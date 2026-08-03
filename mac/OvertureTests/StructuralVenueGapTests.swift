@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1472: a row that a FEED itself publishes with no venue is not a page Overture failed to read, and must
 // not be counted as one.

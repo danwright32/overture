@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1932: what a search runs against, built once when the search starts rather than once per keystroke.
 //

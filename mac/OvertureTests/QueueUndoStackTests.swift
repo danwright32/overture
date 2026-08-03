@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // The session undo stack (#1413, milestone 29). The STACK only: nothing records into it yet (#1414)
 // and nothing triggers it from the Edit menu yet (gated on the #1412 spike).

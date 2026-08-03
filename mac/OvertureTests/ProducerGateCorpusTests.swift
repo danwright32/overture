@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1965, measured with `sample` against the live Release build on 2026-08-01: of 4,588 main-thread
 // samples inside QueueView.body over 30 seconds, `OrgAnswerLedger.inherited` took 487 and the

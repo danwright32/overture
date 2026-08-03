@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1356: the coverage diagnostic's pure logic. A Downbeat client is "armed" when some watched source
 // arms it as a returning client; the diagnostic lists the clients NOTHING arms, so a returning client

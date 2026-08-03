@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1436: the inquiry actions that CHANGE something, moved out of QueueView and InquiryReplySheet so
 // each is a plain function a test can call (#863, the ExcludedTownMutations / WatchlistMutations

@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #653: the pure parsing half of the AppleScript client (decoding the raw field/record-separated
 // string the script emits into ExistingTask values) is unit-testable without any AppleScript or live

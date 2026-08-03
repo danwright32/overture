@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #799 (milestone 22, Phase 1): the extraction contract every source speaks, so the scout can stop
 // hardcoding Carnegie (ScoutService.runScout used to open with `CarnegieExtractor().extract()`).

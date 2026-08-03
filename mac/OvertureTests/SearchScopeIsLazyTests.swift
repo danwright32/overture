@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 private func item(id: String = "k", groupName: String = "Aurora Strings",
                   venue: String? = "Weill Recital Hall",

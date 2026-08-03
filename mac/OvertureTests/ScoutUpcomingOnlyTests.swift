@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #798: the scout had no upcoming-only guard at all. Carnegie's feed only ever returns a forward
 // 90-day window, so nothing ever needed one. An arbitrary org's page is the opposite: the #770 spike

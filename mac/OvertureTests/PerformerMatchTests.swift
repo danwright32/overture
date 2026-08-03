@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // Locked spec for the performer-name matcher (#749, plan #748, issue #585). Repeat-client
 // detection used to match on the org/group name only, so a performance fronted by someone Dan had

@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #384: Dan passes on a show ("Don't want to shoot this"), the identical recurring show comes back
 // next season, and it scores exactly as high as before, so the app pitches him the same thing he

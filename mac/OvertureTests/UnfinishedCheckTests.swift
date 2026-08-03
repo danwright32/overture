@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1809, with #1677 and the remaining half of #1676. One defect class: a reachability check that did not
 // finish leaves Dan paying twice, silently.

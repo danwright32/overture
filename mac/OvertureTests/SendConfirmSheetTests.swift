@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #360: the send confirmation is now a first-class branded sheet, not a stock system alert. Its
 // copy lives in one testable place (SendConfirmCopy) rather than being computed inside the SwiftUI

@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 private func item(_ id: String) -> QueueItem {
     QueueItem(

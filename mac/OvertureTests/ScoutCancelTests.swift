@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1037: a scout Dan started can be stopped. In the native "Scouting" sweep the stop is a flag checked
 // between sources: the loop exits cleanly and, crucially, launches NO detached read for a run Dan chose

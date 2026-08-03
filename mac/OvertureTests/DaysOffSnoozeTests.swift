@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // Dan's call (2026-07-14), correcting what #901 shipped.
 //

@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1580. The persistent bar above the Queue searched the WHOLE store, dismissed shows included, and
 // then routed roughly half of what it found out of the Queue and into Archive. Dan asked for the two

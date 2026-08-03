@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1917: the queue's reply-run line refreshes on a one-second timer, which is right (a finished run's
 // line has to disappear promptly, and a live one has to count up). What was not right is what it paid

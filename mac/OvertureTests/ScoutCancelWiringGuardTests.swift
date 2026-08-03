@@ -1,5 +1,4 @@
 import Testing
-@testable import Overture
 
 // #1037: the cancel wiring spans three files whose behavior is unit-tested elsewhere (the native loop in
 // ScoutCancelTests, the sentinel API in ScoutExtractCancelServiceTests, the button in

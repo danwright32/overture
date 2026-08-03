@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1498: a scout Dan started no longer rations the FREE half of its work. The budget used to cap which
 // sources a manual run fetched, and fetching costs nothing: only a page whose content actually changed is

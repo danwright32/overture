@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #409: recipients are their own SwiftData rows, a cascade-deleted relationship on Prospect, with
 // mutating helpers (setRecipients/addRecipient/removeRecipient/updateRecipient). These cover the

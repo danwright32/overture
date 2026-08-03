@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1238 follow-up: when Dan blocks a town ("Never show me shows in <town>"), the shows there must
 // actually leave his queue, now AND for every future scout, not merely stop reaching the prep queue.

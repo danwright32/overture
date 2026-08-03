@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1005 / #1001: the placement detector (#986) was wired into the AGENT path's recorder only, so the
 // native (Carnegie) path never set lastPlacedCount / hadPlacedBeforeLastRun and its placement count stayed

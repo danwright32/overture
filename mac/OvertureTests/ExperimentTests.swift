@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #5 (opener A/B testing), Phase 1: the experiment model, one-active lifecycle, and app-side 50/50
 // assignment. Every decision lives in a pure/testable function (never a view), so these prove behavior

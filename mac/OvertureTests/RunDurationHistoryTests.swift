@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1427: the learned pace behind the Reading-calendars "~X remaining" line. The prediction is only as
 // honest as these rules: no estimate until a handful of runs exist, degenerate samples never stored, and

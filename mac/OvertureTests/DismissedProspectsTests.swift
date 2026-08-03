@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #28: dismissed prospects drop out of the queue, but Dan needs to see them and undo a
 // mistaken cut. The list shows only dismissed ones (most recent first); restore puts a

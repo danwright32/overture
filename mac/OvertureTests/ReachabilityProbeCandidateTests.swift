@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1308 Layer 2 Phase 3: which shows on a date are worth an opt-in reachability check. Only still-open
 // pre-commitment candidates count: a booked, sent, or drafted show is past the keep/dismiss moment, and an

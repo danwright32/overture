@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1926: what a keystroke in the search box is allowed to cost.
 //

@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #19: a one-time CSV import goes stale as Dan works. Instead, recognition history is
 // derived live from Overture's own activity — orgs it has emailed are "contacted",

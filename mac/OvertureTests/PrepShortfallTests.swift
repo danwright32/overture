@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #876: a Prep run that comes back with fewer shows than it was given.
 //

@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // The last wire (#1500), which no test above it can see. Every rule in BulkDismissTests and
 // BulkDismissMutationTests stays green if the date header never offers the action, offers it on the wrong

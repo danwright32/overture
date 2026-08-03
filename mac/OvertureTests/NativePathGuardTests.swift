@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #987: the two ingest paths disagreed about what a usable event is, and nobody chose that.
 //

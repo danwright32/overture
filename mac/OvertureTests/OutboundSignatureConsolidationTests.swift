@@ -1,5 +1,4 @@
 import Testing
-@testable import Overture
 
 // #1144: the plain-text sign-off used to be pasted into FollowUp and ConversationReminder bodies (and
 // cold drafts had none). It now lives in ONE place, appended at the send layer (GmailMessage, from

@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #924: dismissing a show for a calendar reason records the dismissal AND offers to block the date. The
 // offer is on the banner (an action Dan taps), never automatic. This drives the mutation end to end with a

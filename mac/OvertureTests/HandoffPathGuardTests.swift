@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // Regression guard for #317 / #437: every on-disk handoff path must resolve through
 // StoreLocation, never an independently constructed Application Support path, or a Debug build

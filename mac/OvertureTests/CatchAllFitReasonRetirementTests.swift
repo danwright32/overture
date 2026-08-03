@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1600 (milestone 32 Phase 7.1): retiring the classifier's catch-all fit reason.
 //

@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1744: the launch pass that places the rows ALREADY in the store. Without it the fix is forward-only:
 // a stored location is rewritten only when the hash-gated scout re-emits that row, so Carnegie's 75 blank

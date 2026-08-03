@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1210: the scout now pages forward on a site's own month links, reading the shared four-month horizon
 // (CalendarMonthIndex.defaultHorizon), where it used to read only the month it landed on. This proves the

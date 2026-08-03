@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #468 (SUP-006): a fake MailSender so performSend/sendReply/sendFollowUp/sendConversationNudge
 // are testable without hitting the real network or the GmailAuthManager.shared singleton, the

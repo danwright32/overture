@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1774: searching the same show twice in a row must jump twice.
 //

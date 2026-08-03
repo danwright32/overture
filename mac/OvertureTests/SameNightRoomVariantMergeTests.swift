@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1761: one source page, scouted twice, transcribing its OWN room differently the second time. The
 // title half of the same-night pass already folds ("AUGUST!" and "August" reduce alike, #1590). The venue

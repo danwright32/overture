@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1686: prove the parenthetical fold and the survivor rule against a COPY of Dan's real store before
 // either runs against his own. This pass DELETES rows, so "it works on two hand-built rows" is not the

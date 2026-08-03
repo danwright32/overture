@@ -1,6 +1,5 @@
 import SwiftData
 import Testing
-@testable import Overture
 
 // #799: "Add a lead" has to be reachable by keyboard, and a SwiftUI Button inside a TOOLBAR MENU
 // cannot do that. Its `.keyboardShortcut` renders in the menu (it drew "⌘L" perfectly) and never

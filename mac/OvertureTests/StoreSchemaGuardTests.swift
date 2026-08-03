@@ -2,7 +2,6 @@ import Testing
 import Foundation
 import SwiftData
 import SQLite3
-@testable import Overture
 
 // #663: caught by the Downbeat store-path collision incident (2026-07-08). A different app's
 // SwiftData store landing at Overture's exact path doesn't make ModelContainer throw. CoreData

@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1503: Squarespace serves any page as JSON with `?format=json`, no key and no auth, and a page built on
 // its EVENTS collection carries the whole upcoming schedule as data: title, start date, and the venue.

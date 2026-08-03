@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1280 Phase 4 (#1296): the whole feature end to end. Real TicketTailor widget bytes (the same shape the
 // live all-tickets-calendar embeds) go through the scout read path all the way to a STORED prospect, for

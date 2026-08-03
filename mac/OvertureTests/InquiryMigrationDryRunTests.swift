@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // Phase 2 (#1435) migration dry-run. Adding Inquiry to the live schema is a lightweight additive
 // migration (a new independent entity). This rehearses it against a COPY of the real Release store

@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1763: prove against a COPY of Dan's real store that the row never offers a correction the gate would
 // ignore. The unit tests next door pin the rule on hand-built rows; this one asks whether it bites on the

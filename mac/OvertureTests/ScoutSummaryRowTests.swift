@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1125: the end-of-scout popup's couldn't-be-checked row was reading its address off the run-time
 // SourceResult snapshot, so a URL Dan corrected with "Fix the address" saved to the live WatchedSource

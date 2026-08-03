@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1719: the wiring, which is the whole point of the issue and the thing #1679 records as missing.
 //

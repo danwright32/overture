@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1938: an app with no Prep run happening is not allowed to keep asking whether one has started.
 //

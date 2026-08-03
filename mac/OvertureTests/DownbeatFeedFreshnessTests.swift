@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1456: catching a Downbeat hand-off that still runs daily but has gone dry (the same upcoming shoots for
 // weeks). The existing checks ask about the FILE (health) or a single boolean (any upcoming shoot at all);

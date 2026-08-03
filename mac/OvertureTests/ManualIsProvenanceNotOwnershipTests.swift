@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #888 part A: a show Dan pasted as a lead was PERMANENTLY immune to ever being marked gone.
 //

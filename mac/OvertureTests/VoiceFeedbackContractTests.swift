@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // The Swift writer half of the voice-feedback contract (#241). The READER is the Prep Claude Code
 // workflow (docs/prep-runbook.md, wired by #242), not code, so there is no second programmatic side

@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #618: roughly two dozen QueueView/FollowUpsView/DismissedView handlers each hand-rolled the
 // identical do/catch + feedback.acknowledge(ActionAck.saveFailed(org:), tone: .warning) block

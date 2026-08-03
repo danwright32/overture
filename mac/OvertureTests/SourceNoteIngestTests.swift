@@ -1,7 +1,6 @@
 import Foundation
 import SwiftData
 import Testing
-@testable import Overture
 
 // #875, the wiring half. `SourceNote` being right is worth nothing if the note never reaches the row:
 // a rule that is correct but never called is the exact failure this repo has already shipped (#887),

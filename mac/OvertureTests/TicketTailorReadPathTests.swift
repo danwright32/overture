@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1280 Phase 3 (#1295): when the scout READS an .html source whose fetched page is a TicketTailor widget
 // (FetchedPage.ticketTailorWidgetHTML set by the fetch hop), it parses the embedded selectableDates JSON

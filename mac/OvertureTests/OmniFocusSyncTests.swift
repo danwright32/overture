@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #176 / #229 / #653: the pure core of the OmniFocus sync. `desired` builds the set of tasks that
 // should exist now, ONE PER RECIPIENT (only remotely-actionable reminders, within a horizon), each

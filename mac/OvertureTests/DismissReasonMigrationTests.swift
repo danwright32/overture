@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #940: 'Day doesn't work' is folded into 'Date conflict' (they behaved identically). Any prospect Dan
 // already dismissed with the old reason must be rewritten, or the Archive would show a reason string that

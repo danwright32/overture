@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #418 A1 / #416: the one-time, idempotent repair that copies a legacy lead-level send's thread down
 // to its act recipient, so per-recipient reply detection has a thread to watch.

@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1134: Reached out becomes its own stage, separate from Follow-ups. Because its rows are
 // per-recipient (rendered by reachedOutList, not the standard QueueItem rows), it is a special focus

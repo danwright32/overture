@@ -1,5 +1,4 @@
 import Testing
-@testable import Overture
 
 // The draft-review contact row's chrome rules (#1137, #1139), pulled out of the SwiftUI view body so
 // they are actually testable and can't quietly drift back (a repo lesson: a rule computed inside a

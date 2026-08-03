@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftUI
-@testable import Overture
 
 // #1774: the ticked reachability dates move off QueueView's @State onto a shared object, so that ticking
 // a date invalidates the checkbox and the selection bar instead of re-deriving the entire 724-row queue.

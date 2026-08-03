@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1027 Phase 4: the structured, sectioned warnings the end-of-scout popup renders.
 //

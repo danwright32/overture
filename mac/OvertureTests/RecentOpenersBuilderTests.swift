@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #730: cross-run anti-repetition. Within one Prep run the drafter sees its own earlier drafts and
 // varies openers; across separate runs it has no memory, so day-to-day batches can independently

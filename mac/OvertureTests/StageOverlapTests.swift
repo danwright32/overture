@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1800: what a stage strip may double count, and #1797: who speaks for a contact a review guard holds.
 //

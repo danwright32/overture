@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1663: a show found by two sources took the genre of whichever source's run finished last.
 //

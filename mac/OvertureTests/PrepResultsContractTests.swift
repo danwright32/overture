@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // The Swift reader half of the Prep results contract (#157). The WRITER is the Prep Claude Code
 // workflow (docs/prep-runbook.md), not code, so there is no second programmatic side to assert —

@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1966: the Swift suite is hosted in the app, and the app is menu-bar-only (LSUIElement), so every
 // test run depends on macOS finding room for a status item. On 2026-08-01 that stopped happening and

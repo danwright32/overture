@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // Capturing the reply text onto the prospect when a reply is first detected (#181). The full-format
 // thread (with the body) is fetched LAZILY: only for a thread that actually has a reply, never for

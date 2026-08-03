@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #239: the automatic OmniFocus sync (on launch / data change) is best-effort and swallows errors,
 // so a revoked Automation permission or a moved app silently stops creating follow-up tasks. This

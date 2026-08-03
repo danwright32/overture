@@ -29,6 +29,20 @@
             buildForAnalyzing = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
+               BlueprintIdentifier = "315E41E2235DAD1BA4AF1FEC"
+               BuildableName = "OvertureHostedTests.xctest"
+               BlueprintName = "OvertureHostedTests"
+               ReferencedContainer = "container:Overture.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "NO"
+            buildForProfiling = "NO"
+            buildForArchiving = "NO"
+            buildForAnalyzing = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
                BlueprintIdentifier = "05D51BFAF9ECFC07A5D74730"
                BuildableName = "OvertureTests.xctest"
                BlueprintName = "OvertureTests"
@@ -61,6 +75,17 @@
                BlueprintIdentifier = "05D51BFAF9ECFC07A5D74730"
                BuildableName = "OvertureTests.xctest"
                BlueprintName = "OvertureTests"
+               ReferencedContainer = "container:Overture.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "315E41E2235DAD1BA4AF1FEC"
+               BuildableName = "OvertureHostedTests.xctest"
+               BlueprintName = "OvertureHostedTests"
                ReferencedContainer = "container:Overture.xcodeproj">
             </BuildableReference>
          </TestableReference>

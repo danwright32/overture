@@ -2,7 +2,6 @@ import Testing
 import Foundation
 import SwiftData
 import UserNotifications
-@testable import Overture
 
 // #1601 (the scoped production-readiness check on tonight's work): LaunchMigrations caught a failed
 // save, returned false, and AppDelegate threw that boolean away. The error was never logged either, so a

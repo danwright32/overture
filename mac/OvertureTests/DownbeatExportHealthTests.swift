@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #22/#23: the scout must not silently treat everyone as a cold lead when the Downbeat
 // client export is missing, unreadable, or stale (which would throw away the warm-client

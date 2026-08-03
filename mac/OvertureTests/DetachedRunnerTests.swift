@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // The detached runner must tell the launched script WHICH data folder to use, or a Debug build
 // (whose handoff dir is the isolated Overture-Debug subfolder) launches a script that reads the

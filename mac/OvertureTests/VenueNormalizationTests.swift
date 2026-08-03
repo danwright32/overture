@@ -1,5 +1,4 @@
 import Testing
-@testable import Overture
 
 // #1064: a dedicated venue-normalization pass folds the formatting variance that denotes the SAME
 // physical venue, so two spellings of one venue produce ONE natural key. These tests pin the six real

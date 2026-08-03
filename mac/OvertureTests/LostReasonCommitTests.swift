@@ -1,5 +1,4 @@
 import Testing
-@testable import Overture
 
 // #1418: the "Why lost?" note used to save on every keystroke (a twelve-character note was twelve writes
 // to the live store). It now saves on submit and on focus loss, and only when the text actually changed

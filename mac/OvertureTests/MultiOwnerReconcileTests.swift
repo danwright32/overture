@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #888 part B: the multi-owner rule could never fire, so a show listed by TWO sources was permanently
 // immune to being marked gone.

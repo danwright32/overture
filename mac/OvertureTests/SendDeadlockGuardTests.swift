@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // Regression guard for the in-app Send-button deadlock: the @MainActor send path once
 // blocked the main thread on a synchronous semaphore bridge while awaiting main-actor

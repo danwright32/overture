@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #803: CHECKED and READ are not the same thing, and until now the Sources sheet could not tell Dan
 // which had happened.

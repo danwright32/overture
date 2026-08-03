@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 @Suite("Inquiry copy")
 struct InquiryCopyTests {

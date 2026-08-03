@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1800: the same overlap rules, asked of Dan's real store rather than of shows a test invented.
 //

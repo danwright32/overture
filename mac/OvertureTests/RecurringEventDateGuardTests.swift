@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1126: a recurring/weekly listing must never carry a fabricated far-future placeholder date.
 //

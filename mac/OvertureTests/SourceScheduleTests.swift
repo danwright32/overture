@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #802: what a single scout run does to each watched source, decided BEFORE anything is fetched.
 //

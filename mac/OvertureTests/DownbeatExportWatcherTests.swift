@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #197: when Downbeat rewrites its export while Overture is open, the watcher fires a
 // reconcile so a fresh booking surfaces without a relaunch or scout. The raw FS-event

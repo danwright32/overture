@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // Performing an undo (#1414): putting a row back the way it was, and refusing to when it has moved.
 //

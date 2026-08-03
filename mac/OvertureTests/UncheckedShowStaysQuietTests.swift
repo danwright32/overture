@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1859: a show nobody has looked at does not get to be called hard to reach.
 //

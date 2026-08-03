@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1850: a card names the building Dan has a relationship with, with the room inside it in brackets:
 // "Carnegie Hall (Zankel Hall)". Dan, 2026-07-30: "Actually I like the Carnegie Hall (Zankel) so it's

@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 @Suite("Self double-booking conflict (#1219)")
 struct SelfBookingConflictTests {

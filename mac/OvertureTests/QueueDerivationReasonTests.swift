@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1930: the diagnostic that turns "the idle queue re-derived twice" into "and this is what moved".
 //

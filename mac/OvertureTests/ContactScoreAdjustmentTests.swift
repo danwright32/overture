@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1648 Phases D and E: the contact answer moves the STORED score, once, and leaves a record of what
 // the score was before it did.

@@ -1,5 +1,4 @@
 import Testing
-@testable import Overture
 
 // #1129: a discoverable "Prep these N" button, shown in the Prep stage view so a first-time user does
 // not have to find the Cmd+P shortcut or the toolbar menu to start a Prep run. The show/hide decision

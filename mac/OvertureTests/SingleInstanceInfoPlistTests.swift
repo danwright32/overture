@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // 2026-07-18: `overture` (build-install.sh --launch) opened TWO copies of /Applications/Overture.app.
 // The login agent starts one directly, then the `open overture://show` surface launched a SECOND

@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #676: BounceServiceDelayDetectionTests (#656) only covers the delay-notice behavior added
 // alongside the original hard-bounce path (#398). These tests exercise that original path

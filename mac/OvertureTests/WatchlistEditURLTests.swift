@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1027 Phase 2: correcting a source's URL inline, and confirming an empty page as right-as-is.
 //

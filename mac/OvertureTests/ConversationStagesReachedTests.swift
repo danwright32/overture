@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #16 plumbing, second slice. `conversationStateRaw` holds only where a conversation IS, so a contact
 // who asked a question and then decided to book no longer records that a question was ever asked. The

@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1768: two spellings of one name are two organisations to every rule that reads one, and the store
 // holds real instances. This finds the candidates; it never merges them, because the same rule that

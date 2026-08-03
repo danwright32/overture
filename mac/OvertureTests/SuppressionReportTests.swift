@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #802, Dan's 3rd decision (2026-07-11): a refused org whose shows still turn up on a calendar he
 // watches must be VISIBLY reported, not just silently suppressed.

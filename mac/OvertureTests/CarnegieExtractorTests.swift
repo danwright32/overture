@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // Serves canned Algolia responses in sequence so the extractor's fetch + pagination can be
 // tested without the network. One response per call, indexed by a call counter.

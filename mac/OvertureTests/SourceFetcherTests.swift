@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // Serves one canned HTTP response, with real headers and a real final URL, so the fetch path's typed
 // errors can be tested without a network. Distinct from CarnegieExtractorTests' StubURLProtocol, which

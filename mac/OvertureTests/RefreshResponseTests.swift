@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #50: a refresh response must be read three ways so a dead login is handled, not
 // mistaken for a blip. invalid_grant / 401 => the refresh token is revoked or expired

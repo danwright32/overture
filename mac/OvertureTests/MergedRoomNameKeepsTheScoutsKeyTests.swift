@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1886: the identity key must stay anchored to the spelling THE SCOUT SENDS, not to whatever the card
 // ends up displaying. Two shipped features rewrite a display field and deliberately leave the key alone

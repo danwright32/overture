@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1237: the two host-routed feed adapters (OPERA America, VenueTix) already parse their venues' shows
 // into clean structured events, then throw that away by synthesizing HTML for a PAID AI read. These make

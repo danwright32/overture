@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #468 (SUP-004): every Gmail network call used to default to URLSession.shared, whose resource
 // timeout is 7 days, so a stalled call could hang almost indefinitely with no recovery short of

@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1598 (milestone 32 Phase 5.1) migration dry-run, on the InquiryMigrationDryRunTests precedent.
 // Adding OrgReachabilityAnswer is a lightweight additive migration (a new independent entity, no new

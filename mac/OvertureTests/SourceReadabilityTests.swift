@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #891: when a source keeps coming back with shows Overture could not read, Dan is told.
 //

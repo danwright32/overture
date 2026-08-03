@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1122 (surface 3, Dan's priority note): the Prep run must know when a kept show is a multi-night run
 // whose OPENING night has already passed, so it pitches only the remaining dates and never references the

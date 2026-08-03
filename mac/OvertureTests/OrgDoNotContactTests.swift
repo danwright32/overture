@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #769: an org replies "please stop emailing us", and nothing in the app remembers it. The refusal is
 // filed against ONE performance and forgotten. The scout re-reads Carnegie's calendar every day, so

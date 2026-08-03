@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 private func item(status: ReviewStatus = .new, performanceStatus: PerformanceStatus = .new, key: String = "k") -> QueueItem {
     var q = QueueItem(

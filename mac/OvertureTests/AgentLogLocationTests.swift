@@ -1,7 +1,6 @@
 import Foundation
 import Testing
 import Darwin
-@testable import Overture
 
 @Suite("Agent log location (#279)")
 struct AgentLogLocationTests {

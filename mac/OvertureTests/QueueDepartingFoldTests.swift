@@ -1,5 +1,4 @@
 import Testing
-@testable import Overture
 
 // #361: the just-sent rows playing their leaving delight are folded back into the displayed rows so
 // each glides out in place. That fold is pure list logic, pulled out of the SwiftUI view so it can be

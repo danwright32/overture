@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #55: the behavior that makes a dead Gmail login recoverable — clear the stored token and
 // surface authExpired on a revoked/expired refresh — is now testable via injected file

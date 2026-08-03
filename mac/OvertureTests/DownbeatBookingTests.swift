@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #41 / #99: Auto-books only on exact per-event proof (booking date in range, causally
 // valid). The old client-list org match is downgraded to a suggestion. All guards:

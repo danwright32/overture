@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1523: a run is conflict-checked against every DAY in its span, not the nights it actually plays.
 //

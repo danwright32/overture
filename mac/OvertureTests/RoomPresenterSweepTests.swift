@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1845: a room standing in as its own show's presenter, on rows ALREADY in the store.
 //

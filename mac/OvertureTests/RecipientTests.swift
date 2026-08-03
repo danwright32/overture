@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // One party emailed for a performance. Multiple per performance, each with its own send state and
 // engagement. The behaviors that matter to the rest of the system: who is "silent" (the only ones

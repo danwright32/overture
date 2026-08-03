@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // The pure conversation-reminder calculator (#111), mirroring FollowUp: decides who is due and why,
 // with event-aware timing (the show is the real deadline) and a post-event closing note. Pure, no

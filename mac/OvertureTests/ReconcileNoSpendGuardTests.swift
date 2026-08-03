@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1098 (from the #982 sweep): ReconcileScheduler is documented to run ONLY the safe, free, deterministic
 // reconciles and to NEVER trigger a Prep run, a reply-classify run, or a scout, the #237 unattended-AI

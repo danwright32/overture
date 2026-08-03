@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #241 (milestone 6 / #119): export the high-signal edit pairs the capture step (#240) recorded.
 // Only prospects Dan SUBSTANTIVELY edited AND sent, where the AI draft and the sent copy genuinely

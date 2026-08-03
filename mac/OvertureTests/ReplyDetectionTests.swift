@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #40 reply detection: when someone other than Dan posts to a sent email's thread, that's
 // a reply, and the prospect's outcome becomes .replied (source auto) — one of the two

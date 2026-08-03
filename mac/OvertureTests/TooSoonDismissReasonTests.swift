@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1128: a Dan-chosen "Too soon" dismiss reason for a show he WOULD want to shoot but only found out
 // about too late to pitch. It must be its own case (a missed opportunity, never folded into "Not a fit"),

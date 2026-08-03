@@ -1,5 +1,4 @@
 import Testing
-@testable import Overture
 
 private func event(
     date: String? = "2026-07-01", venue: String? = "Weill Recital Hall", presenter: String? = "Test Choir"

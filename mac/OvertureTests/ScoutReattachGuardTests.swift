@@ -1,5 +1,4 @@
 import Testing
-@testable import Overture
 
 // #1035: a detached scout-extract read outlives the app. RootView already reattaches to an in-flight
 // Prep run at launch (`if PrepQueueService.isRunning { await watchPrepRun() }`), but had no equivalent

@@ -1,6 +1,5 @@
 import Testing
 import SwiftUI
-@testable import Overture
 
 // #379: layout regression coverage for QueueView's masthead, the second consumer the issue named.
 // Same technique and reasoning as ProspectRowViewLayoutTests: relative rendered height, not a

@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // Locked normalization/matching spec (#492). Used to also guard a TypeScript mirror
 // (groupNameMatch.ts), decoding the same committed cases so a one-sided change would fail this

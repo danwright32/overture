@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #768: handing Overture a lead puts that organization's calendar on the watchlist, so the NEXT show
 // these people put on is found without Dan having to trip over it. That is the whole point of the

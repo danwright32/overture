@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #797: `ScoutService.apply` resolved each grouped run back to its assembled prospect through a
 // dictionary keyed on `sourceListingURL`. Two silent data-loss paths came out of that, and both are

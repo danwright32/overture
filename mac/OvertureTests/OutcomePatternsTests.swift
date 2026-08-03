@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #42: surface what converts. The view groups contacted prospects by a chosen dimension
 // (production / discipline / tier) and feeds them to the tested OutcomeStats tallies.

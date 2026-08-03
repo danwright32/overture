@@ -1,5 +1,4 @@
 import Testing
-@testable import Overture
 
 // #1593 (milestone 32 Phase 0.2): the gate that decides whether one reachability answer may be reused
 // across every show from the same presenter. Getting this wrong in the permissive direction is the worst

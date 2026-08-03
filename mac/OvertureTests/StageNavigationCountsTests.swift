@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1121: the stage-pill counts used to run one full pass over every prospect PER focus (nine passes),
 // and each send-related pass faulted the lazily loaded `recipients` relationship on the main thread all

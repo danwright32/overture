@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #856: a detached run that exits without results writes an honest failure, instead of vanishing.
 //

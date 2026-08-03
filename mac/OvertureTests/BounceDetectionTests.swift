@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // Pure classification for #398: a genuine HARD (permanent) Gmail bounce is a message from a
 // bounce-notification sender (mailer-daemon/postmaster) whose subject reads as a permanent

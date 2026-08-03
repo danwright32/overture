@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SQLite3
-@testable import Overture
 
 // #1410: the backup log has to be able to tell a real backup from a snapshot of somebody else's file.
 //

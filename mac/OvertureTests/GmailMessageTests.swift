@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 @Suite("Gmail message encoding")
 struct GmailMessageTests {

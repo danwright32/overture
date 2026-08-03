@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1513, found by Dan walking the Debug build. Reached out was showing two kinds of row in two visual
 // languages, and worse, under two date headings that MEANT DIFFERENT THINGS: the inquiry block carried

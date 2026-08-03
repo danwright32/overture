@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1027 Phase 3: a page Dan confirmed as right-but-empty stops nagging, until its bytes change.
 //

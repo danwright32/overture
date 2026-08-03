@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1127: Green Room 42 is a VenueTix single-page app; a plain fetch reads as a shell showing "0 Events",
 // so the source silently yields nothing. Its events actually load from a public VenueTix cloud-function

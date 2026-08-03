@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #800: how a source READS in the Sources sheet.
 //

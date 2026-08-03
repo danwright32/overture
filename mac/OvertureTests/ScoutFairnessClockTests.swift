@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1189: the scout's coverage fairness, exercised through the real runScout loop with fetch/pin/launch
 // injected (the same pattern as ScoutQueueForReadingTests). Two guarantees:

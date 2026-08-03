@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1773: whether a row is a voice-learning candidate is a fact about that ONE show, and it is the only
 // reason the row factory ever held the whole prospect array. It answered by scanning all 724 prospects

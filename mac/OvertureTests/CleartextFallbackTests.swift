@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1544: reading a site whose https is broken but whose plain http serves the page.
 //

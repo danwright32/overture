@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #623: mirrors ModelContextSaveOrWarnTests (#618). QueueView.sendReply/performSend and
 // FollowUpsView's follow-up-send/conversation-nudge handlers each hand-rolled the identical

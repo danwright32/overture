@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 @Suite("Algolia calendar parsing")
 struct AlgoliaCalendarParseTests {

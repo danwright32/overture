@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #268 / Phase 4: the unattended OmniFocus push must (a) pre-check Automation permission silently and
 // SKIP the AppleScript when not granted — so a windowless background process never posts a TCC modal

@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #48: a finished Prep run that produced nothing must be distinguishable from one that
 // delivered results, so the app can say so instead of looking identical to "still waiting".

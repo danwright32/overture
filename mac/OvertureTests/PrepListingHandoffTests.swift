@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1824: the listing text actually reaching the file the Prep run reads.
 //

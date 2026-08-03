@@ -1,5 +1,4 @@
 import Testing
-@testable import Overture
 
 // #361: the post-send delight (a gold "Sent" seal, a thin gold line drawing once, then the row
 // gliding up and fading). The phase timing and the Reduced Motion decision live here, in a tested

@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #799 slice 3b: the service that hands a batch of pinned pages to ONE detached Claude run and gets
 // out of the way. It mirrors ReplyClassifyService deliberately, so there is one convention for these

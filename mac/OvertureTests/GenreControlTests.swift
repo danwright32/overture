@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1742: the gold genre line IS the editor, and Dan asked for it while looking straight at it. #1533
 // moved the correction onto the line that states the genre, and implemented "quiet" as invisible: the

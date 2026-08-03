@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // Ingesting the classify workflow's results (#185): match each by naturalKey and SUGGEST the
 // conversation state (auto), never overwriting a state Dan set by hand (#60). Mirrors PrepImporter.

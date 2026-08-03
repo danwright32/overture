@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #633: ArchiveView's reveal mechanism used `.task(id: highlightedKey)` with `try? await
 // Task.sleep(...)` to scroll to a newly revealed row. Because `try?` swallows CancellationError,

@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #845. "Stop watching" took a calendar off the watchlist on a single click, with no confirmation and no
 // undo. Nothing was destroyed (the row, its feed history, and the source id stamped on every prospect it

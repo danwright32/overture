@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1906: an exclamation mark in the CLOSING line only.
 //

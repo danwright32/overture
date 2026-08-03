@@ -1,5 +1,4 @@
 import Testing
-@testable import Overture
 
 // #1065: the event's `location` string (stored on Prospect, carried on the scout-extract wire) now
 // feeds TWO independent consumers with DIFFERENT tolerances, and nothing in the code forces a change

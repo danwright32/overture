@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1804: a check pays for ONE lookup when several shows share a producer, and the runbook tells the run to
 // write a result entry for the item's own key AND for every key in its `alsoAnswersFor`. Nothing enforced

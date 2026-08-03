@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 private struct FakeSender: MailSender {
     var receipt = SentReceipt(threadId: "t-123", messageID: "<mid-1@x.org>")

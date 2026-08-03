@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #840/#841/#842: what Dan saw walking the Sources sheet.
 //

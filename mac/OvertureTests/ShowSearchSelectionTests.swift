@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1574. The arithmetic behind driving the search dropdown from the keyboard, kept out of the view
 // so it can be tested at all (a SwiftUI body's @State is unreachable from a test). Dan's call on the

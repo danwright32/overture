@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // The shoot-history contract (#1895, part of #1887). The TypeScript importer
 // (`scripts/import-shoot-history.ts`) writes `overture-shoot-history.json`; this app reads it.

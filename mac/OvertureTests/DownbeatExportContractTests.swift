@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // The Downbeat-export contract (#113). Used to also be decoded by a TypeScript mirror
 // (downbeatExportContract.test.ts) against the same committed fixtures, so a format change one

@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #901: the days Dan cannot shoot, and WHY. The old model was a bare Set<String> of dates, which could
 // only ever answer "yes or no" and so could only ever be used to silently drop a show. Dan's decision is

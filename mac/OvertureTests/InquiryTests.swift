@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // Phase 2 (#1435): the Inquiry record and its intake logic. An inquiry's identity is the EVENT
 // (performance / date / venue), NOT the inquirer's email, because Dan logs it by hand and wouldn't

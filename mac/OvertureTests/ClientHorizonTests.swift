@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1209: a known client's own calendar is read a full YEAR ahead (not the four-month default), so a
 // returning client's far-future date is surfaced with enough lead time to pitch again. "Known client" is

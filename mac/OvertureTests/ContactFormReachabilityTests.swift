@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1626: a show whose act publishes no email but does publish a contact form on its own site is
 // REACHABLE, and Scout used to call it "No email found" while holding the link.

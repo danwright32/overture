@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1308 Layer 2 Phase 4: the cost-saver. The contact hunt is Prep's expensive half, so a show whose
 // contact a probe already found should not be researched again. When such a KEPT show is prepped, the run

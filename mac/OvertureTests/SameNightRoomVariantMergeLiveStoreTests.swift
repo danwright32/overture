@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1761: prove the widened merge against a COPY of Dan's real store before it ever runs against his own.
 // This pass DELETES rows, and #1761 widened what it can reach from "one night, one room" to "one night",

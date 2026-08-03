@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #849: the test suite was writing into Dan's real handoff directory and launching real, token-spending
 // `claude -p` runs.

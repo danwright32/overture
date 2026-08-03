@@ -1,5 +1,4 @@
 import Testing
-@testable import Overture
 
 // #34: the scout recognized only Carnegie's four named halls, so off-site listings came
 // back with no venue (weakening coverage and travel judgments). VenueParser pulls the

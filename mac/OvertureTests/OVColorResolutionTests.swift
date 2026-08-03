@@ -1,7 +1,6 @@
 import Testing
 import SwiftUI
 import AppKit
-@testable import Overture
 
 // #1444: OVColor's dynamic colours used to re-run NSAppearance.bestMatch inside their provider closure on
 // every resolution, so every redraw re-decided each colour's light/dark value. The decision depends only on

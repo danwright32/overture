@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // One shared greeting helper so FollowUp, ConversationReminder, and the per-recipient send greeting
 // (Phase 2.5) all produce the same "Hi <first>," in Dan's voice instead of three copies.

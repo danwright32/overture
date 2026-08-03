@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1260 Phase 2: a merged same-date+venue prospect (SameDateVenueMerge, #1236) is identified for
 // re-scout by its natural key (the emit-order-dependent conductor-list name) and, failing that, by the

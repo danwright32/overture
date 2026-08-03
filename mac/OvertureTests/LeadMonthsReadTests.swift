@@ -1,7 +1,6 @@
 import Foundation
 import SwiftData
 import Testing
-@testable import Overture
 
 // #858. When Dan pastes a venue's calendar, Overture now reads four months of it rather than only the
 // month the site happened to land him on. He has to be TOLD that, for two reasons.

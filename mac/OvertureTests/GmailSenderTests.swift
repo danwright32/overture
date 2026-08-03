@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #84: the live send path (encode + POST, interpret success / api-error / auth-expired) is
 // now testable through an injected fetch and an injected auth-expired hook, no network.

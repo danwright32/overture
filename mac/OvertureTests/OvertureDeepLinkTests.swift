@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #236: the OmniFocus follow-up tasks embed an `overture://lead?key=<naturalKey>` link built by
 // OvertureDeepLink.leadURL(forKey:). This parses that URL back into the natural key so the app can
@@ -74,16 +73,5 @@ struct OvertureDeepLinkTests {
         #else
         #expect(OvertureDeepLink.scheme == "overture")
         #endif
-    }
-
-    // Guards against the Swift constant and the Info.plist's CFBundleURLTypes drifting apart, which
-    // would silently reintroduce #568: the app would still build and run, but LaunchServices would
-    // register a scheme this code never generates or recognizes.
-    @Test func schemeMatchesTheAppsOwnInfoPlistRegistration() throws {
-        let urlTypes = try #require(
-            Bundle.main.object(forInfoDictionaryKey: "CFBundleURLTypes") as? [[String: Any]]
-        )
-        let registeredSchemes = urlTypes.flatMap { $0["CFBundleURLSchemes"] as? [String] ?? [] }
-        #expect(registeredSchemes.contains(OvertureDeepLink.scheme))
     }
 }

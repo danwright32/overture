@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // The conversation-nudge copy (#111): a pre-written, reviewable note per active state plus the
 // post-event closing note, all in Dan's level voice (no performative enthusiasm, no em dashes).

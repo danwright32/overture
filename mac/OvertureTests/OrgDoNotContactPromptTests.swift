@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #769: the prompt that asks whether a "not interested" reply meant this one show or the whole org.
 //

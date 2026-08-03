@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #630: a native macOS NSToolbar item cannot host or anchor a SwiftUI `.popover` AT ALL. Confirmed
 // against the running app via accessibility queries showing zero AXPopover elements anywhere in the

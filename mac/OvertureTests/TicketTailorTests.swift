@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1127: The Cell embeds a tickettailor box-office widget in its page. A plain fetch of the page reads the
 // widget SHELL (the events live in a cross-origin widget the shell only points at), so the source yields

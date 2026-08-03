@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1559: collapse the duplicate rows #1528 left behind, without hiding a live show.
 //

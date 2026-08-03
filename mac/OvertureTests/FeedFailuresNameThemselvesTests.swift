@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1555: a feed adapter reported a malformed address or an error status as "Couldn't reach that page."
 //

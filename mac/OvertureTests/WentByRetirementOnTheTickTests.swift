@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1566: the went-by sweep only ever ran at launch, and Dan leaves Overture open for days.
 //

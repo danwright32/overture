@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #60: classificationOverriddenByDan is mapped through from the Prospect into QueueItem
 // so the row can hide the stale fit-reason line once Dan has corrected the classification.

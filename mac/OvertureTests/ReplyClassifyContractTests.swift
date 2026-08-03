@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // The two reply-classification handoff contracts (#183), guarded by committed fixtures like the
 // #157 files. The app WRITES overture-reply-classify-queue.json (ReplyClassifyQueueBuilder) and the

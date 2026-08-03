@@ -1,7 +1,6 @@
 import Testing
 import SwiftUI
 import AppKit
-@testable import Overture
 
 // #1527: #1501/#1522 changed the conflict pill's WORDS but deliberately not its colour, so a run Dan can
 // still book on seven of its eight nights was drawn in the same filled rust capsule as a show he cannot

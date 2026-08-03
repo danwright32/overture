@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #769 + #802: an org that asks Dan to stop must also come OFF the watchlist.
 //

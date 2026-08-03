@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // Dismiss/revert and the drafting-tone reviewed-gate (#752, plan #748, issue #585).
 //

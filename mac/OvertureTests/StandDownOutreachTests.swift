@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1740: Dan opens Due, sees a nudge for a show he has decided against, and has no way to say so. His
 // words: "I'm not going to action this." Today the row offers only Send nudge and View in Archive, so the

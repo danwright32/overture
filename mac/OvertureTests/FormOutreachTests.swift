@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #1630: Dan pitches a form-only show by hand, through the act's own contact form, and tells Overture
 // he did. That outreach is real but Gmail never touched it, so there is no thread to watch and no

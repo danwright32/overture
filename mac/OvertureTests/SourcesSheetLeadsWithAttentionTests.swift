@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #1541: the toolbar says a source needs a look, and the sheet it opens gives no way to reach it.
 //

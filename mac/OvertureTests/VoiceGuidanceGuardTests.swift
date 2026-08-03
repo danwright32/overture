@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #249: the anonymization guard. The #242 distiller is told to strip every org/venue/contact/
 // production specific from the voice guidance, but nothing verified it. This guard fails CLOSED:

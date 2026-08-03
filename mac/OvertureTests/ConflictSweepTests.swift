@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #901: blocking a week has to flag the shows in that week NOW, not on the next scout.
 //
