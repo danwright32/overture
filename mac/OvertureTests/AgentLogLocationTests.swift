@@ -16,6 +16,15 @@ struct AgentLogLocationTests {
         #expect(AgentLogLocation.standardErrorURL.path.hasPrefix(dir))
         #expect(AgentLogLocation.standardOutURL.lastPathComponent == "overture-agent.out.log")
         #expect(AgentLogLocation.standardErrorURL.lastPathComponent == "overture-agent.err.log")
+        // #1689: the ledger sits beside them, so opening the agent logs reaches it in the same click.
+        #expect(AgentLogLocation.problemsURL.path.hasPrefix(dir))
+        #expect(AgentLogLocation.problemsURL.lastPathComponent == "overture-agent.problems.log")
+    }
+
+    // #1689/#295: the ledger is bounded like the other two, or an app that keeps naming one recurring
+    // problem grows a file nothing ever trims.
+    @Test func theProblemLedgerIsCappedAlongsideTheOtherLogs() {
+        #expect(AgentLogLocation.cappedFiles.contains(AgentLogLocation.problemsURL))
     }
 
     @Test func prepareCreatesTheDirectoryOwnerOnly() throws {
@@ -102,62 +111,78 @@ struct AgentLogLocationTests {
         #expect(inodeAfter == inodeBefore)
     }
 
-    // #302: the menu-bar nudge fires only when the error log has grown by at least the threshold since
-    // Dan last opened the logs — meaningful new stderr, not the odd line of macOS framework chatter.
-    @Test func hasUnreadErrorsWhenLogGrewPastThresholdSinceView() throws {
+    // #1689: the nudge reads the ledger of problems the app NAMED, so the very first one raises it.
+    // There is no size threshold any more and there must not be one: a threshold existed to tolerate
+    // routine chatter, and routine chatter no longer reaches this file, so the only thing a threshold
+    // could still do is hide a single real problem behind its own smallness. The line that prompted
+    // this issue ("1 of 5 shows answered") is about 130 bytes; the old threshold was 8,192.
+    @Test func oneRecordedProblemIsEnoughToRaiseTheNudge() throws {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("logs-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
-        let file = dir.appendingPathComponent("overture-agent.err.log")
-        try String(repeating: "x", count: 5_000).write(to: file, atomically: true, encoding: .utf8)
+        let file = dir.appendingPathComponent("overture-agent.problems.log")
+        try "2026-08-03 reachability probe settled with 1 of 5 shows answered\n"
+            .write(to: file, atomically: true, encoding: .utf8)
 
-        #expect(AgentLogLocation.hasUnreadErrors(viewedSize: 1_000, threshold: 2_000, errorLog: file))
+        #expect(AgentLogLocation.hasUnreadProblems(viewedSize: 0, problemsLog: file))
     }
 
-    @Test func noUnreadErrorsForSubThresholdGrowth() throws {
+    // Opening the logs settles it: nothing new since, nothing to say.
+    @Test func noUnreadProblemsWhenNothingWasAddedSinceDanLooked() throws {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("logs-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
-        let file = dir.appendingPathComponent("overture-agent.err.log")
+        let file = dir.appendingPathComponent("overture-agent.problems.log")
         try String(repeating: "x", count: 1_500).write(to: file, atomically: true, encoding: .utf8)
 
-        #expect(!AgentLogLocation.hasUnreadErrors(viewedSize: 1_000, threshold: 2_000, errorLog: file))
+        #expect(!AgentLogLocation.hasUnreadProblems(viewedSize: 1_500, problemsLog: file))
     }
 
-    @Test func noUnreadErrorsWhenLogMissing() {
+    @Test func noUnreadProblemsWhenNothingHasEverGoneWrong() {
         let file = FileManager.default.temporaryDirectory
             .appendingPathComponent("nope-\(UUID().uuidString).log")
-        #expect(!AgentLogLocation.hasUnreadErrors(viewedSize: 0, threshold: 2_000, errorLog: file))
+        #expect(!AgentLogLocation.hasUnreadProblems(viewedSize: 0, problemsLog: file))
     }
 
-    // #295 rotation truncates the live file, so a log smaller than the recorded view size has wholly
-    // new content — all of it counts toward the threshold, not a negative "growth".
-    @Test func treatsATruncatedLogAsAllNew() throws {
+    // #295 rotation truncates the live file, so a ledger smaller than the recorded view size holds
+    // wholly new content: all of it counts, never a negative "growth" that would read as nothing new.
+    @Test func treatsATruncatedLedgerAsAllNew() throws {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("logs-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
-        let file = dir.appendingPathComponent("overture-agent.err.log")
+        let file = dir.appendingPathComponent("overture-agent.problems.log")
         try String(repeating: "x", count: 3_000).write(to: file, atomically: true, encoding: .utf8)
 
-        // Recorded view size is huge (pre-rotation); the file is now far smaller but over the threshold.
-        #expect(AgentLogLocation.hasUnreadErrors(viewedSize: 5_000_000, threshold: 2_000, errorLog: file))
+        #expect(AgentLogLocation.hasUnreadProblems(viewedSize: 5_000_000, problemsLog: file))
     }
 
-    @Test func recordViewedStoresCurrentErrorLogSize() throws {
+    // ...but a rotation that leaves the ledger EMPTY is not a new problem. Nothing is in there to read.
+    @Test func anEmptiedLedgerIsNotANewProblem() throws {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("logs-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
-        let file = dir.appendingPathComponent("overture-agent.err.log")
+        let file = dir.appendingPathComponent("overture-agent.problems.log")
+        try "".write(to: file, atomically: true, encoding: .utf8)
+
+        #expect(!AgentLogLocation.hasUnreadProblems(viewedSize: 5_000_000, problemsLog: file))
+    }
+
+    @Test func recordViewedStoresCurrentProblemLedgerSize() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("logs-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let file = dir.appendingPathComponent("overture-agent.problems.log")
         try String(repeating: "x", count: 2_048).write(to: file, atomically: true, encoding: .utf8)
         let defaults = UserDefaults(suiteName: "agentlog-test-\(UUID().uuidString)")!
 
-        AgentLogLocation.recordViewed(errorLog: file, into: defaults)
+        AgentLogLocation.recordViewed(problemsLog: file, into: defaults)
 
-        #expect(defaults.double(forKey: AgentLogLocation.viewedErrorSizeKey) == 2_048)
+        #expect(defaults.double(forKey: AgentLogLocation.viewedProblemSizeKey) == 2_048)
     }
 
     @Test func prepareTightensAnAlreadyExistingDirectory() throws {

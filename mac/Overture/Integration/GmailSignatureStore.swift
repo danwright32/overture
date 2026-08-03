@@ -25,7 +25,9 @@ enum GmailSignatureStore {
         // real pitch; any prior good signature is left intact.
         if let reason = GmailSignatureHealth.corruptionReason(html) {
             // copy-inventory:ignore-start  developer diagnostic log, not the app's own voice (#915)
-            NSLog("[Overture] Refusing to cache an obviously-corrupt Gmail signature (%@); keeping any stored one.", reason)
+            // #1689: a PROBLEM. The refusal is correct, but something upstream handed back a signature
+            // that does not look like one, and the next real send is the surface it shows up on.
+            AgentLog.problem("[Overture] Refusing to cache an obviously-corrupt Gmail signature (\(reason)); keeping any stored one.")
             // copy-inventory:ignore-end
             return
         }

@@ -4,12 +4,12 @@ import Foundation
 // wins; otherwise the last reconcile time; otherwise a watching/idle state. Pure so it's testable.
 enum MenuBarStatus {
     static func line(lastReconcileAt: Date?, now: Date, omniFocusFailed: Bool,
-                     hasUnreadLogErrors: Bool) -> String {
+                     hasUnreadLogProblems: Bool) -> String {
         if omniFocusFailed { return "OmniFocus sync needs attention" }
         // #302: the agent wrote new stderr Dan hasn't seen; nudge him to the logs so a silently
         // misbehaving overnight agent doesn't go unnoticed. Ranks below the more specific OmniFocus
         // failure (which has its own remedy) but above the idle/last-checked states.
-        if hasUnreadLogErrors { return "Agent logged an error: open agent logs" }
+        if hasUnreadLogProblems { return "Agent logged a problem: open agent logs" }
         guard let last = lastReconcileAt else { return "Watching for replies and bookings" }
         let formatter = DateFormatter()
         formatter.timeStyle = .short

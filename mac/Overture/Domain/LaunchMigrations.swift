@@ -145,8 +145,8 @@ enum LaunchMigrations {
                                   deliver: (UNNotificationRequest) -> Void =
                                       { UNUserNotificationCenter.current().add($0) }) {
         // copy-inventory:ignore-start  developer diagnostic log, not the app's own voice (#915)
-        NSLog("#1601 LaunchMigrations: the launch save failed, so no migration was persisted: %@",
-              String(describing: error))
+        // #1689: a PROBLEM. Nothing this launch migrated was kept, so the next launch does it all again.
+        AgentLog.problem("#1601 LaunchMigrations: the launch save failed, so no migration was persisted: \(String(describing: error))")
         // copy-inventory:ignore-end
         NotificationService.post(.launchFailed,
                                  title: LaunchMigrationsCopy.saveFailedTitle,

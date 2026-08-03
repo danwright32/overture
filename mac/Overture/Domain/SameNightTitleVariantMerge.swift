@@ -85,8 +85,8 @@ enum SameNightTitleVariantMerge {
                 let withHistory = cluster.filter(NaturalKeyVenueMigration.hasOutreachHistory)
                 if withHistory.count >= 2 {
                     // copy-inventory:ignore-start  developer diagnostic log, not the app's own voice (#915)
-                    NSLog("#1590 SameNightTitleVariantMerge: %d rows of one night carry outreach history; leaving them for Dan.",
-                          withHistory.count)
+                    // #1689: a NOTE. Correct, deliberate, and repeated on every launch (#1639).
+                    AgentLog.note("#1590 SameNightTitleVariantMerge: \(withHistory.count) rows of one night carry outreach history; leaving them for Dan.")
                     // copy-inventory:ignore-end
                     summary.conflictsDeferred += 1
                     continue

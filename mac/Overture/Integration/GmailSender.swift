@@ -64,7 +64,8 @@ struct GmailSender: MailSender {
         let sig = signature ?? GmailSignatureStore.currentSignature()
         if sig.html == nil {
             // copy-inventory:ignore-start  developer diagnostic log, not the app's own voice (#915)
-            NSLog("[Overture] Sending with the plain-text sign-off: no styled Gmail signature is stored. Reconnect Gmail to fetch it.")
+            // #1689: a NOTE. Sending with the plain-text sign-off is a supported, working path.
+            AgentLog.note("[Overture] Sending with the plain-text sign-off: no styled Gmail signature is stored. Reconnect Gmail to fetch it.")
             // copy-inventory:ignore-end
         }
         let raw = GmailMessage.rawField(

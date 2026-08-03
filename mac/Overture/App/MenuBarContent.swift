@@ -8,16 +8,17 @@ import AppKit
 struct MenuBarContent: View {
     @AppStorage(ReconcileScheduler.lastReconcileKey) private var lastReconcileEpoch: Double = 0
     @AppStorage(OmniFocusSyncStatus.failedAtKey) private var omniFocusFailedAt: Double = 0
-    // #302: the menu re-reads err.log's size on open and compares to this seen-size to nudge on new
-    // stderr; opening the logs updates it, clearing the nudge reactively.
-    @AppStorage(AgentLogLocation.viewedErrorSizeKey) private var viewedErrorSize: Double = 0
+    // #302/#1689: the menu re-reads the problem ledger's size on open and compares it to this
+    // seen-size; opening the logs updates it, clearing the nudge reactively. The ledger holds only
+    // lines the app itself called a problem, so any growth at all is worth a word.
+    @AppStorage(AgentLogLocation.viewedProblemSizeKey) private var viewedProblemSize: Double = 0
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         let last = lastReconcileEpoch > 0 ? Date(timeIntervalSince1970: lastReconcileEpoch) : nil
-        let unreadLogErrors = AgentLogLocation.hasUnreadErrors(viewedSize: Int(viewedErrorSize))
+        let unreadLogProblems = AgentLogLocation.hasUnreadProblems(viewedSize: Int(viewedProblemSize))
         Text(MenuBarStatus.line(lastReconcileAt: last, now: Date(), omniFocusFailed: omniFocusFailedAt > 0,
-                                hasUnreadLogErrors: unreadLogErrors))
+                                hasUnreadLogProblems: unreadLogProblems))
         Divider()
         Button("Open Overture") { openWindow(id: "main") }
         Button("Run reconcile now") { AppDelegate.shared?.runReconcileNow() }
