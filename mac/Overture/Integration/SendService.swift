@@ -4,7 +4,7 @@ import SwiftData
 @MainActor
 enum SendService {
     // A performance's recipients in deterministic send order (SwiftData to-many is unordered).
-    private static func sendOrdered(_ recipients: [Recipient]) -> [Recipient] {
+    nonisolated private static func sendOrdered(_ recipients: [Recipient]) -> [Recipient] {
         recipients.sorted {
             $0.sendOrderRank != $1.sendOrderRank ? $0.sendOrderRank < $1.sendOrderRank : $0.id < $1.id
         }
@@ -13,7 +13,10 @@ enum SendService {
     // The next recipient a manual or throttled send would target for this performance: the first
     // still-sendable one, or nil when the show is fully sent (or not sendable at all). Shared by
     // sendOne and SendConfirmation so the picker and the actual send can never disagree.
-    static func nextPendingRecipient(for prospect: Prospect) -> Recipient? {
+    // #2015: `nonisolated` so the QUEUE CARD can ask the same question the send asks, and the two can
+    // never disagree about who is about to be emailed. It reads stored properties and decides; none of
+    // the Gmail work the rest of this service does is involved.
+    nonisolated static func nextPendingRecipient(for prospect: Prospect) -> Recipient? {
         guard prospect.status == .approved, prospect.draftBody != nil else { return nil }
         return sendOrdered(prospect.recipients).first(where: \.isSendablePending)
     }
