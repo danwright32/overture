@@ -150,6 +150,18 @@ enum ManualPrepEditing {
 enum ManualPrepCopy {
     static func editorTitle(groupName: String) -> String { "Prep \(groupName) by hand" }
 
+    // The one line under the address field, which is never empty.
+    //
+    // Dan, on the shipped sheet: "wait I thought we just shipped the ability to email multiple people?" It
+    // had shipped and it worked, but the field looks exactly like the single-address box it always was, so
+    // the capability was invisible to the person it was built for, which is the same as not having it. The
+    // line INVITES the second address until there is one, then CONFIRMS what the addresses will do. Never
+    // both at once: that is the #843 defect, a second line saying what the first already said.
+    static func addressFieldNote(for typed: String) -> String {
+        recipientCountNote(for: typed)
+            ?? "Separate several addresses with commas to email more than one person."
+    }
+
     // #2023, and L64: who a message goes to belongs in what Dan reviews, so naming a second person has to
     // say so before he saves rather than after. Nil for one address, because a line telling him a single
     // address makes a single contact is the #843 defect: a sentence that adds nothing to the one above it.

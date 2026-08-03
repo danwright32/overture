@@ -166,6 +166,28 @@ struct ManualPrepMultipleAddressesTests {
 
     // MARK: - Saying what is about to happen (L64)
 
+    // Dan, looking at the shipped sheet (2026-08-03): "wait I thought we just shipped the ability to email
+    // multiple people?" It was there and working, and nothing on screen said so, which for a field that
+    // looks exactly like a single-address box is the same as not having shipped it. So the line under the
+    // field is never empty: it either INVITES the second address or CONFIRMS what the ones typed will do.
+    @Test func theFieldAlwaysSaysSomething() {
+        let hint = "Separate several addresses with commas to email more than one person."
+        #expect(ManualPrepCopy.addressFieldNote(for: "") == hint)
+        #expect(ManualPrepCopy.addressFieldNote(for: "olga@bargemusic.org") == hint)
+        // Still the invitation while what he has typed cannot yet be read as addresses: the count note
+        // would be a claim about contacts that are not going to be created.
+        #expect(ManualPrepCopy.addressFieldNote(for: "olga@") == hint)
+    }
+
+    // Once there are two, the hint has done its job and the line says what will actually happen instead.
+    // Showing both at once would be the #843 defect: the second line telling him what the first just did.
+    @Test func theInvitationGivesWayToWhatWillHappen() {
+        #expect(ManualPrepCopy.addressFieldNote(for: "a@x.org, b@y.org")
+                == "This adds 2 contacts, and each one gets its own separate email.")
+        #expect(ManualPrepCopy.addressFieldNote(for: "a@x.org, b@y.org, c@z.org")
+                == "This adds 3 contacts, and each one gets its own separate email.")
+    }
+
     @Test func theSheetSaysHowManyContactsItWillCreateOnlyWhenThereIsMoreThanOne() {
         #expect(ManualPrepCopy.recipientCountNote(for: "") == nil)
         #expect(ManualPrepCopy.recipientCountNote(for: "olga@bargemusic.org") == nil)
