@@ -53,6 +53,7 @@ final class AddLeadPresenter {
         // Behind the greyed-out menu item, not instead of it: the flag must never be set when there is no
         // sheet to show it, whatever calls this.
         guard canAddLead else { return }
+        QueueWriteTrace.note(QueueWriteTrace.addLead)
         isPresented = true
     }
 }

@@ -1323,7 +1323,23 @@ enum QueueRenderCounter {
         }
     }
 
+    // #1930: how many times each live object the screen above holds has been WRITTEN. Counted at the
+    // write, never read off the object, because reading an @Observable property to report it would create
+    // the dependency being measured (#1922). A static count creates none, so the fingerprint can name a
+    // cause that was invisible to it before: without this, every render an object triggered reported
+    // `nothing this view reads`, which is the answer the whole diagnostic is trusted for.
+    //
+    // Zero for an object nothing has touched, never absent, so a render's fingerprint is the same SHAPE
+    // every time: an input appearing mid-session would read as a change of its own (`reason` counts a
+    // dropped key as movement, deliberately).
+    nonisolated(unsafe) private static var writeCounts: [String: Int] = [:]
+
+    static func noteWrite(_ label: String) { writeCounts[label, default: 0] += 1 }
+
+    static func writes(_ label: String) -> Int { writeCounts[label] ?? 0 }
+
     static func reset() {
+        writeCounts = [:]
         derivations = 0
         lastReason = firstRender
         previous = [:]

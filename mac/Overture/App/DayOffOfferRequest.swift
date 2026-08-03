@@ -19,8 +19,12 @@ final class DayOffOfferRequest {
     var pending: Pending?
 
     func request(key: String, org: String, start: String, end: String) {
+        QueueWriteTrace.note(QueueWriteTrace.dayOffOffer)
         pending = Pending(id: key, org: org, start: start, end: end)
     }
 
-    func clear() { pending = nil }
+    func clear() {
+        QueueWriteTrace.note(QueueWriteTrace.dayOffOffer)
+        pending = nil
+    }
 }

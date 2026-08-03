@@ -680,6 +680,7 @@
 		C19ECEA717481E97DFA33E2C /* GmailCredentials.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1CF189903BC52B8964DFD8B /* GmailCredentials.swift */; };
 		C28B73DD741A2672BF35E98A /* SelfBookingConfirmSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B698E5CAE41AFFFC111EF7F /* SelfBookingConfirmSheet.swift */; };
 		C2D89CAA95FE8022741A7F53 /* RunTimeouts.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE451DFEC63612B85E98AA33 /* RunTimeouts.swift */; };
+		C2F3F44A87464268B03BC287 /* QueueWriteTraceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 080B17AEA51F43E7A1D88A6A /* QueueWriteTraceTests.swift */; };
 		C310AF25CEA15C47614C240F /* LocationTwoConsumersGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84A57413B509E2CC1870FD93 /* LocationTwoConsumersGuardTests.swift */; };
 		C3B64FB476AE802112B75DF6 /* LostReasonCommit.swift in Sources */ = {isa = PBXBuildFile; fileRef = A050CA8DA53C97D8A74AB12B /* LostReasonCommit.swift */; };
 		C3FE310A2FEB26FCFC13B399 /* RunSummaryCopyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 287DE498366E2CB5EBA5A033 /* RunSummaryCopyTests.swift */; };
@@ -827,6 +828,7 @@
 		E867C5DF2588DFEAD83D767C /* ClientCoverage.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7C658710DD1D5B1A0453E21 /* ClientCoverage.swift */; };
 		E86A481C55D142381316586B /* DepartingRowsSpliceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C437F70313F25EC3F948CA1B /* DepartingRowsSpliceTests.swift */; };
 		E887FF57AD484D520F4726D9 /* ProspectAssembler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39078CF3F9C3902769283CB8 /* ProspectAssembler.swift */; };
+		E88A06EC536ACA84A41DE04F /* QueueWriteTrace.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABF44666516CD7262B326010 /* QueueWriteTrace.swift */; };
 		E894D75CEC13C72C90E544C6 /* QueueRenderPass.swift in Sources */ = {isa = PBXBuildFile; fileRef = 356E8DE7BCC991CE3630DD97 /* QueueRenderPass.swift */; };
 		E953E2F9A05320E3CF28DD80 /* CarnegieExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1277AABACF169CD59F453422 /* CarnegieExtractor.swift */; };
 		E965E7F87A4941ED936064DB /* SourcePlacementPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95DA9B9EE5F7C2F0B69AFE2C /* SourcePlacementPersistenceTests.swift */; };
@@ -945,6 +947,7 @@
 		073482FF171FDD03F329446D /* DismissedProspectsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DismissedProspectsTests.swift; sourceTree = "<group>"; };
 		0751137AFFC48625463E2540 /* SourceScheduleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceScheduleTests.swift; sourceTree = "<group>"; };
 		07962FBB80CEC48C06592086 /* OutcomePatternsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutcomePatternsView.swift; sourceTree = "<group>"; };
+		080B17AEA51F43E7A1D88A6A /* QueueWriteTraceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueWriteTraceTests.swift; sourceTree = "<group>"; };
 		0845A26D25EC532196D63BF2 /* ClassificationConfidenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClassificationConfidenceTests.swift; sourceTree = "<group>"; };
 		087ED2BE07F17339FD8E8EE1 /* FilterChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilterChip.swift; sourceTree = "<group>"; };
 		08BA0F4504495B3318601218 /* ScoutExtractCurrentSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutExtractCurrentSource.swift; sourceTree = "<group>"; };
@@ -1536,6 +1539,7 @@
 		ABB289D6F9CC4313A98E087B /* ContactScoreAdjustmentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactScoreAdjustmentTests.swift; sourceTree = "<group>"; };
 		ABD1EF31EA512A7A4C5EE9CC /* HandoffCleanupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandoffCleanupTests.swift; sourceTree = "<group>"; };
 		ABE40D9C39DD8B70A715F0F2 /* GroupNameMatch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupNameMatch.swift; sourceTree = "<group>"; };
+		ABF44666516CD7262B326010 /* QueueWriteTrace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueWriteTrace.swift; sourceTree = "<group>"; };
 		AC950C3DE82C614695A4DEE5 /* DraftModelTraceDisplayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DraftModelTraceDisplayTests.swift; sourceTree = "<group>"; };
 		AD1E1EF892734DD67ED6047A /* ContactDisplay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactDisplay.swift; sourceTree = "<group>"; };
 		AD3A1B350198E62CF804B333 /* Inquiry+Watchable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Inquiry+Watchable.swift"; sourceTree = "<group>"; };
@@ -1865,6 +1869,7 @@
 				0F17AF936CAA06AD29DC22AB /* MenuBarStatus.swift */,
 				D9B0914E3F338108E97924DF /* OvertureApp.swift */,
 				8206175D779F3595C3B94B62 /* ProbeSelectionState.swift */,
+				ABF44666516CD7262B326010 /* QueueWriteTrace.swift */,
 				595B0E6C06FF1BA88F84DBEA /* ReconcileScheduler.swift */,
 				77C9D0C269C0084ADFE58328 /* RootView.swift */,
 				67BB37DB5C4FB298BF64EED8 /* SecureFileWrite.swift */,
@@ -2206,6 +2211,7 @@
 				61410B8B5EF4F16C9D837125 /* QueueUndoStackTests.swift */,
 				7DDCA7E2A81DE18A0C911ACB /* QueueViewMastheadLayoutTests.swift */,
 				CC0DD05486E1053CDF1A7AA2 /* QueueViewUserActionSaveGuardTests.swift */,
+				080B17AEA51F43E7A1D88A6A /* QueueWriteTraceTests.swift */,
 				FD487981CBBF8C44D61938BB /* RankerTests.swift */,
 				472841E01B10A33E33B045B0 /* ReachabilityBadgeToneTests.swift */,
 				FEC5BB6BC8704C35648658A2 /* ReachabilityProbeCandidateTests.swift */,
@@ -3127,6 +3133,7 @@
 				9F89C043F464F738A5DA0762 /* QueueUndoStack.swift in Sources */,
 				34B4D59778B45482B07FEE79 /* QueueView+Model.swift in Sources */,
 				57B5039B6CAA5732DF7AE178 /* QueueView.swift in Sources */,
+				E88A06EC536ACA84A41DE04F /* QueueWriteTrace.swift in Sources */,
 				B2D2ED69408C169F9F1658C6 /* Ranker.swift in Sources */,
 				5F72B1AA6E800AA0EFE75420 /* Reachability.swift in Sources */,
 				297C789B8BE9332B9D45A0E7 /* ReachabilityProbeMarker.swift in Sources */,
@@ -3596,6 +3603,7 @@
 				1857F1589F02F2423E954D16 /* QueueUndoStackTests.swift in Sources */,
 				3DC5F8EA28D4817B5E9D7F34 /* QueueViewMastheadLayoutTests.swift in Sources */,
 				ABB1BDFED6B323DC6FC1D69B /* QueueViewUserActionSaveGuardTests.swift in Sources */,
+				C2F3F44A87464268B03BC287 /* QueueWriteTraceTests.swift in Sources */,
 				06A4CFEDC7146983E2305A8F /* RankerTests.swift in Sources */,
 				829557533EE43B3C7328A93E /* ReachabilityBadgeToneTests.swift in Sources */,
 				C7B88BB8454766EB1822AF9A /* ReachabilityProbeCandidateTests.swift in Sources */,
