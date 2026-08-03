@@ -61,6 +61,13 @@ echo "==> scripts/check-runner-posix.sh"
 echo "==> scripts/check-live-store-claims.sh"
 "${REPO_ROOT}/scripts/check-live-store-claims.sh"
 
+# Blocks a file in the pure Swift suite from importing the app as a module, which stops that target
+# compiling so NOT ONE of its 4,800 tests runs. Deliberately ahead of the Swift run below: this is the
+# one break a Swift guard cannot catch (an offender means no Swift test can execute at all), and naming
+# the file here costs seconds instead of a full build ending in "unable to resolve module dependency".
+echo "==> scripts/check-pure-suite-imports.sh"
+"${REPO_ROOT}/scripts/check-pure-suite-imports.sh"
+
 # Blocks a STALE committed mac/Overture.xcodeproj/project.pbxproj from reaching main (#1368). Compares it
 # against a fresh xcodegen generate and BLOCKS on any difference; a xcodegen version mismatch says "cannot
 # verify" rather than a false "stale". Local-only like the Swift suite below (CI has no xcodegen/Xcode).
