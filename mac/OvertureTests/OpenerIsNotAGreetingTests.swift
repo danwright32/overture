@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import Overture
 
 // #2013. Overture exports the opening sentence of recent drafts so the AI drafter can vary its own
 // openers rather than repeating a shape. The extraction assumed the stored body carries no greeting,

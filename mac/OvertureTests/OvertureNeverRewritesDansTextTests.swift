@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #2010, the second half of Dan's rule. The first half is that nothing is added at send that he cannot
 // see; this is that nothing is CHANGED behind his back either.

@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #2015. Dan's rule, extended from the TEXT of an email (#2010) to WHO it goes to:
 //

@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import SwiftData
-@testable import Overture
 
 // #2010. Dan's rule, 2026-08-03, on learning the app adds a greeting he cannot see:
 //
