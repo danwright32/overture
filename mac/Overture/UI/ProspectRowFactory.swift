@@ -48,6 +48,15 @@ enum ProspectRowFactory {
                                                    feedback: feedback)
                 }
             },
+            // #2007: prep this show by hand. The prefill is a CLOSURE, called only when the sheet opens:
+            // it walks every prospect and reads the booking-history file, and a queue is hundreds of
+            // cards, so an idle card must pay nothing for a control it is merely offering.
+            onPrepManually: { email, name, subject, body in
+                ProspectMutations.prepManually(item, email: email, name: name, subject: subject,
+                                               body: body, prospects: prospects, context: context,
+                                               feedback: feedback)
+            },
+            manualPrepPrefill: { ProspectMutations.manualPrepPrefill(item, prospects: prospects) },
             onSaveDraft: { subject, body in ProspectMutations.saveDraft(item, subject, body, prospects: prospects, context: context, feedback: feedback) },
             onSaveOpening: { recipientId, opening in
                 ProspectMutations.saveOpening(item, recipientId: recipientId, opening: opening,

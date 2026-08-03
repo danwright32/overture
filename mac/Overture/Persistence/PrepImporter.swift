@@ -18,6 +18,11 @@ enum PrepImporter {
         var matched = 0
         var drafted = 0
         var skippedEdited = 0
+        // #2007: drafts left untouched because Dan WROTE them himself (no Prep run was ever involved).
+        // Its own counter rather than a second meaning for skippedEdited above, for the same reason the
+        // marker behind it is its own field: "kept your edits" would report a run preserving an edit he
+        // never made to a draft no model ever wrote.
+        var skippedHandWritten = 0
         var skippedRecipientEdits = 0
         // #367: the Prep run is prompt-driven, not code, so its result can carry a draft/contacts
         // update outside what the prospect's own reprep flags actually asked for (e.g. a draft
@@ -175,7 +180,12 @@ enum PrepImporter {
             if let d = r.draft {
                 // Never overwrite a draft Dan hand-edited; his version wins until he
                 // explicitly skips/dismisses it.
-                if p.draftEditedByDan {
+                // #2007: a draft Dan WROTE, checked ahead of the edit guard below. Both refuse the same
+                // overwrite, but they are different facts about the text and the summary says so; a
+                // hand-written draft carries no model to have edited.
+                if p.draftWrittenByDan {
+                    outcome.skippedHandWritten += 1
+                } else if p.draftEditedByDan {
                     outcome.skippedEdited += 1
                 } else if contactsOnlyRequest || draftBlockedBySend {
                     outcome.skippedOutOfScope += 1

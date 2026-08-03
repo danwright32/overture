@@ -285,6 +285,24 @@ struct ExperimentTests {
         #expect(arm.editedExcluded == 1)                  // but still counted, visibly
     }
 
+    // #2007: an arm's reply rate is a claim about an opener SHAPE the drafter produced. A show Dan
+    // prepped by hand carries no such opener, so a stale arm stamp from an earlier run must not put his
+    // own email into either arm's numbers.
+    @Test func aHandWrittenDraftIsNotCountedIntoAnArmsRate() {
+        let e = "exp1"
+        let byHand = sentProspect("hand", experimentId: e, arm: "reason-first", outcome: .replied,
+                                  draftVariant: "reason-first")
+        byHand.draftWrittenByDan = true
+        let prospects = [
+            sentProspect("a", experimentId: e, arm: "reason-first", outcome: .noResponse, draftVariant: "reason-first"),
+            byHand,
+        ]
+        let arm = ExperimentReport.armReport(arm: "reason-first", in: prospects)
+        #expect(arm.tally.contacted == 1)
+        #expect(arm.tally.replied == 0)
+        #expect(arm.editedExcluded == 0)   // not an edit of an assigned opener; there was no assigned opener
+    }
+
     @Test func armReportComplianceCountsEchoMatchesAgainstTheAssignedArm() {
         let e = "exp1"
         let prospects = [

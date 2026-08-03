@@ -21,6 +21,11 @@ enum PrepRunSummary {
         var notes: [String] = []
         if outcome.drafted > 0 { notes.append("\(outcome.drafted) drafted") }
         if outcome.skippedEdited > 0 { notes.append("\(outcome.skippedEdited) kept your edits") }
+        // #2007: a show Dan prepped by hand. The run left it alone, and this says WHICH text it left
+        // alone. "Kept your edits" would be a false description of an email no model ever wrote.
+        if outcome.skippedHandWritten > 0 {
+            notes.append("\(outcome.skippedHandWritten) left as you wrote them")
+        }
         return notes
     }
 

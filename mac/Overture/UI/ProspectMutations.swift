@@ -44,25 +44,11 @@ enum ProspectMutations {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedName = name?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let result = ManualRecipientCheck.evaluate(email: trimmedEmail, existingRecipients: model.recipients,
-                                                    venue: model.venue)
+        let result = applyManualRecipient(email: trimmedEmail, name: trimmedName, to: model)
 
-        switch result.action {
-        case .blocked:
+        if case .blocked = result.action {
             feedback.acknowledge(ActionAck.recipientAlreadyExists(name: trimmedName, org: model.groupName))
             return
-        case .resume(let existingId):
-            model.updateRecipient(id: existingId) { r in
-                r.sendState = (r.sentAt != nil) ? .sent : .pending
-                r.suppressionReasonRaw = nil
-                r.resolutionRaw = nil
-                r.outcomeSourceRaw = nil
-            }
-        case .create:
-            let canonical = ReplyDetection.email(from: trimmedEmail)
-            model.addRecipient(Recipient(id: canonical, email: trimmedEmail,
-                                         name: (trimmedName?.isEmpty == false) ? trimmedName : nil,
-                                         provenance: .manual))
         }
 
         guard context.saveOrWarn(org: model.groupName, feedback: feedback) else { return }
@@ -74,6 +60,90 @@ enum ProspectMutations {
                                                            totalCount: model.recipients.count,
                                                            warnings: warningLines(for: result)))
         }
+    }
+
+    // The recipient half of adding a contact by hand, WITHOUT the save or the banner, so the two paths
+    // that do it (the Add-contact control above and #2007's manual prep below) share one implementation
+    // instead of each deciding for itself what a typed address means. Mutates nothing on `.blocked`: that
+    // address already belongs to a live contact on this show, and each caller decides what to say about it.
+    @discardableResult
+    private static func applyManualRecipient(email: String, name: String?,
+                                             to model: Prospect) -> ManualRecipientCheck.Result {
+        let result = ManualRecipientCheck.evaluate(email: email, existingRecipients: model.recipients,
+                                                   venue: model.venue)
+        switch result.action {
+        case .blocked:
+            break
+        case .resume(let existingId):
+            model.updateRecipient(id: existingId) { r in
+                r.sendState = (r.sentAt != nil) ? .sent : .pending
+                r.suppressionReasonRaw = nil
+                r.resolutionRaw = nil
+                r.outcomeSourceRaw = nil
+            }
+        case .create:
+            model.addRecipient(Recipient(id: ReplyDetection.email(from: email), email: email,
+                                         name: (name?.isEmpty == false) ? name : nil,
+                                         provenance: .manual))
+        }
+        return result
+    }
+
+    // #2007: what the manual-prep editor already knows about who to send to, for one card.
+    //
+    // Here rather than in the row factory for two reasons. It has to find this card's prospect in the
+    // store, and #1773's guard rightly refuses that spelling in the factory, which runs once per card per
+    // render pass. And it reads the booking-history file, which is real disk work. Neither belongs on a
+    // render path: the row calls this only when the editor is actually opened.
+    static func manualPrepPrefill(_ item: QueueItem, prospects: [Prospect]) -> ManualPrepPrefill.Result {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else {
+            // No prospect behind this card is not "nothing was found": it is a lookup that could not run,
+            // and saying "checked past emails and the booking sheet" would be a claim about work that
+            // never happened (L11). The history is the half that genuinely could not be consulted.
+            return ManualPrepPrefill.Result(filled: nil, suggestions: [], emptyReason: .historyUnreadable)
+        }
+        let history = LocalHistory.importedWithHealth()
+        return ManualPrepPrefill.build(for: model, amongst: prospects, history: history.records,
+                                       historyUnreadable: history.unreadable)
+    }
+
+    // #2007: prep this show BY HAND. No Prep run, no model call, no spend: Dan names the address and
+    // writes the email himself, and the show lands in `.drafted` exactly where a prepped one does.
+    //
+    // For the shows an AI draft helps least: an annual booking he has shot five years running, where the
+    // email is one paragraph asking about this year's dates and the drafter's cold-pitch shape gets
+    // rewritten anyway.
+    static func prepManually(_ item: QueueItem, email: String, name: String?,
+                             subject: String, body: String,
+                             prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+
+        // #901's gate, and for the same reason it holds the AI path: a pitch for a night he cannot work
+        // is the same wrong email whoever wrote it. Checked BEFORE anything is written, so a refusal
+        // never leaves half a draft behind. The card offers "I can shoot this anyway" to clear it.
+        guard !model.hasUnclearedConflict else {
+            feedback.acknowledge(ActionAck.manualPrepBlockedByClash(org: model.groupName), tone: .warning)
+            return
+        }
+
+        // The same rule the editor's Save button is gated on, so the two cannot disagree.
+        if let refusal = ManualPrepEditing.refusal(email: email, body: body) {
+            feedback.acknowledge(refusal, tone: .warning)
+            return
+        }
+        let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // A `.blocked` result here is not an error on this path: it means the address he named is already
+        // a live contact on this show, which is exactly who he meant to write to. Nothing is added, and
+        // the draft goes ahead against the contact already there.
+        applyManualRecipient(email: trimmedEmail, name: name?.trimmingCharacters(in: .whitespacesAndNewlines),
+                             to: model)
+        model.writeManualDraft(subject: subject.trimmingCharacters(in: .whitespacesAndNewlines),
+                               body: trimmedBody)
+
+        guard context.saveOrWarn(org: model.groupName, feedback: feedback) else { return }
+        feedback.acknowledge(ActionAck.manualPrepSaved(org: model.groupName))
     }
 
     private static func warningLines(for result: ManualRecipientCheck.Result) -> [String] {

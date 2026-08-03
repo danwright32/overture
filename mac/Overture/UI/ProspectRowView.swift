@@ -8,6 +8,8 @@ struct ProspectRowView: View {
     // #1274: the manual-rename sheet and its in-progress text.
     @State private var showingRename = false
     @State private var renameDraft = ""
+    // #2007: the write-it-yourself editor.
+    @State private var showingManualPrep = false
 
     let item: QueueItem
     let today: String
@@ -18,6 +20,13 @@ struct ProspectRowView: View {
     var onSkipDraft: () -> Void = {}
     // #367
     var onReprep: (_ mode: ReprepMode) -> Void = { _ in }
+    // #2007: Dan prepped this show by hand, and what he wrote.
+    var onPrepManually: (_ email: String, _ name: String?, _ subject: String, _ body: String) -> Void = { _, _, _, _ in }
+    // #2007: what the editor already knows about who to send to. A closure, so a card that is merely
+    // OFFERING the control pays nothing: nothing is looked up until the sheet opens.
+    var manualPrepPrefill: () -> ManualPrepPrefill.Result = {
+        ManualPrepPrefill.Result(filled: nil, suggestions: [], emptyReason: .nothingFound)
+    }
     var onSaveDraft: (_ subject: String, _ body: String) -> Void = { _, _ in }
     // #2010: Dan's own opening for one contact, passed through to the draft review screen.
     var onSaveOpening: (_ recipientId: String, _ opening: String) -> Void = { _, _ in }
@@ -189,6 +198,13 @@ struct ProspectRowView: View {
                     lineWidth: item.bookingSuggested || item.isBooked ? 2 : 1)
         )
         .sheet(isPresented: $showingRename) { renameSheet }
+        // #2007: the prefill is looked up HERE, inside the presentation closure, not on the card. It walks
+        // every prospect and reads the booking-history file, and a queue is hundreds of cards, so a card
+        // merely OFFERING the control must pay nothing (`ManualPrepOnScreenTests` holds that).
+        .sheet(isPresented: $showingManualPrep) {
+            ManualPrepSheet(groupName: item.groupName, prefill: manualPrepPrefill(),
+                            onSave: onPrepManually)
+        }
     }
 
     // #1274: the manual-rename sheet. Save commits Dan's name (empty input is ignored by the mutation);
@@ -888,6 +904,7 @@ struct ProspectRowView: View {
                 if item.isKept {
                     Label("Kept", systemImage: "checkmark.seal.fill")
                         .ovPill(.confirmed)
+                    manualPrepControl
                 } else {
                     // #1533: Keep no longer pulls up a classification editor. #348 opened one here on
                     // every unconfirmed guess, which was three quarters of the queue, for a question
@@ -954,6 +971,31 @@ struct ProspectRowView: View {
                 .fixedSize()
             }
         }
+    }
+
+    // #2007: "Prep manually", beside Kept rather than instead of anything. Dan chooses it per show and
+    // nothing is automatic: the ordinary Prep run still owns every cold show, and this is the shortcut
+    // for the warm ones where an AI draft is money and time spent on a paragraph he rewrites anyway.
+    //
+    // Which of the three states to draw is QueueModel.manualPrepOffer's decision (#863), and the blocked
+    // one stays VISIBLE with its reason: "I can shoot this anyway" sits on this same card to clear it.
+    @ViewBuilder private var manualPrepControl: some View {
+        switch QueueModel.manualPrepOffer(for: item) {
+        case .shown:
+            manualPrepButton
+        case .blocked(let reason):
+            manualPrepButton.disabled(true).help(reason)
+        case .hidden:
+            EmptyView()
+        }
+    }
+
+    // Wearing the shared secondary-action capsule (#1460), the same chrome the Dismiss control beside it
+    // wears. Not a plain tinted word: a control styled like static text ships as an invisible feature
+    // (#1742), and this one sits next to a "Kept" PILL, which is a status and not a thing to click.
+    private var manualPrepButton: some View {
+        OVCapsuleButton(label: "Prep manually", tint: OVColor.inkSoft) { showingManualPrep = true }
+            .help("Write this email yourself, with no Prep run and no AI draft")
     }
 
     // #1363/#348: one editor, both dimensions at once. Opened by tapping the badge or automatically
