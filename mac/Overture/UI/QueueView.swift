@@ -1064,6 +1064,13 @@ struct QueueView: View {
             let selfBookingMarker = focusedStage != .scout
                 ? SelfBookingCopy.rowMarker(QueueModel.selfBookingConflictNames(for: item, among: data.items))
                 : nil
+            // #1699 part 3: the same night, when the published curtain times prove Dan can work both.
+            // Nothing to decide, so it is not gold and carries no warning icon: gold is reserved for what
+            // he can act on, and this line exists only so a doubled-up night does not go silent entirely.
+            // Nil whenever the row also has a real clash, so the two lines never stack.
+            let workableNote = focusedStage != .scout
+                ? QueueModel.selfBookingWorkableNote(for: item, among: data.items)
+                : nil
             VStack(alignment: .leading, spacing: 4) {
                 if let marker = selfBookingMarker {
                     HStack(spacing: 4) {
@@ -1072,6 +1079,13 @@ struct QueueView: View {
                     }
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(OVColor.gold)
+                } else if let workableNote {
+                    HStack(spacing: 4) {
+                        Image(systemName: "calendar")
+                        Text(workableNote)
+                    }
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
                 }
                 // #1922: the send's own state is read INSIDE QueueSendAwareRow, not here. Read at this
                 // call site it would be read during QueueView's body, and every "Sending…" would re-derive

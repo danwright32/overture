@@ -620,42 +620,42 @@ struct GroupingTests {
 @Suite("Start time on the card (#1699)")
 struct StartTimeLabelTests {
     @Test func showsAFriendlyClockTimeForASinglePerformance() {
-        #expect(QueueModel.startTimeLabel(["19:00"]) == "7:00 PM")
-        #expect(QueueModel.startTimeLabel(["21:30"]) == "9:30 PM")
-        #expect(QueueModel.startTimeLabel(["11:00"]) == "11:00 AM")
+        #expect(ClockTime.listLabel(["19:00"]) == "7:00 PM")
+        #expect(ClockTime.listLabel(["21:30"]) == "9:30 PM")
+        #expect(ClockTime.listLabel(["11:00"]) == "11:00 AM")
     }
 
     // #1984's double bills, which are 24 of 274 rows on the two live OvationTix venues. Both are named,
     // because showing one would state the day starts then, and the second show is the whole reason a
     // matinee day is worth telling apart from an evening one.
     @Test func namesBothPerformancesOfADoubleBill() {
-        #expect(QueueModel.startTimeLabel(["17:00", "21:15"]) == "5:00 PM and 9:15 PM")
-        #expect(QueueModel.startTimeLabel(["11:00", "14:00"]) == "11:00 AM and 2:00 PM")
+        #expect(ClockTime.listLabel(["17:00", "21:15"]) == "5:00 PM and 9:15 PM")
+        #expect(ClockTime.listLabel(["11:00", "14:00"]) == "11:00 AM and 2:00 PM")
     }
 
     // The majority state, and the one that must produce NOTHING rather than a placeholder, a blank
     // separator, or an invented midnight. "This source never said" is not "this show has no start time".
     @Test func saysNothingAtAllWhenNoTimeWasPublished() {
-        #expect(QueueModel.startTimeLabel([]) == nil)
+        #expect(ClockTime.listLabel([]) == nil)
     }
 
     // Noon and midnight are where 12-hour clocks go wrong, and a show really can start at either.
     @Test func readsNoonAndMidnightTheWayAPersonWould() {
-        #expect(QueueModel.startTimeLabel(["12:00"]) == "12:00 PM")
-        #expect(QueueModel.startTimeLabel(["00:30"]) == "12:30 AM")
+        #expect(ClockTime.listLabel(["12:00"]) == "12:00 PM")
+        #expect(ClockTime.listLabel(["00:30"]) == "12:30 AM")
     }
 
     // A value that is not a time yields no label rather than a mangled one. The readers already refuse
     // to store a drifted time, so this is the second net, not the first.
     @Test func aValueThatIsNotATimeIsNotRendered() {
-        #expect(QueueModel.startTimeLabel(["7pm"]) == nil)
-        #expect(QueueModel.startTimeLabel([""]) == nil)
-        #expect(QueueModel.startTimeLabel(["25:00"]) == nil)
+        #expect(ClockTime.listLabel(["7pm"]) == nil)
+        #expect(ClockTime.listLabel([""]) == nil)
+        #expect(ClockTime.listLabel(["25:00"]) == nil)
     }
 
     // One unreadable half of a double bill costs only that half; the real time still reaches the card.
     @Test func oneBadTimeDoesNotCostTheGoodOneBesideIt() {
-        #expect(QueueModel.startTimeLabel(["19:00", "nonsense"]) == "7:00 PM")
+        #expect(ClockTime.listLabel(["19:00", "nonsense"]) == "7:00 PM")
     }
 }
 
@@ -666,7 +666,7 @@ struct StartTimeLabelTests {
 // A run collapses to ONE card showing a date range, so any single time on it is a claim about every night
 // of the run. That is why this is decided from all the nights rather than read off the opening one.
 // #1699: the ONE string the card puts beside the date, which is what the view calls. Separate from
-// startTimeLabel because the card has a third state that a list of times cannot express: a run whose
+// ClockTime.listLabel because the card has a third state that a list of times cannot express: a run whose
 // nights disagree, which says so instead of showing nothing (Dan's call from the rendered options,
 // 2026-08-02).
 @Suite("What the card says about start time (#1699)")

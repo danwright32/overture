@@ -5,7 +5,7 @@ import SwiftData
 // #1699 / #1984, the WIRING, which is a second claim (the #887 lesson, and the shape
 // RunConflictUsesRealNightsTests uses for the same reason).
 //
-// `RunStartTimes.across` and `QueueModel.startTimeLabel` are both unit tested, and both can be perfectly
+// `RunStartTimes.across` and `ClockTime.listLabel` are both unit tested, and both can be perfectly
 // correct while Dan's card still shows nothing, because the times have to survive assembly, run grouping
 // and the store to reach him. A rule nothing reaches is a rule that does not exist.
 @Suite("A published start time reaches the store (#1699)")

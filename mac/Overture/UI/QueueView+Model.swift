@@ -1517,22 +1517,6 @@ enum QueueModel {
         items.filter(\.bookingSuggested).count
     }
 
-    // #1699: the curtain time(s) for a card, or nil when the source published none.
-    //
-    // Nil is the MAJORITY answer and has to render as nothing at all, not a placeholder and never an
-    // invented midnight: only the three native readers publish a time, so "this source never said" is the
-    // ordinary state of a card and must keep looking exactly like today's (Dan's own framing on #1699).
-    //
-    // Both times of a double bill are named (Dan's call, 2026-08-02, choosing D from the rendered
-    // options). Showing one would state that the day starts then, and the second performance is the whole
-    // reason a matinee day is worth telling apart from an evening one.
-    static func startTimeLabel(_ startTimes: [String]) -> String? {
-        let rendered = startTimes.compactMap(clockLabel)
-        guard let last = rendered.last else { return nil }
-        guard rendered.count > 1 else { return last }
-        return rendered.dropLast().joined(separator: ", ") + " and " + last
-    }
-
     // #1699: the one string the card shows beside the date, or nil to say nothing at all.
     //
     // Nil is the majority answer and renders as NOTHING: no placeholder, no empty separator, no invented
@@ -1544,7 +1528,7 @@ enum QueueModel {
     // sets the flag), so this only arbitrates a state that means something upstream already went wrong,
     // and in that case the concrete fact is worth more than the vaguer sentence.
     static func cardStartTime(startTimes: [String], timesVary: Bool) -> String? {
-        if let label = startTimeLabel(startTimes) { return label }
+        if let label = ClockTime.listLabel(startTimes) { return label }
         return timesVary ? runTimesVaryLabel : nil
     }
 
@@ -1561,15 +1545,7 @@ enum QueueModel {
     // and the drift stays silent (L15/L41); this shape cannot misalign because every time carries its
     // own night.
     static func nightTimesTooltip(_ nightStartTimes: [String]) -> String? {
-        // Grouped by night, keeping the RAW "HH:mm" so the shared card formatter does the rendering once.
-        var byNight: [String: [String]] = [:]
-        for entry in nightStartTimes {
-            let parts = entry.split(separator: " ", omittingEmptySubsequences: false)
-            // A malformed entry costs only ITSELF; the real nights still reach Dan.
-            guard parts.count == 2, day(String(parts[0])) != nil,
-                  clockLabel(String(parts[1])) != nil else { continue }
-            byNight[String(parts[0]), default: []].append(String(parts[1]))
-        }
+        let byNight = nightTimes(nightStartTimes)
         let cal = easternCalendar
         // ISO day strings sort chronologically as text, so this is date order: a hover is read as a
         // schedule, not as whatever order the feed happened to list.
@@ -1577,7 +1553,7 @@ enum QueueModel {
             guard let d = day(iso), let times = byNight[iso],
                   // The SAME phrasing the card uses for a double bill, so the hover speaks in one voice
                   // rather than inventing a second format for the same fact.
-                  let joined = startTimeLabel(times.sorted()) else { return nil }
+                  let joined = ClockTime.listLabel(times.sorted()) else { return nil }
             return "\(shortMonth(cal.component(.month, from: d))) \(cal.component(.day, from: d)) at \(joined)"
         }
         return lines.isEmpty ? nil : lines.joined(separator: "\n")
@@ -1588,18 +1564,22 @@ enum QueueModel {
     // a matinee look identical to a show whose source published no time, which is a different fact.
     static let runTimesVaryLabel = "Times vary"
 
-    // "19:00" as "7:00 PM". Nil for anything that is not a 24-hour "HH:mm", so a drifted value renders as
-    // no time rather than as a mangled one. The readers already refuse to store a bad time; this is the
-    // second net, not the first.
-    private static func clockLabel(_ raw: String) -> String? {
-        let parts = raw.split(separator: ":", omittingEmptySubsequences: false)
-        guard parts.count == 2, parts[0].count == 2, parts[1].count == 2,
-              let hour = Int(parts[0]), let minute = Int(parts[1]),
-              parts[0].allSatisfy(\.isNumber), parts[1].allSatisfy(\.isNumber),
-              (0...23).contains(hour), (0...59).contains(minute) else { return nil }
-        // Noon and midnight are where a 12-hour clock goes wrong, and a show really can start at either.
-        let hour12 = hour % 12 == 0 ? 12 : hour % 12
-        return String(format: "%d:%02d %@", hour12, minute, hour < 12 ? "AM" : "PM")
+    // #1699: the stored "yyyy-MM-dd HH:mm" entries read back as each night's own raw "HH:mm" times.
+    // A malformed entry costs only ITSELF; the real nights still reach Dan.
+    //
+    // One parser, because two things read these entries and must agree on which are real: the hover that
+    // SHOWS the whole schedule, and the clash check that pulls ONE night out of it to compare curtains.
+    // A night the hover displayed but the clash check could not read would be a night Dan was shown and
+    // Overture silently treated as unknown.
+    static func nightTimes(_ nightStartTimes: [String]) -> [String: [String]] {
+        var byNight: [String: [String]] = [:]
+        for entry in nightStartTimes {
+            let parts = entry.split(separator: " ", omittingEmptySubsequences: false)
+            guard parts.count == 2, day(String(parts[0])) != nil,
+                  ClockTime.minutesOfDay(String(parts[1])) != nil else { continue }
+            byNight[String(parts[0]), default: []].append(String(parts[1]))
+        }
+        return byNight
     }
 
     // "Jun 25" for a single date (end nil or same as start), "Jun 25 to 28" for a same-month
@@ -1735,10 +1715,28 @@ enum QueueModel {
         return (i.status == .drafted || i.status == .approved) && i.hasDraft  // an in-progress draft
     }
 
+    // #1699 part 3: the curtain time(s) this row plays on the night the clash check compares, or empty
+    // when nothing published one for that night.
+    //
+    // A RUN is the case worth spelling out. Its card states a single time only when every night agrees
+    // (RunStartTimes.across), so a run with a weekend matinee carries no card time at all, and reading
+    // one off it would say nothing about the night in question. The per-night schedule kept for the
+    // hover DOES name that night, so that is what is read: the most specific true answer available.
+    // When it names nothing for this night, the answer is nothing, never the run's other nights.
+    static func selfBookingStartTimes(_ i: QueueItem) -> [String] {
+        guard let date = i.performanceDate else { return [] }
+        if let night = nightTimes(i.nightStartTimes)[date] { return night }
+        // A run whose nights disagree may not lend one night's time to another (the card refuses to
+        // state one for exactly this reason), so a run that said nothing about THIS night says nothing.
+        guard !i.startTimesVary else { return [] }
+        return i.performanceStartTimes
+    }
+
     private static func selfBookingShow(_ i: QueueItem) -> SelfBookingConflict.Show {
         SelfBookingConflict.Show(key: i.id, date: i.performanceDate,
                                  isCommitment: selfBookingIsCommitment(i),
-                                 engagementKey: i.groupName, name: i.groupName)
+                                 engagementKey: i.groupName, name: i.groupName,
+                                 startTimes: selfBookingStartTimes(i))
     }
 
     // The OTHER committed shows clashing with `item` on its date, across the WHOLE queue (never scoped to
@@ -1751,6 +1749,19 @@ enum QueueModel {
 
     static func hasSelfBookingConflict(for item: QueueItem, among items: [QueueItem]) -> Bool {
         !selfBookingConflicts(for: item, among: items).isEmpty
+    }
+
+    // #1699 part 3: the plain, non-warning note for a night that holds another committed show the clock
+    // proves Dan can work alongside this one. Nil when there is none, and nil whenever the night ALSO
+    // holds a real clash: that night needs the warning, and stacking a reassuring line beside an
+    // actionable one would bury the thing he has to decide about.
+    static func selfBookingWorkableNote(for item: QueueItem, among items: [QueueItem]) -> String? {
+        guard !hasSelfBookingConflict(for: item, among: items) else { return nil }
+        let shows = items.map(selfBookingShow)
+        let target = selfBookingShow(item)
+        return SelfBookingCopy.workableRowMarker(target: target,
+                                                 others: SelfBookingConflict.workable(for: target,
+                                                                                      among: shows))
     }
 
     // The names of the OTHER committed shows on this row's date, so a warning can name them. NOTE (#901/

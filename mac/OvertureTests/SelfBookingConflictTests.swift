@@ -3,10 +3,13 @@ import Foundation
 
 @Suite("Self double-booking conflict (#1219)")
 struct SelfBookingConflictTests {
+    // No published curtain times, which is the MAJORITY of real shows and the state every case below is
+    // about: without them the #1699 gap rule can prove nothing, so these all read exactly as they did
+    // before it existed. The gap's own cases live in SelfBookingWorkableNightTests.
     private func show(_ key: String, _ date: String?, commitment: Bool = false,
                       engagement: String? = nil, name: String = "Show") -> SelfBookingConflict.Show {
         SelfBookingConflict.Show(key: key, date: date, isCommitment: commitment,
-                                 engagementKey: engagement, name: name)
+                                 engagementKey: engagement, name: name, startTimes: [])
     }
 
     // A committed DIFFERENT show on the same exact date is a conflict, and it is the one returned so the
