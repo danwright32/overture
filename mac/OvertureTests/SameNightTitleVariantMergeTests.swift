@@ -199,4 +199,86 @@ struct SameNightTitleVariantMergeTests {
         #expect(second.conflictsDeferred == 0)
         #expect(all(ctx).count == 1)
     }
+
+    // #1845: an address a paid check FOUND, that nobody has written to, is a lookup result and not a
+    // fact about the outside world, so it must not wedge one show into the queue twice forever.
+    //
+    // LIVE-STORE-CLAIM verified=2026-08-03 measure="same-night same-title groups whose copies disagree about the fit score, and what each copy holds"
+    // Measured on the live store: all four surviving groups defer here, three of them for exactly this
+    // reason, and Dan sees each of those shows twice at two different ranks (2 against 10). None of the
+    // nine rows involved has ever been sent anything: no send date, no mail thread, no draft.
+    @Test func afoundAddressNobodyWroteToDoesNotBlockTheMerge() throws {
+        let ctx = try context()
+        let first = insert(ctx, "The Golden Hour Series: Vaden Landers", date: "2026-09-17",
+                           venue: "Greely Square", ingestedAt: 1_000)
+        first.recipients.append(Recipient(id: "hello@golden.example", email: "hello@golden.example",
+                                          provenance: .presenter))
+        let second = insert(ctx, "The Golden Hour Series: Vaden Landers", date: "2026-09-17",
+                            venue: "Greeley Square", ingestedAt: 2_000)
+        second.recipients.append(Recipient(id: "info@jalopy.example", email: "info@jalopy.example",
+                                           provenance: .presenter))
+        try? ctx.save()
+
+        let summary = SameNightTitleVariantMerge.run(in: ctx)
+        try? ctx.save()
+
+        #expect(summary.duplicatesDeleted == 1)
+        #expect(summary.conflictsDeferred == 0)
+        #expect(all(ctx).count == 1)
+    }
+
+    // The other side of the same rule, and the one that must never move: once anybody has actually been
+    // written to, the row records something that happened outside Overture. Merging then moves a real
+    // email onto the wrong show, so the pair is left exactly as it is.
+    @Test func anaddressThatWasActuallyWrittenToStillBlocksTheMerge() throws {
+        let ctx = try context()
+        let first = insert(ctx, "The Golden Hour Series: Vaden Landers", date: "2026-09-17",
+                           venue: "Greely Square", ingestedAt: 1_000)
+        let contacted = Recipient(id: "hello@golden.example", email: "hello@golden.example",
+                                  provenance: .presenter)
+        contacted.sentAt = Date(timeIntervalSince1970: 9_000)
+        contacted.gmailMessageId = "msg-1"
+        contacted.sendState = .sent
+        first.recipients.append(contacted)
+        let second = insert(ctx, "The Golden Hour Series: Vaden Landers", date: "2026-09-17",
+                            venue: "Greeley Square", ingestedAt: 2_000)
+        second.recipients.append(Recipient(id: "info@jalopy.example", email: "info@jalopy.example",
+                                           provenance: .presenter))
+        try? ctx.save()
+
+        let summary = SameNightTitleVariantMerge.run(in: ctx)
+        try? ctx.save()
+
+        #expect(summary.conflictsDeferred == 1)
+        #expect(summary.duplicatesDeleted == 0)
+        #expect(all(ctx).count == 2)
+    }
+
+    // #1845, Dan's call (2026-08-03): when the merge may now collapse two copies that each hold found
+    // addresses, the one Dan keeps must be the copy with the better contact list, because the other
+    // copy's addresses go with it and only a fresh paid check would bring them back.
+    // The richer row is deliberately the LATER-ingested one, so the oldest-wins fallback would pick the
+    // thinner list and this test can actually fail.
+    @Test func thesurvivorKeepsTheBetterContactList() throws {
+        let ctx = try context()
+        let thin = insert(ctx, "The Golden Hour Series: Vaden Landers", date: "2026-09-17",
+                          venue: "Greely Square", ingestedAt: 1_000)
+        thin.recipients.append(Recipient(id: "info@venue.example", email: "info@venue.example",
+                                         provenance: .presenter))
+        let rich = insert(ctx, "The Golden Hour Series: Vaden Landers", date: "2026-09-17",
+                          venue: "Greeley Square", ingestedAt: 2_000)
+        rich.recipients.append(Recipient(id: "act@band.example", email: "act@band.example",
+                                         provenance: .act))
+        rich.recipients.append(Recipient(id: "manager@band.example", email: "manager@band.example",
+                                         provenance: .performer))
+        try? ctx.save()
+
+        SameNightTitleVariantMerge.run(in: ctx)
+        try? ctx.save()
+
+        let remaining = all(ctx)
+        #expect(remaining.count == 1)
+        #expect(remaining.first?.recipients.count == 2,
+                "the copy holding two found contacts must be the one that survives")
+    }
 }

@@ -101,10 +101,17 @@ enum NaturalKeyVenueMigration {
             // Without this the freshest row wins, and where the freshest is an untouched re-scout of a
             // show Dan has already refused, the merge would quietly put it back in front of him, which is
             // the opposite of what this pass is for.
+            // #1845: the same ladder the two merge passes use, spelled through the same named rungs, with
+            // this pass's own tie-break (freshest, for the reason above). The first rung is now the narrow
+            // question rather than `withHistory.first`: a merely-FOUND address no longer decides a
+            // survivor in fetch order, and a dismissed row reaches `refused` below, where it is chosen by
+            // recency as the comment here has always said it should be.
             let freshest: (Prospect, Prospect) -> Bool = { $0.ingestedAt < $1.ingestedAt }
             let refused: [Prospect] = members.filter { $0.status == .dismissed }
-            let survivor: Prospect = withHistory.first
+            let survivor: Prospect =
+                members.first(where: { hasRecordBeyondADismissal($0, countingFoundAddresses: false) })
                 ?? refused.max(by: freshest)
+                ?? richestContactList(members.sorted { freshest($1, $0) })
                 ?? members.max(by: freshest)!
             // The show was first seen when the EARLIEST of these rows first saw it. Carried across before
             // the losers go, or the merge would silently move the funnel's opening node (#16) forward to
@@ -138,12 +145,38 @@ enum NaturalKeyVenueMigration {
     // whole, because a dismissal on its twin may record how that outreach ended. And two refusals that
     // disagree are a real conflict, since choosing between them silently rewrites why Dan said no, which
     // the outcome reporting reads.
+    // #1845 narrows `neverContacted` by one clause: an address a paid check merely FOUND no longer holds
+    // a merge open. Measured on the live store 2026-08-03, that clause alone was wedging three shows into
+    // the queue twice at two different ranks (2 against 10), permanently, on nine rows of which not one
+    // had ever been sent anything. Everything else about this decision is unchanged, including the
+    // refusal to choose between two dismissal reasons that disagree.
     static func mustDefer(_ members: [Prospect]) -> Bool {
         guard members.count > 1 else { return false }
         guard members.filter(hasOutreachHistory).count >= 2 else { return false }
-        let neverContacted = members.allSatisfy { !hasRecordBeyondADismissal($0) }
+        let neverContacted = members.allSatisfy {
+            !hasRecordBeyondADismissal($0, countingFoundAddresses: false)
+        }
         let reasons = Set(members.compactMap(\.dismissReasonRaw))
         return !(neverContacted && reasons.count <= 1)
+    }
+
+    // #1845: the copy whose contact list is worth keeping, once a merge may collapse rows that each hold
+    // addresses. The loser's addresses go with it and only a fresh paid check would bring them back, so
+    // the richest list survives. Nil when no row here holds one. Ties keep the FIRST row given, so the
+    // caller's own ordering decides and the answer cannot vary with fetch order.
+    static func richestContactList(_ members: [Prospect]) -> Prospect? {
+        members.reduce(nil) { best, p in
+            guard !p.recipients.isEmpty else { return best }
+            guard let best else { return p }
+            return p.recipients.count > best.recipients.count ? p : best
+        }
+    }
+
+    // #1845: the row carrying a decision Dan made about this show, as distinct from anything a scout or a
+    // paid check wrote onto it. Named because the survivor ladders in the merge passes need exactly this
+    // rung, and spelling it inline in each of them is how the three drift apart.
+    static func carriesDansDecision(_ p: Prospect) -> Bool {
+        p.status != .new || p.dismissReasonRaw != nil
     }
 
     // A row is a pristine duplicate (safe to drop in a merge) ONLY when it is brand new and carries no
@@ -164,10 +197,18 @@ enum NaturalKeyVenueMigration {
     // deferred branch and stayed there permanently, reported only through NSLog, which is invisible from a
     // running Overture. A dismissal is a DECISION, recoverable and carried onto the survivor below; an
     // outreach record is a fact about the outside world and must never be destroyed.
-    static func hasRecordBeyondADismissal(_ p: Prospect) -> Bool {
+    //
+    // #1845 adds the one seam this predicate has. `countingFoundAddresses` is the difference between the
+    // two questions it is asked: "has anything at all happened here" (true, the default, which is what
+    // `hasOutreachHistory` above and every existing caller mean) and "did we reach the outside world"
+    // (false, which is what a DEFERRAL means, since a found address can be found again and a sent email
+    // cannot be unsent). One list of clauses with one clause parameterised, rather than two lists that
+    // drift, for the same reason this function was split out of the one above in the first place.
+    static func hasRecordBeyondADismissal(_ p: Prospect, countingFoundAddresses: Bool = true) -> Bool {
         if p.sentAt != nil || p.gmailThreadId != nil || p.gmailMessageId != nil { return true }
         if p.draftBody != nil || p.draftSubject != nil { return true }
-        if !p.recipients.isEmpty { return true }
+        if countingFoundAddresses ? !p.recipients.isEmpty
+                                  : p.recipients.contains(where: \.wasWrittenTo) { return true }
         if p.outcomeRaw != Outcome.noResponse.rawValue { return true }
         if p.draftEditedByDan || p.recipientsEditedByDan { return true }
         if p.confidenceReviewedByDan || p.classificationOverriddenByDan { return true }

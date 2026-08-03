@@ -84,25 +84,80 @@ struct SameNightRoomVariantMergeLiveStoreTests {
                 "the pass left \(offenders.count) duplicate pair(s) on one night: \(sample)")
     }
 
+    // #1845's own guard, and the reason that issue was opened: one show must never sit in the QUEUE twice
+    // at two different ranks. The score is a pure function of seven axes, four of which the presenter
+    // string alone decides, so two copies of one show that were read from different pages disagree by up
+    // to 8 points, which is the distance between the top of Dan's queue and the bottom of it.
+    //
+    // LIVE-STORE-CLAIM verified=2026-08-03 measure="same-night confident-title groups of untriaged rows whose stored fit scores differ, after the merge pass has run"
+    // Measured on the live store: 3 such pairs before this change (2 against 10 in each), all three stuck
+    // in the merge's deferral branch on every launch. Scoped to untriaged rows on purpose, because that is
+    // what "in the queue" means, and because a pair Dan has already refused for two DIFFERENT reasons is
+    // deliberately left alone (the merge will not choose between his reasons) and is not in front of him.
+    @Test(.enabled(if: liveStoreExists))
+    func afterThePassNoShowSitsInTheQueueTwiceAtTwoDifferentRanks() throws {
+        let dir = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("overture-1845-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let ctx = ModelContext(try openContainer(at: try copyLiveStore(to: dir)))
+        SameNightTitleVariantMerge.run(in: ctx)
+        try ctx.save()
+
+        let queued = dated((try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []).filter { $0.status == .new }
+        var offenders: [String] = []
+        for (_, night) in Dictionary(grouping: queued, by: { $0.performanceDate ?? "" }) {
+            for i in night.indices {
+                for j in night.indices where j > i {
+                    guard GroupNameMatch.isConfident(
+                        night[i].groupName, night[j].groupName,
+                        minimumContainment: GroupNameMatch.sameNightContainmentFraction) else { continue }
+                    guard night[i].fitScore != night[j].fitScore else { continue }
+                    offenders.append("\(night[i].performanceDate ?? "") \(night[i].groupName): "
+                                     + "\(night[i].fitScore) against \(night[j].fitScore)")
+                }
+            }
+        }
+
+        let sample = offenders.prefix(5).joined(separator: " // ")
+        #expect(offenders.isEmpty,
+                "\(offenders.count) show(s) sit in the queue twice at two different ranks: \(sample)")
+    }
+
     // The safety claim, against real rows rather than invented ones: the pass must never delete a row
     // holding outreach Dan actually sent. Counted before and after on the same copy.
+    //
+    // #1845: this used to count with `hasOutreachHistory`, which is true of a bare dismissal and of an
+    // address a paid check merely FOUND. That is a PROXY for the claim in the sentence above, not the
+    // claim itself, and the two came apart the moment the merge was allowed to collapse duplicates whose
+    // only record was a found address: the pass correctly deleted 10 such rows and this guard read it as
+    // 10 lost outreach records. It now counts the thing it exists to protect. The broad count is asserted
+    // too, as a floor rather than an equality, so a change here still has to be deliberate.
     @Test(.enabled(if: liveStoreExists))
-    func thePassNeverDeletesARowCarryingOutreachHistory() throws {
+    func thePassNeverDeletesARowThatReachedTheOutsideWorld() throws {
         let dir = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("overture-1761-history-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: dir) }
 
         let ctx = ModelContext(try openContainer(at: try copyLiveStore(to: dir)))
-        let before = ((try? ctx.fetch(FetchDescriptor<Prospect>())) ?? [])
-            .filter(NaturalKeyVenueMigration.hasOutreachHistory).count
+        func reachedOutside(_ rows: [Prospect]) -> Int {
+            rows.filter { NaturalKeyVenueMigration.hasRecordBeyondADismissal($0, countingFoundAddresses: false) }
+                .count
+        }
+        let rowsBefore = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
+        let before = reachedOutside(rowsBefore)
+        let anyHistoryBefore = rowsBefore.filter(NaturalKeyVenueMigration.hasOutreachHistory).count
 
         SameNightTitleVariantMerge.run(in: ctx)
         try ctx.save()
 
-        let after = ((try? ctx.fetch(FetchDescriptor<Prospect>())) ?? [])
-            .filter(NaturalKeyVenueMigration.hasOutreachHistory).count
+        let rowsAfter = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
+        let after = reachedOutside(rowsAfter)
+        let anyHistoryAfter = rowsAfter.filter(NaturalKeyVenueMigration.hasOutreachHistory).count
         #expect(after == before,
-                "the merge dropped \(before - after) row(s) carrying real outreach history")
+                "the merge dropped \(before - after) row(s) that had reached the outside world")
+        #expect(anyHistoryAfter <= anyHistoryBefore,
+                "the merge cannot invent history: \(anyHistoryBefore) before, \(anyHistoryAfter) after")
     }
 
     // A merge that keeps a row but blanks its room would read on the card as a show with nowhere to be.

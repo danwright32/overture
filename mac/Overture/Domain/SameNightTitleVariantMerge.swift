@@ -47,8 +47,11 @@ import SwiftData
 //   - An undated row has no night to share and is never grouped.
 //   - Every member of a group must confidently match the FIRST one (GroupNameMatch.isConfident), not just
 //     its neighbour, so a chain of loose pairs can never drag two unrelated acts together.
-//   - When two or more rows carry outreach history the group is left exactly as it is and the conflict is
-//     logged. Merging two real outreach records is Dan's call, not a migration's.
+//   - The deferral is NaturalKeyVenueMigration.mustDefer, the decision named once for all three passes
+//     (#1780, brought here in #1845): the group is left exactly as it is, and the conflict logged, when
+//     two rows reached the outside world or when two dismissal reasons disagree. Merging two real
+//     outreach records is Dan's call, not a migration's. A bare dismissal and an address a paid check
+//     merely FOUND are neither, and used to deadlock a group here on every launch forever.
 //
 // Runs at every launch rather than once: a source keeps republishing its variants, so new pairs keep
 // arriving. Idempotent, because a collapsed group is a singleton and singletons are skipped.
@@ -82,8 +85,17 @@ enum SameNightTitleVariantMerge {
             for cluster in clusters(of: ordered) {
                 guard cluster.count > 1 else { continue }
 
-                let withHistory = cluster.filter(NaturalKeyVenueMigration.hasOutreachHistory)
-                if withHistory.count >= 2 {
+                // #1845: ask the NAMED deferral decision (#1780) instead of hand-rolling a broader one
+                // here. This pass used to defer whenever two rows carried anything at all, which a bare
+                // dismissal and a merely-FOUND address both satisfy, so it refused the same groups on
+                // every launch forever. Measured on the live store 2026-08-03: all four surviving
+                // same-night same-title groups were stuck here, three of them disagreeing about the show's
+                // own rank by 8 points (2 against 10), and two of those three sitting in the QUEUE, where
+                // Dan meets one show twice at two different places in his order. Not one row in any of the
+                // four had ever been sent anything. `mustDefer` still refuses a genuine conflict, including
+                // two dismissal reasons that disagree, which is why the fourth group correctly stays put.
+                if NaturalKeyVenueMigration.mustDefer(cluster) {
+                    let withHistory = cluster.filter(NaturalKeyVenueMigration.hasOutreachHistory)
                     // copy-inventory:ignore-start  developer diagnostic log, not the app's own voice (#915)
                     // #1689: a NOTE. Correct, deliberate, and repeated on every launch (#1639).
                     AgentLog.note("#1590 SameNightTitleVariantMerge: \(withHistory.count) rows of one night carry outreach history; leaving them for Dan.")
@@ -92,7 +104,18 @@ enum SameNightTitleVariantMerge {
                     continue
                 }
 
-                let survivor = withHistory.first ?? probed(cluster) ?? cluster[0]
+                // #1845: the ladder, most irreplaceable first. A real outreach record is a fact about the
+                // outside world; Dan's own decision is next, so an untouched re-scout can never displace a
+                // show he has already refused; then the richest contact list, because the losing copy's
+                // addresses are deleted with it and only a fresh paid check would find them again; then
+                // the row holding a paid answer; then the oldest, which `cluster` is already ordered by.
+                let survivor = cluster.first(where: {
+                        NaturalKeyVenueMigration.hasRecordBeyondADismissal($0, countingFoundAddresses: false)
+                    })
+                    ?? cluster.first(where: NaturalKeyVenueMigration.carriesDansDecision)
+                    ?? NaturalKeyVenueMigration.richestContactList(cluster)
+                    ?? probed(cluster)
+                    ?? cluster[0]
                 // #1761: the survivor is chosen for what it HOLDS (Dan's decision, a paid answer, its
                 // age), which is a different question from which row names the room best. Since the room
                 // no longer gates the merge, a cluster can hold several spellings of one place and the

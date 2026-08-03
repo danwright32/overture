@@ -451,6 +451,33 @@ final class Recipient {
 
     var isBlockedByDraftLint: Bool { !draftLintBlockers.isEmpty && !isLintOverridden }
 
+    // #1845: has anybody actually been written to here, as opposed to this address merely having been
+    // FOUND by a reachability check? The two are different kinds of thing and the merges turn on it: a
+    // found address is the result of a lookup, repeatable by running the lookup again, while a contacted
+    // one records something that happened outside Overture and can never be recreated.
+    //
+    // Dan's call, 2026-08-03, on three duplicated shows sitting in his queue twice at two different ranks
+    // because each copy held addresses nobody had written to: merge them and keep the better contact list.
+    //
+    // FAILS CLOSED, and that is the whole design. Every mark of contact counts, including a suppression
+    // (a booking freeze or a decline is an outcome, not an untouched address) and a stand-down. A field
+    // added later is not covered here, so anything that records contact must be added to this list; the
+    // cost of missing one is a deleted outreach record, which is why the cheap direction is to count too
+    // much rather than too little.
+    var wasWrittenTo: Bool {
+        if sendState != .pending { return true }        // sent, sending, or deliberately suppressed
+        if sentAt != nil || sendClaimedAt != nil { return true }
+        if gmailMessageId != nil || gmailThreadId != nil { return true }
+        if replied || bounced || repliedAt != nil { return true }
+        if followUpCount > 0 || lastFollowUpAt != nil { return true }
+        if replySentAt != nil || replyDraftBody != nil || replyDraftRequestedAt != nil { return true }
+        if replySendClaimedAt != nil || nudgeSendClaimedAt != nil { return true }
+        if formOutreachStartedAt != nil || formOutreachRecordedAt != nil { return true }
+        if conversationStateRaw != nil || conversationStateSetAt != nil { return true }
+        if outreachStoodDownAt != nil || closingNoteStoodDownAt != nil { return true }
+        return false
+    }
+
     // #792: a real contact, with a real address, held back by one of the review guards and waiting on a
     // single glance from Dan.
     //
