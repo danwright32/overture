@@ -19,6 +19,8 @@ struct ProspectRowView: View {
     // #367
     var onReprep: (_ mode: ReprepMode) -> Void = { _ in }
     var onSaveDraft: (_ subject: String, _ body: String) -> Void = { _, _ in }
+    // #2010: Dan's own opening for one contact, passed through to the draft review screen.
+    var onSaveOpening: (_ recipientId: String, _ opening: String) -> Void = { _, _ in }
     var onSetLostReason: (String) -> Void = { _ in }
     var onSend: () -> Void = {}
     var onOverrideSalutationReview: () -> Void = {}
@@ -137,6 +139,7 @@ struct ProspectRowView: View {
                     onSkip: onSkipDraft,
                     onReprep: onReprep,
                     onSaveDraft: onSaveDraft,
+                    onSaveOpening: onSaveOpening,
                     onSetLostReason: onSetLostReason,
                     onSend: onSend,
                     onOverrideSalutationReview: onOverrideSalutationReview,

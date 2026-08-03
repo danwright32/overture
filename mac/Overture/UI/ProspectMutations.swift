@@ -466,6 +466,21 @@ enum ProspectMutations {
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
+    // #2010: Dan's own opening for ONE contact of this show. Blank goes back to Overture's own, so
+    // clearing the field is an undo rather than a request for an email with no greeting at all.
+    //
+    // Matched to a recipient by id within this show, never across shows: the id is the canonical address
+    // and the same person can be a contact on several, so a global lookup would rewrite the opening on a
+    // pitch Dan was not looking at.
+    static func saveOpening(_ item: QueueItem, recipientId: String, opening: String,
+                            prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }),
+              let recipient = model.recipients.first(where: { $0.id == recipientId }) else { return }
+        let trimmed = opening.trimmingCharacters(in: .whitespacesAndNewlines)
+        recipient.openingOverride = trimmed.isEmpty ? nil : trimmed
+        context.saveOrWarn(org: item.groupName, feedback: feedback)
+    }
+
     // #367/#1143: re-prep this one show. It applies the requested mode's flags, saves, and then actually
     // LAUNCHES a Prep run scoped to just this show (reusing PrepQueueService.startPrep, the same detached
     // path "Prep kept" uses), rather than only flagging it for some future run Dan has to remember to

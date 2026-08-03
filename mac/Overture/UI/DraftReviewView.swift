@@ -12,6 +12,9 @@ struct DraftReviewView: View {
     // #367: request a re-prep on a prospect that already has a draft.
     var onReprep: (_ mode: ReprepMode) -> Void = { _ in }
     let onSaveDraft: (_ subject: String, _ body: String) -> Void
+    // #2010: Dan's own opening for one contact. Optional so every existing construction site is
+    // unaffected; without it the opening is shown but not editable.
+    var onSaveOpening: ((_ recipientId: String, _ opening: String) -> Void)? = nil
     var onSetLostReason: (String) -> Void = { _ in }
     var onSend: () -> Void = {}
     // #718: Dan's deliberate override of the #407 salutation-review send block, confirmed via a
@@ -72,6 +75,9 @@ struct DraftReviewView: View {
     var outboundSignature: OutboundSignature = GmailSignatureStore.currentSignature()
 
     @State private var editing = false
+    // #2010: in-progress edits to each contact's opening, keyed by recipient id. Cleared on save and on
+    // cancel, so a half-typed opening never survives into the next draft Dan opens.
+    @State private var openingEdits: [String: String] = [:]
     @State private var askAboutWholeOrg = false   // #769
     @State private var draftSubject = ""
     @State private var draftBody = ""
@@ -201,11 +207,62 @@ struct DraftReviewView: View {
                         dismissLabel: "Not a duplicate", onDismiss: onDismissDuplicateContactMatch)
     }
 
+    // #2010: the top of the email, on screen. Dan's rule (2026-08-03): "I want whatever is in the text
+    // box that I see to be what's sent. There should never be any hidden addition that I cannot see in
+    // the app." This used to be composed at send and appear nowhere, so a draft he read and approved was
+    // not the string that went out.
+    //
+    // One line per CONTACT, because each is addressed differently and a show can have more than one. That
+    // is also what makes editing safe: his words on how he would use it were "if it's multiple i just
+    // don't touch it but if it's single and I want to update it I can", and a per-contact field means an
+    // edit can never re-address somebody else by the wrong name.
+    @ViewBuilder private func openingBlock(editable: Bool) -> some View {
+        if !item.contacts.isEmpty {
+            VStack(alignment: .leading, spacing: 3) {
+                ForEach(item.contacts) { c in
+                    if editable, onSaveOpening != nil {
+                        HStack(spacing: OVSpacing.xs) {
+                            TextField("Opening", text: Binding(
+                                get: { openingEdits[c.id] ?? c.outgoingOpening },
+                                set: { openingEdits[c.id] = $0 }))
+                                .textFieldStyle(.roundedBorder)
+                                .font(OVType.body)
+                            if item.contacts.count > 1 {
+                                Text(c.displayName).font(OVType.tag).foregroundStyle(OVColor.inkFaint)
+                            }
+                        }
+                    } else {
+                        HStack(spacing: OVSpacing.xs) {
+                            Text(c.outgoingOpening)
+                                .font(OVType.body).foregroundStyle(OVColor.ink)
+                                .fixedSize(horizontal: false, vertical: true)
+                            if c.openingIsCustom {
+                                Text("Yours").font(OVType.tag).foregroundStyle(OVColor.gold)
+                            }
+                            if item.contacts.count > 1 {
+                                Text(c.displayName).font(OVType.tag).foregroundStyle(OVColor.inkFaint)
+                            }
+                        }
+                    }
+                }
+                // The one thing worth pointing at rather than silently fixing: the body greets as well,
+                // so the email says hello twice. Said, never rewritten and never blocked, because he can
+                // now see both halves at once and it is his text.
+                if DraftOpeningNotice.bodyRepeatsAGreeting(item.draftBody) {
+                    Text(DraftOpeningNotice.note)
+                        .font(OVType.meta).foregroundStyle(OVColor.rust)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+
     @ViewBuilder private var draftBlock: some View {
         if editing {
             VStack(alignment: .leading, spacing: OVSpacing.xs) {
                 TextField("Subject", text: $draftSubject)
                     .textFieldStyle(.roundedBorder)
+                openingBlock(editable: true)
                 TextEditor(text: $draftBody)
                     .font(OVType.body)
                     .frame(minHeight: 120)
@@ -213,11 +270,14 @@ struct DraftReviewView: View {
                     .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(OVColor.line))
                 HStack {
                     Button("Save") {
+                        // #2010: the opening is part of the email, so it saves with it.
+                        for (id, text) in openingEdits { onSaveOpening?(id, text) }
+                        openingEdits = [:]
                         onSaveDraft(draftSubject, draftBody)
                         editing = false
                     }
                     .buttonStyle(.borderedProminent)
-                    Button("Cancel") { editing = false }
+                    Button("Cancel") { openingEdits = [:]; editing = false }
                         .buttonStyle(.plain).foregroundStyle(OVColor.inkSoft)
                 }
             }
@@ -226,6 +286,7 @@ struct DraftReviewView: View {
                 if let subject = item.draftSubject {
                     Text(subject).font(.system(size: 13, weight: .semibold)).foregroundStyle(OVColor.ink)
                 }
+                openingBlock(editable: false)
                 if let body = item.draftBody {
                     // #1157/#1203: show the body WITH the sign-off the send path appends, so Dan approves
                     // the real outgoing message. DraftSignaturePreview renders the styled text/html a rich

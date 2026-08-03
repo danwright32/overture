@@ -57,7 +57,8 @@ struct LaunchMigrationsTests {
             let reProspect = try #require(reProspects.first)
             #expect(reProspect.recipients.count == 1)
             #expect(reProspect.recipients.first?.provenance == .act)
-            #expect(reProspect.draftBody == "I photograph performing arts in New York.")
+            // #2010: the launch no longer rewrites a stored body, so what was saved is what was written.
+            #expect(reProspect.draftBody == "Hi Emma, I photograph performing arts in New York.")
             await RealStoreTestLock.shared.release()
         } catch {
             await RealStoreTestLock.shared.release()

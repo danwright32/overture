@@ -49,6 +49,10 @@ enum ProspectRowFactory {
                 }
             },
             onSaveDraft: { subject, body in ProspectMutations.saveDraft(item, subject, body, prospects: prospects, context: context, feedback: feedback) },
+            onSaveOpening: { recipientId, opening in
+                ProspectMutations.saveOpening(item, recipientId: recipientId, opening: opening,
+                                              prospects: prospects, context: context, feedback: feedback)
+            },
             onSetLostReason: { reason in ProspectMutations.setLostReason(item, reason, prospects: prospects, context: context, feedback: feedback) },
             onSend: onSend,
             onOverrideSalutationReview: { ProspectMutations.overrideSalutationReview(item, prospects: prospects, context: context, feedback: feedback) },
