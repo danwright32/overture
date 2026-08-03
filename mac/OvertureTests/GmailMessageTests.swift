@@ -1,6 +1,49 @@
 import Testing
 import Foundation
 
+// #2030, the first phase of milestone "One email to several contacts". An outgoing message can name
+// several people. Nothing SENDS to more than one yet (every caller still passes exactly one address);
+// this is only the message format learning that "to" is a list, so the joint send in #2031 has somewhere
+// to put the second person.
+//
+// The joining rule lives here, beside the header it produces, rather than at each call site, so there is
+// one definition of how several addresses become one `To:` line.
+@Suite("A message can name several people (#2030)")
+struct OutgoingMailAddressesTests {
+    @Test func oneAddressReadsExactlyAsItAlwaysHas() {
+        let msg = GmailMessage.rfc822(fromName: "Dan", fromEmail: "d@x.com", to: ["emma@org.org"],
+                                      subject: "s", body: "b")
+
+        #expect(msg.contains("To: emma@org.org\r\n"))
+    }
+
+    @Test func severalAddressesRideOneToLine() {
+        let msg = GmailMessage.rfc822(fromName: "Dan", fromEmail: "d@x.com",
+                                      to: ["emma@org.org", "nathan@org.org"], subject: "s", body: "b")
+
+        #expect(msg.contains("To: emma@org.org, nathan@org.org\r\n"))
+        // One header, not one per person: two `To:` lines is a malformed message, and the second would be
+        // invisible to whoever read the first.
+        #expect(msg.components(separatedBy: "\r\nTo: ").count == 2)
+    }
+
+    // Fail closed. A mail with nobody to send to must not be constructible at all, rather than reaching
+    // Gmail as a message with an empty addressee for it to reject (or worse, accept).
+    @Test func amailWithNobodyToSendToCannotBeBuilt() {
+        #expect(OutgoingMail(to: [], subject: "s", body: "b") == nil)
+        #expect(OutgoingMail(to: ["   "], subject: "s", body: "b") == nil)
+        #expect(OutgoingMail(to: ["emma@org.org"], subject: "s", body: "b") != nil)
+    }
+
+    // A blank alongside a real address is a caller bug, not a reason to send to nobody: the real address
+    // still gets its email, and the blank never reaches the header.
+    @Test func ablankAlongsideARealAddressIsDropped() {
+        let mail = OutgoingMail(to: ["emma@org.org", "  "], subject: "s", body: "b")
+
+        #expect(mail?.to == ["emma@org.org"])
+    }
+}
+
 @Suite("Gmail message encoding")
 struct GmailMessageTests {
     @Test func base64urlHasNoUnsafeCharacters() {
@@ -15,7 +58,7 @@ struct GmailMessageTests {
     @Test func rfc822CarriesHeadersAndBody() {
         let msg = GmailMessage.rfc822(
             fromName: "Dan Wright", fromEmail: "dan@danwrightphotography.com",
-            to: "emma@org.org", subject: "Photographing the choir", body: "Hi Emma,\n\nText.")
+            to: ["emma@org.org"], subject: "Photographing the choir", body: "Hi Emma,\n\nText.")
         #expect(msg.contains("From: Dan Wright <dan@danwrightphotography.com>"))
         #expect(msg.contains("To: emma@org.org"))
         #expect(msg.contains("Subject: Photographing the choir"))
@@ -25,7 +68,7 @@ struct GmailMessageTests {
 
     @Test func nonAsciiSubjectIsRFC2047Encoded() {
         let msg = GmailMessage.rfc822(
-            fromName: "Dan", fromEmail: "d@x.com", to: "t@y.org",
+            fromName: "Dan", fromEmail: "d@x.com", to: ["t@y.org"],
             subject: "Café Quartet at Carnegie", body: "b")
         #expect(msg.contains("Subject: =?UTF-8?B?"))
         #expect(!msg.contains("Subject: Café"))     // raw non-ASCII not in the header
@@ -33,7 +76,7 @@ struct GmailMessageTests {
 
     @Test func rawFieldRoundTripsBackToTheMessage() {
         let raw = GmailMessage.rawField(
-            fromName: "Dan", fromEmail: "d@x.com", to: "t@y.org", subject: "Hello", body: "Body text")
+            fromName: "Dan", fromEmail: "d@x.com", to: ["t@y.org"], subject: "Hello", body: "Body text")
         // Reverse base64url and confirm the message decodes.
         var b64 = raw.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
         while b64.count % 4 != 0 { b64 += "=" }
@@ -45,7 +88,7 @@ struct GmailMessageTests {
     @Test func messageIDHeaderIsIncludedWhenProvided() {
         // #74: the first send stamps a Message-ID so a later follow-up can reference it.
         let msg = GmailMessage.rfc822(
-            fromName: "Dan", fromEmail: "d@x.com", to: "t@y.org",
+            fromName: "Dan", fromEmail: "d@x.com", to: ["t@y.org"],
             subject: "Hello", body: "b", messageID: "<abc@x.com>")
         #expect(msg.contains("Message-ID: <abc@x.com>"))
     }
@@ -53,14 +96,14 @@ struct GmailMessageTests {
     @Test func replyHeadersThreadTheFollowUp() {
         // A follow-up sets In-Reply-To and References to the original so it reads as a Re:.
         let msg = GmailMessage.rfc822(
-            fromName: "Dan", fromEmail: "d@x.com", to: "t@y.org",
+            fromName: "Dan", fromEmail: "d@x.com", to: ["t@y.org"],
             subject: "Re: Hello", body: "b", inReplyTo: "<orig@x.com>")
         #expect(msg.contains("In-Reply-To: <orig@x.com>"))
         #expect(msg.contains("References: <orig@x.com>"))
     }
 
     @Test func omitsThreadingHeadersWhenNotProvided() {
-        let msg = GmailMessage.rfc822(fromName: "Dan", fromEmail: "d@x.com", to: "t@y.org",
+        let msg = GmailMessage.rfc822(fromName: "Dan", fromEmail: "d@x.com", to: ["t@y.org"],
                                       subject: "Hello", body: "b")
         #expect(!msg.contains("Message-ID:"))
         #expect(!msg.contains("In-Reply-To:"))
@@ -77,7 +120,7 @@ struct GmailMessageTests {
     // With no signature the message is byte-for-byte the old single-part text/plain (every existing
     // caller passes nothing, so their behaviour is unchanged).
     @Test func noSignatureStaysSinglePartPlainText() {
-        let msg = GmailMessage.rfc822(fromName: "Dan", fromEmail: "d@x.com", to: "t@y.org",
+        let msg = GmailMessage.rfc822(fromName: "Dan", fromEmail: "d@x.com", to: ["t@y.org"],
                                       subject: "Hello", body: "Hi Emma,\n\nText.", signature: .none)
         #expect(msg.contains("Content-Type: text/plain; charset=UTF-8"))
         #expect(!msg.contains("multipart/alternative"))
@@ -89,7 +132,7 @@ struct GmailMessageTests {
     // sign-off after the body.
     @Test func plainOnlySignatureAppendsSignoffToTheTextPart() {
         let sig = OutboundSignature(html: nil, plainText: "Best,\nDan Wright\nDan Wright Photography")
-        let msg = GmailMessage.rfc822(fromName: "Dan", fromEmail: "d@x.com", to: "t@y.org",
+        let msg = GmailMessage.rfc822(fromName: "Dan", fromEmail: "d@x.com", to: ["t@y.org"],
                                       subject: "Hello", body: "Hi Emma,\n\nText.", signature: sig)
         #expect(msg.contains("Content-Type: text/plain; charset=UTF-8"))
         #expect(!msg.contains("multipart/alternative"))
@@ -104,7 +147,7 @@ struct GmailMessageTests {
         let sig = OutboundSignature(
             html: "<div><b style=\"color:teal\">Dan Wright</b> <span>he/they</span></div>",
             plainText: "Best,\nDan Wright\nDan Wright Photography")
-        let msg = GmailMessage.rfc822(fromName: "Dan", fromEmail: "d@x.com", to: "t@y.org",
+        let msg = GmailMessage.rfc822(fromName: "Dan", fromEmail: "d@x.com", to: ["t@y.org"],
                                       subject: "Hello", body: "Hi Emma,\n\nText.", signature: sig,
                                       boundary: "BOUND123")
         #expect(msg.contains("Content-Type: multipart/alternative; boundary=\"BOUND123\""))
@@ -120,7 +163,7 @@ struct GmailMessageTests {
     // characters can't inject markup and its line breaks survive.
     @Test func theHtmlPartEscapesTheBodyAndKeepsLineBreaks() {
         let sig = OutboundSignature(html: "<div>sig</div>", plainText: "Best")
-        let msg = GmailMessage.rfc822(fromName: "Dan", fromEmail: "d@x.com", to: "t@y.org",
+        let msg = GmailMessage.rfc822(fromName: "Dan", fromEmail: "d@x.com", to: ["t@y.org"],
                                       subject: "Hello", body: "A <b> & one\nSecond line", signature: sig,
                                       boundary: "B")
         #expect(msg.contains("A &lt;b&gt; &amp; one"))   // escaped, not raw markup
@@ -149,7 +192,7 @@ struct GmailMessageTests {
         for sig in [OutboundSignature(html: nil, plainText: "Best,\nDan Wright"),
                     OutboundSignature(html: "<div>sig</div>", plainText: "Best,\nDan Wright")] {
             let preview = GmailMessage.previewBody(body: "Hi Emma,\n\nText.", signature: sig)
-            let msg = GmailMessage.rfc822(fromName: "Dan", fromEmail: "d@x.com", to: "t@y.org",
+            let msg = GmailMessage.rfc822(fromName: "Dan", fromEmail: "d@x.com", to: ["t@y.org"],
                                           subject: "Hello", body: "Hi Emma,\n\nText.", signature: sig, boundary: "B")
             #expect(msg.contains(preview))   // the card's preview IS the plain part inside the sent message
         }
@@ -165,7 +208,7 @@ struct GmailMessageTests {
             html: "<div><b style=\"color:teal\">Dan Wright</b> <span>he/they</span></div>",
             plainText: "Best,\nDan Wright")
         let preview = GmailMessage.previewHTML(body: "Hi Emma,\n\nText.", signature: sig)
-        let msg = GmailMessage.rfc822(fromName: "Dan", fromEmail: "d@x.com", to: "t@y.org",
+        let msg = GmailMessage.rfc822(fromName: "Dan", fromEmail: "d@x.com", to: ["t@y.org"],
                                       subject: "Hello", body: "Hi Emma,\n\nText.", signature: sig, boundary: "B")
         #expect(preview != nil)
         #expect(preview!.contains("<b style=\"color:teal\">Dan Wright</b>"))  // styled signature markup
@@ -205,7 +248,7 @@ struct GmailMessageTests {
     @Test func previewCardHTMLNeverReachesTheSentMessage() {
         let sig = OutboundSignature(
             html: "<div style=\"color:#111\">Dan Wright</div>", plainText: "Best,\nDan Wright")
-        let msg = GmailMessage.rfc822(fromName: "Dan", fromEmail: "d@x.com", to: "t@y.org",
+        let msg = GmailMessage.rfc822(fromName: "Dan", fromEmail: "d@x.com", to: ["t@y.org"],
                                       subject: "Hi", body: "Hi Emma,", signature: sig, boundary: "B")
         #expect(!msg.contains("border-radius"))   // the recipient's html part is not the framed preview card
     }

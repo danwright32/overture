@@ -6,7 +6,10 @@ import Foundation
 // makes the whole send pipeline build, test, and run without sending anything.
 
 struct OutgoingMail: Equatable, Sendable {
-    var to: String
+    // #2030: a list, because one message can name several people (milestone "One email to several
+    // contacts"). Private(set) with a failable init below, so a mail with nobody to send to cannot be
+    // constructed at all rather than reaching Gmail with an empty addressee.
+    private(set) var to: [String]
     var subject: String
     var body: String
     // Threading (#74): on the first send, `messageID` stamps the message so a follow-up can
@@ -14,6 +17,24 @@ struct OutgoingMail: Equatable, Sendable {
     var messageID: String? = nil
     var inReplyTo: String? = nil
     var threadId: String? = nil
+
+    // Nil when there is nobody to send to. A mail with no addressee is not a mail, and the alternative
+    // (constructing one and finding out at the Gmail API, or worse not finding out) puts the discovery
+    // after the point where a caller has already recorded that something went out.
+    //
+    // A blank ALONGSIDE a real address is dropped rather than refused: the person named still gets their
+    // email, and nothing empty reaches the header.
+    init?(to: [String], subject: String, body: String,
+          messageID: String? = nil, inReplyTo: String? = nil, threadId: String? = nil) {
+        let addresses = to.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        guard !addresses.isEmpty else { return nil }
+        self.to = addresses
+        self.subject = subject
+        self.body = body
+        self.messageID = messageID
+        self.inReplyTo = inReplyTo
+        self.threadId = threadId
+    }
 }
 
 struct SentReceipt: Equatable, Sendable {
