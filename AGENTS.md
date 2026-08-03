@@ -58,7 +58,31 @@ already drifting from the Swift version it mirrored.
   example a `@Suite("...")` display name that differs from its Swift type name),
   indistinguishable at a glance from a real pass. Confirm a scoped run by grepping its
   output for the specific test name, or just run the full suite via
-  `run-tests-locked.sh`, which completes in a few seconds.
+  `run-tests-locked.sh`, which takes about a minute and a half.
+- Since #1967 the Swift tests live in TWO targets, and which one a new test belongs in is decided
+  by one question: does it need the app RUNNING?
+  - `OvertureTests` (4,802 tests, `mac/OvertureTests/`) is the default and where a new test goes
+    unless it renders a view. It is UNHOSTED: it reaches the app's code by compiling it in, not by
+    linking a host, so it has no `TEST_HOST` and no dependency on the app target at all.
+  - `OvertureHostedTests` (162 tests, `mac/OvertureHostedTests/`) is only the ViewInspector ones,
+    which render a real SwiftUI view and so genuinely need the host process.
+  - `mac/TestSupport/` holds the helpers both compile (`SourceGuardHelper`, `SwiftSource`,
+    `CopyInventory`), in one place so a guard helper cannot drift between the two targets.
+  This exists because every test used to run inside the launched app, so one launch fault took all
+  of them: on 2026-08-01 a crowded menu bar removed the status item, which terminates a
+  `MenuBarExtra` app, and nothing in the Mac app could be verified at all. Measured 2026-08-02 with
+  a deliberate `fatalError()` in `OvertureApp.init`: the pure suite reported
+  `Test run with 4802 tests in 690 suites passed`, `** TEST SUCCEEDED **`, exit 0, while the app
+  could not start.
+- The pure suite has its own scheme, `OvertureCore`, which does NOT build the app. Use it
+  (`xcodebuild -scheme OvertureCore -destination 'platform=macOS' test`) to verify domain logic while
+  the app is broken or mid-refactor; it does not even need the app to compile. This matters because
+  `-only-testing:OvertureTests` on the combined `Overture` scheme does NOT avoid the app: xcodebuild
+  still prepares and launches the host, and a crash there decided the exit code even though all 4,802
+  passed. `run-tests-locked.sh` now falls back to this scheme automatically whenever a run CRASHES, so
+  a dead host reports "the PURE suite PASSED, the failure above is the APP HOST, not your code"
+  instead of one undifferentiated red. `PureSchemeExcludesTheAppTests` fails if the app is ever put
+  back into that scheme.
 - To actually LOOK at the app, use `mac/scripts/run-debug.sh` (#567): it regenerates the
   project, quits any Debug instance still running (a stale one silently holds the Debug store's
   single-writer lock, so a fresh launch comes up in the degraded "another copy is using its data"

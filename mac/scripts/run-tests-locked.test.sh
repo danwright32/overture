@@ -352,6 +352,26 @@ assert_contains "a build failure says the code did not compile" \
 assert_equals "a build failure exits with xcodebuild's own code" \
   "exit=65" "$(tail -n 1 <<< "${BUILD_FAILURE_RUN}")"
 
+# #1967: when the run DIED (the host crashed), the pure suite's verdict is still knowable, because the
+# pure suite does not need the app at all. Measured on 2026-08-02 with a deliberate fatalError in
+# OvertureApp.init: the OvertureCore scheme reported "4802 tests passed" and exit 0 while the app could
+# not start. So a crash is exactly the case where the runner should go and ask, instead of printing one
+# red verdict over a suite that actually passed.
+#
+# A real FAILURE is never probed: named tests failed, the answer is already known, and re-running the
+# pure suite would only bury the list. Nor is a build failure, which did not compile in the first place.
+assert_equals "a crashed run probes the pure suite, because its verdict is still knowable" \
+  "probe" "$(should_probe_pure_suite crashed)"
+
+assert_equals "a genuine failure is never probed; the failing tests are already named" \
+  "" "$(should_probe_pure_suite failed)"
+
+assert_equals "a build failure is never probed; nothing compiled, so nothing ran" \
+  "" "$(should_probe_pure_suite build-failed)"
+
+assert_equals "a pass is never probed" \
+  "" "$(should_probe_pure_suite "")"
+
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All run-tests-locked.sh stale-host fixtures passed."
   exit 0

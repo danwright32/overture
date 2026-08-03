@@ -127,6 +127,25 @@ should_retry() {
   return 0
 }
 
+# should_probe_pure_suite <outcome>. Prints "probe" when the pure suite's verdict is worth asking for.
+#
+# #1967: the 4,802 pure tests do not need the app. They live in the OvertureCore scheme, which does not
+# build the app target at all, so a broken app cannot fail them, slow them, or stop them reporting.
+# Measured on 2026-08-02 with a deliberate `fatalError()` in OvertureApp.init: that scheme printed
+# "Test run with 4802 tests in 690 suites passed", "** TEST SUCCEEDED **", and exit 0.
+#
+# So when the combined run DIES (the host crashed: no named test failure), one red verdict over the
+# whole thing hides the fact that every domain test passed. Ask the pure suite directly and say so.
+#
+# Only ever on a crash. A genuine "failed" names the tests that failed, so the answer is already known
+# and a second run would only bury the list; "build-failed" never compiled, so nothing ran at all; and a
+# pass has nothing to add.
+should_probe_pure_suite() {
+  local outcome="$1"
+  [[ "${outcome}" == "crashed" ]] && echo "probe"
+  return 0
+}
+
 main() {
   command -v flock >/dev/null || { echo "flock not found; install it with: brew install flock" >&2; exit 1; }
 
@@ -206,6 +225,31 @@ main() {
     echo "Usual causes: the test host could not launch (a running Debug app holding the single-instance lock)," >&2
     echo "or something killed the host mid-run (an overlapping run on this Mac). Any count printed above is not a pass." >&2
     echo "Quit any running Debug Overture, then rerun it; if it passes, the code was never the problem. See #1006/#1252." >&2
+
+    # #1967: a crash used to end here, with one red verdict standing over 4,802 tests that need no app
+    # and may well have passed. The pure suite has its own scheme with the app target left out, so ask it.
+    if [[ -n "$(should_probe_pure_suite "${outcome}")" ]]; then
+      echo >&2
+      echo "run-tests-locked.sh: asking the PURE suite directly, since it does not need the app..." >&2
+      local pure_output pure_code=0 pure_outcome
+      pure_output="$(mktemp)"
+      set +e
+      flock "${LOCK_FILE}" xcodebuild -scheme OvertureCore -destination 'platform=macOS' test \
+        > "${pure_output}" 2>&1
+      pure_code="$?"
+      set -e
+      pure_outcome="$(run_outcome "$(cat "${pure_output}")" "${pure_code}")"
+      echo >&2
+      if [[ -z "${pure_outcome}" ]]; then
+        echo "run-tests-locked.sh: the PURE suite PASSED. $(grep -aoE 'Test run with [0-9]+ tests in [0-9]+ suites passed after [0-9.]+ seconds' "${pure_output}" | tail -1)" >&2
+        echo "So the domain logic is fine and the failure above is the APP HOST, not your code. What is" >&2
+        echo "unverified is only the hosted tests (the handful that render a real SwiftUI view)." >&2
+      else
+        echo "run-tests-locked.sh: the PURE suite also did not pass (${pure_outcome}). Its output is in" >&2
+        echo "${pure_output} and this is NOT just a host problem." >&2
+      fi
+      rm -f "${pure_output}"
+    fi
   fi
 
   # #1252: a test-host launch failure exits xcodebuild 0, so `test_exit_code` alone would let a dead run
