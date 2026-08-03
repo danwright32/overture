@@ -188,6 +188,13 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // date-group header must compare this against the group's date rather than assume the two are the same.
     var conflictBlockedDate: String? = nil
     var runEndDate: String? = nil
+    // #1699: the curtain time(s) this card may state, and whether a run's nights disagree. Both come
+    // straight off the stored show; the decision about what a RUN may claim was made at scout time
+    // (RunStartTimes.across), never here, because the member nights no longer exist by now.
+    var performanceStartTimes: [String] = []
+    var startTimesVary: Bool = false
+    // #1699: every night's times, for the hover behind "Times vary".
+    var nightStartTimes: [String] = []
     var partOfRelatedRun: Bool = false
     // #939: the same production at OTHER venues nearby (a recurring Carnegie community-calendar
     // pattern), distinct from partOfRelatedRun above (which means the same venue, a separate run).
@@ -1510,6 +1517,91 @@ enum QueueModel {
         items.filter(\.bookingSuggested).count
     }
 
+    // #1699: the curtain time(s) for a card, or nil when the source published none.
+    //
+    // Nil is the MAJORITY answer and has to render as nothing at all, not a placeholder and never an
+    // invented midnight: only the three native readers publish a time, so "this source never said" is the
+    // ordinary state of a card and must keep looking exactly like today's (Dan's own framing on #1699).
+    //
+    // Both times of a double bill are named (Dan's call, 2026-08-02, choosing D from the rendered
+    // options). Showing one would state that the day starts then, and the second performance is the whole
+    // reason a matinee day is worth telling apart from an evening one.
+    static func startTimeLabel(_ startTimes: [String]) -> String? {
+        let rendered = startTimes.compactMap(clockLabel)
+        guard let last = rendered.last else { return nil }
+        guard rendered.count > 1 else { return last }
+        return rendered.dropLast().joined(separator: ", ") + " and " + last
+    }
+
+    // #1699: the one string the card shows beside the date, or nil to say nothing at all.
+    //
+    // Nil is the majority answer and renders as NOTHING: no placeholder, no empty separator, no invented
+    // midnight. A show whose source never published a time reads exactly as it does today, so the time is
+    // additive information and never a claim, and an untimed show never looks worse at triage than a
+    // timed one merely because of which feed it came from (Dan's framing on #1699).
+    //
+    // A specific time beats the vary flag. The scout never stores both (the fold clears the times when it
+    // sets the flag), so this only arbitrates a state that means something upstream already went wrong,
+    // and in that case the concrete fact is worth more than the vaguer sentence.
+    static func cardStartTime(startTimes: [String], timesVary: Bool) -> String? {
+        if let label = startTimeLabel(startTimes) { return label }
+        return timesVary ? runTimesVaryLabel : nil
+    }
+
+    // #1699: the schedule behind "Times vary", one line per night, or nil when there is nothing to show.
+    //
+    // Dan's call (2026-08-02) once the real numbers landed: "Times vary" is the MAJORITY of timed cards
+    // (16 of 30 measured on his two live ticketing venues), not the rare case it was offered as, because
+    // almost any run longer than a few nights carries a weekend matinee. So the card keeps the short
+    // honest summary and the actual schedule hangs off a hover, instead of overstating one night or
+    // sending him to the venue's site.
+    //
+    // Each entry is SELF-DESCRIBING ("yyyy-MM-dd HH:mm") rather than a second array that has to stay
+    // lined up with `runNights`. Two parallel lists drift the moment one is written without the other,
+    // and the drift stays silent (L15/L41); this shape cannot misalign because every time carries its
+    // own night.
+    static func nightTimesTooltip(_ nightStartTimes: [String]) -> String? {
+        // Grouped by night, keeping the RAW "HH:mm" so the shared card formatter does the rendering once.
+        var byNight: [String: [String]] = [:]
+        for entry in nightStartTimes {
+            let parts = entry.split(separator: " ", omittingEmptySubsequences: false)
+            // A malformed entry costs only ITSELF; the real nights still reach Dan.
+            guard parts.count == 2, day(String(parts[0])) != nil,
+                  clockLabel(String(parts[1])) != nil else { continue }
+            byNight[String(parts[0]), default: []].append(String(parts[1]))
+        }
+        let cal = easternCalendar
+        // ISO day strings sort chronologically as text, so this is date order: a hover is read as a
+        // schedule, not as whatever order the feed happened to list.
+        let lines = byNight.keys.sorted().compactMap { iso -> String? in
+            guard let d = day(iso), let times = byNight[iso],
+                  // The SAME phrasing the card uses for a double bill, so the hover speaks in one voice
+                  // rather than inventing a second format for the same fact.
+                  let joined = startTimeLabel(times.sorted()) else { return nil }
+            return "\(shortMonth(cal.component(.month, from: d))) \(cal.component(.day, from: d)) at \(joined)"
+        }
+        return lines.isEmpty ? nil : lines.joined(separator: "\n")
+    }
+
+    // #1699, Dan's call from the rendered options (2026-08-02): a run whose nights start at DIFFERENT
+    // times says so, rather than showing nothing. Drawn beside the alternatives, silence made a run with
+    // a matinee look identical to a show whose source published no time, which is a different fact.
+    static let runTimesVaryLabel = "Times vary"
+
+    // "19:00" as "7:00 PM". Nil for anything that is not a 24-hour "HH:mm", so a drifted value renders as
+    // no time rather than as a mangled one. The readers already refuse to store a bad time; this is the
+    // second net, not the first.
+    private static func clockLabel(_ raw: String) -> String? {
+        let parts = raw.split(separator: ":", omittingEmptySubsequences: false)
+        guard parts.count == 2, parts[0].count == 2, parts[1].count == 2,
+              let hour = Int(parts[0]), let minute = Int(parts[1]),
+              parts[0].allSatisfy(\.isNumber), parts[1].allSatisfy(\.isNumber),
+              (0...23).contains(hour), (0...59).contains(minute) else { return nil }
+        // Noon and midnight are where a 12-hour clock goes wrong, and a show really can start at either.
+        let hour12 = hour % 12 == 0 ? 12 : hour % 12
+        return String(format: "%d:%02d %@", hour12, minute, hour < 12 ? "AM" : "PM")
+    }
+
     // "Jun 25" for a single date (end nil or same as start), "Jun 25 to 28" for a same-month
     // range, "Jun 28 to Jul 2" for a cross-month range, "Date to be confirmed" for a bad start.
     static func runDateLabel(start: String?, end: String?) -> String {
@@ -1940,6 +2032,9 @@ extension QueueItem {
             conflictNote: p.conflictNote,
             conflictBlockedDate: p.conflictKey.flatMap { BlockedCalendar.Day(key: $0) }?.date,
             runEndDate: p.runEndDate,
+            performanceStartTimes: p.performanceStartTimes,   // #1699
+            startTimesVary: p.startTimesVary,                 // #1699
+            nightStartTimes: p.nightStartTimes,               // #1699
             partOfRelatedRun: p.partOfRelatedRun,
             disappearedFromFeed: p.disappearedFromFeed,
             contacts: p.recipients

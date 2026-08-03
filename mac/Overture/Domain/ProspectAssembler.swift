@@ -52,6 +52,16 @@ struct AssembledProspect: Equatable, Sendable {
     var partOfRelatedRun: Bool = false
     var runSourceURLs: [String] = []
     var runNights: [String] = []          // #1523: the nights the run plays, for the conflict check
+    // #1699: the times THIS event starts, as published. Still per-NIGHT at this point: the run has not
+    // been grouped yet, so these are one night's performances, and ScoutService.apply decides what the
+    // collapsed run may claim (RunStartTimes.across) once every night is in hand.
+    var startTimes: [String] = []
+    // #1699: set at the FOLD, never here, for the same reason runEndDate is: a run's nights do not exist
+    // as a set until grouping has happened.
+    var startTimesVary: Bool = false
+    // #1699: every night's times as "yyyy-MM-dd HH:mm", assembled at the fold, for the hover behind
+    // "Times vary".
+    var nightStartTimes: [String] = []
     // #901: the day of this run Dan cannot work, if any. Set by ScoutService.apply once the run is known
     // (a conflict is a fact about the whole run, not about its opening night), never by `decide`.
     var conflictKey: String? = nil
@@ -139,7 +149,10 @@ enum ProspectAssembler {
             // returns .none for both no-match and a merely-possible (fuzzy) match, neither of which
             // outranks a standing performer-match correction (#750).
             orgMatchConfident: verdict.relationship != .none,
-            passedOnThisShow: verdict.passedOnThisShow
+            passedOnThisShow: verdict.passedOnThisShow,
+            // #1699: this night's published times, carried through unchanged. What the COLLAPSED run may
+            // claim is decided at the fold, once every night is in hand.
+            startTimes: event.startTimes
         ))
     }
 }

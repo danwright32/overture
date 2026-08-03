@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **973 sentences**, from 340 source files.
+Every sentence Overture can say to Dan: **974 sentences**, from 341 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1697,6 +1697,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceReadability.swift`
 "Timed out waiting for Google. Close any old browser tabs and try Connect Gmail again."
     `Integration/GmailAuthManager.swift`
+"Times vary"
+    `UI/QueueView+Model.swift`
 "Too far"
     `Domain/ReviewStatus.swift`
 "Too far (\(count))"
