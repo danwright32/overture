@@ -32,6 +32,23 @@ struct SquarespaceCalendarTests {
     }
     """#
 
+    // #1699: the precise start instant arrives on EVERY Squarespace event and used to be discarded one
+    // line before it was stored, by formatting the Date through a day-only formatter. Nothing has to be
+    // fetched or parsed differently to keep it; the two fixture instants are 4:00 PM and 7:00 PM Eastern.
+    //
+    // A Squarespace event is one performance, so this is always a single time, unlike OvationTix where a
+    // production can play twice on one day (#1984).
+    @Test("the published start time is kept alongside the day")
+    func keepsTheStartTimeItAlreadyReceives() throws {
+        let events = try SquarespaceCalendar.parseEvents(Data(Self.eventsFeed.utf8))
+        let extracted = SquarespaceCalendar.extractedEvents(from: events, orgName: "Every Voice Choirs",
+                                                            location: "New York, NY")
+        #expect(extracted[0].performanceDate == "2026-11-01")
+        #expect(extracted[0].startTimes == ["16:00"])
+        #expect(extracted[1].performanceDate == "2026-12-10")
+        #expect(extracted[1].startTimes == ["19:00"])
+    }
+
     @Test("an events collection yields its upcoming shows with title, date and venue")
     func parsesUpcoming() throws {
         let events = try SquarespaceCalendar.parseEvents(Data(Self.eventsFeed.utf8))

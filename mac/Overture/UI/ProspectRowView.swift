@@ -358,6 +358,27 @@ struct ProspectRowView: View {
             HStack(spacing: 6) {
                 Text(QueueModel.runDateLabel(start: item.performanceDate, end: item.runEndDate))
                     .foregroundStyle(OVColor.inkFaint)
+                // #1699: the curtain time, when the source published one. Most sources do not, and those
+                // cards render byte-for-byte as they did before this: no separator, no placeholder.
+                // Dan's call from the rendered options (2026-08-02): the SAME weight as the date beside
+                // it, so it reads as part of the when rather than competing with it.
+                if let startTime = QueueModel.cardStartTime(startTimes: item.performanceStartTimes,
+                                                            timesVary: item.startTimesVary) {
+                    Text("·").foregroundStyle(OVColor.lineStrong)
+                    // #1699: when the nights differ, the summary carries the real schedule on hover
+                    // (Dan's call, 2026-08-02), because "Times vary" is the MAJORITY of timed cards and
+                    // on its own it answers nothing he needs.
+                    //
+                    // The tooltip is ATTACHED only when there is something to say, rather than handing
+                    // `help` an empty string and trusting macOS to render nothing from it. A card with a
+                    // single plain time is the common case and must not grow an empty hover box on the
+                    // strength of an assumption about framework behaviour that nothing here can test.
+                    if let nightTimes = QueueModel.nightTimesTooltip(item.nightStartTimes) {
+                        Text(startTime).foregroundStyle(OVColor.inkFaint).help(nightTimes)
+                    } else {
+                        Text(startTime).foregroundStyle(OVColor.inkFaint)
+                    }
+                }
                 // #843: on a booked row the seal already says "BOOKED", so the timing token would repeat
                 // it. The decision lives in the model, tested, not in this ternary.
                 if QueueModel.headerShowsTimingLine(isBooked: item.isBooked) {

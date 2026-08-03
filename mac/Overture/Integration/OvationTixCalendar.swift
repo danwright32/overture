@@ -26,6 +26,17 @@ enum OvationTixCalendar {
         // (so it never wrongly collapses a run) and the link must survive that.
         var productionId: String? = nil
         var performanceId: String? = nil
+        // #1984: EVERY start time this production plays on this day, in the order the feed lists them,
+        // as "HH:mm". Empty when the feed named none, which must stay distinguishable from a day that
+        // starts at midnight.
+        //
+        // A LIST, not one value, because a production really can play twice on one day: measured live
+        // 2026-08-02 across both watched OvationTix venues, 24 of 274 visible rows carry two showtimes
+        // (a 5:00 PM and 9:15 PM double bill; Alice in Wonderland at 11:00 AM and 2:00 PM). The adapter
+        // used to take `showtimes.first` and the second performance vanished with nothing recording it.
+        // The row stays ONE row (Dan pitches a production once); what it must not do is state one of the
+        // two times as if it were the day's only one.
+        var startTimes: [String] = []
     }
 
     // One day of the calendar: the ISO day plus the productions playing it.
@@ -52,6 +63,30 @@ enum OvationTixCalendar {
 
     private struct Showtime: Decodable {
         var performanceId: Int?
+        // #1984: the feed states each performance's start as "yyyy-MM-dd HH:mm" ("2026-07-29 19:00").
+        // Optional like everything else here, so a feed that drops or renames it costs the TIME and never
+        // the row: a show is real and pitchable whether or not its clock survived the read.
+        var performanceStartTime: String?
+    }
+
+    // The "HH:mm" of a showtime that genuinely belongs to `day`, or nil.
+    //
+    // The stated day must MATCH the day the showtime is filed under. The two are separate assertions by
+    // the feed and can only disagree if something drifted, and a time relabelled onto the wrong date is
+    // worse than no time: it would be read as this day's curtain and could quiet the double-booking
+    // warning on a night that is not clear. Anything that is not exactly "yyyy-MM-dd HH:mm" in 24-hour
+    // form yields nil rather than a guess.
+    static func startTime(_ raw: String?, on day: String) -> String? {
+        guard let raw else { return nil }
+        let parts = raw.split(separator: " ", omittingEmptySubsequences: false)
+        guard parts.count == 2, String(parts[0]) == day else { return nil }
+        let time = String(parts[1])
+        let digits = Array(time)
+        guard digits.count == 5, digits[2] == ":",
+              let hour = Int(String(digits[0...1])), let minute = Int(String(digits[3...4])),
+              digits[0].isNumber, digits[1].isNumber, digits[3].isNumber, digits[4].isNumber,
+              (0...23).contains(hour), (0...59).contains(minute) else { return nil }
+        return time
     }
 
     // yyyy-MM-dd in the current zone. The feed's dates are day-granular (only the day matters downstream for
@@ -96,7 +131,14 @@ enum OvationTixCalendar {
                                       seriesId: production.productionId.map(String.init),
                                       productionId: production.productionId.map(String.init),
                                       performanceId: production.showtimes?
-                                          .compactMap(\.performanceId).first.map(String.init)))
+                                          .compactMap(\.performanceId).first.map(String.init),
+                                      // #1984: EVERY performance this production plays today, in feed
+                                      // order. `first` above still addresses the link, which is a
+                                      // separate question: a link opens the production's page for the
+                                      // day and shows both, while a single time would CLAIM the day
+                                      // starts then.
+                                      startTimes: (production.showtimes ?? [])
+                                          .compactMap { startTime($0.performanceStartTime, on: group.date) }))
             }
         }
         // The feed answered with visible productions but NONE parsed, so its shape has changed. Fail loud
@@ -261,7 +303,11 @@ enum OvationTixCalendar {
                            // Dan's call (2026-07-28): fall back to the venue's own calendar, never nothing.
                            sourceUrl: eventURL(for: e, sourceURL: sourceURL) ?? sourceURL?.absoluteString,
                            location: location,
-                           seriesId: e.seriesId.flatMap { multiNight.contains($0) ? $0 : nil })
+                           seriesId: e.seriesId.flatMap { multiNight.contains($0) ? $0 : nil },
+                           // #1984: every performance of this production TODAY, not just the first. The
+                           // link above still addresses one of them, which is a different question: a
+                           // link opens a page listing both, a single time would claim the day starts then.
+                           startTimes: e.startTimes)
         }
     }
 

@@ -35,6 +35,21 @@ struct VenueTixCalendarTests {
         #expect(events[1].title == "The Ethel Merman Disco Album Project")
     }
 
+    // #1699: `dateTime` is the real curtain instant, not a midnight, so the time is already in hand and was
+    // being thrown away by the day-only formatter. The issue predicted this feed would need its
+    // `hour`/`minutes`/`timeFormat` fields; it does not, and these two fixture rows are why: 1781832600000
+    // is 9:30 PM and 1781910000000 is 7:00 PM.
+    //
+    // One VenueTix row is one performance, so this is always a single time (contrast #1984's OvationTix
+    // double bills, where one production plays twice on one day).
+    @Test func keepsTheCurtainTimeThatDateTimeAlreadyCarries() throws {
+        let events = try VenueTixCalendar.parseEvents(Data(Self.feed.utf8))
+        let extracted = VenueTixCalendar.extractedEvents(from: events, presenter: "The Green Room 42",
+                                                         venue: "The Green Room 42", location: nil)
+        #expect(extracted[0].startTimes == ["21:30"])
+        #expect(extracted[1].startTimes == ["19:00"])
+    }
+
     // The synthesized document attributes every show to the venue by NAME (threaded from the source, since
     // the feed carries only an opaque venue id), gives each an explicit ISO date, and is deterministic.
     @Test func synthesizesADocumentAttributedToTheVenue() throws {

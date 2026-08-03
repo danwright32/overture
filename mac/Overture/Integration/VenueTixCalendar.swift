@@ -94,6 +94,21 @@ enum VenueTixCalendar {
         return f
     }()
 
+    // #1699: `dateTime` is the real curtain instant, not a midnight, so the time is already in hand and
+    // was being discarded by the day formatter one line later. Nothing extra is fetched or parsed to keep
+    // it, and the issue's guess that this feed needs its `hour`/`minutes`/`timeFormat` fields is wrong.
+    //
+    // Deliberately the SAME zone as `dayFormatter` above, so a show's day and its time can never be read
+    // in two different zones and disagree about which night it is. That zone being `.current` rather than
+    // Eastern is #1983's subject, and moving one without the other is what would actually break this.
+    private static let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = .current
+        f.dateFormat = "HH:mm"
+        return f
+    }()
+
     // #1174: assigns a clean, run-local tag ("run-1", "run-2", ...) to each production that spans MORE
     // THAN ONE night in this document, in first-appearance order. The synthesized HTML shows that short
     // token (never the feed's opaque id) so the extractor echoes it faithfully into each night's seriesId,
@@ -222,7 +237,9 @@ enum VenueTixCalendar {
                            // source's own calendar rather than to nothing. The card labels the two apart.
                            sourceUrl: eventURL(for: e, sourceURL: sourceURL) ?? sourceURL?.absoluteString,
                            location: location,
-                           seriesId: e.seriesId.flatMap { multiNight.contains($0) ? $0 : nil })
+                           seriesId: e.seriesId.flatMap { multiNight.contains($0) ? $0 : nil },
+                           // #1699: one VenueTix row is one performance, so always exactly one time.
+                           startTimes: [timeFormatter.string(from: e.date)])
         }
     }
 

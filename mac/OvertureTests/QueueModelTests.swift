@@ -611,6 +611,180 @@ struct GroupingTests {
     }
 }
 
+// #1699. Dan's words, walking the queue: he is looking at a card that says `Aug 6` and cannot tell
+// whether the night is workable without leaving the app.
+//
+// The ABSENT case matters at least as much as the present one, and is the majority: only the three native
+// readers publish a time at all, so most cards have none. A card with no time must read exactly as it
+// does today, so the time is additive information and never a claim, and an untimed show never looks
+// worse at triage than a timed one just because of which feed it came from.
+@Suite("Start time on the card (#1699)")
+struct StartTimeLabelTests {
+    @Test func showsAFriendlyClockTimeForASinglePerformance() {
+        #expect(QueueModel.startTimeLabel(["19:00"]) == "7:00 PM")
+        #expect(QueueModel.startTimeLabel(["21:30"]) == "9:30 PM")
+        #expect(QueueModel.startTimeLabel(["11:00"]) == "11:00 AM")
+    }
+
+    // #1984's double bills, which are 24 of 274 rows on the two live OvationTix venues. Both are named,
+    // because showing one would state the day starts then, and the second show is the whole reason a
+    // matinee day is worth telling apart from an evening one.
+    @Test func namesBothPerformancesOfADoubleBill() {
+        #expect(QueueModel.startTimeLabel(["17:00", "21:15"]) == "5:00 PM and 9:15 PM")
+        #expect(QueueModel.startTimeLabel(["11:00", "14:00"]) == "11:00 AM and 2:00 PM")
+    }
+
+    // The majority state, and the one that must produce NOTHING rather than a placeholder, a blank
+    // separator, or an invented midnight. "This source never said" is not "this show has no start time".
+    @Test func saysNothingAtAllWhenNoTimeWasPublished() {
+        #expect(QueueModel.startTimeLabel([]) == nil)
+    }
+
+    // Noon and midnight are where 12-hour clocks go wrong, and a show really can start at either.
+    @Test func readsNoonAndMidnightTheWayAPersonWould() {
+        #expect(QueueModel.startTimeLabel(["12:00"]) == "12:00 PM")
+        #expect(QueueModel.startTimeLabel(["00:30"]) == "12:30 AM")
+    }
+
+    // A value that is not a time yields no label rather than a mangled one. The readers already refuse
+    // to store a drifted time, so this is the second net, not the first.
+    @Test func aValueThatIsNotATimeIsNotRendered() {
+        #expect(QueueModel.startTimeLabel(["7pm"]) == nil)
+        #expect(QueueModel.startTimeLabel([""]) == nil)
+        #expect(QueueModel.startTimeLabel(["25:00"]) == nil)
+    }
+
+    // One unreadable half of a double bill costs only that half; the real time still reaches the card.
+    @Test func oneBadTimeDoesNotCostTheGoodOneBesideIt() {
+        #expect(QueueModel.startTimeLabel(["19:00", "nonsense"]) == "7:00 PM")
+    }
+}
+
+// #1699, Dan's rule (2026-08-02): a run whose nights ALL start at the same time states that time beside
+// its date range; a run whose nights differ says "Times vary"; a run nobody published a time for says
+// nothing, exactly as today.
+//
+// A run collapses to ONE card showing a date range, so any single time on it is a claim about every night
+// of the run. That is why this is decided from all the nights rather than read off the opening one.
+// #1699: the ONE string the card puts beside the date, which is what the view calls. Separate from
+// startTimeLabel because the card has a third state that a list of times cannot express: a run whose
+// nights disagree, which says so instead of showing nothing (Dan's call from the rendered options,
+// 2026-08-02).
+@Suite("What the card says about start time (#1699)")
+struct CardStartTimeTests {
+    @Test func aPublishedTimeIsShown() {
+        #expect(QueueModel.cardStartTime(startTimes: ["19:00"], timesVary: false) == "7:00 PM")
+    }
+
+    @Test func bothTimesOfADoubleBillAreShown() {
+        #expect(QueueModel.cardStartTime(startTimes: ["17:00", "21:15"], timesVary: false)
+                == "5:00 PM and 9:15 PM")
+    }
+
+    // A run whose nights differ SAYS so. Without this it would render identically to a show whose source
+    // published nothing, and those are different facts about different things.
+    @Test func aRunWhoseNightsDifferSaysTheTimesVary() {
+        #expect(QueueModel.cardStartTime(startTimes: [], timesVary: true) == "Times vary")
+    }
+
+    // The majority state: nothing published, so nothing said. Not a placeholder, not a blank separator,
+    // not an invented midnight. The card must read exactly as it does today.
+    @Test func aShowWithNoPublishedTimeSaysNothing() {
+        #expect(QueueModel.cardStartTime(startTimes: [], timesVary: false) == nil)
+    }
+
+    // Defensive: the scout never stores both, because a time beside "times vary" would contradict itself
+    // on one line. If it ever did, the specific time wins over the vaguer sentence.
+    @Test func aStoredTimeWinsOverTheVaryFlagIfBothEverArrive() {
+        #expect(QueueModel.cardStartTime(startTimes: ["19:00"], timesVary: true) == "7:00 PM")
+    }
+}
+
+// #1699, Dan's call (2026-08-02) after seeing the real numbers: "Times vary" turned out to be the
+// MAJORITY of timed cards (16 of 30 measured against his two live ticketing venues), not the rare edge
+// case it was offered as, because almost any run longer than a few nights has a weekend matinee. So the
+// card keeps the short honest summary and the detail hangs off a hover, rather than either overstating
+// one night or making him leave the app.
+@Suite("The per-night times behind Times vary (#1699)")
+struct RunNightTimesTooltipTests {
+    // Each entry is self-describing ("yyyy-MM-dd HH:mm"), never a second array that has to stay aligned
+    // with the nights (the #1523 runNights list is separate and could drift out of step, L15).
+    @Test func listsEachNightWithItsTime() {
+        let text = QueueModel.nightTimesTooltip(["2026-09-26 15:00", "2026-09-27 11:00"])
+        #expect(text == "Sep 26 at 3:00 PM\nSep 27 at 11:00 AM")
+    }
+
+    // A night with two performances names both, the same way the single-date card does.
+    @Test func aNightWithTwoPerformancesNamesBoth() {
+        let text = QueueModel.nightTimesTooltip(["2026-09-27 11:00", "2026-09-27 14:00"])
+        #expect(text == "Sep 27 at 11:00 AM and 2:00 PM")
+    }
+
+    // Nights come out in date order regardless of the order the feed listed them, because this is read as
+    // a schedule.
+    @Test func nightsAreListedInDateOrder() {
+        let text = QueueModel.nightTimesTooltip(["2026-10-02 19:00", "2026-09-27 14:00"])
+        #expect(text == "Sep 27 at 2:00 PM\nOct 2 at 7:00 PM")
+    }
+
+    // Nothing to show means no tooltip at all, rather than an empty box on hover.
+    @Test func noNightsMeansNoTooltip() {
+        #expect(QueueModel.nightTimesTooltip([]) == nil)
+    }
+
+    // A malformed entry costs only itself; the real nights still reach Dan.
+    @Test func aMalformedEntryDoesNotCostTheRest() {
+        #expect(QueueModel.nightTimesTooltip(["nonsense", "2026-09-27 14:00"]) == "Sep 27 at 2:00 PM")
+        #expect(QueueModel.nightTimesTooltip(["nonsense"]) == nil)
+    }
+}
+
+@Suite("A run's start time across its nights (#1699)")
+struct RunStartTimesTests {
+    @Test func aRunWhoseNightsAllShareOneTimeStatesIt() {
+        #expect(RunStartTimes.across([["19:00"], ["19:00"], ["19:00"]]) == .same(["19:00"]))
+    }
+
+    // The real shape from The Players Theatre: weeknights at 7:00 PM, a Sunday matinee at 2:00 PM.
+    @Test func aRunWhoseNightsDifferSaysSo() {
+        #expect(RunStartTimes.across([["19:00"], ["19:00"], ["14:00"]]) == .varies)
+    }
+
+    // "Nobody published a time" is NOT "the times differ", and must not borrow that sentence. This is the
+    // majority of runs, and it has to keep reading like today's card.
+    @Test func aRunWithNoPublishedTimesSaysNothing() {
+        #expect(RunStartTimes.across([[], [], []]) == .none)
+        #expect(RunStartTimes.across([]) == .none)
+    }
+
+    // A run where SOME nights were published and others were not is a run whose nights do not agree, and
+    // the honest answer is that they vary rather than promoting one night's time to the whole run.
+    @Test func aRunWhereOnlySomeNightsPublishedATimeVaries() {
+        #expect(RunStartTimes.across([["19:00"], [], ["19:00"]]) == .varies)
+    }
+
+    // A single-night "run" is just a show, and states its own time.
+    @Test func aSingleNightKeepsItsOwnTime() {
+        #expect(RunStartTimes.across([["19:00"]]) == .same(["19:00"]))
+        #expect(RunStartTimes.across([["17:00", "21:15"]]) == .same(["17:00", "21:15"]))
+    }
+
+    // Two nights that each carry the SAME double bill agree, so the pair is stated for the whole run.
+    @Test func nightsSharingTheSameDoubleBillAgree() {
+        #expect(RunStartTimes.across([["17:00", "21:15"], ["17:00", "21:15"]]) == .same(["17:00", "21:15"]))
+    }
+
+    // The same times in a different order are the same day's performances, not a different schedule.
+    @Test func orderDoesNotMakeTwoNightsDisagree() {
+        #expect(RunStartTimes.across([["17:00", "21:15"], ["21:15", "17:00"]]) == .same(["17:00", "21:15"]))
+    }
+
+    // One night with a matinee and one without is a real difference Dan would act on, so it varies.
+    @Test func anExtraPerformanceOnOneNightCountsAsVarying() {
+        #expect(RunStartTimes.across([["19:00"], ["14:00", "19:00"]]) == .varies)
+    }
+}
+
 @Suite("Run display")
 struct RunDisplayTests {
     @Test func formatsADateRangeWhenRunSpansNights() {

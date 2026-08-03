@@ -139,6 +139,104 @@ struct OvationTixCalendarTests {
         }
     }
 
+    // LIVE-FEED-CLAIM verified=2026-08-02 measure="visible (production, day) rows carrying more than one showtime, both watched OvationTix venues"
+    // #1984: a production can play TWICE on one day, and the adapter used to keep only the first showtime
+    // (`showtimes.first`), so the second performance was discarded with nothing recording that it existed.
+    // Measured live against both watched venues: 24 of 274 visible rows carry two showtimes, never more.
+    // These four are verbatim from that read (SoHo Playhouse client 35583, The Players Theatre client 277).
+    //
+    // The show stays ONE row, because Dan pitches a production once. What must not happen is the row
+    // claiming the day starts at 5:00 PM when it also has a 9:15 PM performance, which is what a card
+    // showing the first time alone would say.
+    static let doubleBill = #"""
+    [
+      {"date":"2026-08-08","productions":[
+        {"productionId":9001,"name":"We've Been Here Before: A One Woman Musical","hidden":false,
+         "showtimes":[{"productionId":9001,"performanceId":501,"performanceStartTime":"2026-08-08 17:00"},
+                      {"productionId":9001,"performanceId":502,"performanceStartTime":"2026-08-08 21:15"}]}
+      ]},
+      {"date":"2026-09-27","productions":[
+        {"productionId":9002,"name":"Alice in Wonderland the Musical","hidden":false,
+         "showtimes":[{"productionId":9002,"performanceId":601,"performanceStartTime":"2026-09-27 11:00"},
+                      {"productionId":9002,"performanceId":602,"performanceStartTime":"2026-09-27 14:00"}]}
+      ]}
+    ]
+    """#
+
+    // The single-performance case, which is the majority (250 of the 274 rows measured): one start time,
+    // read off the feed's own `performanceStartTime` rather than assumed.
+    @Test func capturesTheStartTimeOfASinglePerformanceDay() throws {
+        let events = try OvationTixCalendar.parseEvents(Data(Self.feed.utf8))
+        let cardboard = try #require(events.first { $0.title == "The Passion of Mr. Cardboard" })
+        #expect(cardboard.startTimes == ["21:00"])
+        let wisard = try #require(events.first { $0.title == "Wisard" })
+        #expect(wisard.startTimes == ["19:30"])
+    }
+
+    // #1984, the defect itself: BOTH performances survive, in the order the feed lists them. Before this,
+    // the 9:15 PM show did not exist as far as Overture was concerned.
+    @Test func keepsBothStartTimesWhenAProductionPlaysTwiceInOneDay() throws {
+        let events = try OvationTixCalendar.parseEvents(Data(Self.doubleBill.utf8))
+        let musical = try #require(events.first { $0.title.hasPrefix("We've Been Here Before") })
+        #expect(musical.startTimes == ["17:00", "21:15"])
+        let alice = try #require(events.first { $0.title == "Alice in Wonderland the Musical" })
+        #expect(alice.startTimes == ["11:00", "14:00"])
+    }
+
+    // A double bill is still ONE pitchable row, not two: Dan pitches a production once, and splitting it
+    // would also break the multi-night run collapse that keys on the production id.
+    @Test func aDayWithTwoPerformancesIsStillOneRow() throws {
+        let events = try OvationTixCalendar.parseEvents(Data(Self.doubleBill.utf8))
+        #expect(events.count == 2)
+        #expect(events.filter { $0.title.hasPrefix("We've Been Here Before") }.count == 1)
+    }
+
+    // A feed that names no showtimes (or omits the field entirely) yields NO times rather than a
+    // fabricated one. `showtimes` is optional throughout for exactly this reason: it may cost the time,
+    // never the row.
+    @Test func aProductionWithNoShowtimesCarriesNoStartTimeAndStillSurvives() throws {
+        let noTimes = #"""
+        [{"date":"2026-09-01","productions":[
+          {"productionId":42,"name":"A Show","hidden":false},
+          {"productionId":43,"name":"Another Show","hidden":false,"showtimes":[]}
+        ]}]
+        """#
+        let events = try OvationTixCalendar.parseEvents(Data(noTimes.utf8))
+        #expect(events.count == 2)
+        #expect(events.allSatisfy { $0.startTimes.isEmpty })
+    }
+
+    // A showtime whose stated day disagrees with the day it is filed under is NOT quietly relabelled onto
+    // this date: the two facts contradict each other, and a time is worth having only if it is this day's.
+    // The row survives with the times that do agree.
+    @Test func aShowtimeStatedForAnotherDayIsDroppedRatherThanRelabelled() throws {
+        let mismatched = #"""
+        [{"date":"2026-09-01","productions":[
+          {"productionId":44,"name":"A Show","hidden":false,
+           "showtimes":[{"productionId":44,"performanceId":701,"performanceStartTime":"2026-09-02 19:00"},
+                        {"productionId":44,"performanceId":702,"performanceStartTime":"2026-09-01 20:00"}]}
+        ]}]
+        """#
+        let events = try OvationTixCalendar.parseEvents(Data(mismatched.utf8))
+        #expect(events.count == 1)
+        #expect(events[0].startTimes == ["20:00"])
+    }
+
+    // A drifted time value costs the TIME and never the show. The row is real and pitchable whether or not
+    // its clock survived the read.
+    @Test func anUnparseableStartTimeCostsTheTimeNotTheShow() throws {
+        let drifted = #"""
+        [{"date":"2026-09-01","productions":[
+          {"productionId":45,"name":"A Show","hidden":false,
+           "showtimes":[{"productionId":45,"performanceId":801,"performanceStartTime":"7:00 PM"}]}
+        ]}]
+        """#
+        let events = try OvationTixCalendar.parseEvents(Data(drifted.utf8))
+        #expect(events.count == 1)
+        #expect(events[0].title == "A Show")
+        #expect(events[0].startTimes.isEmpty)
+    }
+
     @Test func handlesOvationtixHostsOnly() {
         #expect(OvationTixCalendar.handles(URL(string: "https://ci.ovationtix.com/35583")!))
         #expect(OvationTixCalendar.handles(URL(string: "https://web.ovationtix.com/whatever")!))
@@ -199,6 +297,20 @@ struct OvationTixCalendarTests {
         // Hungry Women runs three nights -> its id survives; the one-night shows carry no id.
         #expect(extracted.filter { $0.title == "Hungry Women" }.allSatisfy { $0.seriesId == "1280419" })
         #expect(extracted.filter { $0.title == "The Passion of Mr. Cardboard" }.allSatisfy { $0.seriesId == nil })
+    }
+
+    // #1984 + #1699: the times reach the EXTRACTED event, not just the parsed one. A fact captured at the
+    // reader and dropped at the boundary is a field with no consumer, which is the whole defect this pair
+    // exists to fix, one layer further out.
+    @Test func extractedEventsCarryEveryStartTimeOfTheDay() throws {
+        let events = try OvationTixCalendar.parseEvents(Data(Self.doubleBill.utf8))
+        let extracted = OvationTixCalendar.extractedEvents(from: events, presenter: "The Players Theatre",
+                                                           venue: "The Players Theatre",
+                                                           location: "New York, NY")
+        let musical = try #require(extracted.first { $0.title.hasPrefix("We've Been Here Before") })
+        #expect(musical.startTimes == ["17:00", "21:15"])
+        let alice = try #require(extracted.first { $0.title == "Alice in Wonderland the Musical" })
+        #expect(alice.startTimes == ["11:00", "14:00"])
     }
 
     // A feed fetch that fails must throw, never return an empty list: an empty read would read to the

@@ -1017,6 +1017,43 @@ enum ScoutService {
             enriched.runSourceURLs = gr.runSourceURLs
             enriched.runNights = gr.memberDates    // #1523: the nights it plays, for the clash check
 
+            // #1699: what this ONE card may claim about curtain time, decided from EVERY night of the
+            // run rather than read off the representative one. A run collapses to a single card showing a
+            // date range, so a time printed beside that range is a claim about all of its nights.
+            //
+            // Dan's rule (2026-08-02): nights that agree state their shared time; nights that differ say
+            // "Times vary"; a run nobody published a time for says nothing and reads exactly like today's
+            // card. The member rows are gone after this point (the same reason runNights above is stored
+            // rather than derived), so this is the only moment the comparison can be made.
+            let nightTimes = gr.memberIds.compactMap {
+                prospects.indices.contains($0) ? prospects[$0].startTimes : nil
+            }
+            switch RunStartTimes.across(nightTimes) {
+            case .none:
+                enriched.startTimes = []
+                enriched.startTimesVary = false
+            case .same(let times):
+                enriched.startTimes = times
+                enriched.startTimesVary = false
+            case .varies:
+                // No SHARED time alongside the flag: a card holding one night's time AND a note saying
+                // the nights differ would contradict itself on the same line. The per-night schedule is
+                // kept regardless, for the hover.
+                enriched.startTimes = []
+                enriched.startTimesVary = true
+            }
+
+            // #1699: every night's own times, as self-describing "yyyy-MM-dd HH:mm" entries, so the hover
+            // behind "Times vary" shows the real schedule. Dan's call (2026-08-02) once the measurement
+            // showed varying runs are the MAJORITY of timed cards rather than the rare case this feature
+            // was designed around, which made "Times vary" alone the most common thing a timed card said
+            // while answering nothing he needed.
+            enriched.nightStartTimes = gr.memberIds.flatMap { id -> [String] in
+                guard prospects.indices.contains(id),
+                      let night = prospects[id].performanceDate else { return [] }
+                return prospects[id].startTimes.map { "\(night) \($0)" }
+            }
+
             // #1236: a synthetic same-date+venue merge (DCINY) collapsed several per-conductor rows into
             // this one. RunGrouping keeps only the representative row's title, so rebuild the name from
             // EVERY member title (the conductor list is the name), and drop the span: it is one date, not a
@@ -1288,6 +1325,9 @@ enum ScoutService {
             runNights: p.runNights)
         prospect.presenter = p.presenter
         prospect.presenterWasTheRoom = p.presenterWasTheRoom   // #1788
+        prospect.performanceStartTimes = p.startTimes          // #1699
+        prospect.startTimesVary = p.startTimesVary             // #1699
+        prospect.nightStartTimes = p.nightStartTimes           // #1699
         prospect.location = p.location
         prospect.downbeatClientId = p.downbeatClientId
         prospect.passedOnThisShow = p.passedOnThisShow
@@ -1460,6 +1500,14 @@ enum ScoutService {
         existing.partOfRelatedRun = p.partOfRelatedRun
         existing.runSourceURLs = p.runSourceURLs
         existing.runNights = p.runNights        // #1523: keep the played nights current
+
+        // #1699, Dan's call (2026-08-02): the NEWEST read wins, INCLUDING when it is empty. A feed that
+        // stops publishing times costs the card its time, which is the cheap error; a show that gets
+        // rescheduled must never keep advertising the old curtain time, which is the error that could
+        // actually cost him a shoot. So this assigns rather than merging, unlike sourceIds below.
+        existing.performanceStartTimes = p.startTimes
+        existing.startTimesVary = p.startTimesVary
+        existing.nightStartTimes = p.nightStartTimes
 
         // #771: UNION, never replace, and this is the only correct home for it. The chain above
         // deliberately merges the same show arriving from a venue's calendar and from the presenter's

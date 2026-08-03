@@ -523,6 +523,38 @@ final class Prospect {
     // span", so nothing already flagged is cleared on no evidence. Fills in on the next scout.
     var runNights: [String] = []
 
+    // #1699: the curtain time(s) of this card, as "HH:mm", in the order the source published them.
+    //
+    // Empty on every row that predates this and on every source that publishes no time, which is the
+    // MAJORITY and is the ordinary state rather than a gap: the card renders exactly as it does today.
+    // Fills in on the next scout. Deliberately NOT part of the natural key, or every existing show would
+    // look brand new the first time a time was read for it.
+    //
+    // A LIST because a production really can play twice on one day (#1984 measured 24 of 274 rows on the
+    // two watched ticketing venues), and showing one of two would claim the day starts then.
+    var performanceStartTimes: [String] = []
+
+    // #1699: this row is a RUN whose nights do not all start at the same time, so no single time can be
+    // stated for the card. Distinct from an empty `performanceStartTimes`, which means nobody published
+    // one: "the nights differ" and "the source never said" are different facts and only one is about the
+    // show, so they get different sentences (Dan's call, 2026-08-02).
+    //
+    // Decided at scout time by RunStartTimes.across, from every night of the run, because the member
+    // nights are gone by the time anything asks (the same reason runNights above is stored).
+    var startTimesVary: Bool = false
+
+    // #1699: EVERY night's published times, as self-describing "yyyy-MM-dd HH:mm" entries, so the hover
+    // behind "Times vary" can show the actual schedule.
+    //
+    // Deliberately NOT a second array lined up with `runNights`: two parallel lists drift the moment one
+    // is written without the other, and the drift stays silent (L15/L41). Each entry carrying its own
+    // night makes misalignment impossible.
+    //
+    // Kept only because Dan's measurement overturned the earlier decision to discard it: varying runs are
+    // the MAJORITY of timed cards (16 of 30 on his two live ticketing venues), so "Times vary" alone would
+    // have been the most common thing a timed card said while answering nothing.
+    var nightStartTimes: [String] = []
+
     // #804: the model that wrote the draft currently on this show.
     //
     // Dan pinned drafting to the strong TIER rather than an exact version, so he picks up each new Opus
