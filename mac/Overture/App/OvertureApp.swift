@@ -51,6 +51,11 @@ struct OvertureApp: App {
         var lock: StoreLock? = nil
         var reason: String? = nil
         var shrinkWarning: StoreShrinkCheck.Finding? = nil
+        // #1968: set true by the ONE branch below that asks for the single-writer lock and is refused
+        // it. Nothing else may claim it, and it starts false on purpose: a route added to this chain
+        // later inherits "show the reason" rather than "quit without a word", which is what the branch
+        // that stops before the lock is asked for used to inherit by having left `lock` nil.
+        var lockHeldByAnotherCopy = false
 
         if AppEnvironment.isRunningUnderTests {
             // Tests build their own in-memory stores; the host never touches the real store or its lock.
@@ -117,6 +122,9 @@ struct OvertureApp: App {
                 }
             }
         } else {
+            // The lock was asked for and refused, so a live copy really is holding it. This is the only
+            // place in the app that may say so (#1968).
+            lockHeldByAnotherCopy = true
             reason = "Another copy of Overture is already using its data."
         }
 
@@ -127,10 +135,11 @@ struct OvertureApp: App {
         // #1160: classify the launch so a duplicate (another live copy holds the single-writer lock)
         // defers to the resident and quits, instead of lingering on the degraded screen as a second
         // instance. A store that opened badly still shows StoreUnavailableView (see classify's edge).
-        // Tests build in-memory stores and never touch the real lock, so this is only meaningful for a
-        // real launch; under XCTest lockAcquired is effectively true and this stays .ready/.unavailable.
+        // #1968: the duplicate verdict is the branch's own statement, not "did some variable get set".
+        // The test branch needs no special case any more: it never asks for the lock, so it never
+        // claims another copy holds it, and it classifies on whether its in-memory store opened.
         let outcome = StoreLaunchOutcome.classify(
-            lockAcquired: AppEnvironment.isRunningUnderTests || lock != nil,
+            lockHeldByAnotherCopy: lockHeldByAnotherCopy,
             storeOpened: container != nil,
             reason: reason)
         self.launchOutcome = outcome
