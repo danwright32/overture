@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **977 sentences**, from 346 source files.
+Every sentence Overture can say to Dan: **982 sentences**, from 346 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -849,6 +849,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReviewStatus.swift`
 "Looks right"
     `UI/ProspectRowView.swift`
+"Lookups already under way will finish and still count as spent, so stopping now only saves the ones that haven't started."
+    `Domain/Reachability.swift`
 "Lost (keep in mind)"
     `Domain/ReviewStatus.swift`
 "Lost (not interested)"
@@ -2218,6 +2220,14 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/PossibleMatchFanOut.swift`
 "you shoot here regularly"
     `Domain/VenueHistoryCopy.swift`
+"you stopped this check after 1 of \(requested) shows got an answer, and the lookups that were already under way still counted as spent"
+    `Domain/ReachabilityRunSummary.swift`
+"you stopped this check after \(answered) of \(requested) shows got an answer, and the lookups that were already under way still counted as spent"
+    `Domain/ReachabilityRunSummary.swift`
+"you stopped this check before any of the \(requested) shows got an answer, and the lookups that were already under way still counted as spent"
+    `Domain/ReachabilityRunSummary.swift`
+"you stopped this check before the show got an answer, and the lookup it had already started still counted as spent"
+    `Domain/ReachabilityRunSummary.swift`
 "you've photographed a few shows here"
     `Domain/VenueHistoryCopy.swift`
 "you've photographed here before"

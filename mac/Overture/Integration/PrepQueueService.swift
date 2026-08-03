@@ -364,6 +364,7 @@ enum PrepQueueService {
                                         queueURL: URL = PrepQueueBuilder.defaultURL,
                                         downbeatURL: URL = DownbeatBridge.defaultURL,
                                         historyURL: URL = LocalHistory.importedURL,
+                                        cancelURL: URL = defaultCancelURL,
                                         into context: ModelContext, now: Date,
                                         defaults: UserDefaults = .standard) -> ReachabilityRunReport? {
         guard let marker = (try? ReachabilityProbeMarker.read(from: markerURL)) ?? nil else { return nil }
@@ -428,9 +429,19 @@ enum PrepQueueService {
         } else {
             ReachabilityProbeMarker.clear(at: markerURL)
         }
+        // #1685: was this check STOPPED, or did it simply come home short? The two need different
+        // sentences, because only one of them means Dan paid for lookups that returned nothing.
+        //
+        // Read from the cancel sentinel, which is the same file the runner itself obeys, so the report and
+        // the runner can never disagree about whether a stop was requested. It is safe to read here because
+        // `startPrep` clears it before launching: its presence at settle can only have come from a cancel
+        // of THIS run. Read before the marker work above is undone by a later run, and never treated as an
+        // error if the file cannot be reached, since a missing sentinel is the ordinary case.
+        let wasCancelled = FileManager.default.fileExists(atPath: cancelURL.path)
         return ReachabilityRunReport(requested: marker.keys.count, answered: answered.count,
                                      outcome: outcome, stampSaveFailed: stampSaveFailed,
-                                     ledgerSaveFailed: ledger.saveFailed, stampSaveGaveUp: gaveUp)
+                                     ledgerSaveFailed: ledger.saveFailed, stampSaveGaveUp: gaveUp,
+                                     cancelled: wasCancelled)
     }
 
     // #1809: settle a check that finished while Overture was CLOSED.

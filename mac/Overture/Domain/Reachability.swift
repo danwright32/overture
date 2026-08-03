@@ -395,4 +395,16 @@ enum ReachabilityProbeCopy {
             : "This looks up a real contact for the still-open shows on \(dateLabel), so you can tell which are emailable before you keep one. It spends a little on that lookup, only for the shows you check here."
     }
     static let confirmProceed = "Check"
+
+    // #1685: what Cancel actually does on a PAID run, said next to the control rather than after it.
+    //
+    // Measured 2026-07-28: Dan stopped a check on 5 shows at the "1 of 5 done" mark and all five lookups
+    // had already run, so stopping bought him one answer and the cost of five. Cancel reads as "stop this",
+    // and on a paid action a reasonable person hears "stop this before it costs me". Nothing corrected that.
+    //
+    // Says nothing in dollars, per his standing rule on a Max plan (2026-07-27): the app talks about spend
+    // in plain terms, never a figure. It also does not discourage cancelling, because cancelling is often
+    // the right thing to do; it just stops the control promising a saving it cannot make.
+    static let cancelSpendCaveat =
+        "Lookups already under way will finish and still count as spent, so stopping now only saves the ones that haven't started."
 }

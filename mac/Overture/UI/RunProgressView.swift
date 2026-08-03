@@ -173,19 +173,35 @@ struct RunProgressView: View {
     }
 
     @ViewBuilder private func controls(state: RunLiveness) -> some View {
-        HStack(spacing: OVSpacing.sm) {
-            // #1037: stop the run for real, in either state (a running read or a stalled one). Rust, not
-            // forest: this is the one control here that ends work, distinct from Hide (keep running) and
-            // Retry (start again).
-            if let onCancel {
-                Button("Cancel", action: onCancel).buttonStyle(.plain).foregroundStyle(OVColor.rust)
+        VStack(spacing: OVSpacing.xs) {
+            HStack(spacing: OVSpacing.sm) {
+                // #1037: stop the run for real, in either state (a running read or a stalled one). Rust, not
+                // forest: this is the one control here that ends work, distinct from Hide (keep running) and
+                // Retry (start again).
+                if let onCancel {
+                    Button("Cancel", action: onCancel).buttonStyle(.plain).foregroundStyle(OVColor.rust)
+                }
+                if case .stalled = state, let onRetry {
+                    Button("Retry", action: onRetry).buttonStyle(.plain).foregroundStyle(OVColor.forest)
+                }
+                if let onHide {
+                    Button("Hide") { onHide() }
+                        .buttonStyle(.plain).foregroundStyle(OVColor.inkSoft)
+                }
             }
-            if case .stalled = state, let onRetry {
-                Button("Retry", action: onRetry).buttonStyle(.plain).foregroundStyle(OVColor.forest)
-            }
-            if let onHide {
-                Button("Hide") { onHide() }
-                    .buttonStyle(.plain).foregroundStyle(OVColor.inkSoft)
+            // #1685: on the one phase that SPENDS, say what Cancel does before it is pressed. A check is
+            // the only run here where stopping does not stop the cost, and the control read as though it
+            // would. Deliberately visible rather than a tooltip: a caveat nobody hovers over is a caveat
+            // nobody reads (L49), and this one exists to be read at the moment of deciding.
+            //
+            // Only while a cancel is actually on offer, and only for a check. On the scout and on Prep it
+            // would be a sentence about money on a run that spends nothing per item.
+            if phase == .probing, onCancel != nil {
+                Text(ReachabilityProbeCopy.cancelSpendCaveat)
+                    .font(OVType.meta)
+                    .foregroundStyle(OVColor.inkSoft)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

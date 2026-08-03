@@ -29,9 +29,18 @@ enum ReachabilityRunSummary {
                                  outcome: PrepImporter.Outcome?,
                                  stampSaveFailed: Bool = false,
                                  ledgerSaveFailed: Bool = false,
-                                 stampSaveGaveUp: Bool = false) -> String? {
+                                 stampSaveGaveUp: Bool = false,
+                                 cancelled: Bool = false) -> String? {
         var notes: [String] = []
-        if let note = shortfallNote(requested: requested, answered: answered) { notes.append(note) }
+        // #1685: a cancelled check REPLACES the shortfall sentence rather than adding to it. The two
+        // describe the same shows and only one of them is true here: an ordinary short run's shows are
+        // waiting on nothing in particular, while these were stopped on purpose and paid for anyway.
+        // Saying both would be the #843 defect, one fact told twice in two different voices.
+        if cancelled, let note = cancelledNote(requested: requested, answered: answered) {
+            notes.append(note)
+        } else if let note = shortfallNote(requested: requested, answered: answered) {
+            notes.append(note)
+        }
         // #1677 and #1676: the answers came back and the RECORD of them did not save. Said before the
         // shortfall's siblings because it is the only note here about work Dan has already paid for that
         // he is about to pay for again.
@@ -87,6 +96,41 @@ enum ReachabilityRunSummary {
         if unanswered == 1 { return "1 of \(requested) shows never got an answer and is still unchecked" }
         return "\(unanswered) of \(requested) shows never got an answer and are still unchecked"
     }
+
+    // #1685: what a check Dan STOPPED actually bought him. Replaces the sentence above rather than joining
+    // it, because only one of the two is true of these shows.
+    //
+    // Measured 2026-07-28: he cancelled a 5-show check at the "1 of 5 done" mark, and all five lookups had
+    // already run. Stopping the run stopped the waiting, not the spending, and when it settled it read like
+    // any other short run.
+    //
+    // It leads with the ANSWERS rather than the shortfall, unlike its sibling, because that is the half he
+    // did not know: he watched the run stop, so he already knows it did not finish. What he cannot see is
+    // that the lookups it was part-way through were bought anyway.
+    //
+    // Past tense on purpose. By the time this is read those lookups have finished; the control's own
+    // caveat, which he reads while they are still running, is the one that speaks in the present.
+    //
+    // Silent when everything was answered: a cancel that landed after the last answer came home cost
+    // nothing extra and has no warning in it, and an alert that fires on a complete run is one he learns
+    // to scroll past (L36).
+    //
+    // Whole sentences per case rather than interpolated fragments, for the reason the shortfall note above
+    // gives: `docs/copy-inventory.md` is generated from these literals and an assembled sentence lands
+    // there in pieces nobody can cold-read.
+    private static func cancelledNote(requested: Int, answered: Int) -> String? {
+        guard requested > answered else { return nil }
+        if answered == 0 && requested == 1 {
+            return "you stopped this check before the show got an answer, and the lookup it had already started still counted as spent"
+        }
+        if answered == 0 {
+            return "you stopped this check before any of the \(requested) shows got an answer, and the lookups that were already under way still counted as spent"
+        }
+        if answered == 1 {
+            return "you stopped this check after 1 of \(requested) shows got an answer, and the lookups that were already under way still counted as spent"
+        }
+        return "you stopped this check after \(answered) of \(requested) shows got an answer, and the lookups that were already under way still counted as spent"
+    }
 }
 
 // What one settled check was asked to answer, and what it actually answered.
@@ -111,6 +155,8 @@ struct ReachabilityRunReport: Equatable, Sendable {
     // #1677: the stamp failed on the LAST allowed attempt, so the run has been released rather than kept
     // for another try. A different sentence, because the two say different things about what happens next.
     var stampSaveGaveUp: Bool = false
+    // #1685: Dan stopped this check himself.
+    var cancelled: Bool = false
 
     var unanswered: Int { max(0, requested - answered) }
 
@@ -118,6 +164,7 @@ struct ReachabilityRunReport: Equatable, Sendable {
         ReachabilityRunSummary.attentionMessage(requested: requested, answered: answered, outcome: outcome,
                                                 stampSaveFailed: stampSaveFailed,
                                                 ledgerSaveFailed: ledgerSaveFailed,
-                                                stampSaveGaveUp: stampSaveGaveUp)
+                                                stampSaveGaveUp: stampSaveGaveUp,
+                                                cancelled: cancelled)
     }
 }
