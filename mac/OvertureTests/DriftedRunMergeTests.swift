@@ -60,9 +60,11 @@ struct DriftedRunMergeTests {
         try context.fetch(FetchDescriptor<Prospect>())
     }
 
-    // Dan's Hungry Women, exactly as stored. The dismissed 07-23 row is the one carrying his decision, so
-    // it survives and the three pristine rows go. The show he refused stays refused.
-    @Test func theRowCarryingDansDecisionSurvivesAndTheEmptyOnesGo() throws {
+    // Dan's Hungry Women, exactly as stored: he refused the 07-23 night and three later nights of the same
+    // run arrived untouched. #2001, his call: the refused row makes way for one he has not decided about,
+    // so the show comes back and he gets to look again. The freshest undecided night is the one kept, for
+    // this pass's own reason (the earlier nights are stale and the queue is already hiding them).
+    @Test func therefusedRowMakesWayForTheUndecidedOnesSoTheShowComesBack() throws {
         let context = try ctx()
         row(context, night: "2026-07-23", ingestedDaysAgo: 3, missed: 5, dismissed: true)
         row(context, night: "2026-07-24", ingestedDaysAgo: 2, missed: 3)
@@ -73,8 +75,8 @@ struct DriftedRunMergeTests {
 
         let survivors = try all(context)
         #expect(survivors.count == 1)
-        #expect(survivors.first?.performanceDate == "2026-07-23")
-        #expect(survivors.first?.statusRaw == ReviewStatus.dismissed.rawValue)
+        #expect(survivors.first?.performanceDate == "2026-07-26")
+        #expect(survivors.first?.status == .new, "the show must come back for another look")
         #expect(summary.duplicatesDeleted == 3)
     }
 
@@ -172,17 +174,22 @@ struct DriftedRunMergeTests {
     // index, inside a launch migration whose single save is shared with every other migration and whose
     // failure AppDelegate currently discards. One constraint violation would silently roll back all of
     // them, every launch, with nothing anywhere saying so.
+    // Asserted against whichever row survives rather than a hardcoded one, so this pins the claim in its
+    // own sentence (the key is never rewritten) and not the survivor rule, which lives in its own tests.
     @Test func itNeverRewritesTheKeyOrTheDate() throws {
         let context = try ctx()
-        let keeper = row(context, night: "2026-07-23", ingestedDaysAgo: 3, dismissed: true)
-        let originalKey = keeper.naturalKey
-        row(context, night: "2026-07-26", ingestedDaysAgo: 0)
+        let refused = row(context, night: "2026-07-23", ingestedDaysAgo: 3, dismissed: true)
+        let untouched = row(context, night: "2026-07-26", ingestedDaysAgo: 0)
+        let keysAsMinted = [refused.performanceDate: refused.naturalKey,
+                            untouched.performanceDate: untouched.naturalKey]
 
         DriftedRunMerge.run(in: context)
 
         let survivor = try #require(try all(context).first)
-        #expect(survivor.naturalKey == originalKey)
-        #expect(survivor.performanceDate == "2026-07-23")
+        #expect(survivor.naturalKey == keysAsMinted[survivor.performanceDate],
+                "the survivor must still carry the key it was minted with")
+        #expect(["2026-07-23", "2026-07-26"].contains(survivor.performanceDate ?? ""),
+                "the merge must not invent a date")
     }
 
     // Idempotent: a second launch changes nothing and deletes nothing.
@@ -250,7 +257,7 @@ struct DriftedRunMergeTests {
 
         let survivors = try all(context)
         #expect(survivors.count == 1)
-        #expect(survivors.first?.performanceDate == "2026-07-23")
+        #expect(survivors.first?.performanceDate == "2026-07-26")
         #expect(survivors.first?.missedScoutCount == 0)
     }
 

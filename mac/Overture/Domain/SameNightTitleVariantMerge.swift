@@ -104,18 +104,20 @@ enum SameNightTitleVariantMerge {
                     continue
                 }
 
-                // #1845: the ladder, most irreplaceable first. A real outreach record is a fact about the
-                // outside world; Dan's own decision is next, so an untouched re-scout can never displace a
-                // show he has already refused; then the richest contact list, because the losing copy's
-                // addresses are deleted with it and only a fresh paid check would find them again; then
-                // the row holding a paid answer; then the oldest, which `cluster` is already ordered by.
+                // #1845/#2001: the ladder, most irreplaceable first. A real outreach record wins outright,
+                // because it is a fact about the outside world that deleting would destroy. Everything
+                // below it is chosen from the rows Dan has NOT decided about, so a copy he refused makes
+                // way and the show comes back for another look (#2001); within those, the richest contact
+                // list, because the losing copy's addresses are deleted with it and only a fresh paid
+                // check would find them again; then the row holding a paid answer; then the oldest, which
+                // `cluster` is already ordered by.
+                let candidates = NaturalKeyVenueMigration.preferringASecondLook(cluster)
                 let survivor = cluster.first(where: {
                         NaturalKeyVenueMigration.hasRecordBeyondADismissal($0, countingFoundAddresses: false)
                     })
-                    ?? cluster.first(where: NaturalKeyVenueMigration.carriesDansDecision)
-                    ?? NaturalKeyVenueMigration.richestContactList(cluster)
-                    ?? probed(cluster)
-                    ?? cluster[0]
+                    ?? NaturalKeyVenueMigration.richestContactList(candidates)
+                    ?? probed(candidates)
+                    ?? candidates[0]
                 // #1761: the survivor is chosen for what it HOLDS (Dan's decision, a paid answer, its
                 // age), which is a different question from which row names the room best. Since the room
                 // no longer gates the merge, a cluster can hold several spellings of one place and the

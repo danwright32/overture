@@ -254,6 +254,50 @@ struct SameNightTitleVariantMergeTests {
         #expect(all(ctx).count == 2)
     }
 
+    // #2001, Dan's call (2026-08-03): "make it so that the one that has no decision stays. it's not about
+    // the contact list, it's that I may have made a decision based on insufficient information. so give me
+    // another chance to look at it." So when one copy carries a refusal and the other carries none, the
+    // UNDECIDED copy survives and the show returns to the queue for a second look. He chose a genuinely
+    // clean look over a card that remembers: the refusal goes with the row it was on.
+    @Test func arefusedCopyMakesWayForTheUndecidedOneSoTheShowComesBack() throws {
+        let ctx = try context()
+        insert(ctx, "FRIGID Nightcap", date: "2026-07-31", venue: "Under St Marks", ingestedAt: 1_000) {
+            $0.status = .dismissed
+            $0.dismissReasonRaw = "too_soon"
+        }
+        insert(ctx, "FRIGID Nightcap: FUTURE TENSE", date: "2026-07-31", venue: "Under St Marks",
+               ingestedAt: 2_000)
+
+        SameNightTitleVariantMerge.run(in: ctx)
+        try? ctx.save()
+
+        let remaining = all(ctx)
+        #expect(remaining.count == 1)
+        #expect(remaining.first?.status == .new, "the show must come back for another look")
+        #expect(remaining.first?.dismissReasonRaw == nil)
+    }
+
+    // The line that does NOT move. A refusal is Dan's judgment and can be revisited; a sent email is a
+    // fact about the outside world. So a row that reached it survives even against an undecided copy,
+    // because deleting it would destroy the record of what was actually sent.
+    @Test func arowThatReachedTheOutsideWorldStillOutranksAnUndecidedCopy() throws {
+        let ctx = try context()
+        insert(ctx, "FRIGID Nightcap", date: "2026-07-31", venue: "Under St Marks", ingestedAt: 1_000) {
+            $0.sentAt = Date(timeIntervalSince1970: 9_000)
+            $0.gmailMessageId = "msg-1"
+            $0.status = .contacted
+        }
+        insert(ctx, "FRIGID Nightcap: FUTURE TENSE", date: "2026-07-31", venue: "Under St Marks",
+               ingestedAt: 2_000)
+
+        SameNightTitleVariantMerge.run(in: ctx)
+        try? ctx.save()
+
+        let remaining = all(ctx)
+        #expect(remaining.count == 1)
+        #expect(remaining.first?.gmailMessageId == "msg-1", "the sent record must never be deleted")
+    }
+
     // #1845, Dan's call (2026-08-03): when the merge may now collapse two copies that each hold found
     // addresses, the one Dan keeps must be the copy with the better contact list, because the other
     // copy's addresses go with it and only a fresh paid check would bring them back.

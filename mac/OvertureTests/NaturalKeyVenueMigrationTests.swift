@@ -388,10 +388,12 @@ struct NaturalKeyVenueMigrationTests {
         #expect(rows.contains { $0.sentAt != nil })
     }
 
-    // #1780: the survivor rule the relaxation makes load-bearing. A show Dan refused, re-scouted later
-    // under a variant spelling, must not come back: the merge keeps his refusal even though the pristine
-    // row is the fresher of the two.
-    @Test func aRefusedShowDoesNotReturnWhenAPristineRescoutMergesIntoIt() throws {
+    // #2001 REVERSES what #1780 pinned here, on Dan's call (2026-08-03): a show he refused, re-scouted
+    // later under a variant spelling, DOES come back. His reason is that the refusal may have been made on
+    // insufficient information, and a second copy arriving is his chance to reconsider, so the untouched
+    // re-scout survives and the show returns to the queue. He chose a genuinely clean look, so the refusal
+    // goes with the row it was on rather than being carried across.
+    @Test func arefusedShowReturnsWhenAPristineRescoutMergesIntoIt() throws {
         let ctx = try context()
         let group = "Refused Show", date = "2026-08-09"
 
@@ -407,7 +409,7 @@ struct NaturalKeyVenueMigrationTests {
         NaturalKeyVenueMigration.run(in: ctx)
         let rows = allProspects(ctx)
         #expect(rows.count == 1)
-        #expect(rows.first?.status == .dismissed)
-        #expect(rows.first?.dismissReasonRaw == "too_soon")
+        #expect(rows.first?.status == .new, "the show must come back for another look")
+        #expect(rows.first?.dismissReasonRaw == nil)
     }
 }
