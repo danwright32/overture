@@ -51,7 +51,7 @@ enum TicketTailorCalendar {
     }
 
     // Parse the widget HTML's embedded `var selectableDates = ...;` assignment into events.
-    static func parseWidget(_ html: String) throws -> [TTEvent] {
+    static func parseWidget(_ html: String, zone: TimeZone = FeedDates.defaultZone) throws -> [TTEvent] {
         // No assignment at all (a non-widget page, or a shape we don't recognize) reads as empty, never an
         // error: the read-path only routes a CONFIRMED TicketTailor widget here, and a hard failure belongs
         // to the extractor's "the embed vanished" case (#1294), not to a benign parse miss.
@@ -74,7 +74,9 @@ enum TicketTailorCalendar {
         var events: [TTEvent] = []
         var sawAnySeries = false
         for (dateKey, entry) in map {
-            guard let day = dayFormatter.date(from: dateKey) else { continue }   // a key that isn't a day
+            // #1983: Eastern, not the host zone, so the widget's day keys become the same New York days
+            // the rest of Overture reckons by. The day STRING round-trips unchanged in any zone.
+            guard let day = FeedDates.date(day: dateKey, zone: zone) else { continue }   // not a day
             for series in entry.event_series ?? [] {
                 sawAnySeries = true
                 let name = series.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -98,18 +100,12 @@ enum TicketTailorCalendar {
     // Keep shows on today or later. Day-based (the widget dates carry no time), so a show TODAY is kept
     // rather than dropped for being "before now". Filtering a COMPLETE feed to a stable rule keeps the
     // reconcile honest: a show leaves the set only once it is genuinely past.
-    static func upcoming(_ events: [TTEvent], now: Date) -> [TTEvent] {
-        let today = Calendar.current.startOfDay(for: now)
-        return events.filter { Calendar.current.startOfDay(for: $0.date) >= today }
+    static func upcoming(_ events: [TTEvent], now: Date, zone: TimeZone = FeedDates.defaultZone) -> [TTEvent] {
+        // #1983: Eastern's midnight, not the host clock's. At 10pm in New York a UTC host is already
+        // tomorrow, and tonight's show would leave the feed, which reconcile reads as a cancellation.
+        let today = FeedDates.startOfDay(now, zone: zone)
+        return events.filter { FeedDates.startOfDay($0.date, zone: zone) >= today }
     }
-
-    private static let dayFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.timeZone = .current
-        f.dateFormat = "yyyy-MM-dd"
-        return f
-    }()
 
     // The events mapped to ExtractedEvent. Dan's decisions (2026-07-21): the pitch venue is the feed's own
     // `venue` text when present, else the venue name he configured on the source; a recurring show (one
@@ -117,13 +113,14 @@ enum TicketTailorCalendar {
     // seriesId onward (a single-date show gets nil so it is never falsely run-collapsed). The event page
     // URL is carried as the listing link a person would open.
     static func extractedEvents(from events: [TTEvent], venueName: String,
-                                location: String?) -> [ExtractedEvent] {
+                                location: String?,
+                                zone: TimeZone = FeedDates.defaultZone) -> [ExtractedEvent] {
         let multiDate = Set(seriesTags(events).keys)
         return events.map { e in
             ExtractedEvent(title: e.name,
                            presenter: venueName,
                            venue: (e.venue?.isEmpty == false) ? e.venue! : venueName,
-                           performanceDate: dayFormatter.string(from: e.date),
+                           performanceDate: FeedDates.day(from: e.date, zone: zone),
                            sourceUrl: e.eventURL.flatMap(absoluteEventURL),
                            location: location,
                            seriesId: e.seriesId.flatMap { multiDate.contains($0) ? $0 : nil })

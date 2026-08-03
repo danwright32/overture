@@ -86,29 +86,6 @@ enum VenueTixCalendar {
         events.filter { $0.date >= now }
     }
 
-    private static let dayFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.timeZone = .current
-        f.dateFormat = "yyyy-MM-dd"
-        return f
-    }()
-
-    // #1699: `dateTime` is the real curtain instant, not a midnight, so the time is already in hand and
-    // was being discarded by the day formatter one line later. Nothing extra is fetched or parsed to keep
-    // it, and the issue's guess that this feed needs its `hour`/`minutes`/`timeFormat` fields is wrong.
-    //
-    // Deliberately the SAME zone as `dayFormatter` above, so a show's day and its time can never be read
-    // in two different zones and disagree about which night it is. That zone being `.current` rather than
-    // Eastern is #1983's subject, and moving one without the other is what would actually break this.
-    private static let timeFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.timeZone = .current
-        f.dateFormat = "HH:mm"
-        return f
-    }()
-
     // #1174: assigns a clean, run-local tag ("run-1", "run-2", ...) to each production that spans MORE
     // THAN ONE night in this document, in first-appearance order. The synthesized HTML shows that short
     // token (never the feed's opaque id) so the extractor echoes it faithfully into each night's seriesId,
@@ -138,14 +115,15 @@ enum VenueTixCalendar {
     // #1529: `venueName` is OPTIONAL, and a nil one writes no place at all rather than the next best string
     // to hand (which, on the ticket-link hop that reaches this feed without a source, was the request's
     // HOSTNAME). A date stands alone as a complete row; the venue is supplied at ingest instead.
-    static func listingHTML(_ events: [VTEvent], venueName: String?, location: String? = nil) -> String {
+    static func listingHTML(_ events: [VTEvent], venueName: String?, location: String? = nil,
+                            zone: TimeZone = FeedDates.defaultZone) -> String {
         let place = venueName.map { name in location.map { "\(name), \($0)" } ?? name }
         let tags = seriesTags(events)
         let rows = events.map { e -> String in
             let bits = [e.superTitle, e.subTitle].compactMap { $0 }.filter { !$0.isEmpty }
                 .map { "<p>\($0)</p>" }.joined()
             let seriesLine = e.seriesId.flatMap { tags[$0] }.map { "<p>Series: \($0)</p>" } ?? ""
-            let day = dayFormatter.string(from: e.date)
+            let day = FeedDates.day(from: e.date, zone: zone)
             let dateLine = place.map { "\(day) at \($0)" } ?? day
             return "<article><h2>\(e.title)</h2>\(bits)\(seriesLine)<p>\(dateLine)</p></article>"
         }.joined(separator: "\n")
@@ -226,20 +204,24 @@ enum VenueTixCalendar {
     }
 
     static func extractedEvents(from events: [VTEvent], presenter: String, venue: String?,
-                                location: String?, sourceURL: URL? = nil) -> [ExtractedEvent] {
+                                location: String?, sourceURL: URL? = nil,
+                                zone: TimeZone = FeedDates.defaultZone) -> [ExtractedEvent] {
         let multiNight = Set(seriesTags(events).keys)
         return events.map { e in
             ExtractedEvent(title: e.title,
                            presenter: presenter,
                            venue: venue,
-                           performanceDate: dayFormatter.string(from: e.date),
+                           performanceDate: FeedDates.day(from: e.date, zone: zone),
                            // Dan's call (2026-07-28): a row with no per-event link falls back to the
                            // source's own calendar rather than to nothing. The card labels the two apart.
                            sourceUrl: eventURL(for: e, sourceURL: sourceURL) ?? sourceURL?.absoluteString,
                            location: location,
                            seriesId: e.seriesId.flatMap { multiNight.contains($0) ? $0 : nil },
-                           // #1699: one VenueTix row is one performance, so always exactly one time.
-                           startTimes: [timeFormatter.string(from: e.date)])
+                           // #1699: `dateTime` is the real curtain instant, not a midnight, so the
+                           // time is already in hand; one VenueTix row is one performance, so always
+                           // exactly one time. #1983: the day above and this time come from ONE zone,
+                           // so they can never disagree about which night the show is.
+                           startTimes: [FeedDates.time(from: e.date, zone: zone)])
         }
     }
 

@@ -43,17 +43,12 @@ enum OperaAmericaCalendar {
         var eventLink: String?
     }
 
-    // The feed dates arrive zoneless ("2026-07-18T00:00:00") and mean a local calendar day, so they are
-    // parsed in the current time zone. Only the day matters downstream (horizon + geography), not the clock.
-    private static let dateParser: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.timeZone = .current
-        f.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
-        return f
-    }()
+    // The feed dates arrive zoneless ("2026-07-18T00:00:00") and mean a local calendar day. #1983: which
+    // INSTANT that is depends entirely on the zone it is read in, so it is read in Eastern, the zone the
+    // rest of Overture reckons by, never the Mac's own.
+    private static let dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
 
-    static func parsePage(_ data: Data) throws -> OAPage {
+    static func parsePage(_ data: Data, zone: TimeZone = FeedDates.defaultZone) throws -> OAPage {
         let env: Envelope
         do {
             env = try JSONDecoder().decode(Envelope.self, from: data)
@@ -68,7 +63,8 @@ enum OperaAmericaCalendar {
         let events: [OAEvent] = env.items.compactMap { item in
             // A row we cannot date is not a listing we can safely pitch or reconcile, so drop it rather than
             // invent a date. The feed has always carried a date, so this is a guard, not an expected path.
-            guard let raw = item.date, let date = dateParser.date(from: raw) else { return nil }
+            guard let raw = item.date,
+                  let date = FeedDates.date(raw, format: dateFormat, zone: zone) else { return nil }
             return OAEvent(title: item.title,
                            company: item.company ?? "",
                            date: date,
@@ -85,25 +81,15 @@ enum OperaAmericaCalendar {
         return OAPage(totalPages: env.totalPages, totalItems: env.totalItems, events: events)
     }
 
-    // yyyy-MM-dd in the current zone, matching how the feed dates were parsed. Stable output so the
-    // synthesized document (and thus the content hash) does not churn between runs on identical feed data.
-    private static let dayFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.timeZone = .current
-        f.dateFormat = "yyyy-MM-dd"
-        return f
-    }()
-
     // Renders the events as one plain HTML document the extractor reads exactly like any fetched page. Each
     // event carries an EXPLICIT ISO date (never implied), its company, its venue/city/state, and the ticket
     // link, so a real listing can be pulled out. copy-inventory:ignore-start  synthesized source HTML the
     // extractor reads, not the app's own voice to Dan (#915)
-    static func listingHTML(_ events: [OAEvent]) -> String {
+    static func listingHTML(_ events: [OAEvent], zone: TimeZone = FeedDates.defaultZone) -> String {
         let rows = events.map { e -> String in
             let place = [e.venue, [e.city, e.state].compactMap { $0 }.joined(separator: ", ")]
                 .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: ", ")
-            let when = [dayFormatter.string(from: e.date), e.time].compactMap { $0 }.joined(separator: " ")
+            let when = [FeedDates.day(from: e.date, zone: zone), e.time].compactMap { $0 }.joined(separator: " ")
             let link = e.eventLink.map { "<a href=\"\($0)\">Tickets</a>" } ?? ""
             return """
             <article><h2>\(e.title)</h2><p>\(e.company)</p><p>\(when)</p><p>\(place)</p>\(link)</article>
@@ -139,14 +125,14 @@ enum OperaAmericaCalendar {
     // #1237: the events the synthesized HTML fed the paid extractor, mapped straight to ExtractedEvent so
     // the native path ingests them for free. The producing COMPANY is the presenter to pitch (the feed even
     // omits the venue for some items); city/state become the verbatim location (#970); the date is an
-    // explicit ISO day (dayFormatter), never implied. An empty company or place is nil, not "".
-    static func extractedEvents(from events: [OAEvent]) -> [ExtractedEvent] {
+    // explicit ISO day, never implied. An empty company or place is nil, not "".
+    static func extractedEvents(from events: [OAEvent], zone: TimeZone = FeedDates.defaultZone) -> [ExtractedEvent] {
         events.map { e in
             let place = [e.city, e.state].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: ", ")
             return ExtractedEvent(title: e.title,
                                   presenter: e.company.isEmpty ? nil : e.company,
                                   venue: e.venue,
-                                  performanceDate: dayFormatter.string(from: e.date),
+                                  performanceDate: FeedDates.day(from: e.date, zone: zone),
                                   sourceUrl: e.eventLink,
                                   location: place.isEmpty ? nil : place,
                                   seriesId: nil)
@@ -162,7 +148,8 @@ enum OperaAmericaCalendar {
 
     // Builds one page's POST to the Umbraco feed. Pure and testable so the real endpoint/body is pinned
     // without the network. copy-inventory:ignore-start  an outbound API request body, not the app's voice (#915)
-    static func filteredRequest(host: String, from: Date, to: Date, page: Int, pageSize: Int) -> URLRequest {
+    static func filteredRequest(host: String, from: Date, to: Date, page: Int, pageSize: Int,
+                                zone: TimeZone = FeedDates.defaultZone) -> URLRequest {
         var req = URLRequest(url: URL(string: "https://\(host)/umbraco/surface/calendar/filtered")!)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -175,7 +162,7 @@ enum OperaAmericaCalendar {
         let states = EventPlace.inRangeStateCodes.map { $0.uppercased() }
         let body: [String: Any] = [
             "q": "", "coq": "", "types": [], "zip": "", "states": states,
-            "from": dayFormatter.string(from: from), "to": dayFormatter.string(from: to),
+            "from": FeedDates.day(from: from, zone: zone), "to": FeedDates.day(from: to, zone: zone),
             "companyId": 0, "page": page, "pageSize": pageSize, "companies": []
         ]
         req.httpBody = try? JSONSerialization.data(withJSONObject: body)
@@ -186,8 +173,8 @@ enum OperaAmericaCalendar {
     // #1183: the end of the feed's horizon window, derived from the ONE shared calendar horizon
     // (CalendarMonthIndex.defaultHorizon) rather than a private copy of "4 months". If the horizon ever
     // changes, the OPERA feed moves with it instead of silently drifting out of sync with the scout.
-    static func windowEnd(from now: Date) -> Date {
-        Calendar.current.date(byAdding: .month, value: CalendarMonthIndex.defaultHorizon, to: now) ?? now
+    static func windowEnd(from now: Date, zone: TimeZone = FeedDates.defaultZone) -> Date {
+        FeedDates.calendar(zone).date(byAdding: .month, value: CalendarMonthIndex.defaultHorizon, to: now) ?? now
     }
 
     // The real network POST for one feed page, over a horizon window. Shared by both live readers below so
