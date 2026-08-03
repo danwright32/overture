@@ -440,9 +440,13 @@ struct DebugStagingTests {
 
         // Build the detector's Show for each seeded prospect the way QueueModel does (a live draft and an
         // emailed pitch are both commitments; engagementKey is the groupName, which differs between them).
+        // #1699 part 3: the seeds' own published times ride along, so this stays a faithful copy of what
+        // the queue builds. If a future seed ever gives these two shows curtains 5 hours apart, they stop
+        // being a clash and this goes red, which is the right signal rather than a quietly wrong scenario.
         let shows = all.map {
             SelfBookingConflict.Show(key: $0.naturalKey, date: $0.performanceDate, isCommitment: true,
-                                     engagementKey: $0.groupName, name: $0.groupName)
+                                     engagementKey: $0.groupName, name: $0.groupName,
+                                     startTimes: $0.performanceStartTimes)
         }
         let target = try #require(shows.first { $0.key == drafted.naturalKey })
         #expect(SelfBookingConflict.conflicts(for: target, among: shows).count == 1)
