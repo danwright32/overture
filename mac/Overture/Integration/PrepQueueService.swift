@@ -543,6 +543,14 @@ enum PrepQueueService {
         try? Data().write(to: cancelURL)
     }
 
+    // #1684: has a stop been asked for and not yet cleared? The panel reads this to acknowledge the click
+    // at once instead of leaving Dan looking at a screen identical to a working run. The sentinel is the
+    // same file the runner obeys, so the two can never disagree; `startPrep` clears it before launching,
+    // so it can only ever describe the run in flight.
+    static func cancelRequested(cancelURL: URL = defaultCancelURL) -> Bool {
+        FileManager.default.fileExists(atPath: cancelURL.path)
+    }
+
     static func isRunning(markerURL: URL = defaultMarkerURL, now: Date) -> Bool {
         DetachedRunner.isRunning(markerURL: markerURL, now: now, staleAfter: markerStaleAfter)
     }

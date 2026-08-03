@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **982 sentences**, from 346 source files.
+Every sentence Overture can say to Dan: **984 sentences**, from 346 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1485,6 +1485,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ArchiveStatus.swift`
 "Stopped working this"
     `Domain/PerformanceStatus.swift`
+"Stopping the run (\(elapsed))"
+    `Domain/RunProgress.swift`
 "Street, city, state"
     `UI/SourcesView.swift`
 "Sync now"
@@ -1563,6 +1565,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DayOff.swift`
 "The last follow-up sync failed. Tap Retry sync to try again."
     `Integration/OmniFocusUserNotifier.swift`
+"The lookups already under way are finishing, so this takes a moment. Their answers will still be saved."
+    `Domain/Reachability.swift`
 "The only listing for this one is a social page, which sits behind a login, so there's no way in from there. You can still keep it and add a contact by hand. This is a heads up so you don't dismiss a reachable show in its place."
     `Domain/Reachability.swift`
 "The other \(missed) had"

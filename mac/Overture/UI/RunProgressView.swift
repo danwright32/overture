@@ -68,6 +68,10 @@ struct RunProgressView: View {
     // #1037: a real Cancel that STOPS the run (cooperatively), distinct from Hide. Present only when the
     // caller supplies one: the scout takeover does; AddLeadSheet keeps its own Cancel.
     var onCancel: (() -> Void)? = nil
+    // #1684: has a stop already been asked for? Read each tick, like `heartbeat`, from the same cancel
+    // sentinel the runner itself obeys, so the panel and the runner can never disagree about whether the
+    // click was honoured. Defaults to "no", so every caller that has no cancel to offer is unaffected.
+    var cancelRequested: (() -> Bool)? = nil
 
     // Each phase's own stall window: an in-process sweep is quick, a detached read that follows detail
     // pages legitimately runs long, so reusing the sweep's 3-minute ceiling for the read would declare a
@@ -106,13 +110,16 @@ struct RunProgressView: View {
         // advancing-count evidence, folded to beating or stale exactly as before.
         let beat = heartbeat?()
             ?? (RunProgress.sweepIsAlive(lastProgressAt: snap.advancedAt, now: now) ? .beating : .stale)
-        let state = RunProgress.liveness(since: since, now: now, timeout: timeout, heartbeat: beat)
+        let state = RunProgress.liveness(since: since, now: now, timeout: timeout, heartbeat: beat,
+                                         cancelRequested: cancelRequested?() ?? false)
         VStack(spacing: OVSpacing.md) {
             switch state {
             case .stalled(let elapsed):
                 stalled(elapsed: elapsed)
             case .finishing(let elapsed):
                 finishing(elapsed: elapsed)
+            case .stopping(let elapsed):
+                stopping(elapsed: elapsed)
             case .running, .idle:
                 running(snap, now: now)
             }
@@ -164,6 +171,27 @@ struct RunProgressView: View {
             .monospacedDigit()
     }
 
+    // #1684: the stop has been accepted and the run is winding down. Same calm treatment as finishing, no
+    // alarm colour and no warning symbol, because nothing has gone wrong: Dan asked for this.
+    //
+    // It deliberately drops the "N of M done" line and the phase title. Both are what made a stopping run
+    // pixel-identical to a working one, and a count that can no longer climb is a progress line making a
+    // promise it cannot keep.
+    @ViewBuilder private func stopping(elapsed: String) -> some View {
+        ProgressView().controlSize(.large).tint(OVColor.gold)
+        Text(RunProgress.stoppingLabel(elapsed: elapsed))
+            .font(OVType.dateHeading).foregroundStyle(OVColor.ink)
+            .monospacedDigit()
+        // Only the paid phase explains itself: on a check the wait has a cost attached, which is the one
+        // thing he cannot see. On the scout and on Prep the stop is simply a stop.
+        if phase == .probing {
+            Text(ReachabilityProbeCopy.stoppingSpendNote)
+                .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
     @ViewBuilder private func stalled(elapsed: String) -> some View {
         Image(systemName: "exclamationmark.triangle.fill")
             .font(.system(size: 28)).foregroundStyle(OVColor.rust)
@@ -173,12 +201,19 @@ struct RunProgressView: View {
     }
 
     @ViewBuilder private func controls(state: RunLiveness) -> some View {
-        VStack(spacing: OVSpacing.xs) {
+        // #1684: has the stop already been accepted? Kept as one named value rather than repeated inline,
+        // since both the Cancel button and its caveat below turn on it.
+        let stopping: Bool = { if case .stopping = state { return true } else { return false } }()
+        return VStack(spacing: OVSpacing.xs) {
             HStack(spacing: OVSpacing.sm) {
                 // #1037: stop the run for real, in either state (a running read or a stalled one). Rust, not
                 // forest: this is the one control here that ends work, distinct from Hide (keep running) and
                 // Retry (start again).
-                if let onCancel {
+                // #1684: gone once the stop has been accepted. A control that keeps offering itself after
+                // being pressed reads as broken, so Dan presses it again, which is exactly what happened:
+                // "I'm trying to click cancel and it's doing nothing." It was doing something; there was
+                // just nothing on screen that had changed (L44).
+                if let onCancel, !stopping {
                     Button("Cancel", action: onCancel).buttonStyle(.plain).foregroundStyle(OVColor.rust)
                 }
                 if case .stalled = state, let onRetry {
@@ -196,7 +231,7 @@ struct RunProgressView: View {
             //
             // Only while a cancel is actually on offer, and only for a check. On the scout and on Prep it
             // would be a sentence about money on a run that spends nothing per item.
-            if phase == .probing, onCancel != nil {
+            if phase == .probing, onCancel != nil, !stopping {
                 Text(ReachabilityProbeCopy.cancelSpendCaveat)
                     .font(OVType.meta)
                     .foregroundStyle(OVColor.inkSoft)

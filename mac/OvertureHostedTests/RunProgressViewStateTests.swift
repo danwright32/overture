@@ -243,6 +243,71 @@ struct RunProgressViewStateTests {
         #expect(cancelled == true)
     }
 
+    // #1684. Dan, mid-run: "I'm trying to click cancel and it's doing nothing." The click WAS honoured;
+    // the panel just went on showing a spinner, the phase title, "1 of 5 done", a climbing timer and a
+    // Cancel button, identical to a working run, so he pressed it again and called it broken.
+    //
+    // Once the stop is acknowledged the button is gone, and the panel says what is happening.
+    @Test func theCancelControlDisappearsOnceTheStopIsAcknowledged() throws {
+        let since = Date(timeIntervalSince1970: 1000)
+        let now = Date(timeIntervalSince1970: 1070)
+        let view = RunProgressView(phase: .probing, since: since,
+                                   snapshot: snapshot(nil, 1, 5),
+                                   heartbeat: { .beating },
+                                   onCancel: { },
+                                   cancelRequested: { true }).content(now: now)
+
+        #expect((try? view.inspect().find(button: "Cancel")) == nil,
+                "a control that keeps offering itself after being pressed reads as broken")
+        #expect(try allTexts(view).contains { $0.contains("Stopping") })
+    }
+
+    // The same panel with no stop requested still offers Cancel, so the test above cannot pass for the
+    // wrong reason (a probing panel that simply never shows one).
+    @Test func theCancelControlIsStillThereBeforeAnyStopIsRequested() throws {
+        let since = Date(timeIntervalSince1970: 1000)
+        let now = Date(timeIntervalSince1970: 1070)
+        let view = RunProgressView(phase: .probing, since: since,
+                                   snapshot: snapshot(nil, 1, 5),
+                                   heartbeat: { .beating },
+                                   onCancel: { },
+                                   cancelRequested: { false }).content(now: now)
+
+        #expect((try? view.inspect().find(button: "Cancel")) != nil)
+        #expect(try allTexts(view).contains { $0.contains("Stopping") } == false)
+    }
+
+    // The count is dropped while stopping, deliberately: it can no longer climb, and a progress line that
+    // has stopped moving is the thing that made a stopping run look like a working one.
+    @Test func thestoppingPanelDropsTheProgressCountItCanNoLongerAdvance() throws {
+        let since = Date(timeIntervalSince1970: 1000)
+        let now = Date(timeIntervalSince1970: 1070)
+        let view = RunProgressView(phase: .probing, since: since,
+                                   snapshot: snapshot(nil, 1, 5),
+                                   heartbeat: { .beating },
+                                   onCancel: { },
+                                   cancelRequested: { true }).content(now: now)
+
+        #expect(try allTexts(view).contains { $0.contains("1 of 5") } == false)
+    }
+
+    // On the one phase that SPENDS, the wait explains itself: the lookups still finishing are why the
+    // stop is not instant, and their answers are still saved.
+    @Test func thestoppingPanelExplainsTheWaitOnAPaidRun() throws {
+        let since = Date(timeIntervalSince1970: 1000)
+        let now = Date(timeIntervalSince1970: 1070)
+        let probing = RunProgressView(phase: .probing, since: since, snapshot: snapshot(nil, 1, 5),
+                                      heartbeat: { .beating }, onCancel: { },
+                                      cancelRequested: { true }).content(now: now)
+        let prepping = RunProgressView(phase: .prepping, since: since, snapshot: snapshot(nil, 1, 5),
+                                       heartbeat: { .beating }, onCancel: { },
+                                       cancelRequested: { true }).content(now: now)
+
+        #expect(try allTexts(probing).contains(ReachabilityProbeCopy.stoppingSpendNote))
+        #expect(try allTexts(prepping).contains(ReachabilityProbeCopy.stoppingSpendNote) == false,
+                "a run that spends nothing per item must not carry a sentence about spending")
+    }
+
     // MARK: - The sweep's own heartbeat (#1530)
 
     // A manual sweep walks all 62 sources since #1518, so it routinely passes RunTimeouts.scout (3m) and

@@ -36,6 +36,18 @@ enum RunProgress {
         "Finishing up (\(elapsed))"
     }
 
+    // #1684: the run is stopping at Dan's request. Says "Stopping" rather than "Stopped", because it has
+    // not stopped yet and claiming it had would be the same dishonesty in the other direction. Carries the
+    // elapsed counter for the same reason the other states do: it is the evidence that the screen is still
+    // alive rather than frozen, which is exactly what he could not tell.
+    //
+    // Names the RUN rather than standing alone as one word, so it sits beside "Finishing up" as a sentence
+    // and so `docs/copy-inventory.md` carries it: that inventory skips a one-word literal, and a sentence
+    // Dan reads that never reaches the list nobody can cold-read is exactly what the list exists to stop.
+    static func stoppingLabel(elapsed: String) -> String {
+        "Stopping the run (\(elapsed))"
+    }
+
     static func spinnerLabel(_ base: String, since start: Date?, now: Date, detail: String? = nil) -> String {
         let label = detail.map { "\(base) \($0)" } ?? base
         if let elapsed = elapsedLabel(since: start, now: now) {
@@ -55,15 +67,42 @@ enum RunProgress {
     // staleness cannot share one answer. `nil` means the caller has no marker to read at all, which keeps
     // the wall clock in charge exactly as it was before any heartbeat existed.
     static func liveness(since start: Date?, now: Date, timeout: TimeInterval,
-                         heartbeat: RunHeartbeat? = nil) -> RunLiveness {
+                         heartbeat: RunHeartbeat? = nil,
+                         cancelRequested: Bool = false) -> RunLiveness {
         guard let start, let elapsed = elapsedLabel(since: start, now: now) else { return .idle }
         // A marker that is GONE ends the run whatever the clock says: a runner deletes it in its exit
-        // trap, so this is the last thing a healthy run does, not a symptom.
+        // trap, so this is the last thing a healthy run does, not a symptom. Checked BEFORE the stop
+        // below, because a stopped run whose marker has already gone is over, and "Stopping" there would
+        // be a screen claiming work is still winding down after it has ended.
         if heartbeat == .absent { return .finishing(elapsed: elapsed) }
+        // #1684: Dan asked this run to stop, so the screen says so. It outranks both remaining verdicts.
+        // Not `running`, because a spinner identical to a working run is what made him press Cancel three
+        // more times and call it broken. Not `stalled` either: past the timeout a stopped run would
+        // otherwise accuse itself of being stuck and offer him a Retry, when nothing has gone wrong and he
+        // is the one who stopped it.
+        if cancelRequested { return .stopping(elapsed: elapsed) }
         if now.timeIntervalSince(start) >= timeout {
             return heartbeat == .beating ? .running(elapsed: elapsed) : .stalled(elapsed: elapsed)
         }
         return .running(elapsed: elapsed)
+    }
+
+    // #1684: may a run Dan STOPPED be treated as over yet?
+    //
+    // A cancelled run's heartbeat stops at once: `prep-run.sh`'s heartbeat loop reads the sentinel on a
+    // short poll and exits, so nothing touches the marker again. Waiting the full ordinary stale window
+    // after that is waiting on a clock rather than on evidence, and it is the three minutes of silence Dan
+    // sat through. Once the marker has missed a beat it would certainly have made, the run is done.
+    //
+    // Judged on the MARKER rather than on the request, so a runner that has not yet noticed the sentinel
+    // (it polls every few seconds) keeps the run alive by doing what a live run does. Declaring one dead
+    // while it is still working would report a live run as finished, which is the worse error of the two.
+    static func stoppedRunIsOver(cancelRequestedAt: Date?, markerTouchedAt: Date?, now: Date,
+                                 grace: TimeInterval = RunTimeouts.stoppedRunGrace) -> Bool {
+        guard let cancelRequestedAt, now.timeIntervalSince(cancelRequestedAt) > grace else { return false }
+        // No marker reading at all is not evidence of life, so it cannot hold a stopped run open.
+        guard let markerTouchedAt else { return true }
+        return now.timeIntervalSince(markerTouchedAt) > grace
     }
 
     // #1530: the in-process scout sweep's heartbeat, folded to beating or stale for `liveness` above.
@@ -101,6 +140,11 @@ enum RunLiveness: Equatable {
     // #1822: the run has ended and its screen is about to close. Neither working nor stuck, because it
     // is neither: the runner deleted its marker in its exit trap, which is how a HEALTHY run finishes.
     case finishing(elapsed: String)
+    // #1684: Dan pressed Cancel and the request has been accepted. Distinct from every state around it,
+    // because it is a distinct fact: the run is neither working nor stuck nor finished, it is winding down
+    // at his request. A stop with no state of its own is a control that keeps offering itself after being
+    // pressed, which reads as broken (L44).
+    case stopping(elapsed: String)
     case stalled(elapsed: String)
 }
 

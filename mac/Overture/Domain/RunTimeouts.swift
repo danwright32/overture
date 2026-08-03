@@ -31,6 +31,18 @@ enum RunTimeouts {
     // so a long batch never goes stale, and lengthening that would only make a DEAD run look alive longer.
     static let reachabilityProbe: TimeInterval = 10 * 60
 
+    // #1684: how long a run Dan STOPPED may stay on screen before the app calls it over.
+    //
+    // Sized from the runner's own behaviour, not guessed. `prep-run.sh` touches its marker every 60s
+    // while working, and its heartbeat loop exits the moment it reads the cancel sentinel, so after a stop
+    // nothing touches the marker again. 90 seconds is therefore one certain missed beat plus a margin: a
+    // runner that has not yet noticed the sentinel keeps the run alive by touching the marker as usual,
+    // and one that has stopped is recognised in a minute and a half rather than three minutes.
+    //
+    // Deliberately shorter than `prep` and deliberately NOT applied to a run nobody stopped, where the
+    // silence carries no such promise and the longer window is what stops a slow batch being called dead.
+    static let stoppedRunGrace: TimeInterval = 90
+
     // Reply drafter, per recipient: from "Draft a reply" stamped to a draft landing. Shorter than the
     // classify marker because Dan is watching this one and a stranded request should surface sooner.
     static let replyDraft: TimeInterval = 5 * 60
