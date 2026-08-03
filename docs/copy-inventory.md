@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **985 sentences**, from 347 source files.
+Every sentence Overture can say to Dan: **987 sentences**, from 347 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -715,6 +715,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DraftCheck.swift`
 "Held as a duplicate"
     `Domain/Reachability.swift`
+"Held, not sending"
+    `UI/DraftReviewView.swift`
 "Hidden for a week. Overture still can't keep clear of shoots it doesn't know about."
     `App/ActionFeedback.swift`
 "Hide this for a week"
@@ -1385,6 +1387,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Sending despite the greeting warning you confirmed."
     `Domain/DraftReviewNotes.swift`
 "Sending reply"
+    `UI/DraftReviewView.swift`
+"Sending to this one"
     `UI/DraftReviewView.swift`
 "Sending your reply..."
     `UI/InquiryReplySheet.swift`

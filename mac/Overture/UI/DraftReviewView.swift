@@ -650,6 +650,24 @@ struct DraftReviewView: View {
                 // separate "Remove" row below.
                 leadingGlyph(for: c)
                 Text(c.displayName).fontWeight(.medium).foregroundStyle(OVColor.ink)
+                // #2015: the ADDRESS, always, not only when there is no name to show instead. Dan's rule
+                // (2026-08-03): "It should show me every email it's going to send to". A row reading
+                // "Sarah Chen" does not tell him which of her addresses is about to be used, and on a show
+                // that already carried a found contact it may not be hers at all.
+                if let email = c.email, !email.isEmpty, email != c.displayName {
+                    Text(email).font(OVType.meta).foregroundStyle(OVColor.inkSoft).lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                // Which one the next Send actually goes to. The order behind it is a real judgment and
+                // stays (#366/#368, pitch the act, the presenter only after); what changes is that it is
+                // no longer invisible.
+                if c.id == item.nextRecipientId {
+                    Text("Sending to this one").font(OVType.tag).foregroundStyle(OVColor.gold)
+                }
+                // On the show but NOT going to be emailed, so the list does not overstate itself.
+                if c.isHeldFromSending {
+                    Text("Held, not sending").font(OVType.tag).foregroundStyle(OVColor.rust)
+                }
                 Spacer()
                 // #656: a soft/temporary Gmail delay, purely informational, alongside (never in
                 // place of) the status line, since it must never affect isSilent/eligibility.

@@ -102,6 +102,10 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // Drives the Send button under fan-out: the lead `sentAt` rollup flips on the FIRST recipient, but
     // the button must persist until the LAST recipient goes, so it gates on this, not on `isSent`.
     var hasPendingRecipient: Bool = false
+    // #2015: WHICH contact the next Send will actually email. Resolved from `SendService` itself rather
+    // than re-derived here, so the card and the send can never disagree about who is about to receive it,
+    // which is the whole failure this exists to close. Nil when nothing can send yet.
+    var nextRecipientId: String? = nil
     // #1324: a real email exists but only as a venue front desk or press inbox (held by the venue/press
     // guard, so not sendable). Lets the reachability badge say "Weak contact only" rather than the untrue
     // "No email found". Only meaningful once probed and when hasPendingRecipient is false.
@@ -500,6 +504,10 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     // the snapshot rather than recomputed in the view, so the words on screen are by construction the
     // words `OutgoingPitch` will send.
     var outgoingOpening: String = ""
+    // #2015: this contact is on the show but is NOT going to be emailed, because a guard is holding it
+    // (a venue guess, a press address, a suspected duplicate, the draft lint). "Every email it's going to
+    // send to" has to be honest about the ones it will not, or the list quietly overstates itself.
+    var isHeldFromSending: Bool = false
     // Whether that opening is Dan's own, so the screen can say which it is showing him.
     var openingIsCustom: Bool = false
     var replyDraftSubject: String? = nil
@@ -2013,6 +2021,7 @@ extension QueueItem {
             voiceLearningCandidate: p.sentAt != nil && p.originalDraftBody != nil,
             excludedFromVoiceLearning: p.excludedFromVoiceLearning,
             hasPendingRecipient: p.recipients.contains(where: \.isSendablePending),
+            nextRecipientId: SendService.nextPendingRecipient(for: p)?.id,
             // #1324: a real address held by a guard, so the badge can say so rather than "No email found"
             // when that is all a check found. #1798: the same shared definition the stored verdict uses,
             // because these were two copies of one rule and both were missing the duplicate guard.
@@ -2076,6 +2085,7 @@ extension RecipientSnapshot {
                   bounced: r.bounced, outcomeSource: r.outcomeSource,
                   suppressionReason: r.suppressionReason,
                   outgoingOpening: r.outgoingOpening,
+                  isHeldFromSending: r.isBlockedAwaitingReview,
                   openingIsCustom: r.openingOverride?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false,
                   replyDraftSubject: r.replyDraftSubject, replyDraftBody: r.replyDraftBody,
                   replyDraftRequestedAt: r.replyDraftRequestedAt, intentHint: r.intentHint,
