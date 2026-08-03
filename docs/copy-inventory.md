@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **987 sentences**, from 347 source files.
+Every sentence Overture can say to Dan: **1005 sentences**, from 349 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -345,6 +345,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/RootView.swift`
 "Add address"
     `UI/SourcesView.swift`
+"Add an address to send to. Nothing was saved"
+    `App/ActionFeedback.swift`
 "Add another"
     `UI/AddLeadSheet.swift`
 "Add contact"
@@ -664,10 +666,14 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/LeadIntakeModel.swift`
 "Found \(count) shows on that page, but none of them name a venue, so I can't use them. That usually means the show's own page didn't load."
     `UI/LeadIntakeModel.swift`
+"Found by Overture for this show, never written to"
+    `Domain/ManualPrepPrefill.swift`
 "Freshly found events waiting for you to keep or dismiss."
     `Domain/AgentRoster.swift`
 "From Downbeat"
     `UI/DaysOffView.swift`
+"From your booking sheet, which often holds an agent's address rather than theirs"
+    `Domain/ManualPrepPrefill.swift`
 "Genre: \(QueueModel.disciplineLabel(discipline)). Change it."
     `UI/QueueView+Model.swift`
 "Give the organization a name so you can recognize it here."
@@ -901,6 +907,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DownbeatExport.swift`
 "No Prep run or other check can start until it finishes."
     `Domain/ProbeSelection.swift`
+"No address to fill in. Checked past emails to this organisation and the booking sheet."
+    `Domain/ManualPrepPrefill.swift`
 "No address yet, so its shows are not placed in your area."
     `UI/SourcesView.swift`
 "No contact found"
@@ -939,6 +947,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView.swift`
 "No outcomes yet. Once you've sent and recorded results, booking and response rates show up here."
     `UI/OutcomePatternsView.swift`
+"No past email to this organisation, and the booking sheet could not be read."
+    `Domain/ManualPrepPrefill.swift`
 "No replies need classifying right now."
     `Integration/ReplyClassifyService.swift`
 "No response"
@@ -1013,6 +1023,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/StageEmptyState.swift`
 "Nothing in the queue matches \"\(query)\""
     `Domain/ShowSearch.swift`
+"Nothing is drafted for you and no Prep run is started."
+    `UI/ManualPrepSheet.swift`
 "Nothing is recorded until you confirm you sent it."
     `UI/DraftReviewView.swift`
 "Nothing looks odd right now."
@@ -1162,12 +1174,16 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "Possibly one name twice"
     `UI/OrganisationsView.swift`
+"Prep \(groupName) by hand"
+    `Domain/ManualPrepPrefill.swift`
 "Prep a show on a date you're already pitching?"
     `Domain/SelfBookingConflict.swift`
 "Prep anyway"
     `Domain/SelfBookingConflict.swift`
 "Prep kept"
     `App/RootView.swift`
+"Prep manually"
+    `UI/ProspectRowView.swift`
 "Prep matched this show's performer to a past client, which raised the fit score. The draft won't treat them as a returning client until you confirm it."
     `UI/QueueView+Model.swift`
 "Prep these \(count) shows"
@@ -1193,6 +1209,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Re-prep kept"
     `App/RootView.swift`
 "Re-prep queued"
+    `UI/DraftReviewView.swift`
+"Re-prep this show?"
     `UI/DraftReviewView.swift`
 "Re-prepping \(org) to find new contacts"
     `App/ActionFeedback.swift`
@@ -1253,12 +1271,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SendConfirmAndReconnectAlerts.swift`
 "Recorded. \(org) is now in Reached out."
     `App/ActionFeedback.swift`
-"Redo Anyway"
-    `UI/DraftReviewView.swift`
 "Redo it anyway?"
     `Domain/ReprepRequest.swift`
-"Redo this re-prep?"
-    `UI/DraftReviewView.swift`
 "Redraft and find contacts"
     `App/RootView.swift`
     `UI/DraftReviewView.swift`
@@ -1327,6 +1341,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreSchemaGuard.swift`
 "Save changes"
     `Domain/InquiryCopy.swift`
+"Save draft"
+    `UI/ManualPrepSheet.swift`
 "Saved \(org)'s address. Its shows are placed on the next read."
     `UI/SourcesView.swift`
 "Saved \(org)'s venue. Its shows are read again on the next scout."
@@ -1382,6 +1398,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SendConfirmSheet.swift`
 "Send this reply on the contact's thread"
     `UI/DraftReviewView.swift`
+"Send to"
+    `UI/ManualPrepSheet.swift`
 "Sending despite the draft warning you confirmed."
     `Domain/DraftReviewNotes.swift`
 "Sending despite the greeting warning you confirmed."
@@ -1680,6 +1698,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "This production also plays elsewhere on \(dateLabel)."
     `UI/QueueView+Model.swift`
+"This replaces the email you wrote yourself with an AI draft. Replace it?"
+    `Domain/ReprepRequest.swift`
 "This run's results disagreed with themselves, so nothing from it was used."
     `Domain/WatchedSource.swift`
 "This sends one email right now, to this recipient only. Nothing else goes out."
@@ -1822,6 +1842,12 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "Worth a look"
     `UI/OrganisationsView.swift`
+"Write the email before saving it. Nothing was saved"
+    `App/ActionFeedback.swift`
+"Write this email yourself, with no Prep run and no AI draft"
+    `UI/ProspectRowView.swift`
+"Written by you"
+    `UI/QueueView+Model.swift`
 "Wrong match"
     `UI/ProspectRowView.swift`
 "You already have a pitch in progress for \($0) on this date."
@@ -1836,6 +1862,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "You dismissed \(org) because the dates don't work. Block the days you can't shoot, and Overture will stop pitching you for them."
     `Domain/DayOffOffer.swift`
+"You emailed this address about \(outreach.showName) on \(when)."
+    `Domain/ManualPrepPrefill.swift`
+"You emailed this address on \(when)."
+    `Domain/ManualPrepPrefill.swift`
 "You entered days off but haven't blocked them yet."
     `UI/DaysOffView.swift`
 "You have \(pointerPhrase(for: target, count: n)) next."
@@ -1996,6 +2026,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "\(org) is closed out. No closing note was sent"
     `App/ActionFeedback.swift`
+"\(org) is drafted and ready for you to review"
+    `App/ActionFeedback.swift`
+"\(org) is on a night you're already booked, so it can't be pitched until you clear the clash"
+    `App/ActionFeedback.swift`
 "\(org) is on a night you're already booked, so nothing will re-prep until you clear the clash"
     `App/ActionFeedback.swift`
 "\(orgName) asked not to be contacted, so Overture won't watch their calendar."
@@ -2005,6 +2039,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "\(orgNames.count) sources have listed shows before and came back with nothing this run: \(list). Their page formats may have changed."
     `Domain/ScoutWarningCopy.swift`
 "\(outcome.skippedEdited) kept your edits"
+    `Domain/PrepRunSummary.swift`
+"\(outcome.skippedHandWritten) left as you wrote them"
     `Domain/PrepRunSummary.swift`
 "\(outcome.unmatchedKeys.count) didn't match"
     `Domain/PrepRunSummary.swift`

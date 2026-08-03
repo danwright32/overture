@@ -252,6 +252,16 @@ final class Prospect {
     var draftVariant: String? = nil
     var draftEditedByDan: Bool = false
 
+    // #2007: Dan wrote this email himself, with no Prep run and no model call. Its OWN marker, not a
+    // reuse of `draftEditedByDan` above (his call, 2026-08-03): reporting has to be able to tell an
+    // email he wrote from an AI draft he tweaked, and one flag cannot say both.
+    //
+    // Everything that has to honour it ships with it (L46, a stored field needs a reader): a Prep run
+    // never overwrites it (PrepImporter), the recent-openers export never exports his own sentences as
+    // shapes for the drafter to avoid (RecentOpenersBuilder), an A/B arm never counts a draft it did not
+    // produce (ExperimentReport), and the review card says who wrote it (QueueItem.draftAuthorLabel).
+    var draftWrittenByDan: Bool = false
+
     // #5 (opener A/B testing), Phase 1: the experiment stamp. All defaulted so existing records migrate
     // cleanly (lightweight additive, like #132). `assignedArm` is the APP-ASSIGNED archetype token and is
     // the source of truth for the tally, deliberately distinct from `draftVariant` (the drafter's echo of
@@ -784,6 +794,24 @@ final class Prospect {
         draftSubject = subject
         draftBody = body
         draftEditedByDan = true
+    }
+
+    // #2007: Dan's own email, written by hand instead of by a Prep run.
+    //
+    // Deliberately NOT `applyEdit` above. That method exists to snapshot the AI's draft before his first
+    // substantive edit, so the voice-learning loop can study the delta. Here there is no AI draft and so
+    // no delta: snapshotting would file his own words as the model's baseline. It clears `draftModel` for
+    // the same reason it leaves the baseline alone, because no model wrote these words and a stamp left
+    // over from an earlier draft on this show would credit one that did not.
+    //
+    // Moves the show to `.drafted` so it flows through Review, approval and the send path with no special
+    // casing downstream, exactly as a prepped one does.
+    func writeManualDraft(subject: String, body: String) {
+        draftSubject = subject
+        draftBody = body
+        draftWrittenByDan = true
+        draftModel = nil
+        status = .drafted
     }
 
     // Freeze the exact subject/body emailed, immune to later draft edits, so the "sent" side of the

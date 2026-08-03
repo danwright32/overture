@@ -40,6 +40,17 @@ enum DraftReviewNotes {
         !(isApproved && lintBlocked)
     }
 
+    // Whether the ADVISORY voice findings are shown. They exist to catch the drafter's AI-tells, so they
+    // stand down once the words are Dan's: on a draft he edited (the rule since #11), and #2007's case,
+    // one he wrote from scratch, where they were never a model's words at all.
+    //
+    // This says nothing about the BLOCKING findings, which show whatever the provenance and are what
+    // actually holds the send. That is deliberate: the manual path is a shortcut around the model, not
+    // around the quality gate.
+    static func showsVoiceFindings(editedByDan: Bool, writtenByDan: Bool) -> Bool {
+        !editedByDan && !writtenByDan
+    }
+
     // #1311: an approved show with NO emailable contact at all can never send (SendService hard-blocks a
     // blank address), and the greyed Send button never said why. This explains the stall so Dan can act,
     // rather than leaving him staring at a disabled button. Only when there is genuinely no address: an

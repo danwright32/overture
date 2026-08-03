@@ -73,6 +73,17 @@ struct RecentOpenersBuilderTests {
         #expect(out.openers.map(\.naturalKey) == ["kept"])
     }
 
+    // #2007 (carrying the half of #2013 that waited on the marker): this file exists to tell the AI
+    // drafter which opening shapes to steer AWAY from. An email Dan wrote by hand is the shape he
+    // wanted, so exporting it would teach the drafter to avoid his own sentences.
+    @Test func handWrittenDraftsAreNotExportedAsShapesToAvoid() {
+        let ai = prospect(key: "ai", original: "An AI opener sentence. Rest.")
+        let byHand = prospect(key: "byHand", original: "Dan's own opener sentence. Rest.")
+        byHand.draftWrittenByDan = true
+        let out = RecentOpenersBuilder.build(from: [ai, byHand], generatedAt: "2026-07-01T00:00:00Z")
+        #expect(out.openers.map(\.naturalKey) == ["ai"])
+    }
+
     @Test func dedupesIdenticalOpenersKeepingTheNewest() {
         // Two drafts that opened the same way count once; the survivor carries the more recent use.
         let older = prospect(key: "older", original: "I photograph performing arts. A.",

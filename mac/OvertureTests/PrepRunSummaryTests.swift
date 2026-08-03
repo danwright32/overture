@@ -9,12 +9,14 @@ import Foundation
 @Suite("What a finished Prep run tells Dan (#876)")
 struct PrepRunSummaryTests {
 
-    private func outcome(drafted: Int = 0, skippedEdited: Int = 0, unmatched: [String] = [],
+    private func outcome(drafted: Int = 0, skippedEdited: Int = 0, skippedHandWritten: Int = 0,
+                         unmatched: [String] = [],
                          missing: [String] = [], saveFailed: Bool = false,
                          matchDataWarning: String? = nil) -> PrepImporter.Outcome {
         var o = PrepImporter.Outcome()
         o.drafted = drafted
         o.skippedEdited = skippedEdited
+        o.skippedHandWritten = skippedHandWritten
         o.unmatchedKeys = unmatched
         o.missingKeys = missing
         o.saveFailed = saveFailed
@@ -63,6 +65,14 @@ struct PrepRunSummaryTests {
     @Test func aRunThatKeptDansEditsSaysSo() {
         #expect(PrepRunSummary.notes(for: outcome(drafted: 1, skippedEdited: 2))
                 == ["1 drafted", "2 kept your edits"])
+    }
+
+    // #2007: a show Dan prepped by hand. The run left the text alone, and the sentence says which text
+    // it left alone: an email he WROTE, not an AI draft he edited. Same refusal, different fact, so it
+    // gets its own words rather than being folded into "kept your edits".
+    @Test func aRunThatLeftAHandWrittenDraftAloneSaysSo() {
+        #expect(PrepRunSummary.notes(for: outcome(drafted: 1, skippedHandWritten: 2))
+                == ["1 drafted", "2 left as you wrote them"])
     }
 
     // Dan (2026-07-18): the toolbar status slot also carries an unattended scout's warning, so a routine "N drafted"

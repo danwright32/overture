@@ -82,6 +82,15 @@ enum EasternDate {
         return "\(shortMonth(calendar.component(.month, from: d))) \(calendar.component(.day, from: d))"
     }
 
+    // The same day WITH its year: "Nov 2, 2025". For a fact about the past rather than about the queue.
+    // #2007 is the first caller: it dates an email Dan sent, which on an annual show is routinely a year
+    // or more back, and "Nov 2" alone would read as this coming November.
+    static func dayLabelWithYear(_ date: Date) -> String {
+        let day = dayString(from: date)
+        let label = dayLabel(day) ?? day
+        return "\(label), \(calendar.component(.year, from: date))"
+    }
+
     // MARK: - The run window (#798)
     //
     // Two places ask "is this run over?": the scout's import guard (should this show enter the queue

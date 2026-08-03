@@ -277,6 +277,19 @@ enum ActionAck {
         "\(org) is on a night you're already booked, so nothing will re-prep until you clear the clash"
     }
 
+    // #2007: prepping a show by hand. Its own sentence rather than the re-prep one above, because
+    // nothing is going to run: the refusal is about the email he is writing NOW.
+    static func manualPrepBlockedByClash(org: String) -> String {
+        "\(org) is on a night you're already booked, so it can't be pitched until you clear the clash"
+    }
+
+    static let manualPrepNeedsRecipient = "Add an address to send to. Nothing was saved"
+    static let manualPrepNeedsBody = "Write the email before saving it. Nothing was saved"
+
+    static func manualPrepSaved(org: String) -> String {
+        "\(org) is drafted and ready for you to review"
+    }
+
     // #1143: a Prep run was already in progress when Dan clicked Re-prep. The flag is saved, so the show
     // is queued to re-prep on the next run rather than launching a second run over the one in flight.
     static func reprepRunInFlight(org: String) -> String {

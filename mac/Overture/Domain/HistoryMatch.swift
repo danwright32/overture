@@ -142,13 +142,24 @@ enum HistoryMatch {
     // city is not the group (the #995 venue-vs-location rule). The presenter is dropped when it
     // normalizes to the same thing as the title, so a title that already carries the org does no
     // double work.
-    private static func candidateNames(_ title: String, _ presenter: String?) -> [String] {
+    //
+    // #2007: internal (not private) so the manual-prep prefill decides "is this the same organisation"
+    // through the SAME identities this matcher uses, rather than inventing a second, divergent notion of
+    // who an org is.
+    static func candidateNames(_ title: String, _ presenter: String?) -> [String] {
         var names = [title]
         if let p = presenter?.trimmingCharacters(in: .whitespacesAndNewlines), !p.isEmpty,
            GroupNameMatch.normalize(p) != GroupNameMatch.normalize(title) {
             names.append(p)
         }
         return names
+    }
+
+    // The history records one of these identities confidently matches. Named and shared (#2007) so the
+    // manual-prep prefill reads the booking sheet through the same gate the relationship matcher does,
+    // rather than each filtering the same list its own way.
+    static func confidentRecords(names: [String], in history: [HistoryRecord]) -> [HistoryRecord] {
+        history.filter { rec in names.contains { GroupNameMatch.isConfident($0, rec.groupName) } }
     }
 
     // #1702: the identities a FUZZY match may be made on, which are the confident ones minus a presenter
@@ -209,9 +220,7 @@ enum HistoryMatch {
         // #1216: match the title AND the presenter identity, taking the strongest confident match.
         let names = candidateNames(name, presenter)
         let fuzzyNames = fuzzyCandidateNames(name, presenter, venueBrands)
-        let confidentHistory = history.filter { rec in
-            names.contains { GroupNameMatch.isConfident($0, rec.groupName) }
-        }
+        let confidentHistory = confidentRecords(names: names, in: history)
 
         // #384: Dan passed on this exact show before (same org, same venue). Computed on its own, and
         // deliberately EXCLUDED from the relationship signals below, for two reasons. It must not make
@@ -292,7 +301,9 @@ enum HistoryMatch {
     // handle, or a bare note like "DM on instagram". So this looks for things actually shaped like an
     // address (a local part, an @, then a dotted domain) rather than anything merely containing an @,
     // which would let a URL or a social handle pose as an address that then fails to corroborate.
-    private static func addresses(in raw: String?) -> [String] {
+    // #2007: internal (not private) so the manual-prep prefill pulls addresses out of that cell through
+    // the SAME reader, instead of a second parser that would disagree with this one about what counts.
+    static func addresses(in raw: String?) -> [String] {
         (raw ?? "")
             .split(whereSeparator: { $0 == "," || $0 == ";" || $0.isWhitespace })
             .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "<>()[]\"'")) }

@@ -31,7 +31,10 @@ enum RecentOpenersBuilder {
         let iso = ISO8601DateFormatter()
         struct Entry { let opener: RecentOpener; let date: Date; let key: String }
         var entries: [Entry] = []
-        for p in prospects where !p.excludedFromVoiceLearning {   // #244: opted out of learning, here too
+        // #244: opted out of learning, here too. #2007: and an email Dan WROTE is never exported, because
+        // this file is a list of shapes to steer AWAY from, so his own sentences would come back to the
+        // drafter as things to avoid. (The half of #2013 that had to wait for a marker to exist.)
+        for p in prospects where !p.excludedFromVoiceLearning && !p.draftWrittenByDan {
             // The AI's own first opener is the shape we want variety on; prefer it over Dan's later edit.
             guard let body = p.originalDraftBody ?? p.draftBody else { continue }
             let text = opener(from: body)

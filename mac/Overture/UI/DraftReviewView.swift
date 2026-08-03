@@ -97,9 +97,11 @@ struct DraftReviewView: View {
     private var draftLintBlockMessage: String {
         DraftCheck.blockMessage(blockers: item.draftLintBlockers)
     }
-    // #733: guard against repeatedly re-prepping the same prospect.
-    @State private var showReprepCooldownConfirm = false
+    // #733: guard against repeatedly re-prepping the same prospect. #2007: and against replacing text
+    // Dan wrote himself. Both raise this one alert, carrying whichever sentence applies.
+    @State private var showReprepConfirm = false
     @State private var pendingReprepMode: ReprepMode?
+    @State private var pendingReprepMessage = ""
 
     private var isApproved: Bool { item.status == .approved }
 
@@ -303,8 +305,11 @@ struct DraftReviewView: View {
                     if item.draftEditedByDan {
                         Text("Edited").font(.system(size: 10)).foregroundStyle(OVColor.gold)
                     }
-                    if let trace = item.draftTraceLabel {
-                        Text(trace).font(.system(size: 10)).foregroundStyle(OVColor.inkFaint)
+                    // #2007: who wrote it, which is a model on a prepped draft and Dan himself on one he
+                    // wrote by hand. Without this the hand-written draft would be the only one on the
+                    // screen saying nothing at all about where its words came from.
+                    if let author = item.draftAuthorLabel {
+                        Text(author).font(.system(size: 10)).foregroundStyle(OVColor.inkFaint)
                     }
                 }
                 // #367: a re-prep still awaiting the next Prep run, distinct from "Edited" (this
@@ -331,7 +336,11 @@ struct DraftReviewView: View {
                                                        lintBlocked: item.draftLintBlocked) {
             issueFlags(item.draftLintBlockers)
         }
-        if !item.draftEditedByDan, let body = item.draftBody {
+        // #2007: and stand down on text he WROTE for the same reason they stand down on text he edited.
+        // The decision is DraftReviewNotes', tested, not this view's.
+        if DraftReviewNotes.showsVoiceFindings(editedByDan: item.draftEditedByDan,
+                                               writtenByDan: item.draftWrittenByDan),
+           let body = item.draftBody {
             issueFlags(DraftCheck.findings(in: body,
                                            title: item.groupName,   // #1141: don't flag the title's own "!"
                                            knownsDate: item.performanceDate != nil,
@@ -535,15 +544,16 @@ struct DraftReviewView: View {
         } message: {
             Text(DraftReviewNotes.lintOverrideConfirm(blockers: item.draftLintBlockers))
         }
-        // #733: guard against repeatedly re-prepping the same prospect.
-        .alert("Redo this re-prep?", isPresented: $showReprepCooldownConfirm) {
-            Button("Redo Anyway") {
+        // #733: guard against repeatedly re-prepping the same prospect. #2007: and against replacing an
+        // email Dan wrote himself. The sentence is chosen in ReprepRequest.confirmation.
+        .alert("Re-prep this show?", isPresented: $showReprepConfirm) {
+            Button("Re-prep") {
                 if let mode = pendingReprepMode { onReprep(mode) }
                 pendingReprepMode = nil
             }
             Button("Cancel", role: .cancel) { pendingReprepMode = nil }
         } message: {
-            Text(ReprepRequest.confirmMessage(lastServedAt: item.reprepLastServedAt, now: Date()))
+            Text(pendingReprepMessage)
         }
     }
 
@@ -581,13 +591,18 @@ struct DraftReviewView: View {
         .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
     }
 
+    // #2007: one decision covers both reasons a re-prep confirms (the #733 cooldown, and replacing text
+    // Dan wrote himself), so a single click can never raise two alerts in a row.
     private func requestReprep(_ mode: ReprepMode) {
-        if ReprepRequest.isInCooldown(lastServedAt: item.reprepLastServedAt, now: Date()) {
-            pendingReprepMode = mode
-            showReprepCooldownConfirm = true
-        } else {
+        guard let message = ReprepRequest.confirmation(mode: mode, writtenByDan: item.draftWrittenByDan,
+                                                       lastServedAt: item.reprepLastServedAt, now: Date())
+        else {
             onReprep(mode)
+            return
         }
+        pendingReprepMessage = message
+        pendingReprepMode = mode
+        showReprepConfirm = true
     }
 
     // Per-contact conversation surface (#418 B1): once a show is sent, list each contact with its

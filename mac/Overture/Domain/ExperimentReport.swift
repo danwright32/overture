@@ -65,7 +65,12 @@ enum ExperimentReport {
     }
 
     static func armReport(arm: String, in scopedProspects: [Prospect]) -> ArmReport {
-        let armProspects = scopedProspects.filter { $0.assignedArm == arm }
+        // #2007: a hand-written email is excluded outright, before the send filter. An arm's rate is a
+        // claim about an opener the DRAFTER produced, and this one carries no drafter opener at all: the
+        // arm stamp on it is left over from an assignment that never reached a model. Excluded rather
+        // than counted as `editedExcluded`, which means something different (Dan rewrote an opener the
+        // drafter really did write, so the arm was tried and then departed from).
+        let armProspects = scopedProspects.filter { $0.assignedArm == arm && !$0.draftWrittenByDan }
         let sent = armProspects.filter { $0.wasProvablyContacted }
         // A send whose assigned opener Dan rewrote is excluded from the rate but counted separately.
         let counted = sent.filter { !$0.experimentOpenerEdited }

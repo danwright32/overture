@@ -86,6 +86,9 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     var draftSubject: String? = nil
     var draftBody: String? = nil
     var draftEditedByDan: Bool = false
+    // #2007: Dan wrote this email himself, with no Prep run (Prospect.draftWrittenByDan). Read via
+    // draftAuthorLabel below, and by the voice-flag suppression, which treats his own words as his.
+    var draftWrittenByDan: Bool = false
     // #846: which model wrote this draft (Prospect.draftModel). Read via draftTraceLabel below.
     var draftModel: String? = nil
     var outcome: Outcome = .noResponse
@@ -457,12 +460,20 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // cannot drift into saying it differently.
     var draftTraceLabel: String? { DraftTrace.label(for: draftModel) }
 
+    // #2007: WHO wrote this draft, in one line, whether that was Dan or a model. An email he wrote by
+    // hand carries no model stamp (nothing wrote it but him), so without this it would be the one draft
+    // on the screen that says nothing at all about where its words came from.
+    var draftAuthorLabel: String? { draftWrittenByDan ? "Written by you" : draftTraceLabel }
+
     // #1136: the draft trace for the ROW badge specifically. The draft-review panel renders exactly when
     // the item has a draft body (hasDraft) and shows this same "Drafted by opus" line next to "Edited", so
     // a row badge would state it twice. The badge is therefore shown only once the panel is gone (no draft
     // body), which is the archived case #879 built the row badge for: model-vs-outcome staying visible
     // after review. Decided here, tested, not in the SwiftUI row (#863).
-    var rowDraftTraceLabel: String? { hasDraft ? nil : draftTraceLabel }
+    // #2007: reads the AUTHOR label, so an archived show Dan wrote himself keeps saying so here for the
+    // same reason a model-written one does. Comparing outcomes across models is what #879 built this for,
+    // and "he wrote this one himself" is exactly the row that must not be silently counted as a model's.
+    var rowDraftTraceLabel: String? { hasDraft ? nil : draftAuthorLabel }
 
     // #992: the one-line reason this show was placed too far, or nil unless the geo gate positively
     // placed it out of range. Shown on the row only while the "Too far" filter is engaged. Decided in
@@ -836,6 +847,27 @@ enum QueueModel {
         // never say two different things about one state (#843).
         if item.hasUnclearedConflict {
             return .blocked(ActionAck.reprepBlockedByClash(org: item.groupName))
+        }
+        return .shown
+    }
+
+    // #2007: whether this card offers "Prep manually", and when it must say why it cannot.
+    //
+    // Same three states as `reprepOffer` above and for the same reasons: the rule lives here so a test can
+    // reach it (#863), and a blocked control stays VISIBLE with its reason rather than vanishing, because
+    // a control that disappears teaches nothing and this is a state Dan can clear himself.
+    enum ManualPrepOffer: Equatable {
+        case shown
+        case hidden
+        case blocked(String)
+    }
+
+    static func manualPrepOffer(for item: QueueItem) -> ManualPrepOffer {
+        // Keep is the decision that makes a show prep work at all, and a show that already has an email
+        // has nothing to prep, whoever wrote that email.
+        guard item.status == .queued, !item.hasDraft else { return .hidden }
+        if item.hasUnclearedConflict {
+            return .blocked(ActionAck.manualPrepBlockedByClash(org: item.groupName))
         }
         return .shown
     }
@@ -2011,6 +2043,7 @@ extension QueueItem {
             draftSubject: p.draftSubject,
             draftBody: p.draftBody,
             draftEditedByDan: p.draftEditedByDan,
+            draftWrittenByDan: p.draftWrittenByDan,
             draftModel: p.draftModel,
             outcome: p.outcome,
             performanceStatus: p.performanceStatus,

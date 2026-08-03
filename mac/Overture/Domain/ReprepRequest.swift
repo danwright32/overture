@@ -3,7 +3,7 @@ import Foundation
 // #367: what Dan asked for when he clicked "Re-prep" on a prospect, either from the per-prospect
 // picker or the bulk action. Both share this one type so the gating logic below lives in exactly
 // one place.
-enum ReprepMode: Sendable {
+enum ReprepMode: Sendable, Equatable {
     case draftOnly
     case contactsOnly
     case both
@@ -30,6 +30,25 @@ enum ReprepRequest {
         return now.timeIntervalSince(lastServedAt) < cooldown
     }
 
+    // #2007, Dan's decision 2: re-prep IS offered on an email he wrote himself, and it asks first,
+    // because his own words are the one thing here that cannot be got back.
+    static let handWrittenConfirmMessage =
+        "This replaces the email you wrote yourself with an AI draft. Replace it?"
+
+    // What to ask before this re-prep runs, or nil to go straight ahead. ONE decision covering both
+    // reasons a re-prep confirms, so a click can never raise two alerts in a row (which is not a warning,
+    // it is a habit of clicking through) and the caller has no rule of its own to keep in step.
+    //
+    // Losing hand-written text outranks the cooldown: the cooldown protects a Prep run's cost, this
+    // protects work only Dan can redo. A contacts-only request never touches the words, so it is never
+    // warned about on that ground.
+    static func confirmation(mode: ReprepMode, writtenByDan: Bool,
+                             lastServedAt: Date?, now: Date) -> String? {
+        if writtenByDan && mode != .contactsOnly { return handWrittenConfirmMessage }
+        guard isInCooldown(lastServedAt: lastServedAt, now: now) else { return nil }
+        return confirmMessage(lastServedAt: lastServedAt, now: now)
+    }
+
     // Sets the prospect's re-prep flags for the requested mode. Gates the DRAFT-affecting half on
     // `sentAt == nil` (#367 red-team finding 3): a multi-recipient show can have one recipient
     // already sent while the prospect itself is still `.approved` (SendService keeps it approved
@@ -43,15 +62,25 @@ enum ReprepRequest {
         let draftAllowed = p.sentAt == nil
         switch mode {
         case .draftOnly:
-            if draftAllowed { p.reprepDraftRequested = true }
+            if draftAllowed { grantDraft(to: p) }
             return draftAllowed
         case .contactsOnly:
             p.reprepContactsRequested = true
             return false
         case .both:
-            if draftAllowed { p.reprepDraftRequested = true }
+            if draftAllowed { grantDraft(to: p) }
             p.reprepContactsRequested = true
             return draftAllowed
         }
+    }
+
+    // #2007: granting a redraft RELEASES a hand-written draft to the run. The marker is what makes
+    // PrepImporter refuse to overwrite this text, so leaving it set here would spend a whole Prep run
+    // whose draft is then discarded on arrival: a request that reads as granted and silently does
+    // nothing. Only on the branch where the redraft is actually allowed, so a request the send gate
+    // refuses leaves his words protected rather than exposed to the next unrelated run.
+    private static func grantDraft(to p: Prospect) {
+        p.reprepDraftRequested = true
+        p.draftWrittenByDan = false
     }
 }
