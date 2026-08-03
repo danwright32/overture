@@ -303,6 +303,7 @@ final class QueueUndoStack {
     var undoMenuTitle: String { entries.last?.undoMenuTitle ?? "Undo" }
 
     func record(_ entry: QueueUndoEntry) {
+        QueueWriteTrace.note(QueueWriteTrace.undoStack)
         entries.append(entry)
     }
 
@@ -321,6 +322,7 @@ final class QueueUndoStack {
               top.naturalKey == naturalKey,
               top.resultingStatus == .dismissed,
               top.blockedDays == nil else { return false }
+        QueueWriteTrace.note(QueueWriteTrace.undoStack)
         top.blockedDays = QueueUndoEntry.BlockedDays(start: start, end: end)
         entries[entries.count - 1] = top
         return true
@@ -329,10 +331,12 @@ final class QueueUndoStack {
     // Removes and returns the most recent entry. No redo, by Dan's explicit decision, so a taken entry
     // is discarded rather than parked anywhere it could come back from.
     func takeTop() -> QueueUndoEntry? {
-        entries.popLast()
+        QueueWriteTrace.note(QueueWriteTrace.undoStack)
+        return entries.popLast()
     }
 
     func clear() {
+        QueueWriteTrace.note(QueueWriteTrace.undoStack)
         entries.removeAll()
     }
 }
@@ -355,7 +359,10 @@ final class QueueUndoRequest {
     // the second one into the first if the view had not observed it yet.
     private(set) var token = 0
 
-    func request() { token += 1 }
+    func request() {
+        QueueWriteTrace.note(QueueWriteTrace.undoRequest)
+        token += 1
+    }
 }
 
 // Where a Cmd+Z should go (#1412's second question, answered when that spike passed on 2026-07-24).

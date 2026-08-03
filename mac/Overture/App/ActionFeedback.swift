@@ -32,6 +32,7 @@ final class ActionFeedback {
     // labelled "Undo" sitting under "Follow-up sent to Aurora Strings" would silently resume a source Dan
     // stopped ten minutes ago. It belongs to the sentence it came with, and dies with it.
     func acknowledge(_ message: String, tone: Tone = .info, action: Action? = nil) {
+        QueueWriteTrace.note(QueueWriteTrace.feedback)
         self.message = message
         self.tone = tone
         self.action = action
@@ -39,6 +40,7 @@ final class ActionFeedback {
     }
 
     func clear() {
+        QueueWriteTrace.note(QueueWriteTrace.feedback)
         message = nil
         action = nil
     }
@@ -54,12 +56,16 @@ final class ActionFeedback {
     var topBanner: Int { activeBanners.max() ?? 0 }
 
     func registerBanner() -> Int {
+        QueueWriteTrace.note(QueueWriteTrace.feedback)
         nextBannerToken += 1
         activeBanners.insert(nextBannerToken)
         return nextBannerToken
     }
 
-    func releaseBanner(_ token: Int) { activeBanners.remove(token) }
+    func releaseBanner(_ token: Int) {
+        QueueWriteTrace.note(QueueWriteTrace.feedback)
+        activeBanners.remove(token)
+    }
 
     // How long the banner stays up. A message offering Dan a DECISION has to outlast a glance: 3.2
     // seconds is right for "Sent" (which asks nothing of him) and useless for an Undo he has to notice,

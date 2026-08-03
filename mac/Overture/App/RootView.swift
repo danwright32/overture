@@ -269,9 +269,16 @@ struct RootView: View {
     // joins the problem it measures: the Prep and reply run markers are both stats and are deliberately
     // absent for exactly that reason, the same call the queue's fingerprint makes.
     //
-    // The @Observable objects this view holds (the status line, the action feedback, the day-off offer, the
-    // undo stack) are absent for the OTHER reason, #1922's: reading one here would create a dependency on
-    // it that the body may not otherwise have, so the diagnostic would cause renders it then reported.
+    // The live objects this view holds are read through their WRITE counts (`QueueWriteTrace`), never off
+    // the objects themselves, for #1922's reason: reading an @Observable property here would create a
+    // dependency the body may not otherwise have, so the diagnostic would cause renders it then reported.
+    // A static count depends on nothing. Until this landed they were simply missing, and every render one
+    // of them triggered reported `nothing this view reads`, which is the answer this whole trace is trusted
+    // for: it was blind to its own most likely cause while being read as evidence about the cause.
+    //
+    // The status line is different and is read directly: it is a plain Equatable STRUCT in @State, so this
+    // view is already invalidated by every write to it whether the body reads it or not, and naming it
+    // costs nothing.
     //
     // The two progress snapshots are read by their contents rather than by presence, because a run's
     // heartbeat replaces the whole snapshot on every tick and presence alone would report every one of
@@ -320,6 +327,13 @@ struct RootView: View {
             "sheets": [showArchive, showPatterns, showFollowUps, showVoiceGuidance, showInquiryIntake,
                        showSources, showDaysOff, showExcludedTowns, showOrganisations,
                        showReminderSettings].map { $0 ? "1" : "0" }.joined(),
+            "status": "\(status.text?.count ?? -1)/\(status.priority)",
+            "scoutTask": "\(scoutTask != nil)",
+            "writes.feedback": "\(QueueRenderCounter.writes(QueueWriteTrace.feedback))",
+            "writes.dayOffOffer": "\(QueueRenderCounter.writes(QueueWriteTrace.dayOffOffer))",
+            "writes.undoStack": "\(QueueRenderCounter.writes(QueueWriteTrace.undoStack))",
+            "writes.undoRequest": "\(QueueRenderCounter.writes(QueueWriteTrace.undoRequest))",
+            "writes.addLead": "\(QueueRenderCounter.writes(QueueWriteTrace.addLead))",
         ]
     }
 
