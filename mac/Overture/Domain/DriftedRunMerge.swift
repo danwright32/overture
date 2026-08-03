@@ -50,20 +50,22 @@ enum DriftedRunMerge {
                 continue
             }
 
-            // The row holding Dan's decision wins. With none, the FRESHEST wins, and that is the whole
+            // A row that reached the outside world wins. Otherwise the FRESHEST does, and that is the whole
             // difference from #1064: these rows are a time series, so the earliest is the most stale, is
             // typically already past FeedReconcile's gone threshold, and is the one the queue is ALREADY
             // hiding. Keeping it would delete the only card Dan can see (measured: Dukes, Jena Friedman).
-            // #1845 inserts the contact-list rung below those two, for the same reason as the other passes:
-            // the losing copy's found addresses are deleted with it.
-            let freshestFirst = members.sorted { $1.ingestedAt < $0.ingestedAt }
+            // #1845 inserts the contact-list rung, for the same reason as the other passes: the losing
+            // copy's found addresses are deleted with it. #2001 makes every rung below the first choose
+            // from the rows Dan has NOT decided about, so a night he refused makes way for one he has not
+            // and the show comes back for another look.
+            let candidates = NaturalKeyVenueMigration.preferringASecondLook(members)
+            let freshestFirst = candidates.sorted { $1.ingestedAt < $0.ingestedAt }
             let survivor =
                 members.first(where: {
                     NaturalKeyVenueMigration.hasRecordBeyondADismissal($0, countingFoundAddresses: false)
                 })
-                ?? freshestFirst.first(where: NaturalKeyVenueMigration.carriesDansDecision)
                 ?? NaturalKeyVenueMigration.richestContactList(freshestFirst)
-                ?? members.max(by: { $0.ingestedAt < $1.ingestedAt })!
+                ?? candidates.max(by: { $0.ingestedAt < $1.ingestedAt })!
 
             for loser in members where loser.persistentModelID != survivor.persistentModelID {
                 context.delete(loser)

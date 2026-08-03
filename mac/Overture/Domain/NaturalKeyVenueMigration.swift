@@ -97,22 +97,28 @@ enum NaturalKeyVenueMigration {
             // against a real Downbeat client. `ingestedAt` is rewritten on every re-scout, so it means
             // LAST SEEN, and keeping the earliest kept exactly the stale row: one card, saying he has
             // never worked with a group he has. The freshest wins instead.
-            // #1780: a DISMISSED row outranks a pristine one when neither carries an outreach record.
-            // Without this the freshest row wins, and where the freshest is an untouched re-scout of a
-            // show Dan has already refused, the merge would quietly put it back in front of him, which is
-            // the opposite of what this pass is for.
-            // #1845: the same ladder the two merge passes use, spelled through the same named rungs, with
-            // this pass's own tie-break (freshest, for the reason above). The first rung is now the narrow
-            // question rather than `withHistory.first`: a merely-FOUND address no longer decides a
-            // survivor in fetch order, and a dismissed row reaches `refused` below, where it is chosen by
-            // recency as the comment here has always said it should be.
+            // RETIRED, kept because the reasoning is what #2001 overturned and a reader meeting only the
+            // new rule would not know it was ever weighed. #1780 made a DISMISSED row outrank a pristine
+            // one when neither carried an outreach record, on the grounds that otherwise the freshest wins
+            // and an untouched re-scout of a show Dan had refused would quietly put it back in front of
+            // him. He asked for exactly that outcome in #2001, deliberately: see below.
+            // #1845/#2001: the same ladder the two merge passes use, spelled through the same named rungs,
+            // with this pass's own tie-break (freshest, for the reason above). The first rung is the narrow
+            // question rather than `withHistory.first`, so a merely-FOUND address no longer decides a
+            // survivor in fetch order.
+            //
+            // #2001 REPLACES the "a dismissed row outranks a pristine one" rung recorded above. Dan asked
+            // for the opposite: when a copy he refused meets one he has not decided about, the undecided
+            // copy survives so the show comes back and he can look again, because the refusal may have
+            // been made on insufficient information. Where every row carries a decision there is no second
+            // look to give, so `preferringASecondLook` returns them all and the freshest refusal wins as
+            // it always has.
             let freshest: (Prospect, Prospect) -> Bool = { $0.ingestedAt < $1.ingestedAt }
-            let refused: [Prospect] = members.filter { $0.status == .dismissed }
+            let candidates = preferringASecondLook(members)
             let survivor: Prospect =
                 members.first(where: { hasRecordBeyondADismissal($0, countingFoundAddresses: false) })
-                ?? refused.max(by: freshest)
-                ?? richestContactList(members.sorted { freshest($1, $0) })
-                ?? members.max(by: freshest)!
+                ?? richestContactList(candidates.sorted { freshest($1, $0) })
+                ?? candidates.max(by: freshest)!
             // The show was first seen when the EARLIEST of these rows first saw it. Carried across before
             // the losers go, or the merge would silently move the funnel's opening node (#16) forward to
             // whenever the duplicate happened to appear.
@@ -177,6 +183,25 @@ enum NaturalKeyVenueMigration {
     // rung, and spelling it inline in each of them is how the three drift apart.
     static func carriesDansDecision(_ p: Prospect) -> Bool {
         p.status != .new || p.dismissReasonRaw != nil
+    }
+
+    // #2001: which rows of a group may survive it, once a copy Dan has refused meets one he has not.
+    // The UNDECIDED rows win, so the show returns to the queue and he gets to look again. His words
+    // (2026-08-03): "it's not about the contact list, it's that I may have made a decision based on
+    // insufficient information. so give me another chance to look at it."
+    //
+    // This deliberately INVERTS the rule #1780 wrote here, which kept the refused row precisely so an
+    // untouched re-scout could not put a refused show back in front of him. He asked for that outcome on
+    // purpose, and chose a genuinely clean look over a card that remembers, so the refusal goes with the
+    // row it was on and the returning card says nothing about it.
+    //
+    // A row that reached the OUTSIDE WORLD is not covered by this and must be picked ahead of it by every
+    // caller: a refusal is a judgment he may revisit, while a sent email is a fact that cannot be unsent.
+    // When every row here carries a decision there is no second look to give, so the whole group stands
+    // and each pass falls through to its own tie-break.
+    static func preferringASecondLook(_ members: [Prospect]) -> [Prospect] {
+        let undecided = members.filter { !carriesDansDecision($0) }
+        return undecided.isEmpty ? members : undecided
     }
 
     // A row is a pristine duplicate (safe to drop in a merge) ONLY when it is brand new and carries no
