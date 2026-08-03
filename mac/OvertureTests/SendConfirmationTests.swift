@@ -39,6 +39,159 @@ struct SendConfirmationTests {
         return p
     }
 
+    // #2029. The sheet's preview is captioned "The email that will send" (SendConfirmCopy.previewLabel),
+    // and it was not: it showed `prospect.draftBody` alone, so the greeting Dan can see on the draft, the
+    // `Attn:` block a generic inbox gets, a performer's own letter, and his sign-off were all absent from
+    // the one screen he reads before a real email leaves. A caption is a claim (L21, L64).
+    //
+    // Every test below states the same rule from a different angle: the string in the sheet is the string
+    // the send path hands Gmail, composed by the SAME two helpers, so the two cannot drift.
+    @MainActor
+    @Suite("The confirmation shows the email that will send (#2029)")
+    struct ShowsTheRealEmail {
+        private let sig = OutboundSignature(html: nil, plainText: "Best,\nDan")
+
+        private func container() throws -> ModelContainer {
+            try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
+                               configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+        }
+
+        @discardableResult
+        private func show(_ ctx: ModelContext, body: String = "I photograph performing arts in New York.")
+        -> Prospect {
+            let key = Prospect.makeNaturalKey(groupName: "G", performanceDate: "2026-07-01", venue: "V")
+            let p = Prospect(naturalKey: key, groupName: "G", discipline: "choral", venue: "V",
+                             performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                             priorRelationship: "none", production: "self", profile: "strong",
+                             coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
+                             matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                             status: .approved, ingestedAt: Date())
+            p.draftSubject = "Photography for your June concert"
+            p.draftBody = body
+            ctx.insert(p)
+            return p
+        }
+
+        @discardableResult
+        private func contact(_ ctx: ModelContext, on p: Prospect, email: String, name: String?,
+                             method: String? = nil, provenance: RecipientProvenance = .presenter)
+        -> Recipient {
+            let r = Recipient(id: email, email: email, name: name, provenance: provenance,
+                              contactMethodRaw: method)
+            p.recipients.append(r)
+            ctx.insert(r)
+            try? ctx.save()
+            return r
+        }
+
+        // The whole rule as one assertion, against the two helpers the send path itself uses
+        // (SendService.deliver composes OutgoingPitch.text, and GmailMessage.rfc822 appends the sign-off
+        // through previewBody). Neither is restated here, so this cannot pass by copying the old logic.
+        @Test func isTheStringTheSendPathWouldHandGmail() throws {
+            let ctx = ModelContext(try container())
+            let p = show(ctx)
+            let r = contact(ctx, on: p, email: "marcus@org.org", name: "Marcus Hale")
+
+            let onTheWire = GmailMessage.previewBody(body: try #require(OutgoingPitch.text(for: r, of: p)),
+                                                     signature: sig)
+            let c = try #require(SendConfirmation(prospect: p, signature: sig))
+
+            #expect(c.body == onTheWire)
+        }
+
+        // The greeting was the first of the two hidden pieces #2010 made visible on the draft. It was still
+        // missing HERE, on the last screen before the send.
+        @Test func carriesTheGreetingDanCanSeeOnTheDraft() throws {
+            let ctx = ModelContext(try container())
+            let p = show(ctx)
+            contact(ctx, on: p, email: "marcus@org.org", name: "Marcus Hale")
+
+            let c = try #require(SendConfirmation(prospect: p, signature: sig))
+
+            #expect(c.body.hasPrefix("Hi Marcus,\n\n"))
+        }
+
+        // The `Attn:` block is the more surprising piece, because it appears only for a generic inbox.
+        @Test func carriesTheAttnBlockAGenericInboxGets() throws {
+            let ctx = ModelContext(try container())
+            let p = show(ctx)
+            contact(ctx, on: p, email: "info@org.org", name: "Marcus Hale",
+                    method: ContactMethod.genericInbox.rawValue)
+
+            let c = try #require(SendConfirmation(prospect: p, signature: sig))
+
+            #expect(c.body.contains("Attn: Marcus Hale"))
+            #expect(c.body.contains("Hello,"))
+        }
+
+        // An opening Dan typed himself is what sends, so it is what the confirmation must show.
+        @Test func carriesDansOwnOpeningWhenHeWroteOne() throws {
+            let ctx = ModelContext(try container())
+            let p = show(ctx)
+            let r = contact(ctx, on: p, email: "marcus@org.org", name: "Marcus Hale")
+            r.openingOverride = "Marcus, hello again,"
+
+            let c = try #require(SendConfirmation(prospect: p, signature: sig))
+
+            #expect(c.body.hasPrefix("Marcus, hello again,\n\n"))
+            #expect(!c.body.contains("Hi Marcus,"), "Overture must not show a greeting it will not send")
+        }
+
+        // A directly-addressed performer receives their OWN second-person letter (#641/#789), not the
+        // shared third-person body. Showing the shared one would preview an email that never sends.
+        @Test func carriesAPerformersOwnLetterNotTheSharedBody() throws {
+            let ctx = ModelContext(try container())
+            let p = show(ctx, body: "The shared third-person body.")
+            let r = contact(ctx, on: p, email: "nina@band.example", name: "Nina Ford", provenance: .performer)
+            r.overrideBody = "Nina, I photograph performing arts in New York."
+
+            let c = try #require(SendConfirmation(prospect: p, signature: sig))
+
+            #expect(c.body.contains("Nina, I photograph performing arts in New York."))
+            #expect(!c.body.contains("The shared third-person body."))
+        }
+
+        // The failure path, and the one most likely to be silently wrong: when no styled Gmail signature
+        // is stored, the send path still appends the plain-text sign-off rather than sending unsigned
+        // (#1144/#1689). The preview has to show that fallback, not an unsigned email.
+        @Test func carriesThePlainSignOffWhenNoStyledSignatureIsStored() throws {
+            let ctx = ModelContext(try container())
+            let p = show(ctx)
+            contact(ctx, on: p, email: "marcus@org.org", name: "Marcus Hale")
+
+            let c = try #require(SendConfirmation(prospect: p, signature: .plainFallback))
+
+            #expect(c.body.hasSuffix(OutboundSignature.plainFallback.plainText))
+        }
+
+        // The same defect, in the two sheets that are not the cold draft: both showed their nudge text
+        // without the sign-off that the send appends. Fixed as a class, not an instance (L30).
+        @Test func afollowUpConfirmationCarriesTheSignOff() throws {
+            let ctx = ModelContext(try container())
+            let p = show(ctx)
+            let r = contact(ctx, on: p, email: "marcus@org.org", name: "Marcus Hale")
+            r.sentAt = Date()
+            r.sendState = .sent
+
+            let c = try #require(SendConfirmation(followUpFor: r, of: p, signature: sig))
+
+            #expect(c.body.hasSuffix(sig.plainText))
+        }
+
+        @Test func aconversationNoteConfirmationCarriesTheSignOff() throws {
+            let ctx = ModelContext(try container())
+            let p = show(ctx)
+            let r = contact(ctx, on: p, email: "marcus@org.org", name: "Marcus Hale")
+            r.sentAt = Date()
+            r.sendState = .sent
+
+            let c = try #require(SendConfirmation(conversationNudgeFor: r, of: p, kind: .closing,
+                                                  signature: sig))
+
+            #expect(c.body.hasSuffix(sig.plainText))
+        }
+    }
+
     @Test func buildsRecipientAndSubjectFromAnApprovedProspect() throws {
         let ctx = ModelContext(try container())
         let p = make(ctx)
@@ -51,8 +204,13 @@ struct SendConfirmationTests {
     // can preview it, and the From identity, which must be the one true sending identity.
     @Test func carriesTheDraftBodyAndTheSendingIdentity() throws {
         let ctx = ModelContext(try container())
-        let c = SendConfirmation(prospect: make(ctx, body: "Hi Marcus,\n\nI'd love to photograph the evening."))
-        #expect(c?.body == "Hi Marcus,\n\nI'd love to photograph the evening.")
+        // #2029: the drafted text is no longer the WHOLE preview (it is the opening, the body, then the
+        // sign-off, exactly as the email is assembled), so this asserts the drafted text is carried and
+        // leaves the composition itself to the ShowsTheRealEmail suite above. The signature is passed in
+        // rather than read from this Mac's stored one, so the test cannot depend on machine state (L2).
+        let c = SendConfirmation(prospect: make(ctx, body: "Hi Marcus,\n\nI'd love to photograph the evening."),
+                                 signature: .none)
+        #expect(c?.body.contains("Hi Marcus,\n\nI'd love to photograph the evening.") == true)
         #expect(c?.from == SendIdentity.danWright)
     }
 
@@ -118,7 +276,9 @@ struct SendConfirmationTests {
         let r = p.recipients.first!
         r.name = "Marcus"
 
-        let c = SendConfirmation(followUpFor: r, of: p)
+        // #2029: `.none` is the empty sign-off, so this keeps asserting the nudge text EXACTLY while the
+        // sign-off itself is covered by afollowUpConfirmationCarriesTheSignOff above.
+        let c = SendConfirmation(followUpFor: r, of: p, signature: .none)
         #expect(c?.from == SendIdentity.danWright)
         #expect(c?.recipient == "to@org.org")
         #expect(c?.title == "Send this follow-up now?")

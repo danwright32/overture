@@ -26,13 +26,20 @@ struct SendConfirmation: Equatable {
 
     // The main draft send: the show's next pending recipient over the shared draft body.
     @MainActor
-    init?(prospect: Prospect) {
+    init?(prospect: Prospect, signature: OutboundSignature = GmailSignatureStore.currentSignature()) {
         guard let next = SendService.nextPendingRecipient(for: prospect),
               let email = next.email, !email.isEmpty,
-              let body = prospect.draftBody, !body.isEmpty else { return nil }
+              let body = prospect.draftBody, !body.isEmpty,
+              // #2029: composed by the SAME helper the send path uses, for the SAME recipient, so the
+              // preview cannot show a different email from the one that goes out. `nil` here is the same
+              // condition that stops a send, so a sheet can still never appear for an email that would not
+              // actually leave.
+              let pitch = OutgoingPitch.text(for: next, of: prospect) else { return nil }
         from = .danWright
         recipient = email
-        self.body = body
+        // #2029: and through previewBody, which is where GmailMessage.rfc822 appends the sign-off, so the
+        // preview carries it for the same reason the email does rather than by restating it here.
+        self.body = GmailMessage.previewBody(body: pitch, signature: signature)
         let trimmed = (prospect.draftSubject ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         subject = trimmed.isEmpty ? "(no subject)" : trimmed
         title = SendConfirmCopy.title
@@ -42,7 +49,8 @@ struct SendConfirmation: Equatable {
     // #948: a follow-up nudge to one contact. Subject and body come from FollowUp.nudgeContent, the same
     // source SendService.sendFollowUp sends, so the sheet shows exactly what will go out.
     @MainActor
-    init?(followUpFor recipient: Recipient, of prospect: Prospect) {
+    init?(followUpFor recipient: Recipient, of prospect: Prospect,
+          signature: OutboundSignature = GmailSignatureStore.currentSignature()) {
         guard let email = recipient.email, !email.isEmpty else { return nil }
         let content = FollowUp.nudgeContent(originalSubject: prospect.draftSubject, groupName: prospect.groupName,
                                             isMerged: prospect.isMergedConcert,
@@ -51,7 +59,7 @@ struct SendConfirmation: Equatable {
         from = .danWright
         self.recipient = email
         subject = content.subject
-        body = content.body
+        body = GmailMessage.previewBody(body: content.body, signature: signature)   // #2029
         title = SendConfirmCopy.followUpTitle
         reassurance = SendConfirmCopy.followUpReassurance
     }
@@ -60,7 +68,8 @@ struct SendConfirmation: Equatable {
     // that are a prompt, not a sendable email. A closing note carries the extra reassurance clause,
     // because it does a second thing Dan must be told about.
     @MainActor
-    init?(conversationNudgeFor recipient: Recipient, of prospect: Prospect, kind: ConversationReminder.Kind) {
+    init?(conversationNudgeFor recipient: Recipient, of prospect: Prospect, kind: ConversationReminder.Kind,
+          signature: OutboundSignature = GmailSignatureStore.currentSignature()) {
         guard let email = recipient.email, !email.isEmpty,
               let content = ConversationReminder.nudgeContent(kind: kind, originalSubject: prospect.draftSubject,
                                                               groupName: prospect.groupName,
@@ -70,7 +79,7 @@ struct SendConfirmation: Equatable {
         from = .danWright
         self.recipient = email
         subject = content.subject
-        body = content.body
+        body = GmailMessage.previewBody(body: content.body, signature: signature)   // #2029
         title = SendConfirmCopy.noteTitle
         reassurance = content.isClosing ? SendConfirmCopy.noteReassuranceClosing : SendConfirmCopy.noteReassurance
     }

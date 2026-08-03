@@ -1,8 +1,94 @@
 import Testing
 import Foundation
+import SwiftData
 import SwiftUI
 import ViewInspector
 @testable import Overture
+
+// #2018. #2010 was tested as two halves that never meet: the pure suite asserts the SENT email is the
+// opening plus the body, and the suite below asserts the opening is ON SCREEN. Neither would fail if the
+// screen began showing one thing while the send composed another, as long as each stayed internally
+// consistent. That is the shape L1 and L3 warn about, two green halves and no proof the whole holds.
+//
+// This is the join. It builds a real Prospect and Recipient, makes the queue snapshot the app makes from
+// them (`QueueItem(p)`), renders the real draft review, reads the email OFF THE SCREEN, and asks the send
+// path what it would hand Gmail for that same contact. The two strings must be equal, character for
+// character, with nothing composed in between.
+@MainActor
+@Suite("The reviewed email is the sent email (#2018)")
+struct ReviewedEmailIsTheSentEmailTests {
+    private let signature = OutboundSignature(html: nil, plainText: "Best,\nDan")
+
+    private func context() throws -> ModelContext {
+        ModelContext(try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
+                                        configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
+    }
+
+    private func draft(_ ctx: ModelContext, opening: String? = nil)
+    -> (Prospect, Recipient) {
+        let p = Prospect(naturalKey: "k|2026-09-12|weill", groupName: "Aurora Strings",
+                         discipline: "music", venue: "Weill Recital Hall", performanceDate: "2026-09-12",
+                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                         production: "self", profile: "strong", coverage: "likely_uncovered",
+                         fitScore: 5, tier: "mid", fitReason: "r", matchedClientName: nil,
+                         possibleMatchSource: nil, possibleMatchName: nil, status: .drafted)
+        p.draftSubject = "Photography for your September concert"
+        p.draftBody = "I photograph performing arts in New York."
+        ctx.insert(p)
+        let r = Recipient(id: "sarah@aurora.example", email: "sarah@aurora.example", name: "Sarah Chen",
+                          provenance: .presenter)
+        r.openingOverride = opening
+        p.recipients.append(r)
+        ctx.insert(r)
+        try? ctx.save()
+        return (p, r)
+    }
+
+    // Every string the real draft review actually renders for this show.
+    private func textsOnScreen(_ p: Prospect) throws -> [String] {
+        let view = DraftReviewView(item: QueueItem(p), onApprove: {}, onUnapprove: {}, onSkip: {},
+                                   onSaveDraft: { _, _ in }, outboundSignature: signature)
+        return try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
+    }
+
+    // The whole rule as one assertion. The opening block and the body preview are two separate views on
+    // screen, so the email Dan reads is the longer of them appended to the shorter; the send path's string
+    // must be exactly that, with no third piece anywhere.
+    private func assertScreenMatchesSend(_ p: Prospect, _ r: Recipient,
+                                         _ sourceLocation: SourceLocation = #_sourceLocation) throws {
+        let sent = GmailMessage.previewBody(body: try #require(OutgoingPitch.text(for: r, of: p)),
+                                            signature: signature)
+        let texts = try textsOnScreen(p)
+
+        // The greeting, as rendered: the longest thing on screen that the outgoing email begins with. If
+        // the screen showed a different greeting from the one that sends, nothing here would match.
+        let opening = try #require(texts.filter { !$0.isEmpty && sent.hasPrefix($0) }
+                                        .max(by: { $0.count < $1.count }),
+                                   "no text on screen is the start of the email that would send",
+                                   sourceLocation: sourceLocation)
+        // And the rest of the email, which must ALSO be on screen, sign-off included.
+        let rest = String(sent.dropFirst(opening.count + 2))
+        #expect(texts.contains(rest),
+                "the body block on screen is not the rest of the outgoing email",
+                sourceLocation: sourceLocation)
+    }
+
+    @Test func anuntouchedDraftReadsExactlyAsItWillSend() throws {
+        let ctx = try context()
+        let (p, r) = draft(ctx)
+
+        try assertScreenMatchesSend(p, r)
+    }
+
+    // The case where a re-composition would be most tempting to add back: Dan wrote the opening himself,
+    // so the screen has his words and the send path must not put Overture's back on top.
+    @Test func adraftWhoseOpeningDanWroteReadsExactlyAsItWillSend() throws {
+        let ctx = try context()
+        let (p, r) = draft(ctx, opening: "Sarah, hello again,")
+
+        try assertScreenMatchesSend(p, r)
+    }
+}
 
 // #2010. The domain half (the email is the opening plus the body, and nothing rewrites Dan's text) is
 // pinned in the pure suite. This is the half that only a rendered view can answer: is the opening
