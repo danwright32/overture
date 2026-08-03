@@ -22,4 +22,17 @@ enum OutgoingPitch {
         guard let body = recipient.effectiveBody, !body.isEmpty else { return nil }
         return recipient.outgoingOpening + "\n\n" + body
     }
+
+    // #2031: the same email, for several people at once. Nil when there is no single email to compose,
+    // which is either no body at all or a group whose members would not read the same words.
+    static func text(forGroup recipients: [Recipient], of prospect: Prospect) -> String? {
+        guard !recipients.isEmpty else { return nil }
+        // Body EQUALITY, not provenance. Measured on the live prep handoff 2026-08-03: the one show
+        // waiting there has three contacts, all of them performers, each carrying a DIFFERENT letter. A
+        // rule phrased as "a performer beside a non-performer" would wave that through and send one
+        // person's letter, greeting them by name, to all three.
+        let bodies = Set(recipients.map { $0.effectiveBody ?? "" })
+        guard bodies.count == 1, let body = bodies.first, !body.isEmpty else { return nil }
+        return JointOpening.text(for: recipients, of: prospect) + "\n\n" + body
+    }
 }

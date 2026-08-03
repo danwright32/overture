@@ -386,6 +386,130 @@ struct SendServiceTests {
         #expect(recipient.sendClaimedAt == nil)
     }
 
+    // MARK: - #2031 one pitch to several contacts at once
+
+    // Two contacts on one show, both still to be written to, sharing the same letter.
+    private func showWithTwoContacts(_ ctx: ModelContext, body: String = "I document dance.",
+                                     secondName: String? = "Noah Ellis") -> (Prospect, Recipient, Recipient) {
+        let key = Prospect.makeNaturalKey(groupName: "Aurora", performanceDate: "2026-07-01", venue: "V")
+        let p = Prospect(naturalKey: key, groupName: "Aurora", discipline: "dance", venue: "V",
+                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "none", production: "self", profile: "strong",
+                         coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                         status: .approved, ingestedAt: Date(timeIntervalSince1970: 1))
+        p.draftSubject = "S"; p.draftBody = body
+        ctx.insert(p)
+        let a = Recipient(id: "emma@act.example", email: "emma@act.example", name: "Emma Robinson",
+                          provenance: .presenter)
+        let b = Recipient(id: "noah@act.example", email: "noah@act.example", name: secondName,
+                          provenance: .presenter)
+        p.setRecipients([a, b])
+        try? ctx.save()
+        return (p, a, b)
+    }
+
+    // The point of the whole feature: ONE email, and every person on it recorded as having received
+    // that same email. The shared thread is what makes a reply from either of them findable at all.
+    @Test func onejointSendReachesEveryContactOnOneThread() async throws {
+        let ctx = ModelContext(try container())
+        let (p, a, b) = showWithTwoContacts(ctx)
+        let sender = CapturingSender()
+
+        #expect(await SendService.sendJointly(p, to: [a, b], now: Date(timeIntervalSince1970: 10),
+                                              sender: sender) == true)
+
+        #expect(sender.last?.to == ["emma@act.example", "noah@act.example"])
+        #expect(a.sendState == .sent && b.sendState == .sent)
+        #expect(a.gmailThreadId == b.gmailThreadId)
+        #expect(a.gmailMessageId == b.gmailMessageId)
+        #expect(a.sentAt == Date(timeIntervalSince1970: 10) && b.sentAt == a.sentAt)
+        // Recorded as ONE send, which is what every later surface has to read to know these two people
+        // are reading the same conversation.
+        #expect(a.sendGroupId != nil)
+        #expect(a.sendGroupId == b.sendGroupId)
+        #expect(p.status == .contacted, "nobody is left to write to")
+    }
+
+    // The failure path. A joint send that does not leave is not a partial send: nobody may be left
+    // recorded as written to, and nobody may be left looking un-attempted either (L47).
+    @Test func afailedJointSendLeavesNobodySentAndRecordsItOnEveryContact() async throws {
+        let ctx = ModelContext(try container())
+        let (p, a, b) = showWithTwoContacts(ctx)
+
+        #expect(await SendService.sendJointly(p, to: [a, b], now: Date(timeIntervalSince1970: 10),
+                                              sender: AlwaysFailSender()) == false)
+
+        #expect(a.sendState == .pending && b.sendState == .pending)
+        #expect(a.sendClaimedAt == nil && b.sendClaimedAt == nil)
+        #expect(a.sentAt == nil && b.sentAt == nil)
+        #expect(a.sendError != nil, "a contact with no trace of the attempt reads as never tried")
+        #expect(b.sendError != nil)
+        #expect(p.status == .approved)
+    }
+
+    // The refusal that has to exist before this can be offered at all. A performer carries their OWN
+    // second-person letter; putting them on one message with somebody reading a different letter means
+    // one of the two receives text written for the other, greeted by the other's name.
+    @Test func agroupWhoseContactsWouldReadDifferentLettersIsRefused() async throws {
+        let ctx = ModelContext(try container())
+        let (p, a, b) = showWithTwoContacts(ctx)
+        b.provenance = .performer
+        b.overrideBody = "Noah, I document dance."
+        let sender = CapturingSender()
+
+        #expect(await SendService.sendJointly(p, to: [a, b], now: Date(timeIntervalSince1970: 10),
+                                              sender: sender) == false)
+
+        #expect(sender.last == nil, "nothing may go out when the app would have to choose whose letter")
+        #expect(a.sendState == .pending && b.sendState == .pending)
+        #expect(SendService.jointSendRefusal([a, b], of: p) != nil)
+        // And the ordinary case is not refused by the same rule.
+        #expect(SendService.jointSendRefusal([a], of: p) == nil)
+    }
+
+    // One show in the live store already has one contact written to and one waiting. The person who
+    // already had their email must never receive it twice.
+    @Test func acontactWhoAlreadyHadTheEmailIsNotInTheGroup() async throws {
+        let ctx = ModelContext(try container())
+        let (p, a, b) = showWithTwoContacts(ctx)
+        a.sendState = .sent
+        a.sentAt = Date(timeIntervalSince1970: 5)
+        let sender = CapturingSender()
+
+        #expect(await SendService.sendJointly(p, to: [a, b], now: Date(timeIntervalSince1970: 10),
+                                              sender: sender) == true)
+
+        #expect(sender.last?.to == ["noah@act.example"])
+        #expect(a.sentAt == Date(timeIntervalSince1970: 5), "the earlier send is not restamped")
+        #expect(b.sendState == .sent)
+    }
+
+    // Nothing to send to: refused rather than reported as a send that happened.
+    @Test func ajointSendWithNobodyLeftToWriteToDoesNothing() async throws {
+        let ctx = ModelContext(try container())
+        let (p, a, b) = showWithTwoContacts(ctx)
+        for r in [a, b] { r.sendState = .sent; r.sentAt = Date(timeIntervalSince1970: 5) }
+        let sender = CapturingSender()
+
+        #expect(await SendService.sendJointly(p, to: [a, b], now: Date(timeIntervalSince1970: 10),
+                                              sender: sender) == false)
+        #expect(sender.last == nil)
+    }
+
+    // #2030's rule, extended: a contact carrying a group id has been written to, whatever else is true
+    // of it. `wasWrittenTo` fails closed by design and its comment requires every field that records
+    // contact to be listed there, because the merges delete a contact it answers false for.
+    @Test func acontactThatWentOutWithAGroupCountsAsWrittenTo() throws {
+        let ctx = ModelContext(try container())
+        let (_, a, _) = showWithTwoContacts(ctx)
+
+        #expect(a.wasWrittenTo == false)
+        a.sendGroupId = "grp-1"
+
+        #expect(a.wasWrittenTo, "a contact on a sent group must never read as an untouched address")
+    }
+
     // #2030. A send can refuse for a reason that has nothing to do with the network: there is no text to
     // put in the email. That refusal must leave the contact exactly as it found them, still pending and
     // still sendable, because a contact left claimed is a contact nothing will ever retry: no send goes

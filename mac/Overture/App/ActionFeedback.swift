@@ -283,6 +283,11 @@ enum ActionAck {
         "\(org) is on a night you're already booked, so it can't be pitched until you clear the clash"
     }
 
+    // #2031: these contacts do not read the same letter, so one email cannot carry both without the app
+    // choosing whose words everybody gets. It says what to do about it, since either option is his.
+    static let jointSendMixedLetters =
+        "These contacts have different drafts, so one shared email would send one of them to everyone. Send them separately, or make the drafts match"
+
     static let manualPrepNeedsRecipient = "Add an address to send to. Nothing was saved"
     static let manualPrepNeedsBody = "Write the email before saving it. Nothing was saved"
 

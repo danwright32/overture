@@ -122,6 +122,75 @@ struct WhatYouSeeIsWhatSendsTests {
         #expect(r.outgoingOpening == "Hi Sarah,")
     }
 
+    // #2031. One email to several people has ONE opening, so it cannot be composed per contact. The rule
+    // it must still satisfy is #2010's: whatever it says, that is what sends, and Dan can edit it.
+    @Test func agroupOpeningNamesEveryoneOnTheMessage() throws {
+        let ctx = try context()
+        let p = prospect(ctx)
+        let a = recipient(ctx, on: p, email: "emma@aurora.example", name: "Emma Robinson")
+        let b = recipient(ctx, on: p, email: "noah@aurora.example", name: "Noah Ellis")
+
+        #expect(JointOpening.text(for: [a, b], of: p) == "Hi Emma and Noah,")
+    }
+
+    @Test func agroupOpeningOfThreeReadsAsAList() throws {
+        let ctx = try context()
+        let p = prospect(ctx)
+        let a = recipient(ctx, on: p, email: "emma@aurora.example", name: "Emma Robinson")
+        let b = recipient(ctx, on: p, email: "noah@aurora.example", name: "Noah Ellis")
+        let c = recipient(ctx, on: p, email: "sara@aurora.example", name: "Sara Voss")
+
+        #expect(JointOpening.text(for: [a, b, c], of: p) == "Hi Emma, Noah and Sara,")
+    }
+
+    // Half a greeting is worse than none: greeting one person by name on a message two people are
+    // reading tells the unnamed one they were an afterthought.
+    @Test func agroupOpeningFallsBackWhenAnybodyHasNoName() throws {
+        let ctx = try context()
+        let p = prospect(ctx)
+        let a = recipient(ctx, on: p, email: "emma@aurora.example", name: "Emma Robinson")
+        let b = recipient(ctx, on: p, email: "office@aurora.example", name: nil)
+
+        #expect(JointOpening.text(for: [a, b], of: p) == "Hello,")
+    }
+
+    // And Dan's own words win, exactly as they do for a single contact. Stored on the SHOW, because
+    // there is one opening for one message; a per-contact override cannot express it.
+    @Test func agroupOpeningDanWroteIsUsedVerbatim() throws {
+        let ctx = try context()
+        let p = prospect(ctx)
+        let a = recipient(ctx, on: p, email: "emma@aurora.example", name: "Emma Robinson")
+        let b = recipient(ctx, on: p, email: "noah@aurora.example", name: "Noah Ellis")
+        p.jointOpeningOverride = "Emma, Noah, hello again,"
+
+        #expect(JointOpening.text(for: [a, b], of: p) == "Emma, Noah, hello again,")
+    }
+
+    // The whole rule for a joint email, same shape as the single-contact one above: the opening, then
+    // the shared body, and nothing else.
+    @Test func thejointEmailIsTheGroupOpeningPlusTheSharedBody() throws {
+        let ctx = try context()
+        let p = prospect(ctx)
+        let a = recipient(ctx, on: p, email: "emma@aurora.example", name: "Emma Robinson")
+        let b = recipient(ctx, on: p, email: "noah@aurora.example", name: "Noah Ellis")
+
+        let sent = try #require(OutgoingPitch.text(forGroup: [a, b], of: p))
+
+        #expect(sent == "Hi Emma and Noah,\n\n" + p.draftBody!)
+    }
+
+    // A group whose members would not read the same words has no single email to compose, so there is
+    // nothing to return rather than a guess at whose letter wins.
+    @Test func agroupWithDifferentLettersHasNoJointEmail() throws {
+        let ctx = try context()
+        let p = prospect(ctx)
+        let a = recipient(ctx, on: p, email: "emma@aurora.example", name: "Emma Robinson")
+        let b = recipient(ctx, on: p, email: "nina@band.example", name: "Nina Ford", provenance: .performer)
+        b.overrideBody = "Nina, I photograph performing arts in New York."
+
+        #expect(OutgoingPitch.text(forGroup: [a, b], of: p) == nil)
+    }
+
     // The copy path and the send path must never differ, which is what OutgoingPitch exists for. A
     // performer's own second-person draft still wins over the shared body, unchanged.
     @Test func aperformersOwnDraftStillWinsAndKeepsItsOpening() throws {

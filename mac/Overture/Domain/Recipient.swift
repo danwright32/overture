@@ -481,6 +481,12 @@ final class Recipient {
     // other contact by that person's name, which is a mistake he could not see and would not expect.
     var openingOverride: String? = nil
 
+    // #2031: which SEND this contact went out with, when it went out with other people. Nil, the ordinary
+    // case, means their own email. Two contacts sharing this value are reading the same conversation, and
+    // that is the fact every later surface (the follow-up, the note, the reply, the queue row) has to read
+    // before it addresses one of them alone.
+    var sendGroupId: String? = nil
+
     // #1845: has anybody actually been written to here, as opposed to this address merely having been
     // FOUND by a reachability check? The two are different kinds of thing and the merges turn on it: a
     // found address is the result of a lookup, repeatable by running the lookup again, while a contacted
@@ -498,6 +504,7 @@ final class Recipient {
         if sendState != .pending { return true }        // sent, sending, or deliberately suppressed
         if sentAt != nil || sendClaimedAt != nil { return true }
         if gmailMessageId != nil || gmailThreadId != nil { return true }
+        if sendGroupId != nil { return true }   // #2031: went out with other people, still went out
         if replied || bounced || repliedAt != nil { return true }
         if followUpCount > 0 || lastFollowUpAt != nil { return true }
         if replySentAt != nil || replyDraftBody != nil || replyDraftRequestedAt != nil { return true }

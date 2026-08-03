@@ -296,6 +296,10 @@ final class Prospect {
     // even while a body redraft still flows. The two freezes are independent.
     var recipientsEditedByDan: Bool = false
 
+    // #2031: Dan's own opening for a JOINT email, when he has written one. One message has one opening, so
+    // unlike the per-contact override (#2010) this belongs to the show: there is nobody to hang it on.
+    var jointOpeningOverride: String? = nil
+
     // #367: Dan asked for a re-prep on a prospect that already has a draft. Independent flags so he
     // can request just a redraft, just a fresh contact search, or both; PrepQueueBuilder.needsPrep
     // admits a prospect with either flag set even though hasDraft is true. Cleared by PrepImporter

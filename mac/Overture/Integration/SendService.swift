@@ -260,4 +260,91 @@ enum SendService {
             return false
         }
     }
+
+    // #2031: why these contacts cannot share one email, in the words Dan reads, or nil when they can.
+    //
+    // Only one reason exists, and it is the one the app must never decide on his behalf: the members would
+    // not receive the same words. A directly-addressed performer carries their own second-person letter
+    // (#641/#789), so putting them on one message with somebody reading a different letter means one of
+    // the two gets text written for the other, greeted by the other's name.
+    nonisolated static func jointSendRefusal(_ recipients: [Recipient], of prospect: Prospect) -> String? {
+        guard Set(recipients.map { $0.effectiveBody ?? "" }).count > 1 else { return nil }
+        return ActionAck.jointSendMixedLetters
+    }
+
+    // #2031: ONE email to several contacts of a performance, and every one of them recorded as having
+    // received THAT email.
+    //
+    // The group forms from the still-sendable contacts among those passed, so a contact who already had
+    // their own email is never written to twice, and a contact held by a guard is never quietly included
+    // in somebody else's message.
+    @discardableResult
+    static func sendJointly(_ prospect: Prospect, to recipients: [Recipient],
+                            now: Date, sender: MailSender) async -> Bool {
+        let group = sendOrdered(recipients.filter(\.isSendablePending))
+        guard !group.isEmpty, jointSendRefusal(group, of: prospect) == nil,
+              let pitch = OutgoingPitch.text(forGroup: group, of: prospect),
+              let sharedBody = group.first?.effectiveBody,
+              let mail = OutgoingMail(to: group.compactMap(\.email),
+                                      subject: prospect.draftSubject ?? "", body: pitch)
+        else { return false }
+
+        // Claim ALL of them or none, before the network call, on the same reasoning as `deliver`'s single
+        // claim (#475/#476). Nothing between the check and the save awaits, so on the MainActor the whole
+        // prefix is atomic: a second call racing this group sees them already claimed and backs off. One
+        // save, because `modelContext.save()` persists the whole context, so claiming N costs no more
+        // round trips than claiming one.
+        guard group.allSatisfy({ $0.sendState == .pending }) else { return false }
+        for r in group {
+            r.sendState = .sending
+            r.sendClaimedAt = now
+        }
+        guard (try? prospect.modelContext?.save()) != nil else {
+            for r in group {
+                r.sendState = .pending
+                r.sendClaimedAt = nil
+            }
+            return false
+        }
+
+        let groupId = UUID().uuidString
+        do {
+            let receipt = try await sender.send(mail)
+            for r in group {
+                r.sentAt = now
+                r.sendState = .sent
+                r.sendClaimedAt = nil
+                r.gmailThreadId = receipt.threadId
+                r.gmailMessageId = receipt.messageID
+                r.replyTrackingDegraded = receipt.threadIdDegraded
+                r.sendGroupId = groupId
+                r.sendError = nil
+            }
+            // The lead-level first-send rollup, written once, exactly as `deliver` does it.
+            if prospect.sentAt == nil {
+                prospect.sentAt = now
+                prospect.priorRelationshipAtSend = prospect.priorRelationship
+                prospect.freezeFeaturesAtSend()
+                prospect.gmailThreadId = receipt.threadId
+                prospect.gmailMessageId = receipt.messageID
+            }
+            prospect.freezeSentCopy(subject: mail.subject, body: sharedBody)
+            prospect.sendError = nil
+            if !prospect.recipients.contains(where: \.isSendablePending) {
+                prospect.status = .contacted
+            }
+            return true
+        } catch {
+            // Every member carries the failure, not just the first. A contact left with no trace of the
+            // attempt is indistinguishable from one never tried (L47), and this send was attempted on
+            // behalf of all of them at once.
+            for r in group {
+                r.sendState = .pending
+                r.sendClaimedAt = nil
+                r.sendError = error.localizedDescription
+            }
+            prospect.sendError = error.localizedDescription
+            return false
+        }
+    }
 }
