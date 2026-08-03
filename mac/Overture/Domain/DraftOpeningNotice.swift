@@ -31,7 +31,22 @@ enum DraftOpeningNotice {
 
     static func bodyRepeatsAGreeting(_ body: String?) -> Bool {
         guard let body, !body.isEmpty else { return false }
-        return body.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
+        return leadingGreetingRange(in: body) != nil
+    }
+
+    // #2013: the same judgment, for the caller that needs to REMOVE the greeting rather than report it.
+    //
+    // Named once and shared on purpose. The draft screen points at a body that greets, and the openers
+    // export has to have already taken that greeting off; if the two held separate ideas of what a
+    // leading greeting is, the screen would flag one the export had kept, or the reverse, and neither
+    // would be wrong on its own terms.
+    static func withoutLeadingGreeting(_ body: String) -> String {
+        guard let range = leadingGreetingRange(in: body) else { return body }
+        return String(body[range.upperBound...])
+    }
+
+    private static func leadingGreetingRange(in body: String) -> Range<String.Index>? {
+        body.range(of: pattern, options: [.regularExpression, .caseInsensitive])
     }
 
     // Said once, as a whole sentence, so the inventory carries the words Dan actually reads.

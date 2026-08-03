@@ -55,13 +55,25 @@ enum RecentOpenersBuilder {
         return RecentOpeners(version: version, generatedAt: generatedAt, openers: Array(deduped))
     }
 
-    // The first sentence of a body, whitespace-normalized. The drafted body carries no greeting (the
-    // app owns that at send), so the first sentence IS the opener the drafter should vary. Splits on
+    // The first sentence of a body, whitespace-normalized, with any leading greeting removed first.
+    //
+    // #2013: this used to assume the stored body carries no greeting, which was true while the app owned
+    // the greeting at send and nothing else could put one there. It is not true now, and it never quite
+    // was: the AI drafter writes a bare "Hello," itself.
+    //
+    // LIVE-STORE-CLAIM verified=2026-08-03 measure="exported openers that are really a greeting glued to the first sentence, out of all exported openers"
+    // Measured on the live file: 3 of 8 exported openers began "Hello, I photograph performing arts here
+    // in New York and saw...", so the drafter was told to avoid a shape whose distinguishing feature was
+    // a greeting. Two of those three were the same real opener, kept apart only by what sat in front of
+    // them, so they burned three of fifteen slots between them.
+    //
+    // The greeting is identified by `DraftOpeningNotice`, the same judgment the draft screen uses to
+    // point one out, so the screen cannot flag a greeting this export has already dropped. Splits on
     // the first '.'/'!'/'?' that ends the sentence (followed by a space or the end of the text); a body
     // with no terminator is taken whole. A rare early split on an abbreviation is harmless here: this
     // feeds a "don't reuse this shape" nudge, not a correctness-critical parse.
     static func opener(from body: String) -> String {
-        let norm = normalize(body)
+        let norm = normalize(DraftOpeningNotice.withoutLeadingGreeting(body))
         let chars = Array(norm)
         for (i, c) in chars.enumerated() where c == "." || c == "!" || c == "?" {
             let isEnd = i == chars.count - 1
