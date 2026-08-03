@@ -89,18 +89,7 @@ enum OvationTixCalendar {
         return time
     }
 
-    // yyyy-MM-dd in the current zone. The feed's dates are day-granular (only the day matters downstream for
-    // the horizon and the geography gate), and parsing them here in the current zone yields a stable local
-    // midnight so the synthesized document (and thus the content hash) does not churn between identical runs.
-    private static let dayFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.timeZone = .current
-        f.dateFormat = "yyyy-MM-dd"
-        return f
-    }()
-
-    static func parseEvents(_ data: Data) throws -> [OTEvent] {
+    static func parseEvents(_ data: Data, zone: TimeZone = FeedDates.defaultZone) throws -> [OTEvent] {
         let groups: [DateGroup]
         do {
             groups = try JSONDecoder().decode([DateGroup].self, from: data)
@@ -117,7 +106,10 @@ enum OvationTixCalendar {
         // dated event (a renamed date value drops every row), that is drift, not an empty calendar.
         var visibleRows = 0
         for group in groups {
-            let day = dayFormatter.date(from: group.date)
+            // #1983: the feed's dates are day-granular, and reading them in Eastern (rather than the
+            // Mac's own zone) yields the same New York midnight the rest of Overture reckons by. The day
+            // STRING round-trips unchanged in any zone, so no source's content hash churns for this.
+            let day = FeedDates.date(day: group.date, zone: zone)
             for production in group.productions where production.hidden != true {
                 visibleRows += 1
                 let title = production.name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -159,8 +151,11 @@ enum OvationTixCalendar {
     // now's day, not the current instant). Filtering a COMPLETE feed to a stable rule keeps the reconcile
     // honest: a show leaves the set only once its day is genuinely past, never because a partial read shrank
     // the list.
-    static func upcoming(_ events: [OTEvent], now: Date) -> [OTEvent] {
-        let today = Calendar.current.startOfDay(for: now)
+    static func upcoming(_ events: [OTEvent], now: Date, zone: TimeZone = FeedDates.defaultZone) -> [OTEvent] {
+        // #1983: Eastern's midnight, not the host clock's. At 10pm in New York a UTC host is already
+        // tomorrow, and every show playing tonight would leave the feed, which the reconcile then reads
+        // as those shows having been cancelled.
+        let today = FeedDates.startOfDay(now, zone: zone)
         return events.filter { $0.date >= today }
     }
 
@@ -193,14 +188,15 @@ enum OvationTixCalendar {
     // to hand. It is nil on exactly one path (the ticket-link hop, which reaches this feed without a source),
     // and the next best string there was the request's HOSTNAME, which cost The Players Theatre all 149 of
     // its shows. The date still stands alone as a complete row; the venue is supplied at ingest instead.
-    static func listingHTML(_ events: [OTEvent], venueName: String?, location: String? = nil) -> String {
+    static func listingHTML(_ events: [OTEvent], venueName: String?, location: String? = nil,
+                            zone: TimeZone = FeedDates.defaultZone) -> String {
         let place = venueName.map { name in location.map { "\(name), \($0)" } ?? name }
         let tags = seriesTags(events)
         let rows = events.map { e -> String in
             let bits = [e.superTitle, e.subTitle].compactMap { $0 }.filter { !$0.isEmpty }
                 .map { "<p>\($0)</p>" }.joined()
             let seriesLine = e.seriesId.flatMap { tags[$0] }.map { "<p>Series: \($0)</p>" } ?? ""
-            let day = dayFormatter.string(from: e.date)
+            let day = FeedDates.day(from: e.date, zone: zone)
             let dateLine = place.map { "\(day) at \($0)" } ?? day
             return "<article><h2>\(e.title)</h2>\(bits)\(seriesLine)<p>\(dateLine)</p></article>"
         }.joined(separator: "\n")
@@ -293,13 +289,14 @@ enum OvationTixCalendar {
     }
 
     static func extractedEvents(from events: [OTEvent], presenter: String, venue: String?,
-                                location: String?, sourceURL: URL? = nil) -> [ExtractedEvent] {
+                                location: String?, sourceURL: URL? = nil,
+                                zone: TimeZone = FeedDates.defaultZone) -> [ExtractedEvent] {
         let multiNight = Set(seriesTags(events).keys)
         return events.map { e in
             ExtractedEvent(title: e.title,
                            presenter: presenter,
                            venue: venue,
-                           performanceDate: dayFormatter.string(from: e.date),
+                           performanceDate: FeedDates.day(from: e.date, zone: zone),
                            // Dan's call (2026-07-28): fall back to the venue's own calendar, never nothing.
                            sourceUrl: eventURL(for: e, sourceURL: sourceURL) ?? sourceURL?.absoluteString,
                            location: location,

@@ -116,40 +116,22 @@ enum SquarespaceCalendar {
     // would put the wrong place in every pitch, and a venueless row keeps its nil rather than borrowing
     // the org's name, which would be a fabricated venue of the kind #995 and #1498 exist to prevent.
     static func extractedEvents(from events: [SQEvent], orgName: String,
-                                location: String?) -> [ExtractedEvent] {
+                                location: String?,
+                                zone: TimeZone = FeedDates.defaultZone) -> [ExtractedEvent] {
         events.map { event in
             ExtractedEvent(title: event.title,
                            presenter: orgName,
                            venue: event.venue,
-                           performanceDate: dayFormatter.string(from: event.date),
+                           performanceDate: FeedDates.day(from: event.date, zone: zone),
                            sourceUrl: event.url,
                            location: location,
                            // #1699: the precise start instant arrives on every Squarespace event and was
                            // discarded by the day formatter on the line above. One event is one
-                           // performance here, so always exactly one time.
-                           startTimes: [timeFormatter.string(from: event.date)])
+                           // performance here, so always exactly one time. #1983: the day above and this
+                           // time come from ONE zone, so they cannot disagree about which night it is.
+                           startTimes: [FeedDates.time(from: event.date, zone: zone)])
         }
     }
-
-    private static let dayFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.calendar = EasternDate.calendar
-        formatter.timeZone = EasternDate.calendar.timeZone
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter
-    }()
-
-    // #1699. The SAME zone as `dayFormatter` above, so a show's day and its time are never read in two
-    // different zones and cannot disagree about which night it is.
-    private static let timeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.calendar = EasternDate.calendar
-        formatter.timeZone = EasternDate.calendar.timeZone
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "HH:mm"
-        return formatter
-    }()
 
     // The real network read. Asks the page for its JSON view and parses it; a non-2xx is unreachable and
     // a drifted body throws, so an empty list can never be manufactured out of a failure.
