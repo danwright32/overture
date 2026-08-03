@@ -10,9 +10,16 @@ import Foundation
 // So both paths read this. What lands on the clipboard is by construction the same string the mail
 // would have carried, and the two cannot drift.
 enum OutgoingPitch {
+    // #2010: TWO visible pieces, and nothing else. The opening is the field Dan reads and can edit; the
+    // body is the box he writes in. This function may never add a third thing, because anything it adds
+    // is by definition invisible to the person approving the email (L64).
+    //
+    // It used to compose the greeting and the `Attn:` line here, which meant a draft he read and approved
+    // was not the string that went out, and a greeting he typed into the body sent twice.
+    //
     // nil when there is no body to send yet, the same condition that stops a send.
     static func text(for recipient: Recipient, of prospect: Prospect) -> String? {
         guard let body = recipient.effectiveBody, !body.isEmpty else { return nil }
-        return Salutation.attnLine(for: recipient) + Salutation.greeting(for: recipient) + "\n\n" + body
+        return recipient.outgoingOpening + "\n\n" + body
     }
 }

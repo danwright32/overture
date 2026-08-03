@@ -496,6 +496,12 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     // Only meaningful when sendState == .suppressed (#542); defaulted so existing call sites that
     // never touch a suppressed recipient don't need updating.
     var suppressionReason: RecipientSuppressionReason = .bookedElsewhere
+    // #2010: everything the outgoing email says above the body, as Dan sees and can edit it. Carried on
+    // the snapshot rather than recomputed in the view, so the words on screen are by construction the
+    // words `OutgoingPitch` will send.
+    var outgoingOpening: String = ""
+    // Whether that opening is Dan's own, so the screen can say which it is showing him.
+    var openingIsCustom: Bool = false
     var replyDraftSubject: String? = nil
     var replyDraftBody: String? = nil
     var replyDraftRequestedAt: Date? = nil
@@ -2069,6 +2075,8 @@ extension RecipientSnapshot {
                   lastReplyText: r.lastReplyText, resolution: r.resolution,
                   bounced: r.bounced, outcomeSource: r.outcomeSource,
                   suppressionReason: r.suppressionReason,
+                  outgoingOpening: r.outgoingOpening,
+                  openingIsCustom: r.openingOverride?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false,
                   replyDraftSubject: r.replyDraftSubject, replyDraftBody: r.replyDraftBody,
                   replyDraftRequestedAt: r.replyDraftRequestedAt, intentHint: r.intentHint,
                   replyDraftEditedByDan: r.replyDraftEditedByDan,

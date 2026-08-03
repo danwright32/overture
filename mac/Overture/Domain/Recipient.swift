@@ -427,6 +427,27 @@ final class Recipient {
             && !isBlockedByDraftLint
     }
 
+    // #2010: everything the outgoing email says ABOVE the body, as one visible, editable string.
+    //
+    // Dan's rule, on learning the app added a greeting he could not see: "I want whatever is in the text
+    // box that I see to be what's sent. There should never be any hidden addition that I cannot see in
+    // the app." This is the whole of what used to be added silently at send, brought into one place the
+    // app can render and he can edit.
+    //
+    // The default is character for character what `SendService` used to compose, so nothing about an
+    // untouched pitch changes: the `Attn:` block for a generic inbox (which is itself a surprise, since
+    // it appears only for some addresses) and then the greeting.
+    //
+    // A blank override falls back rather than sending a headless email: clearing a field is how somebody
+    // undoes an edit, not how they ask for no greeting at all. If he ever genuinely wants none, that is a
+    // different request and should look like one.
+    var outgoingOpening: String {
+        if let written = openingOverride?.trimmingCharacters(in: .whitespacesAndNewlines), !written.isEmpty {
+            return written
+        }
+        return Salutation.attnLine(for: self) + Salutation.greeting(for: self)
+    }
+
     // #789 / #641: the text THIS recipient actually receives. A directly-addressed performer's own
     // second-person draft (#634 Phase C) wins over the shared third-person body; for everyone else
     // it IS the shared body. SendService.deliver reads this to compose the mail, and the lint below
@@ -450,6 +471,15 @@ final class Recipient {
     }
 
     var isBlockedByDraftLint: Bool { !draftLintBlockers.isEmpty && !isLintOverridden }
+
+    // #2010: Dan's own opening for THIS contact, when he has written one. Nil, the ordinary case, means
+    // Overture's own (see `outgoingOpening` below), so an untouched draft behaves exactly as before.
+    //
+    // Per CONTACT rather than per show, and that is the safety property rather than a detail. His words
+    // (2026-08-03): "if it's multiple i just don't touch it but if it's single and I want to update it I
+    // can". Stored on the show, an edit made while looking at one contact would silently re-address every
+    // other contact by that person's name, which is a mistake he could not see and would not expect.
+    var openingOverride: String? = nil
 
     // #1845: has anybody actually been written to here, as opposed to this address merely having been
     // FOUND by a reachability check? The two are different kinds of thing and the merges turn on it: a

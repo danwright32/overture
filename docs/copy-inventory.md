@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **984 sentences**, from 346 source files.
+Every sentence Overture can say to Dan: **985 sentences**, from 347 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1654,6 +1654,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ProspectRowView.swift`
 "This draft won't send: \(what.isEmpty ? "a blocking issue" : what)."
     `Domain/DraftCheck.swift`
+"This email starts with a greeting and the opening above adds one too, so it will say hello twice."
+    `Domain/DraftOpeningNotice.swift`
 "This group also performs at this venue on other dates"
     `UI/QueueView+Model.swift`
 "This looks up a real contact for every still-open show on the "
