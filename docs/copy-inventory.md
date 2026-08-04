@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1034 sentences**, from 356 source files.
+Every sentence Overture can say to Dan: **1035 sentences**, from 356 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -58,6 +58,7 @@ What is not, and why:
 - `Integration/GmailMessage.swift`: a light card surface for the outbound email's own HTML, not Overture's voice (#1203)
 - `Integration/GmailMessage.swift`: RFC822 headers: a mail server reads these, not Dan (#915)
 - `Integration/GmailSender.swift`: developer diagnostic log, not the app's own voice (#915)
+- `Integration/GmailSignatureHealth.swift`: developer diagnostic reason (log/badge detail), not the app's own voice (#915)
 - `Integration/GmailSignatureHealth.swift`: developer diagnostic reason (log/badge detail), not the app's own voice (#915)
 - `Integration/GmailSignatureService.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Integration/GmailSignatureService.swift`: developer diagnostic log, not the app's own voice (#915)
@@ -416,6 +417,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/InquiryCopy.swift`
 "Another pitch is already in progress on this date"
     `Domain/SelfBookingConflict.swift`
+"Anyone reading in dark mode sees a white box around your signature. Edit it in Gmail settings."
+    `Domain/DraftReviewNotes.swift`
 "Ask Claude to reinstall Overture."
     `Domain/BuildFreshnessPanel.swift`
 "Asking macOS for OmniFocus permission…"
