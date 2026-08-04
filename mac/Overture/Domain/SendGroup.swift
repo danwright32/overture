@@ -48,12 +48,49 @@ enum SendGroup {
     //
     // Held contacts are excluded by `isSendablePending`, so a contact waiting on Dan's glance is never
     // quietly folded into somebody else's email.
+    // #2046: everything a queue card needs to know about who its email reaches, worked out ONCE.
+    //
+    // Three of the card's fields are the same question asked three ways, and each was asking it from
+    // scratch. Every ask filters the show's recipients through `isSendablePending`, which runs the draft
+    // lint over each contact's whole outgoing letter, and it happens while a card is merely being built
+    // for a scroll. Handed to the card rather than cached inside it, so a field cannot go back to
+    // deriving its own without the card's initializer visibly changing.
+    struct CardGroups {
+        // Who the email goes to, no approval gate: what the message will LOOK like is a fact about the
+        // draft (#2049).
+        let preview: [Recipient]
+        // Who the next press of Send actually reaches, which keeps the approval gate.
+        let pending: [Recipient]
+
+        // Whether anything on this show is waiting to be sent. The preview group is exactly the sendable
+        // pending contacts (narrowed to the first when the show sends separately), so it is empty for the
+        // same shows a direct scan would call empty.
+        var hasPending: Bool { !preview.isEmpty }
+
+        init(preview: [Recipient], pending: [Recipient]) {
+            self.preview = preview
+            self.pending = pending
+        }
+
+        // The one pass. Both groups come out of a single filter of the recipients.
+        init(of prospect: Prospect) {
+            let preview = SendGroup.previewGroup(of: prospect)
+            self.init(preview: preview, pending: SendGroup.pending(from: preview, of: prospect))
+        }
+    }
+
     static func pendingGroup(of prospect: Prospect) -> [Recipient] {
+        pending(from: previewGroup(of: prospect), of: prospect)
+    }
+
+    // The approval gate on its own, so a caller that already holds the preview group pays for the filter
+    // once rather than again (#2046). The gate itself is unchanged and lives only here.
+    private static func pending(from preview: [Recipient], of prospect: Prospect) -> [Recipient] {
         // The SHOW-level gate, the same one `SendService.nextPendingRecipient` applies: an unapproved draft
         // sends to nobody, whatever its contacts look like. Without this a card would name contacts on a
         // draft Dan has not approved, and a joint send would email them.
         guard prospect.status == .approved, prospect.draftBody != nil else { return [] }
-        return previewGroup(of: prospect)
+        return preview
     }
 
     // #2017: every contact the send sheet offers, in send order. A contact a review guard is holding is
