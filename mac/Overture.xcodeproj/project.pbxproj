@@ -58,6 +58,7 @@
 		0B16CEC281BEBC7C7669EA27 /* PerformerMatchVisibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3E631C27DDD963B1A1ED5AD /* PerformerMatchVisibilityTests.swift */; };
 		0B3F94BB19E539CB2184E94F /* ShowSearchField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E2C0BEAE1DB8F10FB628901 /* ShowSearchField.swift */; };
 		0B56C1320FF2A74B8E128144 /* SameDateVenueMerge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BB9F65D06CF95AF6C0261CD /* SameDateVenueMerge.swift */; };
+		0B765905A4F64C03FBC04DFA /* GroupIsOneEmailDownstreamTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E749A609BF9074C67D6B972 /* GroupIsOneEmailDownstreamTests.swift */; };
 		0C185DCF9E60490F4E759025 /* ScoutCancelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CDD6E9799514A7740FECF16 /* ScoutCancelTests.swift */; };
 		0C423B78DFE1F4C3987CF37A /* RunProgressView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F26F66B4313EE1F91AE9682 /* RunProgressView.swift */; };
 		0C4E4E2EE5BCBF56CFD7F317 /* DraftModelTraceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C45A4E87B55511CE82F5BB2 /* DraftModelTraceTests.swift */; };
@@ -223,6 +224,7 @@
 		288B045D2335F9CBA36F5CCF /* PrepGroupCredit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72B71EBE4F35C78E3151DE82 /* PrepGroupCredit.swift */; };
 		2894EB0344FEC7E3DFED2CDC /* GmailSender.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8241C5C74975C9F06E4B505 /* GmailSender.swift */; };
 		28B47DB7BADD1B8A63F01A29 /* PresenterLineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5440B824ED54858222A28E76 /* PresenterLineTests.swift */; };
+		290A347454B036DCF9F14813 /* SendGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CA149E1EF787330DE7174AB /* SendGroup.swift */; };
 		29245907898F8127FD749062 /* Experiment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E7D15D7E6680218D019FE0A /* Experiment.swift */; };
 		293295A0EF114EB2D167A40C /* OutreachEventPhrasingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C34BF6FFEC79EE1375261E5 /* OutreachEventPhrasingTests.swift */; };
 		294622ED6F2A7C45793370C5 /* RecipientBackfillLiveStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C200298C3D0968B8EA55122 /* RecipientBackfillLiveStoreTests.swift */; };
@@ -907,6 +909,7 @@
 		B56000F70D3046377B8CA952 /* ExcludedTownEditingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98182D83EE3AD07E5606A7B0 /* ExcludedTownEditingTests.swift */; };
 		B59A9FC6B274B0F898E07406 /* NaturalKeyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B36D082430691342F0343826 /* NaturalKeyTests.swift */; };
 		B5A59385FB8E1AEB9C710B47 /* VoiceGuidanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53E44875CE3B304B81DAA57A /* VoiceGuidanceView.swift */; };
+		B5F3B2AD898CFBE8915379D8 /* SendGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CA149E1EF787330DE7174AB /* SendGroup.swift */; };
 		B61DDB5B8F1577A734E31257 /* DraftReviewNotes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3516FC2154B2251B6E01724 /* DraftReviewNotes.swift */; };
 		B65779AD98EACE189258FF9F /* StoreSchemaGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7075B57662047CDCEC2EFC0D /* StoreSchemaGuardTests.swift */; };
 		B6EBEFF342508EE39AE673DA /* NearMissNames.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D67012632478190EF6A21BF /* NearMissNames.swift */; };
@@ -1353,6 +1356,7 @@
 		0ACE884CD7428E918C0764DC /* LeadMonthsReadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeadMonthsReadTests.swift; sourceTree = "<group>"; };
 		0AE80712417BBF34FEA73430 /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
 		0C2C98CFD9750B9764A04847 /* SourceGuardCoverageGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceGuardCoverageGuardTests.swift; sourceTree = "<group>"; };
+		0CA149E1EF787330DE7174AB /* SendGroup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendGroup.swift; sourceTree = "<group>"; };
 		0CA9EBB5447C9A70DAF4D8E2 /* SalutationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SalutationTests.swift; sourceTree = "<group>"; };
 		0D91A129735ED9D5235A8CD5 /* DayOffOfferRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DayOffOfferRequest.swift; sourceTree = "<group>"; };
 		0E0BB399AA977D624EDE1D1E /* DueWorkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DueWorkTests.swift; sourceTree = "<group>"; };
@@ -1906,6 +1910,7 @@
 		9D59191D583AE8E9F3C798A3 /* EmailAddressListTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmailAddressListTests.swift; sourceTree = "<group>"; };
 		9D9911D8933E5922C0894D82 /* ConversationNudgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationNudgeTests.swift; sourceTree = "<group>"; };
 		9E10A3A36DE78E73EF6EAE0B /* ReviewStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewStatus.swift; sourceTree = "<group>"; };
+		9E749A609BF9074C67D6B972 /* GroupIsOneEmailDownstreamTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupIsOneEmailDownstreamTests.swift; sourceTree = "<group>"; };
 		9E897341D6DCE28A954EE361 /* FollowUpsViewUserActionSaveGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowUpsViewUserActionSaveGuardTests.swift; sourceTree = "<group>"; };
 		9F17F7263541A45DD564327A /* OmniFocusAutomationPermissionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmniFocusAutomationPermissionTests.swift; sourceTree = "<group>"; };
 		9F26F66B4313EE1F91AE9682 /* RunProgressView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunProgressView.swift; sourceTree = "<group>"; };
@@ -2506,6 +2511,7 @@
 				77796F32F1347D9B325687F0 /* GmailSignatureTests.swift */,
 				50350E8E010D01DD330869F0 /* GoogleOAuthTests.swift */,
 				4D9C9EFDFCED90C078C89475 /* GroupedAnswerCreditTests.swift */,
+				9E749A609BF9074C67D6B972 /* GroupIsOneEmailDownstreamTests.swift */,
 				61BFE4E6528A1F2DB7FA5E67 /* GroupNameDriftTests.swift */,
 				8A44DDFE369F148C9DDE1351 /* GuardedArgumentCostTests.swift */,
 				ABD1EF31EA512A7A4C5EE9CC /* HandoffCleanupTests.swift */,
@@ -3176,6 +3182,7 @@
 				AE4E85FCB552D0FFC474291F /* SendConfirmation.swift */,
 				2172CE8354CB41DD0815A77C /* SendDelightTiming.swift */,
 				E04454C008A40315381B7306 /* SendFailureLine.swift */,
+				0CA149E1EF787330DE7174AB /* SendGroup.swift */,
 				5243AA30A84E8A560C92329A /* SendIdentity.swift */,
 				5A35AF491DD6E38C51A19C36 /* ShootHistory.swift */,
 				D218FAF3DC2AF3D19BE9E781 /* ShowSearch.swift */,
@@ -3719,6 +3726,7 @@
 				00DBA181E360CDE318E437AE /* SendDelightRow.swift in Sources */,
 				F4087EC28B4DDFA3BBC4F9EA /* SendDelightTiming.swift in Sources */,
 				A3A367503BF96C9C1B1896FE /* SendFailureLine.swift in Sources */,
+				B5F3B2AD898CFBE8915379D8 /* SendGroup.swift in Sources */,
 				BE915FC97CAC3DF973F3719F /* SendIdentity.swift in Sources */,
 				E8275FDCC144234D7A1437A7 /* SendProgressState.swift in Sources */,
 				04FA610FA66C8446BAD3F238 /* SendService.swift in Sources */,
@@ -4082,6 +4090,7 @@
 				9AF7EF8E6CA8DC957B860BDC /* GmailSignatureTests.swift in Sources */,
 				3FBAB3BA5E3628D94243C1AC /* GoogleOAuth.swift in Sources */,
 				7276BAF9E3E0B280F4137B92 /* GoogleOAuthTests.swift in Sources */,
+				0B765905A4F64C03FBC04DFA /* GroupIsOneEmailDownstreamTests.swift in Sources */,
 				3036B8BD103E67917232F4FB /* GroupNameDriftTests.swift in Sources */,
 				CDE9B7A40BE50A1FD8196603 /* GroupNameMatch.swift in Sources */,
 				710B27706D9213AB5F1D0763 /* GroupedAnswerCreditTests.swift in Sources */,
@@ -4552,6 +4561,7 @@
 				D196FD4B0FDC68A7D3AA15EF /* SendDelightTimingTests.swift in Sources */,
 				71C5D97F445EB84124181143 /* SendFailureLine.swift in Sources */,
 				4EAAA3BC6BEBD8539D544759 /* SendFailureLineTests.swift in Sources */,
+				290A347454B036DCF9F14813 /* SendGroup.swift in Sources */,
 				23494EF8C92E733951CB28DD /* SendIdentity.swift in Sources */,
 				43A9A08EF5D25A1C0061E500 /* SendIdentityTests.swift in Sources */,
 				B402F250379BFA31BAF70BB0 /* SendProgressState.swift in Sources */,

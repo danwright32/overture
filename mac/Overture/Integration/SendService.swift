@@ -118,6 +118,21 @@ enum SendService {
     // send too. The check-then-set-then-persist is synchronous (no await in between), so on the
     // MainActor a second concurrent call against the SAME claim field sees it already set and
     // backs off before ever reaching the network, instead of double-sending.
+    // #2033: the same claim over a whole GROUP. A shared thread has one conversation, so a second click
+    // on a different member of it is the same double-tap the single claim already refuses, and must be
+    // refused for the same reason: it would put two nudges on one thread.
+    private static func claimSecondarySend(_ group: [Recipient],
+                                           _ claim: ReferenceWritableKeyPath<Recipient, Date?>,
+                                           now: Date) -> Bool {
+        guard group.allSatisfy({ $0[keyPath: claim] == nil }) else { return false }
+        for r in group { r[keyPath: claim] = now }
+        guard (try? group.first?.modelContext?.save()) != nil else {
+            for r in group { r[keyPath: claim] = nil }
+            return false
+        }
+        return true
+    }
+
     private static func claimSecondarySend(_ recipient: Recipient,
                                            _ claim: ReferenceWritableKeyPath<Recipient, Date?>,
                                            now: Date) -> Bool {
@@ -139,8 +154,14 @@ enum SendService {
                              config: FollowUpConfig = .init()) async -> Bool {
         // #1740: the same predicate the row and the Due count read, so a contact Dan stood down cannot be
         // nudged from any surface, including one that never asks the Due list.
-        guard FollowUp.isAwaitingNudge(recipient, in: prospect), recipient.followUpCount < config.maxFollowUps,
+        // #2033: the nudge belongs to the CONVERSATION, so it is addressed to everyone on the thread and
+        // spends the cap once. The cap is read from the highest count in the group, because a cap that
+        // each member counts separately can be spent twice over by clicking the other row.
+        let group = SendGroup.peers(of: recipient, in: prospect)
+        let spent = group.map(\.followUpCount).max() ?? recipient.followUpCount
+        guard FollowUp.isAwaitingNudge(recipient, in: prospect), spent < config.maxFollowUps,
               let email = recipient.email, !email.isEmpty else { return false }
+        let addresses = group.compactMap(\.email).filter { !$0.isEmpty }
         // Reply on THIS contact's conversation (#74, per-recipient #418 D): same threadId, In-Reply-To
         // the contact's last Message-ID, and a "Re:" subject, so a reply to the nudge lands on the
         // thread reply detection already watches for this contact.
@@ -153,26 +174,32 @@ enum SendService {
                                             contactName: recipient.name, venue: prospect.venue,
                                             followUpCount: recipient.followUpCount)
         guard let mail = OutgoingMail(
-            to: [email],
+            to: addresses,
             subject: content.subject,
             body: content.body,
             inReplyTo: recipient.gmailMessageId,
             threadId: recipient.gmailThreadId) else { return false }
         // #468: shared with sendConversationNudge's claim below (mutually exclusive by domain
         // state, see the field's doc comment on Recipient), so a fast double-tap on either one
-        // is refused rather than reaching the network twice.
-        guard claimSecondarySend(recipient, \.nudgeSendClaimedAt, now: now) else { return false }
+        // is refused rather than reaching the network twice. #2033: over the whole group.
+        guard claimSecondarySend(group, \.nudgeSendClaimedAt, now: now) else { return false }
         do {
             let receipt = try await sender.send(mail)
-            recipient.followUpCount += 1
-            recipient.lastFollowUpAt = now
-            if let m = receipt.messageID { recipient.gmailMessageId = m }   // thread the next reply off the nudge
-            recipient.sendError = nil
-            recipient.nudgeSendClaimedAt = nil
+            // Every member records the nudge, so the cap reads the same from whichever row Dan clicks
+            // next and no member looks un-nudged on a thread that was nudged.
+            for r in group {
+                r.followUpCount = spent + 1
+                r.lastFollowUpAt = now
+                if let m = receipt.messageID { r.gmailMessageId = m }   // thread the next reply off the nudge
+                r.sendError = nil
+                r.nudgeSendClaimedAt = nil
+            }
             return true
         } catch {
-            recipient.sendError = error.localizedDescription
-            recipient.nudgeSendClaimedAt = nil   // retryable, never stuck claimed
+            for r in group {
+                r.sendError = error.localizedDescription
+                r.nudgeSendClaimedAt = nil   // retryable, never stuck claimed
+            }
             return false
         }
     }
@@ -189,6 +216,9 @@ enum SendService {
     static func sendConversationNudge(_ recipient: Recipient, of prospect: Prospect,
                                       kind: ConversationReminder.Kind, now: Date, sender: MailSender) async -> Bool {
         guard let email = recipient.email, !email.isEmpty, recipient.sentAt != nil else { return false }
+        // #2033: the note lands on a thread the whole group is reading, so it is addressed to all of them.
+        let group = SendGroup.peers(of: recipient, in: prospect)
+        let addresses = group.compactMap(\.email).filter { !$0.isEmpty }
         // #948: subject and body from the one shared helper the confirmation sheet also reads. It returns
         // nil for a kind that is a prompt, not a sendable email, exactly the .needsState/.suggested case.
         //
@@ -199,25 +229,32 @@ enum SendService {
                                                               isMerged: prospect.isMergedConcert,
                                                               contactName: recipient.name, venue: prospect.venue),
               let mail = OutgoingMail(
-                to: [email],
+                to: addresses,
                 subject: content.subject,
                 body: content.body,
                 inReplyTo: recipient.gmailMessageId,
                 threadId: recipient.gmailThreadId) else { return false }
-        // #468: shared with sendFollowUp's claim above.
-        guard claimSecondarySend(recipient, \.nudgeSendClaimedAt, now: now) else { return false }
+        // #468: shared with sendFollowUp's claim above. #2033: over the whole group.
+        guard claimSecondarySend(group, \.nudgeSendClaimedAt, now: now) else { return false }
         do {
             _ = try await sender.send(mail)
-            recipient.conversationRemindedAt = now   // re-anchor so it steps forward, not nags
-            recipient.sendError = nil
+            for r in group {
+                r.conversationRemindedAt = now   // re-anchor so it steps forward, not nags
+                r.sendError = nil
+                r.nudgeSendClaimedAt = nil
+            }
+            // The closing note still resolves only the contact Dan acted on: Dan's 2026-07-08 decision
+            // that a closing note never cascades to a sibling contact (Recipient.setConversationState) is
+            // about his JUDGEMENT of a person, not about who the email was addressed to.
             if case .closing = kind {
                 recipient.markOutcomeManually(resolution: .declinedSoft)
             }
-            recipient.nudgeSendClaimedAt = nil
             return true
         } catch {
-            recipient.sendError = error.localizedDescription
-            recipient.nudgeSendClaimedAt = nil   // retryable, never stuck claimed
+            for r in group {
+                r.sendError = error.localizedDescription
+                r.nudgeSendClaimedAt = nil   // retryable, never stuck claimed
+            }
             return false
         }
     }
@@ -232,6 +269,11 @@ enum SendService {
                                now: Date, sender: MailSender) async -> Bool {
         guard let email = recipient.email, !email.isEmpty,
               let body = recipient.replyDraftBody, !body.isEmpty else { return false }
+        // #2033: a reply onto a shared thread reaches everyone reading it, the way it would in any mail
+        // client. Replying to one of them on a thread the other can see would read as going behind their
+        // back, and the other would see the reply anyway.
+        let group = SendGroup.peers(of: recipient, in: prospect)
+        let addresses = group.compactMap(\.email).filter { !$0.isEmpty }
         // #468: on its own claim field, not shared with sendFollowUp/sendConversationNudge's
         // (see the field's doc comment on Recipient), since a replied recipient can legitimately
         // be due for a conversation nudge at the same time.
@@ -239,7 +281,7 @@ enum SendService {
             ?? FollowUp.replySubject(originalSubject: prospect.draftSubject,
                                      groupName: FollowUp.safeDisplayName(prospect.groupName, isMerged: prospect.isMergedConcert))
         // #2030: built before the claim, for the same reason as the two nudges above.
-        guard let mail = OutgoingMail(to: [email], subject: subject, body: body,
+        guard let mail = OutgoingMail(to: addresses, subject: subject, body: body,
                                       inReplyTo: recipient.gmailMessageId,
                                       threadId: recipient.gmailThreadId) else { return false }
         guard claimSecondarySend(recipient, \.replySendClaimedAt, now: now) else { return false }
