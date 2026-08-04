@@ -119,6 +119,37 @@ assert_fails "refuses an unreadable/absent identity rather than guessing" \
 assert_fails "refuses an unexpected identity" \
   assert_is_debug_bundle "com.someone.else"
 
+# --- drop_previous_registration (#1970) ---
+#
+# Every Xcode build registers the built app with LaunchServices and nothing ever unregisters it:
+# measured on this Mac 2026-08-04, com.danwright.overture.debug had 78 registrations, 76 of them
+# pointing at deleted DerivedData folders and retired worktrees. The bundle is single-instance, so
+# launching it asks LaunchServices to route to an existing instance against that pile of phantoms.
+# This script is the one that rebuilds the Debug bundle, so it is where the count is kept at one.
+LSTMP="$(mktemp -d)"
+trap 'rm -rf "${LSTMP}"' EXIT
+LSLOG="${LSTMP}/asked"
+cat >"${LSTMP}/lsregister" <<EOF
+#!/usr/bin/env bash
+printf '%s %s\n' "\$1" "\$2" >> "${LSLOG}"
+EOF
+chmod +x "${LSTMP}/lsregister"
+
+: > "${LSLOG}"
+LSREGISTER="${LSTMP}/lsregister" drop_previous_registration "/some path/build/Build/Products/Debug/Overture.app"
+assert_equals "unregisters the exact bundle path the build is about to replace" \
+  "-u /some path/build/Build/Products/Debug/Overture.app" \
+  "$(cat "${LSLOG}")"
+
+# The failure path, and it matters more than the happy one: this is a convenience running before a
+# build, so a LaunchServices that is missing or unhappy must not stop Dan compiling.
+with_missing_registrar() {
+  LSREGISTER="${LSTMP}/not-installed" drop_previous_registration "/some path/Overture.app"
+}
+: > "${LSLOG}"
+assert_succeeds "a missing registrar does not take the build down" with_missing_registrar
+assert_equals "and asks nothing of it" "" "$(cat "${LSLOG}")"
+
 if [[ "${FAILURES}" -gt 0 ]]; then
   echo "${FAILURES} failure(s)"
   exit 1
