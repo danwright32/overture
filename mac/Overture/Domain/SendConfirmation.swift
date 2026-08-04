@@ -16,7 +16,20 @@ struct SendConfirmation: Equatable {
     let from: SendIdentity
     let recipient: String
     let subject: String
-    let body: String
+    // #2053: the message body WITHOUT the sign-off, and the signature it will be composed with, instead
+    // of one already-composed string. An outgoing email has TWO parts whenever a styled signature is
+    // stored (GmailMessage.rfc822 builds multipart/alternative), and a mail client displays the HTML one,
+    // so a preview holding only the plain-text composition can only ever show the fallback. Carrying the
+    // ingredients lets the sheet render the same styled document the draft card renders, through the same
+    // helper, so the two screens cannot disagree about one email.
+    //
+    // Dan: "I see my signature here but if I click send it disappears and does a plain text signature?
+    // that violates my rule of what I see on screen should be what's sent."
+    let bodyBeforeSignOff: String
+    let signature: OutboundSignature
+    // The text/plain part, still exactly what the send path hands Gmail, composed the one way rather than
+    // stored beside its ingredients where the two could drift.
+    var body: String { GmailMessage.previewBody(body: bodyBeforeSignOff, signature: signature) }
     let title: String
     let reassurance: String
     // #1219: set when a DIFFERENT show has already been emailed on this performance's date, so the send
@@ -50,9 +63,11 @@ struct SendConfirmation: Equatable {
                 : OutgoingPitch.text(for: next, of: prospect) else { return nil }
         from = .danWright
         recipient = group.compactMap(\.email).filter { !$0.isEmpty }.joined(separator: ", ")
-        // #2029: and through previewBody, which is where GmailMessage.rfc822 appends the sign-off, so the
-        // preview carries it for the same reason the email does rather than by restating it here.
-        self.body = GmailMessage.previewBody(body: pitch, signature: signature)
+        // #2029: the sign-off rides along for the same reason the email carries it (GmailMessage appends
+        // it at the send layer) rather than by being restated here. #2053: as the two ingredients, so the
+        // sheet can compose either part of the message it needs.
+        bodyBeforeSignOff = pitch
+        self.signature = signature
         subject = subjectLine
         title = SendConfirmCopy.title
         // The reassurance is a promise about what this press does. "To this recipient only" is a false
@@ -75,7 +90,8 @@ struct SendConfirmation: Equatable {
         from = .danWright
         self.recipient = email
         subject = content.subject
-        body = GmailMessage.previewBody(body: content.body, signature: signature)   // #2029
+        bodyBeforeSignOff = content.body                                       // #2029, #2053
+        self.signature = signature
         title = SendConfirmCopy.followUpTitle
         reassurance = SendConfirmCopy.followUpReassurance
     }
@@ -95,7 +111,8 @@ struct SendConfirmation: Equatable {
         from = .danWright
         self.recipient = email
         subject = content.subject
-        body = GmailMessage.previewBody(body: content.body, signature: signature)   // #2029
+        bodyBeforeSignOff = content.body                                       // #2029, #2053
+        self.signature = signature
         title = SendConfirmCopy.noteTitle
         reassurance = content.isClosing ? SendConfirmCopy.noteReassuranceClosing : SendConfirmCopy.noteReassurance
     }
