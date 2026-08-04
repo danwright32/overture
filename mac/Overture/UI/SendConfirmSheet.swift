@@ -69,12 +69,16 @@ struct SendConfirmSheet: View {
                         .font(OVType.meta)
                         .foregroundStyle(OVColor.inkFaint)
                         .textCase(.uppercase)
+                    // #2053: the SAME view the draft card previews through, so the last screen before a
+                    // real email leaves shows the same message the card showed. It renders the styled
+                    // text/html part a mail client displays (the signature Dan sees on the card), and
+                    // falls back to the plain-text sign-off exactly where the message has no HTML part.
+                    // Drawing `confirmation.body` here showed the fallback part instead, which is a
+                    // version of his own signature he has not used since #1144, on the one screen that
+                    // is captioned "The email that will send".
                     ScrollView {
-                        Text(confirmation.body)
-                            .font(OVType.body)
-                            .foregroundStyle(OVColor.inkSoft)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .textSelection(.enabled)
+                        DraftSignaturePreview(draftBody: confirmation.bodyBeforeSignOff,
+                                              signature: confirmation.signature)
                     }
                     .frame(maxHeight: 180)
                     .padding(OVSpacing.sm)
