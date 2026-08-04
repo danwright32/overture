@@ -2067,8 +2067,12 @@ extension QueueItem {
             excludedFromVoiceLearning: p.excludedFromVoiceLearning,
             hasPendingRecipient: p.recipients.contains(where: \.isSendablePending),
             nextRecipientIds: SendGroup.pendingGroup(of: p).map(\.id),
-            jointOpening: SendGroup.pendingGroup(of: p).count > 1
-                ? JointOpening.text(for: SendGroup.pendingGroup(of: p), of: p) : nil,
+            // #2049: the PREVIEW group, which is the same set without the approval gate. What the email
+            // will look like is a fact about the draft; who the next press of Send reaches (the line
+            // above) is a claim about sending and keeps its gate. Gating both on approval is what put
+            // "One email to everyone" three lines above one greeting per contact on every drafted show.
+            jointOpening: SendGroup.previewGroup(of: p).count > 1
+                ? JointOpening.text(for: SendGroup.previewGroup(of: p), of: p) : nil,
             jointOpeningIsCustom: p.jointOpeningOverride?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false,
             sendsTogether: p.sendsTogether,
             offersSendModeChoice: p.recipients.filter { $0.email?.isEmpty == false }.count > 1,
