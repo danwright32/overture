@@ -45,12 +45,18 @@ struct PrepStatus: Equatable, Sendable {
 
     // Coarse relative time, enough for "is this fresh?". No external dependency.
     static func relative(from: Date, to: Date) -> String {
+        max(0, to.timeIntervalSince(from)) < 90 ? "just now" : gap(from: from, to: to) + " ago"
+    }
+
+    // #1808: the same coarse buckets with no "ago", for a sentence that says how far APART two things
+    // are ("2d behind what has shipped") rather than how long ago one of them happened. Shared with
+    // `relative` above rather than spelled out a second time, so the two can never bucket differently.
+    static func gap(from: Date, to: Date) -> String {
         let seconds = max(0, to.timeIntervalSince(from))
         switch seconds {
-        case ..<90: return "just now"
-        case ..<3600: return "\(Int(seconds / 60))m ago"
-        case ..<86_400: return "\(Int(seconds / 3600))h ago"
-        default: return "\(Int(seconds / 86_400))d ago"
+        case ..<3600: return "\(Int(seconds / 60))m"
+        case ..<86_400: return "\(Int(seconds / 3600))h"
+        default: return "\(Int(seconds / 86_400))d"
         }
     }
 }

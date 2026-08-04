@@ -161,6 +161,13 @@ main() {
       echo
       echo "CI genuinely passed. Merging PR #${PR_NUMBER}..."
       gh_as_danwright32 pr merge "${PR_NUMBER}" -R "${REPO}" --squash --delete-branch
+      # #1808: something shipped, so record it for the app to compare its own build against. Never fatal:
+      # the merge has already happened and failing here would report a successful merge as a failure.
+      "${REPO_ROOT}/scripts/record-shipped-commit.sh" || true
+      # And say the same thing in the terminal, which is what finally gives #1345's freshness check a
+      # caller. It exits 1 when the installed app is behind, which after a merge it now is, so its
+      # verdict is printed rather than gating anything.
+      "${REPO_ROOT}/mac/scripts/check-release-freshness.sh" || true
       exit 0
     fi
 

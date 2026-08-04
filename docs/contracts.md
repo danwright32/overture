@@ -43,6 +43,16 @@ the workflow's runbook is its spec.
 | `overture-voice-feedback.json` | App (`VoiceFeedbackBuilder.encode`) | Prep run (workflow) | 1, 2, 3 | `fixtures/voice-feedback/` | `VoiceFeedbackContractTests.swift` |
 | `overture-recent-openers.json` | App (`RecentOpenersBuilder.encode`) | Prep run (workflow) | 1 | `fixtures/recent-openers/` | `RecentOpenersContractTests.swift` |
 | `overture-run-duration-history.json` | App (`RunDurationHistoryStore.record`) | App (`RunDurationHistoryStore.load`) | 1 | none | `RunDurationHistoryTests.swift` |
+| `installed-build.json` | `mac/build-install.sh` (after a successful install) | App (`BuildFreshness.installedRecord`) | 1 | none (three fields, pinned by the decode test) | `BuildFreshnessTests.swift` |
+| `shipped-commit.json` | `scripts/record-shipped-commit.sh` **only**, called by both merge scripts, `scripts/hooks/post-merge`, and `mac/build-install.sh` | App (`BuildFreshness.shippedRecord`) | 1 | none (two fields, pinned on both sides) | `BuildFreshnessTests.swift`, `scripts/record-shipped-commit.test.sh` |
+
+#1808: `installed-build.json` and `shipped-commit.json` are how the app answers "is the copy Dan is looking
+at behind the code?", which it cannot work out for itself because it has no git at runtime. They are the
+only two files here whose writer is a shell script and whose reader is the app with no run in between.
+Both are small, both are honest when absent (a missing record reports "cannot tell", never "up to date"),
+and neither lives in the handoff directory's retention sweep: they describe the installed app rather than a
+run, so ageing one out would silently turn the check off. `installed-build.json` also carries `repoPath`,
+which is the only way the app knows where to run the installer from when Dan presses Update.
 
 #1427: `overture-run-duration-history.json` is app-internal telemetry (the last 10 completed Reading-calendars
 runs, for the "~X remaining" estimate), NOT a cross-language contract: the app both writes and reads it, no
