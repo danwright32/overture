@@ -134,7 +134,8 @@ struct AgentRosterTests {
     @Test func conceptSummaryExplainsEachPillAsAWorkQueue() {
         #expect(AgentRoster.conceptSummary(for: "Scout").contains("keep") || AgentRoster.conceptSummary(for: "Scout").contains("dismiss"))
         #expect(AgentRoster.conceptSummary(for: "Prep").contains("draft"))
-        #expect(AgentRoster.conceptSummary(for: "Review").contains("approve"))
+        #expect(AgentRoster.conceptSummary(for: "Review").contains("read"))
+        #expect(AgentRoster.conceptSummary(for: "Review").contains("send"))
         #expect(AgentRoster.conceptSummary(for: "Send issues").contains("sent") || AgentRoster.conceptSummary(for: "Send issues").contains("send"))
         #expect(AgentRoster.conceptSummary(for: "Follow-ups").contains("reached out"))
     }

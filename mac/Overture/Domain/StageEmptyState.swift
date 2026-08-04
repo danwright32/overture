@@ -56,7 +56,7 @@ enum StageEmptyState {
         case .scout: return "Nothing new to triage"
         case .prep: return "Nothing to prep yet"
         case .prepBlocked: return "Nothing held by a date clash"
-        case .review: return "Nothing to review"
+        case .review: return "Nothing to review yet"
         default: return "Nothing here right now"
         }
     }
@@ -79,7 +79,7 @@ enum StageEmptyState {
         // later" is the other half, and the load-bearing half: what puts a show here is the TIMING, a clash
         // arriving after he kept it, not the clash itself.
         case .prepBlocked: return "A show you kept lands here if a clash with your calendar turns up later."
-        case .review: return "Prepped drafts land here to read, approve, and send."
+        case .review: return "Prepped drafts land here to read and send."
         default: return ""
         }
     }

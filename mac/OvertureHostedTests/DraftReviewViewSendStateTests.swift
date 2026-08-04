@@ -19,6 +19,44 @@ struct DraftReviewViewSendStateTests {
                  status: .approved, draftSubject: "S", draftBody: "Hi", hasPendingRecipient: true)
     }
 
+    // #2050: the drafted card, which is now where Dan presses the one button that sends.
+    private func draftedItem() -> QueueItem {
+        QueueItem(id: "k", groupName: "Aurora Strings", discipline: "music", venue: "Weill Recital Hall",
+                 performanceDate: "2026-08-01", sourceListingURL: nil, websiteURL: nil,
+                 priorRelationship: "none", production: "self", profile: "strong",
+                 coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
+                 matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                 status: .drafted, draftSubject: "S", draftBody: "Hi", hasPendingRecipient: true)
+    }
+
+    // A draft carries ONE button to sent, and it names the screen it opens rather than claiming to send.
+    @Test func aDraftOffersOneButtonThatOpensTheFinalReview() throws {
+        let view = DraftReviewView(item: draftedItem(), onUnapprove: {}, onSkip: {},
+                                   onSaveDraft: { _, _ in }, gmailConnected: true, outboundSendSince: nil)
+
+        _ = try view.inspect().find(button: "Final review")
+        #expect((try? view.inspect().find(button: "Approve")) == nil)
+    }
+
+    // #2050/#2012: that button is disabled without Gmail, and a disabled control that explains itself only
+    // on hover is a dead end. This is now the likeliest reason it is greyed, because every draft in the
+    // queue is stopped by it, so it has to be readable on the card.
+    @Test func aDraftSaysWhenGmailIsWhatIsStoppingIt() throws {
+        let view = DraftReviewView(item: draftedItem(), onUnapprove: {}, onSkip: {},
+                                   onSaveDraft: { _, _ in }, gmailConnected: false, outboundSendSince: nil)
+
+        let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
+        #expect(texts.contains { $0.contains(GmailCopy.notConnected) })
+    }
+
+    @Test func aConnectedDraftSaysNothingAboutGmail() throws {
+        let view = DraftReviewView(item: draftedItem(), onUnapprove: {}, onSkip: {},
+                                   onSaveDraft: { _, _ in }, gmailConnected: true, outboundSendSince: nil)
+
+        let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
+        #expect(!texts.contains { $0.contains(GmailCopy.notConnected) })
+    }
+
     @Test func noOutboundSendShowsTheSendButton() throws {
         let view = DraftReviewView(item: approvedItem(), onUnapprove: {}, onSkip: {},
                                    onSaveDraft: { _, _ in }, outboundSendSince: nil)
@@ -53,7 +91,7 @@ struct DraftReviewViewSendStateTests {
                                    onSkip: {}, onSaveDraft: { _, _ in }, outboundSendSince: nil)
 
         let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
-        #expect(texts.contains { $0.contains("no email to send to") })
+        #expect(texts.contains { $0.contains("No email to send to") })
     }
 
     @Test func aSendableApprovedShowShowsNoSuchNote() throws {

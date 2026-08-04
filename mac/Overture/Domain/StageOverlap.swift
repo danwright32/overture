@@ -24,19 +24,25 @@ enum StageOverlap {
         case lifecycle, sendProblem, resolvesNoKeys
     }
 
+    // #2050: `.sendApproved` moved from lifecycle to sendProblem, because it stopped being a place a show
+    // GETS TO. Review now holds a show from drafted until every contact has been emailed, so an approved
+    // email's lifecycle position is Review; the only thing `.sendApproved` still answers is "how many
+    // approved emails is a disconnected Gmail holding up", which is a problem with sending, and its pill
+    // is the one called Send issues. Both rules below stay true of it under the new family: an approved
+    // show is in the send half by SendHalf.entered, so it may carry a send problem.
     static func family(of focus: StageFocus) -> Family {
         switch focus {
-        case .scout, .prep, .prepBlocked, .review, .sendApproved: return .lifecycle
-        case .sendBlocked, .sendErrors, .sendStuck, .sendDegraded: return .sendProblem
+        case .scout, .prep, .prepBlocked, .review: return .lifecycle
+        case .sendApproved, .sendBlocked, .sendErrors, .sendStuck, .sendDegraded: return .sendProblem
         case .followUps, .reachedOut: return .resolvesNoKeys
         }
     }
 
     // The lifecycle focuses keyed purely on `status`, which is a single value, so a show can be in at
     // most one of them. `.prep` and `.prepBlocked` are deliberately NOT here: a re-prep request puts a
-    // drafted or approved show in one of them alongside `.review` or `.sendApproved`, which is a real
-    // state and not a defect.
-    static let mutuallyExclusiveByStatus: [StageFocus] = [.scout, .review, .sendApproved]
+    // drafted or approved show in one of them alongside `.review`, which is a real state and not a
+    // defect.
+    static let mutuallyExclusiveByStatus: [StageFocus] = [.scout, .review]
 
     // What each rule is, in the words a failure should report. Kept beside the checks so a violation
     // names the rule it broke rather than only the focuses it found.

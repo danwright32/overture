@@ -434,6 +434,14 @@ struct DraftReviewView: View {
     // branches would leave exactly the branch nobody was looking at silent.
     @ViewBuilder
     private var sendBlockerNotes: some View {
+        // #2050: the reason that now stops EVERY draft in the queue at once, so it is the one most worth
+        // saying out loud. Approving used to be reachable without Gmail and only the second screen's Send
+        // was gated; with one button the gate moved forward, and a hover is not somewhere Dan will think
+        // to look for it. The sentence is GmailCopy's, the same one the button's own help says.
+        if !gmailConnected {
+            Text(GmailCopy.notConnected)
+                .font(.system(size: 10)).foregroundStyle(OVColor.rust).lineLimit(1)
+        }
         // #1311: no emailable contact at all, so nothing can ever send. Only when there is genuinely no
         // address: an email held by a review guard is a different, already-explained case.
         if let note = DraftReviewNotes.noSendableEmail(hasPendingRecipient: item.hasPendingRecipient,
@@ -1043,7 +1051,7 @@ struct DraftReviewView: View {
     item.draftSubject = "Photographing Aurora Strings at Carnegie Hall."
     item.draftBody = "Hi Emma, I photograph performing arts in New York and saw Aurora Strings is at Carnegie Hall. I shoot unobtrusive, no-flash documentary coverage and think it would suit this program."
     item.sentAt = Date()
-    return DraftReviewView(item: item, onApprove: {}, onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in })
+    return DraftReviewView(item: item, onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in })
         .padding(OVSpacing.lg)
         .frame(width: 480)
         .background(OVColor.canvas)
