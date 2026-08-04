@@ -46,7 +46,7 @@ struct ReviewedEmailIsTheSentEmailTests {
 
     // Every string the real draft review actually renders for this show.
     private func textsOnScreen(_ p: Prospect) throws -> [String] {
-        let view = DraftReviewView(item: QueueItem(p), onApprove: {}, onUnapprove: {}, onSkip: {},
+        let view = DraftReviewView(item: QueueItem(p), onUnapprove: {}, onSkip: {},
                                    onSaveDraft: { _, _ in }, outboundSignature: signature)
         return try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
     }
@@ -135,7 +135,7 @@ struct DraftOpeningOnScreenTests {
     }
 
     private func view(_ item: QueueItem) -> some View {
-        DraftReviewView(item: item, onApprove: {}, onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in })
+        DraftReviewView(item: item, onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in })
     }
 
     // #2033: when the show's contacts share ONE email, there is one greeting, so the screen shows one.

@@ -154,7 +154,8 @@ enum AgentRoster {
         switch name {
         case "Scout": return "Freshly found events waiting for you to keep or dismiss."
         case "Prep": return "Finds a contact and drafts an email for shows you've kept."
-        case "Review": return "Drafts waiting for you to read, edit, and approve."
+        // #2050: "and send", because a show now stays here until it has gone out.
+        case "Review": return "Drafts waiting for you to read, edit, and send."
         case "Send issues": return "Sent emails that hit a problem, or approved ones you can't send yet."
         case "Reached out": return "Shows you've pitched and are waiting to hear back on."
         case "Follow-ups": return "Nudges due on shows you've already reached out to."
@@ -203,8 +204,12 @@ enum AgentRoster {
 
     private static func review(_ i: AgentInputs) -> AgentStatus {
         if i.toReview > 0 {
+            // #2050: "N to review", not "N drafts to review". Approving no longer moves a show out of this
+            // stage, so the number now covers a show Dan has approved but not yet sent as well as one he
+            // has not read, and calling every one of them a draft would be false of the approved ones.
+            // The unqualified count also reads like its neighbours ("464 to triage", "5 ready to prep").
             return AgentStatus(name: "Review", state: .needsAttention,
-                               detail: "\(i.toReview) draft\(i.toReview == 1 ? "" : "s") to review",
+                               detail: "\(i.toReview) to review",
                                focus: .review, count: i.toReview)
         }
         return AgentStatus(name: "Review", state: .idle, detail: "Nothing to review", focus: .review, count: 0)

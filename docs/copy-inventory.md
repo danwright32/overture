@@ -413,14 +413,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/InquiryCopy.swift`
 "Another pitch is already in progress on this date"
     `Domain/SelfBookingConflict.swift`
-"Approve a show on a date you're already pitching?"
-    `Domain/SelfBookingConflict.swift`
-"Approve anyway"
-    `Domain/SelfBookingConflict.swift`
-"Approved, but no email to send to. Add a contact by hand."
-    `Domain/DraftReviewNotes.swift`
-"Approved, but no subject line. Edit the draft to add one."
-    `Domain/DraftReviewNotes.swift`
 "Ask Claude to reinstall Overture."
     `Domain/BuildFreshnessPanel.swift`
 "Asking macOS for OmniFocus permission…"
@@ -627,7 +619,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/DraftReviewView.swift`
 "Drafting replies \(count)"
     `Domain/ReplyClassifyProgress.swift`
-"Drafts waiting for you to read, edit, and approve."
+"Drafts waiting for you to read, edit, and send."
     `Domain/AgentRoster.swift`
 "Each pair counts as two organisations, so nothing found for one is ever reused for the other. Some are real typos and some are simply different names."
     `UI/OrganisationsView.swift`
@@ -653,6 +645,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ExcludedTownsView.swift`
 "Filed as \(reason.label) either way."
     `Domain/BulkDismiss.swift`
+"Final review"
+    `UI/DraftReviewView.swift`
 "Find contacts only"
     `App/RootView.swift`
     `UI/DraftReviewView.swift`
@@ -935,12 +929,12 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/DraftReviewView.swift`
 "No drafted or approved prospects to re-prep"
     `App/ActionFeedback.swift`
-"No drafts to review"
-    `Domain/StageEmptyState.swift`
 "No email found"
     `Domain/Reachability.swift`
 "No email on file for this inquiry, so it can't be sent from here."
     `UI/InquiryReplySheet.swift`
+"No email to send to. Add a contact by hand."
+    `Domain/DraftReviewNotes.swift`
 "No email yet"
     `UI/QueueView+Model.swift`
 "No experiment running. Start one to test two opener styles against each other and see which earns more replies. Nothing changes until you start it."
@@ -979,6 +973,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/ScoutExtractService.swift`
 "No sources yet."
     `UI/SourcesView.swift`
+"No subject line. Edit the draft to add one."
+    `Domain/DraftReviewNotes.swift`
 "No upcoming shows on that page. That's normal off-season: the organization may not have announced its next season yet."
     `Domain/LeadIntake.swift`
 "No venue"
@@ -1072,6 +1068,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/StageEmptyState.swift`
 "Nothing to review"
     `Domain/AgentRoster.swift`
+"Nothing to review yet"
+    `Domain/StageEmptyState.swift`
 "Nothing to send"
     `Domain/AgentRoster.swift`
 "Nothing tracked yet"
@@ -1225,7 +1223,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/PrepQueueButton.swift`
 "Prep's research found this show may already have its own photographer. Tap if that's wrong."
     `UI/ProspectRowView.swift`
-"Prepped drafts land here to read and approve."
+"Prepped drafts land here to read and send."
     `Domain/StageEmptyState.swift`
 "Presumes the booking instead of handing back the decision"
     `Domain/DraftCheck.swift`
@@ -1280,6 +1278,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/WatchedSource.swift`
 "Read the \(count) I fixed"
     `UI/ScoutSummaryView.swift`
+"Read the email one last time, then send it"
+    `UI/DraftReviewView.swift`
 "Read the one I fixed"
     `UI/ScoutSummaryView.swift`
 "Read this one now"
@@ -1949,8 +1949,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ShootHistory.swift`
 "Zankel Hall"
     `Domain/VenueParser.swift`
-"\(Plural.count(count, "draft")) to review"
-    `Domain/StageEmptyState.swift`
 "\(Plural.count(count, "new lead")) while you were away"
     `UI/QueueView+Model.swift`
 "\(Plural.count(count, "show")) \(Plural.word(count, "is", "are")) back in \(undoStageWord(for: priorStatuses))"
@@ -1960,6 +1958,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "\(Plural.count(count, "show")) on \(dateLabel) are dismissed as \(reason.label)"
     `App/ActionFeedback.swift`
 "\(Plural.count(count, "show")) to prep"
+    `Domain/StageEmptyState.swift`
+"\(Plural.count(count, "show")) to review"
     `Domain/StageEmptyState.swift`
 "\(Plural.count(count, "show")) to triage"
     `Domain/StageEmptyState.swift`
@@ -2017,7 +2017,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AgentRoster.swift`
 "\(i.sendErrors) failed to send"
     `Domain/AgentRoster.swift`
-"\(i.toReview) draft\(i.toReview == 1 ? "" : "s") to review"
+"\(i.toReview) to review"
     `Domain/AgentRoster.swift`
 "\(i.toTriage) to triage"
     `Domain/AgentRoster.swift`

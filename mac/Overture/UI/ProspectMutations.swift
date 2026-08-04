@@ -898,6 +898,33 @@ enum ProspectMutations {
     // SendConfirmation(prospect:), a pure struct init, not worth extracting. This is step 2, the
     // actual send. markSending/clearSending let each screen show its own live "Sending..." state;
     // onNeedsReconnect lets each screen show its own reconnect prompt.
+    // #2050: what confirming the final-review sheet does. Approving and sending are one action now, so
+    // this is the only path a draft takes to a stranger's inbox and there is no separate approved state
+    // for Dan to park a show in. His words: "There's no real reason to approve it again on another
+    // screen."
+    //
+    // The approval is committed BEFORE the send rather than after it, and stays committed if the send
+    // fails, because a failed send has to be retryable: the show keeps its approval, records its error,
+    // and is still rendered by Review (StageNavigation now holds a show there until every contact has been
+    // emailed), which is the disappearance this issue was filed about. Approving only what is still
+    // `.drafted` keeps this idempotent, so a retry on an already-approved show does not re-approve it.
+    static func approveAndSend(_ item: QueueItem, prospects: [Prospect], context: ModelContext,
+                               feedback: ActionFeedback, sender: MailSender = liveSender(),
+                               markSending: @escaping (String) -> Void,
+                               clearSending: @escaping (String) -> Void,
+                               onNeedsReconnect: @escaping () -> Void,
+                               onSent: @escaping (_ naturalKey: String, _ fullySent: Bool) -> Void = { _, _ in }) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        if model.status == .drafted {
+            // Through the same setter every other status change uses, so approving here cannot quietly
+            // skip the bookkeeping (the dismissal fields, the conflict rules) that setter owns.
+            setStatus(item, .approved, nil, prospects: prospects, context: context, feedback: feedback)
+        }
+        performSend(item.id, prospects: prospects, context: context, feedback: feedback, sender: sender,
+                    markSending: markSending, clearSending: clearSending,
+                    onNeedsReconnect: onNeedsReconnect, onSent: onSent)
+    }
+
     static func performSend(_ naturalKey: String, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback,
                            sender: MailSender = liveSender(),
                            markSending: @escaping (String) -> Void, clearSending: @escaping (String) -> Void,

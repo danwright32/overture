@@ -108,13 +108,18 @@ struct NoSubjectRefusedTests {
         #expect(SendConfirmation(prospect: p, signature: .none) == nil)
     }
 
-    // The greyed Send button says why, rather than leaving Dan looking at a control that does
+    // The greyed button says why, rather than leaving Dan looking at a control that does
     // nothing (the #1311 shape, for the same reason).
+    //
+    // #2050: it says so on an UNAPPROVED draft too, and no longer opens with "Approved, but". Approving
+    // stopped being a step Dan takes on its own, so a sentence that waited for it was one he never saw:
+    // the button he actually presses is greyed while the subject is missing, and it is greyed before any
+    // approval exists.
     @Test func theGreyedSendButtonSaysWhy() {
-        #expect(DraftReviewNotes.noSubject(isApproved: true, subject: " ")
-                == "Approved, but no subject line. Edit the draft to add one.")
-        #expect(DraftReviewNotes.noSubject(isApproved: true, subject: "A subject") == nil)
-        #expect(DraftReviewNotes.noSubject(isApproved: false, subject: nil) == nil)
+        #expect(DraftReviewNotes.noSubject(subject: " ")
+                == "No subject line. Edit the draft to add one.")
+        #expect(DraftReviewNotes.noSubject(subject: "A subject") == nil)
+        #expect(DraftReviewNotes.noSubject(subject: nil) != nil)
     }
 
     // MARK: - 4. The boundary that composes the mail refuses it

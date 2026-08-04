@@ -41,7 +41,8 @@ enum StageEmptyState {
         case .scout: return "\(Plural.count(count, "show")) to triage"
         case .prep: return "\(Plural.count(count, "show")) to prep"
         case .prepBlocked: return "\(Plural.count(count, "show")) held by a date clash"
-        case .review: return "\(Plural.count(count, "draft")) to review"
+        // #2050: shows, not drafts. An approved show waiting to send is counted here too now.
+        case .review: return "\(Plural.count(count, "show")) to review"
         case .reachedOut: return "\(Plural.count(count, "show")) you've pitched"
         default: return Plural.count(count, "show")
         }
@@ -55,7 +56,7 @@ enum StageEmptyState {
         case .scout: return "Nothing new to triage"
         case .prep: return "Nothing to prep yet"
         case .prepBlocked: return "Nothing held by a date clash"
-        case .review: return "No drafts to review"
+        case .review: return "Nothing to review yet"
         default: return "Nothing here right now"
         }
     }
@@ -78,7 +79,7 @@ enum StageEmptyState {
         // later" is the other half, and the load-bearing half: what puts a show here is the TIMING, a clash
         // arriving after he kept it, not the clash itself.
         case .prepBlocked: return "A show you kept lands here if a clash with your calendar turns up later."
-        case .review: return "Prepped drafts land here to read and approve."
+        case .review: return "Prepped drafts land here to read and send."
         default: return ""
         }
     }

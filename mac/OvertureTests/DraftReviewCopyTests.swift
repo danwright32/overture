@@ -24,29 +24,28 @@ struct DraftReviewCopyTests {
         #expect(DraftCheck.blockMessage(blockers: []) == "This draft won't send: a blocking issue.")
     }
 
-    // MARK: - "Approved, but no email to send to" (#1311)
+    // MARK: - "No email to send to" (#1311)
     //
-    // SendService hard-blocks a send to a blank address, so an approved show with no emailable contact can
-    // never go out. The greyed Send button never said why; this note explains the stall so Dan can act.
-    // ONLY when there is genuinely no address: an email merely held by a review guard is a different,
-    // already-explained case, and saying "no email" there would be untrue.
-    @Test func anApprovedShowWithNoEmailAtAllExplainsWhyItCannotSend() {
-        #expect(DraftReviewNotes.noSendableEmail(isApproved: true, hasPendingRecipient: false,
-                                                 hasAnyEmailContact: false)
-                    == "Approved, but no email to send to. Add a contact by hand.")
+    // SendService hard-blocks a send to a blank address, so a show with no emailable contact can never go
+    // out. The greyed button never said why; this note explains the stall so Dan can act. ONLY when there
+    // is genuinely no address: an email merely held by a review guard is a different, already-explained
+    // case, and saying "no email" there would be untrue.
+    //
+    // #2050: it no longer waits for an approval, because approving is no longer a step of its own. The
+    // button Dan presses is greyed by this while the show is still a draft, so the reason has to be
+    // readable there or it is never read at all.
+    @Test func aShowWithNoEmailAtAllExplainsWhyItCannotSend() {
+        #expect(DraftReviewNotes.noSendableEmail(hasPendingRecipient: false, hasAnyEmailContact: false)
+                    == "No email to send to. Add a contact by hand.")
     }
 
-    @Test func anApprovedShowWhoseEmailIsMerelyHeldSaysNothing() {
+    @Test func aShowWhoseEmailIsMerelyHeldSaysNothing() {
         // An address exists (held by a guard), so "no email to send to" would be untrue.
-        #expect(DraftReviewNotes.noSendableEmail(isApproved: true, hasPendingRecipient: false,
-                                                 hasAnyEmailContact: true) == nil)
+        #expect(DraftReviewNotes.noSendableEmail(hasPendingRecipient: false, hasAnyEmailContact: true) == nil)
     }
 
-    @Test func aSendableOrUnapprovedShowSaysNothing() {
-        #expect(DraftReviewNotes.noSendableEmail(isApproved: true, hasPendingRecipient: true,
-                                                 hasAnyEmailContact: true) == nil)   // can send
-        #expect(DraftReviewNotes.noSendableEmail(isApproved: false, hasPendingRecipient: false,
-                                                 hasAnyEmailContact: false) == nil)  // not approved yet
+    @Test func aSendableShowSaysNothing() {
+        #expect(DraftReviewNotes.noSendableEmail(hasPendingRecipient: true, hasAnyEmailContact: true) == nil)
     }
 
     // MARK: - Sending despite a warning
@@ -150,28 +149,26 @@ struct DraftReviewCopyTests {
 
     // MARK: - #843: a blocking finding is not shown twice
 
-    // Once a draft is approved and still blocked, the "This draft won't send: <finding>." gate by the Send
-    // button names the finding, so the warning flag near the body would say the same thing again. In that
-    // one case the flag steps aside; the gate keeps it.
+    // While a draft is blocked, the "This draft won't send: <finding>." gate by the button names the
+    // finding, so the warning flag near the body would say the same thing again. The flag steps aside; the
+    // gate keeps it.
+    //
+    // #2050: the gate no longer waits for an approval to appear, because one button now carries the draft
+    // from written to sent, so the question this asks is only whether the draft is blocked.
     @Test func aBlockingFindingIsNotFlaggedNearTheBodyWhenTheGateAlreadyNamesIt() {
-        #expect(DraftReviewNotes.showsBlockingFlagsNearBody(isApproved: true, lintBlocked: true) == false)
-    }
-
-    // Before approval there is no gate yet, so the flag is the only place the finding shows: it stays.
-    @Test func aBlockingFindingStaysFlaggedBeforeApproval() {
-        #expect(DraftReviewNotes.showsBlockingFlagsNearBody(isApproved: false, lintBlocked: true))
+        #expect(DraftReviewNotes.showsBlockingFlagsNearBody(lintBlocked: true) == false)
     }
 
     // After an override the gate no longer names the reason (it tones down to "Sending despite the draft
     // warning you confirmed."), so the specific finding must stay visible near the body.
     @Test func anOverriddenFindingStaysFlaggedNearTheBody() {
-        #expect(DraftReviewNotes.showsBlockingFlagsNearBody(isApproved: true, lintBlocked: false))
+        #expect(DraftReviewNotes.showsBlockingFlagsNearBody(lintBlocked: false))
     }
 
     // The guard and its wiring are two claims (#887): the rule only holds on screen if the view gates the
     // flags on it. Cut the wire and the finding is shown twice again with the unit tests still green.
     @Test func theViewGatesTheFlagsOnThatRule() {
         let view = SourceGuardHelper.source("Overture/UI/DraftReviewView.swift")
-        #expect(view.contains("DraftReviewNotes.showsBlockingFlagsNearBody(isApproved: isApproved"))
+        #expect(view.contains("DraftReviewNotes.showsBlockingFlagsNearBody(lintBlocked: item.draftLintBlocked)"))
     }
 }

@@ -1099,7 +1099,6 @@ struct QueueView: View {
                                           replySendSince: replySince,
                                           onSend: { requestSend(item) }, onSendReply: { rid in sendReply(item, rid) },
                                           onReprep: { mode in requestReprep(item, mode) },
-                                          onApprove: { requestApprove(item) },
                                           showingTooFar: false,
                                           userExcludedTowns: userExcludedTowns,
                                           allowedSeedTowns: allowedSeedTowns)
@@ -1122,13 +1121,10 @@ struct QueueView: View {
         }
     }
 
-    private func requestApprove(_ item: QueueItem) {
-        guardSelfBooking(item, title: SelfBookingCopy.approveConfirmTitle,
-                         proceedLabel: SelfBookingCopy.approveConfirmProceed) {
-            ProspectMutations.setStatus(item, .approved, nil, prospects: prospects, context: context, feedback: feedback)
-        }
-    }
-
+    // #2050: there is no separate Approve to guard any more. The self-booking warning did not go with it:
+    // the send confirmation sheet carries it (`sendSelfBookingWarning` below), computed from the same
+    // `selfBookingConflictNames` this guard reads, so the clash is still named, once, at the moment Dan
+    // actually commits rather than in an alert before a second screen.
     private func guardSelfBooking(_ item: QueueItem, title: String, proceedLabel: String,
                                   proceed: @escaping () -> Void) {
         if let clash = QueueModel.selfBookingClash(for: item, among: items),
@@ -1141,9 +1137,14 @@ struct QueueView: View {
     }
 
     // Step 1 of an explicit send: show Dan exactly what will go out and wait for his confirm (#49).
+    //
+    // #2050: also step 1 of APPROVING, which is no longer a separate press on a separate screen. A drafted
+    // show reaches this the same way an approved one does, and `approving: true` is what lets the sheet
+    // name the people a not-yet-approved draft is about to reach. Nothing is written until he confirms, so
+    // cancelling here leaves the draft exactly as it was.
     private func requestSend(_ item: QueueItem) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }),
-              var confirmation = SendConfirmation(prospect: model) else { return }
+              var confirmation = SendConfirmation(prospect: model, approving: true) else { return }
         // #1219: warn at the committing moment when a DIFFERENT committed show shares this date, naming it
         // so Dan remembers which one. Fires on any commitment (booked / emailed / live draft), not just an
         // already-emailed one, and compares against the whole queue so a show in any stage still counts.
@@ -1157,7 +1158,11 @@ struct QueueView: View {
         // the send removes it from `visible`. Only a send that EMPTIES the show (onSent fullySent) plays
         // it; a partial send on a multi-recipient show keeps the row, so no exit yet.
         let snapshot = items.first(where: { $0.id == naturalKey })
-        ProspectMutations.performSend(naturalKey, prospects: prospects, context: context, feedback: feedback,
+        // #2050: approve-then-send, as ONE action, because the sheet Dan just read IS the approval. On a
+        // show that is already approved (a retry, or one approved before this change) it sends without
+        // re-approving. The pair lives in ProspectMutations, not here, so it has a seam a test can reach.
+        guard let confirmed = snapshot else { return }
+        ProspectMutations.approveAndSend(confirmed, prospects: prospects, context: context, feedback: feedback,
                                       markSending: { sendState.markSending($0) },
                                       clearSending: { sendState.clearSending($0) },
                                       onNeedsReconnect: { showReconnect = true },

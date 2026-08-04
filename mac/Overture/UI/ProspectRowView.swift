@@ -15,7 +15,6 @@ struct ProspectRowView: View {
     let today: String
     let onKeep: () -> Void
     let onDismiss: (DismissReason) -> Void
-    var onApprove: () -> Void = {}
     var onUnapprove: () -> Void = {}
     var onSkipDraft: () -> Void = {}
     // #367
@@ -145,7 +144,6 @@ struct ProspectRowView: View {
             if item.hasDraft {
                 DraftReviewView(
                     item: item,
-                    onApprove: onApprove,
                     onUnapprove: onUnapprove,
                     onSkip: onSkipDraft,
                     onReprep: onReprep,

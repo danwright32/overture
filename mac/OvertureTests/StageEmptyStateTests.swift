@@ -29,10 +29,11 @@ struct StageEmptyStateTests {
         #expect(msg.detail == "You have 2 shows to prep next.")
     }
 
-    // A draft-review count reads as drafts; a reached-out count reads as pitched shows.
+    // #2050: a review count reads as SHOWS, not drafts, because Review now holds an approved show
+    // waiting to send as well as one Dan has not read. A reached-out count reads as pitched shows.
     @Test func thePointerNamesReviewAndReachedOutCorrectly() {
         let review = StageEmptyState.message(for: .scout, counts: [.review: 1], reachedOut: 0)
-        #expect(review.detail == "You have 1 draft to review next.")
+        #expect(review.detail == "You have 1 show to review next.")
 
         let reached = StageEmptyState.message(for: .prep, counts: [:], reachedOut: 4)
         #expect(reached.detail == "You have 4 shows you've pitched next.")
@@ -49,7 +50,7 @@ struct StageEmptyStateTests {
     // Each primary stage has its own empty title, so the screen never says the wrong stage is empty.
     @Test func eachStageHasItsOwnTitle() {
         #expect(StageEmptyState.message(for: .prep, counts: [:], reachedOut: 0).title == "Nothing to prep yet")
-        #expect(StageEmptyState.message(for: .review, counts: [:], reachedOut: 0).title == "No drafts to review")
+        #expect(StageEmptyState.message(for: .review, counts: [:], reachedOut: 0).title == "Nothing to review yet")
     }
 
     // #1195/#843: the Send-issues stages (the default arm) have no stage-specific resting line, so when
