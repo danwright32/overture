@@ -5,9 +5,9 @@ import SwiftData
 // #2031 migration dry-run, on the InquiryMigrationDryRunTests precedent (#1435).
 //
 // This one differs from every rehearsal before it: those added a new INDEPENDENT entity, which SwiftData
-// can add without touching a single existing row. This adds two COLUMNS to entities that already hold
-// Dan's real data (`Recipient.sendGroupId`, `Prospect.jointOpeningOverride`), so the migration reaches the
-// tables that matter. Both are optional with a nil default, which is the shape SwiftData's lightweight
+// can add without touching a single existing row. This adds THREE COLUMNS to entities that already hold
+// Dan's real data (`Recipient.sendGroupId`, `Prospect.jointOpeningOverride`, `Prospect.sendsTogetherOverride`),
+// so the migration reaches the tables that matter. Both are optional with a nil default, which is the shape SwiftData's lightweight
 // migration handles, and this rehearses it against a COPY of the real Release store (never the live file).
 //
 // The failure it exists to catch is the loud one and the quiet one at once: a container that refuses to
@@ -58,6 +58,10 @@ struct JointSendMigrationDryRunTests {
         // non-nil default here would make all 100-odd existing contacts read as written to.
         #expect(recipients.allSatisfy { $0.sendGroupId == nil })
         #expect(prospects.allSatisfy { $0.jointOpeningOverride == nil })
+        // #2033: and the mode arrives unset on every existing show, which is what makes them all read as
+        // "together" (the default Dan asked for) rather than as a choice he never made.
+        #expect(prospects.allSatisfy { $0.sendsTogetherOverride == nil })
+        #expect(prospects.allSatisfy { $0.sendsTogether })
 
         // Opening the ALREADY-migrated clone a second time must find exactly the same rows. A migration
         // that loses rows on a later launch is the version of this failure nobody would connect to this

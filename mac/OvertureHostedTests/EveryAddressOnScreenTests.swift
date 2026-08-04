@@ -35,7 +35,7 @@ struct EveryAddressOnScreenTests {
             coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
             matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil, status: .approved)
         item.contacts = contacts
-        item.nextRecipientId = next
+        item.nextRecipientIds = next.map { [$0] } ?? []
         item.draftSubject = "Photographing Aurora Strings"
         item.draftBody = "I photograph performing arts in New York."
         return item

@@ -8,6 +8,12 @@ enum SendConfirmCopy {
     // #1219: the self double-booking warning shown in the send sheet is now dynamic (it names the clashing
     // show), so it lives in SelfBookingCopy.confirmWarning, set on SendConfirmation.selfBookingWarning.
     static let reassurance = "This sends one email right now, to this recipient only. Nothing else goes out."
+    // #2033: the same promise for an email several people are on. It names the number rather than saying
+    // "these recipients", because the count is the thing he is checking when he reads the To line above it.
+    static func reassuranceForSeveral(_ count: Int) -> String {
+        let who = count == 2 ? "both of these people" : "all \(count) of these people"
+        return "This sends one email right now, to \(who). Nothing else goes out."
+    }
     // #948: the follow-up and conversation-note sends share this sheet. Their heading and reassurance
     // differ from the draft's (and a closing note names the second thing it does), and they live here
     // beside the draft's so all three are read together, in one place, rather than in three view bodies.
@@ -131,5 +137,13 @@ struct SendConfirmSheet: View {
                 .textSelection(.enabled)
         }
         .padding(.vertical, OVSpacing.xs)
+    }
+}
+
+// #2033: the tag on a contact row saying this email is going to them. Out of the view because a view that
+// computes its own wording drifts under a green suite (ViewCopyGuardTests).
+enum DraftContactCopy {
+    static func nextSendTag(recipients: Int) -> String {
+        recipients > 1 ? "On this email" : "Sending to this one"
     }
 }

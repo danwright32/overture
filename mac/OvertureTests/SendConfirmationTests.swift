@@ -244,6 +244,9 @@ struct SendConfirmationTests {
         let act = Recipient(id: "emma@act.example", email: "emma@act.example", name: "Emma", provenance: .act)
         let presenter = Recipient(id: "noah@p.example", email: "noah@p.example", name: "Noah", provenance: .presenter)
         p.setRecipients([act, presenter])
+        // #2033: sending SEPARATELY is the mode where the confirmation walks one contact at a time, which
+        // is what this test is about. Under the together default both would be on one confirmation.
+        p.sendsTogetherOverride = false
         try? ctx.save()
 
         // The act is the first pending recipient.

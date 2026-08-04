@@ -581,6 +581,16 @@ enum ProspectMutations {
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
+    // #2033: the opening of a joint email, which belongs to the SHOW because one message has one greeting.
+    // Blank clears it back to Overture's own, matching how a per-contact opening behaves.
+    static func saveJointOpening(_ item: QueueItem, opening: String,
+                                 prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        let trimmed = opening.trimmingCharacters(in: .whitespacesAndNewlines)
+        model.jointOpeningOverride = trimmed.isEmpty ? nil : trimmed
+        context.saveOrWarn(org: item.groupName, feedback: feedback)
+    }
+
     // #367/#1143: re-prep this one show. It applies the requested mode's flags, saves, and then actually
     // LAUNCHES a Prep run scoped to just this show (reusing PrepQueueService.startPrep, the same detached
     // path "Prep kept" uses), rather than only flagging it for some future run Dan has to remember to
@@ -890,10 +900,12 @@ enum ProspectMutations {
             // #1208: pull the current Gmail signature right before composing, so an email Dan sends after
             // editing his signature carries the new one (self-throttled, never blocks the send).
             await GmailSignatureService.refreshBeforeSend()
-            let sent = await SendService.sendOne(model, now: Date(), sender: sender)
+            // #2033: sendNext is the one place the together-or-separately choice is acted on, so this
+            // button, the confirmation Dan just read and the card all agree about who is being emailed.
+            let sent = await SendService.sendNext(model, now: Date(), sender: sender)
             context.saveOrWarnSendNotConfirmed(org: model.groupName, feedback: feedback)
             clearSending(naturalKey)
-            if sent { onSent(naturalKey, SendService.nextPendingRecipient(for: model) == nil) }
+            if sent { onSent(naturalKey, SendGroup.pendingGroup(of: model).isEmpty) }
             // #1770: refresh before deciding. A send that just failed is the moment a revoked credential
             // shows itself, so this must not answer from a cache filled before the token died.
             if !sent && !GmailConnection.shared.refreshedIsConnected() { onNeedsReconnect() }

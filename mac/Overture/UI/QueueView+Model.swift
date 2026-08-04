@@ -108,7 +108,14 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // #2015: WHICH contact the next Send will actually email. Resolved from `SendService` itself rather
     // than re-derived here, so the card and the send can never disagree about who is about to receive it,
     // which is the whole failure this exists to close. Nil when nothing can send yet.
-    var nextRecipientId: String? = nil
+    // #2033: every contact the next press of Send reaches, not just the first. On a show sending
+    // together that is all of them, and a card naming one person for an email going to two is the defect
+    // #2015 was filed to fix, reintroduced.
+    var nextRecipientIds: [String] = []
+    // #2033: the ONE opening a joint email carries, and whether Dan wrote it. Nil when this show's
+    // contacts each get their own email, which is when the per-contact openings are the true ones.
+    var jointOpening: String? = nil
+    var jointOpeningIsCustom: Bool = false
     // #1324: a real email exists but only as a venue front desk or press inbox (held by the venue/press
     // guard, so not sendable). Lets the reachability badge say "Weak contact only" rather than the untrue
     // "No email found". Only meaningful once probed and when hasPendingRecipient is false.
@@ -2054,7 +2061,10 @@ extension QueueItem {
             voiceLearningCandidate: p.sentAt != nil && p.originalDraftBody != nil,
             excludedFromVoiceLearning: p.excludedFromVoiceLearning,
             hasPendingRecipient: p.recipients.contains(where: \.isSendablePending),
-            nextRecipientId: SendService.nextPendingRecipient(for: p)?.id,
+            nextRecipientIds: SendGroup.pendingGroup(of: p).map(\.id),
+            jointOpening: SendGroup.pendingGroup(of: p).count > 1
+                ? JointOpening.text(for: SendGroup.pendingGroup(of: p), of: p) : nil,
+            jointOpeningIsCustom: p.jointOpeningOverride?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false,
             // #1324: a real address held by a guard, so the badge can say so rather than "No email found"
             // when that is all a check found. #1798: the same shared definition the stored verdict uses,
             // because these were two copies of one rule and both were missing the duplicate guard.

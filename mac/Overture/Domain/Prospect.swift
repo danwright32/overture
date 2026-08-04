@@ -300,6 +300,19 @@ final class Prospect {
     // unlike the per-contact override (#2010) this belongs to the show: there is nobody to hang it on.
     var jointOpeningOverride: String? = nil
 
+    // #2033: does this event's outreach go out as ONE email to everybody, or one each?
+    //
+    // Dan's words, 2026-08-03: "Basically it's all or nothing. I want to have a selector that says email
+    // separately or together and just choose the one I want for each event. It should default to
+    // together." So it is one choice per event over all of its contacts, never a per-contact mix.
+    //
+    // Optional with nil meaning TOGETHER, rather than a Bool defaulting to true, because a non-optional
+    // Bool added to a live SwiftData store fills existing rows with false, which is the opposite of the
+    // default he asked for. Nil is "he has not said", and that reads as together.
+    var sendsTogetherOverride: Bool? = nil
+
+    var sendsTogether: Bool { sendsTogetherOverride ?? true }
+
     // #367: Dan asked for a re-prep on a prospect that already has a draft. Independent flags so he
     // can request just a redraft, just a fresh contact search, or both; PrepQueueBuilder.needsPrep
     // admits a prospect with either flag set even though hasDraft is true. Cleared by PrepImporter
