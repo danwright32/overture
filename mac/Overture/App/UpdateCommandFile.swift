@@ -3,9 +3,14 @@ import AppKit
 
 // #1808: the button that actually updates Overture.
 //
-// Reinstalling is `mac/build-install.sh`, a terminal command, and Dan does not work in a terminal. So the
-// panel writes a small executable script and asks macOS to open it, which lands in a NEW Terminal window
-// with the command already running. Opening a document is all that needs (no automation permission),
+// Updating is `mac/scripts/update-overture.sh`, a terminal command, and Dan does not work in a terminal.
+// So the panel writes a small executable script and asks macOS to open it, which lands in a NEW Terminal
+// window with the command already running.
+//
+// It runs the UPDATE path, not the installer directly. Pressing Update means "get me the code that has
+// shipped"; running the installer means "build what is here". On 2026-08-04 those were the same command,
+// so pressing Update on a checkout parked on an already-merged branch rebuilt the same commit, and the
+// panel went on correctly reporting the copy as behind: a loop with no way out from inside the app. Opening a document is all that needs (no automation permission),
 // unlike driving Terminal through AppleScript, which would put a TCC prompt in front of somebody who just
 // wanted a newer app.
 //
@@ -39,7 +44,7 @@ enum UpdateCommandFile {
         # Written by Overture (#1808) to update itself. It deletes itself when it finishes.
         set -e
         cd "\(repoPath)/mac"
-        ./build-install.sh --launch
+        ./scripts/update-overture.sh
         rm -f -- "\(scriptPath)"
         """
     }

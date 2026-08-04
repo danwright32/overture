@@ -22,11 +22,17 @@ struct UpdateCommandFileTests {
 
     // MARK: - What the script says
 
-    @Test func itRunsTheInstallerInTheRepoTheInstallerRecorded() {
+    // Update means "get me the code that has shipped", so it runs the update path, which brings the
+    // checkout up to date and only then installs. Running the installer directly builds whatever commit
+    // happens to be checked out, which is what put Dan in a loop on 2026-08-04: he pressed Update, the
+    // same commit was rebuilt, and the panel went on being right that his copy was behind.
+    @Test func itRunsTheUpdateInTheRepoTheInstallerRecorded() {
         let script = UpdateCommandFile.script(repoPath: "/code/overture", scriptPath: "/tmp/x.command")
 
         #expect(script.contains("/code/overture/mac"))
-        #expect(script.contains("build-install.sh"))
+        #expect(script.contains("scripts/update-overture.sh"))
+        #expect(script.contains("./build-install.sh") == false,
+                "Installing directly builds whatever is checked out, which cannot resolve a copy that is behind.")
     }
 
     // The cleanup Dan asked for, as the script's own last act, because by then Overture has been quit

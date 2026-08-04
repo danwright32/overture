@@ -146,6 +146,9 @@ enum BuildFreshnessCopy {
     static let update = "Update Overture"
     // What the button actually does, said before he presses it: the installer quits Overture partway
     // through and relaunches it, so the app vanishing mid-update is the update working, not a crash.
+    // Deliberately unchanged when the button moved to the update path (2026-08-04): "brings the code up
+    // to what has shipped" only repeats the sentence above it, which already says the copy is behind what
+    // has shipped. What this line is FOR is the surprise, that Overture disappears mid-update.
     static let updateNote = "This opens Terminal and runs the install. Overture quits partway through and comes back on its own."
     static let dismiss = "Not now"
     // Shown in place of the button when there is no record of where the code lives, so the panel never
