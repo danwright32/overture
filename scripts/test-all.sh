@@ -74,12 +74,18 @@ echo "==> scripts/check-pure-suite-imports.sh"
 echo "==> scripts/check-pbxproj-fresh.sh"
 "${REPO_ROOT}/scripts/check-pbxproj-fresh.sh"
 
-# #1970: counts LaunchServices registrations pointing at Overture bundles that no longer exist.
-# ADVISORY, never blocking: a dirty LaunchServices database on this Mac is not a defect in the change
-# being pushed, so stopping the push would stop the wrong thing. It is here because nothing counted
+# #1970: clears LaunchServices registrations pointing at Overture bundles that no longer exist, and
+# says how many it took out. Dan's call, 2026-08-04: "it should clear them without me."
+#
+# Only ever unregisters a path that is gone from disk, so an installed bundle can never be touched. It
+# costs about 9ms per entry and nothing at all when there is nothing stale, which is the ordinary case
+# once each build unregisters the bundle it replaces.
+#
+# Never blocking: a dirty LaunchServices database on this Mac is not a defect in the change being
+# pushed, so a registrar that cannot be read must not stop the push. It is here because nothing counted
 # this for years, and by the time anything noticed there were 86 of them for a single-instance app.
-echo "==> mac/scripts/prune-stale-registrations.sh --check"
-"${REPO_ROOT}/mac/scripts/prune-stale-registrations.sh" --check || true
+echo "==> mac/scripts/prune-stale-registrations.sh"
+"${REPO_ROOT}/mac/scripts/prune-stale-registrations.sh" || true
 
 echo "==> mac/scripts/run-tests-locked.sh"
 "${REPO_ROOT}/mac/scripts/run-tests-locked.sh"
