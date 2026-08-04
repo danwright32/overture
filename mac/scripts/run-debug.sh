@@ -21,6 +21,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MAC_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
+# shellcheck source=scripts/lib/stale-registrations.sh
+source "${SCRIPT_DIR}/lib/stale-registrations.sh"
+
 PROJECT="Overture.xcodeproj"
 SCHEME="Overture"
 CONFIG="Debug"
@@ -99,6 +102,19 @@ quit_running_debug_instances() {
   done
 }
 
+# #1970: drop the registration for the bundle path this build is about to replace.
+#
+# Every Xcode build registers the built app with LaunchServices and nothing ever unregisters it, so
+# the count grew by one per build forever: 78 registrations for the Debug bundle by 2026-08-04, 76 of
+# them pointing at deleted DerivedData folders. The bundle sets LSMultipleInstancesProhibited, so a
+# launch asks LaunchServices to route to an existing instance, against those phantoms. Unregistering
+# the path first keeps the count at one, and costs about 9ms.
+#
+# Best-effort on purpose: a missing or unhappy LaunchServices is not a reason to refuse to compile.
+drop_previous_registration() {
+  overture_unregister_path "${1:-}"
+}
+
 main() {
   cd "${MAC_DIR}"
 
@@ -110,6 +126,10 @@ main() {
   # Before the build, not after: a build can take a while, and the stale instance is holding the lock
   # the whole time.
   quit_running_debug_instances
+
+  # #1970: and drop the outgoing bundle's registration before the build replaces it, so the Debug id
+  # keeps ONE registration instead of collecting one per build.
+  drop_previous_registration "${BUILD_DIR}/Build/Products/${CONFIG}/${APP_NAME}"
 
   echo "==> Building ${SCHEME} (${CONFIG})"
   xcodebuild \
