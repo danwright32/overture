@@ -179,12 +179,40 @@ struct DraftOpeningOnScreenTests {
         #expect(texts.contains { $0.contains("Emma") && !$0.hasPrefix("Hi ") })
     }
 
-    // An opening Dan wrote himself says so, so he can tell his own words from Overture's at a glance.
-    @Test func anopeningDanWroteIsMarkedAsHis() throws {
+    // #2074: the gold "Yours" tag sat inline after the greeting, so the line scanned as the literal
+    // sentence "Hello! Yours chelsea@...". The word goes, on a custom opening too: whether the
+    // customized-opening distinction needs a home somewhere else is a separate design question.
+    @Test func anopeningDanWroteCarriesNoInlineYoursTag() throws {
         let rendered = view(item(opening: "Emma, hello again,", custom: true,
                                  body: "I photograph performing arts."))
 
-        #expect(try allTexts(rendered).contains("Yours"))
+        #expect(try allTexts(rendered).contains("Yours") == false)
+    }
+
+    // #2074: same rule on the joint branch, which drew its own copy of the tag.
+    @Test func acustomJointOpeningCarriesNoInlineYoursTagEither() throws {
+        var it = item(opening: "Hi Emma,", custom: true, body: "I photograph performing arts.",
+                      contacts: 2)
+        it.jointOpening = "Hi Emma and John,"
+        it.jointOpeningIsCustom = true
+
+        #expect(try allTexts(view(it)).contains("Yours") == false)
+    }
+
+    // #2074: the contact label sat directly after the greeting text, reading as part of the sentence
+    // ("Hello! chelsea@..."). A Spacer must push it to the trailing edge so it reads as a row label.
+    // An order test cannot pin placement, so this pins the mechanism itself: the row that holds both
+    // the greeting and the label must hold a Spacer between sentence and label.
+    @Test func thecontactLabelIsPushedToTheTrailingEdgeOfItsRow() throws {
+        let rendered = view(item(opening: "Hi Emma,", body: "I photograph performing arts.", contacts: 2))
+
+        let rows = try rendered.inspect().findAll(ViewType.HStack.self).filter { row in
+            let texts = (try? row.findAll(ViewType.Text.self).map { try $0.string() }) ?? []
+            return texts.contains("Hi Emma,") && texts.contains { $0.contains("Emma Robinson") }
+        }
+        let row = try #require(rows.first, "no rendered row holds both the greeting and the contact label")
+        #expect((try? row.find(ViewType.Spacer.self)) != nil,
+                "nothing pushes the contact label to the trailing edge of the row")
     }
 
     // The notice, on the case that is actually live: the AI drafter writes a bare "Hello," into the body
