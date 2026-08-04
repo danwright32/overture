@@ -30,6 +30,84 @@ enum BuildFreshnessPanel {
     }
 }
 
+// #2065: WHEN the two records are read.
+//
+// They used to be read exactly once, in `OvertureApp.init`, and that answer was pinned for the life of
+// the process. It cost Dan the whole feature on 2026-08-04: the installer bootstrapped the login agent
+// (which launches Overture) BEFORE writing its record, so the app's one read landed in the same second
+// the installer was still writing, saw nothing, and was still saying "This copy did not come from the
+// installer... Ask Claude to reinstall Overture" two hours later with both records sitting on disk.
+// The installer's order is fixed too, but a launch-pinned verdict was wrong on its own terms anyway: it
+// also cannot see a merge that lands while he works.
+//
+// So the answer is re-read, and the rule for how often is here rather than in the view. Not on a render
+// pass: the installed commit genuinely cannot change while this process runs, so paying for it per frame
+// would be paying repeatedly for an answer that mostly does not move (#1916, an idle surface pays
+// nothing). At most one read per `refreshInterval`, whatever asks: the window appearing, Overture coming
+// to the front, or the slow tick that `watch()` runs while it sits open.
+@MainActor
+@Observable
+final class BuildFreshnessState {
+    // Dan asked for the periodic re-check, 2026-08-04. Fifteen minutes: this is a notice about work that
+    // merged, which is never urgent to the minute, and every read is two small files.
+    static let refreshInterval: TimeInterval = 15 * 60
+
+    @ObservationIgnored private let read: @MainActor () -> (BuildFreshness.Verdict, String?)
+    @ObservationIgnored private let sleep: @MainActor (TimeInterval) async -> Void
+    @ObservationIgnored private let clock: @MainActor () -> Date
+    @ObservationIgnored private var lastReadAt: Date?
+
+    // nil until something has actually looked. Deliberately not defaulted to `.cannotTell`, which would
+    // have the panel stating the failure before any check had run, and that sentence (L11) may only claim
+    // what a check measured.
+    private(set) var verdict: BuildFreshness.Verdict?
+    private(set) var repoPath: String?
+
+    // For THIS LAUNCH only, and a re-read does not clear it: a panel that takes most of the window,
+    // reappearing because a timer fired, would be "Not now" ignored.
+    var dismissedThisLaunch = false
+
+    init(reader: @escaping @MainActor () -> (BuildFreshness.Verdict, String?),
+         sleep: @escaping @MainActor (TimeInterval) async -> Void = { try? await Task.sleep(for: .seconds($0)) },
+         now: @escaping @MainActor () -> Date = { Date() }) {
+        self.read = reader
+        self.sleep = sleep
+        self.clock = now
+    }
+
+    // The directory is passed in rather than resolved here, so a test can never read Dan's real
+    // Application Support folder (L2).
+    convenience init(directory: URL,
+                     sleep: @escaping @MainActor (TimeInterval) async -> Void = { try? await Task.sleep(for: .seconds($0)) },
+                     now: @escaping @MainActor () -> Date = { Date() }) {
+        self.init(reader: { (BuildFreshness.verdict(in: directory), BuildFreshnessPanel.repoPath(in: directory)) },
+                  sleep: sleep, now: now)
+    }
+
+    var shouldShow: Bool {
+        guard let verdict else { return false }
+        return BuildFreshnessPanel.shouldShow(verdict, dismissedThisLaunch: dismissedThisLaunch)
+    }
+
+    // Reads the records if nothing has read them within the interval. Safe to call from anywhere and as
+    // often as anything likes: that is the point of the rule living here rather than at each caller.
+    func refreshIfStale(now: Date = Date()) {
+        if let lastReadAt, now.timeIntervalSince(lastReadAt) < Self.refreshInterval { return }
+        (verdict, repoPath) = read()
+        lastReadAt = now
+    }
+
+    // The slow tick, for the whole point of a resident app: Overture sits open for days, and a merge
+    // landing during one of them should reach the panel without Dan doing anything.
+    func watch() async {
+        while !Task.isCancelled {
+            await sleep(Self.refreshInterval)
+            if Task.isCancelled { return }
+            refreshIfStale(now: clock())
+        }
+    }
+}
+
 enum BuildFreshnessCopy {
     static let title = "Overture is out of date"
     static let cannotTellTitle = "Overture cannot tell how old this copy is"
