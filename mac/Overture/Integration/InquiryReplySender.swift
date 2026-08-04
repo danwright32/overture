@@ -20,7 +20,12 @@ enum InquiryReplySender {
     static func sendReply(_ inquiry: Inquiry, subject: String, body: String, now: Date,
                           sender: MailSender) async -> Bool {
         guard let to = inquiry.inquirerEmail, !to.isEmpty else { return false }
-        guard let mail = OutgoingMail(to: [to], subject: subject, body: body) else { return false }
+        // #2063: addressed the way the reply being answered was addressed, falling back to the inquirer
+        // alone when there is nothing to mirror. Through the same helper as the prospect reply path, so the
+        // two cannot answer "who does this reach" differently.
+        let addresses = SendGroup.replyAudience(of: inquiry)
+        guard let mail = OutgoingMail(to: addresses.isEmpty ? [to] : addresses,
+                                      subject: subject, body: body) else { return false }
         do {
             let receipt = try await sender.send(mail)
             inquiry.sentAt = now

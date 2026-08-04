@@ -74,6 +74,10 @@ final class Inquiry {
     var repliedAt: Date?
     var lastReplyId: String?
     var lastReplyText: String?
+    // #2063: who the latest reply named, so Dan's answer reaches them too. An inquiry has no send group to
+    // over-send to, so the failure here is the mirror image of the prospect one: somebody the inquirer
+    // brought in (a partner, a colleague booking alongside them) is silently dropped from the answer.
+    var replyAudience: [String]?
     var dismissedReplyId: String?
     var bounced: Bool = false
     var lastBounceId: String?

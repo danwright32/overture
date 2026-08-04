@@ -22,6 +22,11 @@ protocol ReplyWatchableRecipient: AnyObject {
     var repliedAt: Date? { get set }
     var lastReplyId: String? { get set }
     var lastReplyText: String? { get set }
+    // #2063: who the latest reply was addressed to, captured from the same message as the text above, so
+    // Dan's answer can be addressed the way it was rather than the way his original send was. A settable
+    // requirement rather than a default no-op: both conformers have a send path that reads it, and a field
+    // written with no reader is the shape L46 names.
+    var replyAudience: [String]? { get set }
     var dismissedReplyId: String? { get }        // a reply Dan already dismissed as not real.
     var bounced: Bool { get set }
     var lastBounceId: String? { get set }

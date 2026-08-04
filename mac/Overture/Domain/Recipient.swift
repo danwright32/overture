@@ -219,6 +219,14 @@ final class Recipient {
     var replyDraftSubject: String?
     var replyDraftBody: String?
     var replyDraftRequestedAt: Date?
+    // #2063: who the reply Overture is answering was itself addressed to (its sender plus everyone else it
+    // named, minus Dan), captured with the reply text. Dan's answer goes to exactly these people, so a
+    // reply he received privately is not answered in front of everybody he originally emailed.
+    //
+    // nil means never captured, which is every reply that arrived before this shipped, and is deliberately
+    // distinguishable from an empty audience: the send falls back to the replier alone on nil rather than
+    // to the original group, because under-sending is something Dan can correct and over-sending is not.
+    var replyAudience: [String]?
     var intentHint: String?
     // Whether Dan hand-edited THIS reply draft (#459), mirroring Prospect.draftEditedByDan for the cold
     // draft: once set, the deterministic DraftCheck warnings stop nagging on text he already owns. A

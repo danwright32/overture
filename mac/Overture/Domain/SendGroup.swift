@@ -16,6 +16,25 @@ enum SendGroup {
         return prospect.recipients.filter { $0.sendGroupId == id }.sorted { $0.id < $1.id }
     }
 
+    // #2063: who Dan's REPLY reaches, which is a different question from who his original email reached.
+    //
+    // Deliberately takes no prospect: the send group records what Overture did, and only the reply records
+    // what the other side chose. Answering a private reply to the whole original group is the failure this
+    // exists to prevent, so the group is not even in scope here.
+    //
+    // Falls back to the writer ALONE, never the group, when there is nothing to mirror (a reply captured
+    // before the audience was recorded, or one that somehow arrived empty). The narrow reading is the safe
+    // one: Dan can add somebody back, and cannot unsend.
+    // Takes the protocol rather than `Recipient`, so the prospect reply path and the inquiry reply path are
+    // one implementation and cannot answer "who does this reach" differently (L30).
+    static func replyAudience(of recipient: any ReplyWatchableRecipient) -> [String] {
+        if let captured = recipient.replyAudience?.filter({ !$0.isEmpty }), !captured.isEmpty {
+            return captured
+        }
+        guard let own = recipient.replyWatchAddress, !own.isEmpty else { return [] }
+        return [own]
+    }
+
     // The one contact that stands for the group wherever a LIST would otherwise show it once per person.
     // Stable (lowest id) rather than "whoever is first in the relationship", because SwiftData's to-many
     // is unordered and a row that moves between launches reads as a different row.

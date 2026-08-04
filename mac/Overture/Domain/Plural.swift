@@ -16,6 +16,15 @@ enum Plural {
         "\(n) \(word(n, singular, plural))"
     }
 
+    // #2063: "Ann", "Ann and Ben", "Ann, Ben and Cara". One joiner, for the same reason as the
+    // pluralizer above: BulkDismiss and ClockTime each had a private copy of this exact line, and a third
+    // was about to be written for the reply card.
+    static func list(_ items: [String]) -> String {
+        guard let last = items.last else { return "" }
+        guard items.count > 1 else { return last }
+        return items.dropLast().joined(separator: ", ") + " and " + last
+    }
+
     // An irregular plural is spelled out rather than guessed at by bolting on an "s".
     static func word(_ n: Int, _ singular: String, _ plural: String? = nil) -> String {
         n == 1 ? singular : (plural ?? singular + "s")

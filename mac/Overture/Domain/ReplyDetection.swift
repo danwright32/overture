@@ -106,6 +106,61 @@ enum ReplyDetection {
         return nil
     }
 
+    // #2063: who the latest inbound reply was addressed to, so Dan's answer can go to exactly those people
+    // rather than to everyone the ORIGINAL email went to. The send group records what Overture did; only
+    // the reply itself records what the other side chose, and they differ the moment somebody replies
+    // privately or drops a name.
+    //
+    // Its SENDER plus everyone else it names, minus Dan. The sender is the point: on a reply-all they sit
+    // in From and the rest in To/Cc, so taking only To/Cc would answer everybody except the person who
+    // actually wrote. Deduped case-insensitively, in the order met, so nobody gets two copies.
+    //
+    // nil, never an empty array, when there is no real reply to mirror. The caller has to tell "never
+    // captured" from a real audience, because that is what decides whether the send falls back.
+    static func latestReplyAudience(threadJSON data: Data, selfEmail: String) -> [String]? {
+        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let messages = obj["messages"] as? [[String: Any]] else { return nil }
+        let me = email(from: selfEmail)
+        for m in newestFirst(messages) {
+            guard let payload = m["payload"] as? [String: Any],
+                  let headers = payload["headers"] as? [[String: Any]] else { continue }
+            func header(_ name: String) -> String {
+                headers.first { ($0["name"] as? String)?.lowercased() == name }?["value"] as? String ?? ""
+            }
+            let sender = email(from: header("from"))
+            if sender.isEmpty || sender == me || isAutomated(sender) { continue }
+
+            var audience: [String] = []
+            for address in [sender] + addresses(inHeader: header("to")) + addresses(inHeader: header("cc")) {
+                guard !address.isEmpty, address != me, !audience.contains(address) else { continue }
+                audience.append(address)
+            }
+            return audience
+        }
+        return nil
+    }
+
+    // Every bare address in a To/Cc header value, lowercased. A display name may itself contain a comma
+    // when quoted ("Wright, Dan" <dan@x>), so a quoted region is held together rather than split inside.
+    static func addresses(inHeader raw: String) -> [String] {
+        var parts: [String] = []
+        var current = ""
+        var inQuotes = false
+        var inAngles = false
+        for ch in raw {
+            switch ch {
+            case "\"": inQuotes.toggle(); current.append(ch)
+            case "<": inAngles = true; current.append(ch)
+            case ">": inAngles = false; current.append(ch)
+            case "," where !inQuotes && !inAngles:
+                parts.append(current); current = ""
+            default: current.append(ch)
+            }
+        }
+        parts.append(current)
+        return parts.map { email(from: $0) }.filter { !$0.isEmpty }
+    }
+
     // The latest inbound reply's text from a threads.get (format=full) response: the NEWEST message
     // from someone other than Dan (skipping automated senders). Prefers text/plain, falls back to
     // stripped text/html; base64url-decoded and capped. Residual quoted history is left for the

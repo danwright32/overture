@@ -64,6 +64,12 @@ enum ReplyService {
                         r.replyWatchAddress)
                     if wroteIt {
                         r.lastReplyText = ReplyDetection.latestReplyBody(threadJSON: full, selfEmail: selfEmail)
+                        // #2063: captured from the SAME message as the text, so Dan's answer can be
+                        // addressed the way this reply was. Assigned unconditionally, including to nil: a
+                        // newer reply must never inherit an older one's audience, and nil is the safe
+                        // reading (SendGroup.replyAudience falls back to the writer alone).
+                        r.replyAudience = ReplyDetection.latestReplyAudience(threadJSON: full,
+                                                                            selfEmail: selfEmail)
                     }
                 }
                 count += 1
