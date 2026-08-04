@@ -34,6 +34,22 @@ enum SendGroup {
         // sends to nobody, whatever its contacts look like. Without this a card would name contacts on a
         // draft Dan has not approved, and a joint send would email them.
         guard prospect.status == .approved, prospect.draftBody != nil else { return [] }
+        return previewGroup(of: prospect)
+    }
+
+    // #2049: the same group WITHOUT the approval gate, for showing what the email will look like rather
+    // than claiming who it is about to reach.
+    //
+    // Those are two different questions and they were being answered by one function. Naming the next
+    // recipients is a claim about SENDING, so it must stay behind approval (#2015 caught a card naming
+    // contacts on a draft nobody had approved). Previewing the greeting is a claim about the DRAFT, and
+    // gating it on approval meant a drafted show, which is every show while Dan is reviewing it, showed
+    // the "One email to everyone" switch directly above one greeting per contact. His reading of that
+    // card: "is this saying that it's going to greet them by their emails?"
+    //
+    // Same body as before, so the two cannot bucket contacts differently: `pendingGroup` is now this plus
+    // its gate.
+    static func previewGroup(of prospect: Prospect) -> [Recipient] {
         let sendable = prospect.recipients
             .filter(\.isSendablePending)
             .sorted { $0.sendOrderRank != $1.sendOrderRank ? $0.sendOrderRank < $1.sendOrderRank : $0.id < $1.id }
