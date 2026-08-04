@@ -909,7 +909,9 @@ enum ProspectMutations {
     // emailed), which is the disappearance this issue was filed about. Approving only what is still
     // `.drafted` keeps this idempotent, so a retry on an already-approved show does not re-approve it.
     static func approveAndSend(_ item: QueueItem, prospects: [Prospect], context: ModelContext,
-                               feedback: ActionFeedback, sender: MailSender = liveSender(),
+                               feedback: ActionFeedback,
+                               selecting: [String]? = nil, together: Bool? = nil,
+                               sender: MailSender = liveSender(),
                                markSending: @escaping (String) -> Void,
                                clearSending: @escaping (String) -> Void,
                                onNeedsReconnect: @escaping () -> Void,
@@ -920,12 +922,16 @@ enum ProspectMutations {
             // skip the bookkeeping (the dismissal fields, the conflict rules) that setter owns.
             setStatus(item, .approved, nil, prospects: prospects, context: context, feedback: feedback)
         }
-        performSend(item.id, prospects: prospects, context: context, feedback: feedback, sender: sender,
+        performSend(item.id, prospects: prospects, context: context, feedback: feedback,
+                    selecting: selecting, together: together, sender: sender,
                     markSending: markSending, clearSending: clearSending,
                     onNeedsReconnect: onNeedsReconnect, onSent: onSent)
     }
 
+    // #2017: `selecting` is the contacts Dan ticked on the send sheet, and `together` the choice he made
+    // there. Both nil leaves the path every other caller uses untouched.
     static func performSend(_ naturalKey: String, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback,
+                           selecting: [String]? = nil, together: Bool? = nil,
                            sender: MailSender = liveSender(),
                            markSending: @escaping (String) -> Void, clearSending: @escaping (String) -> Void,
                            onNeedsReconnect: @escaping () -> Void,
@@ -934,6 +940,9 @@ enum ProspectMutations {
                            // partial send on a multi-recipient show (still someone pending) does not trigger it.
                            onSent: @escaping (_ naturalKey: String, _ fullySent: Bool) -> Void = { _, _ in }) {
         guard let model = prospects.first(where: { $0.naturalKey == naturalKey }) else { return }
+        // Written at the COMMIT, not as he flips it, so cancelling the sheet changes nothing about the show.
+        if let together { model.sendsTogetherOverride = together }
+        let chosen = selecting.map { SendGroup.sendableFor(model, ids: $0) }
         markSending(naturalKey)
         Task {
             // #1208: pull the current Gmail signature right before composing, so an email Dan sends after
@@ -941,7 +950,7 @@ enum ProspectMutations {
             await GmailSignatureService.refreshBeforeSend()
             // #2033: sendNext is the one place the together-or-separately choice is acted on, so this
             // button, the confirmation Dan just read and the card all agree about who is being emailed.
-            let sent = await SendService.sendNext(model, now: Date(), sender: sender)
+            let sent = await SendService.sendNext(model, to: chosen, now: Date(), sender: sender)
             context.saveOrWarnSendNotConfirmed(org: model.groupName, feedback: feedback)
             clearSending(naturalKey)
             if sent { onSent(naturalKey, SendGroup.pendingGroup(of: model).isEmpty) }
@@ -1018,4 +1027,9 @@ enum ProspectMutations {
 struct PendingSend: Identifiable {
     let id: String   // prospect naturalKey
     let confirmation: SendConfirmation
+    // #2017: the sheet lets Dan change WHO the pitch reaches and HOW, so it needs to rebuild what it is
+    // showing as he ticks, and to report the choice back when he commits. Built where the prospect is in
+    // hand. Nil leaves the sheet exactly as it was, which is what the follow-up and note paths want.
+    var rebuild: (@MainActor (_ selected: [String], _ together: Bool) -> SendConfirmation?)? = nil
+    var onSendSelection: (@MainActor (_ selected: [String], _ together: Bool) -> Void)? = nil
 }

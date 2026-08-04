@@ -758,7 +758,9 @@ struct DraftReviewView: View {
                 }
                 // On the show but NOT going to be emailed, so the list does not overstate itself.
                 if c.isHeldFromSending {
-                    Text("Held, not sending").font(OVType.tag).foregroundStyle(OVColor.rust)
+                    // #2017: the shared constant, because the send sheet's contact picker says the same
+                    // thing about the same contact and two copies of one sentence drift (#843).
+                    Text(SendConfirmCopy.heldTag).font(OVType.tag).foregroundStyle(OVColor.rust)
                 }
                 Spacer()
                 // #656: a soft/temporary Gmail delay, purely informational, alongside (never in

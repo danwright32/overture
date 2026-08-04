@@ -56,6 +56,31 @@ enum SendGroup {
         return previewGroup(of: prospect)
     }
 
+    // #2017: every contact the send sheet offers, in send order. A contact a review guard is holding is
+    // INCLUDED and marked, rather than dropped: a list that silently omits somebody on the show under-reports
+    // who is on it, which is the same defect #2015 fixed on the draft card.
+    static func candidates(of prospect: Prospect) -> [SendCandidate] {
+        prospect.recipients
+            .filter { $0.isSendablePending || $0.isBlockedAwaitingReview }
+            .sorted { $0.sendOrderRank != $1.sendOrderRank ? $0.sendOrderRank < $1.sendOrderRank : $0.id < $1.id }
+            .compactMap { r in
+                guard let email = r.email, !email.isEmpty else { return nil }
+                return SendCandidate(id: r.id, name: r.name ?? email, email: email,
+                                     isHeld: !r.isSendablePending)
+            }
+    }
+
+    // #2017: the contacts Dan ticked that can ACTUALLY be sent to, in send order. The guard is applied here
+    // rather than trusted from the ticks, because a guard that only lives on a screen is not a guard
+    // (#2052): this is the one filter both the sheet's promise and the send itself go through, so what he
+    // reads and what leaves cannot differ.
+    static func sendableFor(_ prospect: Prospect, ids: [String]) -> [Recipient] {
+        let wanted = Set(ids)
+        return prospect.recipients
+            .filter { wanted.contains($0.id) && $0.isSendablePending }
+            .sorted { $0.sendOrderRank != $1.sendOrderRank ? $0.sendOrderRank < $1.sendOrderRank : $0.id < $1.id }
+    }
+
     // #2049: the same group WITHOUT the approval gate, for showing what the email will look like rather
     // than claiming who it is about to reach.
     //

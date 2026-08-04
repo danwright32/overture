@@ -20,7 +20,10 @@ private struct SendConfirmAndReconnectAlerts: ViewModifier {
                 SendConfirmSheet(
                     confirmation: pending.confirmation,
                     onSend: { onSend(pending.id) },
-                    onCancel: { pendingConfirm = nil }
+                    onCancel: { pendingConfirm = nil },
+                    // #2017: nil on any caller that offers no choice, which leaves the sheet as it was.
+                    rebuild: pending.rebuild,
+                    onSendSelection: pending.onSendSelection
                 )
             }
             .alert("Reconnect Gmail", isPresented: $showReconnect) {
