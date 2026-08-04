@@ -66,6 +66,11 @@ cleanup_worktree() {
 merge_pr() {
   local pr_number="$1"
   gh_as_danwright32 pr merge "${pr_number}" -R "${REPO}" --squash --delete-branch
+  # #1808: something shipped, so record it for the app to compare its own build against, and say the
+  # same thing in the terminal (which is what finally gives #1345's freshness check a caller). Neither
+  # is fatal: the merge has already happened, and failing here would report it as a failure.
+  "${REPO_ROOT}/scripts/record-shipped-commit.sh" || true
+  "${REPO_ROOT}/mac/scripts/check-release-freshness.sh" || true
 }
 
 # The orchestration: resolve the PR, bail on a merge conflict or an unresolvable identifier,

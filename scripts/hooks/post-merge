@@ -15,6 +15,14 @@ HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../lib/mac-project-paths.sh
 source "${HOOK_DIR}/../lib/mac-project-paths.sh"
 
+# #1808: record what has shipped, BEFORE the xcodegen guards below, because those exit early on most
+# merges and a pull that brings down new work is exactly when the app's idea of "what has shipped" needs
+# updating. Reads origin/main, so it is correct whatever branch this merge landed on. Never fatal: a hook
+# that fails a pull over a status file would be worse than the gap it closes.
+if [ -x "${HOOK_DIR}/../record-shipped-commit.sh" ]; then
+  "${HOOK_DIR}/../record-shipped-commit.sh" >/dev/null 2>&1 || true
+fi
+
 # Degrade-safe guards: only Overture clones with xcodegen do anything here.
 command -v xcodegen >/dev/null 2>&1 || exit 0
 [ -f mac/project.yml ] || exit 0

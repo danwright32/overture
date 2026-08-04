@@ -11,6 +11,11 @@ struct OvertureApp: App {
     private let degradedReason: String?
     // #1409: set when the store opened with far fewer shows than its last backup holds.
     private let shrinkWarning: StoreShrinkCheck.Finding?
+    // #1808: whether the copy Dan is looking at is behind what has shipped, read ONCE at launch. Once,
+    // deliberately: it is a fact about this running binary, which cannot change while it runs, so
+    // re-reading it on a render pass would be paying for an answer that is fixed (#1916).
+    private let buildFreshness: BuildFreshness.Verdict
+    private let installedFromRepo: String?
     // #1160: whether this launch is healthy, a duplicate (defer to the resident and quit), or a broken
     // store (show the degraded screen). Distinguishes the last two, which both leave modelContainer nil.
     private let launchOutcome: StoreLaunchOutcome
@@ -132,6 +137,15 @@ struct OvertureApp: App {
         self.storeLock = lock
         self.degradedReason = reason
         self.shrinkWarning = shrinkWarning
+        // #1808: read here, beside the other launch-time findings. #1425's stable signing means the
+        // installed bundle survives reinstalls, but nothing told Dan when it had fallen behind the code.
+        self.buildFreshness = BuildFreshness.verdict(in: StoreLocation.dataDirectory)
+        self.installedFromRepo = BuildFreshnessPanel.repoPath(in: StoreLocation.dataDirectory)
+        // Dan's rule for the update script, 2026-08-03: it deletes itself when it is done. This is the
+        // second half of that, for a run that DIED before reaching its own removal: the installer quits
+        // Overture partway through, so the app that wrote the file can never be the one to tidy up after
+        // a successful run, and the only moment it can clean up a failed one is the next launch.
+        UpdateCommandFile.sweep()
         // #1160: classify the launch so a duplicate (another live copy holds the single-writer lock)
         // defers to the resident and quits, instead of lingering on the degraded screen as a second
         // instance. A store that opened badly still shows StoreUnavailableView (see classify's edge).
@@ -179,6 +193,8 @@ struct OvertureApp: App {
                     .storeShrinkNotice(shrinkWarning,
                                        backupsPath: StoreShrinkCheck.backupsPath(
                                            dataDirectory: StoreLocation.dataDirectory))
+                    // #1808: and the other launch-time notice, that this copy is behind the code.
+                    .buildFreshnessNotice(buildFreshness, repoPath: installedFromRepo)
             } else if launchOutcome == .duplicateInstance {
                 // #1160: this process is a redundant duplicate; AppDelegate terminates it at launch and
                 // it defers to the resident copy. Show nothing (no degraded screen) so a duplicate that

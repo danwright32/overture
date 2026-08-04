@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1023 sentences**, from 352 source files.
+Every sentence Overture can say to Dan: **1031 sentences**, from 356 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -22,6 +22,7 @@ What is not, and why:
 
 - `App/StoreBackup.swift`: backup.log is a diagnostic record, not the app's voice on screen
 - `App/StoreShrinkCheck.swift`: SQL, not a sentence Overture says to Dan
+- `App/UpdateCommandFile.swift`: a shell script for Terminal, not Overture's voice to Dan (#915)
 - `Domain/CatchAllFitReasonMigration.swift`: the retired sentence, named only so this pass can find and clear it
 - `Domain/ConversationReminder.swift`: outbound email: a recipient reads this, not Dan (#915)
 - `Domain/DebugStaging.swift`: a debug-only stand-in draft body (contact-facing email copy, not app voice)
@@ -75,7 +76,7 @@ What is not, and why:
 - `Integration/VenueTixCalendar.swift`: an outbound API request scoped by Origin, not the app's voice (#915)
 - `UI/DraftSignaturePreview.swift`: renders the outbound email's own HTML (body + Gmail signature), not Overture's voice (#1203)
 
-## The same sentence, said in more than one place (44)
+## The same sentence, said in more than one place (45)
 
 Two copies of a sentence will drift. #843 owns fixing these.
 
@@ -140,6 +141,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
 - "Not a real reply"
   - `UI/DraftReviewView.swift`
   - `UI/DraftReviewView.swift`
+- "Not now"
+  - `Domain/BuildFreshnessPanel.swift`
+  - `UI/BlockDaysSheet.swift`
 - "Nothing matches this filter"
   - `Domain/EmptyState.swift`
   - `Domain/EmptyState.swift`
@@ -417,6 +421,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DraftReviewNotes.swift`
 "Approved, but no subject line. Edit the draft to add one."
     `Domain/DraftReviewNotes.swift`
+"Ask Claude to reinstall Overture."
+    `Domain/BuildFreshnessPanel.swift`
 "Asking macOS for OmniFocus permission…"
     `UI/OnboardingView.swift`
 "Asks for the date or venue Overture already knows"
@@ -1002,6 +1008,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Not installed yet. Run your Overture build once to install it."
     `UI/OnboardingView.swift`
 "Not now"
+    `Domain/BuildFreshnessPanel.swift`
     `UI/BlockDaysSheet.swift`
 "Not one I scout"
     `Domain/ClientCoverage.swift`
@@ -1029,6 +1036,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/DaysOffView.swift`
 "Nothing found here was verified as belonging to this act. Only an address read off a page naming them counts; a generic inbox or an inferred address doesn't. It may still be right, so it's worth a look before you write."
     `Domain/Reachability.swift`
+"Nothing has recorded a merge on this Mac, so there is nothing to compare this copy against."
+    `Domain/BuildFreshnessPanel.swift`
 "Nothing held by a date clash"
     `Domain/StageEmptyState.swift`
 "Nothing here right now"
@@ -1131,6 +1140,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SuppressionReport.swift`
 "Outside New York, New Jersey and Connecticut."
     `UI/QueueView+Model.swift`
+"Overture cannot tell how old this copy is"
+    `Domain/BuildFreshnessPanel.swift`
 "Overture cannot tell whether anything is missing"
     `App/StoreShrinkCheck.swift`
 "Overture contact: "
@@ -1147,6 +1158,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/OmniFocusUserNotifier.swift`
 "Overture decided: \(what)"
     `UI/QueueView+Model.swift`
+"Overture is out of date"
+    `Domain/BuildFreshnessPanel.swift`
 "Overture is still reading a previous page. Give it a moment and try again."
     `UI/LeadIntakeModel.swift`
 "Overture knows of no upcoming shoots from Downbeat, so it can't keep clear of them. Block those days here."
@@ -1700,6 +1713,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ManualPrepPrefill.swift`
 "This booking was auto-detected from Downbeat. Confirm it (it then moves out of the reach-out list), or reject a wrong match to pull it back out."
     `UI/ProspectRowView.swift`
+"This copy did not come from the installer, so there is no record of what went into it."
+    `Domain/BuildFreshnessPanel.swift`
+"This copy is \(gap) behind what has shipped, so anything fixed since then is not in front of you."
+    `Domain/BuildFreshnessPanel.swift`
 "This draft won't send: \(what.isEmpty ? "a blocking issue" : what)."
     `Domain/DraftCheck.swift`
 "This email starts with a greeting and the opening above adds one too, so it will say hello twice."
@@ -1714,6 +1731,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/Reachability.swift`
 "This old draft may still have a name in the greeting Overture couldn't safely remove; "
     `Domain/DraftReviewNotes.swift`
+"This opens Terminal and runs the install. Overture quits partway through and comes back on its own."
+    `Domain/BuildFreshnessPanel.swift`
 "This org asked not to be contacted, so none of their shows will be scouted or emailed. Tap to allow contact again."
     `UI/ProspectRowView.swift`
 "This page is right"
@@ -1802,6 +1821,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "Unverified email found"
     `Domain/Reachability.swift`
+"Update Overture"
+    `Domain/BuildFreshnessPanel.swift`
 "Updated \(org)'s address."
     `UI/SourceFixConfirmActions.swift`
 "Updated \(org)'s classification"
