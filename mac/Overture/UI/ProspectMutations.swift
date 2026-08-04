@@ -151,7 +151,7 @@ enum ProspectMutations {
         // The same rule the editor's Save button is gated on, so the two cannot disagree. #2023: this also
         // READS the address field, so a string that is not addresses is refused here, before a single
         // write, rather than becoming one contact whose identity is that whole string.
-        if let refusal = ManualPrepEditing.refusal(email: email, body: body) {
+        if let refusal = ManualPrepEditing.refusal(email: email, subject: subject, body: body) {
             feedback.acknowledge(refusal, tone: .warning)
             return
         }

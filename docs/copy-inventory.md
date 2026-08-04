@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1022 sentences**, from 352 source files.
+Every sentence Overture can say to Dan: **1023 sentences**, from 352 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -263,8 +263,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/VoiceNotesProtector.swift`
 "'\(scriptPath)' >/dev/null 2>&1 &"
     `Integration/DetachedRunner.swift`
-"(no subject)"
-    `Domain/SendConfirmation.swift`
 ", \(parties) people to find"
     `Domain/PrepRunSummary.swift`
 ", likely without its own photographer"
@@ -345,6 +343,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/AddLeadSheet.swift`
 "Add a lead..."
     `App/RootView.swift`
+"Add a subject line. Nothing was saved"
+    `App/ActionFeedback.swift`
 "Add address"
     `UI/SourcesView.swift`
 "Add an address to send to. Nothing was saved"
@@ -414,6 +414,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Approve anyway"
     `Domain/SelfBookingConflict.swift`
 "Approved, but no email to send to. Add a contact by hand."
+    `Domain/DraftReviewNotes.swift`
+"Approved, but no subject line. Edit the draft to add one."
     `Domain/DraftReviewNotes.swift`
 "Asking macOS for OmniFocus permission…"
     `UI/OnboardingView.swift`

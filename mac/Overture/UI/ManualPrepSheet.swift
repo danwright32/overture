@@ -125,7 +125,7 @@ struct ManualPrepSheet: View {
                     .background(Capsule().fill(OVColor.forest))
             }
             .buttonStyle(.plain)
-            .disabled(!ManualPrepEditing.canSave(email: email, body: emailBody))
+            .disabled(!ManualPrepEditing.canSave(email: email, subject: subject, body: emailBody))
         }
     }
 }

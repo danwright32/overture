@@ -214,10 +214,13 @@ struct SendConfirmationTests {
         #expect(c?.from == SendIdentity.danWright)
     }
 
-    @Test func fallsBackWhenSubjectIsMissingOrBlank() throws {
+    // #2052: this used to render "(no subject)" and offer Send beside it, which is how a real email went
+    // out with an empty Subject header. The placeholder was the detection that the value was missing, so
+    // now there is no sheet to press Send on at all.
+    @Test func refusesToBuildWhenTheSubjectIsMissingOrBlank() throws {
         let ctx = ModelContext(try container())
-        #expect(SendConfirmation(prospect: make(ctx, subject: nil))?.subject == "(no subject)")
-        #expect(SendConfirmation(prospect: make(ctx, subject: "   "))?.subject == "(no subject)")
+        #expect(SendConfirmation(prospect: make(ctx, subject: nil)) == nil)
+        #expect(SendConfirmation(prospect: make(ctx, subject: "   ")) == nil)
     }
 
     @Test func refusesToBuildForSomethingThatWouldNotSend() throws {

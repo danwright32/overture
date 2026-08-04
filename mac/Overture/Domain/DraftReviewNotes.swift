@@ -56,6 +56,16 @@ enum DraftReviewNotes {
     // rather than leaving him staring at a disabled button. Only when there is genuinely no address: an
     // email held by a review guard is a different, already-explained case, and saying "no email to send
     // to" there would be untrue.
+    // #2052: an approved draft with no subject line can never send (Recipient.isSendablePending holds
+    // it), and without this the Send button is simply greyed with nothing said. The same shape as
+    // noSendableEmail below, for the same reason: a disabled control that does not say why is a dead end.
+    // It names the fix, because unlike a missing contact this one is two clicks away in the editor.
+    static func noSubject(isApproved: Bool, subject: String?) -> String? {
+        guard isApproved,
+              (subject ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return "Approved, but no subject line. Edit the draft to add one."
+    }
+
     static func noSendableEmail(isApproved: Bool, hasPendingRecipient: Bool, hasAnyEmailContact: Bool) -> String? {
         guard isApproved, !hasPendingRecipient, !hasAnyEmailContact else { return nil }
         return "Approved, but no email to send to. Add a contact by hand."

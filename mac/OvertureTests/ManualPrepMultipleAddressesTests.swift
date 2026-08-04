@@ -148,20 +148,20 @@ struct ManualPrepMultipleAddressesTests {
     // MARK: - The Save button and the refusal are one rule
 
     @Test func theSaveButtonIsGatedOnTheSameAddressRuleTheRefusalUses() {
-        #expect(!ManualPrepEditing.canSave(email: "olga@bargemusic.org, nope", body: "b"))
-        #expect(ManualPrepEditing.refusal(email: "olga@bargemusic.org, nope", body: "b")
+        #expect(!ManualPrepEditing.canSave(email: "olga@bargemusic.org, nope", subject: "s", body: "b"))
+        #expect(ManualPrepEditing.refusal(email: "olga@bargemusic.org, nope", subject: "s", body: "b")
                 == ActionAck.manualPrepBadAddress("nope"))
 
-        #expect(ManualPrepEditing.canSave(email: "olga@bargemusic.org, mark@bargemusic.org", body: "b"))
-        #expect(ManualPrepEditing.refusal(email: "olga@bargemusic.org, mark@bargemusic.org", body: "b") == nil)
+        #expect(ManualPrepEditing.canSave(email: "olga@bargemusic.org, mark@bargemusic.org", subject: "s", body: "b"))
+        #expect(ManualPrepEditing.refusal(email: "olga@bargemusic.org, mark@bargemusic.org", subject: "s", body: "b") == nil)
     }
 
     // An extra separator has no address in it to name, so it gets its own sentence rather than one
     // reading "  is not an email address".
     @Test func anExtraSeparatorSaysSoRatherThanNamingAnEmptyAddress() {
-        #expect(ManualPrepEditing.refusal(email: "a@x.org,,b@y.org", body: "b")
+        #expect(ManualPrepEditing.refusal(email: "a@x.org,,b@y.org", subject: "s", body: "b")
                 == ActionAck.manualPrepExtraSeparator)
-        #expect(!ManualPrepEditing.canSave(email: "a@x.org,,b@y.org", body: "b"))
+        #expect(!ManualPrepEditing.canSave(email: "a@x.org,,b@y.org", subject: "s", body: "b"))
     }
 
     // MARK: - Saying what is about to happen (L64)

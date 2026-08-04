@@ -290,6 +290,7 @@ enum ActionAck {
 
     static let manualPrepNeedsRecipient = "Add an address to send to. Nothing was saved"
     static let manualPrepNeedsBody = "Write the email before saving it. Nothing was saved"
+    static let manualPrepNeedsSubject = "Add a subject line. Nothing was saved"
 
     // #2023: names the piece that cannot be read rather than refusing the whole field, because the field
     // may hold several people and only one of them is wrong.

@@ -24,10 +24,17 @@ struct OutgoingMail: Equatable, Sendable {
     //
     // A blank ALONGSIDE a real address is dropped rather than refused: the person named still gets their
     // email, and nothing empty reaches the header.
+    //
+    // #2052: nil for a blank SUBJECT too, on the same reasoning. This is the boundary every send path
+    // passes through (a pitch, a joint pitch, a follow-up, a conversation note, a reply), so it is the one
+    // place that can promise no email leaves under Dan's name with an empty `Subject:` header, whatever
+    // the screen above it did. The subject is kept verbatim rather than trimmed here: what he approved is
+    // what sends, and this only decides whether there is one at all.
     init?(to: [String], subject: String, body: String,
           messageID: String? = nil, inReplyTo: String? = nil, threadId: String? = nil) {
         let addresses = to.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
-        guard !addresses.isEmpty else { return nil }
+        guard !addresses.isEmpty,
+              !subject.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         self.to = addresses
         self.subject = subject
         self.body = body

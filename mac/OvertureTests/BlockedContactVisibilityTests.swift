@@ -28,6 +28,7 @@ struct BlockedContactVisibilityTests {
                          profile: "strong", coverage: "likely_uncovered", fitScore: 5, tier: "mid",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
                          possibleMatchName: nil)
+        p.draftSubject = "Photographs of your concert"
         p.draftBody = "Hello, I photograph performances and would love to shoot this."
         ctx.insert(p)
         return p

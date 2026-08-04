@@ -114,21 +114,23 @@ struct ManualPrepMutationTests {
     // The Save button and the refusal above are ONE rule, so a button that looks enabled can never be
     // refused on click, and a refusal can never name something the button did not gate on.
     @Test func theEditorAcceptsAnAddressAndAnEmail() {
-        #expect(ManualPrepEditing.refusal(email: "olga@bargemusic.org", body: "b") == nil)
-        #expect(ManualPrepEditing.canSave(email: "olga@bargemusic.org", body: "b"))
+        #expect(ManualPrepEditing.refusal(email: "olga@bargemusic.org", subject: "s", body: "b") == nil)
+        #expect(ManualPrepEditing.canSave(email: "olga@bargemusic.org", subject: "s", body: "b"))
     }
 
     @Test func theEditorNamesWhichPieceIsMissing() {
-        #expect(ManualPrepEditing.refusal(email: " ", body: "b") == ActionAck.manualPrepNeedsRecipient)
-        #expect(ManualPrepEditing.refusal(email: "olga@bargemusic.org", body: "\n ")
+        #expect(ManualPrepEditing.refusal(email: " ", subject: "s", body: "b") == ActionAck.manualPrepNeedsRecipient)
+        #expect(ManualPrepEditing.refusal(email: "olga@bargemusic.org", subject: "s", body: "\n ")
                 == ActionAck.manualPrepNeedsBody)
-        #expect(ManualPrepEditing.canSave(email: "olga@bargemusic.org", body: " ") == false)
+        #expect(ManualPrepEditing.canSave(email: "olga@bargemusic.org", subject: "s", body: " ") == false)
     }
 
-    // A subject is not required: he may be replying into a thread he already has, and an empty subject
-    // is a choice rather than an omission.
-    @Test func theEditorDoesNotRequireASubject() {
-        #expect(ManualPrepEditing.refusal(email: "olga@bargemusic.org", body: "b") == nil)
+    // #2052: a subject IS required, and this test used to assert the opposite. The reasoning then was
+    // that he might be writing into a thread that already had one, so an empty subject was a choice.
+    // Nothing downstream treated it as one: it saved, read as ready, and sent with an empty header.
+    @Test func theEditorRequiresASubject() {
+        #expect(ManualPrepEditing.refusal(email: "olga@bargemusic.org", subject: " ", body: "b")
+                == ActionAck.manualPrepNeedsSubject)
     }
 
     // MARK: - When the control is offered
