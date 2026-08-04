@@ -522,6 +522,16 @@ struct DraftReviewView: View {
                     .help(GmailCopy.sendHelp(connected: gmailConnected, whenConnected: "Send this email now"))
                     Button("Unapprove") { onUnapprove() }
                         .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                    // #2073: the missing-subject note beside Send says "Edit the draft", so the control
+                    // performing it must sit on this card too, not only on the unapproved one. Editing
+                    // does not unapprove: the text stays Dan's either way, and the send confirmation
+                    // still shows the final email before anything leaves.
+                    Button("Edit") {
+                        draftSubject = item.draftSubject ?? ""
+                        draftBody = item.draftBody ?? ""
+                        editing = true
+                    }
+                    .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
                     reprepControl
                     sendBlockerNotes
                 }

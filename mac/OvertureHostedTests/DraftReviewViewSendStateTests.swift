@@ -295,6 +295,52 @@ struct DraftReviewViewReprepCooldownTests {
     }
 }
 
+// #2073: the approved card's missing-subject note says "Edit the draft to add one", but the approved
+// branch drew no Edit control at all: Edit existed only on the drafted card, two states away behind
+// Unapprove, and nothing said so. Dan met the note on a hand-written manual prep and read the surface
+// as offering no way to edit short of a re-prep that would destroy his text. The note and the control
+// it names must live on the same card.
+@MainActor
+@Suite("DraftReviewView approved card offers Edit (#2073)")
+struct DraftReviewViewApprovedEditTests {
+    private func approvedItem(subject: String? = "S") -> QueueItem {
+        QueueItem(id: "k", groupName: "Aurora Strings", discipline: "music", venue: "Weill Recital Hall",
+                 performanceDate: "2026-08-01", sourceListingURL: nil, websiteURL: nil,
+                 priorRelationship: "none", production: "self", profile: "strong",
+                 coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
+                 matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                 status: .approved, draftSubject: subject, draftBody: "Hi", hasPendingRecipient: true)
+    }
+
+    @Test func anApprovedCardOffersEdit() throws {
+        let view = DraftReviewView(item: approvedItem(), onUnapprove: {}, onSkip: {},
+                                   onSaveDraft: { _, _ in }, outboundSendSince: nil)
+
+        _ = try view.inspect().find(button: "Edit")   // throws (fails the test) if absent
+    }
+
+    // The exact card Dan was stuck on: approved, hand-written, no subject, the note telling him to
+    // edit. The remediation the note names must be present beside it.
+    @Test func theCardWhoseNoteSaysEditTheDraftActuallyOffersEdit() throws {
+        let view = DraftReviewView(item: approvedItem(subject: nil), onUnapprove: {}, onSkip: {},
+                                   onSaveDraft: { _, _ in }, outboundSendSince: nil)
+
+        let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
+        #expect(texts.contains { $0.contains("No subject line") })
+        _ = try view.inspect().find(button: "Edit")
+    }
+
+    // While a send is in flight the card shows the live label and nothing else: an edit control
+    // beside an email already leaving would invite changing text the approval no longer covers.
+    @Test func anInFlightSendOffersNoEdit() throws {
+        let view = DraftReviewView(item: approvedItem(), onUnapprove: {}, onSkip: {},
+                                   onSaveDraft: { _, _ in },
+                                   outboundSendSince: Date(timeIntervalSince1970: 1000))
+
+        #expect((try? view.inspect().find(button: "Edit")) == nil)
+    }
+}
+
 // #388: a contact whose address looks like the host venue shows a dismissible warning, listed for
 // EVERY flagged contact (not just the primary one contactLine shows), since a secondary contact
 // (e.g. a presenter) would otherwise be invisible before send.
