@@ -23,6 +23,8 @@ MAC_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 # shellcheck source=scripts/lib/stale-registrations.sh
 source "${SCRIPT_DIR}/lib/stale-registrations.sh"
+# shellcheck source=scripts/lib/app-quit.sh
+source "${SCRIPT_DIR}/lib/app-quit.sh"
 
 PROJECT="Overture.xcodeproj"
 SCHEME="Overture"
@@ -80,26 +82,13 @@ assert_is_debug_bundle() {
   return 0
 }
 
+# #2072: the TERM, bounded wait, escalate, verify loop is the shared driver in lib/app-quit.sh
+# now (build-install.sh needs the identical pattern for the Release bundle), with debug_app_pids
+# above still deciding WHAT may be killed. The driver also verifies the process is actually gone,
+# so a Debug instance that somehow survives kill -9 stops the run here with the survivor named,
+# instead of proceeding into the launch that would come up degraded on the held store lock.
 quit_running_debug_instances() {
-  local pids
-  pids="$(debug_app_pids "$(ps -eo pid=,command=)")"
-  [[ -z "${pids}" ]] && return 0
-
-  echo "==> Quitting running Debug instance(s): ${pids//$'\n'/ }"
-  local pid
-  for pid in ${pids}; do
-    kill "${pid}" 2>/dev/null || true
-  done
-
-  # Give them a moment to release the store's single-writer lock, then insist.
-  local waited=0
-  while [[ -n "$(debug_app_pids "$(ps -eo pid=,command=)")" && "${waited}" -lt 10 ]]; do
-    sleep 0.5
-    waited=$((waited + 1))
-  done
-  for pid in $(debug_app_pids "$(ps -eo pid=,command=)"); do
-    kill -9 "${pid}" 2>/dev/null || true
-  done
+  quit_matched_instances debug_app_pids "Debug instance(s)"
 }
 
 # #1970: drop the registration for the bundle path this build is about to replace.
