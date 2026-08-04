@@ -13,6 +13,9 @@ import Foundation
 // One contacted address whose Gmail thread is watched for a reply or a bounce.
 protocol ReplyWatchableRecipient: AnyObject {
     var gmailThreadId: String? { get }
+    // #2032: the address this contact was written at, so a thread carrying more than one of them can say
+    // which one a reply came from.
+    var replyWatchAddress: String? { get }
     var replyWatchManualOutcome: Bool { get }   // Dan hand-set this contact's state; never auto-overwrite.
     var replyWatchIsBooked: Bool { get }         // this contact is booked; stop watching it.
     var replied: Bool { get set }
@@ -46,16 +49,20 @@ protocol ReplyWatchable: AnyObject {
     var replyWatchManualOutcome: Bool { get }   // lead hand-resolved; stop watching ALL its threads.
     var replyWatchIsBooked: Bool { get }         // lead booked; the whole thing is closed.
     var replyWatchRecipients: [any ReplyWatchableRecipient] { get }
+    // #2032: what to call this in a report Dan reads.
+    var replyWatchDisplayName: String { get }
     // A fresh reply on this entity pauses its still-unsent contacts pending Dan's triage (#430).
     func pausePendingForReply()
 }
 
 extension Recipient: ReplyWatchableRecipient {
+    var replyWatchAddress: String? { email }
     var replyWatchManualOutcome: Bool { outcomeSourceRaw == OutcomeSource.manual.rawValue }
     var replyWatchIsBooked: Bool { resolution == .booked }
 }
 
 extension Prospect: ReplyWatchable {
+    var replyWatchDisplayName: String { groupName }
     var replyWatchManualOutcome: Bool { outcomeSourceRaw == OutcomeSource.manual.rawValue }
     var replyWatchIsBooked: Bool { outcome == .booked }
     var replyWatchRecipients: [any ReplyWatchableRecipient] { recipients }
