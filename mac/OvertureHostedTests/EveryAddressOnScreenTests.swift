@@ -42,7 +42,7 @@ struct EveryAddressOnScreenTests {
     }
 
     private func view(_ item: QueueItem) -> some View {
-        DraftReviewView(item: item, onApprove: {}, onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in })
+        DraftReviewView(item: item, onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in })
     }
 
     // The address itself, on the row, even though the contact has a name to show instead.

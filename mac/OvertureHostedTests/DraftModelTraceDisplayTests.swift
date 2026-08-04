@@ -61,7 +61,7 @@ struct DraftModelTraceDisplayTests {
     }
 
     private func view(_ i: QueueItem) -> DraftReviewView {
-        DraftReviewView(item: i, onApprove: {}, onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in },
+        DraftReviewView(item: i, onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in },
                         outboundSendSince: nil)
     }
 

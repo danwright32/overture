@@ -2,11 +2,12 @@ import SwiftUI
 
 // The Trigger-2 review surface, shown inside a row once the Prep run has found a
 // contact and drafted an email. Dan reads the contact (with its confidence), edits
-// the draft inline if he likes, then approves or skips. Approving is what later
-// hands the email to the throttled Gmail send.
+// the draft inline if he likes, then sends or skips. #2050: one button carries it
+// from here to sent, through the confirmation sheet that shows the whole email and
+// everyone it reaches; approving is the first half of that press, not a step of its
+// own on a screen of its own.
 struct DraftReviewView: View {
     let item: QueueItem
-    let onApprove: () -> Void
     let onUnapprove: () -> Void
     let onSkip: () -> Void
     // #367: request a re-prep on a prospect that already has a draft.
@@ -377,10 +378,9 @@ struct DraftReviewView: View {
         // are about voice, and once Dan edits the text the voice is his; but a dead link or an
         // unfilled placeholder is a fact about the words a stranger will read, no matter who typed
         // them, so his own edit gets flagged too (and it is what actually holds the send).
-        // #843: except once approved-and-blocked, when the "This draft won't send: …" gate by the Send
-        // button already names the same reason. The decision is DraftReviewNotes', tested, not this view's.
-        if DraftReviewNotes.showsBlockingFlagsNearBody(isApproved: isApproved,
-                                                       lintBlocked: item.draftLintBlocked) {
+        // #843: except while blocked, when the "This draft won't send: …" gate by the button already names
+        // the same reason. The decision is DraftReviewNotes', tested, not this view's.
+        if DraftReviewNotes.showsBlockingFlagsNearBody(lintBlocked: item.draftLintBlocked) {
             issueFlags(item.draftLintBlockers)
         }
         // #2007: and stand down on text he WROTE for the same reason they stand down on text he edited.
@@ -428,6 +428,50 @@ struct DraftReviewView: View {
         }
     }
 
+    // #2050: every reason this draft will not go out, shown beside whichever button is currently offering
+    // to send it. One definition rather than two, because these are the sentences that keep a disabled
+    // button from being a dead end (#1311, #2052, #2012), and a copy that drifted onto only one of the two
+    // branches would leave exactly the branch nobody was looking at silent.
+    @ViewBuilder
+    private var sendBlockerNotes: some View {
+        // #1311: no emailable contact at all, so nothing can ever send. Only when there is genuinely no
+        // address: an email held by a review guard is a different, already-explained case.
+        if let note = DraftReviewNotes.noSendableEmail(hasPendingRecipient: item.hasPendingRecipient,
+                                                       hasAnyEmailContact: item.hasAnyEmailContact) {
+            Text(note).font(.system(size: 10)).foregroundStyle(OVColor.rust).lineLimit(1)
+        }
+        // #2052: a missing subject line, which holds the send just as hard and is two clicks from fixed.
+        if let note = DraftReviewNotes.noSubject(subject: item.draftSubject) {
+            Text(note).font(.system(size: 10)).foregroundStyle(OVColor.rust).lineLimit(1)
+        }
+        // #407: a plain, mostly non-dismissible warning, not a flag Dan can dismiss as wrong. It's a fact
+        // about the stored text, and clears itself once the draft is fixed. #718: he CAN override the
+        // block itself via a deliberate two-step confirm (a native alert, not a single tap), which then
+        // tones the message down rather than hiding it, so there's still a visible trail the send happened
+        // despite it. #885: the wording is DraftReviewNotes'; the view only decides whether the Override
+        // button belongs beside it.
+        if let note = DraftReviewNotes.salutation(needsReview: item.draftNeedsSalutationReview,
+                                                  overridden: item.salutationReviewOverridden) {
+            Text(note).font(.system(size: 10)).foregroundStyle(OVColor.rust).lineLimit(1)
+            if !item.salutationReviewOverridden {
+                Button("Override") { showOverrideConfirm = true }
+                    .buttonStyle(.plain).font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
+            }
+        }
+        // #789: same shape as the salutation block above, and the same two-step override.
+        if let note = DraftReviewNotes.lint(blocked: item.draftLintBlocked,
+                                            blockers: item.draftLintBlockers) {
+            Text(note).font(.system(size: 10)).foregroundStyle(OVColor.rust).lineLimit(1)
+            if item.draftLintBlocked {
+                Button("Override") { showLintOverrideConfirm = true }
+                    .buttonStyle(.plain).font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
+            }
+        }
+        if let line = SendFailureLine.text(for: item.sendError) {
+            Text(line).font(.system(size: 10)).foregroundStyle(OVColor.rust).lineLimit(1)
+        }
+    }
+
     private var actionRow: some View {
         HStack(spacing: OVSpacing.xs) {
             // "Sent" only once EVERY recipient has gone. A multi-recipient show keeps the Send button
@@ -471,55 +515,7 @@ struct DraftReviewView: View {
                     Button("Unapprove") { onUnapprove() }
                         .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
                     reprepControl
-                    // #1311: an approved show with no emailable contact can never send, and the greyed
-                    // Send button never said why. This explains the stall so Dan can add a contact. The
-                    // wording is DraftReviewNotes' (#885); the view only decides where it sits.
-                    if let note = DraftReviewNotes.noSendableEmail(isApproved: isApproved,
-                                                                   hasPendingRecipient: item.hasPendingRecipient,
-                                                                   hasAnyEmailContact: item.hasAnyEmailContact) {
-                        Text(note)
-                            .font(.system(size: 10)).foregroundStyle(OVColor.rust).lineLimit(1)
-                    }
-                    // #2052: the same shape for the other thing that can hold an approved draft with no
-                    // explanation, a missing subject line. The wording is DraftReviewNotes'.
-                    if let note = DraftReviewNotes.noSubject(isApproved: isApproved,
-                                                             subject: item.draftSubject) {
-                        Text(note)
-                            .font(.system(size: 10)).foregroundStyle(OVColor.rust).lineLimit(1)
-                    }
-                    // #407: a plain, mostly non-dismissible warning, not a flag Dan can dismiss as
-                    // wrong. It's a fact about the stored text, and clears itself once the draft is
-                    // fixed. #718: he CAN override the block itself via a deliberate two-step confirm
-                    // (a native alert, not a single tap), which then tones the message down rather
-                    // than hiding it, so there's still a visible trail the send happened despite it.
-                    // #885: the wording is DraftReviewNotes'; the view only decides whether the
-                    // Override button belongs beside it.
-                    if let note = DraftReviewNotes.salutation(needsReview: item.draftNeedsSalutationReview,
-                                                              overridden: item.salutationReviewOverridden) {
-                        Text(note)
-                            .font(.system(size: 10)).foregroundStyle(OVColor.rust).lineLimit(1)
-                        if !item.salutationReviewOverridden {
-                            Button("Override") { showOverrideConfirm = true }
-                                .buttonStyle(.plain).font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
-                        }
-                    }
-                    // #789: same shape as the salutation block above. A fact about the words, not a
-                    // guess Dan can dismiss as wrong: it clears itself the moment the text is fixed.
-                    // He can still override it, but only through a deliberate two-step confirm, and
-                    // the message afterwards tones down rather than disappearing, so there is a
-                    // visible trail that the send happened despite it.
-                    if let note = DraftReviewNotes.lint(blocked: item.draftLintBlocked,
-                                                        blockers: item.draftLintBlockers) {
-                        Text(note)
-                            .font(.system(size: 10)).foregroundStyle(OVColor.rust).lineLimit(1)
-                        if item.draftLintBlocked {
-                            Button("Override") { showLintOverrideConfirm = true }
-                                .buttonStyle(.plain).font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
-                        }
-                    }
-                    if let line = SendFailureLine.text(for: item.sendError) {
-                        Text(line).font(.system(size: 10)).foregroundStyle(OVColor.rust).lineLimit(1)
-                    }
+                    sendBlockerNotes
                 }
                 Spacer()
             } else if case let .ready(recipientId, formURL) = item.formPitch {
@@ -563,15 +559,25 @@ struct DraftReviewView: View {
                     .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
                 Spacer()
             } else {
-                Button { onApprove() } label: {
-                    Text("Approve").font(OVType.meta).foregroundStyle(OVColor.onForest)
+                // #2050: ONE button, carrying the draft all the way to sent. It used to say "Approve", and
+                // approving moved the show to a second screen with its own Send, which is the screen Dan
+                // could not find his email on: "There's no real reason to approve it again on another
+                // screen." It says "Final review" rather than "Send" because pressing it does not send:
+                // it opens the confirmation sheet that shows the whole email and who it reaches, and THAT
+                // sheet's Send commits. A button naming an act it does not perform is the thing this
+                // screen can least afford.
+                Button { onSend() } label: {
+                    Text("Final review").font(OVType.meta).foregroundStyle(OVColor.onForest)
                         .padding(.horizontal, OVSpacing.md).padding(.vertical, 5)
                         .background(Capsule().fill(OVColor.forest))
                 }
                 .buttonStyle(.plain)
                 // #399: hasPendingRecipient means "at least one recipient still pending with a real
-                // address", exactly what this gate needs.
-                .disabled(!item.hasPendingRecipient)
+                // address", exactly what this gate needs. #2050: and Gmail, which the old Send button
+                // gated on and the old Approve did not have to, because this button now leads to a send.
+                .disabled(!gmailConnected || !item.hasPendingRecipient)
+                .help(GmailCopy.sendHelp(connected: gmailConnected,
+                                         whenConnected: "Read the email one last time, then send it"))
                 Button("Edit") {
                     draftSubject = item.draftSubject ?? ""
                     draftBody = item.draftBody ?? ""
@@ -581,6 +587,10 @@ struct DraftReviewView: View {
                 Button("Skip") { onSkip() }
                     .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
                 reprepControl
+                // #2050/#2012: the same explanations that used to appear only after approving. The button
+                // above is disabled by exactly the things these name, and Dan met it greyed with nothing
+                // said beside it, on the one screen where a dead end costs him the pitch.
+                sendBlockerNotes
             }
             if !isApproved { Spacer() }
         }

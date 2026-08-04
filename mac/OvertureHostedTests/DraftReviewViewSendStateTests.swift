@@ -20,7 +20,7 @@ struct DraftReviewViewSendStateTests {
     }
 
     @Test func noOutboundSendShowsTheSendButton() throws {
-        let view = DraftReviewView(item: approvedItem(), onApprove: {}, onUnapprove: {}, onSkip: {},
+        let view = DraftReviewView(item: approvedItem(), onUnapprove: {}, onSkip: {},
                                    onSaveDraft: { _, _ in }, outboundSendSince: nil)
 
         _ = try view.inspect().find(button: "Send")   // throws (fails the test) if not present
@@ -28,7 +28,7 @@ struct DraftReviewViewSendStateTests {
 
     @Test func anInFlightOutboundSendShowsTheLiveLabelInsteadOfTheButton() throws {
         let since = Date(timeIntervalSince1970: 1000)
-        let view = DraftReviewView(item: approvedItem(), onApprove: {}, onUnapprove: {}, onSkip: {},
+        let view = DraftReviewView(item: approvedItem(), onUnapprove: {}, onSkip: {},
                                    onSaveDraft: { _, _ in }, outboundSendSince: since)
 
         #expect((try? view.inspect().find(button: "Send")) == nil)
@@ -49,7 +49,7 @@ struct DraftReviewViewSendStateTests {
     }
 
     @Test func anApprovedShowWithNoEmailExplainsWhyItCannotSend() throws {
-        let view = DraftReviewView(item: approvedItemWithNoEmail(), onApprove: {}, onUnapprove: {},
+        let view = DraftReviewView(item: approvedItemWithNoEmail(), onUnapprove: {},
                                    onSkip: {}, onSaveDraft: { _, _ in }, outboundSendSince: nil)
 
         let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
@@ -57,7 +57,7 @@ struct DraftReviewViewSendStateTests {
     }
 
     @Test func aSendableApprovedShowShowsNoSuchNote() throws {
-        let view = DraftReviewView(item: approvedItem(), onApprove: {}, onUnapprove: {},
+        let view = DraftReviewView(item: approvedItem(), onUnapprove: {},
                                    onSkip: {}, onSaveDraft: { _, _ in }, outboundSendSince: nil)
 
         let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
@@ -85,7 +85,7 @@ struct DraftReviewViewSalutationReviewTests {
     }
 
     @Test func flaggedDraftShowsTheWarning() throws {
-        let view = DraftReviewView(item: item(draftNeedsSalutationReview: true), onApprove: {}, onUnapprove: {},
+        let view = DraftReviewView(item: item(draftNeedsSalutationReview: true), onUnapprove: {},
                                    onSkip: {}, onSaveDraft: { _, _ in }, outboundSendSince: nil)
 
         let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
@@ -93,7 +93,7 @@ struct DraftReviewViewSalutationReviewTests {
     }
 
     @Test func unflaggedDraftShowsNoWarning() throws {
-        let view = DraftReviewView(item: item(draftNeedsSalutationReview: false), onApprove: {}, onUnapprove: {},
+        let view = DraftReviewView(item: item(draftNeedsSalutationReview: false), onUnapprove: {},
                                    onSkip: {}, onSaveDraft: { _, _ in }, outboundSendSince: nil)
 
         let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
@@ -102,7 +102,7 @@ struct DraftReviewViewSalutationReviewTests {
 
     @Test func flaggedAndNotOverriddenShowsAnOverrideButton() throws {
         let view = DraftReviewView(item: item(draftNeedsSalutationReview: true, overridden: false),
-                                   onApprove: {}, onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in },
+                                   onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in },
                                    outboundSendSince: nil)
 
         _ = try view.inspect().find(button: "Override")   // throws (fails the test) if absent
@@ -110,7 +110,7 @@ struct DraftReviewViewSalutationReviewTests {
 
     @Test func flaggedAndOverriddenShowsNoOverrideButtonButAToneDownedMessage() throws {
         let view = DraftReviewView(item: item(draftNeedsSalutationReview: true, overridden: true),
-                                   onApprove: {}, onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in },
+                                   onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in },
                                    outboundSendSince: nil)
 
         #expect((try? view.inspect().find(button: "Override")) == nil)
@@ -125,7 +125,7 @@ struct DraftReviewViewSalutationReviewTests {
     @Test func tappingOverrideAloneDoesNotFireTheCallbackWithoutConfirming() throws {
         var overridden = false
         let view = DraftReviewView(item: item(draftNeedsSalutationReview: true, overridden: false),
-                                   onApprove: {}, onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in },
+                                   onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in },
                                    onOverrideSalutationReview: { overridden = true }, outboundSendSince: nil)
 
         let button = try view.inspect().find(button: "Override")
@@ -154,7 +154,7 @@ struct DraftReviewViewDraftLintTests {
     }
 
     private func view(_ item: QueueItem, onOverride: @escaping () -> Void = {}) -> DraftReviewView {
-        DraftReviewView(item: item, onApprove: {}, onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in },
+        DraftReviewView(item: item, onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in },
                         onOverrideDraftLint: onOverride, outboundSendSince: nil)
     }
 
@@ -212,7 +212,7 @@ struct DraftReviewViewReprepCooldownTests {
     }
 
     @Test func reprepMenuIsDisabledWhileARequestIsAlreadyPending() throws {
-        let view = DraftReviewView(item: item(reprepDraftRequested: true), onApprove: {}, onUnapprove: {},
+        let view = DraftReviewView(item: item(reprepDraftRequested: true), onUnapprove: {},
                                    onSkip: {}, onSaveDraft: { _, _ in }, outboundSendSince: nil)
 
         let menu = try view.inspect().find(ViewType.Menu.self)
@@ -220,7 +220,7 @@ struct DraftReviewViewReprepCooldownTests {
     }
 
     @Test func reprepMenuIsEnabledWhenNothingIsPending() throws {
-        let view = DraftReviewView(item: item(), onApprove: {}, onUnapprove: {},
+        let view = DraftReviewView(item: item(), onUnapprove: {},
                                    onSkip: {}, onSaveDraft: { _, _ in }, outboundSendSince: nil)
 
         let menu = try view.inspect().find(ViewType.Menu.self)
@@ -233,7 +233,7 @@ struct DraftReviewViewReprepCooldownTests {
     @Test func tappingAReprepChoiceWithinCooldownDoesNotFireTheCallbackWithoutConfirming() throws {
         var requestedMode: ReprepMode?
         let recentlyServed = Date().addingTimeInterval(-3600)   // 1h ago, well within the 24h cooldown
-        let view = DraftReviewView(item: item(reprepLastServedAt: recentlyServed), onApprove: {}, onUnapprove: {},
+        let view = DraftReviewView(item: item(reprepLastServedAt: recentlyServed), onUnapprove: {},
                                    onSkip: {}, onReprep: { mode in requestedMode = mode },
                                    onSaveDraft: { _, _ in }, outboundSendSince: nil)
 
@@ -246,7 +246,7 @@ struct DraftReviewViewReprepCooldownTests {
     @Test func tappingAReprepChoiceOutsideCooldownFiresTheCallbackDirectly() throws {
         var requestedMode: ReprepMode?
         let longAgo = Date().addingTimeInterval(-48 * 3600)   // 48h ago, past the 24h cooldown
-        let view = DraftReviewView(item: item(reprepLastServedAt: longAgo), onApprove: {}, onUnapprove: {},
+        let view = DraftReviewView(item: item(reprepLastServedAt: longAgo), onUnapprove: {},
                                    onSkip: {}, onReprep: { mode in requestedMode = mode },
                                    onSaveDraft: { _, _ in }, outboundSendSince: nil)
 
@@ -284,7 +284,7 @@ struct DraftReviewViewVenueMatchTests {
         let view = DraftReviewView(item: item(contacts: [
             recipient(id: "act", name: "Emma Robinson", looksLikeVenue: false),
             recipient(id: "presenter", name: nil, looksLikeVenue: true, provenance: .presenter),
-        ]), onApprove: {}, onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in }, outboundSendSince: nil)
+        ]), onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in }, outboundSendSince: nil)
 
         let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
         #expect(texts.contains { $0.contains("may be the venue") })
@@ -294,7 +294,7 @@ struct DraftReviewViewVenueMatchTests {
     @Test func noFlaggedContactsShowNoWarning() throws {
         let view = DraftReviewView(item: item(contacts: [
             recipient(id: "act", name: "Emma Robinson", looksLikeVenue: false),
-        ]), onApprove: {}, onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in }, outboundSendSince: nil)
+        ]), onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in }, outboundSendSince: nil)
 
         let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
         #expect(!texts.contains { $0.contains("may be the venue") })
@@ -304,7 +304,7 @@ struct DraftReviewViewVenueMatchTests {
     @Test func aDismissedFlagShowsNoWarning() throws {
         let view = DraftReviewView(item: item(contacts: [
             recipient(id: "presenter", name: nil, looksLikeVenue: true, dismissed: true, provenance: .presenter),
-        ]), onApprove: {}, onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in }, outboundSendSince: nil)
+        ]), onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in }, outboundSendSince: nil)
 
         let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
         #expect(!texts.contains { $0.contains("may be the venue") })
@@ -314,7 +314,7 @@ struct DraftReviewViewVenueMatchTests {
         var dismissedId: String?
         let view = DraftReviewView(item: item(contacts: [
             recipient(id: "presenter", name: nil, looksLikeVenue: true, provenance: .presenter),
-        ]), onApprove: {}, onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in },
+        ]), onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in },
            onDismissVenueMatch: { rid in dismissedId = rid }, outboundSendSince: nil)
 
         let button = try view.inspect().find(button: "Not the venue")
@@ -349,7 +349,7 @@ struct DraftReviewViewPressContactTests {
         let view = DraftReviewView(item: item(contacts: [
             recipient(id: "act", name: "Emma Robinson", looksLikePressContact: false),
             recipient(id: "presenter", name: nil, looksLikePressContact: true, provenance: .presenter),
-        ]), onApprove: {}, onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in }, outboundSendSince: nil)
+        ]), onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in }, outboundSendSince: nil)
 
         let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
         #expect(texts.contains { $0.contains("may be a press/media contact") })
@@ -359,7 +359,7 @@ struct DraftReviewViewPressContactTests {
     @Test func noFlaggedContactsShowNoWarning() throws {
         let view = DraftReviewView(item: item(contacts: [
             recipient(id: "act", name: "Emma Robinson", looksLikePressContact: false),
-        ]), onApprove: {}, onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in }, outboundSendSince: nil)
+        ]), onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in }, outboundSendSince: nil)
 
         let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
         #expect(!texts.contains { $0.contains("may be a press/media contact") })
@@ -369,7 +369,7 @@ struct DraftReviewViewPressContactTests {
     @Test func aDismissedFlagShowsNoWarning() throws {
         let view = DraftReviewView(item: item(contacts: [
             recipient(id: "presenter", name: nil, looksLikePressContact: true, dismissed: true, provenance: .presenter),
-        ]), onApprove: {}, onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in }, outboundSendSince: nil)
+        ]), onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in }, outboundSendSince: nil)
 
         let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
         #expect(!texts.contains { $0.contains("may be a press/media contact") })
@@ -379,7 +379,7 @@ struct DraftReviewViewPressContactTests {
         var dismissedId: String?
         let view = DraftReviewView(item: item(contacts: [
             recipient(id: "presenter", name: nil, looksLikePressContact: true, provenance: .presenter),
-        ]), onApprove: {}, onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in },
+        ]), onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in },
            onDismissPressContactMatch: { rid in dismissedId = rid }, outboundSendSince: nil)
 
         let button = try view.inspect().find(button: "Not press/media")

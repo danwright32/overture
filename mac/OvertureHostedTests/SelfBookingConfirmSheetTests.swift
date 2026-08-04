@@ -17,13 +17,13 @@ import ViewInspector
 struct SelfBookingConfirmSheetTests {
     @Test func showsTheTitleMessageAndBothButtons() throws {
         let sheet = SelfBookingConfirmSheet(
-            title: SelfBookingCopy.approveConfirmTitle,
+            title: SelfBookingCopy.prepConfirmTitle,
             message: "This date already holds a pitch to Aurora Strings.",
-            proceedLabel: SelfBookingCopy.approveConfirmProceed, onProceed: {}, onCancel: {})
+            proceedLabel: SelfBookingCopy.prepConfirmProceed, onProceed: {}, onCancel: {})
         let texts = try sheet.inspect().findAll(ViewType.Text.self).map { try $0.string() }
-        #expect(texts.contains(SelfBookingCopy.approveConfirmTitle))                 // the title
+        #expect(texts.contains(SelfBookingCopy.prepConfirmTitle))                 // the title
         #expect(texts.contains("This date already holds a pitch to Aurora Strings.")) // the clash message
-        _ = try sheet.inspect().find(button: SelfBookingCopy.approveConfirmProceed)  // the proceed action, wired to onProceed
+        _ = try sheet.inspect().find(button: SelfBookingCopy.prepConfirmProceed)  // the proceed action, wired to onProceed
         _ = try sheet.inspect().find(button: SendConfirmCopy.cancel)                 // and Cancel, wired to onCancel
     }
 

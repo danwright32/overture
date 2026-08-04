@@ -29,15 +29,18 @@ enum DraftReviewNotes {
         return "Sending despite the draft warning you confirmed."
     }
 
-    // #843: the blocking lint findings appear as warning flags near the draft body AND, once the draft is
-    // approved and still blocked, in the "This draft won't send: …" gate by the Send button, which names
-    // the very same reason. That is the same finding on one screen twice. The gate is the one to keep (it
-    // sits with the Send button and its Override), so the flags near the body step aside only in that
-    // exact case. Before approval there is no gate yet, and after an override the gate no longer names the
-    // reason (it tones down to "Sending despite the draft warning you confirmed."), so in both of those
-    // the flags stay: they are the only place the specific finding is still shown.
-    static func showsBlockingFlagsNearBody(isApproved: Bool, lintBlocked: Bool) -> Bool {
-        !(isApproved && lintBlocked)
+    // #843: the blocking lint findings appear as warning flags near the draft body AND, while the draft is
+    // still blocked, in the "This draft won't send: …" gate by the button, which names the very same
+    // reason. That is the same finding on one screen twice. The gate is the one to keep (it sits with the
+    // button and its Override), so the flags near the body step aside exactly when it is showing. After an
+    // override the gate no longer names the reason (it tones down to "Sending despite the draft warning
+    // you confirmed."), so the flags come back: they are then the only place the finding is still shown.
+    //
+    // #2050: no longer asks whether the show is approved. The gate used to appear only on an approved
+    // card, so before approval both were shown and this had to say so; now that one button carries the
+    // draft all the way to sent, the gate is beside it the whole time.
+    static func showsBlockingFlagsNearBody(lintBlocked: Bool) -> Bool {
+        !lintBlocked
     }
 
     // Whether the ADVISORY voice findings are shown. They exist to catch the drafter's AI-tells, so they
@@ -60,15 +63,18 @@ enum DraftReviewNotes {
     // it), and without this the Send button is simply greyed with nothing said. The same shape as
     // noSendableEmail below, for the same reason: a disabled control that does not say why is a dead end.
     // It names the fix, because unlike a missing contact this one is two clicks away in the editor.
-    static func noSubject(isApproved: Bool, subject: String?) -> String? {
-        guard isApproved,
-              (subject ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
-        return "Approved, but no subject line. Edit the draft to add one."
+    // #2050/#2012: no longer gated on approval, and no longer opening with "Approved, but". Approving is
+    // not a separate step Dan can reach any more, so a sentence that waited for it was a sentence that
+    // never arrived: he met a greyed-out button with nothing said beside it. Everything that holds a send
+    // holds it while the draft is still a draft, so this speaks there.
+    static func noSubject(subject: String?) -> String? {
+        guard (subject ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return "No subject line. Edit the draft to add one."
     }
 
-    static func noSendableEmail(isApproved: Bool, hasPendingRecipient: Bool, hasAnyEmailContact: Bool) -> String? {
-        guard isApproved, !hasPendingRecipient, !hasAnyEmailContact else { return nil }
-        return "Approved, but no email to send to. Add a contact by hand."
+    static func noSendableEmail(hasPendingRecipient: Bool, hasAnyEmailContact: Bool) -> String? {
+        guard !hasPendingRecipient, !hasAnyEmailContact else { return nil }
+        return "No email to send to. Add a contact by hand."
     }
 
     // #792: "Sent" was once the whole story, and a contact held back by a review guard is not sendable,

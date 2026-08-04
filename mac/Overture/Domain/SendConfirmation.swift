@@ -38,11 +38,22 @@ struct SendConfirmation: Equatable {
     var selfBookingWarning: String? = nil
 
     // The main draft send: the show's next pending recipient over the shared draft body.
+    //
+    // #2050: `approving` is the one caller that legitimately asks who a draft would reach BEFORE it is
+    // approved, because opening this sheet is now the approval. Dan: "as soon as I click approve I should
+    // get a confirmation that I want to send it and go straight through that action." It defaults to
+    // false, so #2015's guard is untouched for every other caller: a card may still not name the people
+    // an unapproved draft would reach. The two groups differ only by that gate (`pendingGroup` IS
+    // `previewGroup` plus it), and the approval happens in the same action as the send, so what this sheet
+    // names cannot differ from who receives it (L64).
     @MainActor
-    init?(prospect: Prospect, signature: OutboundSignature = GmailSignatureStore.currentSignature()) {
+    init?(prospect: Prospect, approving: Bool = false,
+          signature: OutboundSignature = GmailSignatureStore.currentSignature()) {
         // #2033: the whole group the next press of Send reaches, from the one definition the send itself
         // reads, so what he approves names everybody it is going to (L64).
-        let group = SendGroup.pendingGroup(of: prospect)
+        let group = approving && prospect.status == .drafted && prospect.draftBody != nil
+            ? SendGroup.previewGroup(of: prospect)
+            : SendGroup.pendingGroup(of: prospect)
         // #2052: no sheet at all for a draft with no subject line, where this used to render
         // "(no subject)" beside a live Send button. The placeholder was itself the detection that the
         // value was missing, so it had to stop the send rather than label it (L67). Dan, on finding it:

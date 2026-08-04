@@ -116,7 +116,5 @@ struct SelfBookingCopyTests {
     }
 
     @Test func approveConfirmCopyIsStable() {
-        #expect(SelfBookingCopy.approveConfirmTitle == "Approve a show on a date you're already pitching?")
-        #expect(SelfBookingCopy.approveConfirmProceed == "Approve anyway")
     }
 }

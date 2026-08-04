@@ -200,7 +200,16 @@ enum StageNavigation {
             return p.hasUnclearedConflict && PrepQueueBuilder.needsPrepIgnoringConflict(p)
 
         case .review:
-            return p.status == .drafted
+            // #2050: a show belongs to Review from the moment it has a draft until every contact on it
+            // has been emailed (the last send flips it to `.contacted`, which leaves). Approving used to
+            // move it out, into `.sendApproved`, which has a pill only when Gmail is disconnected, so an
+            // approved email sat in a stage nothing pointed at. Dan, minutes after approving his first
+            // hand-prepped draft: "I clicked approve on it and it disappeared?" He navigates by the pills
+            // alone, so the record was in the store and reachable from no view he uses (L45).
+            //
+            // Stated as the two statuses rather than as "drafted, or approved and unsent", so there is no
+            // gap between them for a part-sent show (approved with `sentAt` already set) to fall into.
+            return p.status == .drafted || p.status == .approved
 
         case .sendApproved:
             return p.status == .approved && p.sentAt == nil

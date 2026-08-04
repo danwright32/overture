@@ -24,11 +24,10 @@ enum ProspectRowFactory {
                     highlightedKey: String?, highlightedRecipientId: String? = nil, outboundSendSince: Date?,
                     replySendSince: @escaping (String) -> Date?,
                     onSend: @escaping () -> Void, onSendReply: @escaping (String) -> Void,
-                    // #1219: Re-prep and Approve are committing moments that may need a screen-local
-                    // self-booking confirm before they run (like onSend), so the caller can supply them here.
-                    // Omitted (ArchiveView), each falls back to the direct ProspectMutations call.
+                    // #1219: Re-prep is a committing moment that may need a screen-local self-booking
+                    // confirm before it runs (like onSend), so the caller can supply it here.
+                    // Omitted (ArchiveView), it falls back to the direct ProspectMutations call.
                     onReprep: ((ReprepMode) -> Void)? = nil,
-                    onApprove: (() -> Void)? = nil,
                     onRestore: (() -> Void)? = nil, showingTooFar: Bool = false,
                     userExcludedTowns: Set<String> = [],
                     allowedSeedTowns: Set<String> = []) -> some View {
@@ -37,7 +36,6 @@ enum ProspectRowFactory {
             today: today,
             onKeep: { ProspectMutations.setStatus(item, .queued, nil, prospects: prospects, context: context, feedback: feedback, undo: undoStack, undoLabel: "Keep") },
             onDismiss: { reason in ProspectMutations.dismissForReason(item, reason, prospects: prospects, context: context, feedback: feedback, offer: dayOffOffer, undo: undoStack) },
-            onApprove: onApprove ?? { ProspectMutations.setStatus(item, .approved, nil, prospects: prospects, context: context, feedback: feedback) },
             onUnapprove: { ProspectMutations.setStatus(item, .drafted, nil, prospects: prospects, context: context, feedback: feedback) },
             onSkipDraft: { ProspectMutations.setStatus(item, .dismissed, .notInterested, prospects: prospects, context: context, feedback: feedback) },
             // #1824: the launch renders this show's listing page first, so it is awaited from a task rather
