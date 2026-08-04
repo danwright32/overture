@@ -38,6 +38,11 @@ enum GmailMessage {
     // previewHTML and this wrapper never reaches the recipient. nil (like previewHTML) when there is no HTML
     // signature, so the card falls back to previewBody.
     // copy-inventory:ignore-start  a light card surface for the outbound email's own HTML, not Overture's voice (#1203)
+    // The card element's id. Named once here, where the card is emitted, because the preview's measuring
+    // script has to find this exact element: two places naming it separately would drift into a preview
+    // measuring nothing, silently (#2062).
+    static let previewCardElementID = "overture-preview-card"
+
     static func previewCardHTML(body: String, signature: OutboundSignature) -> String? {
         guard let inner = previewHTML(body: body, signature: signature) else { return nil }
         // A contained, rounded WHITE CARD floating on the (transparent) dark chrome, framed so it reads as a
@@ -47,7 +52,8 @@ enum GmailMessage {
         // also makes the fixed-width (often 600px) signature's overflow invisible, so overflow:hidden clips
         // it cleanly to the card's rounded bounds with nothing bleeding off the right edge.
         return "<style>html,body{background:transparent;margin:0;padding:8px}</style>"
-            + "<div style=\"background:#ffffff;color:#111111;padding:16px;border-radius:10px;overflow:hidden;"
+            + "<div id=\"\(previewCardElementID)\" "
+            + "style=\"background:#ffffff;color:#111111;padding:16px;border-radius:10px;overflow:hidden;"
             + "border:1px solid rgba(0,0,0,0.12);box-shadow:0 1px 4px rgba(0,0,0,0.25)\">\(inner)</div>"
     }
     // copy-inventory:ignore-end
