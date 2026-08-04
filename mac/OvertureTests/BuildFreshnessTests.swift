@@ -349,9 +349,10 @@ struct BuildFreshnessStateTests {
         #expect(counting.reads == 2)
     }
 
-    // Dismissal still lasts for THIS LAUNCH only, and a re-read does not undo it: a panel taking most of
-    // the window, reappearing while Dan works because a timer fired, would be the same "Not now" ignored.
-    @Test func aDismissalSurvivesTheNextRead() throws {
+    // "Not now" answers the news it was shown. A re-read that finds the SAME news must stay quiet: a
+    // panel taking most of the window, reappearing while Dan works because a timer fired, would be the
+    // same dismissal ignored.
+    @Test func aDismissalHoldsWhileTheNewsIsUnchanged() throws {
         let dir = try tempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
         let state = BuildFreshnessState(directory: dir)
@@ -359,8 +360,52 @@ struct BuildFreshnessStateTests {
         state.refreshIfStale(now: date("2026-08-04T10:00:09Z"))
         #expect(state.shouldShow)
 
-        state.dismissedThisLaunch = true
+        state.dismiss()
         state.refreshIfStale(now: date("2026-08-04T18:00:00Z"))
+
+        #expect(state.shouldShow == false)
+    }
+
+    // Dan's call, 2026-08-04: a dismissal covers the merge it was telling him about, and something that
+    // lands afterwards is different news, so it is worth raising again.
+    @Test func aMergeAfterTheDismissalIsRaisedAgain() throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try #"{"version":1,"commit":"abc123","commitDate":"2026-08-04T10:00:00Z","repoPath":"/code/overture"}"#
+            .write(to: dir.appendingPathComponent("installed-build.json"), atomically: true, encoding: .utf8)
+        try #"{"version":1,"commit":"def456","commitDate":"2026-08-04T12:06:00Z"}"#
+            .write(to: dir.appendingPathComponent("shipped-commit.json"), atomically: true, encoding: .utf8)
+        let state = BuildFreshnessState(directory: dir)
+
+        state.refreshIfStale(now: date("2026-08-04T12:10:00Z"))
+        #expect(state.shouldShow)
+        state.dismiss()
+        #expect(state.shouldShow == false)
+
+        // Something else merges while he works.
+        try #"{"version":1,"commit":"ghi789","commitDate":"2026-08-04T15:40:00Z"}"#
+            .write(to: dir.appendingPathComponent("shipped-commit.json"), atomically: true, encoding: .utf8)
+        state.refreshIfStale(now: date("2026-08-04T15:45:00Z"))
+
+        #expect(state.shouldShow, "A merge that landed after the dismissal is news the dismissal never covered.")
+    }
+
+    // And the one that keeps that from becoming a nag: an update makes the panel go away for good,
+    // rather than reappearing because the answer changed.
+    @Test func catchingUpEndsThePanelRatherThanChangingIt() throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try #"{"version":1,"commit":"abc123","commitDate":"2026-08-04T10:00:00Z","repoPath":"/code/overture"}"#
+            .write(to: dir.appendingPathComponent("installed-build.json"), atomically: true, encoding: .utf8)
+        try #"{"version":1,"commit":"def456","commitDate":"2026-08-04T12:06:00Z"}"#
+            .write(to: dir.appendingPathComponent("shipped-commit.json"), atomically: true, encoding: .utf8)
+        let state = BuildFreshnessState(directory: dir)
+        state.refreshIfStale(now: date("2026-08-04T12:10:00Z"))
+        #expect(state.shouldShow)
+
+        try #"{"version":1,"commit":"def456","commitDate":"2026-08-04T12:06:00Z","repoPath":"/code/overture"}"#
+            .write(to: dir.appendingPathComponent("installed-build.json"), atomically: true, encoding: .utf8)
+        state.refreshIfStale(now: date("2026-08-04T12:40:00Z"))
 
         #expect(state.shouldShow == false)
     }

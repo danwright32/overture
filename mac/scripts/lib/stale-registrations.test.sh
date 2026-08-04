@@ -137,23 +137,6 @@ else
   fail "a missing registrar reports nothing removed instead of failing" "status=${status} count=${count}"
 fi
 
-# 8. The detector. A pile this size grew unseen for years because nothing counted it, so past a
-#    threshold the pre-push run says so, and names the one command that clears it.
-got="$(overture_registration_warning 14 10)"
-case "${got}" in
-  *14*prune-stale-registrations*) pass "past the threshold it reports the count and how to clear it" ;;
-  *) fail "past the threshold it reports the count and how to clear it" "got: ${got}" ;;
-esac
-
-# 9. And says nothing at or under it. A warning that fires on the ordinary state of the machine is a
-#    warning that gets read past (L36: an alert that cries wolf gets ignored).
-got="$(overture_registration_warning 10 10)$(overture_registration_warning 0 10)"
-if [ -z "${got}" ]; then
-  pass "at or under the threshold it says nothing"
-else
-  fail "at or under the threshold it says nothing" "got: ${got}"
-fi
-
 if [ "${FAILURES}" -gt 0 ]; then
   echo "${FAILURES} check(s) failed"
   exit 1

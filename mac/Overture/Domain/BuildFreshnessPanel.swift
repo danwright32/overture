@@ -63,9 +63,12 @@ final class BuildFreshnessState {
     private(set) var verdict: BuildFreshness.Verdict?
     private(set) var repoPath: String?
 
-    // For THIS LAUNCH only, and a re-read does not clear it: a panel that takes most of the window,
-    // reappearing because a timer fired, would be "Not now" ignored.
-    var dismissedThisLaunch = false
+    // What "Not now" was answering. A dismissal covers the news it was shown for, so an unchanged
+    // verdict stays quiet (a panel taking most of the window, reappearing because a timer fired, would
+    // be that dismissal ignored) while a merge landing AFTERWARDS is different news and is raised
+    // again. Dan's call, 2026-08-04. Never persisted: a dismissal that outlived the launch would
+    // quietly recreate the gap this exists to close.
+    private var dismissedVerdict: BuildFreshness.Verdict?
 
     init(reader: @escaping @MainActor () -> (BuildFreshness.Verdict, String?),
          sleep: @escaping @MainActor (TimeInterval) async -> Void = { try? await Task.sleep(for: .seconds($0)) },
@@ -86,7 +89,12 @@ final class BuildFreshnessState {
 
     var shouldShow: Bool {
         guard let verdict else { return false }
-        return BuildFreshnessPanel.shouldShow(verdict, dismissedThisLaunch: dismissedThisLaunch)
+        return BuildFreshnessPanel.shouldShow(verdict, dismissedThisLaunch: verdict == dismissedVerdict)
+    }
+
+    // "Not now", against whatever the panel is currently saying.
+    func dismiss() {
+        dismissedVerdict = verdict
     }
 
     // Reads the records if nothing has read them within the interval. Safe to call from anywhere and as

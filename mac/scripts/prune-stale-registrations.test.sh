@@ -3,9 +3,9 @@ set -uo pipefail
 
 # #1970: the script itself, end to end, against a stubbed LaunchServices.
 #
-# Dan's call, 2026-08-04: "it should clear them without me." So the pre-push run does the clearing
-# rather than reporting a count and leaving him a command to run, and these checks pin both halves:
-# the default run really removes them, and --check really changes nothing.
+# Dan's call, 2026-08-04: "it should clear them without me." So the pre-push run does the clearing,
+# and there is no mode that counts without clearing: these checks pin that the run really removes
+# them, that a bundle still on disk is never touched, and that no argument turns the clearing off.
 #
 # The dump fixture is shaped from real `lsregister -dump` output read that day: records separated by a
 # line of dashes, a `path:` line carrying a trailing "(0x....)" token, and the `identifier:` line after
@@ -80,18 +80,17 @@ else
   fail "a bundle still on disk is never unregistered"
 fi
 
-# 3. --check counts without changing anything, for looking before leaping.
+# 3. There is exactly ONE behavior, and no mode that counts without clearing. An argument left over
+#    from habit, or from a caller that still passes the old flag, must still clear rather than quietly
+#    do nothing while reporting a count: a run that looks like it worked and removed nothing is the
+#    failure this whole script exists to end.
 : > "${UNREGISTERED}"
-out="$(LSREGISTER="${STUB}" "${SCRIPT_DIR}/prune-stale-registrations.sh" --check 2>&1)"
-if [ ! -s "${UNREGISTERED}" ]; then
-  pass "--check changes nothing"
+LSREGISTER="${STUB}" "${SCRIPT_DIR}/prune-stale-registrations.sh" --check >/dev/null 2>&1
+if [ -s "${UNREGISTERED}" ]; then
+  pass "an unrecognised argument still clears, since there is no count-only mode"
 else
-  fail "--check changes nothing" "removed: $(cat "${UNREGISTERED}")"
+  fail "an unrecognised argument still clears, since there is no count-only mode"
 fi
-case "${out}" in
-  *"2 stale"*) pass "--check reports the count it found" ;;
-  *) fail "--check reports the count it found" "got: ${out}" ;;
-esac
 
 # 4. The failure path: LaunchServices missing must never take a push down, since this rides along in
 #    the pre-push run and a dirty registration database is not a defect in the change being pushed.
@@ -108,13 +107,12 @@ case "${out}" in
 esac
 
 # 5. The wiring (#887, a guard and its wiring are two claims). Dan asked for the clearing to happen
-#    without him, so the pre-push run must call this in the mode that CLEARS, not the one that counts.
+#    without him, so the pre-push run has to actually call this.
 TEST_ALL="${SCRIPT_DIR}/../../scripts/test-all.sh"
-if grep -q "prune-stale-registrations.sh" "${TEST_ALL}" \
-   && ! grep -q "prune-stale-registrations.sh\" --check" "${TEST_ALL}"; then
-  pass "the pre-push run clears them rather than only counting them"
+if grep -q "prune-stale-registrations.sh" "${TEST_ALL}"; then
+  pass "the pre-push run calls it, so the clearing happens without being asked"
 else
-  fail "the pre-push run clears them rather than only counting them"
+  fail "the pre-push run calls it, so the clearing happens without being asked"
 fi
 
 if [ "${FAILURES}" -gt 0 ]; then

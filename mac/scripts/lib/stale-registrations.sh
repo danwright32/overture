@@ -78,22 +78,6 @@ EOF
   return 0
 }
 
-# overture_registration_warning STALE_COUNT THRESHOLD
-#   The detector. Prints one line when the pile is bigger than THRESHOLD, and nothing at or under it.
-#
-# Advisory rather than blocking, deliberately: a dirty LaunchServices database on this Mac is not a
-# defect in the change being pushed, and blocking a push on it would stop the wrong thing. Silence
-# under the threshold is the other half of that: a warning that fires on the machine's ordinary state
-# is a warning that gets read past (L36). The threshold exists because prevention cannot cover every
-# source (an xcodebuild test host in a DerivedData folder that is later cleaned, a retired agent
-# worktree), so a handful of stale entries is normal and a growing pile is not.
-overture_registration_warning() {
-  local count="${1:-0}" threshold="${2:-10}"
-  [ "${count}" -gt "${threshold}" ] || return 0
-  printf '%s\n' "LaunchServices holds ${count} Overture registrations pointing at bundles that no longer exist. Clear them with mac/scripts/prune-stale-registrations.sh"
-  return 0
-}
-
 # overture_unregister_path PATH
 #   Drops one bundle path's registration, whether or not it still exists. Called by run-debug.sh for
 #   the path it is ABOUT to replace, which is what keeps the count at one instead of one per build.

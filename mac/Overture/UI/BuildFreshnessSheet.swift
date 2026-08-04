@@ -114,12 +114,12 @@ struct BuildFreshnessNotice: ViewModifier {
             }
             .sheet(isPresented: .init(
                 get: { state.shouldShow },
-                set: { if !$0 { state.dismissedThisLaunch = true } })) {
+                set: { if !$0 { state.dismiss() } })) {
                 // Only ever built when shouldShow is true, which requires a verdict, so there is no
                 // fallback here inventing one.
                 if let verdict = state.verdict {
                     BuildFreshnessSheet(verdict: verdict, repoPath: state.repoPath) {
-                        state.dismissedThisLaunch = true
+                        state.dismiss()
                     }
                 }
             }
