@@ -103,6 +103,17 @@ struct PreviewCardHeight {
     }
 }
 
+// #2081: a WKWebView that hands scroll wheel gestures to the responder above it instead of
+// consuming them. The preview's web view is self-sizing (its frame always equals its content
+// height, see PreviewCardHeight), so it never has anywhere to scroll itself; a stock WKWebView
+// still swallows the gesture, which left the send confirmation's capped preview unscrollable
+// and Dan unable to reach his own signature before pressing Send.
+final class ScrollPassthroughWebView: WKWebView {
+    override func scrollWheel(with event: NSEvent) {
+        nextResponder?.scrollWheel(with: event)
+    }
+}
+
 // A self-sizing web view for the outgoing message's text/html part. Reports its content height back
 // through the binding whenever that height changes (#2062); flips `didFail` on a load error so the parent
 // can fall back to plain text (fail visible, never a blank block).
@@ -121,7 +132,7 @@ private struct SignatureWebView: NSViewRepresentable {
         configuration.userContentController.addUserScript(
             WKUserScript(source: PreviewCardMeasure.script, injectionTime: .atDocumentEnd,
                          forMainFrameOnly: true))
-        let web = WKWebView(frame: .zero, configuration: configuration)
+        let web = ScrollPassthroughWebView(frame: .zero, configuration: configuration)
         web.navigationDelegate = context.coordinator
         web.setValue(false, forKey: "drawsBackground")   // #1203: transparent, so the light email CARD (previewCardHTML) floats on Overture's dark chrome rather than a full white slab
         context.coordinator.loadedHTML = html
