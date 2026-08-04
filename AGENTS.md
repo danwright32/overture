@@ -97,6 +97,16 @@ already drifting from the Swift version it mirrored.
   a trust-settings password dialog); after that every build signs automatically. `build-install.sh`
   fails loud if that identity is missing rather than falling back to ad-hoc. The one-time switch to this
   identity re-prompts for permissions on the first install after it, then they persist.
+- `build-install.sh` builds WHATEVER IS CHECKED OUT, which is what you want when installing a branch build
+  deliberately. The freshness panel's Update button does NOT run it directly: it runs
+  `mac/scripts/update-overture.sh`, which brings the checkout up to origin/main first and only then
+  installs, refusing (and installing nothing) when it cannot do that safely, e.g. uncommitted work in the
+  tree or a local main holding commits the remote does not. Pressing Update means "get me what has
+  shipped"; running the installer by hand means "build this". They were the same command until 2026-08-04,
+  and Dan hit the loop that follows from it: the panel compares the installed commit against origin/main,
+  so a checkout parked on an already-merged branch reinstalled the same commit and stayed behind forever.
+  A corollary for anyone working here: leave the checkout on main when you finish, because a session that
+  parks it on a branch is what puts the Update button in front of that state.
 - Changing what the app SAYS: `docs/copy-inventory.md` is every sentence Overture can say to Dan
   (#915), generated from the source and checked in. The test suite regenerates it and fails when it
   is stale, so a PR that changes the app's wording shows that change in the diff, in the words Dan
