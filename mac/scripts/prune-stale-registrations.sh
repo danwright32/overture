@@ -14,9 +14,8 @@ set -euo pipefail
 # path from multiplying. This clears what is already there and whatever prevention cannot cover (a
 # test host in a DerivedData folder that is later cleaned, a worktree that is retired).
 #
-# Usage:
-#   prune-stale-registrations.sh            remove every stale registration, and say how many
-#   prune-stale-registrations.sh --check    count them and warn past the threshold, changing nothing
+# Takes no arguments: it removes them and says how many. Dan's call, 2026-08-04, "it should clear them
+# without me", so there is no count-only mode to choose between and nothing to remember to run.
 #
 # Only ever unregisters a path that is GONE from disk (overture_stale_registrations owns that rule),
 # so it can never unregister a bundle that is actually installed.
@@ -27,12 +26,9 @@ source "${SCRIPT_DIR}/lib/stale-registrations.sh"
 
 BUNDLE_IDS=("com.danwright.overture" "com.danwright.overture.debug")
 DUMP_FILE=""
-WARN_ABOVE="${OVERTURE_STALE_REGISTRATION_THRESHOLD:-10}"
 LSREGISTER_BIN="${LSREGISTER:-/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister}"
 
 main() {
-  local mode="${1:-prune}"
-
   if [ ! -x "${LSREGISTER_BIN}" ]; then
     # Fail loud rather than reporting a clean database that was never read (L11).
     echo "prune-stale-registrations: cannot read LaunchServices (no lsregister at ${LSREGISTER_BIN})." >&2
@@ -46,25 +42,11 @@ main() {
   trap 'rm -f "${DUMP_FILE:-}"' EXIT
   "${LSREGISTER_BIN}" -dump > "${dump}" 2>/dev/null || true
 
-  local total_stale=0 id stale count
+  local id removed
   for id in "${BUNDLE_IDS[@]}"; do
-    stale="$(overture_stale_registrations "${dump}" "${id}")"
-    count="$(printf '%s' "${stale}" | grep -c . || true)"
-    total_stale=$((total_stale + count))
-    if [ "${mode}" = "--check" ]; then
-      echo "  ${id}: ${count} stale registration(s)"
-      continue
-    fi
-    local removed
     removed="$(overture_unregister_stale "${dump}" "${id}")"
     echo "  ${id}: removed ${removed} stale registration(s)"
   done
-
-  if [ "${mode}" = "--check" ]; then
-    local warning
-    warning="$(overture_registration_warning "${total_stale}" "${WARN_ABOVE}")"
-    [ -n "${warning}" ] && echo "${warning}"
-  fi
   return 0
 }
 
