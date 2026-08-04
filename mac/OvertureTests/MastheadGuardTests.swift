@@ -60,4 +60,33 @@ struct MastheadGuardTests {
         #expect(queueView.contains("ScoutStatus(lastScoutedAt: ScoutService.lastScoutedAt())"))
         #expect(!queueView.contains("prepStatus.summary(now: Date())"))
     }
+
+    // #2051: the strip carries the pills and nothing above them. The line that used to sit there counted
+    // how many PILLS were lit, while every other number on that screen counts shows, so "1 needs you" sat
+    // one line above a pill reading "464 to triage" and the two meant different things. It named no pill,
+    // went nowhere, and each pill already carries its own state and count, which is the #843 duplicate-copy
+    // shape. Dan's call, 2026-08-03: "the answer is just to remove that line entirely. I don't need words to
+    // show me what the glowing badge and their count tells me."
+    //
+    // A source guard rather than a rendered assertion for the same reason as the rest of this suite, and one
+    // specific to this line: it is assembled from interpolated fragments, so it never appeared in
+    // docs/copy-inventory.md and its removal leaves no trace in that diff. Nothing else would notice it
+    // coming back.
+    @Test func theRollUpLineAboveThePillsIsGone() {  // #2051
+        let queueView = source("Overture/UI/QueueView.swift")
+        #expect(!queueView.isEmpty)
+        // Scoped to the strip's own body, so a match elsewhere in a 900-line file cannot answer for it. The
+        // locator is the real signature: a change to it fails this loudly with a nil body rather than
+        // quietly scoping the check to nothing.
+        let strip = SourceGuardHelper.propertyBody("private func agentStrip(_ inputs: AgentInputs) -> some View {",
+                                                   in: queueView)
+        #expect(strip != nil)
+        #expect(strip?.contains("needsYou") == false)
+
+        // And the roster offers no sentence to put back there, nor the pill-counting number behind it, which
+        // nothing else reads once the line is gone.
+        let roster = source("Overture/Domain/AgentRoster.swift")
+        #expect(!roster.isEmpty)
+        #expect(!roster.contains("needsYou"))
+    }
 }

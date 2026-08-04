@@ -129,10 +129,6 @@ enum AgentRoster {
         return .focusOnStage
     }
 
-    static func needsYouCount(_ statuses: [AgentStatus]) -> Int {
-        statuses.filter { $0.state == .needsAttention || $0.state == .error }.count
-    }
-
     // #332: a first-time user could not tell what Prep/Review/Send/Follow-ups each mean, only
     // their live count. This is a short, stable sentence per pill, independent of the live
     // `detail` above, meant to be shown ALONGSIDE it (not replacing it) in the pill's tooltip, so
@@ -278,17 +274,6 @@ enum AgentRoster {
     }
 
     private static func shows(_ n: Int) -> String { Plural.word(n, "show") }   // #885: one pluralizer
-
-    // #885: the roll-up line above the agent chips. The VERB is what agrees here, and it inverts: one
-    // NEEDS you, three NEED you. Written inline in the view as `n == 1 ? "s" : ""`, backwards from every
-    // other pluralization in the app, which is exactly the sort of thing that survives until somebody
-    // "tidies" it into agreeing with its neighbours and silently breaks it.
-    //
-    // Nothing needing Dan says nothing at all: a line that is always there is a line he stops reading.
-    static func needsYouLabel(_ needs: Int) -> String? {
-        guard needs > 0 else { return nil }
-        return "\(needs) \(Plural.word(needs, "needs", "need")) you"
-    }
 
     // #863: the one pill exempt from "the number equals the rows you land on", because it does not land
     // Dan on rows at all: it opens FollowUpsView, which lists the due RECIPIENTS. So a recipient count is
