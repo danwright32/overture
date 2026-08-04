@@ -24,6 +24,14 @@ enum ReplyService {
             if p.replyWatchManualOutcome { continue }
             if p.replyWatchIsBooked { continue }
             var newReply = false
+            // #2032: how many of this entity's contacts sit on each thread. A thread carrying more than
+            // one is a JOINT send: the reply belongs to all of them (they are reading one conversation),
+            // but the WORDS belong to whoever wrote them.
+            var contactsPerThread: [String: Int] = [:]
+            for r in p.replyWatchRecipients {
+                guard let t = r.gmailThreadId, !t.isEmpty else { continue }
+                contactsPerThread[t, default: 0] += 1
+            }
             for r in p.replyWatchRecipients {
                 guard let threadId = r.gmailThreadId, !threadId.isEmpty else { continue }
                 if r.replyWatchManualOutcome { continue }
@@ -42,7 +50,21 @@ enum ReplyService {
                 r.reopenOnReply(at: now)
                 r.lastReplyId = replyId
                 if let full = fetchFullThread(threadId) {
-                    r.lastReplyText = ReplyDetection.latestReplyBody(threadJSON: full, selfEmail: selfEmail)
+                    // On a thread only this contact is on, the sender can only be them, so this is the
+                    // path every existing thread in the store takes, unchanged.
+                    //
+                    // On a SHARED thread the text is evidence of who said it: it goes to the contact whose
+                    // address it came from and to nobody else. A reply from an address nobody was written
+                    // at (a colleague brought in, somebody answering from their own account) still counts
+                    // as a reply above; it simply leaves no words filed under a name that did not write
+                    // them, rather than crediting one of them at random (L11).
+                    let shared = contactsPerThread[threadId, default: 0] > 1
+                    let wroteIt = !shared || ReplyDetection.isSameAddress(
+                        ReplyDetection.latestReplySender(threadJSON: full, selfEmail: selfEmail),
+                        r.replyWatchAddress)
+                    if wroteIt {
+                        r.lastReplyText = ReplyDetection.latestReplyBody(threadJSON: full, selfEmail: selfEmail)
+                    }
                 }
                 count += 1
                 newReply = true

@@ -63,6 +63,31 @@ enum ReplyDetection {
         }
     }
 
+    // #2032: are these the same mailbox? Both sides go through `email(from:)`, so a display name, angle
+    // brackets and casing are all handled in one place rather than at each comparison.
+    static func isSameAddress(_ a: String?, _ b: String?) -> Bool {
+        guard let a, let b else { return false }
+        let l = email(from: a), r = email(from: b)
+        return !l.isEmpty && l == r
+    }
+
+    // #2032: the ADDRESS the newest real reply came from, so a thread carrying more than one contact can
+    // say which of them wrote. Nil when there is no real reply, exactly as `latestReplyId` is.
+    static func latestReplySender(threadJSON data: Data, selfEmail: String) -> String? {
+        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let messages = obj["messages"] as? [[String: Any]] else { return nil }
+        let me = email(from: selfEmail)
+        for m in newestFirst(messages) {
+            guard let payload = m["payload"] as? [String: Any],
+                  let headers = payload["headers"] as? [[String: Any]] else { continue }
+            let from = headers.first { ($0["name"] as? String)?.lowercased() == "from" }?["value"] as? String ?? ""
+            let e = email(from: from)
+            if e.isEmpty || e == me || isAutomated(e) { continue }
+            return e
+        }
+        return nil
+    }
+
     // The Gmail message id of the newest message from someone other than Dan (skipping automated
     // senders), or nil if there's no real reply. Lets a single auto-detected reply be dismissed (#219)
     // while a genuinely newer reply (a different id) still gets flagged.

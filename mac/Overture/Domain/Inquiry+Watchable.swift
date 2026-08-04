@@ -6,11 +6,14 @@ import Foundation
 // conformance is just the two semantic guards; the lead conformance returns `[self]`.
 
 extension Inquiry: ReplyWatchableRecipient {
+    // #2032: an inquiry is its own single thread, so the address is simply the inquirer's.
+    var replyWatchAddress: String? { inquirerEmail }
     var replyWatchManualOutcome: Bool { outcomeSourceRaw == OutcomeSource.manual.rawValue }
     var replyWatchIsBooked: Bool { outcome == .booked }
 }
 
 extension Inquiry: ReplyWatchable {
+    var replyWatchDisplayName: String { inquirerName }
     var replyWatchRecipients: [any ReplyWatchableRecipient] { [self] }
     // An inquiry has no other unsent contacts to hold back while Dan triages a reply, so the
     // prospect-side pause is a no-op here.
