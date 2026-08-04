@@ -21,6 +21,16 @@ enum SendService {
         return sendOrdered(prospect.recipients).first(where: \.isSendablePending)
     }
 
+    // #2033: what pressing Send does, once. It is the ONE place the together-or-separately choice is
+    // acted on, so the card, the confirmation sheet and the send itself cannot disagree about who is
+    // about to be emailed.
+    @discardableResult
+    static func sendNext(_ prospect: Prospect, now: Date, sender: MailSender) async -> Bool {
+        let group = SendGroup.pendingGroup(of: prospect)
+        guard group.count > 1 else { return await sendOne(prospect, now: now, sender: sender) }
+        return await sendJointly(prospect, to: group, now: now, sender: sender)
+    }
+
     // Sends ONE recipient of a performance immediately, bypassing the throttle. This is the manual
     // per-draft "Send" Dan clicks (one click = one email); for a multi-recipient show each click sends
     // the next pending recipient. Manual approval is its own pacing, so no drip needed.
@@ -323,6 +333,11 @@ enum SendService {
     @discardableResult
     static func sendJointly(_ prospect: Prospect, to recipients: [Recipient],
                             now: Date, sender: MailSender) async -> Bool {
+        // #2033: the show-level gate too, not only the per-contact one. `isSendablePending` says this
+        // CONTACT is ready; it does not say the show is approved, and a send that skipped that would put
+        // out a draft Dan never approved. Caught by #2015's own card guard, which noticed an unapproved
+        // draft naming contacts it was about to email.
+        guard prospect.status == .approved else { return false }
         let group = sendOrdered(recipients.filter(\.isSendablePending))
         guard !group.isEmpty, jointSendRefusal(group, of: prospect) == nil,
               let pitch = OutgoingPitch.text(forGroup: group, of: prospect),

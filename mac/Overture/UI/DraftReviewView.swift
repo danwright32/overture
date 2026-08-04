@@ -15,6 +15,9 @@ struct DraftReviewView: View {
     // #2010: Dan's own opening for one contact. Optional so every existing construction site is
     // unaffected; without it the opening is shown but not editable.
     var onSaveOpening: ((_ recipientId: String, _ opening: String) -> Void)? = nil
+    // #2033: the opening of a JOINT email belongs to the show, not to a contact, so it saves through its
+    // own seam rather than pretending one of the contacts owns it.
+    var onSaveJointOpening: ((_ opening: String) -> Void)? = nil
     var onSetLostReason: (String) -> Void = { _ in }
     var onSend: () -> Void = {}
     // #718: Dan's deliberate override of the #407 salutation-review send block, confirmed via a
@@ -78,6 +81,7 @@ struct DraftReviewView: View {
     // #2010: in-progress edits to each contact's opening, keyed by recipient id. Cleared on save and on
     // cancel, so a half-typed opening never survives into the next draft Dan opens.
     @State private var openingEdits: [String: String] = [:]
+    @State private var jointOpeningEdit: String? = nil
     @State private var askAboutWholeOrg = false   // #769
     @State private var draftSubject = ""
     @State private var draftBody = ""
@@ -219,7 +223,32 @@ struct DraftReviewView: View {
     // don't touch it but if it's single and I want to update it I can", and a per-contact field means an
     // edit can never re-address somebody else by the wrong name.
     @ViewBuilder private func openingBlock(editable: Bool) -> some View {
-        if !item.contacts.isEmpty {
+        if let joint = item.jointOpening {
+            // #2033: one email, so ONE opening. Showing a line per contact here would put two greetings on
+            // screen for a message carrying one of them, which is the #2010 defect in a new place.
+            VStack(alignment: .leading, spacing: 3) {
+                if editable, onSaveJointOpening != nil {
+                    TextField("Opening", text: Binding(get: { jointOpeningEdit ?? joint },
+                                                       set: { jointOpeningEdit = $0 }))
+                        .textFieldStyle(.roundedBorder)
+                        .font(OVType.body)
+                } else {
+                    HStack(spacing: OVSpacing.xs) {
+                        Text(joint)
+                            .font(OVType.body).foregroundStyle(OVColor.ink)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if item.jointOpeningIsCustom {
+                            Text("Yours").font(OVType.tag).foregroundStyle(OVColor.gold)
+                        }
+                    }
+                }
+                if DraftOpeningNotice.bodyRepeatsAGreeting(item.draftBody) {
+                    Text(DraftOpeningNotice.note)
+                        .font(OVType.meta).foregroundStyle(OVColor.rust)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        } else if !item.contacts.isEmpty {
             VStack(alignment: .leading, spacing: 3) {
                 ForEach(item.contacts) { c in
                     if editable, onSaveOpening != nil {
@@ -274,6 +303,7 @@ struct DraftReviewView: View {
                     Button("Save") {
                         // #2010: the opening is part of the email, so it saves with it.
                         for (id, text) in openingEdits { onSaveOpening?(id, text) }
+                        if let joint = jointOpeningEdit { onSaveJointOpening?(joint) }
                         openingEdits = [:]
                         onSaveDraft(draftSubject, draftBody)
                         editing = false
@@ -678,8 +708,11 @@ struct DraftReviewView: View {
                 // Which one the next Send actually goes to. The order behind it is a real judgment and
                 // stays (#366/#368, pitch the act, the presenter only after); what changes is that it is
                 // no longer invisible.
-                if c.id == item.nextRecipientId {
-                    Text("Sending to this one").font(OVType.tag).foregroundStyle(OVColor.gold)
+                if item.nextRecipientIds.contains(c.id) {
+                    // #2033: on a show sending together, every one of them is on the same email, so the
+                    // tag has to say that rather than claiming each is the one it goes to.
+                    Text(DraftContactCopy.nextSendTag(recipients: item.nextRecipientIds.count))
+                        .font(OVType.tag).foregroundStyle(OVColor.gold)
                 }
                 // On the show but NOT going to be emailed, so the list does not overstate itself.
                 if c.isHeldFromSending {

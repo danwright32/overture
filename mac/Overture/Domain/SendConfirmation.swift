@@ -27,23 +27,32 @@ struct SendConfirmation: Equatable {
     // The main draft send: the show's next pending recipient over the shared draft body.
     @MainActor
     init?(prospect: Prospect, signature: OutboundSignature = GmailSignatureStore.currentSignature()) {
-        guard let next = SendService.nextPendingRecipient(for: prospect),
+        // #2033: the whole group the next press of Send reaches, from the one definition the send itself
+        // reads, so what he approves names everybody it is going to (L64).
+        let group = SendGroup.pendingGroup(of: prospect)
+        guard let next = group.first,
               let email = next.email, !email.isEmpty,
               let body = prospect.draftBody, !body.isEmpty,
               // #2029: composed by the SAME helper the send path uses, for the SAME recipient, so the
               // preview cannot show a different email from the one that goes out. `nil` here is the same
               // condition that stops a send, so a sheet can still never appear for an email that would not
               // actually leave.
-              let pitch = OutgoingPitch.text(for: next, of: prospect) else { return nil }
+              let pitch = group.count > 1
+                ? OutgoingPitch.text(forGroup: group, of: prospect)
+                : OutgoingPitch.text(for: next, of: prospect) else { return nil }
         from = .danWright
-        recipient = email
+        recipient = group.compactMap(\.email).filter { !$0.isEmpty }.joined(separator: ", ")
         // #2029: and through previewBody, which is where GmailMessage.rfc822 appends the sign-off, so the
         // preview carries it for the same reason the email does rather than by restating it here.
         self.body = GmailMessage.previewBody(body: pitch, signature: signature)
         let trimmed = (prospect.draftSubject ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         subject = trimmed.isEmpty ? "(no subject)" : trimmed
         title = SendConfirmCopy.title
-        reassurance = SendConfirmCopy.reassurance
+        // The reassurance is a promise about what this press does. "To this recipient only" is a false
+        // promise on an email reaching two people, so a group gets its own, naming how many.
+        reassurance = group.count > 1
+            ? SendConfirmCopy.reassuranceForSeveral(group.count)
+            : SendConfirmCopy.reassurance
     }
 
     // #948: a follow-up nudge to one contact. Subject and body come from FollowUp.nudgeContent, the same

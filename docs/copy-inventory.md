@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1015 sentences**, from 352 source files.
+Every sentence Overture can say to Dan: **1019 sentences**, from 352 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1091,6 +1091,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/RootView.swift`
 "OmniFocus sync needs attention"
     `App/MenuBarStatus.swift`
+"On this email"
+    `UI/SendConfirmSheet.swift`
 "Once you have sent a pitch, the people you are waiting to hear back from show up here, soonest follow-up first. They drop off when you book them, mark them lost, or the follow-ups run out."
     `UI/QueueView.swift`
 "One of the addresses is blank. No contact was added"
@@ -1417,7 +1419,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Sending reply"
     `UI/DraftReviewView.swift`
 "Sending to this one"
-    `UI/DraftReviewView.swift`
+    `UI/SendConfirmSheet.swift`
 "Sending your reply..."
     `UI/InquiryReplySheet.swift`
 "Sent emails that hit a problem, or approved ones you can't send yet."
@@ -1718,6 +1720,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReprepRequest.swift`
 "This run's results disagreed with themselves, so nothing from it was used."
     `Domain/WatchedSource.swift`
+"This sends one email right now, to \(who). Nothing else goes out."
+    `UI/SendConfirmSheet.swift`
 "This sends one email right now, to this recipient only. Nothing else goes out."
     `UI/SendConfirmSheet.swift`
 "This sends one follow-up right now, to this recipient only. Nothing else goes out."
@@ -2155,6 +2159,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ProbeSelection.swift`
 "across \(entry.distinctVenueCount) rooms"
     `Domain/OrganisationListing.swift`
+"all \(count) of these people"
+    `UI/SendConfirmSheet.swift`
 "all in one room"
     `Domain/OrganisationListing.swift`
 "all the same title"
@@ -2167,6 +2173,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreShrinkCheck.swift`
 "book now"
     `Domain/TicketLink.swift`
+"both of these people"
+    `UI/SendConfirmSheet.swift`
 "couldn't save the producer answers, so other shows by them won't reuse this one"
     `Domain/ReachabilityRunSummary.swift`
 "couldn't save what this check found, so it isn't finished and those shows may be checked again"

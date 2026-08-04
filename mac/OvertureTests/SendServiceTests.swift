@@ -485,6 +485,22 @@ struct SendServiceTests {
         #expect(b.sendState == .sent)
     }
 
+    // #2033: a draft Dan has not approved sends to nobody, however ready its contacts look. The
+    // per-contact rule (`isSendablePending`) only says THIS CONTACT is ready; approval is a fact about the
+    // show, and a send that read only the first would put out an unapproved draft.
+    @Test func adraftThatWasNeverApprovedCannotBeSentJointly() async throws {
+        let ctx = ModelContext(try container())
+        let (p, a, b) = showWithTwoContacts(ctx)
+        p.status = .drafted
+        let sender = CapturingSender()
+
+        #expect(await SendService.sendJointly(p, to: [a, b], now: Date(timeIntervalSince1970: 10),
+                                              sender: sender) == false)
+
+        #expect(sender.last == nil)
+        #expect(a.sendState == .pending && b.sendState == .pending)
+    }
+
     // Nothing to send to: refused rather than reported as a send that happened.
     @Test func ajointSendWithNobodyLeftToWriteToDoesNothing() async throws {
         let ctx = ModelContext(try container())

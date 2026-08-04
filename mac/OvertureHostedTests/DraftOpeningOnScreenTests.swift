@@ -138,6 +138,19 @@ struct DraftOpeningOnScreenTests {
         DraftReviewView(item: item, onApprove: {}, onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in })
     }
 
+    // #2033: when the show's contacts share ONE email, there is one greeting, so the screen shows one.
+    // Two greetings on a card for a message carrying one of them is the #2010 defect in a new place.
+    @Test func ajointEmailShowsOneOpeningNotOnePerContact() throws {
+        var it = item(opening: "Hi Emma,", body: "I photograph performing arts.", contacts: 2)
+        it.jointOpening = "Hi Emma and John,"
+
+        let texts = try allTexts(view(it))
+
+        #expect(texts.contains("Hi Emma and John,"))
+        #expect(!texts.contains("Hi Emma,"), "the per-contact greetings are not what this email carries")
+        #expect(!texts.contains("Hi John,"))
+    }
+
     // The rule, rendered. The greeting the email will carry is a line Dan can read on the draft.
     @Test func thegreetingTheEmailWillCarryIsOnScreen() throws {
         let rendered = view(item(opening: "Hi Emma,", body: "I photograph performing arts in New York."))

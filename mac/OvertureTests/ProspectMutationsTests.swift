@@ -314,6 +314,9 @@ struct ProspectMutationsTests {
         let p = makeProspect(ctx, status: .approved)
         p.draftSubject = "S"; p.draftBody = "Hi"
         p.recipients = [Recipient(id: "act@example.com", email: "act@example.com", provenance: .act)]
+        // #2033: this is the one-at-a-time mode. A show sending TOGETHER empties in a single press, so
+        // "not fully sent yet" is a fact about sending separately, which is what this guards.
+        p.sendsTogetherOverride = false
         try? ctx.save()
         let sender = RecordingSender()
         var sentReports: [(String, Bool)] = []
@@ -339,6 +342,9 @@ struct ProspectMutationsTests {
             Recipient(id: "act@example.com", email: "act@example.com", provenance: .act),
             Recipient(id: "pres@example.com", email: "pres@example.com", provenance: .presenter),
         ]
+        // #2033: this is the one-at-a-time mode. A show sending TOGETHER empties in a single press, so
+        // "not fully sent yet" is a fact about sending separately, which is what this guards.
+        p.sendsTogetherOverride = false
         try? ctx.save()
         let sender = RecordingSender()
         var sentReports: [(String, Bool)] = []

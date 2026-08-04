@@ -62,6 +62,9 @@ struct EveryAddressIsVisibleTests {
 
     // So the card must SAY which one is next. Resolved from the real send path, never re-derived, so the
     // marker and the send can never disagree about who is about to be emailed.
+    // #2033: a show sends its contacts TOGETHER by default, so "the contact the next Send goes to" is now
+    // every contact it reaches. The promise #2015 made is unchanged and stronger: the card names who is
+    // about to be emailed, and now it cannot name only the first of two.
     @Test func thecardNamesTheContactTheNextSendWillGoTo() throws {
         let ctx = try context()
         let p = approvedProspect(ctx)
@@ -70,8 +73,10 @@ struct EveryAddressIsVisibleTests {
 
         let item = QueueItem(p)
 
-        #expect(item.nextRecipientId == SendService.nextPendingRecipient(for: p)?.id)
-        #expect(item.nextRecipientId == "info@thevenue.example")
+        #expect(item.nextRecipientIds == SendGroup.pendingGroup(of: p).map(\.id))
+        #expect(item.nextRecipientIds.contains("info@thevenue.example"))
+        #expect(item.nextRecipientIds.contains("sarah@company.example"),
+                "both are on the one email this show would send")
     }
 
     // A show nobody can send yet names nobody, rather than pointing at a contact that will not receive
@@ -82,7 +87,7 @@ struct EveryAddressIsVisibleTests {
         p.status = .drafted
         add(ctx, to: p, email: "info@thevenue.example", name: nil, provenance: .act)
 
-        #expect(QueueItem(p).nextRecipientId == nil)
+        #expect(QueueItem(p).nextRecipientIds.isEmpty)
     }
 
     // "Every email it's going to send to" has to be honest about the ones it will NOT: a contact held by a
@@ -98,7 +103,7 @@ struct EveryAddressIsVisibleTests {
         let snapshot = try #require(item.contacts.first { $0.id == "press@thevenue.example" })
 
         #expect(snapshot.isHeldFromSending, "a held contact must not read as one that will be emailed")
-        #expect(item.nextRecipientId != "press@thevenue.example")
+        #expect(!item.nextRecipientIds.contains("press@thevenue.example"))
     }
 
     // And an ordinary contact is not marked as held, or the marker means nothing.
@@ -126,6 +131,7 @@ struct EveryAddressIsVisibleTests {
         let done = try #require(item.contacts.first { $0.id == "sarah@company.example" })
 
         #expect(!done.isHeldFromSending)
-        #expect(item.nextRecipientId == "info@thevenue.example", "the next unsent contact is next")
+        #expect(item.nextRecipientIds == ["info@thevenue.example"],
+                "the contact already written to is not on the next email; the unsent one is")
     }
 }
