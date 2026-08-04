@@ -279,11 +279,14 @@ enum SendService {
                                now: Date, sender: MailSender) async -> Bool {
         guard let email = recipient.email, !email.isEmpty,
               let body = recipient.replyDraftBody, !body.isEmpty else { return false }
-        // #2033: a reply onto a shared thread reaches everyone reading it, the way it would in any mail
-        // client. Replying to one of them on a thread the other can see would read as going behind their
-        // back, and the other would see the reply anyway.
-        let group = SendGroup.peers(of: recipient, in: prospect)
-        let addresses = group.compactMap(\.email).filter { !$0.isEmpty }
+        // #2063: addressed the way the reply being answered was addressed, which is what any mail client
+        // does. #2033 sent this to everyone who received the ORIGINAL email instead, on the reasoning that
+        // replying to one person on a shared thread goes behind the others' backs. That is true when the
+        // writer used reply-all, and exactly wrong when they wrote to Dan alone: it answers a message
+        // somebody chose to send privately in front of everybody else. The original send cannot tell those
+        // apart, because it happened before the choice was made. Dan's rule, 2026-08-04: "if they reply
+        // all, i should reply all. if they respond directly to me I should reply directly to them."
+        let addresses = SendGroup.replyAudience(of: recipient)
         // #468: on its own claim field, not shared with sendFollowUp/sendConversationNudge's
         // (see the field's doc comment on Recipient), since a replied recipient can legitimately
         // be due for a conversation nudge at the same time.

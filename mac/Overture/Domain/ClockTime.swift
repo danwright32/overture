@@ -48,8 +48,7 @@ enum ClockTime {
     // quiet a double-booking warning has everything to lose (L11).
     static func listLabel(_ times: [String]) -> String? {
         let rendered = times.compactMap(label)
-        guard let last = rendered.last else { return nil }
-        guard rendered.count > 1 else { return last }
-        return rendered.dropLast().joined(separator: ", ") + " and " + last
+        guard !rendered.isEmpty else { return nil }   // nothing readable stays nil, not an empty label
+        return Plural.list(rendered)
     }
 }

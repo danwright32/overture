@@ -886,6 +886,13 @@ struct DraftReviewView: View {
                 issueFlags(c.replyDraftFindings(title: item.groupName,   // #1141: don't flag the title's own "!"
                                                 knownsDate: item.performanceDate != nil,
                                                 knownsVenue: item.venue != nil))
+                // #2063: who else reads this, shown only when the reply reaches somebody besides the
+                // contact whose card this is. A reply mirrors the addressing of the message it answers,
+                // which is a fact about that message and not something the card would otherwise show, so
+                // approving the words has to mean approving the audience too (L64).
+                if let alsoReaches = QueueModel.replyAlsoReachesLabel(c.replyAlsoReaches) {
+                    Text(alsoReaches).font(OVType.tag).foregroundStyle(OVColor.gold)
+                }
                 if let since = replySendSince(c.id) {
                     LiveRunLabel(base: "Sending reply", since: since, timeout: RunTimeouts.send,
                                  font: OVType.meta, color: OVColor.inkSoft, onRetry: { onSendReply(c.id) })

@@ -538,6 +538,11 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     var replyDraftRequestedAt: Date? = nil
     var intentHint: String? = nil
     var replyDraftEditedByDan: Bool = false
+    // #2063: everyone Dan's reply to this contact will reach, already resolved through
+    // SendGroup.replyAudience (so it carries the fallback, not the raw captured value). The card names the
+    // ones that are not this contact, because who a reply reaches is now a fact about the incoming message
+    // rather than something he can read off the card he is looking at (L64).
+    var replyAudience: [String] = []
     // #846: which model wrote this reply (Recipient.replyDraftModel). Read via replyDraftTraceLabel.
     var replyDraftModel: String? = nil
     // #642 (#634 Phase D): a performer's direct-address draft, so the review screen can show Dan
@@ -599,6 +604,14 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
         guard !replyDraftEditedByDan, let body = replyDraftBody else { return [] }
         return DraftCheck.findings(in: body, title: title, knownsDate: knownsDate, knownsVenue: knownsVenue)
     }
+    // #2063: the people the reply reaches who are NOT this contact. Empty on the ordinary one-to-one
+    // reply, which is what keeps the card from restating itself (#843). Case-insensitive, because a stored
+    // address spelled differently is the same person and not a second reader.
+    var replyAlsoReaches: [String] {
+        let own = (email ?? "").lowercased()
+        return replyAudience.filter { $0.lowercased() != own }
+    }
+
     // A draft was requested but hasn't arrived yet: show progress.
     var isDraftingReply: Bool { replyDraftRequestedAt != nil && !hasReplyDraft }
 
@@ -814,6 +827,14 @@ enum QueueModel {
     static func confirmBookingsLabel(count: Int) -> String { "Confirm bookings (\(count))" }
 
     static func aiReadNote(hint: String) -> String { "AI read: \(replyIntentLabel(hint))" }
+
+    // #2063: who ELSE this reply reaches, or nil when it reaches only the contact whose card it sits on.
+    // Nil rather than an empty sentence, so the ordinary one-to-one reply shows no line at all instead of
+    // one saying nothing (#843).
+    static func replyAlsoReachesLabel(_ others: [String]) -> String? {
+        guard !others.isEmpty else { return nil }
+        return "Also goes to \(Plural.list(others))"
+    }
 
     // Both branches promise something about what the DRAFT will do, which is why they are worth a test:
     // one says a returning-client draft is now allowed, the other says it is not yet.
@@ -2144,6 +2165,7 @@ extension RecipientSnapshot {
                   replyDraftSubject: r.replyDraftSubject, replyDraftBody: r.replyDraftBody,
                   replyDraftRequestedAt: r.replyDraftRequestedAt, intentHint: r.intentHint,
                   replyDraftEditedByDan: r.replyDraftEditedByDan,
+                  replyAudience: SendGroup.replyAudience(of: r),
                   replyDraftModel: r.replyDraftModel,
                   overrideBody: r.overrideBody,
                   conversationState: r.conversationState,

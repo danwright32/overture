@@ -101,10 +101,8 @@ enum BulkDismiss {
         return "\(list(runs)) run past \(dateLabel), so dismissing them takes their later nights too."
     }
 
-    private static func list(_ names: [String]) -> String {
-        guard names.count > 1 else { return names.joined() }
-        return names.dropLast().joined(separator: ", ") + " and " + names[names.count - 1]
-    }
+    // #2063: Plural.list, shared with ClockTime and the reply card rather than a private third copy.
+    private static func list(_ names: [String]) -> String { Plural.list(names) }
 
     // The proceed button says what it does to what. A bare "OK" on a destructive batch is the control Dan
     // clicks without reading the title above it.
