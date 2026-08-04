@@ -2046,6 +2046,14 @@ enum QueueModel {
 
 extension QueueItem {
     init(_ p: Prospect) {
+        self.init(p, sendGroups: SendGroup.CardGroups(of: p))
+    }
+
+    // #2046: the send groups are worked out once, by the caller above, and handed in. Three of the fields
+    // below are the same question ("who does this show's email reach") asked three ways, and each used to
+    // ask it again from scratch: every ask filters the recipients through the sendable predicate, which
+    // runs the draft lint over each contact's whole letter, for a card being built to be scrolled past.
+    init(_ p: Prospect, sendGroups: SendGroup.CardGroups) {
         self.init(
             id: p.naturalKey,
             groupName: p.groupName,
@@ -2086,14 +2094,14 @@ extension QueueItem {
             // of searching the whole store for its own model to work it out.
             voiceLearningCandidate: p.sentAt != nil && p.originalDraftBody != nil,
             excludedFromVoiceLearning: p.excludedFromVoiceLearning,
-            hasPendingRecipient: p.recipients.contains(where: \.isSendablePending),
-            nextRecipientIds: SendGroup.pendingGroup(of: p).map(\.id),
+            hasPendingRecipient: sendGroups.hasPending,
+            nextRecipientIds: sendGroups.pending.map(\.id),
             // #2049: the PREVIEW group, which is the same set without the approval gate. What the email
             // will look like is a fact about the draft; who the next press of Send reaches (the line
             // above) is a claim about sending and keeps its gate. Gating both on approval is what put
             // "One email to everyone" three lines above one greeting per contact on every drafted show.
-            jointOpening: SendGroup.previewGroup(of: p).count > 1
-                ? JointOpening.text(for: SendGroup.previewGroup(of: p), of: p) : nil,
+            jointOpening: sendGroups.preview.count > 1
+                ? JointOpening.text(for: sendGroups.preview, of: p) : nil,
             jointOpeningIsCustom: p.jointOpeningOverride?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false,
             sendsTogether: p.sendsTogether,
             offersSendModeChoice: p.recipients.filter { $0.email?.isEmpty == false }.count > 1,
