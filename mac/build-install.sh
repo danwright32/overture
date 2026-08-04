@@ -17,6 +17,8 @@ source "$(pwd)/scripts/lib/await-registered.sh"
 source "$(pwd)/scripts/lib/launch-surface.sh"
 # shellcheck source=scripts/lib/stable-signing.sh
 source "$(pwd)/scripts/lib/stable-signing.sh"
+# shellcheck source=scripts/lib/app-quit.sh
+source "$(pwd)/scripts/lib/app-quit.sh"
 
 PROJECT="Overture.xcodeproj"
 SCHEME="Overture"
@@ -61,12 +63,10 @@ echo "==> Installing to ${DEST}"
 launchctl bootout "${GUI_DOMAIN}/${AGENT_LABEL}" 2>/dev/null || true
 if [[ -d "${DEST}" ]]; then
   # A copy launched by hand (not by the agent) won't be stopped by bootout; quit it so the
-  # replace doesn't fail.
-  if pgrep -xq "Overture"; then
-    echo "    Quitting running Overture..."
-    osascript -e 'tell application "Overture" to quit' || true
-    sleep 1
-  fi
+  # replace doesn't fail. #2072: kill by PID with a bounded wait and escalation, and refuse to
+  # delete the bundle while a process is still running from inside it. The polite Apple event
+  # quit this replaced could block forever, stalling every update until Dan quit the app by hand.
+  quit_bundle_instances "${DEST}"
   rm -rf "${DEST}"
 fi
 cp -R "${BUILT_APP}" "${DEST}"
