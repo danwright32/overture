@@ -523,6 +523,9 @@ struct RecipientTests {
                          priorRelationship: "warm", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 8, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
+        // #2052: a draft with no subject line is not sendable, so a fixture about the salutation rule
+        // carries one rather than tripping that one instead.
+        p.draftSubject = "Photographs of your concert"
         p.draftBody = "Hi 2026 season, here is what we offer."
         p.draftNeedsSalutationReview = true
         ctx.insert(p)

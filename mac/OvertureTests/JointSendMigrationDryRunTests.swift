@@ -60,7 +60,16 @@ struct JointSendMigrationDryRunTests {
         #expect(prospects.allSatisfy { $0.jointOpeningOverride == nil })
         // #2033: and the mode arrives unset on every existing show, which is what makes them all read as
         // "together" (the default Dan asked for) rather than as a choice he never made.
-        #expect(prospects.allSatisfy { $0.sendsTogetherOverride == nil })
+        //
+        // #2054: RECORDED AS A KNOWN FAILURE, not deleted. Measured on a copy of the live store
+        // 2026-08-03: 1 of 730 shows carries a value, the one Dan prepped by hand that evening, where
+        // the sheet's own send-mode switch (#2034) legitimately wrote it. So this asks something that
+        // stopped being true the first time the feature was used, and it can no longer tell that use
+        // apart from the migration default it was built to catch (L68). Dan's call, 2026-08-03: mark it
+        // known so #2052 could ship, and choose the real assertion in #2054 rather than at speed.
+        withKnownIssue("The live store now holds a send mode Dan chose (#2054)") {
+            #expect(prospects.allSatisfy { $0.sendsTogetherOverride == nil })
+        }
         #expect(prospects.allSatisfy { $0.sendsTogether })
 
         // Opening the ALREADY-migrated clone a second time must find exactly the same rows. A migration

@@ -17,6 +17,7 @@ struct DraftLintSendGateTests {
                          priorRelationship: "cold", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 8, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
+        p.draftSubject = "Photographs of your concert"
         p.draftBody = body
         ctx.insert(p)
         return p

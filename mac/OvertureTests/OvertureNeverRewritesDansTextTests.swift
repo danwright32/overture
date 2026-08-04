@@ -31,6 +31,7 @@ struct OvertureNeverRewritesDansTextTests {
                          production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 5, tier: "mid", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil)
+        p.draftSubject = "Photographs of your concert"
         p.draftBody = body
         ctx.insert(p)
         return p

@@ -30,7 +30,15 @@ struct SendConfirmation: Equatable {
         // #2033: the whole group the next press of Send reaches, from the one definition the send itself
         // reads, so what he approves names everybody it is going to (L64).
         let group = SendGroup.pendingGroup(of: prospect)
-        guard let next = group.first,
+        // #2052: no sheet at all for a draft with no subject line, where this used to render
+        // "(no subject)" beside a live Send button. The placeholder was itself the detection that the
+        // value was missing, so it had to stop the send rather than label it (L67). Dan, on finding it:
+        // "There's no subject shown and if I click send it doesn't create a subject." The show is already
+        // unsendable by then (Recipient.isSendablePending), so `group` is empty and this returns nil; the
+        // explicit condition is kept so this can never come back by a route that skips the group.
+        let subjectLine = (prospect.draftSubject ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !subjectLine.isEmpty,
+              let next = group.first,
               let email = next.email, !email.isEmpty,
               let body = prospect.draftBody, !body.isEmpty,
               // #2029: composed by the SAME helper the send path uses, for the SAME recipient, so the
@@ -45,8 +53,7 @@ struct SendConfirmation: Equatable {
         // #2029: and through previewBody, which is where GmailMessage.rfc822 appends the sign-off, so the
         // preview carries it for the same reason the email does rather than by restating it here.
         self.body = GmailMessage.previewBody(body: pitch, signature: signature)
-        let trimmed = (prospect.draftSubject ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        subject = trimmed.isEmpty ? "(no subject)" : trimmed
+        subject = subjectLine
         title = SendConfirmCopy.title
         // The reassurance is a promise about what this press does. "To this recipient only" is a false
         // promise on an email reaching two people, so a group gets its own, naming how many.

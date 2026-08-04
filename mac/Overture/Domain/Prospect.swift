@@ -823,6 +823,17 @@ final class Prospect {
     //
     // Moves the show to `.drafted` so it flows through Review, approval and the send path with no special
     // casing downstream, exactly as a prepped one does.
+    // #2052: a written email with no subject line. The one definition of that state, read by the send
+    // predicate (Recipient.isSendablePending) and by the note beside the greyed Send button, so what
+    // holds the send and what explains it can never be two different rules.
+    //
+    // It asks about a DRAFT, not about the show: a show with no draft at all has no subject because it
+    // has no email yet, and treating that as missing would make every un-prepped contact unsendable and
+    // change what the whole queue says about who is reachable.
+    var draftIsMissingSubject: Bool {
+        draftBody != nil && (draftSubject ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     func writeManualDraft(subject: String, body: String) {
         draftSubject = subject
         draftBody = body

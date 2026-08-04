@@ -27,6 +27,9 @@ struct ProspectMutationsTests {
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil, status: status)
+        // #2052: a draft with no subject line is not sendable, so a fixture about anything else carries
+        // one rather than tripping that rule.
+        p.draftSubject = "Photographs of your concert"
         ctx.insert(p)
         try? ctx.save()
         return p

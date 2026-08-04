@@ -421,6 +421,12 @@ final class Recipient {
             // cannot work until he says he can.
             && prospect?.hasUnclearedConflict != true
             && (prospect?.draftNeedsSalutationReview != true || prospect?.isSalutationReviewOverridden == true)
+            // #2052: a written email with no subject line does not go out. Held HERE, and not only on the
+            // confirmation sheet, because the sheet showed the gap ("(no subject)") and offered Send
+            // beside it anyway: a guard on a screen is not a guard. There is no override, unlike the
+            // salutation and lint holds above, because those are judgements about words Dan can stand
+            // behind and this is a field he has not filled in.
+            && prospect?.draftIsMissingSubject != true
             && !(looksLikeVenue && !looksLikeVenueDismissed)
             && !(looksLikePressContact && !looksLikePressContactDismissed)
             && !(looksLikeDuplicateContact && !looksLikeDuplicateContactDismissed)

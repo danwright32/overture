@@ -116,8 +116,12 @@ enum ManualPrepPrefill {
 // on click are the same rule: a button that looks enabled can never be refused, and a refusal can never
 // name something the button did not gate on.
 //
-// No subject is required. He may be writing into a thread that already has one, and an empty subject is
-// a choice rather than an omission; an empty BODY is an email with nothing in it.
+// #2052: a subject IS required. This originally reasoned that Dan might be writing into a thread that
+// already had one, so an empty subject was a choice rather than an omission. It measured wrong: nothing
+// downstream treats it as a choice. The draft saved, the show read as ready, and the send handed Gmail an
+// empty `Subject:` header, with the confirmation sheet printing "(no subject)" beside a live Send button.
+// He found it on the first show he prepped by hand: "Huge gap and easy to send without one." An email he
+// is genuinely replying into a thread with is a reply, which is a different path with its own subject.
 enum ManualPrepEditing {
     // Nil when it can be saved, otherwise WHY not, in the words the refusal uses.
     //
@@ -125,7 +129,7 @@ enum ManualPrepEditing {
     // and a string that cannot be read as addresses must never reach a Recipient: its identity is what
     // reply detection, follow-ups, bounce handling and the booking match all key off, so one contact
     // identified by "a@x.org, b@y.org" sends, reports success, and can never match a reply from either.
-    static func refusal(email: String, body: String) -> String? {
+    static func refusal(email: String, subject: String, body: String) -> String? {
         switch EmailAddressList.parse(email) {
         case .empty:
             return ActionAck.manualPrepNeedsRecipient
@@ -134,14 +138,19 @@ enum ManualPrepEditing {
         case .addresses:
             break
         }
+        // Refused in the order the fields sit on the sheet (address, subject, body), so the sentence
+        // names the first thing he would look at rather than the last rule that happened to run.
+        if subject.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return ActionAck.manualPrepNeedsSubject
+        }
         if body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return ActionAck.manualPrepNeedsBody
         }
         return nil
     }
 
-    static func canSave(email: String, body: String) -> Bool {
-        refusal(email: email, body: body) == nil
+    static func canSave(email: String, subject: String, body: String) -> Bool {
+        refusal(email: email, subject: subject, body: body) == nil
     }
 }
 
