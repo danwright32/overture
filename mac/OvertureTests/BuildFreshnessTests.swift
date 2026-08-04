@@ -162,14 +162,11 @@ struct BuildFreshnessTests {
 
     // The guard and its wiring are two claims (#887). Every rule above passes with nothing in the app
     // ever reading it, which is precisely the state #1808 was filed about: check-release-freshness.sh
-    // has been correct and unit-tested and uncalled since #1345.
-    @Test func theAppReadsTheVerdictAtLaunchAndShowsIt() {
+    // has been correct and unit-tested and uncalled since #1345. WHERE the read happens moved in #2065
+    // and is guarded in BuildFreshnessStateTests; this holds the other half of the launch wiring.
+    @Test func theAppClearsALeftoverUpdateScriptAtLaunch() {
         let source = SourceGuardHelper.source("Overture/App/OvertureApp.swift")
         #expect(!source.isEmpty)
-        #expect(source.contains("BuildFreshness.verdict(in:"),
-                "The app must actually read the verdict at launch (#1808).")
-        #expect(source.contains(".buildFreshnessNotice("),
-                "Reading it without presenting it is the dormant-guard defect this issue is about.")
         #expect(source.contains("UpdateCommandFile.sweep()"),
                 "A leftover update script from a run that died must be cleared at launch (Dan, 2026-08-03).")
     }
@@ -195,5 +192,231 @@ struct BuildFreshnessTests {
             .write(to: dir.appendingPathComponent("installed-build.json"), atomically: true, encoding: .utf8)
 
         #expect(BuildFreshnessPanel.repoPath(in: dir) == "/code/overture")
+    }
+}
+
+// #2065: the answer is read when the panel is about to show, not once at launch.
+//
+// Dan met the dead-end fallback at 12:09 on a copy that had come straight from the installer two hours
+// earlier: "This copy did not come from the installer... Ask Claude to reinstall Overture", with the
+// Update button withheld. Both records were on disk the whole time. The app's ONE read, in
+// `OvertureApp.init`, had raced the installer's write and lost, and nothing ever looked again.
+//
+// Two things were wrong and both are fixed here. The installer started the app before writing its
+// records, so the FIRST launch after EVERY install raced them, which made the panel's most common
+// appearance its wrong one. And a launch-pinned verdict is stale by construction: it cannot see a record
+// that lands a second later, and it cannot see a merge that lands while Dan works (shipped-commit.json
+// changed at 12:06 that day and the running app had no way to know).
+//
+// What it must NOT become is a read on every render pass. The installed commit really is fixed for the
+// life of the process, so the answer is re-read on the moments something can have changed (the window
+// appearing, Overture coming to the front, a slow tick while it sits open) and at most once per
+// interval, never per frame (#1916, an idle surface pays nothing).
+@MainActor
+@Suite("The freshness panel reads the records when it shows, not once at launch (#2065)")
+struct BuildFreshnessStateTests {
+    private func tempDir() throws -> URL {
+        let dir = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("freshness-state-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    private func writeInstallerRecords(in dir: URL) throws {
+        try #"{"version":1,"commit":"abc123","commitDate":"2026-08-04T10:00:00Z","repoPath":"/code/overture"}"#
+            .write(to: dir.appendingPathComponent("installed-build.json"), atomically: true, encoding: .utf8)
+        try #"{"version":1,"commit":"abc123","commitDate":"2026-08-04T10:00:00Z"}"#
+            .write(to: dir.appendingPathComponent("shipped-commit.json"), atomically: true, encoding: .utf8)
+    }
+
+    private func date(_ iso: String) -> Date {
+        ISO8601DateFormatter().date(from: iso)!
+    }
+
+    // Counts the waits the watch loop makes, and lets the test move the world between them, so a whole
+    // day of an app sitting open is driven without a real second passing (the DetachedRunActivity idiom).
+    @MainActor private final class Sleeper {
+        private(set) var waits = 0
+        private let onWait: @MainActor (Int) -> Void
+        init(onWait: @escaping @MainActor (Int) -> Void = { _ in }) { self.onWait = onWait }
+        func sleep(_ seconds: TimeInterval) async {
+            waits += 1
+            onWait(waits)
+        }
+    }
+
+    // THE BUG. The records are absent when the state is built (the installer has not written them yet)
+    // and present by the time the panel would show. Dan must meet the Update button, not the dead end.
+    @Test func aRecordThatLandsAfterLaunchIsSeenWhenThePanelShows() throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let state = BuildFreshnessState(directory: dir)
+
+        // The install race: the app is up, the installer has not finished writing.
+        state.refreshIfStale(now: date("2026-08-04T10:00:09Z"))
+        #expect(state.verdict == .cannotTell(.noInstalledRecord))
+        #expect(state.repoPath == nil)
+
+        try writeInstallerRecords(in: dir)
+        state.refreshIfStale(now: date("2026-08-04T10:20:00Z"))
+
+        #expect(state.verdict == .upToDate)
+        #expect(state.repoPath == "/code/overture",
+                "The panel must offer Update once the installer's record is there, never the ask-Claude fallback.")
+    }
+
+    // Nothing is claimed before anything has been read. Without this the sheet's first frame would carry
+    // the failure message, which is the very sentence that was wrong (L11: a message may claim only what
+    // its check measured, and nothing has been measured yet).
+    @Test func nothingIsShownBeforeTheFirstRead() throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let state = BuildFreshnessState(directory: dir)
+
+        #expect(state.verdict == nil)
+        #expect(state.shouldShow == false)
+    }
+
+    // The failure path stays a failure. A copy with genuinely no records still says so rather than
+    // quietly assuming it is fresh, which is the state #1808 exists to end.
+    @Test func aGenuinelyRecordLessCopyStillSaysItCannotTell() throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let state = BuildFreshnessState(directory: dir)
+
+        state.refreshIfStale(now: date("2026-08-04T10:00:09Z"))
+        state.refreshIfStale(now: date("2026-08-04T18:00:00Z"))
+
+        #expect(state.verdict == .cannotTell(.noInstalledRecord))
+        #expect(state.repoPath == nil)
+        #expect(state.shouldShow, "Not knowing is shown, never swallowed.")
+    }
+
+    // Dan asked for the periodic re-check (2026-08-04) so a merge landing while he works is noticed
+    // without him having to click back into Overture.
+    @Test func aMergeThatLandsWhileTheAppSitsOpenIsNoticed() async throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try #"{"version":1,"commit":"abc123","commitDate":"2026-08-04T10:00:00Z","repoPath":"/code/overture"}"#
+            .write(to: dir.appendingPathComponent("installed-build.json"), atomically: true, encoding: .utf8)
+        try #"{"version":1,"commit":"abc123","commitDate":"2026-08-04T10:00:00Z"}"#
+            .write(to: dir.appendingPathComponent("shipped-commit.json"), atomically: true, encoding: .utf8)
+
+        var clock = date("2026-08-04T10:00:09Z")
+        let box = TaskBox()
+        let sleeper = Sleeper { wait in
+            clock += BuildFreshnessState.refreshInterval
+            // A merge lands on the second tick, hours after the panel last had anything to say.
+            if wait == 2 {
+                try? #"{"version":1,"commit":"def456","commitDate":"2026-08-04T12:06:00Z"}"#
+                    .write(to: dir.appendingPathComponent("shipped-commit.json"),
+                           atomically: true, encoding: .utf8)
+            }
+            if wait == 3 { box.task?.cancel() }
+        }
+        let state = BuildFreshnessState(directory: dir, sleep: sleeper.sleep, now: { clock })
+        state.refreshIfStale(now: clock)
+        #expect(state.verdict == .upToDate)
+
+        box.task = Task { await state.watch() }
+        _ = await box.task?.value
+
+        #expect(sleeper.waits == 3)
+        #expect(state.verdict == .behind(installedAt: date("2026-08-04T10:00:00Z"),
+                                         shippedAt: date("2026-08-04T12:06:00Z")),
+                "A merge landing while the app sits open must be noticed without Dan touching anything.")
+    }
+
+    // And the other half of the same rule: the watch is a slow tick, not a poll. Ticks that arrive with
+    // nothing to have changed cost no read at all, so an app left open all day is not opening these two
+    // files over and over (#1916).
+    @Test func tickingCostsNoReadWhenSomethingElseJustRead() throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let counting = CountingDirectory(dir)
+        let state = BuildFreshnessState(reader: counting.read)
+
+        state.refreshIfStale(now: date("2026-08-04T10:00:09Z"))
+        #expect(counting.reads == 1)
+
+        // Overture coming to the front a minute later, and again a minute after that: nothing can have
+        // changed in the meantime that the next tick will not catch.
+        state.refreshIfStale(now: date("2026-08-04T10:01:09Z"))
+        state.refreshIfStale(now: date("2026-08-04T10:02:09Z"))
+        #expect(counting.reads == 1)
+
+        state.refreshIfStale(now: date("2026-08-04T10:00:09Z").addingTimeInterval(BuildFreshnessState.refreshInterval))
+        #expect(counting.reads == 2)
+    }
+
+    // Dismissal still lasts for THIS LAUNCH only, and a re-read does not undo it: a panel taking most of
+    // the window, reappearing while Dan works because a timer fired, would be the same "Not now" ignored.
+    @Test func aDismissalSurvivesTheNextRead() throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let state = BuildFreshnessState(directory: dir)
+
+        state.refreshIfStale(now: date("2026-08-04T10:00:09Z"))
+        #expect(state.shouldShow)
+
+        state.dismissedThisLaunch = true
+        state.refreshIfStale(now: date("2026-08-04T18:00:00Z"))
+
+        #expect(state.shouldShow == false)
+    }
+
+    // MARK: - Wiring
+
+    // The installer's ordering, which is where the bug actually came from: it bootstrapped the login
+    // agent (which launches Overture) and only then wrote the records, so the first launch after every
+    // install read a directory the installer had not finished writing. Invisible to any test of the
+    // verdict itself, which is exactly how it shipped green.
+    @Test func theInstallerWritesBothRecordsBeforeItStartsTheApp() {
+        let source = SourceGuardHelper.source("build-install.sh")
+        #expect(!source.isEmpty)
+        guard let bootstrap = source.range(of: "launchctl bootstrap"),
+              let installedWrite = source.range(of: "installed-build.json", options: .backwards),
+              let shippedWrite = source.range(of: "record-shipped-commit.sh", options: .backwards) else {
+            Issue.record("build-install.sh must write both records and bootstrap the login agent.")
+            return
+        }
+        #expect(installedWrite.upperBound < bootstrap.lowerBound,
+                "installed-build.json must be written BEFORE the agent starts the app, or the first launch races it (#2065).")
+        #expect(shippedWrite.upperBound < bootstrap.lowerBound,
+                "shipped-commit.json must be recorded before the agent starts the app, for the same reason.")
+    }
+
+    // The guard and its wiring are two claims (#887). Every rule above passes with the app still reading
+    // once at launch and never looking again, which is the defect.
+    @Test func theAppLetsThePanelOwnTheReadInsteadOfPinningItAtLaunch() {
+        let app = SourceGuardHelper.source("Overture/App/OvertureApp.swift")
+        #expect(!app.isEmpty)
+        #expect(app.contains(".buildFreshnessNotice("),
+                "The app must still present the panel (#1808).")
+        #expect(app.contains("BuildFreshness.verdict(in:") == false,
+                "A verdict pinned in init is stale by construction: the panel owns the read now (#2065).")
+
+        let sheet = SourceGuardHelper.source("Overture/UI/BuildFreshnessSheet.swift")
+        #expect(sheet.contains("refreshIfStale"),
+                "The panel must read the records when it shows.")
+        #expect(sheet.contains("state.watch()"),
+                "And keep watching, so a merge landing while Dan works is noticed (his call, 2026-08-04).")
+    }
+}
+
+// Holds the watch task so the sleeper can stop the loop it is driving.
+@MainActor private final class TaskBox {
+    var task: Task<Void, Never>?
+}
+
+// Counts what reading the records actually costs, so a test can assert what an app sitting still pays
+// rather than only what it answers.
+@MainActor private final class CountingDirectory {
+    private let directory: URL
+    private(set) var reads = 0
+    init(_ directory: URL) { self.directory = directory }
+    func read() -> (BuildFreshness.Verdict, String?) {
+        reads += 1
+        return (BuildFreshness.verdict(in: directory), BuildFreshnessPanel.repoPath(in: directory))
     }
 }

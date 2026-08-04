@@ -88,7 +88,38 @@ overture_stable_sign "${DEST}"
 # then refused (the "Overture's data is unavailable" clash, 2026-07-18).
 overture_dedupe_installed_bundle "${BUILT_APP}" "${DEST}"
 
-# Install/refresh the login agent and load it into the user's GUI (Aqua) session — the GUI session
+# #1808: record what was just installed, so the app can tell Dan when the copy he is looking at has
+# fallen behind the code. Nothing else knows this: the app cannot run git, and it cannot know which
+# checkout produced the bundle in /Applications. `repoPath` is what makes the panel's Update button
+# possible at all, since that is where the button has to run this script from.
+#
+# Written AFTER the install succeeds, never before: a record of an install that did not happen would
+# have the app comparing against a bundle that is not there (L12, report what verifiably happened).
+# "After the install succeeds" means after the bundle verifiably landed in /Applications and was signed,
+# which is done by here, NOT after the app has been started.
+#
+# #2065: and BEFORE the login agent below, which launches Overture. These two lines used to sit at the
+# end of the script, after the bootstrap, so the app's launch-time read raced the write and lost: on
+# 2026-08-04 the app started at 10:00:09, this file was written at 10:00:09, and Dan was still being
+# told at 12:09 that his copy "did not come from the installer" with the Update button withheld. The
+# ordering guarantees the first launch after EVERY install lost that race, which made the panel's most
+# common appearance its wrong one. Keep these writes above the bootstrap.
+OVERTURE_REPO_ROOT="$(cd "$(pwd)/.." && pwd)"
+OVERTURE_DATA_DIR="${HOME}/Library/Application Support/Overture"
+INSTALLED_COMMIT="$(git -C "${OVERTURE_REPO_ROOT}" rev-parse HEAD)"
+INSTALLED_COMMIT_DATE="$(git -C "${OVERTURE_REPO_ROOT}" log -1 --format=%cI HEAD)"
+mkdir -p "${OVERTURE_DATA_DIR}"
+INSTALLED_TMP="$(mktemp "${OVERTURE_DATA_DIR}/.installed-build.XXXXXX")"
+printf '{"version":1,"commit":"%s","commitDate":"%s","repoPath":"%s"}\n' \
+  "${INSTALLED_COMMIT}" "${INSTALLED_COMMIT_DATE}" "${OVERTURE_REPO_ROOT}" > "${INSTALLED_TMP}"
+mv -f "${INSTALLED_TMP}" "${OVERTURE_DATA_DIR}/installed-build.json"
+echo "==> Recorded installed build: ${INSTALLED_COMMIT:0:7}"
+
+# And what has shipped, through the one shared writer, so a freshly installed Mac never sits in the
+# "nothing has recorded a merge" state with a panel it has no way to clear.
+"${OVERTURE_REPO_ROOT}/scripts/record-shipped-commit.sh" || true
+
+# Install/refresh the login agent and load it into the user's GUI (Aqua) session. The GUI session
 # is what the menu-bar NSStatusItem requires (a system domain would have no menu bar). RunAtLoad then
 # starts Overture resident immediately and again at every login.
 echo "==> Installing login agent: ${AGENT_DEST}"
@@ -105,28 +136,6 @@ launchctl bootstrap "${GUI_DOMAIN}" "${AGENT_DEST}" \
   || echo "    (agent bootstrap reported an error; inspect with: launchctl print ${GUI_DOMAIN}/${AGENT_LABEL})"
 
 echo "==> Installed: ${DEST} (resident via ${AGENT_LABEL})"
-
-# #1808: record what was just installed, so the app can tell Dan when the copy he is looking at has
-# fallen behind the code. Nothing else knows this: the app cannot run git, and it cannot know which
-# checkout produced the bundle in /Applications. `repoPath` is what makes the panel's Update button
-# possible at all, since that is where the button has to run this script from.
-#
-# Written AFTER the install succeeds, never before: a record of an install that did not happen would
-# have the app comparing against a bundle that is not there (L12, report what verifiably happened).
-OVERTURE_REPO_ROOT="$(cd "$(pwd)/.." && pwd)"
-OVERTURE_DATA_DIR="${HOME}/Library/Application Support/Overture"
-INSTALLED_COMMIT="$(git -C "${OVERTURE_REPO_ROOT}" rev-parse HEAD)"
-INSTALLED_COMMIT_DATE="$(git -C "${OVERTURE_REPO_ROOT}" log -1 --format=%cI HEAD)"
-mkdir -p "${OVERTURE_DATA_DIR}"
-INSTALLED_TMP="$(mktemp "${OVERTURE_DATA_DIR}/.installed-build.XXXXXX")"
-printf '{"version":1,"commit":"%s","commitDate":"%s","repoPath":"%s"}\n' \
-  "${INSTALLED_COMMIT}" "${INSTALLED_COMMIT_DATE}" "${OVERTURE_REPO_ROOT}" > "${INSTALLED_TMP}"
-mv -f "${INSTALLED_TMP}" "${OVERTURE_DATA_DIR}/installed-build.json"
-echo "==> Recorded installed build: ${INSTALLED_COMMIT:0:7}"
-
-# And what has shipped, through the one shared writer, so a freshly installed Mac never sits in the
-# "nothing has recorded a merge" state with a panel it has no way to clear.
-"${OVERTURE_REPO_ROOT}/scripts/record-shipped-commit.sh" || true
 
 if [[ "${1:-}" == "--launch" ]]; then
   # The login agent already started Overture resident. Do NOT `open` the bundle: LaunchServices may

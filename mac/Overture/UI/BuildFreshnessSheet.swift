@@ -86,25 +86,49 @@ struct BuildFreshnessSheet: View {
     }
 }
 
-// Attached at the window, like StoreShrinkNotice, so RootView neither knows nor cares. Its own State
-// holds the dismissal for THIS LAUNCH only: BuildFreshnessPanel.shouldShow owns that rule, and a
-// dismissal that outlived the launch would quietly recreate the gap this exists to close.
+// Attached at the window, like StoreShrinkNotice, so RootView neither knows nor cares. It owns the read
+// as well as the dismissal (#2065): the verdict used to be worked out once in OvertureApp.init and
+// pinned, which raced the installer's own write and left Dan being told for hours that a copy straight
+// from the installer had not come from the installer. Every rule about how often to look lives in
+// BuildFreshnessState, so this holds no policy of its own, just the three moments worth looking at.
 struct BuildFreshnessNotice: ViewModifier {
-    let verdict: BuildFreshness.Verdict
-    let repoPath: String?
-    @State private var dismissed = false
+    @State private var state: BuildFreshnessState
+
+    init(directory: URL) {
+        _state = State(initialValue: BuildFreshnessState(directory: directory))
+    }
 
     func body(content: Content) -> some View {
-        content.sheet(isPresented: .init(
-            get: { BuildFreshnessPanel.shouldShow(verdict, dismissedThisLaunch: dismissed) },
-            set: { if !$0 { dismissed = true } })) {
-            BuildFreshnessSheet(verdict: verdict, repoPath: repoPath) { dismissed = true }
-        }
+        content
+            // The read that beats the install race, then the slow tick that notices a merge landing
+            // while Dan works. Both end when the window goes, so a closed window watches nothing.
+            .task {
+                state.refreshIfStale()
+                await state.watch()
+            }
+            // And the cheap one: he switched to a terminal, something merged, he switched back.
+            // refreshIfStale, not a read, so app-switching all afternoon still costs one look.
+            .onReceive(NotificationCenter.default.publisher(
+                for: NSApplication.didBecomeActiveNotification)) { _ in
+                state.refreshIfStale()
+            }
+            .sheet(isPresented: .init(
+                get: { state.shouldShow },
+                set: { if !$0 { state.dismissedThisLaunch = true } })) {
+                // Only ever built when shouldShow is true, which requires a verdict, so there is no
+                // fallback here inventing one.
+                if let verdict = state.verdict {
+                    BuildFreshnessSheet(verdict: verdict, repoPath: state.repoPath) {
+                        state.dismissedThisLaunch = true
+                    }
+                }
+            }
     }
 }
 
 extension View {
-    func buildFreshnessNotice(_ verdict: BuildFreshness.Verdict, repoPath: String?) -> some View {
-        modifier(BuildFreshnessNotice(verdict: verdict, repoPath: repoPath))
+    // Takes the directory, not an answer: the panel reads the records itself, when it is about to show.
+    func buildFreshnessNotice(directory: URL) -> some View {
+        modifier(BuildFreshnessNotice(directory: directory))
     }
 }
