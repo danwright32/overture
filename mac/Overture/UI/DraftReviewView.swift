@@ -249,14 +249,11 @@ struct DraftReviewView: View {
                         .textFieldStyle(.roundedBorder)
                         .font(OVType.body)
                 } else {
-                    HStack(spacing: OVSpacing.xs) {
-                        Text(joint)
-                            .font(OVType.body).foregroundStyle(OVColor.ink)
-                            .fixedSize(horizontal: false, vertical: true)
-                        if item.jointOpeningIsCustom {
-                            Text("Yours").font(OVType.tag).foregroundStyle(OVColor.gold)
-                        }
-                    }
+                    // #2074: no inline tag after the greeting. A word sitting there reads as part of
+                    // the sentence ("Hello! Yours"), whatever it was meant to mark.
+                    Text(joint)
+                        .font(OVType.body).foregroundStyle(OVColor.ink)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 if DraftOpeningNotice.bodyRepeatsAGreeting(item.draftBody) {
                     Text(DraftOpeningNotice.note)
@@ -279,14 +276,17 @@ struct DraftReviewView: View {
                             }
                         }
                     } else {
+                        // #2074: the greeting is a sentence and the contact label is a row label, so
+                        // nothing may sit inline after the greeting (the "Yours" tag read as literal
+                        // text) and the label is pushed to the trailing edge rather than reading as
+                        // "Hello! chelsea@...". The editable row above already trails its label, the
+                        // TextField takes the width.
                         HStack(spacing: OVSpacing.xs) {
                             Text(c.outgoingOpening)
                                 .font(OVType.body).foregroundStyle(OVColor.ink)
                                 .fixedSize(horizontal: false, vertical: true)
-                            if c.openingIsCustom {
-                                Text("Yours").font(OVType.tag).foregroundStyle(OVColor.gold)
-                            }
                             if item.contacts.count > 1 {
+                                Spacer(minLength: OVSpacing.xs)
                                 Text(c.displayName).font(OVType.tag).foregroundStyle(OVColor.inkFaint)
                             }
                         }
