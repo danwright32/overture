@@ -91,6 +91,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         }
     }
 
+    // #2088: closing the window must never end the process. Overture is resident (#266): with the
+    // window closed the ReconcileScheduler is still doing the watching half of the product, so the
+    // window is a view onto a running app and not the app itself.
+    //
+    // Nothing here said so, and AppKit asks. Reproduced on the live Release app on 2026-08-04 with the
+    // system log open: closing the window went straight down the last-window-closed path
+    // (`NSTerminateAfterLastWindowClosedDelay`) into `terminate:`, and the status bar window closed
+    // five milliseconds AFTER termination had begun, so the menu bar item vanishing was a symptom of
+    // the quit rather than its cause. #2088 had guessed the removable status item from #1966; the
+    // capture contains no "terminating on removal" line at all, and that guess was wrong.
+    //
+    // An optional @objc delegate method is reached through responds(to:), so the ONLY thing standing
+    // between Dan and a dead reply watcher was this method not existing. Quitting stays deliberate:
+    // the menu bar's own Quit, and the #1160 duplicate-instance path, both call terminate directly and
+    // are untouched by this answer.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+
     // #301: handle a tapped notification. The decision is the pure NotificationService.route; here we
     // only carry out its side effects. Lead/window routes reuse the existing deep-link handler
     // (RootView.onOpenURL) by opening the app's own URL scheme, which reactivates this instance and
