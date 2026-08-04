@@ -165,10 +165,13 @@ enum ManualPrepCopy {
     // #2023, and L64: who a message goes to belongs in what Dan reviews, so naming a second person has to
     // say so before he saves rather than after. Nil for one address, because a line telling him a single
     // address makes a single contact is the #843 defect: a sentence that adds nothing to the one above it.
+    // #2034: the count, and ONLY the count. How the email goes out is stated by the switch directly
+    // beside this line, so repeating it here would be the #843 defect: a second line telling him what the
+    // control next to it already says. Still nil for one address, where neither fact is worth a sentence.
     static func recipientCountNote(for typed: String) -> String? {
         guard case .addresses(let addresses) = EmailAddressList.parse(typed), addresses.count > 1
         else { return nil }
-        return "This adds \(addresses.count) contacts, and each one gets its own separate email."
+        return "This adds \(addresses.count) contacts."
     }
 
     // Names the show only when it is a DIFFERENT one from the show being prepped. On an annual booking

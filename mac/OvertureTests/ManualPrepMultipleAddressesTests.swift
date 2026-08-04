@@ -181,20 +181,18 @@ struct ManualPrepMultipleAddressesTests {
 
     // Once there are two, the hint has done its job and the line says what will actually happen instead.
     // Showing both at once would be the #843 defect: the second line telling him what the first just did.
+    //
+    // #2034: what will happen is now Dan's choice, so the line states the setting rather than a fixed fact.
     @Test func theInvitationGivesWayToWhatWillHappen() {
-        #expect(ManualPrepCopy.addressFieldNote(for: "a@x.org, b@y.org")
-                == "This adds 2 contacts, and each one gets its own separate email.")
-        #expect(ManualPrepCopy.addressFieldNote(for: "a@x.org, b@y.org, c@z.org")
-                == "This adds 3 contacts, and each one gets its own separate email.")
+        #expect(ManualPrepCopy.addressFieldNote(for: "a@x.org, b@y.org") == "This adds 2 contacts.")
+        #expect(ManualPrepCopy.addressFieldNote(for: "a@x.org, b@y.org, c@z.org") == "This adds 3 contacts.")
     }
 
     @Test func theSheetSaysHowManyContactsItWillCreateOnlyWhenThereIsMoreThanOne() {
         #expect(ManualPrepCopy.recipientCountNote(for: "") == nil)
         #expect(ManualPrepCopy.recipientCountNote(for: "olga@bargemusic.org") == nil)
         #expect(ManualPrepCopy.recipientCountNote(for: "not an address") == nil)
-        #expect(ManualPrepCopy.recipientCountNote(for: "a@x.org, b@y.org")
-                == "This adds 2 contacts, and each one gets its own separate email.")
-        #expect(ManualPrepCopy.recipientCountNote(for: "a@x.org, b@y.org, c@z.org")
-                == "This adds 3 contacts, and each one gets its own separate email.")
+        #expect(ManualPrepCopy.recipientCountNote(for: "a@x.org, b@y.org") == "This adds 2 contacts.")
+        #expect(ManualPrepCopy.recipientCountNote(for: "a@x.org, b@y.org, c@z.org") == "This adds 3 contacts.")
     }
 }

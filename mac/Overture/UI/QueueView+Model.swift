@@ -116,6 +116,11 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // contacts each get their own email, which is when the per-contact openings are the true ones.
     var jointOpening: String? = nil
     var jointOpeningIsCustom: Bool = false
+    // #2034: which way this event's email goes, and whether the choice is even offered. A show with one
+    // contact is not offered it: a choice between one email and one email is not a choice, and a control
+    // that changes nothing is worse than no control.
+    var sendsTogether: Bool = true
+    var offersSendModeChoice: Bool = false
     // #1324: a real email exists but only as a venue front desk or press inbox (held by the venue/press
     // guard, so not sendable). Lets the reachability badge say "Weak contact only" rather than the untrue
     // "No email found". Only meaningful once probed and when hasPendingRecipient is false.
@@ -2065,6 +2070,8 @@ extension QueueItem {
             jointOpening: SendGroup.pendingGroup(of: p).count > 1
                 ? JointOpening.text(for: SendGroup.pendingGroup(of: p), of: p) : nil,
             jointOpeningIsCustom: p.jointOpeningOverride?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false,
+            sendsTogether: p.sendsTogether,
+            offersSendModeChoice: p.recipients.filter { $0.email?.isEmpty == false }.count > 1,
             // #1324: a real address held by a guard, so the badge can say so rather than "No email found"
             // when that is all a check found. #1798: the same shared definition the stored verdict uses,
             // because these were two copies of one rule and both were missing the duplicate guard.

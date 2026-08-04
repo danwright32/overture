@@ -15,16 +15,18 @@ struct ManualPrepSheet: View {
     // only when the sheet is actually presented; `ManualPrepOnScreenTests` is what holds that.
     // Taking the answer rather than a closure keeps this view a pure function of what it is given.
     let prefill: ManualPrepPrefill.Result
-    let onSave: (_ email: String, _ name: String?, _ subject: String, _ body: String) -> Void
+    let onSave: (_ email: String, _ name: String?, _ subject: String, _ body: String, _ sendsTogether: Bool) -> Void
 
     @Environment(\.dismiss) private var dismiss
 
     @State private var email: String
     @State private var subject = ""
     @State private var emailBody = ""
+    // #2034: together is the default he asked for, on this sheet as well as on an AI draft.
+    @State private var sendsTogether = true
 
     init(groupName: String, prefill: ManualPrepPrefill.Result,
-         onSave: @escaping (_ email: String, _ name: String?, _ subject: String, _ body: String) -> Void) {
+         onSave: @escaping (_ email: String, _ name: String?, _ subject: String, _ body: String, _ sendsTogether: Bool) -> Void) {
         self.groupName = groupName
         self.prefill = prefill
         self.onSave = onSave
@@ -63,6 +65,17 @@ struct ManualPrepSheet: View {
             Text(ManualPrepCopy.addressFieldNote(for: email))
                 .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
                 .fixedSize(horizontal: false, vertical: true)
+            // #2034: the choice, offered only once a second address makes it one. The line above says
+            // what it is currently set to, so the two read as one statement rather than two.
+            if case .addresses(let list) = EmailAddressList.parse(email), list.count > 1 {
+                Picker(SendModeCopy.label, selection: $sendsTogether) {
+                    Text(SendModeCopy.together).tag(true)
+                    Text(SendModeCopy.separately).tag(false)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .accessibilityLabel(SendModeCopy.label)
+            }
             if let filled = prefill.filled {
                 Text(ManualPrepCopy.filledRecipientNote(filled, prepping: groupName))
                     .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
@@ -103,7 +116,7 @@ struct ManualPrepSheet: View {
             Spacer()
             Button("Cancel") { dismiss() }.buttonStyle(.plain).foregroundStyle(OVColor.inkSoft)
             Button {
-                onSave(email, nil, subject, emailBody)
+                onSave(email, nil, subject, emailBody, sendsTogether)
                 dismiss()
             } label: {
                 Text("Save draft")

@@ -147,3 +147,11 @@ enum DraftContactCopy {
         recipients > 1 ? "On this email" : "Sending to this one"
     }
 }
+
+// #2034: the words on the switch that decides whether an event's contacts share one email. Out of the
+// view, like every other sentence, so the wording is testable and shows up in the copy inventory.
+enum SendModeCopy {
+    static let label = "How this goes out"
+    static let together = "One email to everyone"
+    static let separately = "A separate email each"
+}

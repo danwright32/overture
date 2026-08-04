@@ -136,7 +136,7 @@ enum ProspectMutations {
     // email is one paragraph asking about this year's dates and the drafter's cold-pitch shape gets
     // rewritten anyway.
     static func prepManually(_ item: QueueItem, email: String, name: String?,
-                             subject: String, body: String,
+                             subject: String, body: String, sendsTogether: Bool = true,
                              prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
 
@@ -169,6 +169,8 @@ enum ProspectMutations {
         for address in addresses {
             applyManualRecipient(email: address, name: trimmedName, to: model)
         }
+        // #2034: the choice he made on the sheet, recorded with the draft it belongs to.
+        model.sendsTogetherOverride = sendsTogether
         model.writeManualDraft(subject: subject.trimmingCharacters(in: .whitespacesAndNewlines),
                                body: trimmedBody)
 
@@ -578,6 +580,16 @@ enum ProspectMutations {
               let recipient = model.recipients.first(where: { $0.id == recipientId }) else { return }
         let trimmed = opening.trimmingCharacters(in: .whitespacesAndNewlines)
         recipient.openingOverride = trimmed.isEmpty ? nil : trimmed
+        context.saveOrWarn(org: item.groupName, feedback: feedback)
+    }
+
+    // #2034: Dan's choice for THIS event, one email to everybody or one each. Written as the override
+    // rather than a plain flag, so a show he has never touched still reads as the default rather than as a
+    // decision he made.
+    static func setSendsTogether(_ item: QueueItem, _ together: Bool,
+                                 prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        model.sendsTogetherOverride = together
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 

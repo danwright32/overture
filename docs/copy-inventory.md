@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1019 sentences**, from 352 source files.
+Every sentence Overture can say to Dan: **1022 sentences**, from 352 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -325,6 +325,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/Reachability.swift`
 "A scout-extract run is already in progress. Wait for it to finish."
     `Integration/ScoutExtractService.swift`
+"A separate email each"
+    `UI/SendConfirmSheet.swift`
 "A show you kept lands here if a clash with your calendar turns up later."
     `Domain/StageEmptyState.swift`
 "A source \"\(sourceName)\" may be them: check its name, or tag it a returning client."
@@ -739,6 +741,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ReminderSettingsView.swift`
 "How they reached you"
     `UI/InquiryIntakeSheet.swift`
+"How this goes out"
+    `UI/SendConfirmSheet.swift`
 "I can shoot this anyway"
     `UI/ProspectRowView.swift`
 "I can't read that page: the site builds its calendar with JavaScript, so the shows aren't in what I download. Nothing's wrong with your link. Try the venue's page for the show, or a ticket link (Eventbrite and the like) if there is one."
@@ -1095,6 +1099,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SendConfirmSheet.swift`
 "Once you have sent a pitch, the people you are waiting to hear back from show up here, soonest follow-up first. They drop off when you book them, mark them lost, or the follow-ups run out."
     `UI/QueueView.swift`
+"One email to everyone"
+    `UI/SendConfirmSheet.swift`
 "One of the addresses is blank. No contact was added"
     `App/ActionFeedback.swift`
 "One of the addresses is blank. Nothing was saved"
@@ -1688,7 +1694,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/InquiryCopy.swift`
 "This address is already in play on another show at this venue within a few days, so Overture is holding it rather than writing to the same person twice. If they are different bookings, clear the duplicate flag on the contact and it is sendable again."
     `Domain/Reachability.swift`
-"This adds \(addresses.count) contacts, and each one gets its own separate email."
+"This adds \(addresses.count) contacts."
     `Domain/ManualPrepPrefill.swift`
 "This booking was auto-detected from Downbeat. Confirm it (it then moves out of the reach-out list), or reject a wrong match to pull it back out."
     `UI/ProspectRowView.swift`

@@ -61,7 +61,7 @@ struct ManualPrepOnScreenTests {
                                                     sentAt: EasternDate.date(from: "2025-11-02")!)
         let sheet = ManualPrepSheet(groupName: "Bargemusic",
                                     prefill: .init(filled: prior, suggestions: [], emptyReason: nil),
-                                    onSave: { _, _, _, _ in })
+                                    onSave: { _, _, _, _, _ in })
 
         let rendered = try sheet.inspect()
         #expect(try rendered.find(ViewType.TextField.self).input() == "info@everyvoice.org")
@@ -74,7 +74,7 @@ struct ManualPrepOnScreenTests {
     @Test func theEditorSaysWhatItCheckedWhenNothingPrefills() throws {
         let sheet = ManualPrepSheet(groupName: "Bargemusic",
                                     prefill: .init(filled: nil, suggestions: [], emptyReason: .nothingFound),
-                                    onSave: { _, _, _, _ in })
+                                    onSave: { _, _, _, _, _ in })
 
         #expect(try sheet.inspect().findAll(ViewType.Text.self).map { try $0.string() }
                 .contains(ManualPrepCopy.emptyRecipientNote(.nothingFound)))
@@ -86,7 +86,7 @@ struct ManualPrepOnScreenTests {
             prefill: .init(filled: nil,
                            suggestions: [.init(email: "olga@bargemusic.org", source: .bookingSheet)],
                            emptyReason: nil),
-            onSave: { _, _, _, _ in })
+            onSave: { _, _, _, _, _ in })
 
         let rendered = try sheet.inspect()
         // Offered as a button, and the field itself is left empty for him to decide.

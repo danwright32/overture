@@ -18,6 +18,8 @@ struct DraftReviewView: View {
     // #2033: the opening of a JOINT email belongs to the show, not to a contact, so it saves through its
     // own seam rather than pretending one of the contacts owns it.
     var onSaveJointOpening: ((_ opening: String) -> Void)? = nil
+    // #2034: Dan's per-event choice between one shared email and one each.
+    var onSetSendsTogether: ((_ together: Bool) -> Void)? = nil
     var onSetLostReason: (String) -> Void = { _ in }
     var onSend: () -> Void = {}
     // #718: Dan's deliberate override of the #407 salutation-review send block, confirmed via a
@@ -222,6 +224,19 @@ struct DraftReviewView: View {
     // is also what makes editing safe: his words on how he would use it were "if it's multiple i just
     // don't touch it but if it's single and I want to update it I can", and a per-contact field means an
     // edit can never re-address somebody else by the wrong name.
+    // #2034: the choice itself, shown only where there IS one (two or more contacts with addresses).
+    @ViewBuilder private var sendModeChoice: some View {
+        if item.offersSendModeChoice, let set = onSetSendsTogether {
+            Picker(SendModeCopy.label, selection: Binding(get: { item.sendsTogether }, set: { set($0) })) {
+                Text(SendModeCopy.together).tag(true)
+                Text(SendModeCopy.separately).tag(false)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .accessibilityLabel(SendModeCopy.label)
+        }
+    }
+
     @ViewBuilder private func openingBlock(editable: Bool) -> some View {
         if let joint = item.jointOpening {
             // #2033: one email, so ONE opening. Showing a line per contact here would put two greetings on
@@ -293,6 +308,7 @@ struct DraftReviewView: View {
             VStack(alignment: .leading, spacing: OVSpacing.xs) {
                 TextField("Subject", text: $draftSubject)
                     .textFieldStyle(.roundedBorder)
+                sendModeChoice
                 openingBlock(editable: true)
                 TextEditor(text: $draftBody)
                     .font(OVType.body)
@@ -318,6 +334,7 @@ struct DraftReviewView: View {
                 if let subject = item.draftSubject {
                     Text(subject).font(.system(size: 13, weight: .semibold)).foregroundStyle(OVColor.ink)
                 }
+                sendModeChoice
                 openingBlock(editable: false)
                 if let body = item.draftBody {
                     // #1157/#1203: show the body WITH the sign-off the send path appends, so Dan approves

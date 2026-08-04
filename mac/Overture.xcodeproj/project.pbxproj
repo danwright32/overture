@@ -524,6 +524,7 @@
 		5F9BD63732B73A77FC267518 /* ConversationStagesSeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = E15726A547020EA89B328C73 /* ConversationStagesSeed.swift */; };
 		5FBD0BE4A3483D5354AB29A8 /* FocusedStageWiringGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FC68B1599A170632815DAD0 /* FocusedStageWiringGuardTests.swift */; };
 		5FCB7C6FFF471C66FCAE9635 /* OmniFocusSyncStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2624284F3BAF85D48AF1DC5 /* OmniFocusSyncStatus.swift */; };
+		5FD15F6D2D07BEDCCB05E6FF /* TogetherOrSeparatelySwitchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63BF120D22738FBA8B1EEDB9 /* TogetherOrSeparatelySwitchTests.swift */; };
 		5FD7C0FEF733835CF9B19391 /* CalendarMonthIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCB4505CF0D31884FA476533 /* CalendarMonthIndex.swift */; };
 		5FF49AAB5E568C76DF35397F /* InquiryQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BEC564814BBF16A3F636E80 /* InquiryQueue.swift */; };
 		60654046D0FFBA3313455645 /* DraftSignaturePreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C6B3529DB2EF4BDE5AB17BE /* DraftSignaturePreview.swift */; };
@@ -1676,6 +1677,7 @@
 		637CE6DCB47850272BCB073A /* ScoutService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutService.swift; sourceTree = "<group>"; };
 		63AB5D45895A3FF0895BAB9F /* OpenForDecision.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenForDecision.swift; sourceTree = "<group>"; };
 		63B0FBB2EC1279379611F4EF /* OrganisationsSheetModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganisationsSheetModel.swift; sourceTree = "<group>"; };
+		63BF120D22738FBA8B1EEDB9 /* TogetherOrSeparatelySwitchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TogetherOrSeparatelySwitchTests.swift; sourceTree = "<group>"; };
 		63ED83EB487329DD191A3264 /* QueueSearchInvalidationGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueSearchInvalidationGuardTests.swift; sourceTree = "<group>"; };
 		63F8BDF3177782E6E83DD846 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		63FA3A9DF520050E6151FB89 /* ReplyClassifyImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReplyClassifyImporter.swift; sourceTree = "<group>"; };
@@ -2894,6 +2896,7 @@
 				120248A2D19A6D5398477906 /* TicketTailorExtractorTests.swift */,
 				AE80F59E8B15CE9E4608B580 /* TicketTailorReadPathTests.swift */,
 				8A1E00DB2FE38A00D904C212 /* TicketTailorTests.swift */,
+				63BF120D22738FBA8B1EEDB9 /* TogetherOrSeparatelySwitchTests.swift */,
 				03F78419A9875BDFF7B38D2C /* ToolbarConsolidationGuardTests.swift */,
 				3BEBCF94E20C0F098D5943DD /* ToolbarPopoverGuardTests.swift */,
 				90E1EC8E8826FE13EA7E5422 /* ToolbarStatusInsetTests.swift */,
@@ -4691,6 +4694,7 @@
 				3E08D925899DC5FE2C4C1178 /* TicketingFeedRead.swift in Sources */,
 				89980BE53CE59A00D875BD7C /* TicketingFeedVenueTests.swift in Sources */,
 				4F9E2E4E3ACB45F352AD4EC2 /* TitleNormalization.swift in Sources */,
+				5FD15F6D2D07BEDCCB05E6FF /* TogetherOrSeparatelySwitchTests.swift in Sources */,
 				A02D498BAE774D252215C746 /* TooSoonDismissReasonTests.swift in Sources */,
 				81795147A6E8C5854E031D72 /* ToolbarConsolidationGuardTests.swift in Sources */,
 				8D0242AB174B0772CF3300B1 /* ToolbarHoverLabel.swift in Sources */,
