@@ -833,8 +833,11 @@ struct QueueView: View {
         }
     }
 
-    // Per-stage "where am I needed" indicators (#15): each stage shows a coloured dot plus
-    // a label (never colour alone), with a roll-up so needs-attention is unmissable.
+    // Per-stage "where am I needed" indicators (#15): each stage shows a coloured dot plus a label, and
+    // never colour alone. A non-idle pill states what is wrong in words beside its count ("3 failed to
+    // send", "3 shows with a contact held for a check"), which is what carries that rule now: #2051 removed
+    // the roll-up line that used to sit above the strip, because it counted lit PILLS while every other
+    // number on this screen counts shows, and it restated in vaguer terms what the pill beneath it said.
     // #863: lifted wholesale into AgentInputs.from, which builds every count by calling the same
     // StageNavigation predicate the pill's tap resolves. It used to be spelled out here, inside a
     // SwiftUI view, where no test could reach it, which is exactly why the invariant drifted twice
@@ -844,16 +847,8 @@ struct QueueView: View {
     // #1771: this used to be a computed property here, which meant each of its two readers rebuilt it.
     // It is built once in makeRenderData and threaded down, the same rule #1121 set for `items`.
     private func agentStrip(_ inputs: AgentInputs) -> some View {
-        let statuses = AgentRoster.statuses(inputs)
-        let needs = AgentRoster.needsYouCount(statuses)
-        return VStack(alignment: .leading, spacing: OVSpacing.xs) {
-            if let needsYou = AgentRoster.needsYouLabel(needs) {
-                Text(needsYou)
-                    .font(.system(size: 11, weight: .semibold)).foregroundStyle(OVColor.rust)
-            }
-            WrapHStack(spacing: OVSpacing.xs, lineSpacing: OVSpacing.xs) {
-                ForEach(statuses) { agentChip($0) }
-            }
+        WrapHStack(spacing: OVSpacing.xs, lineSpacing: OVSpacing.xs) {
+            ForEach(AgentRoster.statuses(inputs)) { agentChip($0) }
         }
         .padding(.top, OVSpacing.xxs)
     }

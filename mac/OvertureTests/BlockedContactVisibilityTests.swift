@@ -145,10 +145,13 @@ struct BlockedContactVisibilityTests {
 
     // MARK: - It reaches the one place Dan always looks
 
-    // The masthead's "needs you" row is the app's own answer to "where am I needed". A held contact must
-    // appear there, or it is invisible again by a different route, and the whole bug is that it went
-    // invisible.
-    @Test func aBlockedContactShowsUpInTheNeedsYouRow() {
+    // The masthead's pill strip is the app's own answer to "where am I needed". A held contact must appear
+    // there, or it is invisible again by a different route, and the whole bug is that it went invisible.
+    //
+    // #2051: asserted on the Send issues pill itself (lit, carrying its own count, saying why) rather than
+    // on the roll-up line that used to sit above the strip. That line counted lit pills, so it could report
+    // a held contact was visible while the pill holding it said nothing at all.
+    @Test func aBlockedContactShowsUpOnTheSendIssuesPill() {
         var inputs = AgentInputs(toTriage: 0, keptToPrep: 0, prepRunning: false, toReview: 0,
                                  readyToSend: 0, gmailConnected: true, sendErrors: 0, followUpsDue: 0)
         inputs.blockedContacts = 2
@@ -160,7 +163,8 @@ struct BlockedContactVisibilityTests {
         #expect(send.detail.contains("2"))
         // It must say WHY, or Dan cannot tell it from an ordinary queue of approved sends.
         #expect(send.detail.localizedCaseInsensitiveContains("check"))
-        #expect(AgentRoster.needsYouCount(statuses) > 0)
+        // And it is the ONLY pill lit, so nothing else in the strip is standing in for it.
+        #expect(statuses.filter { $0.state != .idle }.map(\.name) == ["Send issues"])
     }
 
     // A real failure still outranks it: a send that failed, or one whose outcome is unknown, needs his

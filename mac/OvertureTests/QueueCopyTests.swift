@@ -32,18 +32,6 @@ struct QueueCopyTests {
         #expect(QueueModel.newLeadsHeading(count: 4) == "4 new leads while you were away")
     }
 
-    // The verb agrees with the count, and it inverts: ONE needs you, THREE need you. The inline version
-    // wrote this backwards from every other pluralization in the app (`n == 1 ? "s" : ""`), which is
-    // exactly the kind of thing that is right until somebody "tidies" it.
-    @Test func theNeedsYouLineAgreesWithItsCount() {
-        #expect(AgentRoster.needsYouLabel(1) == "1 needs you")
-        #expect(AgentRoster.needsYouLabel(3) == "3 need you")
-    }
-
-    @Test func nothingNeedingYouSaysNothing() {
-        #expect(AgentRoster.needsYouLabel(0) == nil)
-    }
-
     // MARK: - The pending-bookings filter
     //
     // Two entirely different sentences depending on whether the filter is on, and the ON one carries a

@@ -15,7 +15,6 @@ struct AgentRosterTests {
     @Test func everythingIdleWhenNothingPending() {
         let s = AgentRoster.statuses(calm)
         #expect(s.allSatisfy { $0.state == .idle })
-        #expect(AgentRoster.needsYouCount(s) == 0)
     }
 
     // #370: freshly scouted, undecided prospects (status .new) get their own pill, before Prep,
@@ -120,12 +119,33 @@ struct AgentRosterTests {
 
         i.stalledReplyDrafts = 2
         #expect(status("Follow-ups", i).detail == "2 reply drafts stalled")
-        #expect(AgentRoster.needsYouCount(AgentRoster.statuses(i)) == 1)
     }
 
-    @Test func rollUpCountsAttentionAndError() {
+    // #2051: with the roll-up gone, each pill is what says it wants Dan, so the claim is per pill: these
+    // inputs light exactly Prep, Review and Send issues, and leave everything else alone.
+    @Test func eachStageWithWorkLightsItsOwnPill() {
         var i = calm; i.keptToPrep = 1; i.toReview = 1; i.sendErrors = 1; i.readyToSend = 1
-        #expect(AgentRoster.needsYouCount(AgentRoster.statuses(i)) == 3)  // Prep, Review, Send
+        let lit = AgentRoster.statuses(i).filter { $0.state != .idle }.map(\.name)
+
+        #expect(Set(lit) == ["Prep", "Review", "Send issues"])
+    }
+
+    // The rule the roll-up used to carry: never colour alone. A pill asking for Dan must say what it wants
+    // in words, or gold and rust are the only thing telling it apart from a pill that is merely busy.
+    @Test func everyPillThatWantsDanSaysSoInWords() {
+        var i = calm
+        i.keptToPrep = 1; i.toReview = 1; i.sendErrors = 1; i.followUpsDue = 2; i.toTriage = 4
+        i.blockedContacts = 3
+
+        let lit = AgentRoster.statuses(i).filter { $0.state == .needsAttention || $0.state == .error }
+        // Or the loop below checks nothing and passes for that reason.
+        #expect(lit.count >= 4, "these inputs stopped lighting pills, so nothing below was checked")
+        #expect(lit.contains { $0.state == .error })          // both colours are represented
+        #expect(lit.contains { $0.state == .needsAttention })
+
+        for s in lit {
+            #expect(!s.detail.isEmpty, Comment(rawValue: "\(s.name) is lit but says nothing beside its dot"))
+        }
     }
 
     // #332: first-time user can't tell what each pill means, only its live count. A short,
@@ -161,7 +181,7 @@ struct AgentRosterTests {
     @Test func aConnectedReadyToSendShowShowsNoPill() {
         var i = calm; i.readyToSend = 3
         #expect(AgentRoster.statuses(i).contains { $0.name == "Send issues" } == false)
-        #expect(AgentRoster.needsYouCount(AgentRoster.statuses(i)) == 0)
+        #expect(AgentRoster.statuses(i).allSatisfy { $0.state == .idle })
     }
 
     // The not-connected line is untouched: it carries a real instruction the concept does not.
@@ -201,7 +221,7 @@ struct AgentRosterTests {
         #expect(s.focus == .reachedOut)
         #expect(s.state == .idle)                 // never gold/rust: it is not attention
         #expect(s.detail == "5")                  // the count Dan sees, which the reached-out view matches
-        #expect(AgentRoster.needsYouCount(AgentRoster.statuses(i)) == 0)
+        #expect(AgentRoster.statuses(i).allSatisfy { $0.state == .idle })
     }
 
     // With no one reached out yet, the pill still appears (a navigation stop) but carries no bare "0".
