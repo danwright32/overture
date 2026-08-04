@@ -21,7 +21,7 @@ struct ProspectRowView: View {
     // #367
     var onReprep: (_ mode: ReprepMode) -> Void = { _ in }
     // #2007: Dan prepped this show by hand, and what he wrote.
-    var onPrepManually: (_ email: String, _ name: String?, _ subject: String, _ body: String) -> Void = { _, _, _, _ in }
+    var onPrepManually: (_ email: String, _ name: String?, _ subject: String, _ body: String, _ sendsTogether: Bool) -> Void = { _, _, _, _, _ in }
     // #2007: what the editor already knows about who to send to. A closure, so a card that is merely
     // OFFERING the control pays nothing: nothing is looked up until the sheet opens.
     var manualPrepPrefill: () -> ManualPrepPrefill.Result = {
@@ -31,6 +31,7 @@ struct ProspectRowView: View {
     // #2010: Dan's own opening for one contact, passed through to the draft review screen.
     var onSaveOpening: (_ recipientId: String, _ opening: String) -> Void = { _, _ in }
     var onSaveJointOpening: (_ opening: String) -> Void = { _ in }   // #2033
+    var onSetSendsTogether: (_ together: Bool) -> Void = { _ in }   // #2034
     var onSetLostReason: (String) -> Void = { _ in }
     var onSend: () -> Void = {}
     var onOverrideSalutationReview: () -> Void = {}
@@ -151,6 +152,7 @@ struct ProspectRowView: View {
                     onSaveDraft: onSaveDraft,
                     onSaveOpening: onSaveOpening,
                     onSaveJointOpening: onSaveJointOpening,
+                    onSetSendsTogether: onSetSendsTogether,
                     onSetLostReason: onSetLostReason,
                     onSend: onSend,
                     onOverrideSalutationReview: onOverrideSalutationReview,

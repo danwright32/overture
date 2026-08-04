@@ -51,9 +51,10 @@ enum ProspectRowFactory {
             // #2007: prep this show by hand. The prefill is a CLOSURE, called only when the sheet opens:
             // it walks every prospect and reads the booking-history file, and a queue is hundreds of
             // cards, so an idle card must pay nothing for a control it is merely offering.
-            onPrepManually: { email, name, subject, body in
+            onPrepManually: { email, name, subject, body, sendsTogether in
                 ProspectMutations.prepManually(item, email: email, name: name, subject: subject,
-                                               body: body, prospects: prospects, context: context,
+                                               body: body, sendsTogether: sendsTogether,
+                                               prospects: prospects, context: context,
                                                feedback: feedback)
             },
             manualPrepPrefill: { ProspectMutations.manualPrepPrefill(item, prospects: prospects) },
@@ -64,6 +65,10 @@ enum ProspectRowFactory {
             },
             onSaveJointOpening: { opening in
                 ProspectMutations.saveJointOpening(item, opening: opening,
+                                                   prospects: prospects, context: context, feedback: feedback)
+            },
+            onSetSendsTogether: { together in
+                ProspectMutations.setSendsTogether(item, together,
                                                    prospects: prospects, context: context, feedback: feedback)
             },
             onSetLostReason: { reason in ProspectMutations.setLostReason(item, reason, prospects: prospects, context: context, feedback: feedback) },
