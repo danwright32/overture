@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1032 sentences**, from 356 source files.
+Every sentence Overture can say to Dan: **1034 sentences**, from 356 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -734,7 +734,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Held as a duplicate"
     `Domain/Reachability.swift`
 "Held, not sending"
-    `UI/DraftReviewView.swift`
+    `UI/SendConfirmSheet.swift`
 "Hidden for a week. Overture still can't keep clear of shoots it doesn't know about."
     `App/ActionFeedback.swift`
 "Hide this for a week"
@@ -1749,6 +1749,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReprepRequest.swift`
 "This run's results disagreed with themselves, so nothing from it was used."
     `Domain/WatchedSource.swift`
+"This sends \(chosen) separate emails right now, one to each of these people. Nothing else goes out."
+    `UI/SendConfirmSheet.swift`
 "This sends one email right now, to \(who). Nothing else goes out."
     `UI/SendConfirmSheet.swift`
 "This sends one email right now, to this recipient only. Nothing else goes out."
@@ -1875,6 +1877,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/PrepSelectionCopy.swift`
 "Who Overture thinks puts each show on, and who it reads as the building."
     `App/RootView.swift`
+"Who this goes to"
+    `UI/SendConfirmSheet.swift`
 "Why (optional): vacation, family, anything"
     `UI/DayOffRangeFields.swift`
 "Why lost? (optional note)"

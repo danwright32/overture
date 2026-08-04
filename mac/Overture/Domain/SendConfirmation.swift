@@ -5,6 +5,16 @@ import Foundation
 // recipient (same source as SendService.sendOne), so the confirm step can never appear
 // for an email that wouldn't actually go, and a fully-sent show yields nil (no
 // duplicate send). For a multi-recipient show each click confirms the next address.
+// #2017: one contact the pitch could go to, as the send sheet offers it. A held contact is OFFERED but
+// never tickable: leaving it out of the list would quietly under-report who is on the show, and letting it
+// be ticked would let a guard be clicked past (#2015, #2052).
+struct SendCandidate: Equatable, Identifiable, Sendable {
+    let id: String
+    let name: String
+    let email: String
+    let isHeld: Bool
+}
+
 struct SendConfirmation: Equatable {
     // #360: the confirmation is now a branded sheet that shows From / To / Subject and a preview of
     // the exact body. `from` is the one true sending identity (SendIdentity.danWright), the same one
@@ -36,6 +46,14 @@ struct SendConfirmation: Equatable {
     // sheet warns of a self double-booking at the committing moment and Dan confirms past it deliberately
     // (a blank warning means no collision). Set by the caller, which has the whole queue to compare.
     var selfBookingWarning: String? = nil
+    // #2017: every contact this show could send to, and the ones currently ticked. The selection starts as
+    // exactly what pressing Send would have done anyway, so the picker only ever offers a way OFF the
+    // default rather than quietly changing it.
+    var candidates: [SendCandidate] = []
+    var selected: [String] = []
+    // The event's own together-or-separately choice as it stands when the sheet opens, so the sheet's
+    // control starts where the card left it rather than at a default of its own.
+    var togetherAtOpen: Bool = true
 
     // The main draft send: the show's next pending recipient over the shared draft body.
     //
@@ -46,14 +64,20 @@ struct SendConfirmation: Equatable {
     // an unapproved draft would reach. The two groups differ only by that gate (`pendingGroup` IS
     // `previewGroup` plus it), and the approval happens in the same action as the send, so what this sheet
     // names cannot differ from who receives it (L64).
+    // #2017: `selecting` names the contacts Dan has ticked, so the To line, the body preview and the
+    // promise underneath it all describe THAT selection rather than the default one. Nil means he has not
+    // touched the ticks, which is the default the sheet opens on.
     @MainActor
-    init?(prospect: Prospect, approving: Bool = false,
+    init?(prospect: Prospect, approving: Bool = false, selecting: [String]? = nil,
           signature: OutboundSignature = GmailSignatureStore.currentSignature()) {
         // #2033: the whole group the next press of Send reaches, from the one definition the send itself
         // reads, so what he approves names everybody it is going to (L64).
-        let group = approving && prospect.status == .drafted && prospect.draftBody != nil
+        let defaultGroup = approving && prospect.status == .drafted && prospect.draftBody != nil
             ? SendGroup.previewGroup(of: prospect)
             : SendGroup.pendingGroup(of: prospect)
+        // A ticked contact must still clear every guard: `sendableFor` filters to the ones that could
+        // actually go, so a held contact cannot be talked past by being named here (#2052).
+        let group = selecting.map { SendGroup.sendableFor(prospect, ids: $0) } ?? defaultGroup
         // #2052: no sheet at all for a draft with no subject line, where this used to render
         // "(no subject)" beside a live Send button. The placeholder was itself the detection that the
         // value was missing, so it had to stop the send rather than label it (L67). Dan, on finding it:
@@ -83,9 +107,11 @@ struct SendConfirmation: Equatable {
         title = SendConfirmCopy.title
         // The reassurance is a promise about what this press does. "To this recipient only" is a false
         // promise on an email reaching two people, so a group gets its own, naming how many.
-        reassurance = group.count > 1
-            ? SendConfirmCopy.reassuranceForSeveral(group.count)
-            : SendConfirmCopy.reassurance
+        // #2017: follows the ticks AND the together-or-separately choice, both changeable on this sheet.
+        reassurance = SendConfirmCopy.reassurance(chosen: group.count, together: prospect.sendsTogether)
+        candidates = SendGroup.candidates(of: prospect)
+        selected = group.map(\.id)
+        togetherAtOpen = prospect.sendsTogether
     }
 
     // #948: a follow-up nudge to one contact. Subject and body come from FollowUp.nudgeContent, the same

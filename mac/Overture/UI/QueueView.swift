@@ -279,7 +279,7 @@ struct QueueView: View {
             .sendConfirmAndReconnectAlerts(
                 pendingConfirm: $pendingConfirm,
                 showReconnect: $showReconnect,
-                onSend: performSend,
+                onSend: { performSend($0) },
                 onConnectGmail: onConnectGmail
             )
             // #1436: compose and send Dan's first reply to a hire inquiry.
@@ -1144,10 +1144,30 @@ struct QueueView: View {
         // so Dan remembers which one. Fires on any commitment (booked / emailed / live draft), not just an
         // already-emailed one, and compares against the whole queue so a show in any stage still counts.
         confirmation.selfBookingWarning = QueueModel.sendSelfBookingWarning(for: item, among: items)
-        pendingConfirm = PendingSend(id: item.id, confirmation: confirmation)
+        // #2017: the sheet redraws for whatever he ticks, so the To line, the preview's greeting and the
+        // promise underneath describe the email actually about to leave rather than the default one.
+        let warning = confirmation.selfBookingWarning
+        pendingConfirm = PendingSend(
+            id: item.id, confirmation: confirmation,
+            rebuild: { selected, together in
+                guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return nil }
+                // Asked of a COPY's worth of state: the real choice is only written at the commit, so a
+                // preview of "one email each" cannot leave the show changed if he cancels.
+                let was = model.sendsTogetherOverride
+                model.sendsTogetherOverride = together
+                defer { model.sendsTogetherOverride = was }
+                guard var rebuilt = SendConfirmation(prospect: model, approving: true,
+                                                     selecting: selected) else { return nil }
+                rebuilt.selfBookingWarning = warning
+                return rebuilt
+            },
+            onSendSelection: { selected, together in
+                performSend(item.id, selecting: selected, together: together)
+            }
+        )
     }
 
-    private func performSend(_ naturalKey: String) {
+    private func performSend(_ naturalKey: String, selecting: [String]? = nil, together: Bool? = nil) {
         pendingConfirm = nil
         // #361: snapshot the row now, while it's still present, so its leaving delight can render after
         // the send removes it from `visible`. Only a send that EMPTIES the show (onSent fullySent) plays
@@ -1158,6 +1178,7 @@ struct QueueView: View {
         // re-approving. The pair lives in ProspectMutations, not here, so it has a seam a test can reach.
         guard let confirmed = snapshot else { return }
         ProspectMutations.approveAndSend(confirmed, prospects: prospects, context: context, feedback: feedback,
+                                      selecting: selecting, together: together,
                                       markSending: { sendState.markSending($0) },
                                       clearSending: { sendState.clearSending($0) },
                                       onNeedsReconnect: { showReconnect = true },

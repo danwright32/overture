@@ -24,10 +24,32 @@ enum SendService {
     // #2033: what pressing Send does, once. It is the ONE place the together-or-separately choice is
     // acted on, so the card, the confirmation sheet and the send itself cannot disagree about who is
     // about to be emailed.
+    // #2017: `to` is the contacts Dan ticked on the send sheet. Nil keeps the behavior every other caller
+    // relies on (the show's own pending group), so the picker is an addition rather than a change to the
+    // path that already works.
+    //
+    // Under "email separately" a multi-contact selection goes out as one email EACH, all now. Dan's answer,
+    // 2026-08-04: "It should send all three now but also give me the option to put them all on the same
+    // email", the second half of which is the together switch he can flip on the same sheet.
     @discardableResult
-    static func sendNext(_ prospect: Prospect, now: Date, sender: MailSender) async -> Bool {
-        let group = SendGroup.pendingGroup(of: prospect)
-        guard group.count > 1 else { return await sendOne(prospect, now: now, sender: sender) }
+    static func sendNext(_ prospect: Prospect, to chosen: [Recipient]? = nil,
+                         now: Date, sender: MailSender) async -> Bool {
+        guard let chosen else {
+            let group = SendGroup.pendingGroup(of: prospect)
+            guard group.count > 1 else { return await sendOne(prospect, now: now, sender: sender) }
+            return await sendJointly(prospect, to: group, now: now, sender: sender)
+        }
+        // Re-filtered rather than trusted: the ticks were read off a screen, and the guards decide.
+        let group = SendGroup.sendableFor(prospect, ids: chosen.map(\.id))
+        guard !group.isEmpty else { return false }
+        guard group.count > 1 else { return await deliver(group[0], of: prospect, now: now, sender: sender) }
+        guard prospect.sendsTogether else {
+            // One each. Every one is attempted even if an earlier one fails, so a single bad address cannot
+            // silently swallow the rest of what he ticked, and the result says whether ANY got out.
+            var anySent = false
+            for r in group where await deliver(r, of: prospect, now: now, sender: sender) { anySent = true }
+            return anySent
+        }
         return await sendJointly(prospect, to: group, now: now, sender: sender)
     }
 

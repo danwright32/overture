@@ -14,6 +14,22 @@ enum SendConfirmCopy {
         let who = count == 2 ? "both of these people" : "all \(count) of these people"
         return "This sends one email right now, to \(who). Nothing else goes out."
     }
+    // #2017: the promise has to follow the TICKS and the together-or-separately choice, both of which Dan
+    // can now change on this sheet. Three people on one shared email and three people getting one each are
+    // different acts, and this is the sentence he reads immediately before the only irreversible thing the
+    // app does, so it says which one is about to happen (L21).
+    static func reassurance(chosen: Int, together: Bool) -> String {
+        guard chosen > 1 else { return reassurance }
+        // One literal, not two concatenated: a split sentence lands in docs/copy-inventory.md as two
+        // fragments, and the point of that file is that Dan reads the sentence he will actually see.
+        guard together else {
+            return "This sends \(chosen) separate emails right now, one to each of these people. Nothing else goes out."
+        }
+        return reassuranceForSeveral(chosen)
+    }
+    // #2017: the picker's own labels.
+    static let chooseLabel = "Who this goes to"
+    static let heldTag = "Held, not sending"
     // #948: the follow-up and conversation-note sends share this sheet. Their heading and reassurance
     // differ from the draft's (and a closing note names the second thing it does), and they live here
     // beside the draft's so all three are read together, in one place, rather than in three view bodies.
@@ -39,6 +55,27 @@ struct SendConfirmSheet: View {
     let confirmation: SendConfirmation
     let onSend: () -> Void
     let onCancel: () -> Void
+    // #2017: rebuilds the confirmation for the current ticks and mode, so the To line, the preview and the
+    // promise all describe what pressing Send is about to do rather than what it would have done on open.
+    // The greeting differs between one shared email and one each, so a static preview would show a message
+    // that is not the one leaving. Dan's rule: "what I see on screen should be what's sent."
+    // Nil on the follow-up and note paths, which send to one contact and offer no choice.
+    var rebuild: (@MainActor (_ selected: [String], _ together: Bool) -> SendConfirmation?)? = nil
+    var onSendSelection: (@MainActor (_ selected: [String], _ together: Bool) -> Void)? = nil
+
+    @State private var selected: [String] = []
+    @State private var together = true
+    @State private var touched = false
+
+    // What the sheet is currently describing. Falls back to the confirmation it opened with, so a rebuild
+    // that cannot produce one (nothing ticked) leaves the screen showing the last good state rather than
+    // emptying out under him.
+    private var current: SendConfirmation {
+        guard touched, let rebuild else { return confirmation }
+        return rebuild(selected, together) ?? confirmation
+    }
+
+    private var offersChoice: Bool { rebuild != nil && confirmation.candidates.count > 1 }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -57,12 +94,16 @@ struct SendConfirmSheet: View {
 
             VStack(alignment: .leading, spacing: OVSpacing.md) {
                 VStack(spacing: 0) {
-                    field(SendConfirmCopy.fromLabel, confirmation.from.display)
+                    field(SendConfirmCopy.fromLabel, current.from.display)
                     Divider().overlay(OVColor.line)
-                    field(SendConfirmCopy.toLabel, confirmation.recipient)
+                    field(SendConfirmCopy.toLabel, current.recipient)
                     Divider().overlay(OVColor.line)
-                    field(SendConfirmCopy.subjectLabel, confirmation.subject, emphasised: true)
+                    field(SendConfirmCopy.subjectLabel, current.subject, emphasised: true)
                 }
+
+                // #2017: who it goes to, and how, both decided here. Dan: "Let me pick, and send to
+                // several." Shown only where there IS a choice (more than one contact on the show).
+                if offersChoice { contactPicker }
 
                 VStack(alignment: .leading, spacing: OVSpacing.xs) {
                     Text(SendConfirmCopy.previewLabel)
@@ -77,8 +118,8 @@ struct SendConfirmSheet: View {
                     // version of his own signature he has not used since #1144, on the one screen that
                     // is captioned "The email that will send".
                     ScrollView {
-                        DraftSignaturePreview(draftBody: confirmation.bodyBeforeSignOff,
-                                              signature: confirmation.signature)
+                        DraftSignaturePreview(draftBody: current.bodyBeforeSignOff,
+                                              signature: current.signature)
                     }
                     .frame(maxHeight: 180)
                     .padding(OVSpacing.sm)
@@ -89,7 +130,7 @@ struct SendConfirmSheet: View {
 
                 // #1219: a self double-booking warning, shown at the committing moment so Dan confirms
                 // past it deliberately rather than forgetting he already pitched this date.
-                if let warning = confirmation.selfBookingWarning {
+                if let warning = current.selfBookingWarning {
                     HStack(alignment: .top, spacing: OVSpacing.xs) {
                         Image(systemName: "calendar.badge.exclamationmark")
                             .font(.system(size: 12, weight: .semibold)).foregroundStyle(OVColor.rust)
@@ -103,7 +144,7 @@ struct SendConfirmSheet: View {
 
                 HStack(alignment: .top, spacing: OVSpacing.xs) {
                     Circle().fill(OVColor.gold).frame(width: 6, height: 6).padding(.top, 5)
-                    Text(confirmation.reassurance)
+                    Text(current.reassurance)
                         .font(.system(size: 12))
                         .foregroundStyle(OVColor.inkSoft)
                         .fixedSize(horizontal: false, vertical: true)
@@ -113,18 +154,68 @@ struct SendConfirmSheet: View {
                     Button(SendConfirmCopy.cancel) { onCancel() }
                         .keyboardShortcut(.cancelAction)
                     Spacer()
-                    Button { onSend() } label: {
+                    Button {
+                        if let onSendSelection, touched { onSendSelection(selected, together) } else { onSend() }
+                    } label: {
                         Label(SendConfirmCopy.send, systemImage: "paperplane")
                     }
                     .keyboardShortcut(.defaultAction)
                     .buttonStyle(.borderedProminent)
                     .tint(OVColor.gold)
+                    // #2017: nothing ticked is nobody to send to, and the button must not offer to do an
+                    // action it cannot do. It is the same refusal the send itself makes, at the control.
+                    .disabled(offersChoice && selected.isEmpty)
                 }
             }
             .padding(OVSpacing.lg)
         }
         .frame(width: 460)
         .background(OVColor.canvas)
+        .onAppear {
+            selected = confirmation.selected
+            together = confirmation.togetherAtOpen
+        }
+    }
+
+    // #2017: the contacts, ticked. A held contact is listed with its reason and cannot be ticked, so the
+    // list never quietly omits somebody on the show (#2015) and a guard cannot be clicked past (#2052).
+    @ViewBuilder private var contactPicker: some View {
+        VStack(alignment: .leading, spacing: OVSpacing.xs) {
+            Text(SendConfirmCopy.chooseLabel)
+                .font(OVType.meta).foregroundStyle(OVColor.inkFaint).textCase(.uppercase)
+            ForEach(confirmation.candidates) { c in
+                Toggle(isOn: Binding(
+                    get: { selected.contains(c.id) },
+                    set: { on in
+                        touched = true
+                        if on { if !selected.contains(c.id) { selected.append(c.id) } }
+                        else { selected.removeAll { $0 == c.id } }
+                    }
+                )) {
+                    HStack(spacing: OVSpacing.xs) {
+                        Text(c.name).font(.system(size: 12)).foregroundStyle(OVColor.ink)
+                        Text(c.email).font(OVType.tag).foregroundStyle(OVColor.inkSoft)
+                        if c.isHeld {
+                            Text(SendConfirmCopy.heldTag).font(OVType.tag).foregroundStyle(OVColor.rust)
+                        }
+                    }
+                }
+                .toggleStyle(.checkbox)
+                .disabled(c.isHeld)
+            }
+            // The event's own together-or-separately choice, reachable at the sending moment. Dan,
+            // 2026-08-04: "It should send all three now but also give me the option to put them all on the
+            // same email." Same stored choice as the draft card's, not a second one.
+            Picker(SendModeCopy.label, selection: Binding(get: { together },
+                                                          set: { together = $0; touched = true })) {
+                Text(SendModeCopy.together).tag(true)
+                Text(SendModeCopy.separately).tag(false)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .accessibilityLabel(SendModeCopy.label)
+            .padding(.top, OVSpacing.xxs)
+        }
     }
 
     private func field(_ label: String, _ value: String, emphasised: Bool = false) -> some View {
