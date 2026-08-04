@@ -44,7 +44,9 @@ enum ReachedOutQueue {
                                 reminderConfig: ConversationReminderConfig = .init()) -> [(prospect: Prospect, recipient: Recipient, next: Date)] {
         prospects
             .flatMap { p in
-                p.recipients.compactMap { r -> (prospect: Prospect, recipient: Recipient, next: Date)? in
+                // #2033: one row per EMAIL, not per person on it.
+                p.recipients.filter { SendGroup.isRepresentative($0, in: p) }
+                 .compactMap { r -> (prospect: Prospect, recipient: Recipient, next: Date)? in
                     nextReachOut(for: r, of: p, now: now, followUpConfig: followUpConfig,
                                  reminderConfig: reminderConfig).map { (prospect: p, recipient: r, next: $0) }
                 }

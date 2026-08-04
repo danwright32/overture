@@ -119,7 +119,10 @@ enum FollowUp {
         for p in prospects {
             // A hand-resolved or booked show stops all its follow-ups (matches the lead-level auto-stop).
             if p.outcomeSourceRaw == OutcomeSource.manual.rawValue || p.outcome == .booked { continue }
-            for r in p.recipients where isDue(eligible: isAwaitingNudge(r, in: p), sentAt: r.sentAt,
+            // #2033: one row per EMAIL. Contacts who received one shared email are one conversation to
+            // chase, and two rows would be two buttons doing the same thing to the same thread.
+            for r in p.recipients where SendGroup.isRepresentative(r, in: p)
+                && isDue(eligible: isAwaitingNudge(r, in: p), sentAt: r.sentAt,
                                               lastFollowUpAt: r.lastFollowUpAt, followUpCount: r.followUpCount,
                                               remindedAt: r.nudgeRemindedAt, now: now, config: config) {
                 due.append(DueRecipient(prospect: p, recipient: r))

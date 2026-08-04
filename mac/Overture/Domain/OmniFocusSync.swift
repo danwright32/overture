@@ -86,7 +86,9 @@ enum OmniFocusSync {
         var tasks: [DesiredTask] = []
         for p in prospects {
             guard p.status != .dismissed else { continue }   // #238: a no-go lead never nags via OmniFocus
-            for r in p.recipients {
+            // #2033: one task per EMAIL. These land in an app Dan reads away from his desk, so a
+            // duplicate is a chore he has to tidy up somewhere he cannot see why there are two.
+            for r in p.recipients where SendGroup.isRepresentative(r, in: p) {
                 let standing = r.standing
                 let unhandledReply = r.hasUnhandledReply && r.conversationStateSource != .manual
                 // A closed contact drops out, UNLESS a fresh reply still needs triage (a late reply on
