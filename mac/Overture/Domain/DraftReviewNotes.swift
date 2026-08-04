@@ -126,6 +126,14 @@ extension DraftReviewNotes {
 enum GmailCopy {
     static let notConnected = "Connect Gmail first"
 
+    // #2087: shown beside the draft preview when the stored Gmail signature carries styling that only
+    // goes wrong on a dark background. The preview renders on a white card (#1203), the same background
+    // Gmail authors signatures for, so it is structurally unable to show this and the sentence is the
+    // only warning there can be. Names the fix as well as the effect, because the signature lives in
+    // Gmail's settings and Overture cannot change it.
+    static let signatureLooksWrongOnDark =
+        "Anyone reading in dark mode sees a white box around your signature. Edit it in Gmail settings."
+
     static func sendHelp(connected: Bool, whenConnected: String) -> String {
         connected ? whenConnected : notConnected
     }

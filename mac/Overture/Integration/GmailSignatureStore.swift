@@ -42,6 +42,19 @@ enum GmailSignatureStore {
         return GmailSignatureHealth.corruptionReason(v)
     }
 
+    // #2087: the reason the currently cached signature will look wrong to a dark-mode reader, or nil when
+    // it looks fine everywhere. Deliberately its OWN answer rather than another value folded into
+    // currentSignatureIssue above: these are two independent checks with two different consequences (that
+    // one refuses a signature, this one only warns about it), and a single shared status field lets a pass
+    // from one erase the other's finding (L53).
+    //
+    // Reads the RAW stored value, like currentSignatureIssue, so a signature the corruption guard is
+    // already hiding still answers for itself here.
+    static func currentDarkBackgroundIssue(defaults: UserDefaults = .standard) -> String? {
+        guard let v = defaults.string(forKey: key), !v.isEmpty else { return nil }
+        return GmailSignatureHealth.darkBackgroundReason(v)
+    }
+
     static func clear(defaults: UserDefaults = .standard) { defaults.removeObject(forKey: key) }
 
     // #1158: when the periodic refresh last ATTEMPTED a fetch. GmailSignatureService.refreshIfDue uses it

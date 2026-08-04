@@ -10,10 +10,41 @@ struct DraftSignaturePreview: View {
     let draftBody: String
     let signature: OutboundSignature
 
+    // #2087: whether the signature about to be sent carries styling that only goes wrong on a dark
+    // background. Computed ONCE, at init, rather than in `body`: the page reports its height on every
+    // resize (#2062), so each report re-evaluates the body, and a regex sweep of the signature hung off
+    // that would be paid again on every one of them for an answer that cannot have changed (L62, and the
+    // recompute-per-render freeze this app already shipped once in #1374).
+    private let darkBackgroundIssue: String?
+
+    init(draftBody: String, signature: OutboundSignature) {
+        self.draftBody = draftBody
+        self.signature = signature
+        self.darkBackgroundIssue = signature.html.flatMap(GmailSignatureHealth.darkBackgroundReason)
+    }
+
     @State private var height = PreviewCardHeight()
     @State private var didFail = false
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            renderedMessage
+            // #2087: the warning belongs HERE, beside the preview, and inside this view rather than at
+            // either call site, so the draft review card and the send confirmation both carry it and a
+            // third preview surface cannot be added without it (L30). It is Overture's own voice, so it
+            // sits outside the ignore region above and lands in the copy inventory.
+            if darkBackgroundIssue != nil {
+                HStack(spacing: 5) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                    Text(GmailCopy.signatureLooksWrongOnDark)
+                }
+                .font(OVType.tag).foregroundStyle(OVColor.rust)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    @ViewBuilder private var renderedMessage: some View {
         // copy-inventory:ignore-start  renders the outbound email's own HTML (body + Gmail signature), not Overture's voice (#1203)
         if let html = GmailMessage.previewCardHTML(body: draftBody, signature: signature), !didFail {
             ZStack(alignment: .topLeading) {
