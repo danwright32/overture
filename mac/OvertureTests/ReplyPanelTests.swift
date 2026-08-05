@@ -57,6 +57,108 @@ struct ReplyPanelTests {
         #expect(!ReplyPanel.canSend(body: "Sounds good.", audience: ["a@x.org"], gmailConnected: false, writer: nil))
     }
 
+    // MARK: why the send is refused (#2152)
+
+    // The refusal and the disabled button are ONE decision, asked once. A second predicate deciding what
+    // to say could agree with the button today and drift from it tomorrow, and the drift would show as a
+    // dead button beside a sentence claiming everything is fine (L16, L70).
+    @Test func theDisabledButtonAndTheStatedReasonAreTheSameDecision() {
+        let bodies = ["", "   ", "Tuesday works."]
+        let audiences: [[String]] = [[], ["chelsea@everyvoicechoirs.org"],
+                                     ["chelsea@everyvoicechoirs.org", "nicolebecker@everyvoicechoirs.org"]]
+        let writers: [String?] = [nil, "", "nicolebecker@everyvoicechoirs.org"]
+        for body in bodies {
+            for audience in audiences {
+                for connected in [true, false] {
+                    for writer in writers {
+                        let refusal = ReplyPanel.refusal(body: body, audience: audience,
+                                                         gmailConnected: connected, writer: writer)
+                        let can = ReplyPanel.canSend(body: body, audience: audience,
+                                                     gmailConnected: connected, writer: writer)
+                        #expect(can == (refusal == nil),
+                                "body \(body.debugDescription), audience \(audience), connected \(connected), writer \(writer.debugDescription)")
+                    }
+                }
+            }
+        }
+    }
+
+    // Dan's real case: Nicole wrote from an address he never pitched, so #2147 refuses the send. Without
+    // this he sees a dead Send button on a plainly live conversation and cannot tell a refusal from a bug.
+    // The line names BOTH sides, because the mismatch between them is the whole reason (L11).
+    @Test func theReasonNamesWhoWroteAndWhoTheReplyWouldReach() throws {
+        let refusal = ReplyPanel.refusal(body: "Tuesday works.",
+                                         audience: ["nbecker@everyvoicechoirs.org"],
+                                         gmailConnected: true,
+                                         writer: "nicolebecker@everyvoicechoirs.org")
+        #expect(refusal == .writerNotReached(writer: "nicolebecker@everyvoicechoirs.org",
+                                             audience: ["nbecker@everyvoicechoirs.org"]))
+        let line = try #require(ReplyPanelCopy.refusalLine(refusal))
+        #expect(line.contains("nicolebecker@everyvoicechoirs.org"))
+        #expect(line.contains("nbecker@everyvoicechoirs.org"))
+    }
+
+    // Every address the answer would reach is named, not just the first, so Dan can see the whole
+    // mismatch rather than a sample of it.
+    @Test func theReasonNamesEveryAddressTheReplyWouldReach() {
+        let line = ReplyPanelCopy.refusalLine(
+            ReplyPanel.refusal(body: "Tuesday works.",
+                               audience: ["chelsea@everyvoicechoirs.org", "ray@elsewhere.example"],
+                               gmailConnected: true,
+                               writer: "nicolebecker@everyvoicechoirs.org"))
+        #expect(line?.contains("chelsea@everyvoicechoirs.org") == true)
+        #expect(line?.contains("ray@elsewhere.example") == true)
+    }
+
+    // A disconnected Gmail said itself only in a tooltip, which is invisible at rest (L49). It is the one
+    // refusal with a plain next step, so it belongs on screen beside the button too.
+    @Test func aDisconnectedGmailSaysSoOnScreenRatherThanOnlyOnHover() {
+        let refusal = ReplyPanel.refusal(body: "Tuesday works.", audience: ["a@x.org"],
+                                         gmailConnected: false, writer: nil)
+        #expect(refusal == .gmailDisconnected)
+        #expect(ReplyPanelCopy.refusalLine(refusal) == GmailCopy.notConnected)
+    }
+
+    // Nothing typed is not explained, deliberately: Dan is looking straight at his own empty box, and a
+    // sentence telling him it is empty is the restatement #843 was about.
+    @Test func anEmptyBoxIsNotExplainedBackToHim() {
+        let refusal = ReplyPanel.refusal(body: "  ", audience: ["a@x.org"],
+                                         gmailConnected: true, writer: nil)
+        #expect(refusal == .nothingTyped)
+        #expect(ReplyPanelCopy.refusalLine(refusal) == nil)
+    }
+
+    // Nor is an empty audience, because the header two lines above already says "No address to reply to"
+    // in the same panel. Saying it twice is the other half of #843.
+    @Test func anEmptyAudienceIsNotRestatedBesideTheButton() {
+        let refusal = ReplyPanel.refusal(body: "Tuesday works.", audience: [],
+                                         gmailConnected: true, writer: nil)
+        #expect(refusal == .noAudience)
+        #expect(ReplyPanelCopy.refusalLine(refusal) == nil)
+        #expect(ReplyPanel.audienceLine([]) == "No address to reply to")
+    }
+
+    // And a send that CAN go says nothing at all, so the line cannot become permanent furniture that
+    // stops meaning anything.
+    @Test func aSendableReplyCarriesNoRefusalLine() {
+        let refusal = ReplyPanel.refusal(body: "Tuesday works.",
+                                         audience: ["nicolebecker@everyvoicechoirs.org"],
+                                         gmailConnected: true,
+                                         writer: "nicolebecker@everyvoicechoirs.org")
+        #expect(refusal == nil)
+        #expect(ReplyPanelCopy.refusalLine(refusal) == nil)
+    }
+
+    // The mismatch outranks the empty box: with both true, the line Dan needs is the one he cannot work
+    // out for himself.
+    @Test func theWriterMismatchIsStatedEvenBeforeHeHasTyped() {
+        let refusal = ReplyPanel.refusal(body: "", audience: ["chelsea@everyvoicechoirs.org"],
+                                         gmailConnected: true,
+                                         writer: "nicolebecker@everyvoicechoirs.org")
+        #expect(refusal == .writerNotReached(writer: "nicolebecker@everyvoicechoirs.org",
+                                             audience: ["chelsea@everyvoicechoirs.org"]))
+    }
+
     // MARK: the audience Dan approves
 
     // L64: what he reviews has to include WHO it goes to. The panel states the audience outright rather

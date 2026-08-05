@@ -30,10 +30,13 @@ struct ReplyPanelSheet: View {
     private enum Phase: Equatable { case compose, sending, failed(String) }
 
     private var audience: [String] { SendGroup.replyAudience(of: recipient) }
-    private var canSend: Bool {
-        ReplyPanel.canSend(body: body_, audience: audience, gmailConnected: gmailConnected,
+    // #2152: one decision, asked once. The button's disabled state and the reason on screen come from the
+    // same value, so a refusal can never be enforced without being stated.
+    private var refusal: ReplyPanel.SendRefusal? {
+        ReplyPanel.refusal(body: body_, audience: audience, gmailConnected: gmailConnected,
                            writer: recipient.replyFromAddress)
     }
+    private var canSend: Bool { refusal == nil }
 
     var body: some View {
         VStack(alignment: .leading, spacing: OVSpacing.md) {
@@ -89,6 +92,20 @@ struct ReplyPanelSheet: View {
     }
 
     private var footer: some View {
+        VStack(alignment: .leading, spacing: OVSpacing.xs) {
+            // #2152: why the Send button is refusing, above the button itself, so a refusal reads as a
+            // refusal rather than as a broken control. The wording is ReplyPanelCopy's, never composed
+            // here (ViewCopyGuardTests).
+            if let reason = ReplyPanelCopy.refusalLine(refusal) {
+                Text(reason).font(OVType.meta).foregroundStyle(OVColor.rust)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            buttons
+        }
+    }
+
+    private var buttons: some View {
         HStack(spacing: OVSpacing.sm) {
             Button(ReplyPanelCopy.cancel) { dismiss() }
                 .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
@@ -111,8 +128,9 @@ struct ReplyPanelSheet: View {
                 Button(ReplyPanelCopy.send) { send() }
                     .buttonStyle(.borderedProminent).controlSize(.regular)
                     .disabled(!canSend)
-                    .help(GmailCopy.sendHelp(connected: gmailConnected,
-                                             whenConnected: ReplyPanelCopy.sendHelp))
+                    // Says what the button DOES. Why it will not do it is stated on screen above rather
+                    // than swapped in here, where only a hover would ever find it (#2152, L49).
+                    .help(ReplyPanelCopy.sendHelp)
             }
         }
     }
