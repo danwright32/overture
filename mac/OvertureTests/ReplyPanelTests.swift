@@ -135,7 +135,7 @@ struct ReplyPanelTests {
                                          gmailConnected: true, writer: nil)
         #expect(refusal == .noAudience)
         #expect(ReplyPanelCopy.refusalLine(refusal) == nil)
-        #expect(ReplyPanel.audienceLine([]) == "No address to reply to")
+        #expect(ReplyPanelCopy.noAddress == "No address to reply to")
     }
 
     // And a send that CAN go says nothing at all, so the line cannot become permanent furniture that
@@ -159,20 +159,148 @@ struct ReplyPanelTests {
                                              audience: ["chelsea@everyvoicechoirs.org"]))
     }
 
-    // MARK: the audience Dan approves
+    // MARK: who wrote, and taking somebody off the reply (#2155)
 
-    // L64: what he reviews has to include WHO it goes to. The panel states the audience outright rather
-    // than only naming the extras, because it is the approval surface for the send.
-    @Test func theAudienceIsStatedInFull() {
-        #expect(ReplyPanel.audienceLine(["nbecker@everyvoicechoirs.org"])
-                == "Goes to nbecker@everyvoicechoirs.org")
-        #expect(ReplyPanel.audienceLine(["nbecker@everyvoicechoirs.org", "ray@elsewhere.example"])
-                == "Goes to nbecker@everyvoicechoirs.org and ray@elsewhere.example")
+    // Dan, looking at the live Pumpkin Singalong panel: "it's also not clear which email sent the message
+    // I'm reading". Three addresses, one flat sentence, and the surface the send is approved from said
+    // less about who he was answering than the row he opened it from.
+    @Test func theAddressThatWroteIsMarkedAmongTheOthers() {
+        let entries = ReplyPanel.audienceEntries(["nicolebecker@everyvoicechoirs.org",
+                                                  "chelsea@everyvoicechoirs.org",
+                                                  "nbecker@everyvoicechoirs.org"],
+                                                 writer: "nicolebecker@everyvoicechoirs.org")
+        #expect(entries.map(\.address) == ["nicolebecker@everyvoicechoirs.org",
+                                           "chelsea@everyvoicechoirs.org",
+                                           "nbecker@everyvoicechoirs.org"])
+        #expect(entries.filter(\.wrote).map(\.address) == ["nicolebecker@everyvoicechoirs.org"])
     }
 
-    // A panel with nobody to write to says so, rather than showing a bare "Goes to" with nothing after it.
+    // Matched the way reply detection matches, so a difference in casing cannot silently unmark the one
+    // person the panel exists to identify.
+    @Test func theWriterIsMarkedEvenWhenTheStoredSpellingDiffersInCase() {
+        let entries = ReplyPanel.audienceEntries(["nicolebecker@everyvoicechoirs.org"],
+                                                 writer: "NicoleBecker@EveryVoiceChoirs.org")
+        #expect(entries.first?.wrote == true)
+    }
+
+    // A row with nothing recorded about who wrote marks nobody, rather than guessing at the first address
+    // and telling Dan somebody wrote who may not have.
+    @Test func anUnknownWriterMarksNobody() {
+        let entries = ReplyPanel.audienceEntries(["a@x.org", "b@x.org"], writer: nil)
+        #expect(entries.map(\.wrote) == [false, false])
+    }
+
+    // "if she changed it from nbecker to nicolebecker, she clearly wants that one. So I should be able to
+    // remove the other one." Every address can come off, including the writer's: removing the writer is a
+    // refusal to send, which the panel already states, not something to forbid at the control.
+    @Test func anyAddressCanBeTakenOffWhileMoreThanOneRemains() {
+        let entries = ReplyPanel.audienceEntries(["nicolebecker@everyvoicechoirs.org",
+                                                  "nbecker@everyvoicechoirs.org"],
+                                                 writer: "nicolebecker@everyvoicechoirs.org")
+        #expect(entries.map(\.canRemove) == [true, true])
+    }
+
+    // The last one cannot, because an empty audience does not mean "send to nobody": SendGroup falls back
+    // to the contact's own address, which would quietly deliver the reply to somebody Dan just removed
+    // (L75). The control is absent rather than present and failing.
+    @Test func theLastAddressCannotBeTakenOff() {
+        let entries = ReplyPanel.audienceEntries(["nbecker@everyvoicechoirs.org"], writer: nil)
+        #expect(entries.count == 1)
+        #expect(entries[0].canRemove == false)
+    }
+
+    @Test func removingAnAddressLeavesTheRestInOrder() {
+        let left = ReplyPanel.removing("nbecker@everyvoicechoirs.org",
+                                       from: ["nicolebecker@everyvoicechoirs.org",
+                                              "chelsea@everyvoicechoirs.org",
+                                              "nbecker@everyvoicechoirs.org"])
+        #expect(left == ["nicolebecker@everyvoicechoirs.org", "chelsea@everyvoicechoirs.org"])
+    }
+
+    // Same comparison as the marking above, so an address written one way in the thread and another way
+    // on the contact cannot survive a removal Dan believes he performed.
+    @Test func removingIgnoresCasing() {
+        let left = ReplyPanel.removing("NBecker@EveryVoiceChoirs.org",
+                                       from: ["nicolebecker@everyvoicechoirs.org",
+                                              "nbecker@everyvoicechoirs.org"])
+        #expect(left == ["nicolebecker@everyvoicechoirs.org"])
+    }
+
+    // Removing the last address is refused by the same rule the control is hidden by, so a caller that
+    // reaches this another way cannot empty the audience either.
+    @Test func removingTheLastAddressIsRefused() {
+        #expect(ReplyPanel.removing("only@x.org", from: ["only@x.org"]) == ["only@x.org"])
+    }
+
+    // Dan's call on how far a removal reaches (2026-08-05): "drop it entirely. just like it would in a
+    // real email client. if they want to add it back they can." So it comes off the reply AND the show
+    // stops using that contact, through the same removeOrSuppressRecipient the card's own Remove uses.
+    // An already-emailed contact is suppressed rather than deleted there, so nothing about the pitch it
+    // received is lost and re-adding the address resumes it.
+    @Test func takingAContactOffTheReplyAlsoStopsTheShowUsingThem() throws {
+        let ctx = ModelContext(try container())
+        let p = show(ctx)
+        let chelsea = contact(p, "chelsea@everyvoicechoirs.org")
+        let nicole = contact(p, "nbecker@everyvoicechoirs.org")
+        for r in [chelsea, nicole] { r.replied = true; r.replyFromAddress = "nicolebecker@everyvoicechoirs.org" }
+        nicole.replyAudience = ["nicolebecker@everyvoicechoirs.org",
+                                "chelsea@everyvoicechoirs.org",
+                                "nbecker@everyvoicechoirs.org"]
+
+        #expect(ReplyPanel.removeFromReply("chelsea@everyvoicechoirs.org", on: nicole, of: p))
+
+        // Off this reply, and the SEND reads the same narrowed list, so what Dan approved is what goes.
+        #expect(SendGroup.replyAudience(of: nicole) == ["nicolebecker@everyvoicechoirs.org",
+                                                        "nbecker@everyvoicechoirs.org"])
+        // And off the show, without losing that she was pitched.
+        #expect(chelsea.sendState == .suppressed)
+        #expect(chelsea.suppressionReason == .removedByDan)
+        #expect(p.recipients.contains { $0.id == chelsea.id }, "an emailed contact is suppressed, never deleted")
+    }
+
+    // The writer's own address is on no contact of this show, which is the whole reason this panel needed
+    // fixing. Removing it narrows the reply and touches no contact record at all.
+    @Test func takingOffAnAddressThatIsNobodysContactJustNarrowsTheReply() throws {
+        let ctx = ModelContext(try container())
+        let p = show(ctx)
+        let nicole = contact(p, "nbecker@everyvoicechoirs.org")
+        nicole.replied = true
+        nicole.replyFromAddress = "nicolebecker@everyvoicechoirs.org"
+        nicole.replyAudience = ["nicolebecker@everyvoicechoirs.org", "nbecker@everyvoicechoirs.org"]
+
+        #expect(ReplyPanel.removeFromReply("nicolebecker@everyvoicechoirs.org", on: nicole, of: p))
+        #expect(SendGroup.replyAudience(of: nicole) == ["nbecker@everyvoicechoirs.org"])
+        #expect(nicole.sendState == .sent, "no contact holds that address, so no contact changes")
+    }
+
+    // Nothing is emptied. The audience falling back to the contact's own address would deliver the reply
+    // to somebody Dan had just taken off it, which looks exactly like success (L75).
+    @Test func theLastAddressSurvivesEvenIfSomethingAsksToRemoveIt() throws {
+        let ctx = ModelContext(try container())
+        let p = show(ctx)
+        let nicole = contact(p, "nbecker@everyvoicechoirs.org")
+        nicole.replied = true
+        nicole.replyAudience = ["nbecker@everyvoicechoirs.org"]
+
+        #expect(ReplyPanel.removeFromReply("nbecker@everyvoicechoirs.org", on: nicole, of: p) == false)
+        #expect(SendGroup.replyAudience(of: nicole) == ["nbecker@everyvoicechoirs.org"])
+        #expect(nicole.sendState == .sent, "a refused removal must not half-happen on the contact")
+    }
+
+    // MARK: the audience Dan approves
+
+    // L64: what he reviews has to include WHO it goes to. The panel lists every address outright rather
+    // than only naming the extras, because it is the approval surface for the send.
+    @Test func everyAddressTheReplyReachesIsListed() {
+        let entries = ReplyPanel.audienceEntries(["nbecker@everyvoicechoirs.org",
+                                                  "ray@elsewhere.example"], writer: nil)
+        #expect(entries.map(\.address) == ["nbecker@everyvoicechoirs.org", "ray@elsewhere.example"])
+    }
+
+    // A panel with nobody to write to says so, rather than showing a heading with nothing under it.
     @Test func anEmptyAudienceSaysSoRatherThanTrailingOff() {
-        #expect(ReplyPanel.audienceLine([]) == "No address to reply to")
+        #expect(ReplyPanel.audienceEntries([], writer: nil).isEmpty)
+        #expect(ReplyPanelCopy.noAddress == "No address to reply to")
     }
 
     // MARK: which contact the panel is about

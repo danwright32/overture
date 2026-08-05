@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1047 sentences**, from 363 source files.
+Every sentence Overture can say to Dan: **1049 sentences**, from 363 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -723,8 +723,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/GmailAuthManager.swift`
 "Go back to deciding \(organisation) automatically"
     `UI/QueueView+Model.swift`
-"Goes to \(Plural.list(addresses))"
-    `Domain/ReplyPanel.swift`
 "Google did not return a refresh token. Revoke prior access and retry."
     `Integration/GmailAuthManager.swift`
 "Grant these once, here, so Overture can keep working while you're away from your desk."
@@ -1583,6 +1581,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ClientTagCopy.swift`
 "Tagged as returning client \(namedClient): shows surface up to a year ahead."
     `Domain/ClientTagCopy.swift`
+"Take \(address) off this reply and stop this show emailing it"
+    `Domain/ReplyPanel.swift`
 "Take this source off the watchlist. You can put it back any time"
     `UI/SourceFixConfirmActions.swift`
 "Thalia Spanish Theatre"
@@ -1984,6 +1984,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DownbeatExport.swift`
 "Your Gmail access has expired or was revoked, so nothing was sent. Click Connect Gmail to reconnect, then try Send again."
     `UI/SendConfirmAndReconnectAlerts.swift`
+"Your reply goes to"
+    `Domain/ReplyPanel.swift`
 "Your shoot history is \(days) days old, so rooms you've photographed since then won't be mentioned in a pitch. Re-export your Shoots calendar and run the import again."
     `Domain/ShootHistory.swift`
 "Zankel Hall"
@@ -2366,6 +2368,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "which usually means the match is wrong."
     `Domain/PossibleMatchFanOut.swift`
+"wrote this"
+    `Domain/ReplyPanel.swift`
 "you stopped this check after 1 of \(requested) shows got an answer, and the lookups that were already under way still counted as spent"
     `Domain/ReachabilityRunSummary.swift`
 "you stopped this check after \(answered) of \(requested) shows got an answer, and the lookups that were already under way still counted as spent"

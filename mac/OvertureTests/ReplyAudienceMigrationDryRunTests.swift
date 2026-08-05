@@ -8,10 +8,10 @@ import SwiftData
 // `Inquiry.replyAudience`), both optional with a nil default, which is the shape SwiftData's lightweight
 // migration handles. Rehearsed against a COPY of the real Release store, never the live file.
 //
-// Unlike the joint-send rehearsal this one is a GENUINE forward migration at the time of writing: the
-// columns do not exist in the live store yet, so the census below reads nothing going in and the run has
-// to produce them empty. That is the branch #2054 built and could no longer exercise itself, because its
-// own columns had already shipped.
+// It WAS a genuine forward migration when written: the columns did not exist in the live store, so the
+// census read nothing going in and the run had to produce them empty. They have since shipped and Dan's
+// store now carries real values, so the census takes its other branch (the count going in must equal the
+// count coming out) and the rehearsal is now about preserving data rather than creating columns.
 @MainActor
 @Suite("Reply-audience columns migration dry-run against a clone of the live store")
 struct ReplyAudienceMigrationDryRunTests {
@@ -85,11 +85,27 @@ struct ReplyAudienceMigrationDryRunTests {
             }
         }
 
-        // Nobody inherits an audience they never had: with nothing captured, a reply reaches the contact
-        // alone, which is the fallback the whole change rests on.
+        // Nobody inherits an audience they never had, and nobody loses one they do have.
+        //
+        // This used to read `r.replyAudience == nil` on every row, which was true only for as long as the
+        // feature had never been used. On 2026-08-05 the reply repair pass legitimately filled two rows on
+        // Dan's Pumpkin Singalong thread and this went red on working software, which is exactly the shape
+        // L68 names: a guard over live data must assert the SIGNATURE of the failure it protects against,
+        // never the data's current emptiness, or ordinary use expires it.
+        //
+        // The signature is a migration that invents, drops or corrupts an audience. So: a row with nothing
+        // captured still falls back to the contact alone (the property the whole change rests on), and a
+        // row that has one comes out holding real addresses rather than a husk of empty strings.
         for r in recipients {
-            #expect(r.replyAudience == nil)
-            #expect(SendGroup.replyAudience(of: r) == [r.email].compactMap { $0 }.filter { !$0.isEmpty })
+            let own = [r.email].compactMap { $0 }.filter { !$0.isEmpty }
+            if let captured = r.replyAudience {
+                #expect(!captured.isEmpty, "a migrated row carries an audience with nothing in it")
+                #expect(captured.allSatisfy { !$0.trimmingCharacters(in: .whitespaces).isEmpty },
+                        "a migrated audience holds a blank address, so the values did not survive intact")
+                #expect(SendGroup.replyAudience(of: r) == captured)
+            } else {
+                #expect(SendGroup.replyAudience(of: r) == own)
+            }
         }
 
         // Opening the ALREADY-migrated clone a second time must find exactly the same rows.
