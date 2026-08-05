@@ -43,19 +43,7 @@ struct GmailReplyChecker {
         // so a reply to any contact is seen. Skip a show only on a MANUAL lead resolution or a booking
         // (a closed show); never on the auto .replied rollup, or a second contact's reply would be missed.
         // An inquiry presents itself here as its own single recipient.
-        var threadIds: Set<String> = []
-        for p in all {
-            if p.replyWatchManualOutcome || p.replyWatchIsBooked { continue }
-            for r in p.replyWatchRecipients {
-                guard let t = r.gmailThreadId, !t.isEmpty,
-                      !r.replyWatchManualOutcome, !r.replyWatchIsBooked else { continue }
-                // #2113: a thread that already replied is normally never fetched again. One that replied
-                // before the writer was recorded is fetched exactly once more, to learn who wrote, and
-                // then falls back out of this set for good.
-                guard !r.replied || r.replyFromAddress == nil || r.lastReplyText == nil else { continue }
-                threadIds.insert(t)
-            }
-        }
+        let threadIds = Self.threadsToCheck(in: all)
         guard !threadIds.isEmpty else { return false }
 
         var threads: [String: Data] = [:]
@@ -75,7 +63,7 @@ struct GmailReplyChecker {
                                                         fetchThread: { threads[$0] })
         // #2113: name the writer on threads that replied before any of this was recorded. Runs after
         // detection, so a reply found on this very pass has already named its own writer and is skipped.
-        let respondersFilled = ReplyService.backfillResponders(in: all, selfEmail: fromEmail,
+        let respondersFilled = ReplyService.backfillResponders(in: all, selfEmail: fromEmail, now: now,
                                                                fetchThread: { threads[$0] },
                                                                fetchFullThread: { fullThreads[$0] })
         guard repliesMarked > 0 || bouncesMarked > 0 || respondersFilled > 0 else { return false }
@@ -86,6 +74,27 @@ struct GmailReplyChecker {
             // #499: replies were detected in memory but couldn't persist.
             return true
         }
+    }
+
+    // Which Gmail threads this check pulls. Out of the method body and made testable in #2149, because the
+    // question it answers ("is anything still missing on this row") is the SAME one the fill asks, and the
+    // two drifting is what produced a permanent refetch loop: the checker went on pulling a thread the
+    // fill had already given up on. Both now go through ReplyGap.
+    //
+    // A never-replied row is watched because a reply might arrive. A replied row is watched only while it
+    // still has a gap something could fill.
+    static func threadsToCheck(in entities: [any ReplyWatchable]) -> Set<String> {
+        var threadIds: Set<String> = []
+        for p in entities {
+            if p.replyWatchManualOutcome || p.replyWatchIsBooked { continue }
+            for r in p.replyWatchRecipients {
+                guard let t = r.gmailThreadId, !t.isEmpty,
+                      !r.replyWatchManualOutcome, !r.replyWatchIsBooked else { continue }
+                guard !r.replied || ReplyGap.needsFilling(r) else { continue }
+                threadIds.insert(t)
+            }
+        }
+        return threadIds
     }
 
     private func fetchThread(

@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1057 sentences**, from 363 source files.
+Every sentence Overture can say to Dan: **1058 sentences**, from 364 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1168,6 +1168,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/LaunchMigrations.swift`
 "Overture couldn't move its data to \(newStoreURL.path): "
     `App/StoreRelocation.swift`
+"Overture couldn't read this message, which usually means it's an image or an attachment. Open it in Gmail."
+    `Domain/ReplyPanel.swift`
 "Overture couldn't safely confirm the greeting in this draft is free of a real name. Confirm you've checked it and it's fine to send as-is."
     `UI/DraftReviewView.swift`
 "Overture couldn't start the Gmail sign-in on this Mac, so it didn't open your browser."

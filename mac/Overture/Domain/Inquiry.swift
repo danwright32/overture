@@ -84,6 +84,9 @@ final class Inquiry {
     var replyFromAddress: String?
     var replyFromName: String?
     var inboundReplySentAt: Date?
+    // #2149: when the repair pass last TRIED to fill in the message text, whether or not it found any.
+    // Without it a reply with no decodable body stays in the gap and its thread is refetched forever.
+    var replyTextCheckedAt: Date?
     var dismissedReplyId: String?
     var bounced: Bool = false
     var lastBounceId: String?

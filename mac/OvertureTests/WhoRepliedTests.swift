@@ -155,7 +155,8 @@ struct WhoRepliedTests {
         r.repliedAt = Date(timeIntervalSince1970: 5_000)
         let json = thread(from: "Nicole Becker <nbecker@everyvoicechoirs.org>", internalDate: "1754355390000")
 
-        let filled = ReplyService.backfillResponders(in: [p], selfEmail: me, fetchThread: { _ in json })
+        let filled = ReplyService.backfillResponders(in: [p], selfEmail: me,
+                                            now: Date(timeIntervalSince1970: 9_999), fetchThread: { _ in json })
         #expect(filled == 1)
         #expect(r.replyFromAddress == "nbecker@everyvoicechoirs.org")
         #expect(r.inboundReplySentAt == Date(timeIntervalSince1970: 1_754_355_390))
@@ -176,6 +177,7 @@ struct WhoRepliedTests {
         r.lastReplyText = "Thanks, that sounds good."
         var fetches = 0
         let filled = ReplyService.backfillResponders(in: [p], selfEmail: me,
+                                            now: Date(timeIntervalSince1970: 9_999),
                                                      fetchThread: { _ in fetches += 1; return nil })
         #expect(filled == 0)
         #expect(fetches == 0)
@@ -188,6 +190,7 @@ struct WhoRepliedTests {
         contact(p, "chelsea@everyvoicechoirs.org", group: nil)
         var fetches = 0
         let filled = ReplyService.backfillResponders(in: [p], selfEmail: me,
+                                            now: Date(timeIntervalSince1970: 9_999),
                                                      fetchThread: { _ in fetches += 1; return nil })
         #expect(filled == 0)
         #expect(fetches == 0)

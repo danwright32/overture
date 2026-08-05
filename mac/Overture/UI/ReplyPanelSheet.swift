@@ -151,8 +151,10 @@ struct ReplyPanelSheet: View {
             .frame(maxHeight: 160)
             .padding(OVSpacing.sm)
             .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(OVColor.surfaceSunk.opacity(0.6)))
-        } else {
-            Text(ReplyPanelCopy.noCapturedWords).font(OVType.meta).foregroundStyle(OVColor.inkFaint)
+        } else if let reason = ReplyPanel.missingWordsReason(recipient) {
+            // #2149: which of the two reasons, decided beside the data rather than assumed here.
+            Text(reason).font(OVType.meta).foregroundStyle(OVColor.inkFaint)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 

@@ -112,7 +112,7 @@ enum ReplyService {
     // Bounded by the gap itself: a row is fetched only when it replied and has no writer recorded, so the
     // pass costs nothing at all once it has run, and nothing on a store that never had the gap.
     @discardableResult
-    static func backfillResponders(in entities: [any ReplyWatchable], selfEmail: String,
+    static func backfillResponders(in entities: [any ReplyWatchable], selfEmail: String, now: Date,
                                    fetchThread: (String) -> Data?,
                                    fetchFullThread: (String) -> Data? = { _ in nil }) -> Int {
         var filled = 0
@@ -124,7 +124,7 @@ enum ReplyService {
                 // #2147: the words are part of the gap now. A reply from an address none of the contacts
                 // were written at used to be filed against nobody, so rows that replied before that fix
                 // carry a writer and no message at all, and the panel tells Dan nothing was captured.
-                guard r.replied, r.replyFromAddress == nil || r.lastReplyText == nil else { continue }
+                guard ReplyGap.needsFilling(r) else { continue }
                 guard let threadId = r.gmailThreadId, !threadId.isEmpty else { continue }
                 guard let data = fetchThread(threadId),
                       ReplyDetection.latestReplySender(threadJSON: data, selfEmail: selfEmail) != nil
@@ -133,6 +133,11 @@ enum ReplyService {
                 // The body needs the full thread, which the caller fetches only for threads that have one.
                 if r.lastReplyText == nil, let full = fetchFullThread(threadId) {
                     r.lastReplyText = ReplyDetection.latestReplyBody(threadJSON: full, selfEmail: selfEmail)
+                    // #2149: stamped whether or not a body came back. A reply with no decodable body
+                    // (HTML-only, attachment-only) returns nil every time, so recording only success
+                    // leaves the row in the gap and refetches this thread on every check forever. The
+                    // attempt is the thing that has to be remembered, on the row it failed on (L47).
+                    r.replyTextCheckedAt = now
                     if r.replyAudience == nil {
                         r.replyAudience = ReplyDetection.latestReplyAudience(threadJSON: full, selfEmail: selfEmail)
                     }

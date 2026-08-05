@@ -21,6 +21,17 @@ enum ReplyPanel {
         return text
     }
 
+    // #2149: WHY there are no words, which is two different states and needs two different sentences.
+    // Overture has read the thread and found nothing it could decode (an image or an attachment), or it
+    // has not looked yet. Saying "didn't capture" of a message it read and could not understand claims
+    // something its own check never measured (L11). Nil when the words are there and nothing needs saying.
+    static func missingWordsReason(_ recipient: Recipient) -> String? {
+        guard theirWords(recipient) == nil else { return nil }
+        return recipient.replyTextCheckedAt == nil
+            ? ReplyPanelCopy.noCapturedWords
+            : ReplyPanelCopy.unreadableWords
+    }
+
     // #2152: WHY the send is refused, as a value. The disabled button and the sentence beside it are then
     // one decision asked once, so they cannot drift into a dead button sitting next to a line claiming
     // everything is fine (L16, L70).
@@ -192,6 +203,11 @@ enum ReplyPanel {
 enum ReplyPanelCopy {
     static let answer = "Answer"
     static let noCapturedWords = "Overture didn't capture what they wrote. Their message is in Gmail."
+    // #2149: a message Overture DID read and could not decode, which is a different thing and gets
+    // different words. It names the likely cause, because that is what tells Dan the answer is in Gmail
+    // rather than that something is broken, and Overture will not keep trying this one.
+    static let unreadableWords =
+        "Overture couldn't read this message, which usually means it's an image or an attachment. Open it in Gmail."
     static let draftWithAI = "Draft with AI"
     static let draftWithAIHelp = "Write a first draft of this one reply, which you can then edit"
     static let send = "Send reply"
