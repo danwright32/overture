@@ -821,6 +821,11 @@ struct QueueView: View {
                     .foregroundStyle(OVColor.rust)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            // #2091: "Overture stopped watching for replies and bookings". Sits directly under the
+            // scouted/fan-out lines because those say how fresh this queue's CONTENTS are, and this says
+            // whether the app is still updating them at all: a quiet queue and a dead watcher look
+            // identical without it. Its own view for the same reason as ReplyRunLine below.
+            WatchGapLine()
             // #1923: its own view, so an idle queue runs no timer for it and a run starting repaints one
             // line instead of re-deriving the store. See ReplyRunLine.
             ReplyRunLine(activity: .replyClassify)

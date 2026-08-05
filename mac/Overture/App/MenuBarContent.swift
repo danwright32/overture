@@ -17,8 +17,12 @@ struct MenuBarContent: View {
     var body: some View {
         let last = lastReconcileEpoch > 0 ? Date(timeIntervalSince1970: lastReconcileEpoch) : nil
         let unreadLogProblems = AgentLogLocation.hasUnreadProblems(viewedSize: Int(viewedProblemSize))
+        // #2091: read at menu-open (this body runs each time the menu is built), which is the right
+        // moment: it is exactly when Dan is asking what the resident app is doing. Reading the clocks
+        // here rather than inside MenuBarStatus keeps the decision pure and testable.
+        let watchReport = WatchHeartbeatStore.currentReport()
         Text(MenuBarStatus.line(lastReconcileAt: last, now: Date(), omniFocusFailed: omniFocusFailedAt > 0,
-                                hasUnreadLogProblems: unreadLogProblems))
+                                hasUnreadLogProblems: unreadLogProblems, watchReport: watchReport))
         Divider()
         Button("Open Overture") { openWindow(id: "main") }
         Button("Run reconcile now") { AppDelegate.shared?.runReconcileNow() }

@@ -35,8 +35,11 @@ final class ReconcileScheduler {
     }
 
     // The reconcile cadence (#245 decision: configurable, 30-minute default).
-    static let intervalKey = "reconcileIntervalMinutes"
-    static func intervalSeconds(defaults: UserDefaults = .standard) -> Double {
+    // #2091: nonisolated (it only reads a default) so the watch-gap window can be derived from the real
+    // cadence off the main actor, per L51: the staleness threshold must come from the schedule that
+    // computes it rather than be guessed beside it.
+    nonisolated static let intervalKey = "reconcileIntervalMinutes"
+    nonisolated static func intervalSeconds(defaults: UserDefaults = .standard) -> Double {
         let minutes = defaults.double(forKey: intervalKey)
         return (minutes > 0 ? minutes : 30) * 60
     }
@@ -80,8 +83,18 @@ final class ReconcileScheduler {
         p.hasUnhandledReply || p.outcome == .replied
     }
 
+    // #2091: `defaults` and `uptime` are injected (both defaulting to the real ones) so the watch
+    // heartbeat this tick writes can be driven against a scratch suite and a fake clock, and so the
+    // existing lastReconcileAt write stops landing in the real defaults during a test run too.
     @discardableResult
-    func runSafeReconcilesOnce(now: Date = Date()) async -> ReconcileSummary {
+    func runSafeReconcilesOnce(now: Date = Date(), defaults: UserDefaults = .standard,
+                               uptime: TimeInterval = ProcessInfo.processInfo.systemUptime)
+        async -> ReconcileSummary {
+        // #2091: note a silence this tick is resuming after, BEFORE the stamp at the end hides it. Why
+        // that ordering is the whole design, and why it lives here rather than in start(), is in WatchGap.
+        WatchHeartbeatStore.observeResume(
+            now: now, uptime: uptime,
+            intervalSeconds: ReconcileScheduler.intervalSeconds(defaults: defaults), into: defaults)
         // #269: snapshot which leads are already replied/booked BEFORE mutating, so the diff after the
         // reconcile names exactly what arrived this tick (each item reported once).
         let before = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
@@ -121,7 +134,10 @@ final class ReconcileScheduler {
         let newBookingKeys = AwayAlert.newKeys(before: bookedBefore, after: bookedAfter)
 
         lastReconcileAt = now
-        UserDefaults.standard.set(now.timeIntervalSince1970, forKey: ReconcileScheduler.lastReconcileKey)
+        defaults.set(now.timeIntervalSince1970, forKey: ReconcileScheduler.lastReconcileKey)
+        // #2091: the watch heartbeat, carrying the awake clock alongside the wall clock so the next tick
+        // can tell a sleeping Mac (nothing missed) from a dead process (everything missed).
+        WatchHeartbeatStore.stamp(now: now, uptime: uptime, into: defaults)
         return ReconcileSummary(omniFocusChanged: omniFocusChanged,
                                 newReplies: newReplies, newBookings: newBookings,
                                 newReplyKeys: newReplyKeys, newBookingKeys: newBookingKeys,

@@ -41,6 +41,38 @@ struct MenuBarStatusTests {
 
     // A known OmniFocus failure is the more specific, more actionable signal, so it still wins over the
     // generic "something was logged as a problem" nudge.
+    // #2091: THE defect this line had. With no date on it, "Last checked 9:14 PM" reads exactly the
+    // same three days into an outage as it does thirty seconds after a healthy tick, so the menu bar
+    // reported a dead watcher as a working one. A live silence now replaces it.
+    @Test func aStoppedWatchReplacesTheCheerfulLastCheckedTime() {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let stale = MenuBarStatus.line(lastReconcileAt: now.addingTimeInterval(-3 * 86_400), now: now,
+                                       omniFocusFailed: false, hasUnreadLogProblems: false,
+                                       watchReport: .ongoing(awakeSeconds: 3 * 86_400))
+        #expect(stale == "Overture has not checked for replies or bookings in 3d")
+        #expect(!stale.hasPrefix("Last checked "))
+    }
+
+    // It outranks the other nudges: they are about work this app is supposed to be doing, and a stopped
+    // watcher means it is doing none of it.
+    @Test func aStoppedWatchOutranksTheOtherNudges() {
+        let line = MenuBarStatus.line(lastReconcileAt: nil, now: Date(timeIntervalSince1970: 2_000),
+                                      omniFocusFailed: true, hasUnreadLogProblems: true,
+                                      watchReport: .ongoing(awakeSeconds: 2 * 3_600))
+        #expect(line == "Overture has not checked for replies or bookings in 2h")
+    }
+
+    // A silence that has already ENDED is history, and the queue masthead is where it is read. The menu
+    // bar goes back to its ordinary line rather than repeating it in a second place.
+    @Test func aRecoveredSilenceDoesNotHoldTheMenuBarLine() {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let line = MenuBarStatus.line(lastReconcileAt: now, now: now, omniFocusFailed: false,
+                                      hasUnreadLogProblems: false,
+                                      watchReport: .recovered(awakeSeconds: 3 * 86_400,
+                                                              endedAt: now.addingTimeInterval(-600)))
+        #expect(line.hasPrefix("Last checked "))
+    }
+
     @Test func anOmniFocusFailureStillWinsOverUnreadLogProblems() {
         let line = MenuBarStatus.line(lastReconcileAt: nil, now: Date(timeIntervalSince1970: 2_000),
                                       omniFocusFailed: true, hasUnreadLogProblems: true)
