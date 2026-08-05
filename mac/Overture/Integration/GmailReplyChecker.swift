@@ -48,8 +48,11 @@ struct GmailReplyChecker {
             if p.replyWatchManualOutcome || p.replyWatchIsBooked { continue }
             for r in p.replyWatchRecipients {
                 guard let t = r.gmailThreadId, !t.isEmpty,
-                      !r.replyWatchManualOutcome,
-                      !r.replied, !r.replyWatchIsBooked else { continue }
+                      !r.replyWatchManualOutcome, !r.replyWatchIsBooked else { continue }
+                // #2113: a thread that already replied is normally never fetched again. One that replied
+                // before the writer was recorded is fetched exactly once more, to learn who wrote, and
+                // then falls back out of this set for good.
+                guard !r.replied || r.replyFromAddress == nil else { continue }
                 threadIds.insert(t)
             }
         }
@@ -70,7 +73,11 @@ struct GmailReplyChecker {
                                                        fetchThread: { threads[$0] }, fetchFullThread: { fullThreads[$0] })
         let bouncesMarked = BounceService.detectBounces(in: all, selfEmail: fromEmail, now: now,
                                                         fetchThread: { threads[$0] })
-        guard repliesMarked > 0 || bouncesMarked > 0 else { return false }
+        // #2113: name the writer on threads that replied before any of this was recorded. Runs after
+        // detection, so a reply found on this very pass has already named its own writer and is skipped.
+        let respondersFilled = ReplyService.backfillResponders(in: all, selfEmail: fromEmail,
+                                                               fetchThread: { threads[$0] })
+        guard repliesMarked > 0 || bouncesMarked > 0 || respondersFilled > 0 else { return false }
         do {
             try context.save()
             return false

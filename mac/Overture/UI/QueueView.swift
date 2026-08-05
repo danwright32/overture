@@ -986,7 +986,7 @@ struct QueueView: View {
         return HStack(alignment: .top, spacing: OVSpacing.md) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(p.groupName).font(OVType.groupName).foregroundStyle(OVColor.ink)
-                Text(r.email ?? r.name ?? "no contact").font(OVType.body).foregroundStyle(OVColor.inkSoft)
+                Text(ReplyIdentity.rowContactLine(for: r, in: p)).font(OVType.body).foregroundStyle(OVColor.inkSoft)
                 // #1630: a form pitch has no address and no thread, so the row has to account for the
                 // silence itself. Said in inkSoft, not rust: nothing is wrong here.
                 if r.outreachChannel == .contactForm {
