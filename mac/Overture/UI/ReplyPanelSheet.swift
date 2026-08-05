@@ -96,8 +96,12 @@ struct ReplyPanelSheet: View {
     }
 
     private func remove(_ address: String) {
-        guard ReplyPanel.removeFromReply(address, on: recipient, of: prospect) else { return }
-        context.saveOrWarn(org: prospect.groupName, feedback: feedback)
+        let removal = ReplyPanel.removeFromReply(address, on: recipient, of: prospect)
+        guard let said = ReplyPanelCopy.removed(removal, address: address) else { return }
+        // Announced only once the write COMMITS, so the banner is never shown over a removal that did not
+        // persist (L12). saveOrWarn puts its own warning up on the failure path.
+        guard context.saveOrWarn(org: prospect.groupName, feedback: feedback) else { return }
+        feedback.acknowledge(said)
     }
 
     @ViewBuilder private var theirReply: some View {
