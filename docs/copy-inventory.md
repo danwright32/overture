@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1049 sentences**, from 363 source files.
+Every sentence Overture can say to Dan: **1051 sentences**, from 363 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1828,6 +1828,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ExperimentReport.swift`
 "Too soon"
     `Domain/ReviewStatus.swift`
+"Took \(address) off this reply."
+    `Domain/ReplyPanel.swift`
+"Took \(address) off this reply. This show won't email them again."
+    `Domain/ReplyPanel.swift`
 "Towns Overture keeps out of your queue."
     `UI/ExcludedTownsView.swift`
 "Towns you skipped"

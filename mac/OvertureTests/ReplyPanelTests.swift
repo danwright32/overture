@@ -247,7 +247,8 @@ struct ReplyPanelTests {
                                 "chelsea@everyvoicechoirs.org",
                                 "nbecker@everyvoicechoirs.org"]
 
-        #expect(ReplyPanel.removeFromReply("chelsea@everyvoicechoirs.org", on: nicole, of: p))
+        #expect(ReplyPanel.removeFromReply("chelsea@everyvoicechoirs.org", on: nicole, of: p)
+                == .fromReplyAndShow)
 
         // Off this reply, and the SEND reads the same narrowed list, so what Dan approved is what goes.
         #expect(SendGroup.replyAudience(of: nicole) == ["nicolebecker@everyvoicechoirs.org",
@@ -268,9 +269,29 @@ struct ReplyPanelTests {
         nicole.replyFromAddress = "nicolebecker@everyvoicechoirs.org"
         nicole.replyAudience = ["nicolebecker@everyvoicechoirs.org", "nbecker@everyvoicechoirs.org"]
 
-        #expect(ReplyPanel.removeFromReply("nicolebecker@everyvoicechoirs.org", on: nicole, of: p))
+        #expect(ReplyPanel.removeFromReply("nicolebecker@everyvoicechoirs.org", on: nicole, of: p)
+                == .fromReply)
         #expect(SendGroup.replyAudience(of: nicole) == ["nbecker@everyvoicechoirs.org"])
         #expect(nicole.sendState == .sent, "no contact holds that address, so no contact changes")
+    }
+
+    // #2155 follow-up: the removal has to SAY what it did, because its two outcomes differ in a way Dan
+    // cannot see. Taking off an address that is nobody's contact changes this reply alone; taking off a
+    // contact also stops the show emailing them, and a banner claiming the wider effect on the narrower
+    // action would be a claim its own check never measured (L11).
+    @Test func eachOutcomeOfARemovalGetsItsOwnSentence() {
+        let onlyReply = ReplyPanelCopy.removed(.fromReply, address: "nicolebecker@everyvoicechoirs.org")
+        let alsoShow = ReplyPanelCopy.removed(.fromReplyAndShow, address: "chelsea@everyvoicechoirs.org")
+        #expect(onlyReply != nil)
+        #expect(alsoShow != nil)
+        #expect(onlyReply != alsoShow, "both outcomes cannot report the same thing happened")
+        #expect(onlyReply?.contains("nicolebecker@everyvoicechoirs.org") == true)
+        #expect(alsoShow?.contains("chelsea@everyvoicechoirs.org") == true)
+        // Only the wider one may claim the show stopped emailing them.
+        #expect(alsoShow?.localizedCaseInsensitiveContains("won't email") == true)
+        #expect(onlyReply?.localizedCaseInsensitiveContains("won't email") == false)
+        // And a refused removal announces nothing at all, rather than a banner over a no-op (L12).
+        #expect(ReplyPanelCopy.removed(.notRemoved, address: "only@x.org") == nil)
     }
 
     // Nothing is emptied. The audience falling back to the contact's own address would deliver the reply
@@ -282,7 +303,7 @@ struct ReplyPanelTests {
         nicole.replied = true
         nicole.replyAudience = ["nbecker@everyvoicechoirs.org"]
 
-        #expect(ReplyPanel.removeFromReply("nbecker@everyvoicechoirs.org", on: nicole, of: p) == false)
+        #expect(ReplyPanel.removeFromReply("nbecker@everyvoicechoirs.org", on: nicole, of: p) == .notRemoved)
         #expect(SendGroup.replyAudience(of: nicole) == ["nbecker@everyvoicechoirs.org"])
         #expect(nicole.sendState == .sent, "a refused removal must not half-happen on the contact")
     }

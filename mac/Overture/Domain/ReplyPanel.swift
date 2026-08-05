@@ -120,21 +120,30 @@ enum ReplyPanel {
     // there, never deleted, so the pitch it received survives and re-adding the address resumes it.
     //
     // An address belonging to no contact (the writer's own, on the row that started all of this) narrows
-    // the reply and touches no contact record. Returns whether anything actually changed, so a refused
-    // removal cannot be reported as done.
+    // the reply and touches no contact record.
+    //
+    // The two outcomes are distinct because they differ in a way Dan cannot see afterwards, and the banner
+    // may only claim what actually happened (L11): a removal that touched no contact must not report that
+    // the show stopped emailing anyone.
+    enum Removal: Equatable {
+        case notRemoved
+        case fromReply
+        case fromReplyAndShow
+    }
+
     @MainActor
     @discardableResult
-    static func removeFromReply(_ address: String, on recipient: Recipient, of prospect: Prospect) -> Bool {
+    static func removeFromReply(_ address: String, on recipient: Recipient,
+                                of prospect: Prospect) -> Removal {
         let current = SendGroup.replyAudience(of: recipient)
         let left = removing(address, from: current)
-        guard left != current else { return false }
+        guard left != current else { return .notRemoved }
         recipient.replyAudience = left
-        if let contact = prospect.recipients.first(where: {
+        guard let contact = prospect.recipients.first(where: {
             ReplyDetection.isSameAddress($0.email ?? "", address)
-        }) {
-            prospect.removeOrSuppressRecipient(id: contact.id)
-        }
-        return true
+        }) else { return .fromReply }
+        prospect.removeOrSuppressRecipient(id: contact.id)
+        return .fromReplyAndShow
     }
 }
 
@@ -161,6 +170,19 @@ enum ReplyPanelCopy {
     // the label hides (L21).
     static func removeFromReply(_ address: String) -> String {
         "Take \(address) off this reply and stop this show emailing it"
+    }
+
+    // What actually happened, said afterwards. The row simply vanishing left the wider half of the action
+    // (the show no longer emailing that contact) with no evidence it had occurred at all, on a control
+    // whose only statement of it was a tooltip nobody has to read. Each outcome gets its own sentence, so
+    // the banner never claims an effect this particular removal did not have (L11), and a removal that was
+    // refused says nothing rather than announcing a no-op (L12).
+    static func removed(_ removal: ReplyPanel.Removal, address: String) -> String? {
+        switch removal {
+        case .notRemoved: return nil
+        case .fromReply: return "Took \(address) off this reply."
+        case .fromReplyAndShow: return "Took \(address) off this reply. This show won't email them again."
+        }
     }
     // Names what happened and leaves the button available, rather than a dead spinner or a cheerful
     // pretence that it went (L12). The words stay in the box: nothing Dan typed is thrown away.
