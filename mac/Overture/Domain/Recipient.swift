@@ -36,8 +36,14 @@ enum SendState: String, Codable, CaseIterable, Sendable {
 // #399: a third reason, distinct from an actual outcome. removedByDan means Dan hand-removed an
 // already-sent contact without recording a decline (reply/decline stats stay honest); the other
 // two cases both reflect a real event (the show booked elsewhere, or this contact declined).
+// #2151: a fourth, and the only one that is not about STOPPING something. joinedFromReply means this
+// address is on the show because somebody wrote from it, not because Overture ever pitched it. It is
+// suppressed for the opposite reason to the others: not because pursuit ended, but because pursuit never
+// applied. A cold pitch to the person already mid-conversation is the failure this prevents, and pending
+// would not prevent it, since resumePausedRecipients deliberately makes the show's other contacts
+// sendable again the moment Dan triages the reply.
 enum RecipientSuppressionReason: String, Codable, CaseIterable, Sendable {
-    case bookedElsewhere, declined, removedByDan
+    case bookedElsewhere, declined, removedByDan, joinedFromReply
 }
 
 // A recipient's terminal commercial outcome (#389 derived-outcome model). The active states

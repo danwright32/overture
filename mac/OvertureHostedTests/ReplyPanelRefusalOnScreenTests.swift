@@ -112,4 +112,29 @@ struct ReplyPanelRefusalOnScreenTests {
         let label = ReplyPanelCopy.removeFromReply("nbecker@everyvoicechoirs.org")
         #expect((try? view.inspect().find(viewWithAccessibilityLabel: label)) == nil)
     }
+
+    // MARK: #2151, an address on no contact of this show
+
+    // Dan's real row. The panel says the address is not saved here and offers to save it, rather than
+    // leaving the mismatch invisible and permanent.
+    @Test func anAddressOnNoContactIsSaidAndOfferedOnThePanel() throws {
+        let view = try panel(writer: "nicolebecker@everyvoicechoirs.org",
+                             audience: ["nicolebecker@everyvoicechoirs.org",
+                                        "nbecker@everyvoicechoirs.org"])
+        let shown = try texts(view)
+        #expect(shown.contains(ReplyPanelCopy.writerNotAContact("nicolebecker@everyvoicechoirs.org")),
+                "the panel must say the address is new. Shown: \(shown)")
+        #expect((try? view.inspect().find(button: ReplyPanelCopy.saveWriter)) != nil,
+                "and offer to save it")
+    }
+
+    // A writer Dan actually pitched is the ordinary case and gets neither the sentence nor the offer, so
+    // the line cannot become permanent furniture beside every reply.
+    @Test func aWriterAlreadyOnTheShowIsNotOfferedForSaving() throws {
+        let view = try panel(writer: "nbecker@everyvoicechoirs.org",
+                             audience: ["nbecker@everyvoicechoirs.org"])
+        #expect((try? view.inspect().find(button: ReplyPanelCopy.saveWriter)) == nil)
+        let shown = try texts(view)
+        #expect(!shown.contains { $0.contains("isn't saved as a contact") })
+    }
 }

@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1051 sentences**, from 363 source files.
+Every sentence Overture can say to Dan: **1056 sentences**, from 363 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -371,6 +371,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/DraftReviewView.swift`
 "Add one address at a time. No contact was added"
     `App/ActionFeedback.swift`
+"Add this address to this show so a reply from it is recognised. It won't be pitched."
+    `Domain/ReplyPanel.swift`
 "Add this venue's address so its shows count as in your area."
     `UI/SourcesView.swift`
 "Added \(Plural.count(count, "show")), ranked into your queue with everything else."
@@ -1398,6 +1400,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/InquiryCopy.swift`
 "Save draft"
     `UI/ManualPrepSheet.swift`
+"Save this address"
+    `Domain/ReplyPanel.swift`
+"Saved \(address) to this show. Replies from it are recognised now, and it won't be pitched."
+    `Domain/ReplyPanel.swift`
 "Saved \(org)'s address. Its shows are placed on the next read."
     `UI/SourcesView.swift`
 "Saved \(org)'s venue. Its shows are read again on the next scout."
@@ -1938,6 +1944,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "Write this email yourself, with no Prep run and no AI draft"
     `UI/ProspectRowView.swift`
+"Writes from here"
+    `UI/QueueView+Model.swift`
 "Written by you"
     `UI/QueueView+Model.swift`
 "Wrong match"
@@ -2012,6 +2020,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/StageEmptyState.swift`
 "\(added) from watched calendars"
     `Domain/ScoutRunSummary.swift`
+"\(address) isn't saved as a contact on this show."
+    `Domain/ReplyPanel.swift`
 "\(arm.editedExcluded) edited (\(Int((rate * 100).rounded()))% of sends), excluded from the rate"
     `Domain/ExperimentReport.swift`
 "\(arm.editedExcluded) edited, excluded from the rate"
