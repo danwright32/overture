@@ -308,6 +308,112 @@ struct ReplyPanelTests {
         #expect(nicole.sendState == .sent, "a refused removal must not half-happen on the contact")
     }
 
+    // MARK: an address that is on no contact of this show (#2151)
+
+    // Measured on the live store: Dan pitched nbecker@ and chelsea@, and Nicole answered from
+    // nicolebecker@. Nothing said the address was new, so she stayed a stranger to this show and every
+    // future reply from her would be handled the same way again.
+    @Test func anAddressOnNoContactOfThisShowIsOfferedForSaving() throws {
+        let ctx = ModelContext(try container())
+        let p = show(ctx)
+        contact(p, "chelsea@everyvoicechoirs.org")
+        let nicole = contact(p, "nbecker@everyvoicechoirs.org")
+        nicole.replied = true
+        nicole.replyFromAddress = "nicolebecker@everyvoicechoirs.org"
+
+        #expect(ReplyPanel.unknownWriter(on: nicole, of: p) == "nicolebecker@everyvoicechoirs.org")
+    }
+
+    // The ordinary case, and the one that must stay quiet: the person who wrote is somebody Dan pitched,
+    // so there is nothing new to tell him and no offer to make.
+    @Test func aWriterWhoIsAlreadyAContactIsNotOffered() throws {
+        let ctx = ModelContext(try container())
+        let p = show(ctx)
+        let nicole = contact(p, "nbecker@everyvoicechoirs.org")
+        nicole.replied = true
+        nicole.replyFromAddress = "NBecker@EveryVoiceChoirs.org"   // same address, different spelling
+        #expect(ReplyPanel.unknownWriter(on: nicole, of: p) == nil)
+    }
+
+    // Nothing recorded about who wrote is not an unknown address, it is an unknown fact. Offering to save
+    // something Overture cannot name would be an offer with no subject.
+    @Test func aRowWithNoRecordedWriterOffersNothing() throws {
+        let ctx = ModelContext(try container())
+        let p = show(ctx)
+        let r = contact(p, "nbecker@everyvoicechoirs.org")
+        r.replied = true
+        #expect(ReplyPanel.unknownWriter(on: r, of: p) == nil)
+    }
+
+    // Saving her puts her ON the show as a peer of the conversation, which is the whole point: from then
+    // on a reply from that address resolves to HER row rather than to whichever contact sorts first.
+    @Test func savingTheWriterMakesHerRecognisedNextTime() throws {
+        let ctx = ModelContext(try container())
+        let p = show(ctx)
+        let chelsea = contact(p, "chelsea@everyvoicechoirs.org")
+        let nbecker = contact(p, "nbecker@everyvoicechoirs.org")
+        for r in [chelsea, nbecker] {
+            r.replied = true
+            r.replyFromAddress = "nicolebecker@everyvoicechoirs.org"
+        }
+        nbecker.replyFromName = "Nicole Becker"
+
+        #expect(ReplyPanel.saveWriterAsContact(on: nbecker, of: p))
+
+        let saved = try #require(p.recipients.first { $0.id == "nicolebecker@everyvoicechoirs.org" })
+        #expect(saved.name == "Nicole Becker", "the name from her reply is what makes the row readable")
+        #expect(saved.sendGroupId == nbecker.sendGroupId, "she has to be a peer, or nothing resolves to her")
+        // The point of the whole issue: she is no longer a stranger.
+        #expect(ReplyIdentity.answering(for: chelsea, in: p).id == saved.id)
+    }
+
+    // And she must NEVER be cold-pitched. She is the person already in this conversation, so a contact
+    // that could be picked up by the ordinary send path would put a first-contact pitch in front of
+    // somebody mid-conversation. Suppressed with its own reason, distinct from Dan removing somebody and
+    // from a real decline, so nothing reads her as either.
+    @Test func theSavedWriterIsNeverPitched() throws {
+        let ctx = ModelContext(try container())
+        let p = show(ctx)
+        let nbecker = contact(p, "nbecker@everyvoicechoirs.org")
+        nbecker.replied = true
+        nbecker.replyFromAddress = "nicolebecker@everyvoicechoirs.org"
+
+        #expect(ReplyPanel.saveWriterAsContact(on: nbecker, of: p))
+        let saved = try #require(p.recipients.first { $0.id == "nicolebecker@everyvoicechoirs.org" })
+        #expect(saved.isSendablePending == false, "a pitch must never go to somebody already replying")
+        #expect(saved.sendState == .suppressed)
+        #expect(saved.suppressionReason == .joinedFromReply)
+        #expect(saved.resolution == nil, "she has not declined anything")
+        // Resuming the show's paused contacts after triage must not turn her into a pitch target either.
+        p.resumePausedRecipients()
+        #expect(saved.isSendablePending == false)
+    }
+
+    // Asked twice, saved once. The offer disappears the moment she is on the show, and a second call
+    // cannot mint a duplicate contact carrying the same address.
+    @Test func savingHerTwiceIsSavingHerOnce() throws {
+        let ctx = ModelContext(try container())
+        let p = show(ctx)
+        let nbecker = contact(p, "nbecker@everyvoicechoirs.org")
+        nbecker.replied = true
+        nbecker.replyFromAddress = "nicolebecker@everyvoicechoirs.org"
+
+        #expect(ReplyPanel.saveWriterAsContact(on: nbecker, of: p))
+        #expect(ReplyPanel.saveWriterAsContact(on: nbecker, of: p) == false)
+        #expect(p.recipients.filter { $0.id == "nicolebecker@everyvoicechoirs.org" }.count == 1)
+        #expect(ReplyPanel.unknownWriter(on: nbecker, of: p) == nil, "the offer is gone once it is done")
+    }
+
+    // What the panel says about it. The sentence states the fact and the offer names the address, because
+    // saving an address Dan cannot see is a decision he cannot make.
+    @Test func theOfferNamesTheAddressItWouldSave() {
+        let line = ReplyPanelCopy.writerNotAContact("nicolebecker@everyvoicechoirs.org")
+        #expect(line.contains("nicolebecker@everyvoicechoirs.org"))
+        #expect(ReplyPanelCopy.saveWriter.isEmpty == false)
+        #expect(ReplyPanelCopy.savedWriter("nicolebecker@everyvoicechoirs.org")
+                    .contains("nicolebecker@everyvoicechoirs.org"))
+    }
+
     // MARK: the audience Dan approves
 
     // L64: what he reviews has to include WHO it goes to. The panel lists every address outright rather

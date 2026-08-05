@@ -70,8 +70,34 @@ struct ReplyPanelSheet: View {
                 ForEach(ReplyPanel.audienceEntries(audience, writer: recipient.replyFromAddress)) { entry in
                     audienceRow(entry)
                 }
+                // #2151: the address that wrote is on none of this show's contacts, so say so and offer to
+                // save it. Offered rather than done, because whether it is the same person from a second
+                // mailbox or a colleague answering for them is a judgement only Dan can make.
+                if let stranger = ReplyPanel.unknownWriter(on: recipient, of: prospect) {
+                    unknownWriterOffer(stranger)
+                }
             }
         }
+    }
+
+    private func unknownWriterOffer(_ address: String) -> some View {
+        HStack(spacing: OVSpacing.xs) {
+            Text(ReplyPanelCopy.writerNotAContact(address))
+                .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                .fixedSize(horizontal: false, vertical: true)
+            Button(ReplyPanelCopy.saveWriter) { saveWriter() }
+                .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forest)
+                .help(ReplyPanelCopy.saveWriterHelp)
+            Spacer()
+        }
+        .padding(.top, OVSpacing.xxs)
+    }
+
+    private func saveWriter() {
+        guard let address = ReplyPanel.unknownWriter(on: recipient, of: prospect) else { return }
+        guard ReplyPanel.saveWriterAsContact(on: recipient, of: prospect) else { return }
+        guard context.saveOrWarn(org: prospect.groupName, feedback: feedback) else { return }
+        feedback.acknowledge(ReplyPanelCopy.savedWriter(address))
     }
 
     private func audienceRow(_ entry: ReplyPanel.AudienceEntry) -> some View {

@@ -668,6 +668,8 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
             case .bookedElsewhere: return "Paused (booked elsewhere)"
             case .declined: return "Paused (show declined)"
             case .removedByDan: return "Removed"
+            // #2151: on the show because they wrote from this address, never pitched from it.
+            case .joinedFromReply: return "Writes from here"
             }
         case .sending: return "Sending…"
         }

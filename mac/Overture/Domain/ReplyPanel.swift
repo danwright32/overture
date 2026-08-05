@@ -131,6 +131,48 @@ enum ReplyPanel {
         case fromReplyAndShow
     }
 
+    // #2151: the address that wrote, when this show has no contact holding it. Dan noticed the gap only
+    // because the card named the wrong person; nothing said the address was new, so she stayed a stranger
+    // and every future reply from her would be handled the same way again.
+    //
+    // Returns nil when there is nothing to say: no writer recorded (an unknown fact, not a new address),
+    // or a writer who is already one of the show's contacts, which is the ordinary case.
+    static func unknownWriter(on recipient: Recipient, of prospect: Prospect) -> String? {
+        guard let writer = recipient.replyFromAddress, !writer.isEmpty else { return nil }
+        return contact(holding: writer, of: prospect) == nil ? writer : nil
+    }
+
+    // One place that answers "does this show have a contact at this address", shared by the offer above
+    // and the removal below, so the two can never disagree about what counts as a contact.
+    static func contact(holding address: String, of prospect: Prospect) -> Recipient? {
+        prospect.recipients.first { ReplyDetection.isSameAddress($0.email ?? "", address) }
+    }
+
+    // Saving her. A judgement only Dan can make, since the writer may genuinely be somebody else answering
+    // on a colleague's behalf, so it is offered and never done for him.
+    //
+    // She joins the send group, which is what makes her recognised: ReplyIdentity.answering resolves a
+    // writer through the group's peers, so without that the next reply from this address lands on
+    // whichever contact sorts first all over again.
+    //
+    // And she is SUPPRESSED, deliberately. A pending contact on a show already in conversation becomes
+    // sendable again the moment Dan triages the reply (resumePausedRecipients), which would put a cold
+    // first-contact pitch in front of the person he is already talking to. joinedFromReply says why she is
+    // here without claiming she declined or that Dan removed her.
+    @MainActor
+    @discardableResult
+    static func saveWriterAsContact(on recipient: Recipient, of prospect: Prospect) -> Bool {
+        guard let writer = unknownWriter(on: recipient, of: prospect) else { return false }
+        let saved = Recipient(id: ReplyDetection.email(from: writer), email: writer,
+                              name: recipient.replyFromName?.isEmpty == false ? recipient.replyFromName : nil,
+                              provenance: .manual)
+        saved.sendGroupId = SendGroup.groupKey(recipient)
+        saved.sendState = .suppressed
+        saved.suppressionReason = .joinedFromReply
+        prospect.addRecipient(saved)
+        return true
+    }
+
     @MainActor
     @discardableResult
     static func removeFromReply(_ address: String, on recipient: Recipient,
@@ -139,9 +181,7 @@ enum ReplyPanel {
         let left = removing(address, from: current)
         guard left != current else { return .notRemoved }
         recipient.replyAudience = left
-        guard let contact = prospect.recipients.first(where: {
-            ReplyDetection.isSameAddress($0.email ?? "", address)
-        }) else { return .fromReply }
+        guard let contact = contact(holding: address, of: prospect) else { return .fromReply }
         prospect.removeOrSuppressRecipient(id: contact.id)
         return .fromReplyAndShow
     }
@@ -170,6 +210,21 @@ enum ReplyPanelCopy {
     // the label hides (L21).
     static func removeFromReply(_ address: String) -> String {
         "Take \(address) off this reply and stop this show emailing it"
+    }
+
+    // #2151: the address that wrote is on no contact of this show. States the fact plainly; it does not
+    // guess at WHY, because the two possible reasons (the same person from a second mailbox, or a
+    // colleague answering on their behalf) are exactly what Dan is being asked to judge.
+    static func writerNotAContact(_ address: String) -> String {
+        "\(address) isn't saved as a contact on this show."
+    }
+
+    // The offer. Short, because the address it acts on is named in the line directly above it.
+    static let saveWriter = "Save this address"
+    static let saveWriterHelp =
+        "Add this address to this show so a reply from it is recognised. It won't be pitched."
+    static func savedWriter(_ address: String) -> String {
+        "Saved \(address) to this show. Replies from it are recognised now, and it won't be pitched."
     }
 
     // What actually happened, said afterwards. The row simply vanishing left the wider half of the action
