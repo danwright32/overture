@@ -73,6 +73,18 @@ enum ReplyClassifyService {
         try? Data().write(to: cancelURL)
     }
 
+    // #2104: sweep a read that DIED rather than finished. Same shape and same shared implementation as
+    // Prep's (#1613): the runner removes its own marker on the way out, so a marker still there when the
+    // read stops being live means it stopped somewhere it never reached that exit, and Cancel (which
+    // writes a sentinel only a live runner reads) can no longer do anything. Judged against THIS run's
+    // own window, because a calendar read and a reply draft take nothing like the same time.
+    @discardableResult
+    static func clearDeadRun(markerURL: URL = defaultMarkerURL, cancelURL: URL = defaultCancelURL,
+                             now: Date) -> Bool {
+        DetachedRunner.sweepDeadRun(markerURL: markerURL, cancelURL: cancelURL, now: now,
+                                    staleAfter: markerStaleAfter)
+    }
+
     static func isRunning(markerURL: URL = defaultMarkerURL, now: Date) -> Bool {
         DetachedRunner.isRunning(markerURL: markerURL, now: now, staleAfter: markerStaleAfter)
     }

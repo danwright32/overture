@@ -290,7 +290,16 @@ enum RunProgressCopy {
     // that nothing was alive to hear. It names the ending and says Overture has already tidied up, so the
     // sentence is a report rather than an instruction with no action behind it (L11).
     static func diedLine(phase: RunProgressView.Phase) -> String {
-        "\(title(phase)) stopped before it finished. Overture has cleared it, so you can start again."
+        diedLine(named: title(phase))
+    }
+
+    // #2104: the reply-classify run has no Phase case (it has no takeover modal of its own, only the
+    // queue's one-line run label), so it names itself here. Built through the same sentence as every
+    // other dead run rather than a second one, so they cannot come to word it differently.
+    static let diedLineForReplies = diedLine(named: "Drafting replies")
+
+    private static func diedLine(named what: String) -> String {
+        "\(what) stopped before it finished. Overture has cleared it, so you can start again."
     }
 
     // #1124: the name and the count are two uncoordinated facts (the name is the source being read RIGHT

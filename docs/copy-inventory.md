@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1036 sentences**, from 358 source files.
+Every sentence Overture can say to Dan: **1037 sentences**, from 358 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -625,6 +625,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DraftTrace.swift`
 "Drafting a reply"
     `UI/DraftReviewView.swift`
+"Drafting replies"
+    `UI/RunProgressView.swift`
 "Drafting replies \(count)"
     `Domain/ReplyClassifyProgress.swift`
 "Drafts waiting for you to read, edit, and send."
@@ -2153,8 +2155,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OutcomePatterns.swift`
 "\(tally.kept) of \(reviewed) kept after review"
     `Domain/SourceYield.swift`
-"\(title(phase)) stopped before it finished. Overture has cleared it, so you can start again."
-    `UI/RunProgressView.swift`
 "\(titleRejected) of \(total) shows had no title, so Overture won't mark anything from this source as gone until it can read its pages again."
     `Domain/SourceReadability.swift`
 "\(titleRejected) of \(total) shows had no title."
@@ -2179,6 +2179,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceReadability.swift`
 "\(venueRejected) of \(total) shows had no venue on their own detail page."
     `Domain/SourceReadability.swift`
+"\(what) stopped before it finished. Overture has cleared it, so you can start again."
+    `UI/RunProgressView.swift`
 "\(who) is already a recipient on \(org)."
     `App/ActionFeedback.swift`
 "\(worst.name) is flagged as a possible match on \(worst.count) shows, "
