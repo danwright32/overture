@@ -209,12 +209,13 @@ assert_not_contains() {
   fi
 }
 
-# Runs the real run-tests-locked.sh with flock, xcodebuild and ps stubbed ahead of the real ones on
-# PATH, so main's whole path executes without building anything or reading this Mac's process table.
-# Prints the script's combined output with a final "exit=<code>" line.
+# Runs the real run-tests-locked.sh with flock, xcodebuild, ps and log stubbed ahead of the real ones
+# on PATH, so main's whole path executes without building anything, reading this Mac's process table,
+# or dumping its OS log. Prints the script's combined output, then a "logcalls=<n>" line counting the
+# `log` invocations (#1972: only a dead run may pay for one), then a final "exit=<code>" line.
 run_wrapper_with_stub_xcodebuild() {
-  local xcodebuild_output="$1" xcodebuild_exit="$2"
-  local bin_dir output code
+  local xcodebuild_output="$1" xcodebuild_exit="$2" log_output="${3:-}"
+  local bin_dir output code log_calls
 
   bin_dir="$(mktemp -d)"
 
@@ -241,12 +242,24 @@ XCODEBUILD_OUTPUT
 exit ${xcodebuild_exit}
 STUB
 
-  chmod +x "${bin_dir}/flock" "${bin_dir}/ps" "${bin_dir}/xcodebuild"
+  # Records every invocation, so a run that must not read the OS log can be shown not to (an
+  # assertion on the printed output alone cannot tell "never called" from "called and found
+  # nothing"). Echoes back the fixture dump the real `log show` would have produced.
+  cat > "${bin_dir}/log" <<STUB
+#!/usr/bin/env bash
+echo "\$@" >> "${bin_dir}/log-calls"
+cat <<'LOG_OUTPUT'
+${log_output}
+LOG_OUTPUT
+STUB
+
+  chmod +x "${bin_dir}/flock" "${bin_dir}/ps" "${bin_dir}/xcodebuild" "${bin_dir}/log"
 
   output="$(PATH="${bin_dir}:${PATH}" "${SCRIPT_DIR}/run-tests-locked.sh" 2>&1)"
   code=$?
+  log_calls="$(grep -c . "${bin_dir}/log-calls" 2>/dev/null || echo 0)"
   rm -rf "${bin_dir}"
-  printf '%s\nexit=%s\n' "${output}" "${code}"
+  printf '%s\nlogcalls=%s\nexit=%s\n' "${output}" "${log_calls}" "${code}"
 }
 
 # THE case. Two deliberately-red guards on #1451 came out of this wrapper labelled a crashed run.
@@ -371,6 +384,153 @@ assert_equals "a build failure is never probed; nothing compiled, so nothing ran
 
 assert_equals "a pass is never probed" \
   "" "$(should_probe_pure_suite "")"
+
+echo
+# --- name the cause from the host's own log (#1972) ----------------------------------------
+#
+# A crash said WHICH kind of red it was (#1006) but never WHY, and the causes it printed were a
+# guess: a hardcoded "usual causes" list naming a Debug app holding the single-instance lock and an
+# overlapping run on this Mac. On 2026-08-01 the real cause was neither. The app's menu bar item had
+# been removed, which terminates a MenuBarExtra app and so its test host (#1966), and the wrong hint
+# sent hours of elimination in the wrong direction (clean main, deleted DerivedData, store locks,
+# disk space, crash reports, stale LaunchServices registrations, a full restart).
+#
+# The reason was in the operating system's own log the whole time, two lines deep. These cover
+# getting at it: which process to ask about, and cutting the answer down to the lines that name a
+# cause.
+
+# The host logs its own PID in every line it prints through xcodebuild, in the shape
+# `Overture[37030:38151440]`. That is the only place the dead process's identity survives, since by
+# the time the run is declared dead the process is gone and cannot be found in the process table.
+HOST_PID_OUTPUT="Test Suite 'All tests' started
+2026-08-01 14:48:55.738 Overture[37030:38151440] [error] CoreData: error: Executing as effective user 501
+Failing tests:
+** TEST FAILED **"
+assert_equals "the dead host's PID is read out of its own log prefix" \
+  "37030" "$(host_pid_from_output "${HOST_PID_OUTPUT}")"
+
+# The case in this issue's title: the host died BEFORE it started, so it never logged a line and
+# there is no PID to find. That must be empty rather than a fabricated one, because the predicate
+# built from it decides what the log is asked about.
+NEVER_LAUNCHED_OUTPUT="Testing failed:
+	Could not launch \"OvertureTests\"
+** TEST FAILED **"
+assert_equals "a host that never launched leaves no PID" \
+  "" "$(host_pid_from_output "${NEVER_LAUNCHED_OUTPUT}")"
+
+# xcodebuild relaunches the host after an unexpected exit, so one attempt's output can carry two
+# PIDs. The one that matters is the last, which is the process whose death ended the run.
+RELAUNCHED_OUTPUT="2026-08-01 14:48:55.738 Overture[37030:38151440] [error] CoreData: noise
+Restarting after unexpected exit, crash, or test timeout in FooTests
+2026-08-01 14:49:20.110 Overture[37044:38151999] [error] CoreData: noise
+Failing tests:
+** TEST FAILED **"
+assert_equals "after a relaunch the PID asked about is the host that actually died" \
+  "37044" "$(host_pid_from_output "${RELAUNCHED_OUTPUT}")"
+
+# Ask the log about the exact process when we know which one it was, and fall back to the app by
+# name when the host never got far enough to say. Never a PID we did not observe.
+assert_equals "a known PID is asked about by PID" \
+  "processID == 37030" "$(host_log_predicate "37030")"
+
+assert_equals "with no PID the log is asked about the app by name" \
+  'process == "Overture"' "$(host_log_predicate "")"
+
+# The decisive pair from 2026-08-01, in `log show` line shape, buried in the framework chatter that
+# a --debug --info dump of a ~90 second run actually produces. Printing the dump whole would bury
+# the two lines that name the cause, which is the same defect as printing nothing.
+REAL_LOG_OUTPUT='2026-08-01 14:48:50.100000-0400 0x1a2b Default 0x0 37030 0 Overture: (CoreFoundation) [com.apple.CFBundle] Bundle loaded
+2026-08-01 14:48:51.200000-0400 0x1a2c Default 0x0 37030 0 Overture: (HIToolbox) [com.apple.HIToolbox] menu bar layout changed
+2026-08-01 14:48:55.738000-0400 0x1a2d Default 0x0 37030 0 Overture: (AppKit) [com.apple.AppKit:StatusBar] 0 terminating on removal
+2026-08-01 14:48:55.740000-0400 0x1a2e Default 0x0 37030 0 Overture: (AppKit) [com.apple.AppKit:Application] terminate:'
+
+LOG_EVIDENCE="$(host_log_evidence "${REAL_LOG_OUTPUT}")"
+
+assert_contains "the status bar line that names the cause is kept" \
+  "[com.apple.AppKit:StatusBar] 0 terminating on removal" "${LOG_EVIDENCE}"
+
+assert_contains "the termination line that names the cause is kept" \
+  "[com.apple.AppKit:Application] terminate:" "${LOG_EVIDENCE}"
+
+assert_not_contains "ordinary framework chatter is dropped" \
+  "Bundle loaded" "${LOG_EVIDENCE}"
+
+# A privacy denial and an unopenable store are the other two causes seen here (#663 refuses a
+# foreign file at the store path, and a missing TCC grant kills calendar and Gmail access), so the
+# filter must keep them too rather than only the one crash it was written from.
+OTHER_CAUSES_LOG='2026-08-02 09:00:00.000000-0400 0x1 Default 0x0 41000 0 Overture: (TCC) [com.apple.TCC:access] TCC deny kTCCServiceCalendar
+2026-08-02 09:00:01.000000-0400 0x2 Default 0x0 41000 0 Overture: (Overture) store unavailable: refusing to open a foreign file'
+
+OTHER_EVIDENCE="$(host_log_evidence "${OTHER_CAUSES_LOG}")"
+
+assert_contains "a privacy denial is kept" "TCC deny kTCCServiceCalendar" "${OTHER_EVIDENCE}"
+assert_contains "an unopenable store is kept" "store unavailable" "${OTHER_EVIDENCE}"
+
+# Nothing matching means nothing to print, so the caller can say the log named no cause instead of
+# printing an empty block under a heading promising evidence.
+assert_equals "a log naming no cause yields no evidence" \
+  "" "$(host_log_evidence '2026-08-01 14:48:50.100000-0400 0x1a2b Default 0x0 37030 0 Overture: (CoreFoundation) [com.apple.CFBundle] Bundle loaded')"
+
+# And a log that matches thousands of times is capped, or the two useful lines scroll away exactly
+# as they would have in the raw dump.
+MANY_MATCHES="$(for i in $(seq 1 120); do echo "line ${i} terminating"; done)"
+assert_equals "the evidence is capped at the last 40 lines" \
+  "40" "$(host_log_evidence "${MANY_MATCHES}" | grep -c .)"
+
+assert_contains "the cap keeps the LAST lines, which are the ones nearest the death" \
+  "line 120 terminating" "$(host_log_evidence "${MANY_MATCHES}")"
+
+echo
+# --- the wiring: only a dead run asks the OS log (#1972) -----------------------------------
+#
+# `log show --debug --info` over the window of a full test run is slow and produces thousands of
+# lines, so a run that did not die must never pay for it. The functions above are all correct while
+# main either never calls them or calls them on every run, and neither is visible from a fixture
+# that tests a function in isolation. These drive the real script with `log` stubbed alongside
+# flock, xcodebuild and ps, and count the calls.
+
+CRASH_WITH_PID_RUN="$(run_wrapper_with_stub_xcodebuild "${CRASH_WITH_ERROR_NOISE}" 65 "${REAL_LOG_OUTPUT}")"
+
+assert_contains "a dead run asks the OS log about the host that died" \
+  "logcalls=1" "${CRASH_WITH_PID_RUN}"
+
+assert_contains "a dead run prints the line that names the cause" \
+  "[com.apple.AppKit:StatusBar] 0 terminating on removal" "${CRASH_WITH_PID_RUN}"
+
+assert_contains "the log is asked about the dead host's own PID" \
+  "processID == 37030" "${CRASH_WITH_PID_RUN}"
+
+# THE regression. A hint the script cannot support is worse than no hint: this exact sentence sent
+# the 2026-08-01 investigation at a Debug app and an overlapping run when the cause was neither.
+assert_not_contains "a dead run no longer guesses at usual causes" \
+  "Usual causes" "${CRASH_WITH_PID_RUN}"
+
+# When the log names nothing, say so and hand over the command, rather than printing an empty block
+# or falling back to the guess this change exists to remove.
+SILENT_LOG_RUN="$(run_wrapper_with_stub_xcodebuild "${CRASH_WITH_ERROR_NOISE}" 65 "nothing here names a cause")"
+
+assert_contains "a log that names no cause says so" \
+  "named no cause" "${SILENT_LOG_RUN}"
+
+assert_contains "and hands over the command to read it in full" \
+  "log show --last" "${SILENT_LOG_RUN}"
+
+# The three runs that must never pay for it. A pass is the common case and must stay silent; a
+# named test failure already knows what failed; a build failure never started a host at all, so
+# there is no host log to read.
+assert_contains "a passing run never asks the OS log" \
+  "logcalls=0" "$(run_wrapper_with_stub_xcodebuild "${PASSING_OUTPUT}" 0 "${REAL_LOG_OUTPUT}")"
+
+assert_contains "a named test failure never asks the OS log" \
+  "logcalls=0" "$(run_wrapper_with_stub_xcodebuild "${REAL_FAILURE_OUTPUT}" 65 "${REAL_LOG_OUTPUT}")"
+
+assert_contains "a build failure never asks the OS log; no host ever started" \
+  "logcalls=0" "$(run_wrapper_with_stub_xcodebuild "${BUILD_FAILURE_OUTPUT}" 65 "${REAL_LOG_OUTPUT}")"
+
+# A retried crash (#1331) runs xcodebuild twice but dies once, and the log is read once, after the
+# last attempt. Two dumps of the same window would double the noise for no new evidence.
+assert_contains "a retried crash reads the log once, not once per attempt" \
+  "logcalls=1" "$(run_wrapper_with_stub_xcodebuild "${CRASHED_OUTPUT}" 65 "${REAL_LOG_OUTPUT}")"
 
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All run-tests-locked.sh stale-host fixtures passed."
