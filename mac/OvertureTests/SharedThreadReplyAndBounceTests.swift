@@ -98,8 +98,14 @@ struct SharedThreadReplyAndBounceTests {
 
     // A reply from an address nobody was written to (a colleague brought in, somebody answering from
     // their own account rather than the shared inbox) is still a reply. It must never vanish because the
-    // app could not name the author (L10): the conversation shows as live and nobody is credited.
-    @Test @MainActor func areplyFromAnAddressNobodyWasWrittenToStillSurfaces() {
+    // app could not name the author (L10): the conversation shows as live.
+    //
+    // #2147 changed what happens to the WORDS. Filing them under nobody discarded them, and the reply
+    // panel then told Dan "Overture didn't capture what they wrote" about a message it had just read.
+    // Measured on the live store: he pitched nbecker@ and Nicole answered from nicolebecker@, so this is
+    // the ordinary case and not an exotic one. The words belong to the CONVERSATION, so every contact on
+    // the thread keeps them, and replyFromAddress names who actually wrote so nothing is misattributed.
+    @Test @MainActor func areplyFromAnAddressNobodyWasWrittenToKeepsItsWords() {
         let p = Self.show()
         let json = Self.replyJSON(from: "assistant@org.example", text: "Passing this to Emma")
 
@@ -107,8 +113,10 @@ struct SharedThreadReplyAndBounceTests {
                                    fetchThread: { _ in json }, fetchFullThread: { _ in json })
 
         #expect(p.recipients.allSatisfy { $0.replied }, "a reply the app cannot attribute is still a reply")
-        #expect(p.recipients.allSatisfy { $0.lastReplyText == nil },
-                "nobody may be credited with words the app cannot show they wrote")
+        #expect(p.recipients.allSatisfy { $0.lastReplyText == "Passing this to Emma" },
+                "the conversation's words must survive a sender who is none of its contacts")
+        #expect(p.recipients.allSatisfy { $0.replyFromAddress == "assistant@org.example" },
+                "and the writer is named, which is what keeps the words honest")
     }
 
     // Every thread in the live store today carries exactly one contact, so this is the case that must not

@@ -28,9 +28,13 @@ enum ReplyService {
             // one is a JOINT send: the reply belongs to all of them (they are reading one conversation),
             // but the WORDS belong to whoever wrote them.
             var contactsPerThread: [String: Int] = [:]
+            // #2147: every address this entity was written at, so a reply from one that is NOT among them
+            // can be told apart from one that is.
+            var contactAddresses: [String] = []
             for r in p.replyWatchRecipients {
                 guard let t = r.gmailThreadId, !t.isEmpty else { continue }
                 contactsPerThread[t, default: 0] += 1
+                if let a = r.replyWatchAddress, !a.isEmpty { contactAddresses.append(a) }
             }
             for r in p.replyWatchRecipients {
                 guard let threadId = r.gmailThreadId, !threadId.isEmpty else { continue }
@@ -68,10 +72,18 @@ enum ReplyService {
                     // as a reply above; it simply leaves no words filed under a name that did not write
                     // them, rather than crediting one of them at random (L11).
                     let shared = contactsPerThread[threadId, default: 0] > 1
-                    let wroteIt = !shared || ReplyDetection.isSameAddress(
-                        ReplyDetection.latestReplySender(threadJSON: full, selfEmail: selfEmail),
-                        r.replyWatchAddress)
-                    if wroteIt {
+                    let sender = ReplyDetection.latestReplySender(threadJSON: full, selfEmail: selfEmail)
+                    let wroteIt = !shared || ReplyDetection.isSameAddress(sender, r.replyWatchAddress)
+                    // #2147: a sender who is NONE of the contacts on this thread. Measured on the live
+                    // store: Dan pitched nbecker@ and Nicole answered from nicolebecker@, so the words
+                    // matched nobody and were filed against nobody, and the panel told him Overture had
+                    // not captured a message it had just read.
+                    //
+                    // They belong to the CONVERSATION, so every contact on the thread keeps them. Nothing
+                    // is misattributed by that, because replyFromAddress names who actually wrote and the
+                    // surfaces show it; the rule above still holds for a sender who IS one of them.
+                    let fromOutside = shared && !contactAddresses.contains { ReplyDetection.isSameAddress(sender, $0) }
+                    if wroteIt || fromOutside {
                         r.lastReplyText = ReplyDetection.latestReplyBody(threadJSON: full, selfEmail: selfEmail)
                         // #2063: captured from the SAME message as the text, so Dan's answer can be
                         // addressed the way this reply was. Assigned unconditionally, including to nil: a
@@ -101,18 +113,30 @@ enum ReplyService {
     // pass costs nothing at all once it has run, and nothing on a store that never had the gap.
     @discardableResult
     static func backfillResponders(in entities: [any ReplyWatchable], selfEmail: String,
-                                   fetchThread: (String) -> Data?) -> Int {
+                                   fetchThread: (String) -> Data?,
+                                   fetchFullThread: (String) -> Data? = { _ in nil }) -> Int {
         var filled = 0
         for p in entities {
             for r in p.replyWatchRecipients {
-                // The gap itself is the bound: a row that never replied has nothing to name, and one that
-                // already names its writer is done forever.
-                guard r.replied, r.replyFromAddress == nil else { continue }
+                // The gap itself is the bound: a row that never replied has nothing to fill, and one that
+                // already names its writer AND holds the words is done forever.
+                //
+                // #2147: the words are part of the gap now. A reply from an address none of the contacts
+                // were written at used to be filed against nobody, so rows that replied before that fix
+                // carry a writer and no message at all, and the panel tells Dan nothing was captured.
+                guard r.replied, r.replyFromAddress == nil || r.lastReplyText == nil else { continue }
                 guard let threadId = r.gmailThreadId, !threadId.isEmpty else { continue }
                 guard let data = fetchThread(threadId),
                       ReplyDetection.latestReplySender(threadJSON: data, selfEmail: selfEmail) != nil
                 else { continue }
-                recordWriter(on: r, threadJSON: data, selfEmail: selfEmail)
+                if r.replyFromAddress == nil { recordWriter(on: r, threadJSON: data, selfEmail: selfEmail) }
+                // The body needs the full thread, which the caller fetches only for threads that have one.
+                if r.lastReplyText == nil, let full = fetchFullThread(threadId) {
+                    r.lastReplyText = ReplyDetection.latestReplyBody(threadJSON: full, selfEmail: selfEmail)
+                    if r.replyAudience == nil {
+                        r.replyAudience = ReplyDetection.latestReplyAudience(threadJSON: full, selfEmail: selfEmail)
+                    }
+                }
                 filled += 1
             }
         }

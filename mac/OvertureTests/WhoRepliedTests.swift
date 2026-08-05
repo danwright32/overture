@@ -170,6 +170,10 @@ struct WhoRepliedTests {
         let r = contact(p, "chelsea@everyvoicechoirs.org", group: nil)
         r.replied = true
         r.replyFromAddress = "nbecker@everyvoicechoirs.org"
+        // #2147: a COMPLETE row is one that names its writer and holds the words. A row missing the words
+        // is still a gap to repair, because a sender matching none of the contacts used to leave them
+        // filed against nobody.
+        r.lastReplyText = "Thanks, that sounds good."
         var fetches = 0
         let filled = ReplyService.backfillResponders(in: [p], selfEmail: me,
                                                      fetchThread: { _ in fetches += 1; return nil })
@@ -290,6 +294,7 @@ struct ResponderBackfillWiringTests {
         let ctx = ModelContext(try container())
         let r = repliedShow(ctx)
         r.replyFromAddress = "nbecker@everyvoicechoirs.org"
+        r.lastReplyText = "Thanks, that sounds good."   // #2147: complete means writer AND words
         var fetches = 0
         await GmailReplyChecker(fromEmail: me).markReplies(
             in: ctx, token: "tok", now: Date(timeIntervalSince1970: 9_999),

@@ -31,7 +31,8 @@ struct ReplyPanelSheet: View {
 
     private var audience: [String] { SendGroup.replyAudience(of: recipient) }
     private var canSend: Bool {
-        ReplyPanel.canSend(body: body_, audience: audience, gmailConnected: gmailConnected)
+        ReplyPanel.canSend(body: body_, audience: audience, gmailConnected: gmailConnected,
+                           writer: recipient.replyFromAddress)
     }
 
     var body: some View {
