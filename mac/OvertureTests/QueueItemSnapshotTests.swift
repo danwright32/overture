@@ -346,8 +346,12 @@ struct QueueItemSnapshotTests {
         p.setRecipients([edited, fresh])
 
         let item = QueueItem(p)
-        #expect(item.contacts.first { $0.id == "a@act.example" }?.replyDraftEditedByDan == true)
+        // #2131: written with nothing to edit is his own, not an edit. Both flags travel, because both
+        // protect his text from a fresh AI draft and both decide what the card says about it.
+        #expect(item.contacts.first { $0.id == "a@act.example" }?.replyDraftWrittenByDan == true)
+        #expect(item.contacts.first { $0.id == "a@act.example" }?.replyDraftEditedByDan == false)
         #expect(item.contacts.first { $0.id == "b@present.example" }?.replyDraftEditedByDan == false)
+        #expect(item.contacts.first { $0.id == "b@present.example" }?.replyDraftWrittenByDan == false)
     }
 
     // #418 B1 — the derived per-contact status line: terminal resolution wins, then bounce, then reply,

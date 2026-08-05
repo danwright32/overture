@@ -78,7 +78,7 @@ What is not, and why:
 - `UI/DraftSignaturePreview.swift`: renders the outbound email's own HTML (body + Gmail signature), not Overture's voice (#1203)
 - `UI/DraftSignaturePreview.swift`: browser-side measuring script, not a sentence Overture says to Dan (#915)
 
-## The same sentence, said in more than one place (45)
+## The same sentence, said in more than one place (46)
 
 Two copies of a sentence will drift. #843 owns fixing these.
 
@@ -216,6 +216,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
 - "What converts"
   - `App/RootView.swift`
   - `UI/OutcomePatternsView.swift`
+- "Written by you"
+  - `UI/QueueView+Model.swift`
+  - `UI/QueueView+Model.swift`
 - "\n\nLast lines of the run log:\n\(tail)"
   - `Domain/DetachedRunOutcome.swift`
   - `UI/LeadIntakeModel.swift`

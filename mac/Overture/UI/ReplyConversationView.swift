@@ -83,8 +83,10 @@ struct ReplyConversationView: View {
             // #846: same two separate tags as the cold draft, for the same reason. A reply goes to
             // somebody who already wrote back to him, so it is the LAST place the trace should be missing.
             HStack(spacing: 6) {
-                if contact.replyDraftEditedByDan {
-                    Text("Edited").font(.system(size: 10)).foregroundStyle(OVColor.gold)
+                // #2131: says which it is. A reply Dan typed himself is not an edit of anything, and
+                // calling it one told him the card had an earlier version that never existed.
+                if let author = contact.replyAuthorLabel {
+                    Text(author).font(.system(size: 10)).foregroundStyle(OVColor.gold)
                 }
                 if let trace = contact.replyDraftTraceLabel {
                     Text(trace).font(.system(size: 10)).foregroundStyle(OVColor.inkFaint)
