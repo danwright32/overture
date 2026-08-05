@@ -261,3 +261,81 @@ struct WhoRepliedTests {
         #expect(ReachedOutQueue.nextReachOut(for: r, of: p, now: noticed.addingTimeInterval(3_600)) == noticed)
     }
 }
+
+// A backfill that works and a backfill that RUNS are two claims, and only the second one reaches Dan's
+// store. These drive the real `GmailReplyChecker.markReplies` against the full app schema, because the
+// pass depends on an edit in a different file: the checker's thread-collection deliberately skips any
+// row that has already replied, so without that edit the backfill would run every poll, be handed no
+// thread at all, and quietly fill nothing forever.
+@MainActor
+@Suite("The responder backfill runs in the live reply check")
+struct ResponderBackfillWiringTests {
+    private let me = "dan@danwrightphotography.com"
+
+    private func container() throws -> ModelContainer {
+        try ModelContainer(for: AppSchema.schema,
+                           configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+    }
+
+    private func repliedShow(_ ctx: ModelContext) -> Recipient {
+        let p = Prospect(naturalKey: "k", groupName: "Pumpkin Singalong", discipline: "choral", venue: "V",
+                         performanceDate: "2026-10-31", sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "none", production: "self", profile: "strong",
+                         coverage: "likely_uncovered", fitScore: 8, tier: "high", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
+        ctx.insert(p)
+        let r = Recipient(id: "chelsea@everyvoicechoirs.org", email: "chelsea@everyvoicechoirs.org",
+                          provenance: .act)
+        r.gmailThreadId = "t1"
+        r.sentAt = Date(timeIntervalSince1970: 1)
+        r.sendState = .sent
+        r.gmailMessageId = "m1"
+        r.replied = true                       // replied before any writer was ever recorded
+        r.repliedAt = Date(timeIntervalSince1970: 5_000)
+        p.addRecipient(r)
+        return r
+    }
+
+    private func fetching(from: String, internalDate: String, count: UnsafeMutablePointer<Int>)
+    -> (URLRequest) async throws -> (Data, URLResponse) {
+        let json = """
+        {"messages":[{"id":"m9","internalDate":"\(internalDate)",
+          "payload":{"headers":[{"name":"From","value":"\(from)"}]}}]}
+        """
+        return { req in
+            count.pointee += 1
+            return (Data(json.utf8),
+                    HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        }
+    }
+
+    @Test func aThreadThatRepliedLongAgoLearnsWhoWroteOnTheNextCheck() async throws {
+        let ctx = ModelContext(try container())
+        let r = repliedShow(ctx)
+        var fetches = 0
+        await GmailReplyChecker(fromEmail: me).markReplies(
+            in: ctx, token: "tok", now: Date(timeIntervalSince1970: 9_999),
+            fetch: fetching(from: "Nicole Becker <nbecker@everyvoicechoirs.org>",
+                            internalDate: "1754355390000", count: &fetches))
+        #expect(fetches > 0, "the already-replied thread has to be fetched at all")
+        #expect(r.replyFromAddress == "nbecker@everyvoicechoirs.org")
+        #expect(r.replyFromName == "Nicole Becker")
+        #expect(r.inboundReplySentAt == Date(timeIntervalSince1970: 1_754_355_390))
+        // The backfill names the writer; it must not restamp what the row already knew.
+        #expect(r.repliedAt == Date(timeIntervalSince1970: 5_000))
+    }
+
+    // Once named, the thread drops back out of the fetch set, so the pass cannot become a standing Gmail
+    // cost on every poll for the life of the row.
+    @Test func aThreadThatAlreadyNamesItsWriterIsNotFetchedAgain() async throws {
+        let ctx = ModelContext(try container())
+        let r = repliedShow(ctx)
+        r.replyFromAddress = "nbecker@everyvoicechoirs.org"
+        var fetches = 0
+        await GmailReplyChecker(fromEmail: me).markReplies(
+            in: ctx, token: "tok", now: Date(timeIntervalSince1970: 9_999),
+            fetch: fetching(from: "Nicole Becker <nbecker@everyvoicechoirs.org>",
+                            internalDate: "1754355390000", count: &fetches))
+        #expect(fetches == 0)
+    }
+}
