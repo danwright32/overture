@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1033 sentences**, from 356 source files.
+Every sentence Overture can say to Dan: **1035 sentences**, from 357 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -289,6 +289,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceAttention.swift`
 "1 venue is still waiting to be checked."
     `UI/ScoutSummaryView.swift`
+"1px solid rgba(0,0,0,0.12)"
+    `Domain/PreviewBackground.swift`
+"1px solid rgba(255,255,255,0.18)"
+    `Domain/PreviewBackground.swift`
 "A Gmail connection is already in progress. Finish it in the browser."
     `Integration/GmailAuthManager.swift`
 "A Prep run is already in progress. Wait for it to finish."
@@ -417,8 +421,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/InquiryCopy.swift`
 "Another pitch is already in progress on this date"
     `Domain/SelfBookingConflict.swift`
-"Anyone reading in dark mode sees a white box around your signature. Edit it in Gmail settings."
-    `Domain/DraftReviewNotes.swift`
 "Ask Claude to reinstall Overture."
     `Domain/BuildFreshnessPanel.swift`
 "Asking macOS for OmniFocus permission…"
@@ -1481,6 +1483,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "Show the scout that's running. Hiding its window doesn't stop it."
     `App/RootView.swift`
+"Show this email the way a recipient reading in light or dark mode sees it."
+    `Domain/DraftReviewNotes.swift`
 "Show which bookings were auto-detected"
     `UI/OutcomePatternsView.swift`
 "Showing only the \(Plural.count(count, "pending booking")). Click to show the whole queue again."

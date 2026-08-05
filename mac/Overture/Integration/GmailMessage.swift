@@ -26,7 +26,10 @@ enum GmailMessage {
     // signature, so the card falls back to previewBody. The single html composition, shared by BOTH the
     // card and the send path (rfc822), so the styled preview can never drift from the wire message.
     static func previewHTML(body: String, signature: OutboundSignature) -> String? {
-        guard let html = signature.html, !html.isEmpty else { return nil }
+        // #2086: sendableHTML, not html. This is the ONE composition both the wire (rfc822) and both
+        // preview surfaces go through, so stripping here is what makes the invisible border impossible to
+        // send and guarantees the card shows the same message that ships.
+        guard let html = signature.sendableHTML, !html.isEmpty else { return nil }
         return htmlDocument(body: body, signatureHTML: html)
     }
 
@@ -43,18 +46,25 @@ enum GmailMessage {
     // measuring nothing, silently (#2062).
     static let previewCardElementID = "overture-preview-card"
 
-    static func previewCardHTML(body: String, signature: OutboundSignature) -> String? {
+    // #2086: which background the card draws is now the caller's, because a preview with only ONE
+    // background cannot show styling that is invisible on that background and glaring on the other. The
+    // colours themselves live on PreviewBackground, so the two surfaces that render this cannot end up
+    // disagreeing about what "dark" looks like. The content is IDENTICAL on both: the card never
+    // sanitises the signature, or the preview would stop being a preview.
+    static func previewCardHTML(body: String, signature: OutboundSignature,
+                                background: PreviewBackground = .light) -> String? {
         guard let inner = previewHTML(body: body, signature: signature) else { return nil }
-        // A contained, rounded WHITE CARD floating on the (transparent) dark chrome, framed so it reads as a
-        // real inbox preview rather than the edge-to-edge white slab Dan found jarring (2026-07-20). The
-        // surface is true white on purpose: a Gmail signature's own divider rules are authored white (#fff)
-        // to vanish on a white email body, so an off-white card wrongly reveals them as grey lines. White
-        // also makes the fixed-width (often 600px) signature's overflow invisible, so overflow:hidden clips
-        // it cleanly to the card's rounded bounds with nothing bleeding off the right edge.
+        // A contained, rounded CARD floating on the (transparent) chrome, framed so it reads as a real
+        // inbox preview rather than the edge-to-edge slab Dan found jarring (2026-07-20). On light the
+        // surface is true white on purpose: a Gmail signature's own divider rules are authored white
+        // (#fff) to vanish on a white email body, so an off-white card wrongly reveals them as grey lines.
+        // overflow:hidden clips the fixed-width (often 600px) signature to the card's rounded bounds with
+        // nothing bleeding off the right edge.
         return "<style>html,body{background:transparent;margin:0;padding:8px}</style>"
             + "<div id=\"\(previewCardElementID)\" "
-            + "style=\"background:#ffffff;color:#111111;padding:16px;border-radius:10px;overflow:hidden;"
-            + "border:1px solid rgba(0,0,0,0.12);box-shadow:0 1px 4px rgba(0,0,0,0.25)\">\(inner)</div>"
+            + "style=\"background:\(background.surfaceCSS);color:\(background.inkCSS);padding:16px;"
+            + "border-radius:10px;overflow:hidden;"
+            + "border:\(background.frameCSS);box-shadow:0 1px 4px rgba(0,0,0,0.25)\">\(inner)</div>"
     }
     // copy-inventory:ignore-end
 

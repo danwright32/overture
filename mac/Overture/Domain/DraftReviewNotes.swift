@@ -126,13 +126,29 @@ extension DraftReviewNotes {
 enum GmailCopy {
     static let notConnected = "Connect Gmail first"
 
-    // #2087: shown beside the draft preview when the stored Gmail signature carries styling that only
-    // goes wrong on a dark background. The preview renders on a white card (#1203), the same background
-    // Gmail authors signatures for, so it is structurally unable to show this and the sentence is the
-    // only warning there can be. Names the fix as well as the effect, because the signature lives in
-    // Gmail's settings and Overture cannot change it.
-    static let signatureLooksWrongOnDark =
-        "Anyone reading in dark mode sees a white box around your signature. Edit it in Gmail settings."
+    // #2087's "Anyone reading in dark mode sees a white box around your signature. Edit it in Gmail
+    // settings." is GONE, deliberately, and this note is here so nobody adds it back without reading why.
+    //
+    // It told Dan to fix the signature in Gmail Settings. On 2026-08-04 that turned out to be impossible:
+    // the bordered wrappers come from the signature generator's own markup, so they ride along with any
+    // copy of the rendered signature, and Gmail's editor offers no way to select a wrapper or set a
+    // border colour. A refetch after Dan re-pasted his signature returned a genuinely different value
+    // with all three border rules byte identical. So the sentence was asking him to do something that
+    // could not be done, which is worse than saying nothing (L21: copy is a contract).
+    //
+    // Overture strips those borders on the way out instead (#2086, Dan's call). Because the stripper is
+    // defined as removing exactly what GmailSignatureHealth.darkBackgroundReason flags, nothing it flags
+    // can survive to the message being previewed, so the warning became UNREACHABLE rather than merely
+    // rare, and unreachable copy pretending to be a guard is the thing L29 says to delete. If a
+    // dark-background defect outside the detector's reach ever needs surfacing, that is a new sentence
+    // with a new check behind it, not this one revived.
+
+    // #2086: the preview's Light and Dark switch. The preview had one background, true white, which is
+    // the one background a white border is invisible on, so it could not show what a dark-mode reader
+    // gets. This says what the two buttons are for, on a control whose labels alone do not say whose
+    // background it means.
+    static let previewBackgroundHelp =
+        "Show this email the way a recipient reading in light or dark mode sees it."
 
     static func sendHelp(connected: Bool, whenConnected: String) -> String {
         connected ? whenConnected : notConnected
