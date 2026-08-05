@@ -42,19 +42,19 @@ struct ReplyPanelTests {
 
     // Dan types the words himself, so there is nothing to send until he has typed some.
     @Test func nothingSendsUntilSomethingIsTyped() {
-        #expect(!ReplyPanel.canSend(body: "", audience: ["a@x.org"], gmailConnected: true))
-        #expect(!ReplyPanel.canSend(body: "   \n  ", audience: ["a@x.org"], gmailConnected: true))
-        #expect(ReplyPanel.canSend(body: "Sounds good.", audience: ["a@x.org"], gmailConnected: true))
+        #expect(!ReplyPanel.canSend(body: "", audience: ["a@x.org"], gmailConnected: true, writer: nil))
+        #expect(!ReplyPanel.canSend(body: "   \n  ", audience: ["a@x.org"], gmailConnected: true, writer: nil))
+        #expect(ReplyPanel.canSend(body: "Sounds good.", audience: ["a@x.org"], gmailConnected: true, writer: nil))
     }
 
     // An audience of nobody means the send has no destination, so the button must refuse rather than
     // fail at the network and report it as an error Dan cannot act on.
     @Test func nothingSendsWithNobodyToSendTo() {
-        #expect(!ReplyPanel.canSend(body: "Sounds good.", audience: [], gmailConnected: true))
+        #expect(!ReplyPanel.canSend(body: "Sounds good.", audience: [], gmailConnected: true, writer: nil))
     }
 
     @Test func nothingSendsWhileGmailIsDisconnected() {
-        #expect(!ReplyPanel.canSend(body: "Sounds good.", audience: ["a@x.org"], gmailConnected: false))
+        #expect(!ReplyPanel.canSend(body: "Sounds good.", audience: ["a@x.org"], gmailConnected: false, writer: nil))
     }
 
     // MARK: the audience Dan approves

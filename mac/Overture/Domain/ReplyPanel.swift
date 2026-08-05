@@ -24,8 +24,14 @@ enum ReplyPanel {
     // The send is refused, never merely discouraged, on each of the three things that make it impossible:
     // nothing typed, nobody to send to, no Gmail. Refusing here means the button is honest at rest,
     // instead of failing at the network and reporting an error Dan can do nothing about (L67).
-    static func canSend(body: String, audience: [String], gmailConnected: Bool) -> Bool {
+    // #2147: `writer` is the address that actually wrote, when it is known. If the answer would not reach
+    // them, the send is REFUSED rather than delivered to whoever the row happens to stand on. Substituting
+    // a nearby contact looks exactly like success and emails somebody else (L75). A row with no recorded
+    // writer is not blocked: answering the contact it was sent to is the best that is known about it.
+    static func canSend(body: String, audience: [String], gmailConnected: Bool, writer: String?) -> Bool {
         guard gmailConnected, !audience.isEmpty else { return false }
+        if let writer, !writer.isEmpty,
+           !audience.contains(where: { ReplyDetection.isSameAddress($0, writer) }) { return false }
         return !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
