@@ -30,6 +30,8 @@ PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)/.."   # the Overture repo root
 # kill of the script is off the table; the stop is cooperative, and it lands at a poll boundary so it can
 # never interrupt a reply mid-write and corrupt the shared results file.
 . "$(dirname "$0")/lib/scout-cancel.sh"
+# #2106: the heartbeat touch, and stopping the run when it can no longer report itself alive.
+. "$(dirname "$0")/lib/run-heartbeat.sh"
 # #1097: the fail-closed tool scope for this detached run, shared with scout-extract and prep.
 # --allowedTools alone only PRE-approves; the --permission-mode manual this carries is what actually
 # denies Bash, Edit, web access and everything else the inherited "auto" default would grant a headless run.
@@ -113,7 +115,8 @@ MARKER_INTERVAL=60
     since_marker=$((since_marker + CANCEL_POLL))
     if marker_due "$since_marker" "$MARKER_INTERVAL"; then
       since_marker=0
-      touch "$MARKER" 2>/dev/null || exit
+      # #2106: cannot report itself alive => stops the run. Why, in lib/run-heartbeat.sh.
+      heartbeat_touch_or_stop "$MARKER" "$CLAUDE_PID_FILE" || exit
       update_progress_from_results "$QUEUE" "$RESULTS" "$PROGRESS"
     fi
   done ) &

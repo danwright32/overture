@@ -32,6 +32,8 @@ PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)/.."   # the Overture repo root
 # the table; a cooperative stop between ticks also can never interrupt a source mid-write and corrupt the
 # shared results file the way a kill -9 could.
 . "$(dirname "$0")/lib/scout-cancel.sh"
+# #2106: the heartbeat touch, and stopping the run when it can no longer report itself alive.
+. "$(dirname "$0")/lib/run-heartbeat.sh"
 # #1026: the tool scope for this DETACHED run, in one place. The run reads untrusted web content and
 # writes Dan's outreach data, so it is restricted to exactly Read, Write and WebFetch. The restriction is
 # real (fail-closed), not the mere pre-approval that --allowedTools used to give: see lib/scout-tools.sh.
@@ -126,7 +128,8 @@ MARKER_INTERVAL=60
     since_marker=$((since_marker + CANCEL_POLL))
     if marker_due "$since_marker" "$MARKER_INTERVAL"; then
       since_marker=0
-      touch "$MARKER" 2>/dev/null || exit
+      # #2106: cannot report itself alive => stops the run. Why, in lib/run-heartbeat.sh.
+      heartbeat_touch_or_stop "$MARKER" "$CHUNK_PIDS_FILE" || exit
       merge_chunk_results "$QUEUE" "$CHUNKDIR" "$RESULTS"
       update_progress_from_results "$QUEUE" "$RESULTS" "$PROGRESS"
     fi

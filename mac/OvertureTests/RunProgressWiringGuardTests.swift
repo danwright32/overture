@@ -39,11 +39,14 @@ struct RunProgressWiringGuardTests {
     // behind marker_due deeper in the loop body; the window is generous enough to reach it while still
     // ending well before the post-claude final derive hundreds of lines later.
     @Test func theHeartbeatLoopDerivesProgressEachTick() throws {
-        guard let heartbeatRange = runner.range(of: "while :; do") else {
+        // #2106: scoped to the heartbeat loop's own body rather than a fixed character
+        // count after its header. The count was a proxy for the loop, and it expired the
+        // way a proxy does: it had 34 characters of headroom, so an edit INSIDE the loop
+        // pushed the guarded call past it while the wiring was untouched (L63).
+        guard let nearby = SourceGuardHelper.between("while :; do", and: "done )", in: runner) else {
             Issue.record("heartbeat loop not found in scout-extract-run.sh")
             return
         }
-        let nearby = runner[heartbeatRange.lowerBound...].prefix(800)
         #expect(nearby.contains("update_progress_from_results"))
     }
 

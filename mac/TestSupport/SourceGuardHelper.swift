@@ -13,6 +13,20 @@ enum SourceGuardHelper {
         return (try? String(contentsOf: url, encoding: .utf8)) ?? ""
     }
 
+    // #2106: the text between two markers, for scoping a guard to a region that is not brace-delimited.
+    // The runners' heartbeat is `( while :; do … done ) &`, so its body runs from the loop header to the
+    // loop's own terminator, and that is the region a guard about "what the heartbeat does each tick"
+    // actually means. The alternative in use was a fixed character count after the header, which is a
+    // proxy for the region rather than the region: it left 34 characters of headroom in prep-run.sh, so
+    // the next edit inside the loop failed the guard while the wiring it protects was untouched (L63).
+    // Returns nil if either marker is missing or they appear in the wrong order.
+    static func between(_ start: String, and end: String, in source: String) -> String? {
+        guard let startRange = source.range(of: start),
+              let endRange = source.range(of: end, range: startRange.upperBound..<source.endIndex)
+        else { return nil }
+        return String(source[startRange.upperBound..<endRange.lowerBound])
+    }
+
     // Returns the balanced-brace body of the property/computed-var declaration whose header line
     // ends in the given open-brace marker (e.g. "private var masthead: some View {"), scanning
     // character-by-character from the marker's own opening brace until depth returns to zero
