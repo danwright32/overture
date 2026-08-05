@@ -21,6 +21,48 @@ enum AgentLogLocation {
     // folder, and a ledger Dan cannot reach from the nudge that mentions it is no use to him.
     static var problemsURL: URL { directory.appendingPathComponent("overture-agent.problems.log") }
 
+    // #2003: the ledger a diagnostic write in THIS process is allowed to land in.
+    //
+    // A test run writes into the app's own files. Measured on 2026-08-04, the live ledger held 443 KB,
+    // of which 112 lines read "the launch save failed, so no migration was persisted: SaveFailed()".
+    // SaveFailed is a stub error declared only in the test target, so every one of those lines was
+    // written by a test and describes a launch that never happened.
+    //
+    // That is the alerting version of a false positive. This ledger is the only thing that carries a
+    // real problem to Dan, ANY new byte raises the nudge (deliberately, #1689), and every test run
+    // pushes it past the mark, so the reliable way to stop the nudge firing for nothing is to stop
+    // believing it. It also destroys the file as evidence, because nothing in it records which lines
+    // a test wrote.
+    //
+    // So a test process writes somewhere of its own. Redirected rather than refused: a problem raised
+    // while a test exercises that path is still worth reading, and dropping it silently would leave
+    // the live file looking exactly the same as a working guard (L11).
+    //
+    // Keyed on the DIRECTORY, not the one file, so this covers the class: everything the app writes
+    // diagnostics to lives in there, and a file added later arrives protected rather than needing to
+    // be remembered.
+    //
+    // A ledger a test named itself (a throwaway temp file it then asserts on) is left exactly where it
+    // asked for; only Dan's own directory is out of bounds.
+    static var testRunLedgerURL: URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("overture-test-run.problems.log")
+    }
+
+    static func writableLedger(_ requested: URL,
+                               isUnderTest: Bool = AppEnvironment.isRunningUnderTests,
+                               liveDirectory: URL = AgentLogLocation.directory,
+                               testRunLedger: URL = AgentLogLocation.testRunLedgerURL) -> URL {
+        guard isUnderTest, isInside(requested, liveDirectory) else { return requested }
+        return testRunLedger
+    }
+
+    private static func isInside(_ url: URL, _ directory: URL) -> Bool {
+        let dir = directory.standardizedFileURL.path
+        let path = url.standardizedFileURL.path
+        return path == dir || path.hasPrefix(dir + "/")
+    }
+
     // #295: the resident agent's logs live in a permanent directory (#279), so nothing ever truncates
     // them and on an always-resident agent (#237) they would grow without bound. ~5 MB per file is
     // plenty of recent diagnostics; with the single retained backup, disk stays bounded at ~10 MB.

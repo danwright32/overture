@@ -84,4 +84,33 @@ struct AgentLogTests {
 
         #expect(try String(contentsOf: ledger, encoding: .utf8).contains("the launch save failed"))
     }
+
+    // #2003: THE guard. Every test above hands AgentLog a throwaway file, so none of them can see the
+    // defect: app code exercised BY a test calls AgentLog.problem with no ledger argument at all, takes
+    // the live default, and writes into the file the menu bar reads. Measured on 2026-08-04, that file
+    // held 443 KB of which 112 lines came from the test target's own stub error.
+    //
+    // This calls it the way production code does, with no ledger argument, from inside a test run.
+    // Asserting on the CONTENT rather than the file's size, so an unrelated write by a real Overture
+    // running alongside can never turn this red for the wrong reason.
+    @Test func aProblemRaisedDuringATestRunNeverReachesTheLedgerTheMenuBarReads() throws {
+        let sentinel = "2003 guard sentinel \(UUID().uuidString)"
+
+        AgentLog.problem(sentinel)
+
+        let live = (try? String(contentsOf: AgentLogLocation.problemsURL, encoding: .utf8)) ?? ""
+        #expect(!live.contains(sentinel))
+    }
+
+    // And the other half of the same claim: it is redirected, not dropped. A problem the app raises
+    // while a test is exercising it is still worth being able to read, and a guard that silently
+    // stopped all of it would look identical from the live file alone (L11).
+    @Test func aProblemRaisedDuringATestRunIsStillRecordedSomewhereReadable() throws {
+        let sentinel = "2003 redirect sentinel \(UUID().uuidString)"
+
+        AgentLog.problem(sentinel)
+
+        let redirected = try String(contentsOf: AgentLogLocation.testRunLedgerURL, encoding: .utf8)
+        #expect(redirected.contains(sentinel))
+    }
 }
