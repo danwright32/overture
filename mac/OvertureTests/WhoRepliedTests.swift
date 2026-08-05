@@ -189,49 +189,8 @@ struct WhoRepliedTests {
         #expect(fetches == 0)
     }
 
-    // MARK: what the row actually says
-
-    // The defect Dan saw: the row stood on Chelsea because "c" sorts before "n".
-    @Test func theRowNamesTheWriterNotTheAlphabeticallyFirstContact() throws {
-        let ctx = ModelContext(try container())
-        let p = show(ctx)
-        let chelsea = contact(p, "chelsea@everyvoicechoirs.org")
-        contact(p, "nbecker@everyvoicechoirs.org")
-        for r in p.recipients {
-            r.replied = true
-            r.replyFromAddress = "nbecker@everyvoicechoirs.org"
-            r.replyFromName = "Nicole Becker"
-        }
-        #expect(SendGroup.isRepresentative(chelsea, in: p), "Chelsea is still the row the list stands on")
-        #expect(ReplyIdentity.rowContactLine(for: chelsea, in: p) == "nbecker@everyvoicechoirs.org")
-    }
-
-    @Test func theRowFallsBackToTheRawAddressForAWriterWhoIsNotAContact() throws {
-        let ctx = ModelContext(try container())
-        let p = show(ctx)
-        let chelsea = contact(p, "chelsea@everyvoicechoirs.org", group: nil)
-        chelsea.replied = true
-        chelsea.replyFromAddress = "ray@elsewhere.example"
-        chelsea.replyFromName = "Ray Ortiz"
-        #expect(ReplyIdentity.rowContactLine(for: chelsea, in: p) == "ray@elsewhere.example")
-    }
-
-    // Nothing has replied yet, so the row still names the contact Dan pitched.
-    @Test func anUnrepliedRowStillNamesTheContactPitched() throws {
-        let ctx = ModelContext(try container())
-        let p = show(ctx)
-        let chelsea = contact(p, "chelsea@everyvoicechoirs.org", group: nil)
-        #expect(ReplyIdentity.rowContactLine(for: chelsea, in: p) == "chelsea@everyvoicechoirs.org")
-    }
-
-    // A replied row from before any of this was recorded must not go blank while the backfill catches up.
-    @Test func aRepliedRowWithNoWriterRecordedStillNamesSomebody() throws {
-        let ctx = ModelContext(try container())
-        let p = show(ctx)
-        let chelsea = contact(p, "chelsea@everyvoicechoirs.org", group: nil)
-        chelsea.replied = true
-        #expect(ReplyIdentity.rowContactLine(for: chelsea, in: p) == "chelsea@everyvoicechoirs.org")
-    }
+    // What the row actually SAYS is now the audience roster (#2121), covered in RowAudienceTests: the row
+    // lists everyone its next email reaches with the writer marked, which subsumes naming a single writer.
 
     // MARK: the queue anchors on when they WROTE, not when Overture noticed
 

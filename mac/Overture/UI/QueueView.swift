@@ -986,7 +986,21 @@ struct QueueView: View {
         return HStack(alignment: .top, spacing: OVSpacing.md) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(p.groupName).font(OVType.groupName).foregroundStyle(OVColor.ink)
-                Text(ReplyIdentity.rowContactLine(for: r, in: p)).font(OVType.body).foregroundStyle(OVColor.inkSoft)
+                // #2121: everyone this row's next email reaches, so Dan can see whether he is answering
+                // one person or five before he opens it, with the writer of the reply marked out.
+                //
+                // Marked by WEIGHT as well as colour, and carrying its own accessibility label, because a
+                // highlight a screen reader cannot perceive is not a highlight (the row is read aloud as a
+                // flat list of addresses otherwise).
+                let audience = ReplyIdentity.rowAudience(for: r, in: p)
+                ForEach(audience.lines, id: \.self) { line in
+                    let wroteBack = line == audience.responder
+                    Text(line)
+                        .font(OVType.body)
+                        .fontWeight(wroteBack ? .semibold : .regular)
+                        .foregroundStyle(wroteBack ? OVColor.ink : OVColor.inkSoft)
+                        .accessibilityLabel(audience.spokenLabel(for: line))
+                }
                 // #1630: a form pitch has no address and no thread, so the row has to account for the
                 // silence itself. Said in inkSoft, not rust: nothing is wrong here.
                 if r.outreachChannel == .contactForm {
