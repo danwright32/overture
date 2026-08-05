@@ -16,7 +16,21 @@ enum DetachedRunner {
     // means the runner exited cleanly, stale means it stopped without doing so. One reader, so the two
     // questions can never drift apart on what the marker means.
     static func heartbeat(markerURL: URL, now: Date, staleAfter: TimeInterval) -> RunHeartbeat {
-        let touched = try? markerURL.resourceValues(forKeys: [.contentModificationDateKey])
+        // #1613: drop any cached reading FIRST. Foundation caches resource values on a URL value, so a
+        // URL that has been asked once keeps answering with the reading it got then, for the life of that
+        // value, even after the file has been deleted. Measured 2026-08-04: delete the file and the same
+        // URL still reports the old modification date, while a freshly constructed URL correctly reports
+        // nothing. That turns "the marker is gone" into "the marker is still there and stale", which is a
+        // dead run reporting itself over and over, and it is the same family of defect as a live run and
+        // a dead one being indistinguishable from the files.
+        //
+        // Production mostly escaped it because the default marker URLs are computed properties, so most
+        // callers happen to build a new URL each time. That is luck, not a design, and the sweep in
+        // clearDeadRun reads this immediately after deleting the file, which is exactly where the luck
+        // runs out. Fixed here, once, so all three run services get it (L30).
+        var url = markerURL
+        url.removeAllCachedResourceValues()
+        let touched = try? url.resourceValues(forKeys: [.contentModificationDateKey])
             .contentModificationDate
         return RunHeartbeat.of(markerTouchedAt: touched ?? nil, now: now, staleAfter: staleAfter)
     }

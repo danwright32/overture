@@ -466,6 +466,43 @@ enum PrepQueueService {
                                        into: context, now: now, defaults: defaults)
     }
 
+    // #1613: sweep a run that DIED.
+    //
+    // Observed live on 2026-07-27: prep-run.sh died at parse time, so it never reached the heartbeat loop
+    // that reads the cancel sentinel. The app called it stuck and offered Cancel, and Cancel writes a
+    // sentinel only a LIVE runner ever reads, so the button could not do anything however many times it
+    // was pressed. It cleared only when the files were deleted by hand in Application Support, which Dan
+    // has no way to do from inside the app.
+    //
+    // Dan's call (2026-08-04): Overture clears it itself and says the run died, rather than waiting for a
+    // click. So this is a sweep, not a button. It returns nil for every ending that is NOT a death, which
+    // is what stops it touching a live batch mid-write and what makes calling it twice report once: the
+    // second call finds no marker, reads .absent, and declines.
+    //
+    // The paid half goes through #1809's own settle rather than a second implementation of it: a check
+    // that died still researched shows Dan paid for, and deleting its marker blind would throw those
+    // answers away. Settled FIRST, then the marker is released, in that order, for the same reason
+    // settleAnyCheckBefore does it that way.
+    @discardableResult
+    static func clearDeadRun(markerURL: URL = defaultMarkerURL,
+                             cancelURL: URL = defaultCancelURL,
+                             probeRunURL: URL = defaultProbeRunURL,
+                             into context: ModelContext, now: Date) -> DeadRunOutcome? {
+        guard PrepRunEnding.of(heartbeat: heartbeat(markerURL: markerURL, now: now)) == .died else {
+            return nil
+        }
+        let report = settleOrphanedProbe(markerURL: probeRunURL, into: context, now: now)
+        ReachabilityProbeMarker.clear(at: probeRunURL)
+        // The marker goes last: while it is there the run still reads as one that ended badly, so a crash
+        // part-way through this leaves the sweep to be retried rather than a half-swept run that reads as
+        // clean (assume it runs twice).
+        try? FileManager.default.removeItem(at: markerURL)
+        // The sentinel nobody read must not survive to stop a LATER run before it starts. startPrep also
+        // clears it, so this is defence in depth on the same rule.
+        try? FileManager.default.removeItem(at: cancelURL)
+        return DeadRunOutcome(probeReport: report)
+    }
+
     // #1809: a Prep run is definitively NOT a check, so no check marker may survive into its completion,
     // where it would make this run ingest probe-safely and silently drop every draft it produced.
     //

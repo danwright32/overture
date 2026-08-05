@@ -743,6 +743,11 @@ struct RootView: View {
                     // task (below) follows it to completion, so this no longer awaits here (which also
                     // stops an in-flight Prep from blocking the scout reattach that follows).
                     prepSheetShown = true
+                } else if sweptADeadPrepRun() {
+                    // #1613: a run that DIED while Overture was closed leaves its marker standing, because
+                    // the runner never reached the exit that removes it. Swept here, before the orphan
+                    // settle below, because the sweep performs that settle itself and reports the death as
+                    // well: the two must not both run and report the same check twice.
                 } else if let report = PrepQueueService.settleOrphanedProbe(into: context, now: Date()) {
                     // #1809: a check that finished while Overture was CLOSED. The run watcher below only
                     // settles a run it is watching, and the detached runner removes its own marker on
@@ -1216,6 +1221,12 @@ struct RootView: View {
         // #1130: the run has ended (the marker cleared). Close the takeover so it does not sit showing a
         // finished run; the outcome surfaces below via ingest / the empty-run notice.
         prepSheetShown = false
+        // #1613: a run can end two ways and they deserve opposite treatment. The runner removes its own
+        // marker on the way out, so a marker STILL THERE at the moment the run stopped being live means it
+        // died somewhere it never reached that exit. Nothing more is coming, so the panel must not sit
+        // offering Cancel (which writes a sentinel only a live runner reads, and so could never do
+        // anything). Swept and reported instead; the normal settle below is for a run that finished.
+        if sweptADeadPrepRun() { return }
         let started = PrepQueueService.lastRunStartedAt
         let resultsMod = try? PrepImporter.defaultURL
             .resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
@@ -1246,6 +1257,26 @@ struct RootView: View {
         case .idle:
             break
         }
+    }
+
+    // #1613: sweep a Prep run that died rather than finished, and say so. Returns whether there was one,
+    // so both callers (the run watcher and the launch path) can stop rather than also running the settle
+    // for a run that finished, which would report the same check twice.
+    //
+    // Dan's call (2026-08-04): Overture clears it itself rather than offering a button. The button it used
+    // to offer was Cancel, and Cancel cannot work on a dead run however many times it is pressed, so
+    // waiting for a click meant waiting forever. The check it was running is settled on the way through
+    // (the sweep does that), so a death never silently discards answers already paid for.
+    @discardableResult
+    private func sweptADeadPrepRun() -> Bool {
+        // Read WHICH kind of run it was before the sweep clears the marker that says so.
+        let wasProbe = ((try? ReachabilityProbeMarker.read(from: PrepQueueService.defaultProbeRunURL)) ?? nil) != nil
+        guard let outcome = PrepQueueService.clearDeadRun(into: context, now: Date()) else { return false }
+        if let report = outcome.probeReport { reportReachabilityRun(report) }
+        // .warning, not .info: an .info write can be silently overwritten by a later routine receipt, and
+        // a run Dan was waiting on having died is the one thing about it he has to see.
+        status.set(RunProgressCopy.diedLine(phase: wasProbe ? .probing : .prepping), priority: .warning)
+        return true
     }
 
     // #1769: a check that came home partial says so. The sentence itself lives in ReachabilityRunSummary,
