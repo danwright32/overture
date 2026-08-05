@@ -114,7 +114,6 @@ struct RootView: View {
     @State private var showFollowUps = false
     // #682: the recipient Dan clicked "Send a follow-up" from on the Reached Out row, handed to
     // FollowUpsView so it opens with that same entry highlighted instead of a plain list.
-    @State private var followUpsHighlightRecipientId: String?
     @State private var showVoiceGuidance = false
     // #1435/#1436: the "Log an inquiry" intake sheet, opened from the same grouped menu as "Add a lead".
     @State private var showInquiryIntake = false
@@ -323,7 +322,6 @@ struct RootView: View {
             "archiveJumpKey": archiveJumpKey ?? "none",
             "archiveJumpRecipientId": archiveJumpRecipientId ?? "none",
             "archiveOpeningQuery": "\(archiveOpeningQuery.count)",
-            "followUpsHighlight": followUpsHighlightRecipientId ?? "none",
             "sheets": [showArchive, showPatterns, showFollowUps, showVoiceGuidance, showInquiryIntake,
                        showSources, showDaysOff, showExcludedTowns, showOrganisations,
                        showReminderSettings].map { $0 ? "1" : "0" }.joined(),
@@ -375,10 +373,6 @@ struct RootView: View {
     private var queueContent: some View {
         QueueView(deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys, onConnectGmail: connectGmail,
                   onShowFollowUps: { showFollowUps = true },
-                  onShowFollowUpsFor: { recipientId in
-                      followUpsHighlightRecipientId = recipientId
-                      showFollowUps = true
-                  },
                   onOpenInArchive: { key, recipientId in
                       openArchive(key: key, recipientId: recipientId)
                   },
@@ -860,8 +854,7 @@ struct RootView: View {
                 FollowUpsView(onOpenInArchive: { key, recipientId in
                     showFollowUps = false
                     openArchive(key: key, recipientId: recipientId)
-                }, initialHighlightRecipientId: followUpsHighlightRecipientId,
-                onHighlightConsumed: { followUpsHighlightRecipientId = nil })
+                })
             }
             .sheet(isPresented: $showVoiceGuidance) { VoiceGuidanceView() }
             // #953: pick which kept shows this Prep run covers. Defaults by performance date; the run
