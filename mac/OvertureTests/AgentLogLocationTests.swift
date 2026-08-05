@@ -235,4 +235,57 @@ struct AgentLogLocationTests {
         let perms = (try FileManager.default.attributesOfItem(atPath: dir.path)[.posixPermissions] as? NSNumber)?.intValue
         #expect(perms == 0o755)   // truly unchanged, not silently "fixed"
     }
+
+    // #2003: a test run must not be able to write into the ledger the menu bar reads.
+    //
+    // Measured on 2026-08-04, before any of this: that file held 443 KB and 112 lines reading
+    // "the launch save failed, so no migration was persisted: SaveFailed()". SaveFailed is a stub
+    // error type that exists only in the test target, so every one of those lines was written by a
+    // test run and describes a launch that never happened.
+    //
+    // It is the alerting version of a false positive (L36). The ledger is the only thing carrying a
+    // real problem to Dan, ANY new byte raises the nudge, and every test run pushes it past the mark,
+    // so the reliable way to stop the nudge firing for nothing is to stop believing it. It also
+    // destroys the ledger as evidence: nothing in the file records which lines a test wrote.
+    //
+    // The redirect is keyed on the DIRECTORY rather than the one file, because the fix has to cover
+    // the class: every path the app writes diagnostics to lives in there, and a second one added
+    // later would otherwise arrive unprotected.
+
+    @Test func aTestRunsProblemGoesToItsOwnLedgerNotTheOneTheMenuBarReads() {
+        let landed = AgentLogLocation.writableLedger(AgentLogLocation.problemsURL, isUnderTest: true)
+
+        #expect(landed != AgentLogLocation.problemsURL)
+        #expect(landed == AgentLogLocation.testRunLedgerURL)
+    }
+
+    @Test func theRealLedgerIsWrittenWhenThisIsNotATestRun() {
+        #expect(AgentLogLocation.writableLedger(AgentLogLocation.problemsURL, isUnderTest: false)
+                == AgentLogLocation.problemsURL)
+    }
+
+    // A test that hands AgentLog its own throwaway file is asserting on what it wrote there, so the
+    // redirect must leave it exactly where it asked for. Redirecting everything would take the
+    // existing ledger tests down with it.
+    @Test func aLedgerATestChoseItselfIsLeftWhereItAskedFor() {
+        let chosen = FileManager.default.temporaryDirectory
+            .appendingPathComponent("agentlog-\(UUID().uuidString)/problems.log")
+
+        #expect(AgentLogLocation.writableLedger(chosen, isUnderTest: true) == chosen)
+    }
+
+    // The class, not the instance: anything inside the live agent log directory is Dan's, whichever
+    // file it is.
+    @Test func anySiblingFileInTheLiveLogDirectoryIsRedirectedToo() {
+        let sibling = AgentLogLocation.directory.appendingPathComponent("overture-agent.err.log")
+
+        #expect(AgentLogLocation.writableLedger(sibling, isUnderTest: true)
+                == AgentLogLocation.testRunLedgerURL)
+    }
+
+    // The test run's own ledger is somewhere a person could actually go and read, and is nowhere
+    // near the live directory, or the redirect would just move the pollution one file sideways.
+    @Test func theTestRunLedgerSitsOutsideTheLiveLogDirectory() {
+        #expect(!AgentLogLocation.testRunLedgerURL.path.hasPrefix(AgentLogLocation.directory.path))
+    }
 }

@@ -38,7 +38,11 @@ enum AgentLog {
         // percent sign would otherwise be read as a format specifier and print garbage or worse.
         NSLog("%@", message)
         guard kind == .problem else { return }
-        record(message, in: ledger, at: now, fileManager: fileManager)
+        // #2003: app code exercised BY a test calls this with no ledger argument, takes the live
+        // default, and writes into the file the menu bar reads, so the running app tells Dan it had a
+        // problem it never had. Resolved here rather than in the default argument, so a caller naming
+        // the live path outright is redirected too and the guard cannot be walked around.
+        record(message, in: AgentLogLocation.writableLedger(ledger), at: now, fileManager: fileManager)
     }
 
     // Appends one line, creating the file and its directory if this is the first problem ever recorded.
