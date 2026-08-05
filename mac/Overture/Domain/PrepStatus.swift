@@ -51,8 +51,13 @@ struct PrepStatus: Equatable, Sendable {
     // #1808: the same coarse buckets with no "ago", for a sentence that says how far APART two things
     // are ("2d behind what has shipped") rather than how long ago one of them happened. Shared with
     // `relative` above rather than spelled out a second time, so the two can never bucket differently.
-    static func gap(from: Date, to: Date) -> String {
-        let seconds = max(0, to.timeIntervalSince(from))
+    static func gap(from: Date, to: Date) -> String { duration(seconds: to.timeIntervalSince(from)) }
+
+    // #2091: the same buckets from a LENGTH rather than two dates, for a sentence about how long
+    // something lasted ("not checking for 3d"). Shared with both of the above rather than a third copy,
+    // so a duration and an age can never bucket differently.
+    static func duration(seconds: TimeInterval) -> String {
+        let seconds = max(0, seconds)
         switch seconds {
         case ..<3600: return "\(Int(seconds / 60))m"
         case ..<86_400: return "\(Int(seconds / 3600))h"

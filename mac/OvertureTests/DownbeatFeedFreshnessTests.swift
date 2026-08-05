@@ -93,10 +93,15 @@ struct DownbeatFeedFreshnessTests {
 struct FeedFreshnessWiringGuardTests {
     @Test func theSafeReconcileTickObservesTheFeed() {
         let sched = SourceGuardHelper.source("Overture/App/ReconcileScheduler.swift")
-        guard let range = sched.range(of: "func runSafeReconcilesOnce") else {
+        // #2091: scoped to the function's balanced-brace BODY, not the first 1200 characters after its
+        // name. That window was a proxy for "inside this function" and it expired the way a proxy does:
+        // #2091 added a call plus its comment at the top of the tick, which pushed the guarded call past
+        // the character count while the wiring it protects was untouched, so the guard failed for a
+        // reason unrelated to what it asserts (L63). The body is the quantity it actually means, and it
+        // now also covers the REST of the function, which the count never did.
+        guard let body = SourceGuardHelper.propertyBody("async -> ReconcileSummary {", in: sched) else {
             Issue.record("runSafeReconcilesOnce not found"); return
         }
-        let body = sched[range.lowerBound...].prefix(1200)
         #expect(body.contains("observeFeedFreshness(now: now)"),
                 "the safe reconcile tick must advance the feed-freshness clock each tick")
     }

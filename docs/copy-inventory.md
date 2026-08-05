@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1030 sentences**, from 354 source files.
+Every sentence Overture can say to Dan: **1033 sentences**, from 356 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1162,6 +1162,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/OmniFocusUserNotifier.swift`
 "Overture decided: \(what)"
     `UI/QueueView+Model.swift`
+"Overture has not checked for replies or bookings in \(PrepStatus.duration(seconds: seconds))"
+    `Domain/WatchGap.swift`
 "Overture is out of date"
     `Domain/BuildFreshnessPanel.swift`
 "Overture is still reading a previous page. Give it a moment and try again."
@@ -1176,6 +1178,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/OmniFocusUserNotifier.swift`
 "Overture opened with \(live) \(live == 1 ? "show" : "shows"). Its most recent backup holds "
     `App/StoreShrinkCheck.swift`
+"Overture was not checking for replies or bookings for \(PrepStatus.duration(seconds: seconds)), "
+    `Domain/WatchGap.swift`
 "Overture's data file doesn't look like Overture's own database. Another app may "
     `App/StoreSchemaGuard.swift`
 "Overture's data is unavailable"
@@ -2200,6 +2204,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OrganisationListing.swift`
 "all the same title"
     `Domain/OrganisationListing.swift`
+"and resumed \(PrepStatus.relative(from: endedAt, to: now))"
+    `Domain/WatchGap.swift`
 "another show"
     `Domain/SelfBookingConflict.swift`
 "at \(venue) on \(dateLabel)"

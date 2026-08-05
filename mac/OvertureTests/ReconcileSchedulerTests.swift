@@ -234,4 +234,59 @@ struct ReconcileSchedulerTests {
     }
 
     private func freshDefaults() -> UserDefaults { UserDefaults(suiteName: "sched-\(UUID().uuidString)")! }
+
+    // #2091: the tick is where the watch heartbeat is written, and that wiring is a separate claim from
+    // WatchGap's own arithmetic being right (L3: built is not wired). Driven through the REAL tick rather
+    // than by calling WatchHeartbeatStore directly, so a future edit that drops either call fails here.
+    @Test func aTickStampsTheWatchHeartbeat() async throws {
+        let ctx = ModelContext(try container())
+        let defaults = freshDefaults()
+        let scheduler = ReconcileScheduler(context: ctx)
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+
+        await scheduler.runSafeReconcilesOnce(now: now, defaults: defaults, uptime: 5_000)
+
+        #expect(WatchHeartbeatStore.load(defaults) == WatchGap.heartbeat(now: now, uptime: 5_000))
+        // A first tick has no prior heartbeat to compare against, so it can never invent an outage.
+        #expect(WatchHeartbeatStore.loadOutage(defaults) == nil)
+    }
+
+    // The failure path: a tick that comes back after the process was dead for three days records that
+    // silence, and does so BEFORE its own stamp hides it. Without this the launch tick would leave a
+    // perfectly healthy-looking heartbeat and Dan would be told nothing, which is exactly #2091.
+    @Test func aTickResumingAfterASilenceRecordsIt() async throws {
+        let ctx = ModelContext(try container())
+        let defaults = freshDefaults()
+        let scheduler = ReconcileScheduler(context: ctx)
+        let before = Date(timeIntervalSince1970: 1_700_000_000)
+        await scheduler.runSafeReconcilesOnce(now: before, defaults: defaults, uptime: 5_000)
+
+        let threeDays = 3 * 86_400.0
+        let resumedAt = before.addingTimeInterval(threeDays)
+        await scheduler.runSafeReconcilesOnce(now: resumedAt, defaults: defaults, uptime: 5_000 + threeDays)
+
+        let outage = try #require(WatchHeartbeatStore.loadOutage(defaults))
+        #expect(outage.awakeSeconds == threeDays)
+        #expect(outage.endedAt == resumedAt.timeIntervalSince1970)
+        // And the surface reads it: the heartbeat is fresh again, so only the recorded outage can speak.
+        #expect(WatchHeartbeatStore.currentReport(now: resumedAt.addingTimeInterval(60),
+                                                  uptime: 5_000 + threeDays + 60,
+                                                  intervalSeconds: 30 * 60, defaults: defaults)
+                == .recovered(awakeSeconds: threeDays, endedAt: resumedAt))
+    }
+
+    // A Mac that merely slept between two ticks records nothing: the alert Dan would otherwise get every
+    // single morning, and the one that would teach him to ignore the line (L36).
+    @Test func aTickAfterTheMacSleptRecordsNoSilence() async throws {
+        let ctx = ModelContext(try container())
+        let defaults = freshDefaults()
+        let scheduler = ReconcileScheduler(context: ctx)
+        let before = Date(timeIntervalSince1970: 1_700_000_000)
+        await scheduler.runSafeReconcilesOnce(now: before, defaults: defaults, uptime: 5_000)
+
+        // Eight hours of wall clock later, but the Mac was awake for only a minute of it.
+        await scheduler.runSafeReconcilesOnce(now: before.addingTimeInterval(8 * 3_600),
+                                              defaults: defaults, uptime: 5_060)
+        #expect(WatchHeartbeatStore.loadOutage(defaults) == nil)
+    }
 }
