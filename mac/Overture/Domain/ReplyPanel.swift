@@ -21,18 +21,43 @@ enum ReplyPanel {
         return text
     }
 
-    // The send is refused, never merely discouraged, on each of the three things that make it impossible:
-    // nothing typed, nobody to send to, no Gmail. Refusing here means the button is honest at rest,
-    // instead of failing at the network and reporting an error Dan can do nothing about (L67).
+    // #2152: WHY the send is refused, as a value. The disabled button and the sentence beside it are then
+    // one decision asked once, so they cannot drift into a dead button sitting next to a line claiming
+    // everything is fine (L16, L70).
+    enum SendRefusal: Equatable {
+        case gmailDisconnected
+        case noAudience
+        // The address that wrote, and the addresses the answer would actually reach, carried together
+        // because the mismatch BETWEEN them is the reason and neither half states it alone.
+        case writerNotReached(writer: String, audience: [String])
+        case nothingTyped
+    }
+
+    // The send is refused, never merely discouraged, on each of the four things that make it impossible:
+    // no Gmail, nobody to send to, an answer that would miss whoever wrote, nothing typed. Refusing here
+    // means the button is honest at rest, instead of failing at the network and reporting an error Dan
+    // can do nothing about (L67).
     // #2147: `writer` is the address that actually wrote, when it is known. If the answer would not reach
     // them, the send is REFUSED rather than delivered to whoever the row happens to stand on. Substituting
     // a nearby contact looks exactly like success and emails somebody else (L75). A row with no recorded
     // writer is not blocked: answering the contact it was sent to is the best that is known about it.
-    static func canSend(body: String, audience: [String], gmailConnected: Bool, writer: String?) -> Bool {
-        guard gmailConnected, !audience.isEmpty else { return false }
+    //
+    // Order is what Dan needs to hear first, not what is cheapest to check: the writer mismatch outranks
+    // an empty box, because the empty box is the one thing on this panel he can already see for himself.
+    static func refusal(body: String, audience: [String], gmailConnected: Bool,
+                        writer: String?) -> SendRefusal? {
+        guard gmailConnected else { return .gmailDisconnected }
+        guard !audience.isEmpty else { return .noAudience }
         if let writer, !writer.isEmpty,
-           !audience.contains(where: { ReplyDetection.isSameAddress($0, writer) }) { return false }
-        return !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+           !audience.contains(where: { ReplyDetection.isSameAddress($0, writer) }) {
+            return .writerNotReached(writer: writer, audience: audience)
+        }
+        guard !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return .nothingTyped }
+        return nil
+    }
+
+    static func canSend(body: String, audience: [String], gmailConnected: Bool, writer: String?) -> Bool {
+        refusal(body: body, audience: audience, gmailConnected: gmailConnected, writer: writer) == nil
     }
 
     // The panel's send, out of the view so the sequence and its failure path can be tested.
@@ -71,4 +96,29 @@ enum ReplyPanelCopy {
     // Names what happened and leaves the button available, rather than a dead spinner or a cheerful
     // pretence that it went (L12). The words stay in the box: nothing Dan typed is thrown away.
     static let sendFailed = "That didn't send. Your reply is still here, so you can try again."
+
+    // #2152: the sentence beside a disabled Send button. A control that refuses without saying why reads
+    // as broken rather than as a refusal (L11, L67), and this one fires exactly where Dan is least able
+    // to work it out: a reply from an address that matches no contact on the show.
+    //
+    // Two of the four refusals deliberately say NOTHING here, because the panel already tells him:
+    //   nothing typed  he is looking straight at his own empty box
+    //   no audience    the header two lines above reads "No address to reply to", in the same red
+    // Repeating either beside the button is the restatement #843 was about, and a line that is always on
+    // screen stops being read at all.
+    static func refusalLine(_ refusal: ReplyPanel.SendRefusal?) -> String? {
+        switch refusal {
+        case nil, .nothingTyped, .noAudience:
+            return nil
+        case .gmailDisconnected:
+            // Said on screen and not only in the button's tooltip, which is invisible at rest (L49).
+            return GmailCopy.notConnected
+        case .writerNotReached(let writer, let audience):
+            // Names both sides, since the mismatch between them is the reason. It points at Gmail rather
+            // than at a control Overture does not have yet: #2151 is where adding the address to the
+            // contact becomes an offer here, and promising it before then would be copy that lies (L21).
+            return "\(writer) wrote, and this reply would go to \(Plural.list(audience)) instead, "
+                + "so Overture won't send it. Answer this one in Gmail."
+        }
+    }
 }

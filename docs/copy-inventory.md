@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1045 sentences**, from 363 source files.
+Every sentence Overture can say to Dan: **1047 sentences**, from 363 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -2206,6 +2206,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "\(worst.name) is flagged as a possible match on \(worst.count) shows, "
     `Domain/PossibleMatchFanOut.swift`
+"\(writer) wrote, and this reply would go to \(Plural.list(audience)) instead, "
+    `Domain/ReplyPanel.swift`
 "\n\nLast lines of the run log:\n\(tail)"
     `Domain/DetachedRunOutcome.swift`
     `UI/LeadIntakeModel.swift`
@@ -2315,6 +2317,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ProbeSelection.swift`
 "so Overture won't mark anything from this source as gone until the smaller calendar holds."
     `Domain/SourceReadability.swift`
+"so Overture won't send it. Answer this one in Gmail."
+    `Domain/ReplyPanel.swift`
 "something Overture has seen before"
     `UI/QueueView+Model.swift`
 "still couldn't save what this check found, so it has stopped trying and those shows will be checked again"
