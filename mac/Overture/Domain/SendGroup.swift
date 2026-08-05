@@ -42,6 +42,34 @@ enum SendGroup {
         peers(of: recipient, in: prospect).first?.id == recipient.id
     }
 
+    // Which conversation a contact belongs to. Its send group when it has one, otherwise itself: a contact
+    // emailed alone is a group of one rather than a special case.
+    static func groupKey(_ recipient: Recipient) -> String {
+        if let id = recipient.sendGroupId, !id.isEmpty { return id }
+        return recipient.id
+    }
+
+    // #2126: one row per EMAIL, chosen from the contacts that actually QUALIFY for the list asking.
+    //
+    // `isRepresentative` picks the lowest sorted id of the whole group and knows nothing about whether that
+    // contact belongs in the list. Every surface then ANDs it with its own eligibility test, and the two
+    // compose wrongly: when the alphabetically first contact is the one that stopped qualifying, the WHOLE
+    // conversation disappears, because the list is standing on somebody it has already excluded. Measured
+    // on the fixtures in OneRowPerGroupTests: a declined first contact took a live colleague's overdue
+    // nudge and its entire reached-out row down with it, in both lists, silently.
+    //
+    // `peers(of:in:)` filters on sendGroupId alone with no resolution filter, so a booked or declined
+    // contact stays the representative permanently. It cannot be taught otherwise without teaching it every
+    // caller's idea of eligible, which is the thing that differs. So the order is inverted instead: each
+    // list filters to what it wants FIRST and collapses after, and the row it keeps is the lowest id among
+    // those, which is stable across launches for the same reason the old rule was.
+    static func oneRowPerGroup<T>(_ qualifying: [T], recipient: (T) -> Recipient) -> [T] {
+        var seen = Set<String>()
+        return qualifying
+            .sorted { recipient($0).id < recipient($1).id }
+            .filter { seen.insert(groupKey(recipient($0))).inserted }
+    }
+
     // #2033: the contacts the NEXT press of Send will email, which is the pre-send half of the same
     // question `peers` answers after the fact. One definition, so the card, the confirmation and the send
     // itself cannot disagree about who is about to be written to.

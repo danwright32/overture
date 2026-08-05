@@ -88,7 +88,12 @@ enum OmniFocusSync {
             guard p.status != .dismissed else { continue }   // #238: a no-go lead never nags via OmniFocus
             // #2033: one task per EMAIL. These land in an app Dan reads away from his desk, so a
             // duplicate is a chore he has to tidy up somewhere he cannot see why there are two.
-            for r in p.recipients where SendGroup.isRepresentative(r, in: p) {
+            //
+            // #2126: earned FIRST, collapsed after. Filtering by lowest id up front meant a contact who had
+            // declined kept the group's only slot forever, so a colleague on the same email who genuinely
+            // owed a task never got one, away from his desk where he would never notice the absence.
+            var earned: [(recipient: Recipient, task: DesiredTask)] = []
+            for r in p.recipients {
                 let standing = r.standing
                 let unhandledReply = r.hasUnhandledReply && r.conversationStateSource != .manual
                 // A closed contact drops out, UNLESS a fresh reply still needs triage (a late reply on
@@ -109,10 +114,10 @@ enum OmniFocusSync {
                         due <= cutoff
                     else { continue }
                     let dueDate = easternTime(hour: dueHour, onDayOf: due)
-                    tasks.append(DesiredTask(naturalKey: p.naturalKey, recipientId: r.id, title: title(for: p, r),
-                                             note: note(for: p, r, dueDate: dueDate),
-                                             deferDate: easternTime(hour: deferHour, onDayOf: due),
-                                             dueDate: dueDate))
+                    earned.append((r, DesiredTask(naturalKey: p.naturalKey, recipientId: r.id, title: title(for: p, r),
+                                                  note: note(for: p, r, dueDate: dueDate),
+                                                  deferDate: easternTime(hour: deferHour, onDayOf: due),
+                                                  dueDate: dueDate)))
                     continue
                 }
 
@@ -128,12 +133,13 @@ enum OmniFocusSync {
                     // would complete+recreate the task on every new calendar day until Dan triages it.
                     let anchor = r.conversationStateSetAt ?? r.sentAt ?? now
                     let dueDate = easternTime(hour: dueHour, onDayOf: anchor)
-                    tasks.append(DesiredTask(naturalKey: p.naturalKey, recipientId: r.id, title: triageTitle(for: p, r),
-                                             note: note(for: p, r, dueDate: dueDate),
-                                             deferDate: easternTime(hour: deferHour, onDayOf: anchor),
-                                             dueDate: dueDate))
+                    earned.append((r, DesiredTask(naturalKey: p.naturalKey, recipientId: r.id, title: triageTitle(for: p, r),
+                                                  note: note(for: p, r, dueDate: dueDate),
+                                                  deferDate: easternTime(hour: deferHour, onDayOf: anchor),
+                                                  dueDate: dueDate)))
                 }
             }
+            tasks.append(contentsOf: SendGroup.oneRowPerGroup(earned) { $0.recipient }.map(\.task))
         }
         return tasks
     }

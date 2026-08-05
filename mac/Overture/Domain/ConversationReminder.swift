@@ -214,6 +214,7 @@ enum ConversationReminder {
                              config: ConversationReminderConfig = .init()) -> [DueRecipient] {
         var due: [DueRecipient] = []
         for p in prospects {
+            var dueHere: [DueRecipient] = []
             if p.status == .dismissed { continue }   // #238: dismissed leads stop nagging
             if p.outcomeSourceRaw == OutcomeSource.manual.rawValue || p.outcome == .booked { continue }
             for r in p.recipients {
@@ -242,8 +243,14 @@ enum ConversationReminder {
                                          repliedAt: r.replyArrivedAt, source: r.conversationStateSource,
                                          now: now, config: config)
                 else { continue }
-                due.append(DueRecipient(prospect: p, recipient: r, reminder: due0))
+                dueHere.append(DueRecipient(prospect: p, recipient: r, reminder: due0))
             }
+            // #2126: one row per EMAIL. Everyone on one send is reading one thread, so it is one thing for
+            // Dan to categorise; two rows asked him the same question twice and made Due read 2 (his report,
+            // 2026-08-05: "why does it seem like there are two email threads?"). Collapsed AFTER the due
+            // test, never by lowest id alone, so a state he set on the second contact still raises its own
+            // reminder instead of belonging to a row nothing reads.
+            due.append(contentsOf: SendGroup.oneRowPerGroup(dueHere) { $0.recipient })
         }
         return due.sorted {
             let ra = urgencyRank($0.reminder.kind), rb = urgencyRank($1.reminder.kind)
