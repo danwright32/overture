@@ -133,16 +133,22 @@ enum ConversationReminder {
     // the timed track: the earlier of (anchor + interval) and (event - lead buffer).
     static func nextReminderDate(state: ConversationState?, setAt: Date?, remindedAt: Date?,
                                  performanceDate: String?, isClosed: Bool, hasUnhandledReply: Bool,
-                                 source: OutcomeSource?,
+                                 repliedAt: Date?, source: OutcomeSource?,
                                  now: Date, config: ConversationReminderConfig = .init()) -> Date? {
         guard !isClosed else { return nil }
         guard let state else {
-            return hasUnhandledReply ? now : nil   // replied but uncategorized: needs a state now
+            // Replied but uncategorized: needs a state, dated the day the reply ARRIVED (#2111).
+            return hasUnhandledReply ? anchored(repliedAt, now: now) : nil
         }
         guard state.isActive, let interval = config.intervalDays(for: state) else { return nil }
-        if source == .auto { return now }             // unconfirmed AI state: surface immediately
+        // Unconfirmed AI state: still surfaces immediately, dated from when the guess was made (#2116).
+        if source == .auto { return anchored(setAt, now: now) }
         let daysToEvent = performanceDate.flatMap { EasternDate.daysUntil(from: EasternDate.today(now), to: $0) }
-        if let d = daysToEvent, d < 0 { return now }  // the day after the show: closing note
+        if let d = daysToEvent, d < 0 {
+            // The closing note, dated the day after the show (#2116), so one owed for a week reads a
+            // week overdue rather than arriving fresh every morning.
+            return anchored(dayAfterShow(performanceDate), now: now)
+        }
         var dates: [Date] = []
         if let anchor = remindedAt ?? setAt {
             dates.append(anchor.addingTimeInterval(TimeInterval(interval) * 86_400))
@@ -153,13 +159,35 @@ enum ConversationReminder {
         return dates.min()
     }
 
+    // #2111/#2116: the three "due immediately" cases used to `return now`, which is not a date at all but
+    // a reading of the clock taken afresh on every draw. The card re-filed itself under today every day,
+    // so it could never read as overdue and never sort above work that had only just arrived. Each case
+    // now anchors to the instant its work actually arrived (the reply, the AI guess, the show ending).
+    //
+    // Clamped to `now` because an anchor is evidence, not a schedule: a reply stamped in the future (clock
+    // skew) or a show date recorded wrong must not push a due item OUT of the due list. Nothing here
+    // decides whether an item is due, only which day it belongs to; the `now >= date` gate in reminder()
+    // still owns that, and every anchor is at or before now, so everything due before is still due.
+    private static func anchored(_ arrivedAt: Date?, now: Date) -> Date {
+        // A row with no recorded instant (written before its field was filled) keeps the old reading
+        // rather than dropping out of the due list entirely.
+        min(arrivedAt ?? now, now)
+    }
+
+    // Eastern midnight opening the day after the performance, the moment a closing note starts being owed.
+    private static func dayAfterShow(_ performanceDate: String?) -> Date? {
+        performanceDate
+            .flatMap { EasternDate.date(from: $0) }
+            .flatMap { EasternDate.calendar.date(byAdding: .day, value: 1, to: $0) }
+    }
+
     static func reminder(state: ConversationState?, setAt: Date?, remindedAt: Date?,
                          performanceDate: String?, isClosed: Bool, hasUnhandledReply: Bool,
-                         source: OutcomeSource?, now: Date,
+                         repliedAt: Date?, source: OutcomeSource?, now: Date,
                          config: ConversationReminderConfig = .init()) -> DueReminder? {
         guard let date = nextReminderDate(state: state, setAt: setAt, remindedAt: remindedAt,
                                           performanceDate: performanceDate, isClosed: isClosed,
-                                          hasUnhandledReply: hasUnhandledReply,
+                                          hasUnhandledReply: hasUnhandledReply, repliedAt: repliedAt,
                                           source: source, now: now, config: config) else { return nil }
         guard now >= date else { return nil }   // scheduled, but not due yet
 
@@ -211,7 +239,8 @@ enum ConversationReminder {
                 guard let due0 = reminder(state: r.conversationState, setAt: r.conversationStateSetAt,
                                          remindedAt: r.conversationRemindedAt, performanceDate: p.performanceDate,
                                          isClosed: closed, hasUnhandledReply: unhandledReply,
-                                         source: r.conversationStateSource, now: now, config: config)
+                                         repliedAt: r.repliedAt, source: r.conversationStateSource,
+                                         now: now, config: config)
                 else { continue }
                 due.append(DueRecipient(prospect: p, recipient: r, reminder: due0))
             }

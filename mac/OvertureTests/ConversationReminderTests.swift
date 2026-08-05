@@ -16,13 +16,16 @@ struct ConversationReminderTests {
     private func daysAgo(_ d: Double) -> Date { now.addingTimeInterval(-d * 86_400) }
 
     private func reminder(state: ConversationState?, setAt: Date?, remindedAt: Date? = nil,
-                          event: String? = nil, outcome: Outcome = .replied,
+                          event: String? = nil, outcome: Outcome = .replied, repliedAt: Date? = nil,
                           source: OutcomeSource? = .manual) -> ConversationReminder.DueReminder? {
         // Phase F: the timing function now takes the derived booleans; map the legacy outcome onto them.
         let closed = outcome == .booked || outcome == .lostSoft || outcome == .lostHard
+        // #2111: these cases pin a single instant and assert the KIND, not the date, so they pass no
+        // arrival instant and exercise the no-timestamp fallback. The dates themselves are pinned in
+        // ReminderDateAgesWithTheWorkTests, which is where the anchoring behaviour lives.
         return ConversationReminder.reminder(state: state, setAt: setAt, remindedAt: remindedAt,
                                              performanceDate: event, isClosed: closed,
-                                             hasUnhandledReply: outcome == .replied,
+                                             hasUnhandledReply: outcome == .replied, repliedAt: repliedAt,
                                              source: source, now: now)
     }
 

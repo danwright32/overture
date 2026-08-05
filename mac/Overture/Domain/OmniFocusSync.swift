@@ -104,7 +104,8 @@ enum OmniFocusSync {
                         state: r.conversationState, setAt: r.conversationStateSetAt,
                         remindedAt: r.conversationRemindedAt, performanceDate: p.performanceDate,
                         isClosed: !standing.isInPlay, hasUnhandledReply: unhandledReply,
-                        source: r.conversationStateSource, now: now, config: reminderConfig),
+                        repliedAt: r.repliedAt, source: r.conversationStateSource,
+                        now: now, config: reminderConfig),
                         due <= cutoff
                     else { continue }
                     let dueDate = easternTime(hour: dueHour, onDayOf: due)
