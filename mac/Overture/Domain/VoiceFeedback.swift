@@ -109,6 +109,12 @@ enum VoiceFeedbackBuilder {
         }
     }
 
+    // #2132: a wholesale REWRITE is not a lesson about wording, only "I did not want this draft", and
+    // making the AI opt-in (#2129) makes that more common rather than less. A ceiling on how much may
+    // change is the obvious guard, and it is deliberately NOT here yet: calibrated on invented samples it
+    // rejected genuine short edits, and the live store holds almost no real reply pairs to measure a
+    // threshold from (L56). Tracked separately, to be set from real pairs once this feature has produced
+    // some.
     static func isHighSignal(originalBody: String, sentBody: String) -> Bool {
         editDistance(normalize(originalBody), normalize(sentBody)) >= minEditDistance
     }
