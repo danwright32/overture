@@ -46,11 +46,14 @@ struct PrepReplyRunnerWiringGuardTests {
     // function, not just sources the file that defines it. The derive sits behind marker_due deeper in the
     // loop body (#1053's short-poll structure), so the window is generous.
     @Test func prepHeartbeatDerivesProgressEachTick() throws {
-        guard let heartbeatRange = prep.range(of: "while :; do") else {
+        // #2106: scoped to the heartbeat loop's own body rather than a fixed character
+        // count after its header. The count was a proxy for the loop, and it expired the
+        // way a proxy does: it had 34 characters of headroom, so an edit INSIDE the loop
+        // pushed the guarded call past it while the wiring was untouched (L63).
+        guard let nearby = SourceGuardHelper.between("while :; do", and: "done )", in: prep) else {
             Issue.record("heartbeat loop not found in prep-run.sh")
             return
         }
-        let nearby = prep[heartbeatRange.lowerBound...].prefix(800)
         #expect(nearby.contains("update_progress_from_results"))
     }
 
@@ -83,11 +86,14 @@ struct PrepReplyRunnerWiringGuardTests {
     // function, not just sources the file that defines it. The derive sits behind marker_due deeper in
     // the loop body (#1053's short-poll structure), so the window is generous.
     @Test func replyHeartbeatDerivesProgressEachTick() throws {
-        guard let heartbeatRange = reply.range(of: "while :; do") else {
+        // #2106: scoped to the heartbeat loop's own body rather than a fixed character
+        // count after its header. The count was a proxy for the loop, and it expired the
+        // way a proxy does: it had 34 characters of headroom, so an edit INSIDE the loop
+        // pushed the guarded call past it while the wiring was untouched (L63).
+        guard let nearby = SourceGuardHelper.between("while :; do", and: "done )", in: reply) else {
             Issue.record("heartbeat loop not found in reply-classify-run.sh")
             return
         }
-        let nearby = reply[heartbeatRange.lowerBound...].prefix(800)
         #expect(nearby.contains("update_progress_from_results"))
     }
 
