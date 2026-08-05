@@ -20,11 +20,8 @@ struct FollowUpsView: View {
     var onOpenInArchive: (_ key: String, _ recipientId: String?) -> Void = { _, _ in }
     // #682: the recipient Dan clicked "Send a follow-up" from on the Reached Out row, so this
     // sheet scrolls to and highlights that same entry instead of leaving him to find it again.
-    var initialHighlightRecipientId: String? = nil
     // Clears RootView's own copy of the target once captured, so a later plain "Follow-ups" pill
     // click (with no specific recipient) doesn't re-highlight a stale one.
-    var onHighlightConsumed: () -> Void = {}
-    @State private var highlightedRecipientId: String?
     // #468 (SUP-006): a nudge/closing-note send in flight, keyed by recipient id, same shape as
     // QueueView/ArchiveView's outboundSending/replySending, so this sheet's Send buttons get the
     // same live "Sending…" feedback instead of staying clickable during the send.
@@ -131,20 +128,6 @@ struct FollowUpsView: View {
                     }
                     // #976: hold the scroll on the top visible section across a @Query rebuild (topSection).
                     .scrollPosition(id: $topSection, anchor: .top)
-                    // #682: reuses ArchiveReveal's cancellation-safe scroll-after-delay timing
-                    // (the same one ArchiveView uses for its own search/deep-link jumps) instead
-                    // of a second copy of that logic.
-                    .task(id: highlightedRecipientId) {
-                        guard let key = highlightedRecipientId else { return }
-                        // #976: release the pinned section so a rebuild during this jump cannot restore
-                        // the old top over the contact we are revealing; the scrollTo below owns it.
-                        topSection = nil
-                        await ArchiveReveal.scrollAfterDelay(key: key) { key in
-                            withAnimation { proxy.scrollTo(key, anchor: .center) }
-                        }
-                        try? await Task.sleep(nanoseconds: 2_500_000_000)
-                        if highlightedRecipientId == key { highlightedRecipientId = nil }
-                    }
                 }
             }
         }
@@ -164,11 +147,6 @@ struct FollowUpsView: View {
                              onCancel: { pendingConversation = nil })
         }
         .actionFeedbackBanner()
-        .onAppear {
-            guard let key = initialHighlightRecipientId else { return }
-            highlightedRecipientId = key
-            onHighlightConsumed()
-        }
     }
 
     @ViewBuilder private func section<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {
@@ -209,8 +187,6 @@ struct FollowUpsView: View {
         }
         .padding(.vertical, OVSpacing.xs)
         .padding(.horizontal, OVSpacing.xs)
-        .background(highlightedRecipientId == r.id ? OVColor.gold.opacity(0.18) : Color.clear,
-                    in: RoundedRectangle(cornerRadius: 8))
         .id(r.id)
     }
 
@@ -270,8 +246,6 @@ struct FollowUpsView: View {
         }
         .padding(.vertical, OVSpacing.xs)
         .padding(.horizontal, OVSpacing.xs)
-        .background(highlightedRecipientId == r.id ? OVColor.gold.opacity(0.18) : Color.clear,
-                    in: RoundedRectangle(cornerRadius: 8))
         .id(r.id)
     }
 
