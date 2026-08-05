@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1037 sentences**, from 359 source files.
+Every sentence Overture can say to Dan: **1037 sentences**, from 360 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -180,8 +180,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
   - `UI/FollowUpsView.swift`
   - `UI/FollowUpsView.swift`
 - "Send reply"
-  - `UI/DraftReviewView.swift`
   - `UI/InquiryReplySheet.swift`
+  - `UI/ReplyConversationView.swift`
 - "Set a state"
   - `UI/ConversationStateMenu.swift`
   - `UI/FollowUpsView.swift`
@@ -528,7 +528,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Copy pitch and open form"
     `Domain/FormOutreach.swift`
 "Copy the draft and mark it replied (paste it into Gmail yourself)"
-    `UI/DraftReviewView.swift`
+    `UI/ReplyConversationView.swift`
 "Correct this source's web address, then read it to check"
     `UI/SourceFixConfirmActions.swift`
 "Couldn't block \(range)"
@@ -620,11 +620,11 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Downbeat clients no watched source treats as a returning client, so their next season would not surface a year ahead. Add a source for them, or tag an existing one below."
     `Domain/ClientCoverage.swift`
 "Draft a reply"
-    `UI/DraftReviewView.swift`
+    `UI/ReplyConversationView.swift`
 "Drafted by \(name)"
     `Domain/DraftTrace.swift`
 "Drafting a reply"
-    `UI/DraftReviewView.swift`
+    `UI/ReplyConversationView.swift`
 "Drafting replies"
     `UI/RunProgressView.swift`
 "Drafting replies \(count)"
@@ -1431,8 +1431,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Send nudge"
     `UI/FollowUpsView.swift`
 "Send reply"
-    `UI/DraftReviewView.swift`
     `UI/InquiryReplySheet.swift`
+    `UI/ReplyConversationView.swift`
 "Send this email now"
     `UI/DraftReviewView.swift`
 "Send this email now?"
@@ -1442,7 +1442,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Send this note now?"
     `UI/SendConfirmSheet.swift`
 "Send this reply on the contact's thread"
-    `UI/DraftReviewView.swift`
+    `UI/ReplyConversationView.swift`
 "Send to"
     `UI/ManualPrepSheet.swift`
 "Sending despite the draft warning you confirmed."
@@ -1450,7 +1450,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Sending despite the greeting warning you confirmed."
     `Domain/DraftReviewNotes.swift`
 "Sending reply"
-    `UI/DraftReviewView.swift`
+    `UI/ReplyConversationView.swift`
 "Sending to this one"
     `UI/SendConfirmSheet.swift`
 "Sending your reply..."
@@ -1543,7 +1543,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Stop sending to this contact"
     `Domain/FollowUp.swift`
 "Stop the reply drafting run"
-    `UI/DraftReviewView.swift`
+    `UI/ReplyConversationView.swift`
 "Stop watching"
     `UI/SourceFixConfirmActions.swift`
 "Stop working this show"
