@@ -297,6 +297,16 @@ enum SendService {
     // conversation). On success it consumes the draft and re-anchors that contact's clock. One of the
     // two locked send paths (d); the other is copy-out (recordRepliedInGmail), handled in the UI.
     @discardableResult
+    // #2144: what a reply is CALLED, in one place. The confirmation sheet Dan approves and the message
+    // that leaves both ask this, so the subject line he reads cannot differ from the one on the email. Two
+    // expressions of the same rule would drift the first time either changed.
+    static func replySubject(for recipient: Recipient, of prospect: Prospect) -> String {
+        recipient.replyDraftSubject
+            ?? FollowUp.replySubject(originalSubject: prospect.draftSubject,
+                                     groupName: FollowUp.safeDisplayName(prospect.groupName,
+                                                                          isMerged: prospect.isMergedConcert))
+    }
+
     static func sendReplyDraft(_ recipient: Recipient, of prospect: Prospect,
                                now: Date, sender: MailSender) async -> Bool {
         guard let email = recipient.email, !email.isEmpty,
@@ -312,9 +322,7 @@ enum SendService {
         // #468: on its own claim field, not shared with sendFollowUp/sendConversationNudge's
         // (see the field's doc comment on Recipient), since a replied recipient can legitimately
         // be due for a conversation nudge at the same time.
-        let subject = recipient.replyDraftSubject
-            ?? FollowUp.replySubject(originalSubject: prospect.draftSubject,
-                                     groupName: FollowUp.safeDisplayName(prospect.groupName, isMerged: prospect.isMergedConcert))
+        let subject = replySubject(for: recipient, of: prospect)
         // #2030: built before the claim, for the same reason as the two nudges above.
         guard let mail = OutgoingMail(to: addresses, subject: subject, body: body,
                                       inReplyTo: recipient.gmailMessageId,

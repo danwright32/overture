@@ -33,6 +33,8 @@ enum SendConfirmCopy {
     // #948: the follow-up and conversation-note sends share this sheet. Their heading and reassurance
     // differ from the draft's (and a closing note names the second thing it does), and they live here
     // beside the draft's so all three are read together, in one place, rather than in three view bodies.
+    // #2144: a reply gets the same From/To/Subject/preview treatment as everything else that leaves.
+    static let replyTitle = "Send this reply now?"
     static let followUpTitle = "Send this follow-up now?"
     static let followUpReassurance = "This sends one follow-up right now, to this recipient only. Nothing else goes out."
     static let noteTitle = "Send this note now?"

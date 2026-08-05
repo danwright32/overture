@@ -26,6 +26,10 @@ struct ReplyPanelSheet: View {
 
     @State private var body_ = ""
     @State private var phase: Phase = .compose
+    // #2144: what Dan is about to approve, held while he reads it. Nil until Send is pressed, which is
+    // deliberate: building it composes the signature onto the body, and hanging that off every keystroke
+    // would pay the whole composition per character (L59, L62).
+    @State private var pending: PendingReply?
 
     private enum Phase: Equatable { case compose, sending, failed(String) }
 
@@ -53,6 +57,13 @@ struct ReplyPanelSheet: View {
         }
         .padding(OVSpacing.lg)
         .frame(width: 560)
+        // #2144: the same sheet every other consequential send goes through, so a reply is approved with
+        // its From, To, Subject and the composed message including the signature, on either background.
+        .sheet(item: $pending) { held in
+            SendConfirmSheet(confirmation: held.confirmation,
+                             onSend: { pending = nil; send() },
+                             onCancel: { pending = nil })
+        }
     }
 
     private var header: some View {
@@ -190,7 +201,7 @@ struct ReplyPanelSheet: View {
                 LiveRunLabel(base: ReplyPanelCopy.sending, since: Date(), timeout: RunTimeouts.send,
                              font: OVType.meta, color: OVColor.inkSoft)
             } else {
-                Button(ReplyPanelCopy.send) { send() }
+                Button(ReplyPanelCopy.send) { review() }
                     .buttonStyle(.borderedProminent).controlSize(.regular)
                     .disabled(!canSend)
                     // Says what the button DOES. Why it will not do it is stated on screen above rather
@@ -200,10 +211,24 @@ struct ReplyPanelSheet: View {
         }
     }
 
-    private func send() {
+    // #2144: step one of sending, and the only thing the Send button does now. Refreshes the signature
+    // FIRST so the message Dan reads carries the signature the send will actually compose, then puts the
+    // whole composed email in front of him. Nothing has left at this point.
+    private func review() {
         phase = .sending
         Task {
             await GmailSignatureService.refreshBeforeSend()
+            pending = SendConfirmation(replyFor: recipient, of: prospect, body: body_)
+                .map { PendingReply(confirmation: $0) }
+            // A confirmation that cannot be built means the send could not have gone either, so the panel
+            // returns to composing rather than sitting on a spinner that will never resolve.
+            phase = .compose
+        }
+    }
+
+    private func send() {
+        phase = .sending
+        Task {
             // The sequence itself lives in ReplyPanel.commit, where a test can reach it.
             let sent = await ReplyPanel.commit(body: body_, on: recipient, of: prospect,
                                                now: Date(), sender: sender)
@@ -225,6 +250,13 @@ struct ReplyTarget: Identifiable {
     let prospect: Prospect
     let recipient: Recipient
     var id: String { prospect.naturalKey + "|" + recipient.id }
+}
+
+// #2144: the composed reply held while Dan reads it. A wrapper only because SendConfirmation carries no
+// identity of its own and `.sheet(item:)` needs one, the same reason PendingRowNudge below has an id.
+struct PendingReply: Identifiable {
+    let confirmation: SendConfirmation
+    var id: String { confirmation.recipient + "|" + confirmation.subject }
 }
 
 // #2130: the nudge or closing note the reached-out row is about to send, held while Dan approves it.

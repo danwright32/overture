@@ -507,6 +507,86 @@ struct ReplyPanelTests {
         #expect(!ReplyPanel.isOffered(for: r, in: p))
     }
 
+    // MARK: what Dan approves before a reply goes (#2144)
+
+    // The signature is composed onto the message at the send layer, so a panel that shows only Dan's typed
+    // words is not showing the artifact that lands in the inbox. That gap shipped a white outline box to
+    // every dark-mode recipient for two weeks (#2086). The confirmation carries the body and the signature
+    // as INGREDIENTS, so the sheet renders them through the same helper the wire uses (L64).
+    @Test func theConfirmationCarriesTheSignatureTheSendWillCompose() throws {
+        let ctx = ModelContext(try container())
+        let p = show(ctx)
+        let r = contact(p, "nbecker@everyvoicechoirs.org", group: nil)
+        r.replied = true
+        r.replyAudience = ["nbecker@everyvoicechoirs.org"]
+        let sig = OutboundSignature(html: "<p>Dan Wright</p>", plainText: "Dan Wright")
+
+        let c = try #require(SendConfirmation(replyFor: r, of: p, body: "Tuesday works.", signature: sig))
+        #expect(c.bodyBeforeSignOff == "Tuesday works.")
+        #expect(c.signature == sig)
+        // The composed text/plain part is what the send hands Gmail, built the one way.
+        #expect(c.body == GmailMessage.previewBody(body: "Tuesday works.", signature: sig))
+        #expect(c.from == .danWright)
+    }
+
+    // The To line is the reply's audience, not the original email's, so what he approves names the people
+    // the answer actually reaches.
+    @Test func theConfirmationNamesEveryAddressTheReplyReaches() throws {
+        let ctx = ModelContext(try container())
+        let p = show(ctx)
+        let r = contact(p, "nbecker@everyvoicechoirs.org", group: nil)
+        r.replied = true
+        r.replyAudience = ["nicolebecker@everyvoicechoirs.org", "chelsea@everyvoicechoirs.org"]
+
+        let c = try #require(SendConfirmation(replyFor: r, of: p, body: "Tuesday works."))
+        #expect(c.recipient.contains("nicolebecker@everyvoicechoirs.org"))
+        #expect(c.recipient.contains("chelsea@everyvoicechoirs.org"))
+    }
+
+    // The subject comes from the SAME place the sender takes it, so the line Dan reads on the sheet is the
+    // line on the message. Two expressions of "what a reply is called" would drift silently.
+    @Test func theConfirmationShowsTheSubjectTheSenderWillUse() throws {
+        let ctx = ModelContext(try container())
+        let p = show(ctx)
+        let r = contact(p, "nbecker@everyvoicechoirs.org", group: nil)
+        r.replied = true
+        r.replyAudience = ["nbecker@everyvoicechoirs.org"]
+        r.replyDraftSubject = "Re: Photographing the Pumpkin Singalong"
+
+        let c = try #require(SendConfirmation(replyFor: r, of: p, body: "Tuesday works."))
+        #expect(c.subject == SendService.replySubject(for: r, of: p))
+        #expect(c.subject == "Re: Photographing the Pumpkin Singalong")
+    }
+
+    // And with no subject stored on the reply it falls back to the same derived one the sender derives,
+    // rather than an empty line the sheet would show as blank.
+    @Test func aReplyWithNoStoredSubjectStillShowsTheOneThatWillGoOut() throws {
+        let ctx = ModelContext(try container())
+        let p = show(ctx)
+        let r = contact(p, "nbecker@everyvoicechoirs.org", group: nil)
+        r.replied = true
+        r.replyAudience = ["nbecker@everyvoicechoirs.org"]
+
+        let c = try #require(SendConfirmation(replyFor: r, of: p, body: "Tuesday works."))
+        #expect(c.subject == SendService.replySubject(for: r, of: p))
+        #expect(c.subject.isEmpty == false)
+    }
+
+    // Nothing to confirm is nothing to send: no audience and no typed words each refuse to build a sheet,
+    // so a confirmation can never stand for an email that could not go.
+    @Test func thereIsNoConfirmationWithoutAnAudienceOrWords() throws {
+        let ctx = ModelContext(try container())
+        let p = show(ctx)
+        let r = contact(p, "nbecker@everyvoicechoirs.org", group: nil)
+        r.replied = true
+
+        r.replyAudience = []
+        #expect(SendConfirmation(replyFor: r, of: p, body: "Tuesday works.") != nil,
+                "an empty stored audience still falls back to the contact, which is a real destination")
+        r.replyAudience = ["nbecker@everyvoicechoirs.org"]
+        #expect(SendConfirmation(replyFor: r, of: p, body: "   ") == nil)
+    }
+
     // MARK: sending, and what survives a send that fails
 
     // The failure path Dan actually meets: Gmail refuses, and his words must not be lost. They are

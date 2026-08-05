@@ -114,6 +114,32 @@ struct SendConfirmation: Equatable {
         togetherAtOpen = prospect.sendsTogether
     }
 
+    // #2144: a REPLY, which until now was the one consequential send with no confirmation at all. The
+    // signature is composed on at the send layer, so a panel showing only Dan's typed words is not showing
+    // the artifact that lands in the inbox, and that is precisely the gap that shipped a hard white
+    // outline box to every dark-mode recipient for two weeks (#2086, L69).
+    //
+    // Carries the body and signature as INGREDIENTS like every other confirmation, so the sheet renders
+    // the same document the wire builds rather than a second composition that can drift, and takes its
+    // audience and subject from the same two helpers the sender asks (L64).
+    @MainActor
+    init?(replyFor recipient: Recipient, of prospect: Prospect, body: String,
+          signature: OutboundSignature = GmailSignatureStore.currentSignature()) {
+        let addresses = SendGroup.replyAudience(of: recipient)
+        guard !addresses.isEmpty, !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+        from = .danWright
+        self.recipient = addresses.joined(separator: ", ")
+        subject = SendService.replySubject(for: recipient, of: prospect)
+        bodyBeforeSignOff = body
+        self.signature = signature
+        title = SendConfirmCopy.replyTitle
+        // A reply always goes as ONE email to everybody it mirrors, so the promise counts them rather than
+        // offering the together-or-separately choice a first pitch has.
+        reassurance = SendConfirmCopy.reassurance(chosen: addresses.count, together: true)
+    }
+
     // #948: a follow-up nudge to one contact. Subject and body come from FollowUp.nudgeContent, the same
     // source SendService.sendFollowUp sends, so the sheet shows exactly what will go out.
     @MainActor
