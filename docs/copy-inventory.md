@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1042 sentences**, from 362 source files.
+Every sentence Overture can say to Dan: **1044 sentences**, from 362 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -622,6 +622,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ClientCoverage.swift`
 "Draft a reply"
     `UI/ReplyConversationView.swift`
+"Draft with AI"
+    `Domain/ReplyPanel.swift`
 "Drafted by \(name)"
     `Domain/DraftTrace.swift`
 "Drafting a reply"
@@ -1921,6 +1923,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "Worth a look"
     `UI/OrganisationsView.swift`
+"Write a first draft of this one reply, which you can then edit"
+    `Domain/ReplyPanel.swift`
 "Write the email before saving it. Nothing was saved"
     `App/ActionFeedback.swift`
 "Write this email yourself, with no Prep run and no AI draft"

@@ -91,6 +91,17 @@ struct ReplyPanelSheet: View {
         HStack(spacing: OVSpacing.sm) {
             Button(ReplyPanelCopy.cancel) { dismiss() }
                 .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+            // #2129: offered, never automatic. Dan writes these himself and presses this only if he wants
+            // to. Scoped to THIS reply, so it spends on the one conversation he asked about.
+            if phase != .sending {
+                Button(ReplyPanelCopy.draftWithAI) {
+                    ProspectMutations.draftOneReply(prospect.naturalKey, recipient.id,
+                                                    prospects: [prospect], context: context, feedback: feedback)
+                    dismiss()
+                }
+                .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forest)
+                .help(ReplyPanelCopy.draftWithAIHelp)
+            }
             Spacer()
             if phase == .sending {
                 LiveRunLabel(base: ReplyPanelCopy.sending, since: Date(), timeout: RunTimeouts.send,

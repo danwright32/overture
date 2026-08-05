@@ -250,6 +250,18 @@ enum ProspectMutations {
         _ = try? ReplyClassifyService.startClassify(from: context, now: Date())
     }
 
+    // #2129: draft THIS reply, not every reply waiting. Same run, scoped to one conversation, so the
+    // button spends on the one Dan pressed it on and its Cancel abandons only that.
+    static func draftOneReply(_ naturalKey: String, _ recipientId: String, prospects: [Prospect],
+                              context: ModelContext, feedback: ActionFeedback) {
+        guard let model = prospects.first(where: { $0.naturalKey == naturalKey }) else { return }
+        model.updateRecipient(id: recipientId) { $0.replyDraftRequestedAt = Date() }
+        context.saveOrWarn(org: model.groupName, feedback: feedback)
+        _ = try? ReplyClassifyService.startClassify(
+            from: context, now: Date(),
+            only: ReplyClassifyService.Target(naturalKey: naturalKey, recipientId: recipientId))
+    }
+
     static func editReplyDraft(_ item: QueueItem, _ recipientId: String, _ body: String,
                                prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
