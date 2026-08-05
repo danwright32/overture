@@ -73,12 +73,68 @@ enum ReplyPanel {
         return await SendService.sendReplyDraft(recipient, of: prospect, now: now, sender: sender)
     }
 
-    // L64: what Dan approves has to include WHO it reaches. The panel states the audience in full rather
+    // L64: what Dan approves has to include WHO it reaches. The panel lists the audience in full rather
     // than only naming the extras the way a card does, because this is the surface the send is approved
     // from and the audience of a reply is routinely not the audience of the original email.
-    static func audienceLine(_ addresses: [String]) -> String {
-        guard !addresses.isEmpty else { return "No address to reply to" }
-        return "Goes to \(Plural.list(addresses))"
+    //
+    // #2155, Dan on the live Pumpkin Singalong panel: "it's also not clear which email sent the message
+    // I'm reading". Three addresses ran together in one sentence, so the approval surface said LESS about
+    // who he was answering than the queue row he opened it from, which has marked the writer since #2113.
+    struct AudienceEntry: Equatable, Identifiable {
+        let address: String
+        // The one who actually wrote. Marked rather than reordered: the audience mirrors how the message
+        // was addressed, and shuffling it would misrepresent the reply Dan is answering.
+        let wrote: Bool
+        // False only for the last one standing. An empty audience is not "send to nobody": SendGroup
+        // falls back to the contact's own address, so emptying it would quietly deliver the reply to
+        // somebody Dan had just taken off it, which looks exactly like success (L75).
+        let canRemove: Bool
+        var id: String { address }
+    }
+
+    static func audienceEntries(_ addresses: [String], writer: String?) -> [AudienceEntry] {
+        addresses.map { address in
+            AudienceEntry(address: address,
+                          // Compared the way reply detection compares, so a difference in casing between
+                          // the thread and the stored writer cannot unmark the one person this identifies.
+                          wrote: writer.map { ReplyDetection.isSameAddress(address, $0) } ?? false,
+                          canRemove: addresses.count > 1)
+        }
+    }
+
+    // The audience with one address taken off, or unchanged when it is the last one. The refusal to empty
+    // it lives HERE rather than only in the control, so a caller reaching this another way cannot do what
+    // the button is hidden to prevent.
+    static func removing(_ address: String, from addresses: [String]) -> [String] {
+        guard addresses.count > 1 else { return addresses }
+        return addresses.filter { !ReplyDetection.isSameAddress($0, address) }
+    }
+
+    // Taking somebody off a reply, Dan's way (2026-08-05): "drop it entirely. just like it would in a real
+    // email client. if they want to add it back they can." So it comes off THIS reply and the show stops
+    // using that contact, in one action, with no dialog.
+    //
+    // The contact half goes through Prospect.removeOrSuppressRecipient, the same call the card's own
+    // Remove makes, rather than a second implementation of what removing a contact means. That is also
+    // what makes this safe to do without a confirmation: a contact who has been emailed is SUPPRESSED
+    // there, never deleted, so the pitch it received survives and re-adding the address resumes it.
+    //
+    // An address belonging to no contact (the writer's own, on the row that started all of this) narrows
+    // the reply and touches no contact record. Returns whether anything actually changed, so a refused
+    // removal cannot be reported as done.
+    @MainActor
+    @discardableResult
+    static func removeFromReply(_ address: String, on recipient: Recipient, of prospect: Prospect) -> Bool {
+        let current = SendGroup.replyAudience(of: recipient)
+        let left = removing(address, from: current)
+        guard left != current else { return false }
+        recipient.replyAudience = left
+        if let contact = prospect.recipients.first(where: {
+            ReplyDetection.isSameAddress($0.email ?? "", address)
+        }) {
+            prospect.removeOrSuppressRecipient(id: contact.id)
+        }
+        return true
     }
 }
 
@@ -93,6 +149,19 @@ enum ReplyPanelCopy {
     static let sending = "Sending"
     static let cancel = "Cancel"
     static let sendHelp = "Send this reply on the thread they wrote on"
+
+    // #2155: the audience, now one address per row so each can be marked and taken off.
+    static let audienceHeading = "Your reply goes to"
+    static let noAddress = "No address to reply to"
+    // What this address DID, not who they are, because that is the question Dan asked of the panel: which
+    // of these three sent the message he is reading.
+    static let wroteThis = "wrote this"
+    // Icon-only control, so the label carries the whole action and states BOTH halves of it. Saying only
+    // "remove from this reply" would understate what the button does; a person cannot consent to an effect
+    // the label hides (L21).
+    static func removeFromReply(_ address: String) -> String {
+        "Take \(address) off this reply and stop this show emailing it"
+    }
     // Names what happened and leaves the button available, rather than a dead spinner or a cheerful
     // pretence that it went (L12). The words stay in the box: nothing Dan typed is thrown away.
     static let sendFailed = "That didn't send. Your reply is still here, so you can try again."

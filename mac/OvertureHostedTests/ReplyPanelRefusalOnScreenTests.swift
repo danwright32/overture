@@ -22,7 +22,8 @@ struct ReplyPanelRefusalOnScreenTests {
 
     // Dan's real row, measured on the live store (#2151): he pitched nbecker@ and Nicole answered from
     // nicolebecker@, an address on no contact of this show.
-    private func panel(writer: String?, gmailConnected: Bool = true) throws -> ReplyPanelSheet {
+    private func panel(writer: String?, gmailConnected: Bool = true,
+                       audience: [String]? = nil) throws -> ReplyPanelSheet {
         let ctx = ModelContext(try container())
         let p = Prospect(naturalKey: "k", groupName: "Every Voice Choirs", discipline: "choral",
                          venue: "Merkin Hall", performanceDate: "2026-10-31", sourceListingURL: nil,
@@ -39,7 +40,7 @@ struct ReplyPanelRefusalOnScreenTests {
         r.replied = true
         r.replyFromAddress = writer
         r.lastReplyText = "Tuesday works for us."
-        r.replyAudience = ["nbecker@everyvoicechoirs.org"]
+        r.replyAudience = audience ?? ["nbecker@everyvoicechoirs.org"]
         p.setRecipients([r])
         return ReplyPanelSheet(prospect: p, recipient: r, gmailConnected: gmailConnected)
     }
@@ -72,5 +73,43 @@ struct ReplyPanelRefusalOnScreenTests {
         let shown = try texts(panel(writer: "nbecker@everyvoicechoirs.org"))
         #expect(!shown.contains { $0.contains("won't send it") })
         #expect(!shown.contains(GmailCopy.notConnected))
+    }
+
+    // MARK: #2155, who wrote and taking somebody off
+
+    // Dan's exact complaint on the live panel: "it's also not clear which email sent the message I'm
+    // reading". Three addresses, and the one that wrote is marked on screen rather than left to be
+    // inferred from the order.
+    @Test func thePanelMarksWhichOfTheAddressesWroteTheMessage() throws {
+        let shown = try texts(panel(writer: "nicolebecker@everyvoicechoirs.org",
+                                    audience: ["nicolebecker@everyvoicechoirs.org",
+                                               "chelsea@everyvoicechoirs.org",
+                                               "nbecker@everyvoicechoirs.org"]))
+        #expect(shown.contains("nicolebecker@everyvoicechoirs.org"))
+        #expect(shown.contains("chelsea@everyvoicechoirs.org"))
+        #expect(shown.contains(ReplyPanelCopy.wroteThis), "the writer must be identified. Shown: \(shown)")
+    }
+
+    // A remove control per address, and its label states BOTH halves of what pressing it does, because an
+    // icon-only button's label is the only place the second half is written down.
+    @Test func everyAddressCarriesARemoveControlThatSaysWhatItDoes() throws {
+        let view = try panel(writer: "nicolebecker@everyvoicechoirs.org",
+                             audience: ["nicolebecker@everyvoicechoirs.org",
+                                        "chelsea@everyvoicechoirs.org"])
+        for address in ["nicolebecker@everyvoicechoirs.org", "chelsea@everyvoicechoirs.org"] {
+            let label = ReplyPanelCopy.removeFromReply(address)
+            #expect((try? view.inspect().find(button: label)) != nil
+                    || (try? view.inspect().find(viewWithAccessibilityLabel: label)) != nil,
+                    "no remove control for \(address)")
+        }
+    }
+
+    // The last address has none, because emptying the audience would fall back to the contact's own
+    // address and deliver the reply to somebody just taken off it.
+    @Test func theLastRemainingAddressHasNoRemoveControl() throws {
+        let view = try panel(writer: "nbecker@everyvoicechoirs.org",
+                             audience: ["nbecker@everyvoicechoirs.org"])
+        let label = ReplyPanelCopy.removeFromReply("nbecker@everyvoicechoirs.org")
+        #expect((try? view.inspect().find(viewWithAccessibilityLabel: label)) == nil)
     }
 }

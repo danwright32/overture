@@ -56,13 +56,48 @@ struct ReplyPanelSheet: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: OVSpacing.xxs) {
             Text(prospect.groupName).font(.system(size: 15, weight: .semibold)).foregroundStyle(OVColor.ink)
             // L64: the audience is stated before the button, because a reply mirrors the addressing of the
             // message it answers and that is routinely not who the original email went to.
-            Text(ReplyPanel.audienceLine(audience))
-                .font(OVType.meta).foregroundStyle(audience.isEmpty ? OVColor.rust : OVColor.inkSoft)
+            //
+            // #2155: one row per address rather than one sentence, so the panel can mark which of them
+            // actually wrote and put a remove control on each.
+            if audience.isEmpty {
+                Text(ReplyPanelCopy.noAddress).font(OVType.meta).foregroundStyle(OVColor.rust)
+            } else {
+                Text(ReplyPanelCopy.audienceHeading).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                ForEach(ReplyPanel.audienceEntries(audience, writer: recipient.replyFromAddress)) { entry in
+                    audienceRow(entry)
+                }
+            }
         }
+    }
+
+    private func audienceRow(_ entry: ReplyPanel.AudienceEntry) -> some View {
+        HStack(spacing: OVSpacing.xs) {
+            Text(entry.address).font(OVType.meta).foregroundStyle(OVColor.ink)
+            if entry.wrote {
+                Text(ReplyPanelCopy.wroteThis).font(OVType.meta).foregroundStyle(OVColor.forest)
+            }
+            if entry.canRemove {
+                // Icon only, so it carries the full sentence as its accessibility label as well as its
+                // tooltip: the label is the only place the second half of what it does is stated.
+                Button { remove(entry.address) } label: {
+                    Image(systemName: "xmark.circle.fill").font(OVType.meta)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(OVColor.inkFaint)
+                .help(ReplyPanelCopy.removeFromReply(entry.address))
+                .accessibilityLabel(ReplyPanelCopy.removeFromReply(entry.address))
+            }
+            Spacer()
+        }
+    }
+
+    private func remove(_ address: String) {
+        guard ReplyPanel.removeFromReply(address, on: recipient, of: prospect) else { return }
+        context.saveOrWarn(org: prospect.groupName, feedback: feedback)
     }
 
     @ViewBuilder private var theirReply: some View {
