@@ -45,6 +45,9 @@ struct QueueView: View {
     @Query private var inquiries: [Inquiry]
     // The inquiry Dan is composing a first reply to (nil = none).
     @State private var replyingTo: Inquiry?
+    // #2128: the prospect half of the same thing. A panel over the queue, so the compose box's text lives
+    // one level down and typing cannot re-derive the store (the #1774 / #1922 / #1923 class).
+    @State private var answeringReply: ReplyTarget?
     // #1504: the inquiry whose logged details Dan is correcting (nil = none).
     @State private var editingInquiry: Inquiry?
 
@@ -279,6 +282,10 @@ struct QueueView: View {
             )
             // #1436: compose and send Dan's first reply to a hire inquiry.
             .sheet(item: $replyingTo) { InquiryReplySheet(inquiry: $0) }
+            .sheet(item: $answeringReply) { target in
+                ReplyPanelSheet(prospect: target.prospect, recipient: target.recipient,
+                                gmailConnected: data.gmailConnected)
+            }
             // #1504: the same sheet that logs one, opened on an existing record.
             .sheet(item: $editingInquiry) { InquiryIntakeSheet(editing: $0) }
     }
@@ -1024,6 +1031,17 @@ struct QueueView: View {
                 let dueNow = ReachedOutQueue.isDueNow(next: pair.next, now: now)
                 Text(ReachedOutQueue.timingLabel(next: pair.next, now: now, channel: r.outreachChannel))
                     .font(OVType.meta).foregroundStyle(dueNow ? OVColor.rust : OVColor.inkSoft)
+                // #2128: somebody is waiting on an answer, which is the actual job on this row, so it
+                // leads. Keyed on the peer who WROTE, since the row stands on whoever sorts first.
+                if ReplyPanel.isOffered(for: r, in: p) {
+                    Button(ReplyPanelCopy.answer) {
+                        answeringReply = ReplyTarget(prospect: p,
+                                                     recipient: ReplyIdentity.answering(for: r, in: p))
+                    }
+                    .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.onForest)
+                    .padding(.horizontal, OVSpacing.md).padding(.vertical, 4)
+                    .background(Capsule().fill(OVColor.forest))
+                }
                 // #1630: a form pitch gets the state control unconditionally. Overture cannot detect its
                 // reply, so waiting for `replied` to become true would mean waiting forever, and the one
                 // thing that moves the show forward is Dan saying where it stands.

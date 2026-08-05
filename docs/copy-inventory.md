@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1037 sentences**, from 360 source files.
+Every sentence Overture can say to Dan: **1042 sentences**, from 362 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -180,6 +180,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
   - `UI/FollowUpsView.swift`
   - `UI/FollowUpsView.swift`
 - "Send reply"
+  - `Domain/ReplyPanel.swift`
   - `UI/InquiryReplySheet.swift`
   - `UI/ReplyConversationView.swift`
 - "Set a state"
@@ -717,6 +718,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/GmailAuthManager.swift`
 "Go back to deciding \(organisation) automatically"
     `UI/QueueView+Model.swift`
+"Goes to \(Plural.list(addresses))"
+    `Domain/ReplyPanel.swift`
 "Google did not return a refresh token. Revoke prior access and retry."
     `Integration/GmailAuthManager.swift`
 "Grant these once, here, so Overture can keep working while you're away from your desk."
@@ -931,6 +934,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ProbeSelection.swift`
 "No address to fill in. Checked past emails to this organisation and the booking sheet."
     `Domain/ManualPrepPrefill.swift`
+"No address to reply to"
+    `Domain/ReplyPanel.swift`
 "No address yet, so its shows are not placed in your area."
     `UI/SourcesView.swift`
 "No contact found"
@@ -1166,6 +1171,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/OmniFocusUserNotifier.swift`
 "Overture decided: \(what)"
     `UI/QueueView+Model.swift`
+"Overture didn't capture what they wrote. Their message is in Gmail."
+    `Domain/ReplyPanel.swift`
 "Overture has not checked for replies or bookings in \(PrepStatus.duration(seconds: seconds))"
     `Domain/WatchGap.swift`
 "Overture is out of date"
@@ -1431,6 +1438,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Send nudge"
     `UI/FollowUpsView.swift`
 "Send reply"
+    `Domain/ReplyPanel.swift`
     `UI/InquiryReplySheet.swift`
     `UI/ReplyConversationView.swift`
 "Send this email now"
@@ -1443,6 +1451,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SendConfirmSheet.swift`
 "Send this reply on the contact's thread"
     `UI/ReplyConversationView.swift`
+"Send this reply on the thread they wrote on"
+    `Domain/ReplyPanel.swift`
 "Send to"
     `UI/ManualPrepSheet.swift`
 "Sending despite the draft warning you confirmed."
@@ -1580,6 +1590,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/SourceFetcher.swift`
 "That contact"
     `App/ActionFeedback.swift`
+"That didn't send. Your reply is still here, so you can try again."
+    `Domain/ReplyPanel.swift`
 "That doesn't look like a link. Paste the web address of the show or the org's events page."
     `UI/LeadIntakeModel.swift`
 "That doesn't look like a web address."
