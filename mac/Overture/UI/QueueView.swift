@@ -48,6 +48,9 @@ struct QueueView: View {
     // #2128: the prospect half of the same thing. A panel over the queue, so the compose box's text lives
     // one level down and typing cannot re-derive the store (the #1774 / #1922 / #1923 class).
     @State private var answeringReply: ReplyTarget?
+    // #2130: the nudge or closing note the row's control is about to send, held so Dan approves the exact
+    // email first. Its own state rather than pendingConfirm, whose onSend is wired to the pitch send.
+    @State private var pendingRowNudge: PendingRowNudge?
     // #1504: the inquiry whose logged details Dan is correcting (nil = none).
     @State private var editingInquiry: Inquiry?
 
@@ -282,6 +285,11 @@ struct QueueView: View {
             )
             // #1436: compose and send Dan's first reply to a hire inquiry.
             .sheet(item: $replyingTo) { InquiryReplySheet(inquiry: $0) }
+            .sheet(item: $pendingRowNudge) { pending in
+                SendConfirmSheet(confirmation: pending.confirmation,
+                                 onSend: { performRowNudge(pending) },
+                                 onCancel: { pendingRowNudge = nil })
+            }
             .sheet(item: $answeringReply) { target in
                 ReplyPanelSheet(prospect: target.prospect, recipient: target.recipient,
                                 gmailConnected: data.gmailConnected)
@@ -1057,10 +1065,11 @@ struct QueueView: View {
                                                                                 prospects: prospects, context: context, feedback: feedback)
                         })
                 }
-                // #1630: never for a form pitch. Follow-ups is the EMAIL nudge screen and does not list it
-                // (isAwaitingFollowUp is false), so the button would land him on a list this show is not in.
-                if dueNow, r.outreachChannel != .contactForm {
-                    Button("Send a follow-up") { onShowFollowUpsFor(r.id) }
+                // #2130: the control says what is actually due, because "due now" here is min of three
+                // clocks and meant six different things behind one wording. Nothing due, no button: an
+                // always-present control that refuses on press is the defect this replaces.
+                if let label = ReachedOutAction.of(r, in: p, now: now, today: today).label {
+                    Button(label) { startRowAction(r, of: p, now: now) }
                         .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forest)
                 }
                 // #683: the reply text, AI reply drafter, and Mark… menu only live on the full
@@ -1224,6 +1233,54 @@ struct QueueView: View {
                                               }
                                           }
                                       })
+    }
+
+    // #2130: what the row's control actually does, one branch per kind, so the wording and the behaviour
+    // are decided in the same place. A send never fires from the press: it builds the exact email and puts
+    // it in front of Dan first, the same confirmation the Due sheet uses (L64).
+    private func startRowAction(_ r: Recipient, of p: Prospect, now: Date) {
+        switch ReachedOutAction.of(r, in: p, now: now, today: today) {
+        case .sendNudge:
+            // A conversation with a confirmed state nudges through the conversation track; a still-silent
+            // contact through the follow-up sequence. Both are "Send a follow-up" to Dan, and they are two
+            // different emails underneath, so the confirmation is built from whichever actually applies.
+            if let state = r.conversationState, state.isActive, r.conversationStateSource != .auto,
+               let confirmation = SendConfirmation(conversationNudgeFor: r, of: p, kind: .active(state)) {
+                pendingRowNudge = PendingRowNudge(naturalKey: p.naturalKey, recipientId: r.id,
+                                                  confirmation: confirmation, isClosing: false,
+                                                  isConversation: true)
+            } else if let confirmation = SendConfirmation(followUpFor: r, of: p) {
+                pendingRowNudge = PendingRowNudge(naturalKey: p.naturalKey, recipientId: r.id,
+                                                  confirmation: confirmation, isClosing: false,
+                                                  isConversation: false)
+            }
+        case .sendClosingNote:
+            guard let confirmation = SendConfirmation(conversationNudgeFor: r, of: p, kind: .closing) else { return }
+            pendingRowNudge = PendingRowNudge(naturalKey: p.naturalKey, recipientId: r.id,
+                                              confirmation: confirmation, isClosing: true,
+                                              isConversation: true)
+        case .confirmState:
+            ProspectMutations.confirmRecipientConversationState(QueueItem(p), r.id, prospects: prospects,
+                                                                context: context, feedback: feedback)
+        case .sayWhatHappened, .none:
+            break   // no control is drawn for these
+        }
+    }
+
+    private func performRowNudge(_ pending: PendingRowNudge) {
+        pendingRowNudge = nil
+        if pending.isConversation {
+            ProspectMutations.sendConversationNudge(pending.naturalKey, pending.recipientId,
+                                                    isClosing: pending.isClosing,
+                                                    prospects: prospects, context: context, feedback: feedback,
+                                                    markSending: { sendState.markSending($0) },
+                                                    clearSending: { sendState.clearSending($0) })
+        } else {
+            ProspectMutations.sendFollowUp(pending.naturalKey, pending.recipientId,
+                                           prospects: prospects, context: context, feedback: feedback,
+                                           markSending: { sendState.markSending($0) },
+                                           clearSending: { sendState.clearSending($0) })
+        }
     }
 
     private func sendReply(_ item: QueueItem, _ recipientId: String) {

@@ -16,11 +16,19 @@ struct FollowUpsDeepLinkGuardTests {
     private var followUpsView: String { source("Overture/UI/FollowUpsView.swift") }
     private var rootView: String { source("Overture/App/RootView.swift") }
 
-    @Test func reachedOutRowCallsTheTargetedCallback() throws {
+    // #2130 replaced this. The row's control no longer navigates anywhere: it names what is actually due
+    // and does it, because "due now" here meant six different things behind one wording and two of them
+    // could not be sent at all. Dan pressed Send a follow-up and reached a list that sent nothing.
+    //
+    // Pinned as the inverse, so the deep link cannot quietly come back to that button and restore the
+    // defect. The targeted mechanism itself is now unused and is tracked for removal.
+    @Test func reachedOutRowActsRatherThanNavigatingToFollowUps() throws {
         #expect(!queueView.isEmpty)
         let body = try SourceGuard.functionBody(named: "reachedOutRow", in: queueView)
-        #expect(body.contains("onShowFollowUpsFor(r.id)"),
-                "reachedOutRow's Send-a-follow-up button doesn't thread the specific recipient through (#682).")
+        #expect(!body.contains("onShowFollowUpsFor(r.id)"),
+                "the reached-out row's control must act on the row, not open the Follow-ups sheet (#2130).")
+        #expect(body.contains("ReachedOutAction.of("),
+                "the reached-out row no longer labels its control by what is actually due (#2130).")
     }
 
     @Test func queueViewDeclaresTheTargetedCallback() {
