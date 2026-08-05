@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1035 sentences**, from 356 source files.
+Every sentence Overture can say to Dan: **1030 sentences**, from 354 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1201,8 +1201,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ExperimentReportView.swift`
 "Pitch copied for \(org)"
     `App/ActionFeedback.swift`
-"Pitch will say \(claim(for: band)): \(dates)"
-    `Domain/VenueHistoryCopy.swift`
 "Pitching other shows that night"
     `Domain/ReviewStatus.swift`
 "Possible booking, confirm?"
@@ -2133,8 +2131,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ExperimentReport.swift`
 "\(show) is on a date you already have a pitch in progress for \(others)."
     `Domain/SelfBookingConflict.swift`
-"\(shown.joined(separator: ", ")) and \(hidden) more"
-    `Domain/VenueHistoryCopy.swift`
 "\(structuralGaps) of \(total) listings named no venue, so Overture left \(left) out of the queue."
     `Domain/SourceReadability.swift`
 "\(subject) a look: failing, or can't mark shows as gone until it reads its calendar properly again"
@@ -2331,8 +2327,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "which usually means the match is wrong."
     `Domain/PossibleMatchFanOut.swift`
-"you shoot here regularly"
-    `Domain/VenueHistoryCopy.swift`
 "you stopped this check after 1 of \(requested) shows got an answer, and the lookups that were already under way still counted as spent"
     `Domain/ReachabilityRunSummary.swift`
 "you stopped this check after \(answered) of \(requested) shows got an answer, and the lookups that were already under way still counted as spent"
@@ -2341,10 +2335,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReachabilityRunSummary.swift`
 "you stopped this check before the show got an answer, and the lookup it had already started still counted as spent"
     `Domain/ReachabilityRunSummary.swift`
-"you've photographed a few shows here"
-    `Domain/VenueHistoryCopy.swift`
-"you've photographed here before"
-    `Domain/VenueHistoryCopy.swift`
 "your booking log"
     `UI/QueueView+Model.swift`
 "your queue"

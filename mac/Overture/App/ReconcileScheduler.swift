@@ -105,11 +105,6 @@ final class ReconcileScheduler {
         // self-throttles to at most one fetch per day, and can never clobber a good stored signature on a
         // failed fetch. Best-effort and free, like the reply detection above; no paid AI run.
         await GmailSignatureService.refreshIfDue()
-        // #1964: keep the held shoot history current on this same free tick (launch + periodic +
-        // export-change), which is the only thing that picks up a shoot-history import Dan runs while the
-        // app is open, since the app never runs that import itself. Two file reads at this cadence rather
-        // than on every render pass, and a tick that finds the same history notifies nobody (#1930).
-        VenueShootHistoryCache.shared.refresh()
         var omniFocusChanged = 0
         let config = OmniFocusSyncConfig.loaded()
         if config.enabled {
