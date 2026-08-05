@@ -33,9 +33,28 @@ enum ReplyIdentity {
     // send paths rather than decided again here, so the row cannot promise an audience the send will not
     // use (L64): a reply goes to SendGroup.replyAudience, a follow-up or conversation nudge goes to the
     // whole send group.
+    // The peer this row's reply is actually ABOUT.
+    //
+    // The list stands on SendGroup.isRepresentative, which is lowest sorted id and knows nothing about who
+    // wrote. Detection files the reply's words and its audience on the WRITER alone (ReplyService.swift,
+    // `if wroteIt`), deliberately, so nothing is credited to somebody who did not say it. Those two facts
+    // together mean the row is routinely standing on a contact who holds neither: on Dan's Pumpkin
+    // Singalong card the row is Chelsea and everything about the reply is on Nicole.
+    //
+    // Resolved through the writer recorded on every peer (#2113), so any row of the group answers the same.
+    static func answering(for recipient: Recipient, in prospect: Prospect) -> Recipient {
+        guard recipient.hasUnhandledReply, let writer = recipient.replyFromAddress, !writer.isEmpty else {
+            return recipient
+        }
+        return SendGroup.peers(of: recipient, in: prospect)
+            .first { ReplyDetection.isSameAddress($0.email, writer) } ?? recipient
+    }
+
     static func rowAudience(for recipient: Recipient, in prospect: Prospect) -> RowAudience {
-        let addresses: [String] = recipient.hasUnhandledReply
-            ? SendGroup.replyAudience(of: recipient)
+        // Everything below asks the peer who WROTE, not the peer the list happens to stand on.
+        let answerer = answering(for: recipient, in: prospect)
+        let addresses: [String] = answerer.hasUnhandledReply
+            ? SendGroup.replyAudience(of: answerer)
             : SendGroup.peers(of: recipient, in: prospect).compactMap(\.email).filter { !$0.isEmpty }
 
         // Nothing emailable (a form outreach, a record with no address). The row still has to name
@@ -45,7 +64,7 @@ enum ReplyIdentity {
         }
         // Matched through reply detection's own comparison, so casing or a display name on the stored
         // writer cannot make them fail to match their own line and silently lose the highlight.
-        let responder = recipient.replyFromAddress.flatMap { writer in
+        let responder = answerer.replyFromAddress.flatMap { writer in
             addresses.first { ReplyDetection.isSameAddress($0, writer) }
         }
         return RowAudience(lines: addresses, responder: responder)

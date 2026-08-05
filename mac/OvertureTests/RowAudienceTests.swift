@@ -150,6 +150,33 @@ struct RowAudienceTests {
         #expect(audience.responder == nil)
     }
 
+    // Dan's LIVE card, standing on the row the list actually renders. ReachedOutQueue.activeWithDates
+    // filters to SendGroup.isRepresentative, which is lowest sorted id, so the row is Chelsea. But
+    // ReplyService writes replyAudience and lastReplyText ONLY to the peer who wrote (ReplyService.swift:74
+    // `if wroteIt`), so Chelsea carries neither and the audience falls back to Chelsea herself.
+    //
+    // The row therefore names the one person who did NOT write, with nothing highlighted, which is the
+    // exact defect #2113 was opened for.
+    @Test func theRowTheListActuallyRendersNamesTheWriter() throws {
+        let ctx = ModelContext(try container())
+        let p = show(ctx)
+        let chelsea = contact(p, "chelsea@everyvoicechoirs.org")
+        let nicole = contact(p, "nbecker@everyvoicechoirs.org")
+        for r in [chelsea, nicole] {
+            r.replied = true
+            r.replyFromAddress = "nbecker@everyvoicechoirs.org"   // #2113 records this on every peer
+        }
+        // Only the writer carries the audience and the words, exactly as detection leaves them.
+        nicole.replyAudience = ["nbecker@everyvoicechoirs.org"]
+        nicole.lastReplyText = "Thanks, that sounds good."
+
+        let row = try #require(ReachedOutQueue.activeWithDates(from: [p], now: Date(timeIntervalSince1970: 1_800_000_000)).first)
+        #expect(row.recipient.id == chelsea.id, "the list stands on the alphabetically first contact")
+        let audience = ReplyIdentity.rowAudience(for: row.recipient, in: p)
+        #expect(audience.lines == ["nbecker@everyvoicechoirs.org"])
+        #expect(audience.responder == "nbecker@everyvoicechoirs.org")
+    }
+
     // The highlight is weight and colour, and a screen reader can perceive neither, so for the one line
     // carrying it the mark has to be in the WORDS. Every other line reads as just its address, with no
     // decoration to sit through.
