@@ -146,6 +146,82 @@ should_probe_pure_suite() {
   return 0
 }
 
+# --- naming the cause of a dead run from the host's own log (#1972) ------------------------
+#
+# A crash says WHICH kind of red it is (#1006) but never said WHY, and the causes it printed were a
+# guess: a hardcoded list naming a Debug app holding the single-instance lock and an overlapping run
+# on this Mac. On 2026-08-01 the real cause was neither. The app's menu bar item had been removed,
+# which terminates a MenuBarExtra app and so its test host (#1966), and the wrong hint sent hours of
+# elimination in the wrong direction (clean main, deleted DerivedData, store locks, disk space,
+# crash reports, 78 stale LaunchServices registrations, a full restart). The two decisive lines were
+# in the operating system's own log the whole time.
+#
+# The three below are pure text over already-captured output, so they are testable without a dead
+# host; main asks `log show` on the crash path only.
+
+# The dead host's PID, read out of the prefix it stamps on every line it logs through xcodebuild
+# (`Overture[37030:38151440]`). That prefix is the only place its identity survives: by the time the
+# run is declared dead the process is gone, so the process table cannot answer. Empty when the host
+# never launched at all, which is a real case (it is this issue's title) and must never be filled in
+# with a PID nobody observed, since the log predicate is built from it.
+#
+# The LAST one wins: xcodebuild relaunches the host after an unexpected exit, so one attempt's
+# output can carry two, and the one whose death ended the run is the later.
+host_pid_from_output() {
+  local output="$1"
+  grep -aoE 'Overture\[[0-9]+:[0-9]+\]' <<< "${output}" \
+    | tail -1 \
+    | sed -E 's/^Overture\[([0-9]+):.*/\1/' \
+    || true
+}
+
+# What to ask `log show` about: the exact process when its PID was observed, and the app by name
+# when it was not. Asking by name is wider (it would also match a Debug or Release Overture running
+# alongside), which is why it is the fallback rather than the default.
+host_log_predicate() {
+  local pid="$1"
+  if [[ -n "${pid}" ]]; then
+    echo "processID == ${pid}"
+  else
+    echo 'process == "Overture"'
+  fi
+}
+
+# A `log show` dump cut down to the lines that name a cause: a termination, the status bar (whose
+# removal is what killed the host in #1966), a TCC privacy denial, or the store refusing to open
+# (#663). A --debug --info dump over a ~90 second run is thousands of lines of framework chatter, so
+# printing it whole would bury the two that matter, which is the same defect as printing nothing.
+#
+# Capped at the last 40, and deliberately the LAST: the lines nearest the death are the ones that
+# describe it.
+host_log_evidence() {
+  local log_output="$1"
+  grep -aiE 'terminat|StatusBar|TCC|store[ -]unavailable' <<< "${log_output}" | tail -40 || true
+}
+
+# Prints what the host's own log says about why it died, or says plainly that it named nothing.
+# window_seconds is how far back to look, sized to how long the run actually took, so the dump
+# covers the run and no more.
+report_host_log_evidence() {
+  local host_pid="$1" window_seconds="$2"
+  local predicate evidence
+
+  predicate="$(host_log_predicate "${host_pid}")"
+  evidence="$(host_log_evidence "$(log show --last "${window_seconds}s" --debug --info --predicate "${predicate}" 2>/dev/null || true)")"
+
+  echo >&2
+  if [[ -n "${evidence}" ]]; then
+    echo "run-tests-locked.sh: the host's own log (${predicate}) says why:" >&2
+    sed 's/^/  /' <<< "${evidence}" >&2
+  else
+    echo "run-tests-locked.sh: the host's own log named no cause. Read it in full with:" >&2
+    echo "  log show --last ${window_seconds}s --debug --info --predicate '${predicate}'" >&2
+    echo "Causes actually seen here: the menu bar item being removed, which terminates the app and" >&2
+    echo "so its test host (#1966); a Debug Overture holding the single-instance lock (#1257, which" >&2
+    echo "this script checks before building); an overlapping xcodebuild on this Mac (#1331)." >&2
+  fi
+}
+
 main() {
   command -v flock >/dev/null || { echo "flock not found; install it with: brew install flock" >&2; exit 1; }
 
@@ -173,8 +249,10 @@ main() {
   # #1331: run the suite, and if the HOST crashes (the run died with no named test failure, a known
   # self-hosted flake) retry once. A genuine failure or a pass is never retried (see should_retry).
   local test_exit_code=0 outcome="" attempt=1 max_attempts=2 output_file pid
+  local host_pid="" started_at=0 log_window=60
   while true; do
     test_exit_code=0
+    started_at="${SECONDS}"
     output_file="$(mktemp)"
     # tee, so the run still streams live: a suite that only prints at the end looks hung (#1006's
     # investigation was slow enough without waiting blind).
@@ -204,6 +282,11 @@ main() {
     # died, not that a test failed, and reading it as a test failure sends whoever sees it hunting for
     # a bug that does not exist.
     outcome="$(run_outcome "$(cat "${output_file}")" "${test_exit_code}")"
+    # #1972: captured before the output is discarded, since the dead host's PID survives nowhere
+    # else. The window is this attempt's own duration plus a margin for the launch that precedes
+    # its first log line, so the dump covers the run and no more.
+    host_pid="$(host_pid_from_output "$(cat "${output_file}")")"
+    log_window=$(( SECONDS - started_at + 30 ))
     rm -f "${output_file}"
 
     [[ -z "$(should_retry "${outcome}" "${attempt}" "${max_attempts}")" ]] && break
@@ -222,9 +305,11 @@ main() {
   if [[ "${outcome}" == "crashed" ]]; then
     echo >&2
     echo "run-tests-locked.sh: the test run CRASHED. It did not pass and it did not fail: the run died." >&2
-    echo "Usual causes: the test host could not launch (a running Debug app holding the single-instance lock)," >&2
-    echo "or something killed the host mid-run (an overlapping run on this Mac). Any count printed above is not a pass." >&2
-    echo "Quit any running Debug Overture, then rerun it; if it passes, the code was never the problem. See #1006/#1252." >&2
+    echo "Any count printed above is not a pass. If a rerun passes, the code was never the problem. See #1006." >&2
+
+    # #1972: say WHY from the host's own log instead of guessing at it. Only here, never on a pass
+    # or a build failure: the dump is slow and there is no dead host to explain.
+    report_host_log_evidence "${host_pid}" "${log_window}"
 
     # #1967: a crash used to end here, with one red verdict standing over 4,802 tests that need no app
     # and may well have passed. The pure suite has its own scheme with the app target left out, so ask it.
