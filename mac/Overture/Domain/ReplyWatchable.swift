@@ -34,6 +34,10 @@ protocol ReplyWatchableRecipient: AnyObject {
     var replyFromAddress: String? { get set }
     var replyFromName: String? { get set }
     var inboundReplySentAt: Date? { get set }
+    // #2149: when the repair pass last TRIED to fill in the message text, set whether or not it found any.
+    // A reply with no decodable body yields nothing every time, so without a record of the attempt the row
+    // stays in the gap and its thread is refetched from Gmail forever with nothing changing (L47).
+    var replyTextCheckedAt: Date? { get set }
     var dismissedReplyId: String? { get }        // a reply Dan already dismissed as not real.
     var bounced: Bool { get set }
     var lastBounceId: String? { get set }

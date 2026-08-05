@@ -198,6 +198,9 @@ final class Recipient {
     var replyFromName: String?
     // #2113: when they actually SENT it, off the same message's internalDate.
     var inboundReplySentAt: Date?
+    // #2149: when the repair pass last TRIED to fill in the message text, whether or not it found any.
+    // Without it a reply with no decodable body stays in the gap and its thread is refetched forever.
+    var replyTextCheckedAt: Date?
     var lastReplyId: String?
     var dismissedReplyId: String?
     var lastReplyText: String?

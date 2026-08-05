@@ -113,6 +113,41 @@ struct ReplyPanelRefusalOnScreenTests {
         #expect((try? view.inspect().find(viewWithAccessibilityLabel: label)) == nil)
     }
 
+    // MARK: #2149, a message Overture could not read
+
+    // A reply it read and could not decode is a different state from one it never looked at, and the panel
+    // has to show the sentence that is true of THIS row. Rendered, because the decision being right in
+    // ReplyPanel proves nothing about which words reach the screen (L3).
+    @Test func aMessageThatCouldNotBeReadSaysSoOnThePanel() throws {
+        let view = try panel(writer: "nbecker@everyvoicechoirs.org")
+        view.recipient.lastReplyText = nil
+        view.recipient.replyTextCheckedAt = Date(timeIntervalSince1970: 10)
+
+        let shown = try texts(view)
+        #expect(shown.contains(ReplyPanelCopy.unreadableWords), "Shown: \(shown)")
+        #expect(!shown.contains(ReplyPanelCopy.noCapturedWords),
+                "a message that was read must not claim nothing was captured")
+    }
+
+    // And one nothing has been tried on yet keeps the sentence that is true of it.
+    @Test func aReplyNothingHasBeenTriedOnStillSaysNothingWasCaptured() throws {
+        let view = try panel(writer: "nbecker@everyvoicechoirs.org")
+        view.recipient.lastReplyText = nil
+        view.recipient.replyTextCheckedAt = nil
+
+        let shown = try texts(view)
+        #expect(shown.contains(ReplyPanelCopy.noCapturedWords), "Shown: \(shown)")
+        #expect(!shown.contains(ReplyPanelCopy.unreadableWords))
+    }
+
+    // With the words in hand the panel explains nothing, it just shows them.
+    @Test func aReadableReplyExplainsNothingAndShowsTheWords() throws {
+        let shown = try texts(panel(writer: "nbecker@everyvoicechoirs.org"))
+        #expect(shown.contains("Tuesday works for us."))
+        #expect(!shown.contains(ReplyPanelCopy.unreadableWords))
+        #expect(!shown.contains(ReplyPanelCopy.noCapturedWords))
+    }
+
     // MARK: #2151, an address on no contact of this show
 
     // Dan's real row. The panel says the address is not saved here and offers to save it, rather than

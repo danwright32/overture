@@ -164,6 +164,7 @@ struct ReplyFromANewAddressTests {
                           to: "\(me)", body: "Tuesday works for us.")
 
         let filled = ReplyService.backfillResponders(in: [p], selfEmail: me,
+                                            now: Date(timeIntervalSince1970: 9_999),
                                                      fetchThread: { _ in json },
                                                      fetchFullThread: { _ in json })
         #expect(filled == 2)
@@ -185,6 +186,7 @@ struct ReplyFromANewAddressTests {
         r.lastReplyText = "Already here."
         var fetches = 0
         let filled = ReplyService.backfillResponders(in: [p], selfEmail: me,
+                                            now: Date(timeIntervalSince1970: 9_999),
                                                      fetchThread: { _ in fetches += 1; return nil })
         #expect(filled == 0)
         #expect(fetches == 0)
