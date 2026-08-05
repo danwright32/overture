@@ -56,6 +56,8 @@ enum ReplyPanel {
 enum ReplyPanelCopy {
     static let answer = "Answer"
     static let noCapturedWords = "Overture didn't capture what they wrote. Their message is in Gmail."
+    static let draftWithAI = "Draft with AI"
+    static let draftWithAIHelp = "Write a first draft of this one reply, which you can then edit"
     static let send = "Send reply"
     static let sending = "Sending"
     static let cancel = "Cancel"

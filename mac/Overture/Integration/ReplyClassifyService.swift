@@ -20,11 +20,25 @@ enum ReplyClassifyService {
         return false
     }
 
-    static func buildQueue(from context: ModelContext, generatedAt: String) -> ReplyClassifyQueue {
+    // #2129: one conversation, named. The run drafts every waiting reply in a single detached, paid pass,
+    // which is right for the batch it was built for and wrong for a button pressed on ONE reply: it would
+    // spend across every other waiting conversation and its Cancel would abandon all of them.
+    struct Target: Equatable, Sendable {
+        let naturalKey: String
+        let recipientId: String
+    }
+
+    static func buildQueue(from context: ModelContext, generatedAt: String,
+                           only: Target? = nil) -> ReplyClassifyQueue {
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         var items: [ReplyClassifyItem] = []
         for p in all {
+            // A scope that matches nothing yields NOTHING, never the whole batch. Widening a scoped
+            // request back to everything is the exact failure this exists to prevent, and it would be
+            // invisible: the run would look like it worked, having spent on every other conversation.
+            if let only, only.naturalKey != p.naturalKey { continue }
             for r in p.recipients where recipientNeedsClassify(r) {
+                if let only, only.recipientId != r.id { continue }
                 items.append(ReplyClassifyItem(naturalKey: p.naturalKey, groupName: p.groupName,
                                                venue: p.venue, performanceDate: p.performanceDate,
                                                replyText: r.lastReplyText ?? "",
@@ -106,6 +120,9 @@ enum ReplyClassifyService {
 
     @discardableResult
     static func startClassify(from context: ModelContext, now: Date,
+                              // #2129: nil is the batch run (the at-launch sweep); a Target is one reply
+                              // Dan asked for by pressing Draft with AI on it.
+                              only: Target? = nil,
                               queueURL: URL = ReplyClassifyQueueBuilder.defaultURL,
                               markerURL: URL = defaultMarkerURL,
                               cancelURL: URL = defaultCancelURL,
@@ -120,7 +137,7 @@ enum ReplyClassifyService {
         guard !isRunning(markerURL: markerURL, now: now) else { throw ClassifyLaunchError.alreadyRunning }
 
         let stamp = ISO8601DateFormatter().string(from: now)
-        let queue = buildQueue(from: context, generatedAt: stamp)
+        let queue = buildQueue(from: context, generatedAt: stamp, only: only)
         guard !queue.items.isEmpty else { throw ClassifyLaunchError.nothingToClassify }
 
         // Take the lock ATOMICALLY (#420 C5): clear any stale marker, then exclusive-create so two
