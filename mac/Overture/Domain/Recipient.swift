@@ -663,6 +663,11 @@ final class Recipient {
         replied = true
         self.repliedAt = repliedAt
         if resolution == .stoodDown { resolution = nil }
+        // #2132: a new exchange starts from no baseline. Left behind, the next pair would measure this
+        // answer against a draft written for an older message, which is a lesson about nothing.
+        originalReplyDraftBody = nil
+        replyDraftWrittenByDan = false
+        replyDraftEditedByDan = false
     }
 
     func standDownClosingNote(now: Date) { closingNoteStoodDownAt = now }
@@ -760,9 +765,17 @@ final class Recipient {
     }
 
     // Freeze the exact reply body Dan committed (sent or copied out), immune to later re-drafts, as the
-    // "sent" side of the voice pair (#463). Mirrors Prospect.freezeSentCopy; only the first commit writes.
+    // "sent" side of the voice pair (#463).
+    //
+    // #2132: once per EXCHANGE, not once per contact. Guarding on "never captured" meant only the first
+    // answer in any thread ever taught anything, and answering from the queue is precisely about the
+    // second and third. A capture is allowed again only once they have written again since the last one,
+    // so a stray re-send cannot overwrite a captured pair with a later timestamp.
     func freezeSentReply(now: Date) {
-        guard sentReplyBody == nil, let body = replyDraftBody, !body.isEmpty else { return }
+        guard let body = replyDraftBody, !body.isEmpty else { return }
+        if let captured = replySentAt {
+            guard let theirs = replyArrivedAt, theirs > captured else { return }
+        }
         sentReplyBody = body
         replySentAt = now
     }
