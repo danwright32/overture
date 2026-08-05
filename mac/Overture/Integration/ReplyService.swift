@@ -49,6 +49,15 @@ enum ReplyService {
                 // wherever a reply is recorded, not just here.
                 r.reopenOnReply(at: now)
                 r.lastReplyId = replyId
+                // #2113: who wrote, and when they sent it. Read from the METADATA thread already in hand,
+                // so naming the writer costs no extra Gmail call. Recorded on every contact sharing this
+                // thread (each one passes through this loop on its own), because whichever of them the
+                // list happens to stand on has to be able to name the person who replied.
+                //
+                // Safe to spread across the group precisely because Gmail NAMES the sender: it is a fact
+                // about the conversation, not a claim about each mailbox. A bounce is the opposite and
+                // must never be spread this way (L66).
+                recordWriter(on: r, threadJSON: data, selfEmail: selfEmail)
                 if let full = fetchFullThread(threadId) {
                     // On a thread only this contact is on, the sender can only be them, so this is the
                     // path every existing thread in the store takes, unchanged.
@@ -80,5 +89,44 @@ enum ReplyService {
             if newReply { p.pausePendingForReply() }
         }
         return count
+    }
+
+    // #2113: fill in who wrote on rows that replied before any of this was recorded. Separate from
+    // detectReplies rather than folded into it, because detection's own loop deliberately skips a row
+    // that has already replied, and reopening that path would re-run everything a first detection does
+    // (recapture the text, re-pause the show's unsent contacts, count the reply again) on a conversation
+    // Dan may already have worked. This only fills the gaps.
+    //
+    // Bounded by the gap itself: a row is fetched only when it replied and has no writer recorded, so the
+    // pass costs nothing at all once it has run, and nothing on a store that never had the gap.
+    @discardableResult
+    static func backfillResponders(in entities: [any ReplyWatchable], selfEmail: String,
+                                   fetchThread: (String) -> Data?) -> Int {
+        var filled = 0
+        for p in entities {
+            for r in p.replyWatchRecipients {
+                // The gap itself is the bound: a row that never replied has nothing to name, and one that
+                // already names its writer is done forever.
+                guard r.replied, r.replyFromAddress == nil else { continue }
+                guard let threadId = r.gmailThreadId, !threadId.isEmpty else { continue }
+                guard let data = fetchThread(threadId),
+                      ReplyDetection.latestReplySender(threadJSON: data, selfEmail: selfEmail) != nil
+                else { continue }
+                recordWriter(on: r, threadJSON: data, selfEmail: selfEmail)
+                filled += 1
+            }
+        }
+        return filled
+    }
+
+    // The one place the writer is read off a thread, shared by first detection and the backfill, so the
+    // two can never disagree about who wrote or when they sent it.
+    private static func recordWriter(on r: any ReplyWatchableRecipient, threadJSON data: Data,
+                                     selfEmail: String) {
+        guard let address = ReplyDetection.latestReplySender(threadJSON: data, selfEmail: selfEmail) else { return }
+        r.replyFromAddress = address
+        r.replyFromName = ReplyDetection.latestReplySenderHeader(threadJSON: data, selfEmail: selfEmail)
+            .flatMap { ReplyDetection.displayName(from: $0) }
+        r.inboundReplySentAt = ReplyDetection.latestReplySentAt(threadJSON: data, selfEmail: selfEmail)
     }
 }

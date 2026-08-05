@@ -78,6 +78,12 @@ final class Inquiry {
     // over-send to, so the failure here is the mirror image of the prospect one: somebody the inquirer
     // brought in (a partner, a colleague booking alongside them) is silently dropped from the answer.
     var replyAudience: [String]?
+    // #2113: who actually wrote the latest reply, and when they sent it. An inquiry starts from one
+    // person, but the answer can come from a colleague copied in, so the writer is no more knowable here
+    // than on a shared prospect thread.
+    var replyFromAddress: String?
+    var replyFromName: String?
+    var inboundReplySentAt: Date?
     var dismissedReplyId: String?
     var bounced: Bool = false
     var lastBounceId: String?

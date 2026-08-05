@@ -27,6 +27,13 @@ protocol ReplyWatchableRecipient: AnyObject {
     // requirement rather than a default no-op: both conformers have a send path that reads it, and a field
     // written with no reader is the shape L46 names.
     var replyAudience: [String]? { get set }
+    // #2113: WHO wrote back, and when they sent it. Settable requirements rather than defaulted no-ops,
+    // for the same reason `replyAudience` is: both conformers have a surface that reads them (the queue
+    // row names the writer, the queue dates the row by the send time), and a field written with nothing
+    // reading it is the shape L46 names.
+    var replyFromAddress: String? { get set }
+    var replyFromName: String? { get set }
+    var inboundReplySentAt: Date? { get set }
     var dismissedReplyId: String? { get }        // a reply Dan already dismissed as not real.
     var bounced: Bool { get set }
     var lastBounceId: String? { get set }

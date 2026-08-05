@@ -239,7 +239,7 @@ enum ConversationReminder {
                 guard let due0 = reminder(state: r.conversationState, setAt: r.conversationStateSetAt,
                                          remindedAt: r.conversationRemindedAt, performanceDate: p.performanceDate,
                                          isClosed: closed, hasUnhandledReply: unhandledReply,
-                                         repliedAt: r.repliedAt, source: r.conversationStateSource,
+                                         repliedAt: r.replyArrivedAt, source: r.conversationStateSource,
                                          now: now, config: config)
                 else { continue }
                 due.append(DueRecipient(prospect: p, recipient: r, reminder: due0))

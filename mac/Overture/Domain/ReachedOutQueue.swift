@@ -29,7 +29,7 @@ enum ReachedOutQueue {
         let reminderDate = ConversationReminder.nextReminderDate(
             state: r.conversationState, setAt: r.conversationStateSetAt, remindedAt: r.conversationRemindedAt,
             performanceDate: p.performanceDate, isClosed: !standing.isInPlay, hasUnhandledReply: unhandledReply,
-            repliedAt: r.repliedAt, source: r.conversationStateSource, now: now, config: reminderConfig)
+            repliedAt: r.replyArrivedAt, source: r.conversationStateSource, now: now, config: reminderConfig)
         return [nextFollowUp(for: r, now: now, config: followUpConfig),
                 nextFormDecision(for: r, config: followUpConfig),
                 reminderDate]

@@ -71,39 +71,75 @@ enum ReplyDetection {
         return !l.isEmpty && l == r
     }
 
-    // #2032: the ADDRESS the newest real reply came from, so a thread carrying more than one contact can
-    // say which of them wrote. Nil when there is no real reply, exactly as `latestReplyId` is.
-    static func latestReplySender(threadJSON data: Data, selfEmail: String) -> String? {
+    // #2113: the newest message on the thread that is a REAL reply, meaning not Dan's own and not an
+    // automated sender. One definition of that, shared by every reader below, because five of them were
+    // walking the messages themselves with the same three-part skip copied out. A change to what counts
+    // as a real reply now reaches all of them at once instead of one and not the others (L30).
+    private static func latestReplyMessage(threadJSON data: Data, selfEmail: String) -> [String: Any]? {
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let messages = obj["messages"] as? [[String: Any]] else { return nil }
         let me = email(from: selfEmail)
         for m in newestFirst(messages) {
-            guard let payload = m["payload"] as? [String: Any],
-                  let headers = payload["headers"] as? [[String: Any]] else { continue }
-            let from = headers.first { ($0["name"] as? String)?.lowercased() == "from" }?["value"] as? String ?? ""
-            let e = email(from: from)
+            let e = email(from: headerValue("from", of: m))
             if e.isEmpty || e == me || isAutomated(e) { continue }
-            return e
+            return m
         }
         return nil
+    }
+
+    private static func headerValue(_ name: String, of message: [String: Any]) -> String {
+        guard let payload = message["payload"] as? [String: Any],
+              let headers = payload["headers"] as? [[String: Any]] else { return "" }
+        return headers.first { ($0["name"] as? String)?.lowercased() == name }?["value"] as? String ?? ""
+    }
+
+    // #2032: the ADDRESS the newest real reply came from, so a thread carrying more than one contact can
+    // say which of them wrote. Nil when there is no real reply, exactly as `latestReplyId` is.
+    static func latestReplySender(threadJSON data: Data, selfEmail: String) -> String? {
+        guard let m = latestReplyMessage(threadJSON: data, selfEmail: selfEmail) else { return nil }
+        let e = email(from: headerValue("from", of: m))
+        return e.isEmpty ? nil : e
+    }
+
+    // #2113: the RAW From value of the newest real reply, display name and all. `latestReplySender`
+    // lowercases to a bare mailbox for comparison, which is the right shape to match on and the wrong
+    // shape to show a person.
+    static func latestReplySenderHeader(threadJSON data: Data, selfEmail: String) -> String? {
+        guard let m = latestReplyMessage(threadJSON: data, selfEmail: selfEmail) else { return nil }
+        let raw = headerValue("from", of: m).trimmingCharacters(in: .whitespaces)
+        return raw.isEmpty ? nil : raw
+    }
+
+    // #2113: the display name in a From header, or nil when it carries a bare address. Nil rather than a
+    // guess: inventing "nbecker" as somebody's name reads worse than showing the address they wrote from.
+    static func displayName(from header: String) -> String? {
+        let s = header.trimmingCharacters(in: .whitespaces)
+        // No angle brackets means the header is the address itself, which names nobody.
+        guard let lo = s.lastIndex(of: "<") else { return nil }
+        var name = String(s[s.startIndex..<lo]).trimmingCharacters(in: .whitespaces)
+        // A display name is quoted exactly when it contains something that would otherwise split it, a
+        // comma most often ("Becker, Nicole"), so the quotes come off and the comma stays.
+        if name.count >= 2, name.hasPrefix("\""), name.hasSuffix("\"") {
+            name = String(name.dropFirst().dropLast()).trimmingCharacters(in: .whitespaces)
+        }
+        return name.isEmpty ? nil : name
+    }
+
+    // #2113: when the newest real reply was actually SENT, from Gmail's internalDate (epoch millis).
+    // Nil when the message carries no internalDate, so a caller can tell "not known" from an instant and
+    // fall back rather than treating the epoch as a real send time.
+    static func latestReplySentAt(threadJSON data: Data, selfEmail: String) -> Date? {
+        guard let m = latestReplyMessage(threadJSON: data, selfEmail: selfEmail) else { return nil }
+        let millis = internalDateMillis(m)
+        guard millis > 0 else { return nil }
+        return Date(timeIntervalSince1970: TimeInterval(millis) / 1000)
     }
 
     // The Gmail message id of the newest message from someone other than Dan (skipping automated
     // senders), or nil if there's no real reply. Lets a single auto-detected reply be dismissed (#219)
     // while a genuinely newer reply (a different id) still gets flagged.
     static func latestReplyId(threadJSON data: Data, selfEmail: String) -> String? {
-        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let messages = obj["messages"] as? [[String: Any]] else { return nil }
-        let me = email(from: selfEmail)
-        for m in newestFirst(messages) {
-            guard let payload = m["payload"] as? [String: Any],
-                  let headers = payload["headers"] as? [[String: Any]] else { continue }
-            let from = headers.first { ($0["name"] as? String)?.lowercased() == "from" }?["value"] as? String ?? ""
-            let e = email(from: from)
-            if e.isEmpty || e == me || isAutomated(e) { continue }
-            return m["id"] as? String
-        }
-        return nil
+        latestReplyMessage(threadJSON: data, selfEmail: selfEmail)?["id"] as? String
     }
 
     // #2063: who the latest inbound reply was addressed to, so Dan's answer can go to exactly those people
@@ -118,26 +154,17 @@ enum ReplyDetection {
     // nil, never an empty array, when there is no real reply to mirror. The caller has to tell "never
     // captured" from a real audience, because that is what decides whether the send falls back.
     static func latestReplyAudience(threadJSON data: Data, selfEmail: String) -> [String]? {
-        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let messages = obj["messages"] as? [[String: Any]] else { return nil }
         let me = email(from: selfEmail)
-        for m in newestFirst(messages) {
-            guard let payload = m["payload"] as? [String: Any],
-                  let headers = payload["headers"] as? [[String: Any]] else { continue }
-            func header(_ name: String) -> String {
-                headers.first { ($0["name"] as? String)?.lowercased() == name }?["value"] as? String ?? ""
-            }
-            let sender = email(from: header("from"))
-            if sender.isEmpty || sender == me || isAutomated(sender) { continue }
+        guard let m = latestReplyMessage(threadJSON: data, selfEmail: selfEmail) else { return nil }
+        let sender = email(from: headerValue("from", of: m))
 
-            var audience: [String] = []
-            for address in [sender] + addresses(inHeader: header("to")) + addresses(inHeader: header("cc")) {
-                guard !address.isEmpty, address != me, !audience.contains(address) else { continue }
-                audience.append(address)
-            }
-            return audience
+        var audience: [String] = []
+        for address in [sender] + addresses(inHeader: headerValue("to", of: m))
+                                + addresses(inHeader: headerValue("cc", of: m)) {
+            guard !address.isEmpty, address != me, !audience.contains(address) else { continue }
+            audience.append(address)
         }
-        return nil
+        return audience
     }
 
     // Every bare address in a To/Cc header value, lowercased. A display name may itself contain a comma

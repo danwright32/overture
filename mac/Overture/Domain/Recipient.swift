@@ -181,7 +181,17 @@ final class Recipient {
     var closingNoteStoodDownAt: Date? = nil
     var lastFollowUpAt: Date?
     var replied: Bool = false
+    // When Overture NOTICED a reply. Not when it was written: the watcher stamps this as it runs, so a
+    // reply that lands while the app is shut carries the next launch. `inboundReplySentAt` is the real
+    // thing and is preferred wherever the date is shown or grouped (#2113).
     var repliedAt: Date?
+    // #2113: WHO wrote back, captured from the From header Gmail already returns. Both are needed: the
+    // address identifies the mailbox, the display name is what a person is actually called. Nil on a row
+    // that replied before this was recorded, until the backfill reaches it.
+    var replyFromAddress: String?
+    var replyFromName: String?
+    // #2113: when they actually SENT it, off the same message's internalDate.
+    var inboundReplySentAt: Date?
     var lastReplyId: String?
     var dismissedReplyId: String?
     var lastReplyText: String?
@@ -379,6 +389,13 @@ final class Recipient {
     // manually hand-set conversation state (#653) is NOT excluded here: only two of the four call
     // sites need that exclusion, so they layer `&& conversationStateSource != .manual` on top.
     var hasUnhandledReply: Bool { replied && resolution == nil && !bounced }
+
+    // #2113: when the reply actually ARRIVED, which is what every date surface wants. Prefers the instant
+    // they sent it over the instant Overture noticed, and falls back to the notice for a row recorded
+    // before the send time was captured. One definition, because the queue, the reminder calculator and
+    // the OmniFocus sync all ask it and two of them asking differently is how a card ends up under the
+    // wrong day (L16).
+    var replyArrivedAt: Date? { inboundReplySentAt ?? repliedAt }
 
     // Ready to actually receive the pitch: still pending and has a real address. A form-only contact
     // (#368) is pending but has no email, so it is never auto-sendable until Dan fills one in. The send
