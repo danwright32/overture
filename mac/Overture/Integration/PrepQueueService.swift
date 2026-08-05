@@ -488,18 +488,21 @@ enum PrepQueueService {
                              cancelURL: URL = defaultCancelURL,
                              probeRunURL: URL = defaultProbeRunURL,
                              into context: ModelContext, now: Date) -> DeadRunOutcome? {
-        guard PrepRunEnding.of(heartbeat: heartbeat(markerURL: markerURL, now: now)) == .died else {
+        // The death is established FIRST and separately from the sweep below. It has to be: the settle
+        // between them costs real work and, on a check, writes paid answers into the store, so running it
+        // before knowing the run is dead would settle a check that is still going.
+        guard DetachedRunEnding.of(heartbeat: heartbeat(markerURL: markerURL, now: now)) == .died else {
             return nil
         }
+        // Settled BEFORE the marker is released: dropping it first would leave a window where the run
+        // reads as finished while answers Dan paid for are still unaccounted for. Same ordering, and the
+        // same reason, as settleAnyCheckBefore.
         let report = settleOrphanedProbe(markerURL: probeRunURL, into: context, now: now)
         ReachabilityProbeMarker.clear(at: probeRunURL)
-        // The marker goes last: while it is there the run still reads as one that ended badly, so a crash
-        // part-way through this leaves the sweep to be retried rather than a half-swept run that reads as
-        // clean (assume it runs twice).
-        try? FileManager.default.removeItem(at: markerURL)
-        // The sentinel nobody read must not survive to stop a LATER run before it starts. startPrep also
-        // clears it, so this is defence in depth on the same rule.
-        try? FileManager.default.removeItem(at: cancelURL)
+        // #2104: the marker and sentinel half is DetachedRunner's, shared with the scout read and the
+        // reply run so the three cannot drift. The check settle above is the only Prep-specific part.
+        DetachedRunner.sweepDeadRun(markerURL: markerURL, cancelURL: cancelURL, now: now,
+                                    staleAfter: markerStaleAfter)
         return DeadRunOutcome(probeReport: report)
     }
 

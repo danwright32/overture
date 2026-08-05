@@ -41,18 +41,18 @@ struct DeadPrepRunTests {
     // The runner removes its own marker on exit, so an absent marker is a clean ending: whatever it
     // produced is on disk and the normal settle reports it.
     @Test func anAbsentMarkerIsACleanEnding() {
-        #expect(PrepRunEnding.of(heartbeat: .absent) == .finished)
+        #expect(DetachedRunEnding.of(heartbeat: .absent) == .finished)
     }
 
     // A marker still sitting there, untouched past the window, is the signature of a runner that stopped
     // without exiting: it never reached the code that would have cleaned up after itself.
     @Test func aStaleMarkerIsADeath() {
-        #expect(PrepRunEnding.of(heartbeat: .stale) == .died)
+        #expect(DetachedRunEnding.of(heartbeat: .stale) == .died)
     }
 
     // A run still beating has not ended at all, and must never be swept as dead mid-batch.
     @Test func aBeatingMarkerHasNotEnded() {
-        #expect(PrepRunEnding.of(heartbeat: .beating) == nil)
+        #expect(DetachedRunEnding.of(heartbeat: .beating) == nil)
     }
 
     // MARK: clearing it

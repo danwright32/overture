@@ -14,13 +14,13 @@ import Foundation
 // the run produced. A death has produced nothing more and never will, so the honest thing is to say so
 // and clear up, instead of offering Cancel, which writes a sentinel that only a LIVE runner ever reads
 // and which therefore cannot do anything at all.
-enum PrepRunEnding: Equatable, Sendable {
+enum DetachedRunEnding: Equatable, Sendable {
     case finished
     case died
 
     // nil while the run is still beating: it has not ended, and sweeping it here would kill a real
     // multi-prospect batch mid-write.
-    static func of(heartbeat: RunHeartbeat) -> PrepRunEnding? {
+    static func of(heartbeat: RunHeartbeat) -> DetachedRunEnding? {
         switch heartbeat {
         case .beating: return nil
         case .absent:  return .finished

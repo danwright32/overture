@@ -35,6 +35,37 @@ enum DetachedRunner {
         return RunHeartbeat.of(markerTouchedAt: touched ?? nil, now: now, staleAfter: staleAfter)
     }
 
+    // #1613/#2104: sweep a run that DIED rather than finished, and report whether there was one.
+    //
+    // The runner removes its own marker on the way out, so a marker STILL THERE at the moment a run stops
+    // being live means it stopped somewhere it never reached that exit. Nothing more is coming from it, so
+    // the app must not go on offering Cancel: Cancel writes a sentinel that only a LIVE runner ever reads,
+    // which is why pressing it on a dead run could not do anything however many times it was pressed.
+    //
+    // Lives HERE rather than in each service because all three detached runs have exactly this shape, and
+    // #1613 shipping it for Prep alone left the same defect reaching Dan through the scout read and the
+    // reply run (L30, fix the class). Each service still passes its OWN marker, sentinel and staleness
+    // window: the three runs take wildly different times, and judging one against another's window is the
+    // mistake #1822 already had to undo once.
+    //
+    // Returns false for every ending that is NOT a death, which is what stops it touching a live run
+    // mid-write and what makes calling it twice report once.
+    @discardableResult
+    static func sweepDeadRun(markerURL: URL, cancelURL: URL, now: Date,
+                             staleAfter: TimeInterval) -> Bool {
+        guard DetachedRunEnding.of(heartbeat: heartbeat(markerURL: markerURL, now: now,
+                                                        staleAfter: staleAfter)) == .died else {
+            return false
+        }
+        // The marker goes first only in the sense that both go: a crash between the two leaves the sweep
+        // to be retried rather than a half-swept run that reads as clean (assume it runs twice).
+        try? FileManager.default.removeItem(at: markerURL)
+        // The sentinel nobody read must not survive to stop a LATER run before it starts. Each service's
+        // start path also clears it, so this is defence in depth on the same rule.
+        try? FileManager.default.removeItem(at: cancelURL)
+        return true
+    }
+
     // The runner script path, configured once via a string default (not hardcoded) so it can be
     // unset; nil then makes the caller fail gracefully with "runner unavailable".
     static func scriptURL(defaultsKey: String) -> URL? {

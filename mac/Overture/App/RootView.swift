@@ -1328,6 +1328,11 @@ struct RootView: View {
         case finishedEmpty(String)
         case idle
         case cancelledWithPartial(readCount: Int)
+        // #2104: the read stopped without reaching its own exit. Distinct from `finishedEmpty`, which is a
+        // run that WORKED and found nothing: a death produced at best a partial file and is worth saying
+        // out loud, where an empty read is routine. Collapsing the two would be the L10 defect, an error
+        // wearing an empty state's clothes.
+        case died(String)
     }
 
     // #1427: record this Reading-calendars run's pace for the "~X remaining" estimate, but ONLY for a run
@@ -1346,6 +1351,13 @@ struct RootView: View {
     private func watchScoutExtractRun() async -> ScoutReadResult {
         while ScoutExtractService.isRunning(now: Date()) {
             try? await Task.sleep(nanoseconds: 3 * 1_000_000_000)
+        }
+        // #2104: the read has stopped being live, which happens two ways. A marker still present means it
+        // died somewhere it never reached the exit that removes it, so the results file below holds at
+        // best a partial read and Cancel can no longer reach it. Swept and named, rather than falling
+        // through to a phase check that would report a dead run as one that simply found nothing.
+        if ScoutExtractService.clearDeadRun(now: Date()) {
+            return .died(RunProgressCopy.diedLine(phase: .reading))
         }
         let started = ScoutExtractService.lastRunStartedAt
         let resultsMod = try? ScoutExtractResultsDecoder.defaultURL
@@ -1434,6 +1446,14 @@ struct RootView: View {
         let activity = DetachedRunActivity.replyClassify
         for await _ in activity.runStarts() {
             if await activity.followUntilFinished() {
+                // #2104: a run can end two ways. A marker still present when it stops being live means it
+                // died somewhere it never reached the exit that removes it, so there are no drafts coming
+                // and the ingest below has nothing to do. Say so instead of falling silently quiet, which
+                // is indistinguishable from a run that found nothing to reply to.
+                if ReplyClassifyService.clearDeadRun(now: Date()) {
+                    status.set(RunProgressCopy.diedLineForReplies, priority: .warning)
+                    continue
+                }
                 ingestFinishedReplyClassifyRun()
             }
         }
@@ -1602,6 +1622,11 @@ struct RootView: View {
                         recordReadingRun(elapsed: readingElapsed)
                     case .finishedEmpty(let m): finishedEmpty = m
                     case .idle: break
+                    case .died(let message):
+                        // #2104: falls through to finishScout like any other empty-handed ending, so the
+                        // run UI still closes; the death itself rides the status line at .warning, where
+                        // a later routine receipt cannot quietly overwrite it.
+                        status.set(message, priority: .warning)
                     case .cancelledWithPartial(let count):
                         // #1054: a cancelled read's shows are not imported yet. Wind the run down and hand
                         // the keep-or-discard choice to Dan; its buttons own what happens next, so skip
@@ -1693,6 +1718,12 @@ struct RootView: View {
         case .finishedEmpty(let m):
             finishScout(ScoutWarnings.from(native: emptyNative, extract: nil, finishedEmpty: m), auto: false)
         case .idle:
+            finishScout(ScoutWarnings.from(native: emptyNative, extract: nil, finishedEmpty: nil), auto: false)
+        case .died(let message):
+            // #2104: the case this path is most likely to meet. A read that died while Overture was shut
+            // is discovered here, on reattach, and must close the run UI like any other ending rather than
+            // leaving the takeover sitting over a run that stopped hours ago.
+            status.set(message, priority: .warning)
             finishScout(ScoutWarnings.from(native: emptyNative, extract: nil, finishedEmpty: nil), auto: false)
         case .cancelledWithPartial(let count):
             // #1054: not expected on a reattach (Dan did not cancel this run), but surface the choice
