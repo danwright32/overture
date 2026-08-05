@@ -10,6 +10,16 @@ struct OutboundSignature: Equatable, Sendable {
     var html: String?
     var plainText: String
 
+    // #2086: the signature as it goes ON THE WIRE, with the near-invisible borders removed. `html` stays
+    // the faithful copy of what Gmail holds; this is what Overture actually sends, and therefore also
+    // what every preview renders and what the dark-background warning is judged against. One definition
+    // rather than a strip at each call site, so the wire and the card cannot come to differ about the
+    // message Dan approved (L64).
+    var sendableHTML: String? {
+        guard let html, !html.isEmpty else { return nil }
+        return GmailSignatureHealth.strippingInvisibleBorders(html)
+    }
+
     // No sign-off at all: the neutral default, so an existing GmailMessage caller that passes nothing is
     // byte-for-byte unchanged. The real send path always passes a populated signature.
     static let none = OutboundSignature(html: nil, plainText: "")

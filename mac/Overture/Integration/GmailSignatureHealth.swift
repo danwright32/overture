@@ -50,6 +50,40 @@ enum GmailSignatureHealth {
         return nil
     }
 
+    // #2086: remove exactly the declarations `darkBackgroundReason` flags, and nothing else.
+    //
+    // Dan's call, 2026-08-04, after the route through Gmail Settings was tried and shown not to reach
+    // them: the wrappers come from the signature generator's own markup, so they ride along with any copy
+    // of the rendered signature, and Gmail's editor offers no way to select a wrapper or set a border
+    // colour. A refetch after he re-pasted the signature returned a genuinely different value with all
+    // three border rules byte identical.
+    //
+    // Defined in terms of the SAME predicate that detects, never a second opinion about what counts as
+    // this defect, so the two can never disagree about a border: whatever the detector would flag is
+    // exactly what comes out, which `strippingLeavesNothingTheDetectorStillFlags` pins as a fixed point.
+    // Everything else is left byte for byte, including the layout the wrapper carried, the icons'
+    // `border:0px`, and any border dark enough for a person to have chosen it on purpose.
+    static func strippingInvisibleBorders(_ html: String) -> String {
+        var result = ""
+        var last = html.startIndex
+        let range = NSRange(html.startIndex..., in: html)
+        for match in borderDeclaration.matches(in: html, range: range) {
+            guard let whole = Range(match.range, in: html),
+                  let valueRange = Range(match.range(at: 1), in: html) else { continue }
+            let value = String(html[valueRange])
+            guard drawsAVisibleLine(value), nearWhiteColour(in: value) != nil else { continue }
+            result += html[last..<whole.lowerBound]
+            // The declaration goes, and so does the separator that joined it to its neighbour, or the
+            // style attribute is left holding a stray `;;` or a trailing `;` where the rule used to be.
+            var cut = whole.upperBound
+            if cut < html.endIndex, html[cut] == ";" { cut = html.index(after: cut) }
+            else if result.last == ";" { result.removeLast() }
+            last = cut
+        }
+        result += html[last...]
+        return result
+    }
+
     // The value of every `border` / `border-top` / `border-right` / `border-bottom` / `border-left`
     // declaration. Anchored on the colon, so `border-radius`, `border-collapse` and `border-spacing`
     // cannot match, and so the HTML attribute spelling (`border="0"`, which the real signature carries

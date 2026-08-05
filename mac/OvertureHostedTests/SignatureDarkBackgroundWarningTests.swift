@@ -4,20 +4,20 @@ import SwiftUI
 import ViewInspector
 @testable import Overture
 
-// #2087, the half that decides whether any of this reaches Dan. A detector nobody reads is a field with
-// a writer and no consumer (L46), and the check it sits beside is already exactly that: nothing in the
-// app calls `currentSignatureIssue`, so #1253's corrupt-signature finding has never once been on screen.
-// This one is wired to the surface where the defect is invisible by construction: the draft preview,
-// which renders the signature on a white card (#1203) and so is structurally unable to show a white
-// border (L69). The sentence beside it is the only thing that can.
+// #2086, superseding #2087's warning.
 //
-// Wired inside DraftSignaturePreview rather than at either call site, so the draft review card and the
-// send confirmation sheet get it from one implementation and a third preview surface cannot be added
-// without it (L30).
+// #2087 put a sentence beside the preview telling Dan to fix his signature in Gmail Settings, because the
+// preview rendered on a white card and was structurally unable to show a white border. On 2026-08-04 that
+// instruction turned out to be impossible to follow: the bordered wrappers come from the signature
+// generator's markup, so they ride along with any copy of the rendered signature, and Gmail's editor
+// offers no way to select a wrapper or set a border colour. A refetch after Dan re-pasted his signature
+// returned a genuinely different value with all three border rules byte identical.
 //
-// @MainActor: inspecting a SwiftUI view must run on the main actor, as every ViewInspector suite here does.
+// So the sentence is gone and Overture strips the borders instead (Dan's call). What this suite pins now
+// is the pair of claims that replaced it: the preview no longer says the thing that cannot be acted on,
+// and the message it renders no longer carries the defect on EITHER background.
 @MainActor
-@Suite("The preview says when the signature only breaks on dark (#2087)")
+@Suite("What the preview shows once Overture strips the border (#2086)")
 struct SignatureDarkBackgroundWarningTests {
     private let body = "I photograph performing arts in New York."
 
@@ -29,38 +29,34 @@ struct SignatureDarkBackgroundWarningTests {
         try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
     }
 
-    // The signature that actually shipped for two weeks. Dan is looking at a preview that cannot show
-    // the problem, so the preview has to say it.
-    @Test func theRealSignatureThatShippedWarnsBesideThePreview() throws {
-        let view = DraftSignaturePreview(draftBody: body,
-                                         signature: signature(Signature2086Fixture.asSent))
-
-        #expect(try texts(view).contains(GmailCopy.signatureLooksWrongOnDark))
+    // The instruction that could not be followed is gone from the surface Dan reads. Asserted on the
+    // words themselves rather than on a symbol name, so deleting the constant cannot make this vacuous.
+    @Test func thePreviewNoLongerTellsDanToEditTheSignatureInGmail() throws {
+        let shown = try texts(DraftSignaturePreview(draftBody: body,
+                                                    signature: signature(Signature2086Fixture.asSent)))
+        #expect(!shown.contains { $0.localizedCaseInsensitiveContains("Edit it in Gmail settings") })
+        #expect(!shown.contains { $0.localizedCaseInsensitiveContains("white box around your signature") })
     }
 
-    // And a signature with nothing wrong with it says nothing at all. A warning that shows on every
-    // draft whatever the signature holds is a warning Dan stops reading (L36).
-    @Test func acleanSignatureSaysNothing() throws {
-        let view = DraftSignaturePreview(
-            draftBody: body,
-            signature: signature(Signature2086Fixture.asTheMailClientSendsIt))
-
-        #expect(!(try texts(view).contains(GmailCopy.signatureLooksWrongOnDark)))
+    // And the reason it is gone: the defect is not in the message any more. The strip is proven on the
+    // wire in SignatureBorderStripTests; this is the same claim about the thing actually rendered on
+    // screen, which is what Dan approves (L64).
+    @Test func theRenderedPreviewCarriesNoInvisibleBorderOnEitherBackground() throws {
+        let sig = signature(Signature2086Fixture.asSent)
+        for background in PreviewBackground.allCases {
+            let card = try #require(GmailMessage.previewCardHTML(body: body, signature: sig,
+                                                                 background: background))
+            #expect(!card.contains("border:1px solid #fff"))
+            #expect(!card.contains("border:1px solid rgb(255,255,255)"))
+        }
     }
 
-    // With no styled signature at all there is nothing to be wrong, and the plain sign-off path must not
-    // acquire a warning about styling it does not have.
-    @Test func theplainSignOffSaysNothingEither() throws {
+    // The plain sign-off path has no styled signature at all, so it must not acquire either the switch or
+    // a warning about styling it does not have.
+    @Test func theplainSignOffShowsNoStylingControlsAtAll() throws {
         let view = DraftSignaturePreview(draftBody: body, signature: .plainFallback)
-
-        #expect(!(try texts(view).contains(GmailCopy.signatureLooksWrongOnDark)))
-    }
-
-    // The sentence has to say what a dark-mode reader sees AND what to do about it, because the fix is
-    // not in Overture: the signature lives in Gmail's own settings and only Dan can change it.
-    @Test func theSentenceNamesBothTheEffectAndTheFix() {
-        let copy = GmailCopy.signatureLooksWrongOnDark
-        #expect(copy.localizedCaseInsensitiveContains("dark mode"))
-        #expect(copy.localizedCaseInsensitiveContains("Gmail"))
+        #expect((try? view.inspect().find(ViewType.Picker.self)) == nil)
+        let shown = try texts(view)
+        #expect(!shown.contains { $0.localizedCaseInsensitiveContains("dark mode") })
     }
 }

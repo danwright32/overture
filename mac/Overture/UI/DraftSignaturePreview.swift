@@ -10,43 +10,56 @@ struct DraftSignaturePreview: View {
     let draftBody: String
     let signature: OutboundSignature
 
-    // #2087: whether the signature about to be sent carries styling that only goes wrong on a dark
-    // background. Computed ONCE, at init, rather than in `body`: the page reports its height on every
-    // resize (#2062), so each report re-evaluates the body, and a regex sweep of the signature hung off
-    // that would be paid again on every one of them for an answer that cannot have changed (L62, and the
-    // recompute-per-render freeze this app already shipped once in #1374).
-    private let darkBackgroundIssue: String?
-
     init(draftBody: String, signature: OutboundSignature) {
         self.draftBody = draftBody
         self.signature = signature
-        self.darkBackgroundIssue = signature.html.flatMap(GmailSignatureHealth.darkBackgroundReason)
+        // #2086: which background this OPENS on, judged on sendableHTML, the signature as it goes on the
+        // wire rather than the raw cached copy. Computed ONCE, at init, rather than in `body`: the page
+        // reports its height on every resize (#2062), so each report re-evaluates the body, and a regex
+        // sweep of the signature hung off that would be paid again on every one of them for an answer
+        // that cannot have changed (L62, and the recompute-per-render freeze this app shipped in #1374).
+        _background = State(initialValue: PreviewBackground.opening(for: signature.sendableHTML))
     }
 
     @State private var height = PreviewCardHeight()
     @State private var didFail = false
+    // #2086: the preview used to have ONE background, true white, which is the one background a white
+    // border is invisible on, so it was structurally unable to show what it was about to send to a
+    // dark-mode reader. Switching is per-preview state rather than a stored setting: it is a thing Dan
+    // does while looking at one draft, not a preference he sets once (L69).
+    @State private var background: PreviewBackground
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
+            // #2086: the switch belongs HERE, inside this view rather than at either call site, so the
+            // draft review card and the send confirmation both carry it and a third preview surface
+            // cannot be added without it (L30), which is where #2087 put its warning for the same reason.
+            backgroundSwitch
             renderedMessage
-            // #2087: the warning belongs HERE, beside the preview, and inside this view rather than at
-            // either call site, so the draft review card and the send confirmation both carry it and a
-            // third preview surface cannot be added without it (L30). It is Overture's own voice, so it
-            // sits outside the ignore region above and lands in the copy inventory.
-            if darkBackgroundIssue != nil {
-                HStack(spacing: 5) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                    Text(GmailCopy.signatureLooksWrongOnDark)
-                }
-                .font(OVType.tag).foregroundStyle(OVColor.rust)
-                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    // #2086: the two backgrounds a recipient reads on. Always present, not only when something is wrong:
+    // a control that appears only for the defect it was built for cannot be used to LOOK for the next
+    // one, and the whole point is that a preview on one background can never show this class at all.
+    // Shown only when there is a styled signature to look at, since the plain-text fallback renders the
+    // same on both and a switch that changes nothing is worse than no switch.
+    @ViewBuilder private var backgroundSwitch: some View {
+        if signature.html?.isEmpty == false {
+            Picker("", selection: $background) {
+                ForEach(PreviewBackground.allCases) { Text($0.label).tag($0) }
             }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(maxWidth: 160, alignment: .leading)
+            .help(GmailCopy.previewBackgroundHelp)
         }
     }
 
     @ViewBuilder private var renderedMessage: some View {
         // copy-inventory:ignore-start  renders the outbound email's own HTML (body + Gmail signature), not Overture's voice (#1203)
-        if let html = GmailMessage.previewCardHTML(body: draftBody, signature: signature), !didFail {
+        if let html = GmailMessage.previewCardHTML(body: draftBody, signature: signature,
+                                                   background: background), !didFail {
             ZStack(alignment: .topLeading) {
                 SignatureWebView(html: html, height: $height, didFail: $didFail)
                     .frame(height: max(height.points, 1))
