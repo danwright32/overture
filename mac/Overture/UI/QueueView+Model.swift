@@ -170,12 +170,6 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // there is nothing to say. Drawn under the header by ProspectRowView.showSummaryNote.
     var showSummary: String? = nil
     var showSummaryAbsence: ShowSummaryAbsence? = nil
-    // #1887: how well Dan already knows this ROOM, and the nights it rests on, so the card can show
-    // him what the pitch is about to claim on his behalf. Set by the list builder from one shared
-    // VenueShootHistory rather than per row, the same way venueBrands is. Nil band means the pitch
-    // will say nothing, which includes a Carnegie show by design.
-    var venueHistoryBand: VenueShootHistory.Band? = nil
-    var venueHistoryShoots: [VenueShootHistory.Shoot] = []
     // #753: Prep matched this show's PERFORMER (not its org) to a past client and warmed the lead.
     // Unlike alreadyCovered, this one ALREADY changed fitScore/tier, so the row has to be able to
     // both explain it and take it back. Unreviewed means the warm drafting tone is still held back
@@ -1908,14 +1902,6 @@ enum QueueModel {
                       answers: [OrgReachabilityAnswer] = [], corpus: [Prospect]? = nil,
                       overrides: ProducerOverrides = .none,
                       sources: [WatchedSource] = [],
-                      // #1964: HANDED IN, never sourced here. Building one opens and decodes the
-                      // shoot-history file and the Downbeat export, and this runs on every render pass, so
-                      // sourcing its own put two file reads on the main thread behind every dismiss and
-                      // every keystroke. The render path passes the held copy (VenueShootHistoryCache);
-                      // nil is for callers with no cache in hand (a unit test, a one-off build), which
-                      // read the files once and are not on a render path. Same shape as
-                      // PrepQueueService.buildQueue's own venueHistory parameter.
-                      history: VenueShootHistory? = nil,
                       now: Date = Date()) -> [QueueItem] {
         let linked = EngagementLink.group(prospects.map(EngagementLink.Row.init))
         let inherited = inheritedAnswers(answers, corpus: corpus ?? prospects,
@@ -1928,10 +1914,7 @@ enum QueueModel {
         let venueBrands = ProducerGate.VenueBrands(
             shows: (corpus ?? prospects).map { ProducerGate.Show(presenter: $0.presenter, venue: $0.venue) },
             overrides: overrides)
-        // #1887: read ONCE here for the same reason venueBrands is, never per row.
-        // #1964: and no longer built here at all on the render path, because building one reads two files.
-        let shootHistory = history ?? VenueShootHistory.current()
-        // #1825: built ONCE, for the same reason as the two above. Every row resolves its own sources
+        // #1825: built ONCE, for the same reason as venueBrands above. Every row resolves its own sources
         // through this rather than walking the watchlist per card.
         let calendarBySourceId = Dictionary(
             sources.compactMap { s -> (String, String)? in
@@ -1942,9 +1925,6 @@ enum QueueModel {
         return prospects.map {
             var item = QueueItem($0)
             item.sourceCalendarURLs = $0.sourceIds.compactMap { calendarBySourceId[$0] }
-            // #1887: read from the one history built above, never rebuilt per row (it loads a file).
-            item.venueHistoryBand = shootHistory.band(for: $0.venue)
-            item.venueHistoryShoots = shootHistory.shoots(for: $0.venue)
             item.linkedEngagementMembers = linked[$0.naturalKey] ?? []
             item.inheritedReachability = inherited[$0.naturalKey]
             // #1648: one staleness evaluation, feeding both the badge and the merit split.

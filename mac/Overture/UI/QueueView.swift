@@ -171,10 +171,7 @@ struct QueueView: View {
         QueueModel.items(from: prospects, answers: orgAnswers, corpus: allProspects,
                          overrides: ProducerOverrides(promotedRows: promotedProducers,
                                                       demotedRows: demotedHouses),
-                         sources: watchedSources,
-                         // #1964: the held copy, exactly like the Gmail answer above. Building one here
-                         // opened and decoded two files on every render pass.
-                         history: VenueShootHistoryCache.shared.history())
+                         sources: watchedSources)
     }
 
     private var today: String { QueueModel.easternToday() }
@@ -232,8 +229,6 @@ struct QueueView: View {
             sources: watchedSources,
             overrides: ProducerOverrides(promotedRows: promotedProducers, demotedRows: demotedHouses),
             geo: geo,
-            // #1964: the held copy. Building one here opened and decoded two files on every pass.
-            history: VenueShootHistoryCache.shared.history(),
             today: today,
             now: now,
             focusedStage: focusedStage,

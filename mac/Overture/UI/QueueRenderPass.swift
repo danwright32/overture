@@ -49,9 +49,9 @@ enum QueueRenderPass {
         func recordSweep() { sweeps += 1 }
     }
 
-    // Everything one pass derives FROM. Values only: every file-backed answer (the Gmail connection, the
-    // shoot history, whether a detached run is alive) is READ BY THE CALLER and handed in, so the pass
-    // itself cannot reach the filesystem. QueueRenderPassCostTests holds it to that.
+    // Everything one pass derives FROM. Values only: every file-backed answer (the Gmail connection,
+    // whether a detached run is alive) is READ BY THE CALLER and handed in, so the pass itself cannot
+    // reach the filesystem. QueueRenderPassCostTests holds it to that.
     @MainActor
     struct Inputs {
         var prospects: Corpus
@@ -61,7 +61,6 @@ enum QueueRenderPass {
         var sources: [WatchedSource] = []
         var overrides: ProducerOverrides = .none
         var geo: GeoRefusals = .none
-        var history: VenueShootHistory
         var today: String
         var now: Date = Date()
         var focusedStage: StageFocus?
@@ -82,7 +81,7 @@ enum QueueRenderPass {
         // computed property that wants a row.
         let items = QueueModel.items(from: i.prospects.all, answers: i.orgAnswers,
                                      corpus: i.allProspects.all, overrides: i.overrides,
-                                     sources: i.sources, history: i.history, now: i.now)
+                                     sources: i.sources, now: i.now)
         #if DEBUG
         QueueRenderCounter.recordDerivation(inputs: i.trace, rows: items)
         #endif

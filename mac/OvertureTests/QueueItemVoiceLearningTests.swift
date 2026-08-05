@@ -7,7 +7,7 @@ import Foundation
 //
 // It belongs on the snapshot instead, resolved once when the queue is built, which is the rule every
 // other whole-store verdict on QueueItem already follows (inheritedReachability, presenterLine,
-// producerStanding, venueHistoryBand). These pin the resolution itself, so the card can be handed the
+// producerStanding). These pin the resolution itself, so the card can be handed the
 // answer rather than going looking for it.
 @Suite("A queue item carries its own voice-learning standing (#1773)")
 struct QueueItemVoiceLearningTests {

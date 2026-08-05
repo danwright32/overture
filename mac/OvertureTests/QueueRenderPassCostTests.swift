@@ -79,7 +79,6 @@ struct QueueRenderPassCostTests {
             prospects: QueueRenderPass.Corpus(rows, tally: tally),
             allProspects: QueueRenderPass.Corpus(rows, tally: tally),
             inquiries: [], orgAnswers: [],
-            history: VenueShootHistory(shoots: [], bookings: [], today: "2026-08-02"),
             today: "2026-08-02", now: Date(timeIntervalSince1970: 1_785_000_000),
             focusedStage: .scout, focusedKeys: nil)
     }
@@ -143,7 +142,9 @@ struct QueueRenderPassIsPureTests {
         #expect(!renderPass.isEmpty)
         // Each of these was, at some point, read from inside the queue's own derivation: the Gmail token
         // (#1770), the shoot history and the Downbeat export (#1964), and the two detached run markers
-        // (#1923, #1938). All five are handed in as values now.
+        // (#1923, #1938). The rest are handed in as values now; the shoot history is not read here at
+        // all any more (#2080 removed the only card that wanted it), and stays on this list so putting
+        // a file read back on the render path is a red test rather than a silent regression.
         for reader in ["GmailConnection", "VenueShootHistory.current", "DownbeatBridge.loadedExport",
                        "ShootHistory.load", "PrepQueueService.isRunning", "ReplyClassifyService.isRunning",
                        "FileManager", "Data(contentsOf:"] {
