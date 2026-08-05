@@ -121,12 +121,17 @@ enum FollowUp {
             if p.outcomeSourceRaw == OutcomeSource.manual.rawValue || p.outcome == .booked { continue }
             // #2033: one row per EMAIL. Contacts who received one shared email are one conversation to
             // chase, and two rows would be two buttons doing the same thing to the same thread.
-            for r in p.recipients where SendGroup.isRepresentative(r, in: p)
-                && isDue(eligible: isAwaitingNudge(r, in: p), sentAt: r.sentAt,
-                                              lastFollowUpAt: r.lastFollowUpAt, followUpCount: r.followUpCount,
-                                              remindedAt: r.nudgeRemindedAt, now: now, config: config) {
-                due.append(DueRecipient(prospect: p, recipient: r))
+            //
+            // #2126: due FIRST, collapse after. ANDed with the old lowest-id test this dropped the whole
+            // conversation whenever the alphabetically first contact was the one not due, so a colleague's
+            // overdue nudge vanished behind a contact who had already declined.
+            let dueHere = p.recipients.filter { r in
+                isDue(eligible: isAwaitingNudge(r, in: p), sentAt: r.sentAt,
+                      lastFollowUpAt: r.lastFollowUpAt, followUpCount: r.followUpCount,
+                      remindedAt: r.nudgeRemindedAt, now: now, config: config)
             }
+            due.append(contentsOf: SendGroup.oneRowPerGroup(dueHere) { $0 }
+                .map { DueRecipient(prospect: p, recipient: $0) })
         }
         return due
     }

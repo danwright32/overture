@@ -43,13 +43,15 @@ enum ReachedOutQueue {
                                 followUpConfig: FollowUpConfig = .init(),
                                 reminderConfig: ConversationReminderConfig = .init()) -> [(prospect: Prospect, recipient: Recipient, next: Date)] {
         prospects
-            .flatMap { p in
-                // #2033: one row per EMAIL, not per person on it.
-                p.recipients.filter { SendGroup.isRepresentative($0, in: p) }
-                 .compactMap { r -> (prospect: Prospect, recipient: Recipient, next: Date)? in
+            .flatMap { p -> [(prospect: Prospect, recipient: Recipient, next: Date)] in
+                // #2033: one row per EMAIL, not per person on it. #2126: chosen from the contacts that
+                // still have a reach-out date, so a resolved first contact cannot take a live colleague's
+                // whole row down with it.
+                let live = p.recipients.compactMap { r -> (prospect: Prospect, recipient: Recipient, next: Date)? in
                     nextReachOut(for: r, of: p, now: now, followUpConfig: followUpConfig,
                                  reminderConfig: reminderConfig).map { (prospect: p, recipient: r, next: $0) }
                 }
+                return SendGroup.oneRowPerGroup(live) { $0.recipient }
             }
             .sorted { $0.next < $1.next }
     }
