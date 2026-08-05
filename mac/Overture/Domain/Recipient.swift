@@ -733,15 +733,30 @@ final class Recipient {
 
     // Apply Dan's edit to the AI reply draft (#459), mirroring Prospect.applyEdit for the cold draft:
     // his text wins and the deterministic DraftCheck warnings stop nagging on it.
+    // #2131: Dan wrote this reply himself, with nothing to edit. Its own field rather than reusing
+    // "edited", which would say the card had an earlier version it never had, and which also switches the
+    // lint off (QueueView+Model.replyDraftFindings) so the default path would silently skip it.
+    // Mirrors the cold path's own draftWrittenByDan.
+    var replyDraftWrittenByDan: Bool = false
+
     func applyReplyDraftEdit(_ body: String) {
         // Snapshot the AI reply as the learning baseline on the first substantive edit only, mirroring
         // Prospect.applyEdit; trivial / whitespace saves never overwrite it (#463).
-        if originalReplyDraftBody == nil,
+        // #2131: only ever the AI's version. Capturing his own first draft here would teach the voice
+        // pair that he "edited" himself, from a baseline no model ever wrote.
+        if originalReplyDraftBody == nil, !replyDraftWrittenByDan,
            Prospect.isSubstantiveEdit(oldSubject: nil, oldBody: replyDraftBody, newSubject: "", newBody: body) {
             originalReplyDraftBody = replyDraftBody
         }
+        // Writing where there was nothing, or revising his own words, is his; changing a draft the AI
+        // produced is an edit. The two are different claims and the card states whichever is true.
+        let hadSomethingToEdit = (replyDraftBody?.isEmpty == false)
+        if hadSomethingToEdit && !replyDraftWrittenByDan {
+            replyDraftEditedByDan = true
+        } else {
+            replyDraftWrittenByDan = true
+        }
         replyDraftBody = body
-        replyDraftEditedByDan = true
     }
 
     // Freeze the exact reply body Dan committed (sent or copied out), immune to later re-drafts, as the

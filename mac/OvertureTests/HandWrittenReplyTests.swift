@@ -1,0 +1,111 @@
+import Testing
+import Foundation
+import SwiftData
+
+// #2131: a reply Dan typed himself must not claim to be an edit of something.
+//
+// applyReplyDraftEdit set replyDraftEditedByDan unconditionally, which was true when the only route to a
+// reply body was the AI drafter and Dan editing over it. Now that he writes them himself from the reply
+// panel, that flag fires on a reply that was never edited because there was nothing to edit: the card
+// would say "Edited" about words that had no earlier version (L11).
+//
+// It also decides the lint, so a hand-written reply would silently skip the check on what has just become
+// the default path for every reply.
+@MainActor
+@Suite("A hand-written reply says so")
+struct HandWrittenReplyTests {
+    private func container() throws -> ModelContainer {
+        try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
+                           configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+    }
+
+    private func contact(_ ctx: ModelContext) -> Recipient {
+        let r = Recipient(id: "c@x.org", email: "c@x.org", provenance: .act)
+        ctx.insert(r)
+        return r
+    }
+
+    // The default path now: nothing was there, so nothing was edited.
+    @Test func writingFromNothingIsWrittenNotEdited() throws {
+        let ctx = ModelContext(try container())
+        let r = contact(ctx)
+        r.applyReplyDraftEdit("Tuesday works. I'll bring the 85mm.")
+        #expect(r.replyDraftWrittenByDan)
+        #expect(!r.replyDraftEditedByDan)
+        #expect(r.replyDraftBody == "Tuesday works. I'll bring the 85mm.")
+    }
+
+    // Changing an AI draft is genuinely an edit, and still records as one.
+    @Test func changingAnAiDraftIsAnEdit() throws {
+        let ctx = ModelContext(try container())
+        let r = contact(ctx)
+        r.replyDraftBody = "The AI's attempt."
+        r.applyReplyDraftEdit("Tuesday works. I'll bring the 85mm.")
+        #expect(r.replyDraftEditedByDan)
+        #expect(!r.replyDraftWrittenByDan)
+        // The AI's version is kept as the learning baseline, which is the whole point of the pair.
+        #expect(r.originalReplyDraftBody == "The AI's attempt.")
+    }
+
+    // An empty existing draft is nothing to edit either, so it counts as writing.
+    @Test func writingOverAnEmptyDraftIsStillWriting() throws {
+        let ctx = ModelContext(try container())
+        let r = contact(ctx)
+        r.replyDraftBody = ""
+        r.applyReplyDraftEdit("Tuesday works.")
+        #expect(r.replyDraftWrittenByDan)
+        #expect(!r.replyDraftEditedByDan)
+    }
+
+    // Editing his OWN words a second time leaves it his: it never becomes an edit of an AI draft that
+    // never existed.
+    @Test func revisingHisOwnWordsStaysHisOwn() throws {
+        let ctx = ModelContext(try container())
+        let r = contact(ctx)
+        r.applyReplyDraftEdit("Tuesday works.")
+        r.applyReplyDraftEdit("Tuesday works, and I'll bring the 85mm.")
+        #expect(r.replyDraftWrittenByDan)
+        #expect(!r.replyDraftEditedByDan)
+        #expect(r.originalReplyDraftBody == nil, "there was never an AI version to learn from")
+    }
+
+    // MARK: what the card says about it
+
+    @Test func theCardNamesWhoWroteIt() throws {
+        let ctx = ModelContext(try container())
+        let mine = contact(ctx)
+        mine.applyReplyDraftEdit("Mine.")
+        #expect(RecipientSnapshot(mine).replyAuthorLabel == "Written by you")
+
+        let edited = contact(ctx)
+        edited.replyDraftBody = "The AI's attempt."
+        edited.applyReplyDraftEdit("Changed.")
+        #expect(RecipientSnapshot(edited).replyAuthorLabel == "Edited")
+
+        let untouched = contact(ctx)
+        untouched.replyDraftBody = "Straight from the drafter."
+        #expect(RecipientSnapshot(untouched).replyAuthorLabel == nil)
+    }
+
+    // MARK: the lint
+
+    // Dan's own words are not linted, which is the same rule his edits already got, and for the same
+    // reason: the lint flags a draft for asking about a date or venue the show already knows, and he is
+    // entitled to write whatever he means. Stated as a deliberate decision rather than inherited by
+    // accident from a flag that happened to be set.
+    @Test func hisOwnWordsAreNotLinted() throws {
+        let ctx = ModelContext(try container())
+        let r = contact(ctx)
+        r.applyReplyDraftEdit("What venue is this at, and what date?")
+        #expect(RecipientSnapshot(r).replyDraftFindings(title: "G", knownsDate: true, knownsVenue: true).isEmpty)
+    }
+
+    // An untouched AI draft is still linted, so the check that exists to catch the drafter asking for
+    // something the show already carries keeps working.
+    @Test func anUntouchedAiDraftIsStillLinted() throws {
+        let ctx = ModelContext(try container())
+        let r = contact(ctx)
+        r.replyDraftBody = "What venue is this at, and what date?"
+        #expect(!RecipientSnapshot(r).replyDraftFindings(title: "G", knownsDate: true, knownsVenue: true).isEmpty)
+    }
+}

@@ -532,6 +532,7 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     var replyDraftRequestedAt: Date? = nil
     var intentHint: String? = nil
     var replyDraftEditedByDan: Bool = false
+    var replyDraftWrittenByDan: Bool = false   // #2131: he wrote it himself, with nothing to edit
     // #2063: everyone Dan's reply to this contact will reach, already resolved through
     // SendGroup.replyAudience (so it carries the fallback, not the raw captured value). The card names the
     // ones that are not this contact, because who a reply reaches is now a fact about the incoming message
@@ -594,13 +595,25 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     // The deterministic self-check findings to surface on the reply draft (#456), or none once Dan has
     // edited it: it's his text then, the same suppression the cold path applies via draftEditedByDan
     // (#459). Lives here, not in the view, so the suppression is unit-testable.
+    // #2131: Dan's own words are not linted, deliberately, and this now says so rather than inheriting it
+    // from a flag that happened to be set. The lint exists to catch the DRAFTER asking for a date or venue
+    // the show already carries; when Dan writes the sentence himself he means it, and flagging him was a
+    // real complaint about this check. An untouched AI draft is still linted.
     func replyDraftFindings(title: String? = nil, knownsDate: Bool, knownsVenue: Bool) -> [DraftIssue] {
-        guard !replyDraftEditedByDan, let body = replyDraftBody else { return [] }
+        guard !replyDraftEditedByDan, !replyDraftWrittenByDan, let body = replyDraftBody else { return [] }
         return DraftCheck.findings(in: body, title: title, knownsDate: knownsDate, knownsVenue: knownsVenue)
     }
     // #2063: the people the reply reaches who are NOT this contact. Empty on the ordinary one-to-one
     // reply, which is what keeps the card from restating itself (#843). Case-insensitive, because a stored
     // address spelled differently is the same person and not a second reader.
+    // #2131: who wrote the reply on screen, mirroring the cold path's draftAuthorLabel. nil for a draft
+    // straight from the drafter, which the trace label beside it already accounts for.
+    var replyAuthorLabel: String? {
+        if replyDraftWrittenByDan { return "Written by you" }
+        if replyDraftEditedByDan { return "Edited" }
+        return nil
+    }
+
     var replyAlsoReaches: [String] {
         let own = (email ?? "").lowercased()
         return replyAudience.filter { $0.lowercased() != own }
@@ -2153,6 +2166,7 @@ extension RecipientSnapshot {
                   replyDraftSubject: r.replyDraftSubject, replyDraftBody: r.replyDraftBody,
                   replyDraftRequestedAt: r.replyDraftRequestedAt, intentHint: r.intentHint,
                   replyDraftEditedByDan: r.replyDraftEditedByDan,
+                  replyDraftWrittenByDan: r.replyDraftWrittenByDan,
                   replyAudience: SendGroup.replyAudience(of: r),
                   replyDraftModel: r.replyDraftModel,
                   overrideBody: r.overrideBody,

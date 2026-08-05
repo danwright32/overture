@@ -132,7 +132,8 @@ struct ReplyClassifyImporterTests {
 
         let ra = p.recipients.first { $0.id == "act@a.example" }
         #expect(ra?.replyDraftBody == "Dan's hand-edited reply.")   // his text survives
-        #expect(ra?.replyDraftEditedByDan == true)                  // flag stays set
+        // #2131: written with nothing to edit records as his own, and is protected just the same.
+        #expect(ra?.replyDraftWrittenByDan == true)                  // flag stays set
         #expect(ra?.intentHint == "interested")                     // hint still refreshes
         #expect(out.skippedEdited == 1)
     }

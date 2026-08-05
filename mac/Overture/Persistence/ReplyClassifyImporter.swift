@@ -48,7 +48,11 @@ enum ReplyClassifyImporter {
                     // or dismisses it, mirroring the cold path (PrepImporter draftEditedByDan). Guard on
                     // actual edited TEXT, not the marker alone, so a draft he already sent in Gmail
                     // (body cleared, marker still set) still takes a fresh draft for a genuinely new reply.
-                    if rec.replyDraftEditedByDan, rec.replyDraftBody?.isEmpty == false {
+                    // #2131: and never clobber one he WROTE. Now that a reply is hand-written by
+                    // default, protecting only the "edited" marker would let a fresh AI draft overwrite
+                    // the words he typed himself, which is the loss #462 exists to prevent (L5).
+                    if rec.replyDraftEditedByDan || rec.replyDraftWrittenByDan,
+                       rec.replyDraftBody?.isEmpty == false {
                         outcome.skippedEdited += 1
                     } else {
                         if let s = r.draftSubject { rec.replyDraftSubject = s }
@@ -62,6 +66,7 @@ enum ReplyClassifyImporter {
                         if let b = r.draftBody {
                             rec.replyDraftBody = b
                             rec.replyDraftEditedByDan = false
+                            rec.replyDraftWrittenByDan = false   // #2131: an AI body is not his words
                             rec.replyDraftModel = results.model
                         }
                     }
