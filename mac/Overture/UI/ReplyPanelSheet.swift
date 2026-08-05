@@ -142,3 +142,15 @@ struct ReplyTarget: Identifiable {
     let recipient: Recipient
     var id: String { prospect.naturalKey + "|" + recipient.id }
 }
+
+// #2130: the nudge or closing note the reached-out row is about to send, held while Dan approves it.
+struct PendingRowNudge: Identifiable {
+    let naturalKey: String
+    let recipientId: String
+    let confirmation: SendConfirmation
+    let isClosing: Bool
+    // Which sender it goes through. The two write different emails, so the confirmation Dan reads and the
+    // send that follows have to agree about which one this is.
+    let isConversation: Bool
+    var id: String { naturalKey + "|" + recipientId }
+}
