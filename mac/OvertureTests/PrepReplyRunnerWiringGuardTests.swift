@@ -21,6 +21,10 @@ struct PrepReplyRunnerWiringGuardTests {
     private var rootView: String { source("Overture/App/RootView.swift") }
     private var factory: String { source("Overture/UI/ProspectRowFactory.swift") }
     private var draftReview: String { source("Overture/UI/DraftReviewView.swift") }
+    // #2127: the reply surface moved OUT of DraftReviewView into a standalone view shared with the
+    // reached-out queue, so the assertions about the per-recipient drafting label follow it here. Pinned
+    // by path for the same reason the others are: a source guard is only as good as the file it reads.
+    private var replyConversation: String { source("Overture/UI/ReplyConversationView.swift") }
     private var queueView: String { source("Overture/UI/QueueView.swift") }
     private var replyRunLine: String { source("Overture/UI/ReplyRunLine.swift") }
 
@@ -125,16 +129,16 @@ struct PrepReplyRunnerWiringGuardTests {
     // ReplyClassifyProgressContractTests.runningLabel*.
     // #1923: the line is its own view now (ReplyRunLine), so that is where the reading lives.
     @Test func theRunLevelLineReadsTheProgressFileAndThePerRecipientLabelNoLongerDoes() {
-        #expect(!draftReview.isEmpty)
+        #expect(!replyConversation.isEmpty)
         #expect(!replyRunLine.isEmpty)
         // The per-recipient label dropped the run-wide count...
-        guard let labelRange = draftReview.range(of: "LiveRunLabel(base: \"Drafting a reply\"") else {
+        guard let labelRange = replyConversation.range(of: "LiveRunLabel(base: \"Drafting a reply\"") else {
             Issue.record("reply drafter LiveRunLabel not found")
             return
         }
         // Generous window (the label spans several argument lines plus an explanatory comment), so an
         // added note near the label can't push the assertion out of view.
-        let nearby = draftReview[labelRange.lowerBound...].prefix(900)
+        let nearby = replyConversation[labelRange.lowerBound...].prefix(900)
         #expect(!nearby.contains("progressDetail:"))
         // ...and the run-level line now reads the derived count, gated on a live run and re-read each tick.
         #expect(replyRunLine.contains("ReplyClassifyProgressDecoder.runningLabel("))
@@ -208,9 +212,9 @@ struct PrepReplyRunnerWiringGuardTests {
 
     @Test func theReplyDrafterCancelWritesTheSentinel() {
         #expect(!factory.isEmpty)
-        #expect(!draftReview.isEmpty)
+        #expect(!replyConversation.isEmpty)
         // The reply-drafter flow shows a Cancel beside its "Drafting a reply" label...
-        #expect(draftReview.contains("onCancelReplyDraft"))
+        #expect(replyConversation.contains("onCancelReplyDraft"))
         // ...and that closure asks the reply-classify run to stop.
         #expect(factory.contains("ReplyClassifyService.requestCancel()"))
     }

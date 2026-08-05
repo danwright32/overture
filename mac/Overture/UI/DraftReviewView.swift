@@ -88,8 +88,6 @@ struct DraftReviewView: View {
     @State private var askAboutWholeOrg = false   // #769
     @State private var draftSubject = ""
     @State private var draftBody = ""
-    @State private var editingReplyFor: String?    // recipient id whose reply draft is being edited (#423 E)
-    @State private var replyEditText = ""
     @State private var lostReason = ""
     // #1418: the value last written to the store, so a commit on focus loss with no edit writes nothing.
     @State private var lastSavedLostReason = ""
@@ -413,19 +411,9 @@ struct DraftReviewView: View {
 
     // The shared warning-row rendering for any DraftCheck findings, used by both the cold draft
     // review above and the reply draft below (#456) so there is one surface, not two.
+    // #2127: one implementation, in DraftIssueFlags, so the cold draft and the reply draft cannot drift.
     @ViewBuilder private func issueFlags(_ findings: [DraftIssue]) -> some View {
-        if !findings.isEmpty {
-            VStack(alignment: .leading, spacing: 2) {
-                ForEach(findings, id: \.self) { f in
-                    HStack(spacing: 5) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                        Text(f.label)
-                    }
-                    .font(OVType.tag).foregroundStyle(OVColor.rust)
-                }
-            }
-            .padding(.top, 2)
-        }
+        DraftIssueFlags(findings: findings)
     }
 
     // #2050: every reason this draft will not go out, shown beside whichever button is currently offering
@@ -860,100 +848,22 @@ struct DraftReviewView: View {
     // The AI reply drafter surface for one replied contact (#420 C6 / #421): a non-binding intent hint,
     // and either the drafted reply (send on the thread / copy out), a "drafting…" progress, or a button
     // to request a draft. Treated as request-response even though the run is detached.
+    // #2127: the reply surface itself lives in ReplyConversationView, shared with the reached-out queue,
+    // so answering a reply is not something only this card can do.
     @ViewBuilder private func replyDraftBlock(_ c: RecipientSnapshot) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            if let hint = c.intentHint, !hint.isEmpty {
-                Text(QueueModel.aiReadNote(hint: hint))
-                    .font(OVType.tag).foregroundStyle(OVColor.inkFaint)
-            }
-            if editingReplyFor == c.id {
-                TextEditor(text: $replyEditText)
-                    .font(OVType.body).frame(minHeight: 90).padding(4)
-                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(OVColor.line))
-                HStack(spacing: OVSpacing.xs) {
-                    Button("Save") { onEditReplyDraft(c.id, replyEditText); editingReplyFor = nil }
-                        .buttonStyle(.borderedProminent).controlSize(.small)
-                    Button("Cancel") { editingReplyFor = nil }
-                        .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
-                }
-            } else if c.hasReplyDraft {
-                Text(c.replyDraftBody ?? "")
-                    .font(OVType.body).foregroundStyle(OVColor.ink)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(OVSpacing.sm)
-                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(OVColor.surfaceSunk.opacity(0.6)))
-                // #846: same two separate tags as the cold draft above, for the same reason. A reply goes
-                // to somebody who already wrote back to him, so it is the LAST place the trace should be
-                // missing (#874).
-                HStack(spacing: 6) {
-                    if c.replyDraftEditedByDan {
-                        Text("Edited").font(.system(size: 10)).foregroundStyle(OVColor.gold)
-                    }
-                    if let trace = c.replyDraftTraceLabel {
-                        Text(trace).font(.system(size: 10)).foregroundStyle(OVColor.inkFaint)
-                    }
-                }
-                // #456 / #459: flag a reply draft that asks for the date/venue this show already carries,
-                // same as the cold path, but suppressed once Dan edits (logic in replyDraftFindings).
-                issueFlags(c.replyDraftFindings(title: item.groupName,   // #1141: don't flag the title's own "!"
-                                                knownsDate: item.performanceDate != nil,
-                                                knownsVenue: item.venue != nil))
-                // #2063: who else reads this, shown only when the reply reaches somebody besides the
-                // contact whose card this is. A reply mirrors the addressing of the message it answers,
-                // which is a fact about that message and not something the card would otherwise show, so
-                // approving the words has to mean approving the audience too (L64).
-                if let alsoReaches = QueueModel.replyAlsoReachesLabel(c.replyAlsoReaches) {
-                    Text(alsoReaches).font(OVType.tag).foregroundStyle(OVColor.gold)
-                }
-                if let since = replySendSince(c.id) {
-                    LiveRunLabel(base: "Sending reply", since: since, timeout: RunTimeouts.send,
-                                 font: OVType.meta, color: OVColor.inkSoft, onRetry: { onSendReply(c.id) })
-                } else {
-                    HStack(spacing: OVSpacing.xs) {
-                        Button { onSendReply(c.id) } label: {
-                            Label("Send reply", systemImage: "paperplane")
-                                .font(OVType.meta).foregroundStyle(OVColor.onForest)
-                                .padding(.horizontal, OVSpacing.md).padding(.vertical, 5)
-                                .background(Capsule().fill(OVColor.forest))
-                        }
-                        .buttonStyle(.plain).disabled(!gmailConnected)
-                        .help(GmailCopy.sendHelp(connected: gmailConnected, whenConnected: "Send this reply on the contact's thread"))
-                        Button("Edit") { replyEditText = c.replyDraftBody ?? ""; editingReplyFor = c.id }
-                            .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forest)
-                        Button("Copy") { onCopyReply(c.id) }
-                            .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forest)
-                            .help("Copy the draft and mark it replied (paste it into Gmail yourself)")
-                    }
-                }
-            } else if c.isDraftingReply {
-                // #436: past the stall timeout this flips to a visible "looks stuck" state with a Retry
-                // (re-stamps and re-launches the draft) instead of an indefinite spinner.
-                // #1038: a Cancel beside it stops the detached run cooperatively, so Dan can abandon a
-                // drafting run he no longer wants instead of only waiting it out.
-                HStack(spacing: OVSpacing.xs) {
-                    // #1085: the run's "N of M" count is a single run-wide fact, so it lives once at the
-                    // top of the queue (QueueView.replyRunLine), not repeated on every recipient this run
-                    // is currently drafting. This per-recipient label keeps its own genuinely per-recipient
-                    // states: spinner + elapsed (working), a stall timeout that flips to Retry, and the
-                    // run's real heartbeat, so "working / still-alive / stalled" stay distinguishable here.
-                    LiveRunLabel(base: "Drafting a reply", since: c.replyDraftRequestedAt,
-                                 timeout: RunTimeouts.replyDraft,
-                                 font: OVType.meta, color: OVColor.inkSoft,
-                                 onRetry: { onDraftReply(c.id) },
-                                 heartbeat: { ReplyClassifyService.heartbeat(now: Date()) })
-                    Button("Cancel") { onCancelReplyDraft() }
-                        .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.rust)
-                        .help("Stop the reply drafting run")
-                }
-            } else {
-                Button("Draft a reply") { onDraftReply(c.id) }
-                    .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forest)
-                    .padding(.horizontal, OVSpacing.sm).padding(.vertical, 4)
-                    .background(Capsule().strokeBorder(OVColor.forest.opacity(0.4), lineWidth: 1))
-            }
-        }
-        .padding(.leading, 20)
+        ReplyConversationView(contact: c,
+                              lintTitle: item.groupName,   // #1141: don't flag the title's own "!"
+                              knownsDate: item.performanceDate != nil,
+                              knownsVenue: item.venue != nil,
+                              gmailConnected: gmailConnected,
+                              sendingSince: replySendSince(c.id),
+                              onDraftReply: onDraftReply,
+                              onSendReply: onSendReply,
+                              onCopyReply: onCopyReply,
+                              onEditReplyDraft: onEditReplyDraft,
+                              onCancelReplyDraft: onCancelReplyDraft)
     }
+
 
     // #1137: for a still-pending contact the leading glyph IS the remove control (the X sits exactly
     // where the person icon used to be, so a click there removes the contact), which is why the separate
