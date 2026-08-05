@@ -285,6 +285,14 @@ enum RunProgressCopy {
         }
     }
 
+    // #1613: what a run that DIED says. Not "looks stuck": stuck invites waiting, and there is nothing
+    // left to wait for, which is the state Dan sat in for 3:38 on 2026-07-27 pressing a Cancel button
+    // that nothing was alive to hear. It names the ending and says Overture has already tidied up, so the
+    // sentence is a report rather than an instruction with no action behind it (L11).
+    static func diedLine(phase: RunProgressView.Phase) -> String {
+        "\(title(phase)) stopped before it finished. Overture has cleared it, so you can start again."
+    }
+
     // #1124: the name and the count are two uncoordinated facts (the name is the source being read RIGHT
     // NOW, from the queue/results diff; the count is how many are DONE, from the run's own progress file),
     // so they are rendered as two separate lines, never glued into "name · N of M". That glued form read
