@@ -109,7 +109,9 @@ struct ReachedOutActionTests {
     @Test func everyActionHasItsOwnLabel() {
         #expect(ReachedOutAction.sendNudge.label == "Send a follow-up")
         #expect(ReachedOutAction.sendClosingNote.label == "Send a closing note")
-        #expect(ReachedOutAction.confirmState.label == "Confirm")
+        // #2154: no button of its own either. Confirming an AI guess means ruling on a message, and the
+        // row cannot show one, so it is offered on the reply screen beside the words instead.
+        #expect(ReachedOutAction.confirmState.label == nil)
         // No button of its own: the row's timing text already says this and the state control is how he
         // says it, so a second control with the same words would be a duplicate (#843).
         #expect(ReachedOutAction.sayWhatHappened.label == nil)

@@ -142,16 +142,13 @@ struct QueueView: View {
     // #682: unlike the generic Follow-ups pill above, the reached-out row's own "Send a follow-up"
     // button knows exactly which contact Dan clicked from, so it opens the sheet with that
     // recipient highlighted instead of leaving him to find it again in what could be a longer list.
-    // #683: the lightweight reached-out row has no reply text, AI reply drafter, or Mark… menu
-    // (deliberately not duplicated here, see #661); this jumps to the full card that still has
-    // them, reusing RootView's existing archive-highlight mechanism (#236/#308) rather than a
-    // second one. #685: also carries which contact Dan clicked from, so a multi-recipient show
-    // highlights that one instead of just the whole card.
-    var onOpenInArchive: (_ key: String, _ recipientId: String?) -> Void = { _, _ in }
+    // #2154: the reached-out row's jump to the Archive card is gone, and with it the last thing on this
+    // view that called an open-in-Archive closure. Dan: "I'm basically never going to want to view it in
+    // the archive so we can remove that." Kept as a parameter it would be a prop written by RootView and
+    // read by nothing, which reads as wired from either end (L46).
     // #1129: a discoverable "Prep these N" button in the Prep stage view starts a Prep run through
     // RootView's existing #953 selection-sheet flow (mirrors the readOne closure SourcesView receives),
-    // so a first-time user need not know the Cmd+P shortcut or the toolbar menu. Declared last so the
-    // RootView call site can keep onOpenInArchive near the top for ReachedOutRowArchiveJumpGuardTests.
+    // so a first-time user need not know the Cmd+P shortcut or the toolbar menu.
     var onStartPrep: () -> Void = {}
     var onProbeReachability: (Set<String>) -> Void = { _ in }   // #1308 Layer 2
 
@@ -1062,6 +1059,10 @@ struct QueueView: View {
                 if r.replied || r.outreachChannel == .contactForm {
                     ConversationStateControl(
                         currentState: r.conversationState, stateSource: r.conversationStateSource,
+                        // #2154: no Confirm here. The row cannot show what they wrote, so confirming from
+                        // it is Dan endorsing a reading he has not seen. It is offered on the reply
+                        // screen, beside the message it is about.
+                        offersConfirm: false,
                         onSet: { state in
                             ProspectMutations.setRecipientConversationState(QueueItem(p), r.id, state,
                                                                             prospects: prospects, context: context, feedback: feedback)
@@ -1078,11 +1079,6 @@ struct QueueView: View {
                     Button(label) { startRowAction(r, of: p, now: now) }
                         .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forest)
                 }
-                // #683: the reply text, AI reply drafter, and Mark… menu only live on the full
-                // card in Archive; always offered, not just once due, so Dan can read a reply or
-                // record an outcome any time.
-                Button("View in Archive") { onOpenInArchive(p.naturalKey, r.id) }
-                    .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
             }
         }
         .padding(.vertical, OVSpacing.xs)

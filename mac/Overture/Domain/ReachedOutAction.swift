@@ -26,7 +26,12 @@ enum ReachedOutAction: String, Equatable, Sendable, CaseIterable {
         switch self {
         case .sendNudge: return "Send a follow-up"
         case .sendClosingNote: return "Send a closing note"
-        case .confirmState: return "Confirm"
+        // #2154: no button. The row drew Confirm TWICE, from this slot and from the state control
+        // beside it, both calling the same mutation with the same arguments. The state control owns the
+        // guess and shows what the guess actually IS, while a bare second "Confirm" says nothing about
+        // what it confirms, so this is the copy that goes (#843, the same reasoning `.sayWhatHappened`
+        // already carries). The case itself stays: it is still what the row is waiting for.
+        case .confirmState: return nil
         // No button: the row's own timing text already reads "Say what happened" for a form pitch, and
         // the state control beside it is how he says it. A second control with the same words is the
         // duplicate-copy trap #843 exists for.
