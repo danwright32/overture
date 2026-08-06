@@ -275,7 +275,7 @@ enum ProspectMutations {
               let body = recipient.replyDraftBody, !body.isEmpty else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(body, forType: .string)
-        model.updateRecipient(id: recipientId) { $0.recordRepliedInGmail(now: Date()) }
+        model.updateRecipient(id: recipientId) { $0.recordAnswerSent(now: Date()) }
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 

@@ -336,11 +336,11 @@ struct RecipientTests {
         #expect(r.originalReplyDraftBody == nil)
     }
 
-    @Test func recordRepliedInGmailFreezesTheSentReply() {
+    @Test func recordAnswerSentFreezesTheSentReply() {
         let r = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
         r.replyDraftBody = "AI reply draft."
         r.applyReplyDraftEdit("Dan's committed reply text.")
-        r.recordRepliedInGmail(now: Date(timeIntervalSince1970: 7))
+        r.recordAnswerSent(now: Date(timeIntervalSince1970: 7))
         #expect(r.sentReplyBody == "Dan's committed reply text.")
         #expect(r.replySentAt == Date(timeIntervalSince1970: 7))
         #expect(r.replyDraftBody == nil)   // still consumed

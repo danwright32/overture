@@ -935,10 +935,10 @@ struct SendServiceTests {
     }
 
     // Copy-out path: Dan sent the reply from Gmail himself; consume the draft + re-anchor, no send.
-    @Test func recordRepliedInGmailConsumesTheDraftWithoutSending() {
+    @Test func recordAnswerSentConsumesTheDraftWithoutSending() {
         let r = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
         r.replyDraftSubject = "Re"; r.replyDraftBody = "a draft"
-        r.recordRepliedInGmail(now: Date(timeIntervalSince1970: 7))
+        r.recordAnswerSent(now: Date(timeIntervalSince1970: 7))
         #expect(r.replyDraftBody == nil)
         #expect(r.replyDraftSubject == nil)
         #expect(r.lastFollowUpAt == Date(timeIntervalSince1970: 7))
