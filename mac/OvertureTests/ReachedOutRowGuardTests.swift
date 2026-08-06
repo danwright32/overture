@@ -57,4 +57,29 @@ struct ReachedOutRowGuardTests {
         #expect(panel.contains("@State private var body_"),
                 "ReplyPanelSheet must own the text it is composing (#2128).")
     }
+
+    // #2145: the panel's send states come from the tested phase, not from the view's own guesses. A
+    // rendered test cannot reach this, because the phase is private `@State` with no way in from outside,
+    // so the wiring is pinned at the source. Each of these three was a live defect.
+    @Test func thePanelTakesItsSendStatesFromTheTestedPhase() throws {
+        let panel = SourceGuardHelper.source("Overture/UI/ReplyPanelSheet.swift")
+        #expect(!panel.isEmpty)
+
+        // The elapsed counter measures from when the step began. Anchored on a fresh `Date()` at render
+        // time it restarted on every redraw, so a hung send could never reach its stall timeout (L74).
+        #expect(panel.contains("since: phase.startedAt"),
+                "the running label must count from the instant the step began, never from this redraw.")
+        #expect(!panel.contains("LiveRunLabel(base: ReplyPanelCopy.sending, since: Date()"),
+                "an elapsed counter anchored on now measures the time since the last redraw.")
+
+        // Cancel is refused while the mail is going, and his words stay on screen through a failure.
+        #expect(panel.contains(".disabled(!phase.allowsCancel)"),
+                "Cancel must be refused once the send is in flight, or the failure has nowhere to land.")
+        #expect(panel.contains("if phase.showsComposeBox"),
+                "the compose box must survive a failure whose sentence promises his reply is still there.")
+
+        // And the step before the send names itself, rather than claiming the mail is already going.
+        #expect(panel.contains("phase = .preparing(since:"),
+                "fetching the signature is not sending; it must not claim to be (#2145).")
+    }
 }

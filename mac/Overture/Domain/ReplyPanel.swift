@@ -130,6 +130,63 @@ enum ReplyPanel {
             || recipient.replyTextCheckedAt != nil
     }
 
+    // #2145: what the screen is doing, and since when.
+    //
+    // The instant is carried BY the phase rather than read at render time. An elapsed counter anchored on
+    // "now" restarts on every redraw, so it measures the time since the last thing changed on screen
+    // instead of the time since the work began, and the stall timeout it feeds can never be reached: a
+    // send that hung forever reads as one that just started (L74).
+    enum SendPhase: Equatable {
+        case composing
+        // Building what Dan is about to approve (fetching the signature the send will compose on).
+        // Nothing has left, and he has not yet seen what he would be approving.
+        case preparing(since: Date)
+        // He approved it and the mail is going.
+        case sending(since: Date)
+        case failed(String)
+
+        var startedAt: Date? {
+            switch self {
+            case .preparing(let since), .sending(let since): return since
+            case .composing, .failed: return nil
+            }
+        }
+
+        // Each running state says what IT is doing. Two different acts under one word would tell him a
+        // message had gone while it was still being assembled (L11, L12).
+        var runningLabel: String? {
+            switch self {
+            case .preparing: return ReplyPanelCopy.preparing
+            case .sending: return ReplyPanelCopy.sending
+            case .composing, .failed: return nil
+            }
+        }
+
+        // Cancel is refused only once the mail is actually going. Dismissing then would take the screen
+        // down with the outcome still to come, so a send that failed would look exactly like one that
+        // worked, and the words he typed would go with it (L12, L44).
+        var allowsCancel: Bool {
+            if case .sending = self { return false }
+            return true
+        }
+
+        // His words stay on screen in every state. The failure sentence promises his reply is still here,
+        // and that has to be true of the screen and not only of a variable (L11).
+        var showsComposeBox: Bool { true }
+
+        // Frozen only while the mail is going, so an edit cannot land on words already handed to Gmail.
+        // A failure is the state he is meant to fix and retry from, so it stays editable.
+        var freezesComposeBox: Bool {
+            if case .sending = self { return true }
+            return false
+        }
+
+        var failure: String? {
+            if case .failed(let message) = self { return message }
+            return nil
+        }
+    }
+
     // #2152: WHY the send is refused, as a value. The disabled button and the sentence beside it are then
     // one decision asked once, so they cannot drift into a dead button sitting next to a line claiming
     // everything is fine (L16, L70).
@@ -321,6 +378,10 @@ enum ReplyPanelCopy {
     // rather than that something is broken, and Overture will not keep trying this one.
     static let unreadableWords =
         "Overture couldn't read this message, which usually means it's an image or an attachment. Open it in Gmail."
+    // #2145: getting the message ready for him to approve, which is NOT sending it. Nothing has left at
+    // this point and he has not yet seen what he would be approving, so calling it "Sending" would claim
+    // an act that has not happened (L12).
+    static let preparing = "Getting your reply ready"
     static let draftWithAI = "Draft with AI"
     // #2143: the run the button starts, named where Dan is watching for it. The same words the Archive
     // card's own drafting line uses, shared rather than spelled twice, so the two surfaces cannot drift.
@@ -379,7 +440,14 @@ enum ReplyPanelCopy {
     }
     // Names what happened and leaves the button available, rather than a dead spinner or a cheerful
     // pretence that it went (L12). The words stay in the box: nothing Dan typed is thrown away.
-    static let sendFailed = "That didn't send. Your reply is still here, so you can try again."
+    // #2145: the promise that his words survived is now the SCREEN's job, not this sentence's. The box
+    // stays visible through a failure with his reply in it, so a clause saying so restates what he is
+    // looking at, and a line that only repeats the screen stops being read (#843).
+    static let sendFailed = "That didn't send. You can try again."
+    // #2145: the step BEFORE the send could not be completed, so nothing was ever put in front of him to
+    // approve. Named as its own failure rather than dropping back to the compose box unchanged, which is
+    // a button that does nothing and says nothing (L67).
+    static let couldNotPrepare = "Overture couldn't get this reply ready to send."
 
     // #2152: the sentence beside a disabled Send button. A control that refuses without saying why reads
     // as broken rather than as a refusal (L11, L67), and this one fires exactly where Dan is least able
