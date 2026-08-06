@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1064 sentences**, from 368 source files.
+Every sentence Overture can say to Dan: **1061 sentences**, from 367 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -181,7 +181,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
   - `UI/FollowUpsView.swift`
 - "Send reply"
   - `Domain/ReplyPanel.swift`
-  - `UI/InquiryReplySheet.swift`
   - `UI/ReplyConversationView.swift`
 - "Set a state"
   - `UI/ConversationStateMenu.swift`
@@ -955,8 +954,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "No email found"
     `Domain/Reachability.swift`
-"No email on file for this inquiry, so it can't be sent from here."
-    `UI/InquiryReplySheet.swift`
 "No email to send to. Add a contact by hand."
     `Domain/DraftReviewNotes.swift`
 "No email yet"
@@ -1284,7 +1281,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Re-prepping \(org) to redraft and find new contacts"
     `App/ActionFeedback.swift`
 "Re: your inquiry"
-    `UI/InquiryReplySheet.swift`
+    `Domain/InquiryCopy.swift`
 "Reach out now"
     `Domain/ReachedOutQueue.swift`
 "Reachability checked"
@@ -1462,7 +1459,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/FollowUpsView.swift`
 "Send reply"
     `Domain/ReplyPanel.swift`
-    `UI/InquiryReplySheet.swift`
     `UI/ReplyConversationView.swift`
 "Send this email now"
     `UI/DraftReviewView.swift`
@@ -1488,8 +1484,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ReplyConversationView.swift`
 "Sending to this one"
     `UI/SendConfirmSheet.swift`
-"Sending your reply..."
-    `UI/InquiryReplySheet.swift`
 "Sent emails that hit a problem, or approved ones you can't send yet."
     `Domain/AgentRoster.swift`
 "Sent through their form. Overture cannot see a reply to this one."
@@ -1699,8 +1693,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/LeadIntakeModel.swift`
 "The reader that pulls listings off a page isn't set up yet, so the pages that changed couldn't be read. See docs/scout-extract-runbook.md. Nothing was lost: they'll be read on the next scout once it's configured."
     `Integration/ScoutService.swift`
-"The reply couldn't be sent. Check that Gmail is connected, then try again."
-    `UI/InquiryReplySheet.swift`
 "The reply drafter finished but didn't produce a draft. It may have hit an error."
     `Domain/DetachedRunOutcome.swift`
 "The room its shows play in"

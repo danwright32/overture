@@ -2,7 +2,7 @@ import Foundation
 import SwiftData
 
 // #1436: the inquiry actions that CHANGE something, moved out of QueueView, InquiryRowView, and
-// InquiryReplySheet so each is a plain function a test can call (#863, the ExcludedTownMutations /
+// the inquiry reply sheet so each is a plain function a test can call (#863, the ExcludedTownMutations /
 // WatchlistMutations idiom). Marking an inquiry booked or lost removes it from the queue on screen, so
 // the write behind it has to be confirmed rather than attempted: the previous bare
 // `try? context.save()` discarded a genuine failure and left the screen showing an outcome the store

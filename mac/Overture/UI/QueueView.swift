@@ -282,8 +282,12 @@ struct QueueView: View {
                 onSend: { performSend($0) },
                 onConnectGmail: onConnectGmail
             )
-            // #1436: compose and send Dan's first reply to a hire inquiry.
-            .sheet(item: $replyingTo) { InquiryReplySheet(inquiry: $0) }
+            // #1436: compose and send Dan's reply to a hire inquiry, through the SAME screen a scouted
+            // show is answered on since #2145. One list should not behave two ways.
+            .sheet(item: $replyingTo) { inquiry in
+                ReplySheet(composition: .answering(inquiry, context: context, feedback: feedback),
+                           gmailConnected: data.gmailConnected)
+            }
             .sheet(item: $pendingRowNudge) { pending in
                 SendConfirmSheet(confirmation: pending.confirmation,
                                  onSend: { performRowNudge(pending) },

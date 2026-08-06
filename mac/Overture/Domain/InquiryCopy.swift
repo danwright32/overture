@@ -8,6 +8,13 @@ enum InquiryCopy {
         "Reply to \(inquirerName)"
     }
 
+    // #2145: what the subject line starts at, out of the view now that the shared reply screen takes it
+    // as an input. An inquiry has no thread subject to answer into, so this is the one Dan edits.
+    //
+    // Deliberately NOT marked as outbound-only copy. It ends up on the wire, but he reads it in a field
+    // and can change it, so it is a sentence the app says to him and belongs in the inventory.
+    static let replySubjectDefault = "Re: your inquiry"
+
     // #1504: one sheet both logs an inquiry and corrects one, so every sentence in it has to say which
     // it is doing. "Log" wording on an edit would tell Dan he is about to add a second record.
     static func intakeTitle(isEditing: Bool) -> String {
