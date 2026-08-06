@@ -64,6 +64,40 @@ struct ReplyComposition {
 }
 
 extension ReplyComposition {
+    // #2145: a hire inquiry's reply. An inquiry is its own single watched thread, so it is both the entity
+    // and its own contact, which is why it can hand ITSELF to the screen as the contact.
+    //
+    // No drafter and no audience controls, and both absent rather than inert: an inquiry has no reply
+    // draft fields at all, and it is one person, so "take this address off and stop emailing it" has
+    // nothing to mean.
+    static func answering(_ inquiry: Inquiry, context: ModelContext, feedback: ActionFeedback,
+                          sender: MailSender = ProspectMutations.liveSender()) -> ReplyComposition {
+        ReplyComposition(
+            title: InquiryCopy.replyTitle(to: inquiry.inquirerName),
+            subtitle: inquiry.notes,
+            contact: inquiry,
+            editableSubject: InquiryCopy.replySubjectDefault,
+            aiDraft: nil,
+            audienceControls: nil,
+            confirmation: { body, subject in
+                // The subject he TYPED, never the default it started at, or the sheet would show one
+                // subject while another shipped (L64).
+                SendConfirmation(replyTo: SendGroup.replyAudience(of: inquiry),
+                                 subject: subject ?? InquiryCopy.replySubjectDefault, body: body)
+            },
+            send: { body, subject in
+                // What to do next is decided in InquiryMutations (tested, including the sent-but-not-saved
+                // path), exactly as it was before this screen was shared.
+                switch await InquiryMutations.sendReply(inquiry,
+                                                        subject: subject ?? InquiryCopy.replySubjectDefault,
+                                                        body: body, now: Date(), sender: sender,
+                                                        context: context, feedback: feedback) {
+                case .sent: return true
+                case .sendFailed: return false
+                }
+            })
+    }
+
     // A scouted show's reply. `recipient` is the peer who actually WROTE, resolved by the caller through
     // ReplyIdentity.answering: the row the list stands on is picked by sorted id and is routinely
     // somebody else.

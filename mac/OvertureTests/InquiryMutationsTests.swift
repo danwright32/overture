@@ -2,10 +2,10 @@ import Testing
 import Foundation
 import SwiftData
 
-// #1436: the inquiry actions that CHANGE something, moved out of QueueView and InquiryReplySheet so
+// #1436: the inquiry actions that CHANGE something, moved out of QueueView and the inquiry reply sheet so
 // each is a plain function a test can call (#863, the ExcludedTownMutations / WatchlistMutations
 // idiom). The reason this matters beyond testability: both surfaces persisted with a bare
-// `try? context.save()` (QueueView) or a hand-rolled do/catch (InquiryReplySheet), so a failed write
+// `try? context.save()` (QueueView) or a hand-rolled do/catch (the reply sheet), so a failed write
 // either went nowhere at all or duplicated the message #623 already consolidated into
 // `saveOrWarnSendNotConfirmed`. Marking an inquiry booked pulls it out of the queue on screen, so a
 // silently-lost write is a state Dan cannot see and cannot get back to.
