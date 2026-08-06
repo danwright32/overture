@@ -263,9 +263,13 @@ struct OvertureApp: App {
         // macOS removes takes the whole process down with it (terminationOnRemoval), which is how a
         // crowded menu bar came to block all 4811 Swift tests with no error anyone could read. The rule
         // lives on AppEnvironment beside its sibling for background services, never spelled out here.
-        MenuBarExtra("Overture", image: "MenuBarGlyph",
-                     isInserted: .constant(AppEnvironment.showsMenuBarExtra)) {
+        // #2115: the glyph carries the count of work due today beside it, so the resident app says how
+        // much is waiting without Dan opening anything. The label is its own small view (MenuBarLabel)
+        // because it has to react to the count changing, and a Scene cannot hold that state itself.
+        MenuBarExtra(isInserted: .constant(AppEnvironment.showsMenuBarExtra)) {
             MenuBarContent()
+        } label: {
+            MenuBarLabel()
         }
     }
 }

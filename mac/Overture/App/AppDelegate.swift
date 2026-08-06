@@ -76,6 +76,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                        name: NSWindow.didBecomeKeyNotification, object: nil)
         nc.addObserver(self, selector: #selector(windowWillClose),
                        name: NSWindow.willCloseNotification, object: nil)
+        // #2115: and whenever the due count changes, since that now decides whether there is a Dock icon
+        // at all. Without this the badge would only ever appear on a window event, so work falling due
+        // while Dan is away (the case it exists for) would go unshown until he came back anyway.
+        nc.addObserver(self, selector: #selector(windowVisibilityChanged),
+                       name: UserDefaults.didChangeNotification, object: nil)
         updateDockPresence()
 
         // #270: surface first-run onboarding while Dan is present whenever a grant is missing, so the
@@ -193,11 +198,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     // only supplies the real NSApp. (Promoting out of the menu-bar-only presence does NOT make the app
     // active, and an inactive app owns no menu bar, so none of its shortcuts fire: that is the Cmd+L bug.)
     private func updateDockPresence() {
+        // #2115: the count decides whether there is a Dock icon at all, so it is read before the policy
+        // rather than painted onto whatever icon happens to exist.
+        let due = DueBadge.current()
         DockPresence.apply(
             mainWindowVisible: NSApp.windows.contains(where: isMainContentWindow),
+            dueCount: due,
             current: NSApp.activationPolicy(),
             setPolicy: { NSApp.setActivationPolicy($0) },
             activate: { NSApp.activate(ignoringOtherApps: true) })
+        // nil, never "0": an empty badge is no badge, and a red dot reading zero claims work Dan does not
+        // have. Needs no notification permission, unlike an alert.
+        NSApp.dockTile.badgeLabel = DueBadge.label(count: due)
     }
 
     // The main Overture window only (#334 chose to exclude the onboarding window): a visible,

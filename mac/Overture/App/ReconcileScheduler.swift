@@ -135,6 +135,13 @@ final class ReconcileScheduler {
 
         lastReconcileAt = now
         defaults.set(now.timeIntervalSince1970, forKey: ReconcileScheduler.lastReconcileKey)
+        // #2115: the count Dan sees on the Dock and beside the menu bar glyph. Published from here
+        // because this tick already holds every prospect fetched and already writes to defaults, and
+        // because neither surface that draws it can hold a SwiftData query of its own. Same predicate as
+        // the toolbar's Due badge, so the three can never state different numbers.
+        DueBadge.publish(DueWork.counts(prospects: after, now: now,
+                                        reminder: ConversationReminderConfig.loaded()).total,
+                         into: defaults)
         // #2091: the watch heartbeat, carrying the awake clock alongside the wall clock so the next tick
         // can tell a sleeping Mac (nothing missed) from a dead process (everything missed).
         WatchHeartbeatStore.stamp(now: now, uptime: uptime, into: defaults)
