@@ -290,8 +290,11 @@ struct QueueView: View {
                                  onCancel: { pendingRowNudge = nil })
             }
             .sheet(item: $answeringReply) { target in
-                ReplyPanelSheet(prospect: target.prospect, recipient: target.recipient,
-                                gmailConnected: data.gmailConnected)
+                // #2145: the one reply screen, told what it is answering. An inquiry builds its own
+                // composition and reaches the same screen.
+                ReplySheet(composition: .answering(target.recipient, of: target.prospect,
+                                                   context: context, feedback: feedback),
+                           gmailConnected: data.gmailConnected)
             }
             // #1504: the same sheet that logs one, opened on an existing record.
             .sheet(item: $editingInquiry) { InquiryIntakeSheet(editing: $0) }

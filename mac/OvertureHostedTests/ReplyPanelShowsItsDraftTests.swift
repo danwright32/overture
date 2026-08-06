@@ -19,7 +19,7 @@ struct ReplyPanelShowsItsDraftTests {
     }
 
     // Dan's real row (#2151): Every Voice Choirs, answered by the contact he pitched.
-    private func panel(draft: String? = nil, requestedAt: Date? = nil) throws -> ReplyPanelSheet {
+    private func panel(draft: String? = nil, requestedAt: Date? = nil) throws -> ReplySheet {
         let ctx = ModelContext(try container())
         let p = Prospect(naturalKey: "k", groupName: "Every Voice Choirs", discipline: "choral",
                          venue: "Merkin Hall", performanceDate: "2026-10-31", sourceListingURL: nil,
@@ -40,7 +40,8 @@ struct ReplyPanelShowsItsDraftTests {
         r.replyDraftBody = draft
         r.replyDraftRequestedAt = requestedAt
         p.setRecipients([r])
-        return ReplyPanelSheet(prospect: p, recipient: r, gmailConnected: true)
+        return ReplySheet(composition: .answering(r, of: p, context: ctx, feedback: ActionFeedback()),
+                          gmailConnected: true)
     }
 
     // The defect: the drafted words are in the box Dan types in, not only in the Archive he never opens.

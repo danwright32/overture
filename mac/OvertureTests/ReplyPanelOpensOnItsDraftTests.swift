@@ -4,7 +4,7 @@ import SwiftData
 
 // #2143: the reply panel must open on the draft that is already waiting on this contact.
 //
-// ReplyPanelSheet held its compose text in `@State private var body_ = ""` and never read
+// The reply screen held its compose text in `@State private var body_ = ""` and never read
 // `replyDraftBody`, so the draft written by the scoped AI run (#2129) was invisible on the only surface
 // Dan uses. The only view rendering it was the Archive card, and his premise for the whole feature was
 // that he never goes there: "archive is only for things that are done and that I can't pitch/respond to
