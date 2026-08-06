@@ -721,10 +721,20 @@ final class Recipient {
 
     // The AI's auto-classification suggests a state for this recipient (source = auto). Never
     // overwrites a state Dan set by hand.
+    // #2171: re-suggesting the SAME state leaves the date alone. #2116 anchored an unconfirmed guess to
+    // the instant it was made so an untriaged one ages and can read as overdue, and this writer defeated
+    // it: the classifier re-stamped the anchor on every run, so the guess was always freshly made and the
+    // card re-filed itself under today. Measured on the live store, a day-old suggestion carried a stamp
+    // from one minute before Dan looked at it, and the card read "Reach out now" (L74, L55).
+    //
+    // The anchor records when this judgement first needed him, not when the machine last repeated itself.
+    // A suggestion that actually CHANGES the state is new work and takes the new date.
     func suggestConversationState(_ state: ConversationState, now: Date) {
         guard conversationStateSource != .manual else { return }
+        let isRepeat = conversationState == state && conversationStateSource == .auto
+                       && conversationStateSetAt != nil
         conversationState = state
-        conversationStateSetAt = now
+        if !isRepeat { conversationStateSetAt = now }
         conversationStateSource = .auto
     }
 
