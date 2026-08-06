@@ -44,10 +44,10 @@ struct InquiryReplyAgainTests {
     @Test("the row offers a way to answer once they have replied")
     func replyActionReturnsAfterTheyReply() {
         // Before this, Reply was offered ONLY before the first send, so a replied inquiry had none.
-        #expect(InquiryMutations.showsReplyAction(sentAt: nil, replied: false))
-        #expect(!InquiryMutations.showsReplyAction(sentAt: Date(), replied: false),
+        #expect(InquiryMutations.showsReplyAction(sentAt: nil, replied: false, bounced: false))
+        #expect(!InquiryMutations.showsReplyAction(sentAt: Date(), replied: false, bounced: false),
                 "still no action while waiting on them")
-        #expect(InquiryMutations.showsReplyAction(sentAt: Date(), replied: true),
+        #expect(InquiryMutations.showsReplyAction(sentAt: Date(), replied: true, bounced: false),
                 "they answered, so Dan can answer back")
     }
 

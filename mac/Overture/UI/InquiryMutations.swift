@@ -54,7 +54,15 @@ enum InquiryMutations {
     // #1513: Dan can answer before the first send, and again whenever they have written back. What he
     // cannot do is send into silence: while he is waiting on them the action is absent, because chasing
     // is the follow-up nudge's job, not a second reply.
-    static func showsReplyAction(sentAt: Date?, replied: Bool) -> Bool { sentAt == nil || replied }
+    // #2145: and never on a thread that BOUNCED, which is the one case where the two halves of the
+    // Reached out list disagreed. A show refuses to offer an answer on a bounced thread
+    // (Recipient.hasUnhandledReply guards it); an inquiry offered one, so Dan could write a reply to an
+    // address that had already proved dead and only learn at the send. Found by asserting both rules
+    // against the same state rather than describing the difference in a comment (L57).
+    static func showsReplyAction(sentAt: Date?, replied: Bool, bounced: Bool) -> Bool {
+        guard !bounced else { return false }
+        return sentAt == nil || replied
+    }
 
     // What the reply sheet should do next. `.sent` means the mail is gone and the sheet closes, whether
     // or not the local record of it saved: a save failure there is warned through the shared banner

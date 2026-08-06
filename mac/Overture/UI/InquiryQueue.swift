@@ -13,6 +13,9 @@ struct InquiryRow: Identifiable, Equatable, Sendable {
     let outcome: Outcome
     let sentAt: Date?
     let replied: Bool
+    // #2145: whether this thread bounced. Carried so the Reply control can refuse the same case the
+    // show side already refuses: an answer to an address that has proved dead cannot arrive.
+    let bounced: Bool
     let bookingSuggested: Bool
     let followUpNudgeDue: Bool
     let shouldSuggestClosing: Bool

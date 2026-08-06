@@ -99,8 +99,8 @@ struct InquiryMutationsTests {
     // different, unbuilt thing (#1497 covers the stalled follow-up), so the button must not imply it.
     @Test("the Reply action is offered only before the first reply has been sent")
     func replyActionOnlyBeforeFirstReply() {
-        #expect(InquiryMutations.showsReplyAction(sentAt: nil, replied: false))
-        #expect(!InquiryMutations.showsReplyAction(sentAt: Date(), replied: false))
+        #expect(InquiryMutations.showsReplyAction(sentAt: nil, replied: false, bounced: false))
+        #expect(!InquiryMutations.showsReplyAction(sentAt: Date(), replied: false, bounced: false))
     }
 
     private struct StubSender: MailSender {

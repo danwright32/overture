@@ -23,7 +23,7 @@ struct InquiryQueueTests {
     private func inquiryRow(id: String, date: String?) -> InquiryRow {
         InquiryRow(id: id, inquirerName: "Ada \(id)", source: .directEmail, eventName: "Gala",
                    performanceDate: date, venue: "V", outcome: .noResponse, sentAt: nil,
-                   replied: false, bookingSuggested: false, followUpNudgeDue: false,
+                   replied: false, bounced: false, bookingSuggested: false, followUpNudgeDue: false,
                    shouldSuggestClosing: false)
     }
 
