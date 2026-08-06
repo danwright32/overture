@@ -181,8 +181,9 @@ final class UpdateAttemptState {
 enum UpdateAttemptCopy {
     static let title = "Overture could not update"
 
-    // What a failure with no reason in it says. It states the two things actually known and nothing else.
-    static let unexplained = "Overture did not update, and the update did not say why. Ask Claude to look."
+    // What a failure with no reason in it says. It states the one thing known beyond the title, which is
+    // that the run itself offered nothing, and never guesses at a cause.
+    static let unexplained = "The update stopped without saying why. Ask Claude to look."
 
     static func body(_ progress: UpdateAttempt.Progress) -> String {
         switch progress {
@@ -191,7 +192,10 @@ enum UpdateAttemptCopy {
             // word for word what the Terminal window printed.
             return reason
         case .neverStarted:
-            return "The update never started, so nothing was installed and Overture is unchanged."
+            // Adds the fact the title cannot carry: it did not begin at all, as against beginning and
+            // failing. "Nothing was installed" is left out on purpose, since the title has already said
+            // the update did not happen and repeating it is the restatement #843 exists for.
+            return "The update never started. Ask Claude to look."
         case .waiting, .running:
             // No panel, so no sentence. Deliberately not a reassuring one, which would sit in
             // docs/copy-inventory.md as something Overture can say while being unreachable.
@@ -199,6 +203,9 @@ enum UpdateAttemptCopy {
         }
     }
 
-    static let tryAgain = "Try again"
-    static let dismiss = "Not now"
+    // The SAME label the out of date panel uses, by construction rather than by coincidence. Both refusal
+    // sentences end "press Update again", and a button called anything else would be telling him to press
+    // something that is not on the screen he is reading it on.
+    static let tryAgain = BuildFreshnessCopy.update
+    static let dismiss = BuildFreshnessCopy.dismiss
 }

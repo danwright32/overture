@@ -51,7 +51,7 @@ struct UpdateAttemptStateTests {
 
     // THE CASE. The run refused, and the app has to say so in the run's own words.
     @Test func aRefusalReachesTheApp() {
-        let reason = "Overture did not update: there is unsaved work in progress in the code folder."
+        let reason = "There is unsaved work in progress in the code folder."
         let state = UpdateAttemptState(reader: { self.failed(press: "p1", reason: reason) })
         state.pressed("p1", at: date("2026-08-06T14:00:00Z"))
         state.check(now: date("2026-08-06T14:00:05Z"))

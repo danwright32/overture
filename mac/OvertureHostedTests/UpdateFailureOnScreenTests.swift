@@ -12,7 +12,7 @@ import ViewInspector
 @MainActor
 @Suite("A refused update is on screen, in the words the run used (#2188)")
 struct UpdateFailureOnScreenTests {
-    private let refusal = "Overture did not update: there is unsaved work in progress in the code folder, and updating would disturb it."
+    private let refusal = "There is unsaved work in progress in the code folder, and updating would disturb it. Ask Claude to finish or put aside that work, then press Update again."
 
     private func texts(_ view: some View) throws -> [String] {
         try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }

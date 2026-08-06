@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1061 sentences**, from 367 source files.
+Every sentence Overture can say to Dan: **1064 sentences**, from 369 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -78,7 +78,7 @@ What is not, and why:
 - `UI/DraftSignaturePreview.swift`: renders the outbound email's own HTML (body + Gmail signature), not Overture's voice (#1203)
 - `UI/DraftSignaturePreview.swift`: browser-side measuring script, not a sentence Overture says to Dan (#915)
 
-## The same sentence, said in more than one place (46)
+## The same sentence, said in more than one place (47)
 
 Two copies of a sentence will drift. #843 owns fixing these.
 
@@ -145,6 +145,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
   - `UI/DraftReviewView.swift`
 - "Not now"
   - `Domain/BuildFreshnessPanel.swift`
+  - `Domain/UpdateAttempt.swift`
   - `UI/BlockDaysSheet.swift`
 - "Nothing matches this filter"
   - `Domain/EmptyState.swift`
@@ -198,6 +199,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
 - "Their events or season page"
   - `UI/SourceFixConfirmActions.swift`
   - `UI/SourcesView.swift`
+- "Try again"
+  - `App/RootView.swift`
+  - `Domain/UpdateAttempt.swift`
 - "Verbal yes, not booked"
   - `Domain/ConversationReminder.swift`
   - `UI/ReminderSettingsView.swift`
@@ -1025,6 +1029,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/OnboardingView.swift`
 "Not now"
     `Domain/BuildFreshnessPanel.swift`
+    `Domain/UpdateAttempt.swift`
     `UI/BlockDaysSheet.swift`
 "Not one I scout"
     `Domain/ClientCoverage.swift`
@@ -1164,6 +1169,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreShrinkCheck.swift`
 "Overture contact: "
     `Domain/OmniFocusSync.swift`
+"Overture could not update"
+    `Domain/UpdateAttempt.swift`
 "Overture couldn't finish starting up"
     `Domain/LaunchMigrations.swift`
 "Overture couldn't get this reply ready to send."
@@ -1726,6 +1733,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "The show's status, read from its contacts. Mark a contact below to change it."
     `UI/DraftReviewView.swift`
+"The update never started. Ask Claude to look."
+    `Domain/UpdateAttempt.swift`
+"The update stopped without saying why. Ask Claude to look."
+    `Domain/UpdateAttempt.swift`
 "Their calendar, not one show: a single show's page never changes again, so watching it would watch nothing."
     `UI/SourcesView.swift`
 "Their email (optional)"
@@ -1759,7 +1770,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ProspectRowView.swift`
 "This copy did not come from the installer, so there is no record of what went into it."
     `Domain/BuildFreshnessPanel.swift`
-"This copy is \(gap) behind what has shipped, so anything fixed since then is not in front of you."
+"This copy is \(behindBy(installedAt: installedAt, shippedAt: shippedAt, now: now)) behind what has shipped, so anything fixed since then is not in front of you."
     `Domain/BuildFreshnessPanel.swift`
 "This draft won't send: \(what.isEmpty ? "a blocking issue" : what)."
     `Domain/DraftCheck.swift`
@@ -1863,6 +1874,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/EmptyState.swift`
 "Try again"
     `App/RootView.swift`
+    `Domain/UpdateAttempt.swift`
 "Try another link"
     `UI/AddLeadSheet.swift`
 "Undo \(actionLabel) and Days Off: \(subject)"

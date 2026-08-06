@@ -21,9 +21,9 @@ struct UpdateAttemptTests {
 
     @Test func aRunThatSaysItFailedIsReportedWithItsReason() {
         let p = UpdateAttempt.progress(record: record(press: "abc", outcome: "failed",
-                                                      reason: "Overture did not update: there is unsaved work in progress in the code folder."),
+                                                      reason: "There is unsaved work in progress in the code folder."),
                                        press: "abc", elapsed: 5)
-        #expect(p == .failed(reason: "Overture did not update: there is unsaved work in progress in the code folder."))
+        #expect(p == .failed(reason: "There is unsaved work in progress in the code folder."))
     }
 
     @Test func aRunStillGoingIsNotAFailure() {
@@ -124,8 +124,7 @@ struct UpdateAttemptTests {
     @Test func eachStateSaysItsOwnThing() {
         #expect(UpdateAttemptCopy.body(.failed(reason: "Overture did not update: because."))
                 == "Overture did not update: because.")
-        #expect(UpdateAttemptCopy.body(.neverStarted)
-                == "The update never started, so nothing was installed and Overture is unchanged.")
+        #expect(UpdateAttemptCopy.body(.neverStarted) == "The update never started. Ask Claude to look.")
         // The two quiet states have no panel and so no sentence, rather than a cheerful one that would
         // sit in the copy inventory as something Overture can say while being unreachable.
         #expect(UpdateAttemptCopy.body(.running) == "")

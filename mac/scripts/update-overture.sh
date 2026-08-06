@@ -59,7 +59,8 @@ main() {
   # already died: exactly the silence this exists to end, one step further along.
   if ! "${installer}" --launch; then
     echo "Nothing was installed, so Overture is unchanged." >&2
-    overture_update_record_failed "Overture did not update: the install did not finish. Ask Claude to look."
+    overture_update_refuse "The install did not finish. Ask Claude to look."
+    overture_update_record_failed "${OVERTURE_UPDATE_REASON}"
     return 1
   fi
 
