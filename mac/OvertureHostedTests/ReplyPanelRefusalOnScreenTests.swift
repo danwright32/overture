@@ -23,7 +23,7 @@ struct ReplyPanelRefusalOnScreenTests {
     // Dan's real row, measured on the live store (#2151): he pitched nbecker@ and Nicole answered from
     // nicolebecker@, an address on no contact of this show.
     private func panel(writer: String?, gmailConnected: Bool = true,
-                       audience: [String]? = nil) throws -> ReplyPanelSheet {
+                       audience: [String]? = nil) throws -> ReplySheet {
         let ctx = ModelContext(try container())
         let p = Prospect(naturalKey: "k", groupName: "Every Voice Choirs", discipline: "choral",
                          venue: "Merkin Hall", performanceDate: "2026-10-31", sourceListingURL: nil,
@@ -42,10 +42,11 @@ struct ReplyPanelRefusalOnScreenTests {
         r.lastReplyText = "Tuesday works for us."
         r.replyAudience = audience ?? ["nbecker@everyvoicechoirs.org"]
         p.setRecipients([r])
-        return ReplyPanelSheet(prospect: p, recipient: r, gmailConnected: gmailConnected)
+        return ReplySheet(composition: .answering(r, of: p, context: ctx, feedback: ActionFeedback()),
+                          gmailConnected: gmailConnected)
     }
 
-    private func texts(_ view: ReplyPanelSheet) throws -> [String] {
+    private func texts(_ view: ReplySheet) throws -> [String] {
         try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
     }
 
@@ -120,8 +121,8 @@ struct ReplyPanelRefusalOnScreenTests {
     // ReplyPanel proves nothing about which words reach the screen (L3).
     @Test func aMessageThatCouldNotBeReadSaysSoOnThePanel() throws {
         let view = try panel(writer: "nbecker@everyvoicechoirs.org")
-        view.recipient.lastReplyText = nil
-        view.recipient.replyTextCheckedAt = Date(timeIntervalSince1970: 10)
+        view.composition.contact.lastReplyText = nil
+        view.composition.contact.replyTextCheckedAt = Date(timeIntervalSince1970: 10)
 
         let shown = try texts(view)
         #expect(shown.contains(ReplyPanelCopy.unreadableWords), "Shown: \(shown)")
@@ -132,8 +133,8 @@ struct ReplyPanelRefusalOnScreenTests {
     // And one nothing has been tried on yet keeps the sentence that is true of it.
     @Test func aReplyNothingHasBeenTriedOnStillSaysNothingWasCaptured() throws {
         let view = try panel(writer: "nbecker@everyvoicechoirs.org")
-        view.recipient.lastReplyText = nil
-        view.recipient.replyTextCheckedAt = nil
+        view.composition.contact.lastReplyText = nil
+        view.composition.contact.replyTextCheckedAt = nil
 
         let shown = try texts(view)
         #expect(shown.contains(ReplyPanelCopy.noCapturedWords), "Shown: \(shown)")

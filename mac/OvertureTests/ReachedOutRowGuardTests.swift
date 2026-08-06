@@ -50,19 +50,19 @@ struct ReachedOutRowGuardTests {
     // derivation, which is the defect #1774, #1922 and #1923 each fought.
     @Test func theReplyPanelIsASheetAndOwnsItsOwnText() throws {
         let queueView = SourceGuardHelper.source("Overture/UI/QueueView.swift")
-        let panel = SourceGuardHelper.source("Overture/UI/ReplyPanelSheet.swift")
+        let panel = SourceGuardHelper.source("Overture/UI/ReplySheet.swift")
         #expect(queueView.contains(".sheet(item: $answeringReply)"))
         #expect(!queueView.contains("@State private var replyPanelBody"),
                 "the reply text must live in the panel, never on QueueView (#2128).")
         #expect(panel.contains("@State private var body_"),
-                "ReplyPanelSheet must own the text it is composing (#2128).")
+                "ReplySheet must own the text it is composing (#2128, #2145).")
     }
 
     // #2145: the panel's send states come from the tested phase, not from the view's own guesses. A
     // rendered test cannot reach this, because the phase is private `@State` with no way in from outside,
     // so the wiring is pinned at the source. Each of these three was a live defect.
     @Test func thePanelTakesItsSendStatesFromTheTestedPhase() throws {
-        let panel = SourceGuardHelper.source("Overture/UI/ReplyPanelSheet.swift")
+        let panel = SourceGuardHelper.source("Overture/UI/ReplySheet.swift")
         #expect(!panel.isEmpty)
 
         // The elapsed counter measures from when the step began. Anchored on a fresh `Date()` at render
