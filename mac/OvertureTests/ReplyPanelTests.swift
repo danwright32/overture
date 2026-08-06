@@ -42,19 +42,19 @@ struct ReplyPanelTests {
 
     // Dan types the words himself, so there is nothing to send until he has typed some.
     @Test func nothingSendsUntilSomethingIsTyped() {
-        #expect(!ReplyPanel.canSend(body: "", audience: ["a@x.org"], gmailConnected: true, writer: nil))
-        #expect(!ReplyPanel.canSend(body: "   \n  ", audience: ["a@x.org"], gmailConnected: true, writer: nil))
-        #expect(ReplyPanel.canSend(body: "Sounds good.", audience: ["a@x.org"], gmailConnected: true, writer: nil))
+        #expect(!ReplyPanel.canSend(body: "", subject: nil, audience: ["a@x.org"], gmailConnected: true, writer: nil))
+        #expect(!ReplyPanel.canSend(body: "   \n  ", subject: nil, audience: ["a@x.org"], gmailConnected: true, writer: nil))
+        #expect(ReplyPanel.canSend(body: "Sounds good.", subject: nil, audience: ["a@x.org"], gmailConnected: true, writer: nil))
     }
 
     // An audience of nobody means the send has no destination, so the button must refuse rather than
     // fail at the network and report it as an error Dan cannot act on.
     @Test func nothingSendsWithNobodyToSendTo() {
-        #expect(!ReplyPanel.canSend(body: "Sounds good.", audience: [], gmailConnected: true, writer: nil))
+        #expect(!ReplyPanel.canSend(body: "Sounds good.", subject: nil, audience: [], gmailConnected: true, writer: nil))
     }
 
     @Test func nothingSendsWhileGmailIsDisconnected() {
-        #expect(!ReplyPanel.canSend(body: "Sounds good.", audience: ["a@x.org"], gmailConnected: false, writer: nil))
+        #expect(!ReplyPanel.canSend(body: "Sounds good.", subject: nil, audience: ["a@x.org"], gmailConnected: false, writer: nil))
     }
 
     // MARK: why the send is refused (#2152)
@@ -71,9 +71,9 @@ struct ReplyPanelTests {
             for audience in audiences {
                 for connected in [true, false] {
                     for writer in writers {
-                        let refusal = ReplyPanel.refusal(body: body, audience: audience,
+                        let refusal = ReplyPanel.refusal(body: body, subject: nil, audience: audience,
                                                          gmailConnected: connected, writer: writer)
-                        let can = ReplyPanel.canSend(body: body, audience: audience,
+                        let can = ReplyPanel.canSend(body: body, subject: nil, audience: audience,
                                                      gmailConnected: connected, writer: writer)
                         #expect(can == (refusal == nil),
                                 "body \(body.debugDescription), audience \(audience), connected \(connected), writer \(writer.debugDescription)")
@@ -87,7 +87,7 @@ struct ReplyPanelTests {
     // this he sees a dead Send button on a plainly live conversation and cannot tell a refusal from a bug.
     // The line names BOTH sides, because the mismatch between them is the whole reason (L11).
     @Test func theReasonNamesWhoWroteAndWhoTheReplyWouldReach() throws {
-        let refusal = ReplyPanel.refusal(body: "Tuesday works.",
+        let refusal = ReplyPanel.refusal(body: "Tuesday works.", subject: nil,
                                          audience: ["nbecker@everyvoicechoirs.org"],
                                          gmailConnected: true,
                                          writer: "nicolebecker@everyvoicechoirs.org")
@@ -102,7 +102,7 @@ struct ReplyPanelTests {
     // mismatch rather than a sample of it.
     @Test func theReasonNamesEveryAddressTheReplyWouldReach() {
         let line = ReplyPanelCopy.refusalLine(
-            ReplyPanel.refusal(body: "Tuesday works.",
+            ReplyPanel.refusal(body: "Tuesday works.", subject: nil,
                                audience: ["chelsea@everyvoicechoirs.org", "ray@elsewhere.example"],
                                gmailConnected: true,
                                writer: "nicolebecker@everyvoicechoirs.org"))
@@ -113,7 +113,7 @@ struct ReplyPanelTests {
     // A disconnected Gmail said itself only in a tooltip, which is invisible at rest (L49). It is the one
     // refusal with a plain next step, so it belongs on screen beside the button too.
     @Test func aDisconnectedGmailSaysSoOnScreenRatherThanOnlyOnHover() {
-        let refusal = ReplyPanel.refusal(body: "Tuesday works.", audience: ["a@x.org"],
+        let refusal = ReplyPanel.refusal(body: "Tuesday works.", subject: nil, audience: ["a@x.org"],
                                          gmailConnected: false, writer: nil)
         #expect(refusal == .gmailDisconnected)
         #expect(ReplyPanelCopy.refusalLine(refusal) == GmailCopy.notConnected)
@@ -122,7 +122,7 @@ struct ReplyPanelTests {
     // Nothing typed is not explained, deliberately: Dan is looking straight at his own empty box, and a
     // sentence telling him it is empty is the restatement #843 was about.
     @Test func anEmptyBoxIsNotExplainedBackToHim() {
-        let refusal = ReplyPanel.refusal(body: "  ", audience: ["a@x.org"],
+        let refusal = ReplyPanel.refusal(body: "  ", subject: nil, audience: ["a@x.org"],
                                          gmailConnected: true, writer: nil)
         #expect(refusal == .nothingTyped)
         #expect(ReplyPanelCopy.refusalLine(refusal) == nil)
@@ -131,7 +131,7 @@ struct ReplyPanelTests {
     // Nor is an empty audience, because the header two lines above already says "No address to reply to"
     // in the same panel. Saying it twice is the other half of #843.
     @Test func anEmptyAudienceIsNotRestatedBesideTheButton() {
-        let refusal = ReplyPanel.refusal(body: "Tuesday works.", audience: [],
+        let refusal = ReplyPanel.refusal(body: "Tuesday works.", subject: nil, audience: [],
                                          gmailConnected: true, writer: nil)
         #expect(refusal == .noAudience)
         #expect(ReplyPanelCopy.refusalLine(refusal) == nil)
@@ -141,7 +141,7 @@ struct ReplyPanelTests {
     // And a send that CAN go says nothing at all, so the line cannot become permanent furniture that
     // stops meaning anything.
     @Test func aSendableReplyCarriesNoRefusalLine() {
-        let refusal = ReplyPanel.refusal(body: "Tuesday works.",
+        let refusal = ReplyPanel.refusal(body: "Tuesday works.", subject: nil,
                                          audience: ["nicolebecker@everyvoicechoirs.org"],
                                          gmailConnected: true,
                                          writer: "nicolebecker@everyvoicechoirs.org")
@@ -152,7 +152,7 @@ struct ReplyPanelTests {
     // The mismatch outranks the empty box: with both true, the line Dan needs is the one he cannot work
     // out for himself.
     @Test func theWriterMismatchIsStatedEvenBeforeHeHasTyped() {
-        let refusal = ReplyPanel.refusal(body: "", audience: ["chelsea@everyvoicechoirs.org"],
+        let refusal = ReplyPanel.refusal(body: "", subject: nil, audience: ["chelsea@everyvoicechoirs.org"],
                                          gmailConnected: true,
                                          writer: "nicolebecker@everyvoicechoirs.org")
         #expect(refusal == .writerNotReached(writer: "nicolebecker@everyvoicechoirs.org",

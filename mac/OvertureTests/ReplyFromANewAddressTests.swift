@@ -115,14 +115,14 @@ struct ReplyFromANewAddressTests {
     // is not among the people the answer would reach, the send is refused outright. Substituting a nearby
     // contact looks exactly like success and emails somebody else (L75).
     @Test func theSendIsRefusedWhenTheWriterIsNotInTheAudience() {
-        #expect(!ReplyPanel.canSend(body: "Tuesday works.",
+        #expect(!ReplyPanel.canSend(body: "Tuesday works.", subject: nil,
                                     audience: ["chelsea@everyvoicechoirs.org"],
                                     gmailConnected: true,
                                     writer: "nicolebecker@everyvoicechoirs.org"))
     }
 
     @Test func theSendIsAllowedWhenTheWriterIsTheOneBeingAnswered() {
-        #expect(ReplyPanel.canSend(body: "Tuesday works.",
+        #expect(ReplyPanel.canSend(body: "Tuesday works.", subject: nil,
                                    audience: ["nicolebecker@everyvoicechoirs.org"],
                                    gmailConnected: true,
                                    writer: "nicolebecker@everyvoicechoirs.org"))
@@ -130,7 +130,7 @@ struct ReplyFromANewAddressTests {
 
     // A reply-all keeps everyone on it, so the writer being one of several is fine.
     @Test func theSendIsAllowedWhenTheWriterIsOneOfSeveral() {
-        #expect(ReplyPanel.canSend(body: "Tuesday works.",
+        #expect(ReplyPanel.canSend(body: "Tuesday works.", subject: nil,
                                    audience: ["chelsea@everyvoicechoirs.org", "nicolebecker@everyvoicechoirs.org"],
                                    gmailConnected: true,
                                    writer: "nicolebecker@everyvoicechoirs.org"))
@@ -139,7 +139,7 @@ struct ReplyFromANewAddressTests {
     // Nothing recorded about who wrote is not a reason to refuse: rows that replied before any of this was
     // captured still answer the contact they were sent to, which is the best that is known about them.
     @Test func anUnknownWriterDoesNotBlockTheSend() {
-        #expect(ReplyPanel.canSend(body: "Tuesday works.",
+        #expect(ReplyPanel.canSend(body: "Tuesday works.", subject: nil,
                                    audience: ["chelsea@everyvoicechoirs.org"],
                                    gmailConnected: true,
                                    writer: nil))

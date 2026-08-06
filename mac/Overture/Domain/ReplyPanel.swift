@@ -15,7 +15,9 @@ enum ReplyPanel {
     // What they actually wrote, or nil when nothing was captured: a reply detected before the words were
     // stored, or one written by somebody nobody was emailed at, whose text is deliberately not filed
     // under a contact who did not say it. The panel says so rather than showing an empty quote (L10).
-    static func theirWords(_ recipient: Recipient) -> String? {
+    // #2145: over the seam both entities already conform to, so one screen can answer either. Reads only
+    // protocol members, which is why it generalises at all.
+    static func theirWords(_ recipient: any ReplyWatchableRecipient) -> String? {
         guard let text = recipient.lastReplyText?.trimmingCharacters(in: .whitespacesAndNewlines),
               !text.isEmpty else { return nil }
         return text
@@ -99,11 +101,33 @@ enum ReplyPanel {
     // Overture has read the thread and found nothing it could decode (an image or an attachment), or it
     // has not looked yet. Saying "didn't capture" of a message it read and could not understand claims
     // something its own check never measured (L11). Nil when the words are there and nothing needs saying.
-    static func missingWordsReason(_ recipient: Recipient) -> String? {
+    // #2145: and a THIRD state, which only exists once an inquiry uses this surface. Dan answers a hire
+    // inquiry he logged by hand before anything has been sent or received, so there is no inbound message
+    // and no Gmail thread to point at. Both sentences above would claim a message exists, and one of them
+    // would name a place it is not (L11). Nothing is missing here, so nothing is said.
+    static func missingWordsReason(_ recipient: any ReplyWatchableRecipient) -> String? {
         guard theirWords(recipient) == nil else { return nil }
+        guard hasReceivedAnything(recipient) else { return nil }
         return recipient.replyTextCheckedAt == nil
             ? ReplyPanelCopy.noCapturedWords
             : ReplyPanelCopy.unreadableWords
+    }
+
+    // Whether anybody has ever written TO Dan here. Every piece of evidence counts, deliberately, because
+    // each one alone is enough to prove a message arrived and no single one is present on every row:
+    //   replied              the flag detection raises, which is set without a stamp on some rows
+    //   repliedAt            when it arrived; survives an answer, which CLEARS the flag above
+    //                        (InquiryReplySender.sendReply), so the flag alone would forget a conversation
+    //                        Dan has already answered
+    //   inboundReplySentAt   when they sent it, captured with the text
+    //   replyTextCheckedAt   the repair pass looked, and it only ever looks at a thread holding a message
+    // A hire inquiry Dan logged by hand and has not answered carries none of them, which is the one state
+    // this exists to name.
+    static func hasReceivedAnything(_ recipient: any ReplyWatchableRecipient) -> Bool {
+        recipient.replied
+            || recipient.repliedAt != nil
+            || recipient.inboundReplySentAt != nil
+            || recipient.replyTextCheckedAt != nil
     }
 
     // #2152: WHY the send is refused, as a value. The disabled button and the sentence beside it are then
@@ -115,6 +139,9 @@ enum ReplyPanel {
         // The address that wrote, and the addresses the answer would actually reach, carried together
         // because the mismatch BETWEEN them is the reason and neither half states it alone.
         case writerNotReached(writer: String, audience: [String])
+        // #2145: an entity whose subject Dan types (an inquiry) can have it emptied. A show answers into a
+        // Gmail thread that already has a subject, so this can never fire for one.
+        case noSubject
         case nothingTyped
     }
 
@@ -129,7 +156,15 @@ enum ReplyPanel {
     //
     // Order is what Dan needs to hear first, not what is cheapest to check: the writer mismatch outranks
     // an empty box, because the empty box is the one thing on this panel he can already see for himself.
-    static func refusal(body: String, audience: [String], gmailConnected: Bool,
+    // #2145: `subject` is nil for an entity with no editable subject (a show answers into a Gmail thread
+    // that already has one), which is a different thing from an empty subject somebody can fix. Refusing
+    // on it HERE rather than in the view is what stops an inquiry losing the check it has today: the mail
+    // cannot be built without a subject, so without this the send would be allowed, fail at the wire, and
+    // report a failure for something the app knew was impossible before he pressed (L67).
+    //
+    // It sits below the writer mismatch and above the empty body, following the screen: the subject field
+    // is above the box, and both are things Dan can see for himself.
+    static func refusal(body: String, subject: String?, audience: [String], gmailConnected: Bool,
                         writer: String?) -> SendRefusal? {
         guard gmailConnected else { return .gmailDisconnected }
         guard !audience.isEmpty else { return .noAudience }
@@ -137,12 +172,16 @@ enum ReplyPanel {
            !audience.contains(where: { ReplyDetection.isSameAddress($0, writer) }) {
             return .writerNotReached(writer: writer, audience: audience)
         }
+        if let subject, subject.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return .noSubject
+        }
         guard !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return .nothingTyped }
         return nil
     }
 
-    static func canSend(body: String, audience: [String], gmailConnected: Bool, writer: String?) -> Bool {
-        refusal(body: body, audience: audience, gmailConnected: gmailConnected, writer: writer) == nil
+    static func canSend(body: String, subject: String?, audience: [String], gmailConnected: Bool,
+                        writer: String?) -> Bool {
+        refusal(body: body, subject: subject, audience: audience, gmailConnected: gmailConnected, writer: writer) == nil
     }
 
     // The panel's send, out of the view so the sequence and its failure path can be tested.
@@ -353,7 +392,9 @@ enum ReplyPanelCopy {
     // screen stops being read at all.
     static func refusalLine(_ refusal: ReplyPanel.SendRefusal?) -> String? {
         switch refusal {
-        case nil, .nothingTyped, .noAudience:
+        // #2145: an empty subject joins them, for exactly the reason an empty box is on this list. The
+        // field is on screen directly above, and he is looking at it.
+        case nil, .nothingTyped, .noAudience, .noSubject:
             return nil
         case .gmailDisconnected:
             // Said on screen and not only in the button's tooltip, which is invisible at rest (L49).

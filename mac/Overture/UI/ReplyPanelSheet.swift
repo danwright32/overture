@@ -57,7 +57,7 @@ struct ReplyPanelSheet: View {
     // #2152: one decision, asked once. The button's disabled state and the reason on screen come from the
     // same value, so a refusal can never be enforced without being stated.
     private var refusal: ReplyPanel.SendRefusal? {
-        ReplyPanel.refusal(body: body_, audience: audience, gmailConnected: gmailConnected,
+        ReplyPanel.refusal(body: body_, subject: nil, audience: audience, gmailConnected: gmailConnected,
                            writer: recipient.replyFromAddress)
     }
     private var canSend: Bool { refusal == nil }
