@@ -82,6 +82,77 @@ struct UpdateCommandFileTests {
         #expect(contents.filter { $0.hasSuffix(".command") }.count == 1)
     }
 
+    // #2146, the defect this file exists to prevent now.
+    //
+    // Dan pressed Update and nothing installed. His copy stayed nine commits behind and he had to run the
+    // installer by hand. Terminal treats a .command as a DOCUMENT, and the previous run's window was still
+    // sitting open at "[Process completed]" holding that exact path, so asking macOS to open the same path
+    // again ACTIVATED that finished window instead of running anything. The button read as an update that
+    // ran (L12), and it stays broken for as long as a finished window is open, which is Terminal's default.
+    //
+    // So every press gets a path macOS has never seen. This is the assertion that fails if the fixed
+    // filename ever comes back.
+    @Test func eachPressGetsAPathMacOSHasNotSeenBefore() throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let first = try #require(UpdateCommandFile.write(repoPath: "/code/overture", in: dir))
+        let second = try #require(UpdateCommandFile.write(repoPath: "/code/overture", in: dir))
+
+        #expect(first != second, "a second press on the same path reopens the old window instead of running")
+    }
+
+    // Ten presses, ten distinct paths, so this cannot pass by two names happening to differ once.
+    @Test func repeatedPressesNeverRepeatAPath() throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        var seen = Set<String>()
+        for _ in 0..<10 {
+            let url = try #require(UpdateCommandFile.write(repoPath: "/code/overture", in: dir))
+            #expect(!seen.contains(url.path))
+            seen.insert(url.path)
+        }
+        #expect(seen.count == 10)
+    }
+
+    // The script still names ITSELF for removal, whatever it is called this time, or a unique name would
+    // trade one leftover for a growing pile.
+    @Test func eachScriptRemovesItsOwnUniqueSelf() throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let url = try #require(UpdateCommandFile.write(repoPath: "/code/overture", in: dir))
+        let written = try String(contentsOf: url, encoding: .utf8)
+        #expect(written.contains("rm -f -- \"\(url.path)\""))
+    }
+
+    // And the sweep clears a FAMILY of them, not one known name, since there is no longer a single name to
+    // look for. This is the property the fixed filename was originally chosen to guarantee.
+    @Test func theSweepClearsEveryLeftoverNotJustOneName() throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        // Three dead runs, as if the machine slept mid-update three times.
+        var leftovers: [URL] = []
+        for _ in 0..<3 {
+            let url = try #require(UpdateCommandFile.write(repoPath: "/code/overture", in: dir,
+                                                           sweepingFirst: false))
+            leftovers.append(url)
+        }
+        #expect(Set(leftovers.map(\.path)).count == 3)
+        let bystander = dir.appendingPathComponent("something-else.command-ish.json")
+        try "{}".write(to: bystander, atomically: true, encoding: .utf8)
+
+        UpdateCommandFile.sweep(in: dir)
+
+        for url in leftovers {
+            #expect(!FileManager.default.fileExists(atPath: url.path), "left behind: \(url.lastPathComponent)")
+        }
+        #expect(FileManager.default.fileExists(atPath: bystander.path),
+                "the sweep must not reach beyond its own files")
+    }
+
     // MARK: - The sweep
 
     // The crash path: the update died before the script reached its own removal, so the file is still

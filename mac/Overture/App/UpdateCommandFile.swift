@@ -23,10 +23,30 @@ import AppKit
 //  2. `sweep` runs at launch, so a run that DIED before reaching that line (the machine slept, the build
 //     failed hard, Terminal was closed mid-run) still leaves nothing sitting there.
 //
-// One fixed filename, never a unique temp name, so a leftover is always the file the sweep looks for
-// rather than one of a growing pile nobody is counting.
+// #2146: every press gets its OWN filename, and that is load-bearing rather than tidiness.
+//
+// This used to be one fixed filename, chosen so a leftover was always the file the sweep looks for rather
+// than one of a growing pile nobody counts. That choice is what broke the button. Terminal treats a
+// .command as a DOCUMENT: on 2026-08-05 the previous run's window was still open at "[Process completed]"
+// holding that exact path, so asking macOS to open it again ACTIVATED the finished window instead of
+// running anything. Dan's copy stayed nine commits behind and he had to run the installer by hand. The
+// button is the only route to new code that does not involve a terminal, and it stayed dead for as long
+// as a finished window sat open, which is Terminal's default setting.
+//
+// The pile the fixed name was protecting against is prevented two other ways instead, so nothing is
+// traded away: `write` sweeps its own family before writing the new one, and `sweep` matches the PREFIX
+// rather than one known name.
 enum UpdateCommandFile {
-    static let filename = "overture-update.command"
+    static let prefix = "overture-update-"
+    static let fileExtension = "command"
+
+    static func filename(token: String) -> String { "\(prefix)\(token).\(fileExtension)" }
+
+    // Whether a file in the temp directory is one of ours. Both halves are required: the prefix alone
+    // would sweep a differently-suffixed neighbour, and the extension alone would sweep any .command.
+    static func isOurs(_ name: String) -> Bool {
+        name.hasPrefix(prefix) && name.hasSuffix(".\(fileExtension)")
+    }
 
     // Where it goes: the per-user temp directory, which is stable across launches (so the sweep can find
     // a leftover) and is not Overture's data directory, whose contents are a published contract.
@@ -52,9 +72,16 @@ enum UpdateCommandFile {
 
     // Writes the script executable and returns where it went, or nil if it could not be written (in which
     // case the caller must not claim it opened anything).
+    // `token` is injected so a test can name the file, and defaults to a UUID rather than a timestamp:
+    // uniqueness is the whole requirement, and two presses inside the same second must still differ.
+    // `sweepingFirst` exists so a test can stage several leftovers; the app always sweeps.
     @discardableResult
-    static func write(repoPath: String, in directory: URL = UpdateCommandFile.directory) -> URL? {
-        let url = directory.appendingPathComponent(filename)
+    static func write(repoPath: String, in directory: URL = UpdateCommandFile.directory,
+                      token: String = UUID().uuidString, sweepingFirst: Bool = true) -> URL? {
+        // The previous press's file goes now rather than being left for the launch sweep, so a unique
+        // name cannot become the growing pile the fixed name was chosen to prevent.
+        if sweepingFirst { sweep(in: directory) }
+        let url = directory.appendingPathComponent(filename(token: token))
         // Removed first rather than overwritten, so a second press cannot leave a half-written file with
         // the old contents' tail on the end.
         try? FileManager.default.removeItem(at: url)
@@ -67,10 +94,17 @@ enum UpdateCommandFile {
         return url
     }
 
-    // Removes a leftover from a run that never reached its own `rm`. Silent when there is nothing there,
+    // Removes leftovers from runs that never reached their own `rm`. Silent when there is nothing there,
     // which is the ordinary case at every launch after a clean update.
+    //
+    // #2146: matches the PREFIX, because there is no single name to look for any more. Everything it
+    // removes is a file this type wrote, and a neighbour in the shared temp directory is never touched.
     static func sweep(in directory: URL = UpdateCommandFile.directory) {
-        try? FileManager.default.removeItem(at: directory.appendingPathComponent(filename))
+        let fm = FileManager.default
+        guard let names = try? fm.contentsOfDirectory(atPath: directory.path) else { return }
+        for name in names where isOurs(name) {
+            try? fm.removeItem(at: directory.appendingPathComponent(name))
+        }
     }
 
     // Writes it and hands it to macOS, which opens a `.command` in Terminal and runs it. Does nothing if
