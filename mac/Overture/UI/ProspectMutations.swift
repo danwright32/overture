@@ -275,7 +275,9 @@ enum ProspectMutations {
               let body = recipient.replyDraftBody, !body.isEmpty else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(body, forType: .string)
-        model.updateRecipient(id: recipientId) { $0.recordAnswerSent(now: Date()) }
+        // #2191: the same routine the in-app send runs, so answering by pasting into Gmail clears the
+        // conversation exactly as answering in the app does.
+        AnsweredReply.record(on: recipient, in: model, now: Date())
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
