@@ -335,7 +335,10 @@ enum SendService {
             // #2170: the same routine the copy-out path runs, rather than the four lines it used to
             // repeat here. They had drifted into two copies of one idea, and the fact neither of them
             // recorded (that Dan had ANSWERED) is why the Answer button kept offering itself afterwards.
-            recipient.recordAnswerSent(now: now)
+            // #2191: through AnsweredReply, so the peers detection put this same reply on stop asking
+            // too. Calling recordAnswerSent directly here is what left a colleague reading as waiting
+            // after the answer had gone.
+            AnsweredReply.record(on: recipient, in: prospect, now: now)
             recipient.sendError = nil
             recipient.replySendClaimedAt = nil
             return true

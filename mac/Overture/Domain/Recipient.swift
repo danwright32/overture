@@ -842,6 +842,15 @@ final class Recipient {
         replyHandledAt = now
     }
 
+    // #2191: the GROUP half of an answer, for a peer that was on the same incoming reply but sent nothing
+    // itself. Only the answered stamp, never the sent body or send time, which belong to whoever sent them.
+    // Never moves backwards, so a later answer on the thread cannot be undone by an earlier one arriving
+    // out of order.
+    func markReplyAnswered(now: Date) {
+        guard let existing = replyHandledAt else { replyHandledAt = now; return }
+        if now > existing { replyHandledAt = now }
+    }
+
     // Dan dismissed a wrong auto-detected reply for THIS contact (#219, per-recipient #418): revert
     // the replied state and remember the wrong reply's id so detection never re-flags that same one,
     // while a genuinely newer reply on the contact's thread still gets detected.

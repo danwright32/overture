@@ -103,6 +103,12 @@ enum LaunchMigrations {
         // show this pass places in a town Dan has already refused is cut in the same launch rather than
         // sitting in the queue until the next one. Idempotent and additive: it fills blanks only.
         LocationBackfill.run(in: context)
+        // LIVE-STORE-CLAIM verified=2026-08-06 measure="recipients that are replied, unresolved, unbounced and carry no answered stamp, where an answer was demonstrably sent on the same conversation after the reply arrived"
+        // #2190: stamp the replies Dan answered BEFORE #2170 added the field that means "Dan answered".
+        // Two rows on the live store, both on The Pumpkin Singalong, which had gone on asking him to
+        // answer an email he answered on 2026-08-05. Selected by the defect's signature rather than by the
+        // stamp being empty, since an empty stamp is the ordinary state of every reply still waiting.
+        AnsweredReplyBackfill.run(in: context)
         // #864: retire an untriaged show whose last night has passed, so `new` genuinely means "waiting
         // on Dan" rather than accumulating rows in a state that can never be resolved. Unlike the
         // backfills above, this one is not a one-time migration: it runs every launch, because a show
