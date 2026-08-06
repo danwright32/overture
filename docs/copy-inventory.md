@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1062 sentences**, from 366 source files.
+Every sentence Overture can say to Dan: **1064 sentences**, from 366 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -706,6 +706,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ManualPrepPrefill.swift`
 "Genre: \(QueueModel.disciplineLabel(discipline)). Change it."
     `UI/QueueView+Model.swift`
+"Getting your reply ready"
+    `Domain/ReplyPanel.swift`
 "Give the organization a name so you can recognize it here."
     `Domain/WatchlistEditing.swift`
 "Gmail access expired or was revoked. Click Connect Gmail to reconnect."
@@ -1168,6 +1170,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OmniFocusSync.swift`
 "Overture couldn't finish starting up"
     `Domain/LaunchMigrations.swift`
+"Overture couldn't get this reply ready to send."
+    `Domain/ReplyPanel.swift`
 "Overture couldn't move its data to \(newStoreURL.path): "
     `App/StoreRelocation.swift`
 "Overture couldn't read this message, which usually means it's an image or an attachment. Open it in Gmail."
@@ -1613,7 +1617,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/SourceFetcher.swift`
 "That contact"
     `App/ActionFeedback.swift`
-"That didn't send. Your reply is still here, so you can try again."
+"That didn't send. You can try again."
     `Domain/ReplyPanel.swift`
 "That doesn't look like a link. Paste the web address of the show or the org's events page."
     `UI/LeadIntakeModel.swift`

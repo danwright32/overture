@@ -31,13 +31,14 @@ struct ReplyPanelSheet: View {
     // #2143: a draft that arrived while he was writing. Held, not applied: replacing words somebody is
     // in the middle of typing is the one thing reading the screen afterwards cannot undo.
     @State private var offeredDraft: String?
-    @State private var phase: Phase = .compose
+    // #2145: the whole state of the send, carrying the instant each running step began, decided in
+    // ReplyPanel where it is tested.
+    @State private var phase: ReplyPanel.SendPhase = .composing
     // #2144: what Dan is about to approve, held while he reads it. Nil until Send is pressed, which is
     // deliberate: building it composes the signature onto the body, and hanging that off every keystroke
     // would pay the whole composition per character (L59, L62).
     @State private var pending: PendingReply?
 
-    private enum Phase: Equatable { case compose, sending, failed(String) }
 
     // #2143: the box opens on the draft already waiting on this contact. Seeded at construction rather
     // than in an onAppear, so the panel is never on screen holding an empty box over a draft that exists,
@@ -66,14 +67,14 @@ struct ReplyPanelSheet: View {
         VStack(alignment: .leading, spacing: OVSpacing.md) {
             header
             theirReply
-            switch phase {
-            case .compose, .sending:
-                draftOffer
-                compose
-            case .failed(let message):
-                Text(message).font(OVType.body).foregroundStyle(OVColor.rust)
+            // #2145: the failure sits ABOVE his words rather than in place of them. The sentence promises
+            // his reply is still here, and hiding the box made that true only of a variable (L11).
+            if let failure = phase.failure {
+                Text(failure).font(OVType.body).foregroundStyle(OVColor.rust)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            draftOffer
+            if phase.showsComposeBox { compose }
             footer
         }
         .padding(OVSpacing.lg)
@@ -221,7 +222,9 @@ struct ReplyPanelSheet: View {
             .font(OVType.body)
             .frame(minHeight: 160)
             .overlay(RoundedRectangle(cornerRadius: 6).stroke(OVColor.line))
-            .disabled(phase == .sending)
+            // #2145: read-only only while the mail is actually going, so an edit cannot land on words
+            // already handed to Gmail. A failure is the state he retries FROM, so it stays editable.
+            .disabled(phase.freezesComposeBox)
     }
 
     private var footer: some View {
@@ -240,8 +243,11 @@ struct ReplyPanelSheet: View {
 
     private var buttons: some View {
         HStack(spacing: OVSpacing.sm) {
+            // #2145: refused once the mail is going. Dismissing then took the screen down with the
+            // outcome still to come, so a send that failed looked exactly like one that worked (L12).
             Button(ReplyPanelCopy.cancel) { dismiss() }
                 .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                .disabled(!phase.allowsCancel)
             // #2143: the run stays on the panel that started it. Pressing the button used to dismiss the
             // sheet, which put the only trace of a paid run that was under way (and of the draft it came
             // back with) on the Archive card Dan does not open, so working, still-alive and stalled were
@@ -254,14 +260,17 @@ struct ReplyPanelSheet: View {
                              heartbeat: { ReplyClassifyService.heartbeat(now: Date()) })
             // #2129: offered, never automatic. Dan writes these himself and presses this only if he wants
             // to. Scoped to THIS reply, so it spends on the one conversation he asked about.
-            } else if phase != .sending {
+            } else if phase.runningLabel == nil {
                 Button(ReplyPanelCopy.draftWithAI) { requestDraft() }
                 .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forest)
                 .help(ReplyPanelCopy.draftWithAIHelp)
             }
             Spacer()
-            if phase == .sending {
-                LiveRunLabel(base: ReplyPanelCopy.sending, since: Date(), timeout: RunTimeouts.send,
+            // #2145: the label names WHICH step is running, and counts from the instant that step began
+            // rather than from this redraw. Anchored on `Date()` here, the counter restarted whenever
+            // anything on the panel changed, so the stall timeout could never be reached (L74).
+            if let running = phase.runningLabel {
+                LiveRunLabel(base: running, since: phase.startedAt, timeout: RunTimeouts.send,
                              font: OVType.meta, color: OVColor.inkSoft)
             } else {
                 Button(ReplyPanelCopy.send) { review() }
@@ -285,19 +294,24 @@ struct ReplyPanelSheet: View {
     // FIRST so the message Dan reads carries the signature the send will actually compose, then puts the
     // whole composed email in front of him. Nothing has left at this point.
     private func review() {
-        phase = .sending
+        // #2145: PREPARING, not sending. Nothing has left, and he has not yet seen what he would approve.
+        phase = .preparing(since: Date())
         Task {
             await GmailSignatureService.refreshBeforeSend()
-            pending = SendConfirmation(replyFor: recipient, of: prospect, body: body_)
-                .map { PendingReply(confirmation: $0) }
-            // A confirmation that cannot be built means the send could not have gone either, so the panel
-            // returns to composing rather than sitting on a spinner that will never resolve.
-            phase = .compose
+            guard let confirmation = SendConfirmation(replyFor: recipient, of: prospect, body: body_) else {
+                // #2145: a confirmation that cannot be built means the send could not have gone either,
+                // and the button pressing to no visible effect is the same silence as a dead control. Say
+                // so instead of dropping back to composing with nothing changed (L11, L67).
+                phase = .failed(ReplyPanelCopy.couldNotPrepare)
+                return
+            }
+            pending = PendingReply(confirmation: confirmation)
+            phase = .composing
         }
     }
 
     private func send() {
-        phase = .sending
+        phase = .sending(since: Date())
         Task {
             // The sequence itself lives in ReplyPanel.commit, where a test can reach it.
             let sent = await ReplyPanel.commit(body: body_, on: recipient, of: prospect,
