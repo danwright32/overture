@@ -122,22 +122,43 @@ struct SendConfirmation: Equatable {
     // Carries the body and signature as INGREDIENTS like every other confirmation, so the sheet renders
     // the same document the wire builds rather than a second composition that can drift, and takes its
     // audience and subject from the same two helpers the sender asks (L64).
+    // #2145: the same reply confirmation, built from what a reply IS (who it reaches, what it is called,
+    // what it says) rather than from what kind of thing is being answered. An inquiry has no Prospect
+    // anywhere near it and needs this sheet for exactly the reason a show does: the signature is composed
+    // at the send layer onto every outgoing mail, so without a confirmation it goes out having been read
+    // by nobody (L69, the two weeks of #2086).
+    //
+    // Takes an audience and a subject already DECIDED, so it cannot hold an opinion that differs from the
+    // rule which decided the send was allowed at all (L16, L70).
     @MainActor
-    init?(replyFor recipient: Recipient, of prospect: Prospect, body: String,
+    init?(replyTo audience: [String], subject: String, body: String,
           signature: OutboundSignature = GmailSignatureStore.currentSignature()) {
-        let addresses = SendGroup.replyAudience(of: recipient)
-        guard !addresses.isEmpty, !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return nil
-        }
+        // Nothing to send is nothing to confirm. The subject is guarded here as well as at the refusal,
+        // because the mail itself cannot be built without one, so a sheet promising to send it would be
+        // promising something impossible (L67).
+        guard !audience.isEmpty,
+              !subject.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         from = .danWright
-        self.recipient = addresses.joined(separator: ", ")
-        subject = SendService.replySubject(for: recipient, of: prospect)
+        recipient = audience.joined(separator: ", ")
+        self.subject = subject
         bodyBeforeSignOff = body
         self.signature = signature
         title = SendConfirmCopy.replyTitle
         // A reply always goes as ONE email to everybody it mirrors, so the promise counts them rather than
         // offering the together-or-separately choice a first pitch has.
-        reassurance = SendConfirmCopy.reassurance(chosen: addresses.count, together: true)
+        reassurance = SendConfirmCopy.reassurance(chosen: audience.count, together: true)
+    }
+
+    @MainActor
+    // #2145: the show's own reply, now only a LOOKUP of the two things the shared initializer above takes.
+    // Kept as its own entry point because the lookup is genuinely Prospect-shaped (the subject is derived
+    // from the show's draft subject and its merged-concert name), while the composition it feeds is not.
+    init?(replyFor recipient: Recipient, of prospect: Prospect, body: String,
+          signature: OutboundSignature = GmailSignatureStore.currentSignature()) {
+        self.init(replyTo: SendGroup.replyAudience(of: recipient),
+                  subject: SendService.replySubject(for: recipient, of: prospect),
+                  body: body, signature: signature)
     }
 
     // #948: a follow-up nudge to one contact. Subject and body come from FollowUp.nudgeContent, the same
