@@ -18,6 +18,7 @@ struct BuildFreshnessSheet: View {
     // Where the installer built from, or nil when there is no record of an install. Nil means no Update
     // button, because a button that cannot act reads as an update that ran and did nothing (#1778).
     let repoPath: String?
+    let onUpdate: () -> Void
     let onDismiss: () -> Void
 
     var body: some View {
@@ -64,13 +65,12 @@ struct BuildFreshnessSheet: View {
                         .buttonStyle(.plain)
                         .foregroundStyle(OVColor.onForest.opacity(0.75))
                     Spacer()
-                    if let repoPath {
-                        Button(BuildFreshnessCopy.update) {
-                            // Dismissed first: the installer quits this process moments later, and a
-                            // sheet still up when the window goes is a worse last frame than a closed one.
-                            onDismiss()
-                            UpdateCommandFile.open(repoPath: repoPath)
-                        }
+                    if repoPath != nil {
+                        // #2188: the press is REPORTED rather than acted on here. The sheet used to
+                        // dismiss itself and open the command file, so there was no moment at which
+                        // anything else could learn a press had happened, and a run that then refused
+                        // had nowhere to report back to.
+                        Button(BuildFreshnessCopy.update) { onUpdate() }
                         .keyboardShortcut(.defaultAction)
                         .buttonStyle(.borderedProminent)
                         .tint(OVColor.gold)
@@ -91,15 +91,36 @@ struct BuildFreshnessSheet: View {
 // pinned, which raced the installer's own write and left Dan being told for hours that a copy straight
 // from the installer had not come from the installer. Every rule about how often to look lives in
 // BuildFreshnessState, so this holds no policy of its own, just the three moments worth looking at.
+//
+// #2188: it also owns the waiting that follows a press. The update runs in a Terminal window this
+// process cannot see, so the only thing that knows how it went is the record the run leaves, and
+// something has to be looking. One sheet shows either panel, because they are one conversation: the
+// press closes the out of date panel and its outcome opens the next one in the same place.
 struct BuildFreshnessNotice: ViewModifier {
     @State private var state: BuildFreshnessState
+    @State private var attempt: UpdateAttemptState
 
     init(directory: URL) {
         _state = State(initialValue: BuildFreshnessState(directory: directory))
+        _attempt = State(initialValue: UpdateAttemptState(directory: directory))
+    }
+
+    // The press: open the update, and hand the id it comes back with to the watcher. Nothing is watched
+    // when nothing was opened, so a press that could not be written never leaves something waiting on a
+    // run that does not exist.
+    @MainActor private func press() {
+        guard let repoPath = state.repoPath else { return }
+        // Dismissed first: the installer quits this process moments later, and a sheet still up when the
+        // window goes is a worse last frame than a closed one.
+        state.dismiss()
+        guard let id = UpdateCommandFile.open(repoPath: repoPath) else { return }
+        attempt.pressed(id, at: Date())
     }
 
     func body(content: Content) -> some View {
         content
+            // One watch per press, started when the press happens and ending when its outcome is known.
+            .task(id: attempt.press) { await attempt.watch() }
             // The read that beats the install race, then the slow tick that notices a merge landing
             // while Dan works. Both end when the window goes, so a closed window watches nothing.
             .task {
@@ -113,14 +134,21 @@ struct BuildFreshnessNotice: ViewModifier {
                 state.refreshIfStale()
             }
             .sheet(isPresented: .init(
-                get: { state.shouldShow },
-                set: { if !$0 { state.dismiss() } })) {
-                // Only ever built when shouldShow is true, which requires a verdict, so there is no
-                // fallback here inventing one.
-                if let verdict = state.verdict {
-                    BuildFreshnessSheet(verdict: verdict, repoPath: state.repoPath) {
-                        state.dismiss()
-                    }
+                get: { attempt.shouldShow || state.shouldShow },
+                set: { if !$0 { if attempt.shouldShow { attempt.dismiss() } else { state.dismiss() } } })) {
+                // The outcome of a press he just made comes first: it is the newer news, and it is about
+                // the thing he did rather than the thing he was told.
+                if attempt.shouldShow, let progress = attempt.progress {
+                    UpdateFailureSheet(progress: progress,
+                                       canRetry: state.repoPath != nil,
+                                       onRetry: { press() },
+                                       onDismiss: { attempt.dismiss() })
+                } else if let verdict = state.verdict {
+                    // Only ever built when shouldShow is true, which requires a verdict, so there is no
+                    // fallback here inventing one.
+                    BuildFreshnessSheet(verdict: verdict, repoPath: state.repoPath,
+                                        onUpdate: { press() },
+                                        onDismiss: { state.dismiss() })
                 }
             }
     }

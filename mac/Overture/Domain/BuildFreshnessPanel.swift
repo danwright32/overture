@@ -120,7 +120,26 @@ enum BuildFreshnessCopy {
     static let title = "Overture is out of date"
     static let cannotTellTitle = "Overture cannot tell how old this copy is"
 
-    static func body(_ verdict: BuildFreshness.Verdict) -> String {
+    // #2187: how far behind the copy is, which is time from the SHIPPED commit to now.
+    //
+    // It used to be the span between the two commit dates, and that is a different question wearing the
+    // same word. On 2026-08-06 Dan's copy was built at 9:52pm and main's tip had landed at 12:46am, so at
+    // 9:56am the panel said "2h behind" about code that had shipped nine hours earlier, and he read it as
+    // something having shipped that morning. Worse than the wrong number is that it could not move: both
+    // its ends were in the past, so it would still have said "2h" a week later while the copy fell
+    // further and further behind, and nothing about a frozen number looks broken.
+    //
+    // The fallback is for a clock that disagrees with the commit it is reading (a skewed Mac, a commit
+    // dated ahead). Then the span between the commits is used instead: it is the one thing still known
+    // to be true without a clock, and it is never negative, because `.behind` exists only when the
+    // installed commit is older. Naively subtracting would floor at "0m behind", which reads as up to
+    // date on the single screen whose whole job is to say otherwise.
+    static func behindBy(installedAt: Date, shippedAt: Date, now: Date) -> String {
+        guard now > shippedAt else { return PrepStatus.gap(from: installedAt, to: shippedAt) }
+        return PrepStatus.gap(from: shippedAt, to: now)
+    }
+
+    static func body(_ verdict: BuildFreshness.Verdict, now: Date = Date()) -> String {
         switch verdict {
         case .upToDate:
             // Nothing, because there is no panel: `shouldShow` refuses this case, so the only way to
@@ -129,8 +148,7 @@ enum BuildFreshnessCopy {
             // say to Dan while being unreachable by construction.
             return ""
         case .behind(let installedAt, let shippedAt):
-            let gap = PrepStatus.gap(from: installedAt, to: shippedAt)
-            return "This copy is \(gap) behind what has shipped, so anything fixed since then is not in front of you."
+            return "This copy is \(behindBy(installedAt: installedAt, shippedAt: shippedAt, now: now)) behind what has shipped, so anything fixed since then is not in front of you."
         case .cannotTell(.noInstalledRecord):
             return "This copy did not come from the installer, so there is no record of what went into it."
         case .cannotTell(.noShippedRecord):

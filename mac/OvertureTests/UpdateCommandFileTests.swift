@@ -56,6 +56,46 @@ struct UpdateCommandFileTests {
         #expect(script.contains("\"/tmp/my temp/x.command\""))
     }
 
+    // #2188: the script tells the run which press it belongs to, and the press hands that same id back
+    // to whoever is watching. Both halves are needed for the app to learn how the update went: without
+    // the id in the script the run has nothing to stamp its record with, and without it coming back the
+    // app cannot tell its own press's outcome from a record left by an earlier one.
+    @Test func theScriptTellsTheRunWhichPressItBelongsTo() {
+        let script = UpdateCommandFile.script(repoPath: "/code/overture", scriptPath: "/tmp/x.command",
+                                              press: "press-1")
+
+        #expect(script.contains("OVERTURE_UPDATE_PRESS=\"press-1\""))
+        // Exported before the update is invoked, or the run cannot see it at all.
+        let lines = script.split(separator: "\n").map(String.init)
+        let pressLine = try? #require(lines.firstIndex { $0.contains("OVERTURE_UPDATE_PRESS") })
+        let runLine = try? #require(lines.firstIndex { $0.contains("update-overture.sh") })
+        #expect((pressLine ?? 0) < (runLine ?? 0))
+    }
+
+    @MainActor @Test func openingHandsBackTheIdTheScriptCarries() throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        var opened: URL?
+        let press = UpdateCommandFile.open(repoPath: "/code/overture", in: dir, token: "tok-9") { opened = $0 }
+
+        #expect(press == "tok-9")
+        let written = try String(contentsOf: try #require(opened), encoding: .utf8)
+        #expect(written.contains("OVERTURE_UPDATE_PRESS=\"tok-9\""),
+                "the id handed back has to be the one the run will stamp its record with, or the app watches for an outcome nothing will ever write")
+    }
+
+    // A press that could not be written reports nothing rather than an id, so nothing goes off waiting
+    // for the outcome of a run that was never started.
+    @MainActor @Test func aPressThatCouldNotBeWrittenHandsBackNothing() {
+        let missing = URL(fileURLWithPath: "/nowhere/at/all/\(UUID().uuidString)")
+        var opened = false
+        let press = UpdateCommandFile.open(repoPath: "/code/overture", in: missing) { _ in opened = true }
+
+        #expect(press == nil)
+        #expect(opened == false)
+    }
+
     // MARK: - Writing it
 
     @Test func itIsWrittenExecutableSoTerminalCanRunIt() throws {

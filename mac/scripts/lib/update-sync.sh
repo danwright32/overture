@@ -39,13 +39,29 @@ overture_update_verdict() {
 overture_update_reason() {
   case "${1:-}" in
     refuse:work-in-progress)
-      printf '%s\n' "Overture did not update: there is unsaved work in progress in the code folder, and updating would disturb it. Ask Claude to finish or put aside that work, then press Update again."
+      printf '%s\n' "There is unsaved work in progress in the code folder, and updating would disturb it. Ask Claude to finish or put aside that work, then press Update again."
       ;;
     refuse:diverged)
-      printf '%s\n' "Overture did not update: the code folder holds work that never reached the shared copy, so it cannot be brought up to date on its own. Ask Claude to sort it out, then press Update again."
+      printf '%s\n' "The code folder holds work that never reached the shared copy, so it cannot be brought up to date on its own. Ask Claude to sort it out, then press Update again."
       ;;
     *) printf '\n' ;;
   esac
+}
+
+# Set alongside every refusal, so the caller can hand the SAME sentence to the app (#2188) instead of
+# composing a second copy that drifts from what the Terminal window printed.
+OVERTURE_UPDATE_REASON=""
+
+# overture_update_refuse REASON
+#   Says it did not update, says why, and remembers the why.
+#
+# The two surfaces carry one sentence each rather than both carrying the whole thing. A Terminal window
+# has no title, so it needs the standing line; the app's panel is headed "Overture could not update", so
+# a reason that began "Overture did not update" would be the same fact twice on one screen, which is the
+# restatement #843 exists for.
+overture_update_refuse() {
+  OVERTURE_UPDATE_REASON="${1:-}"
+  printf 'Overture did not update.\n%s\n' "${OVERTURE_UPDATE_REASON}" >&2
 }
 
 # overture_bring_checkout_current REPO
@@ -60,7 +76,7 @@ overture_bring_checkout_current() {
 
   if ! git -C "${repo}" fetch --quiet origin main 2>/dev/null; then
     # Fail loud. A silent build on stale code is how the loop looked from the outside.
-    printf '%s\n' "Overture did not update: it could not reach the shared copy of the code to see what has shipped. Check the network and press Update again." >&2
+    overture_update_refuse "It could not reach the shared copy of the code to see what has shipped. Check the network and press Update again."
     return 1
   fi
 
@@ -84,7 +100,7 @@ overture_bring_checkout_current() {
     ready) return 0 ;;
     sync) : ;;
     *)
-      overture_update_reason "${verdict}" >&2
+      overture_update_refuse "$(overture_update_reason "${verdict}")"
       return 1
       ;;
   esac
@@ -92,11 +108,11 @@ overture_bring_checkout_current() {
   # The move itself, and it must not be able to half-happen: if either step fails the checkout is left
   # where it is and the installer is told not to build, rather than building something nobody chose.
   if ! git -C "${repo}" checkout --quiet main 2>/dev/null; then
-    printf '%s\n' "Overture did not update: it could not switch the code folder to the shared copy. Ask Claude to look." >&2
+    overture_update_refuse "It could not switch the code folder to the shared copy. Ask Claude to look."
     return 1
   fi
   if ! git -C "${repo}" merge --ff-only --quiet origin/main 2>/dev/null; then
-    printf '%s\n' "Overture did not update: it could not bring the code folder up to what has shipped. Ask Claude to look." >&2
+    overture_update_refuse "It could not bring the code folder up to what has shipped. Ask Claude to look."
     return 1
   fi
   return 0
