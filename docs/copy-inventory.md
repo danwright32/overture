@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1058 sentences**, from 364 source files.
+Every sentence Overture can say to Dan: **1059 sentences**, from 366 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1204,6 +1204,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreUnavailableView.swift`
 "Overture's data is unavailable."
     `App/StoreLaunchOutcome.swift`
+"Overture, \(Plural.count(count, "thing")) due"
+    `Domain/DueBadge.swift`
 "Owes a reply"
     `Domain/ConversationReminder.swift`
     `UI/ReminderSettingsView.swift`

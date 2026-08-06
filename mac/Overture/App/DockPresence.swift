@@ -5,8 +5,11 @@ import AppKit
 // is closed it drops back to the menu-bar-only LSUIElement presence (.accessory). Pure so the
 // mapping is testable; the AppDelegate owns when to call it.
 enum DockPresence {
-    static func policy(mainWindowVisible: Bool) -> NSApplication.ActivationPolicy {
-        mainWindowVisible ? .regular : .accessory
+    // #2115: work being due keeps the icon alive too. Dan asked for a Dock badge, and with the window
+    // closed this app has no Dock icon at all, so the badge would be invisible in exactly the situation
+    // it exists for. The icon appearing IS part of the signal, not a side effect of drawing on it.
+    static func policy(mainWindowVisible: Bool, dueCount: Int = 0) -> NSApplication.ActivationPolicy {
+        (mainWindowVisible || dueCount > 0) ? .regular : .accessory
     }
 
     // Whether taking this policy also means ACTIVATING the app, which is the whole of the Cmd+L bug Dan
@@ -36,13 +39,17 @@ enum DockPresence {
     // untested is a guard that has already silently rotted once here. So the sequence itself (set the
     // policy, and then activate when we have just become a regular app) lives where it can be asserted,
     // and the AppDelegate only supplies the real NSApp.
-    static func apply(mainWindowVisible: Bool,
+    // #2115: only a WINDOW brings the app forward. The icon can now also appear because work fell due,
+    // and that promotion must never activate: Dan closed the window to get on with something else, and an
+    // overdue reply arriving is not permission to take his keyboard mid-sentence. The icon appears, the
+    // badge lands on it, and he comes back when he chooses.
+    static func apply(mainWindowVisible: Bool, dueCount: Int = 0,
                       current: NSApplication.ActivationPolicy,
                       setPolicy: (NSApplication.ActivationPolicy) -> Void,
                       activate: () -> Void) {
-        let next = policy(mainWindowVisible: mainWindowVisible)
+        let next = policy(mainWindowVisible: mainWindowVisible, dueCount: dueCount)
         guard current != next else { return }
         setPolicy(next)
-        if shouldActivate(from: current, to: next) { activate() }
+        if mainWindowVisible, shouldActivate(from: current, to: next) { activate() }
     }
 }
