@@ -18,13 +18,19 @@ struct ReplyPanelSheet: View {
     // list stands on is picked by sorted id and is routinely somebody else.
     let recipient: Recipient
     let gmailConnected: Bool
-    var sender: MailSender = ProspectMutations.liveSender()
+    var sender: MailSender
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
     @Environment(ActionFeedback.self) private var feedback
 
-    @State private var body_ = ""
+    @State private var body_: String
+    // #2143: what the box was last given, so a draft landing later can tell text Dan has since written
+    // from text he was handed and has not touched.
+    @State private var seeded: String
+    // #2143: a draft that arrived while he was writing. Held, not applied: replacing words somebody is
+    // in the middle of typing is the one thing reading the screen afterwards cannot undo.
+    @State private var offeredDraft: String?
     @State private var phase: Phase = .compose
     // #2144: what Dan is about to approve, held while he reads it. Nil until Send is pressed, which is
     // deliberate: building it composes the signature onto the body, and hanging that off every keystroke
@@ -32,6 +38,20 @@ struct ReplyPanelSheet: View {
     @State private var pending: PendingReply?
 
     private enum Phase: Equatable { case compose, sending, failed(String) }
+
+    // #2143: the box opens on the draft already waiting on this contact. Seeded at construction rather
+    // than in an onAppear, so the panel is never on screen holding an empty box over a draft that exists,
+    // not even for one frame.
+    init(prospect: Prospect, recipient: Recipient, gmailConnected: Bool,
+         sender: MailSender = ProspectMutations.liveSender()) {
+        self.prospect = prospect
+        self.recipient = recipient
+        self.gmailConnected = gmailConnected
+        self.sender = sender
+        let opening = ReplyPanel.openingBody(recipient)
+        _body_ = State(initialValue: opening)
+        _seeded = State(initialValue: opening)
+    }
 
     private var audience: [String] { SendGroup.replyAudience(of: recipient) }
     // #2152: one decision, asked once. The button's disabled state and the reason on screen come from the
@@ -48,6 +68,7 @@ struct ReplyPanelSheet: View {
             theirReply
             switch phase {
             case .compose, .sending:
+                draftOffer
                 compose
             case .failed(let message):
                 Text(message).font(OVType.body).foregroundStyle(OVColor.rust)
@@ -57,6 +78,12 @@ struct ReplyPanelSheet: View {
         }
         .padding(OVSpacing.lg)
         .frame(width: 560)
+        // #2143: the drafter is detached, so its result lands on the contact while this panel is open.
+        // Reading it here is what makes "Draft with AI" finish somewhere Dan is looking.
+        .onChange(of: recipient.replyDraftBody) { _, arrived in
+            let arrival = ReplyPanel.arriving(draft: arrived, typed: body_, seeded: seeded)
+            apply(ReplyPanel.applying(arrival, to: composeState))
+        }
         // #2144: the same sheet every other consequential send goes through, so a reply is approved with
         // its From, To, Subject and the composed message including the signature, on either background.
         .sheet(item: $pending) { held in
@@ -158,7 +185,35 @@ struct ReplyPanelSheet: View {
         }
     }
 
-    // Empty and ready to type: Dan writes these himself. "I'll respond to whatever it is they say, usually
+    // #2143: the three pieces of the compose box as one value, so the rules about what may replace what
+    // live in ReplyPanel where they are tested, and this view only reads and assigns.
+    private var composeState: ReplyPanel.ComposeState {
+        ReplyPanel.ComposeState(typed: body_, seeded: seeded, offered: offeredDraft)
+    }
+
+    private func apply(_ state: ReplyPanel.ComposeState) {
+        body_ = state.typed
+        seeded = state.seeded
+        offeredDraft = state.offered
+    }
+
+    // #2143: the draft that came back while he was writing, offered above the box it would replace.
+    @ViewBuilder private var draftOffer: some View {
+        if offeredDraft != nil {
+            HStack(spacing: OVSpacing.xs) {
+                Text(ReplyPanelCopy.draftArrivedWhileWriting)
+                    .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button(ReplyPanelCopy.useTheDraft) { apply(ReplyPanel.taking(composeState)) }
+                .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forest)
+                .help(ReplyPanelCopy.useTheDraftHelp)
+                Spacer()
+            }
+        }
+    }
+
+    // Opens on the draft already waiting, and otherwise empty and ready to type: Dan writes these himself.
+    // "I'll respond to whatever it is they say, usually
     // by hand without needing AI to write it, although I should be given the option to trigger an AI
     // written draft if i choose too (that's not the default in that situation though)."
     private var compose: some View {
@@ -187,14 +242,20 @@ struct ReplyPanelSheet: View {
         HStack(spacing: OVSpacing.sm) {
             Button(ReplyPanelCopy.cancel) { dismiss() }
                 .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+            // #2143: the run stays on the panel that started it. Pressing the button used to dismiss the
+            // sheet, which put the only trace of a paid run that was under way (and of the draft it came
+            // back with) on the Archive card Dan does not open, so working, still-alive and stalled were
+            // all the same silence. Read from the contact rather than from a flag of this view's own, so
+            // opening the panel onto a run already under way shows it too (L14).
+            if ReplyPanel.isDrafting(recipient) {
+                LiveRunLabel(base: ReplyPanelCopy.drafting, since: recipient.replyDraftRequestedAt,
+                             timeout: RunTimeouts.replyDraft, font: OVType.meta, color: OVColor.inkSoft,
+                             onRetry: { requestDraft() },
+                             heartbeat: { ReplyClassifyService.heartbeat(now: Date()) })
             // #2129: offered, never automatic. Dan writes these himself and presses this only if he wants
             // to. Scoped to THIS reply, so it spends on the one conversation he asked about.
-            if phase != .sending {
-                Button(ReplyPanelCopy.draftWithAI) {
-                    ProspectMutations.draftOneReply(prospect.naturalKey, recipient.id,
-                                                    prospects: [prospect], context: context, feedback: feedback)
-                    dismiss()
-                }
+            } else if phase != .sending {
+                Button(ReplyPanelCopy.draftWithAI) { requestDraft() }
                 .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forest)
                 .help(ReplyPanelCopy.draftWithAIHelp)
             }
@@ -211,6 +272,13 @@ struct ReplyPanelSheet: View {
                     .help(ReplyPanelCopy.sendHelp)
             }
         }
+    }
+
+    // #2143: asking for the draft, from the button and from the retry the stalled label offers, so the two
+    // routes cannot start different runs.
+    private func requestDraft() {
+        ProspectMutations.draftOneReply(prospect.naturalKey, recipient.id,
+                                        prospects: [prospect], context: context, feedback: feedback)
     }
 
     // #2144: step one of sending, and the only thing the Send button does now. Refreshes the signature

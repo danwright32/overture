@@ -132,7 +132,9 @@ struct PrepReplyRunnerWiringGuardTests {
         #expect(!replyConversation.isEmpty)
         #expect(!replyRunLine.isEmpty)
         // The per-recipient label dropped the run-wide count...
-        guard let labelRange = replyConversation.range(of: "LiveRunLabel(base: \"Drafting a reply\"") else {
+        // #2143: anchored on the shared constant, since the reply panel says this too and the two
+        // surfaces now read the words from one place instead of spelling them separately.
+        guard let labelRange = replyConversation.range(of: "LiveRunLabel(base: ReplyPanelCopy.drafting") else {
             Issue.record("reply drafter LiveRunLabel not found")
             return
         }

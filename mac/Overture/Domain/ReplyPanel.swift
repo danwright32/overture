@@ -21,6 +21,80 @@ enum ReplyPanel {
         return text
     }
 
+    // #2143: what the compose box opens holding, which is the draft already sitting on this contact.
+    // The panel used to open on a hard-coded empty string, so a draft Dan had asked for was invisible on
+    // the only surface he uses, and typing over it and sending threw it away (L5).
+    //
+    // Hand-written stays the default: a contact with nothing drafted still opens on an empty box.
+    static func openingBody(_ recipient: Recipient) -> String {
+        guard let draft = recipient.replyDraftBody,
+              !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return "" }
+        return draft
+    }
+
+    // #2143: whether an AI draft is on its way for THIS reply, so the panel can show a live run rather
+    // than closing itself and leaving the button's effect nowhere on screen.
+    //
+    // Guarded against a stale stamp: recordAnswerSent consumes the draft body and leaves
+    // replyDraftRequestedAt standing, so a request belonging to an exchange already answered would
+    // otherwise read as a run that is drafting right now (L68).
+    static func isDrafting(_ recipient: Recipient) -> Bool {
+        guard let requested = recipient.replyDraftRequestedAt else { return false }
+        guard recipient.replyDraftBody?.isEmpty != false else { return false }
+        if let answered = recipient.replyHandledAt, requested <= answered { return false }
+        return true
+    }
+
+    // #2143: a draft landing while the panel is open. Three outcomes, because Dan's own words and an
+    // empty box are not the same situation and neither is nothing having arrived.
+    enum ArrivingDraft: Equatable {
+        case ignore
+        // Nothing of his would be lost, so the draft he pressed for simply appears.
+        case adopt(String)
+        // He has typed since. Offered, never imposed: overwriting what somebody is in the middle of
+        // writing is the one outcome that cannot be undone by reading the screen.
+        case offer(String)
+    }
+
+    // #2143: the compose box's whole state, so what a landing draft does to it is decided here and the
+    // view only assigns.
+    struct ComposeState: Equatable {
+        var typed: String
+        // The last text the box was GIVEN, which is how a later draft tells his words from words it
+        // handed him and he left alone.
+        var seeded: String
+        var offered: String?
+    }
+
+    static func applying(_ arrival: ArrivingDraft, to state: ComposeState) -> ComposeState {
+        switch arrival {
+        case .ignore:
+            // Including an offer already standing: it waits for his answer rather than being withdrawn
+            // by an unrelated write to the contact.
+            return state
+        case .adopt(let draft):
+            return ComposeState(typed: draft, seeded: draft, offered: nil)
+        case .offer(let draft):
+            // His words are untouched. Only the offer beside them is new.
+            return ComposeState(typed: state.typed, seeded: state.seeded, offered: draft)
+        }
+    }
+
+    // He pressed the offer, which is the only thing that may replace what he wrote.
+    static func taking(_ state: ComposeState) -> ComposeState {
+        guard let draft = state.offered else { return state }
+        return ComposeState(typed: draft, seeded: draft, offered: nil)
+    }
+
+    static func arriving(draft: String?, typed: String, seeded: String) -> ArrivingDraft {
+        guard let draft, !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return .ignore }
+        guard draft != typed else { return .ignore }   // already what the box holds; nothing to say
+        // Whitespace is not words to protect, and neither is text he has not touched since it was put
+        // there for him.
+        let untouched = typed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || typed == seeded
+        return untouched ? .adopt(draft) : .offer(draft)
+    }
+
     // #2149: WHY there are no words, which is two different states and needs two different sentences.
     // Overture has read the thread and found nothing it could decode (an image or an attachment), or it
     // has not looked yet. Saying "didn't capture" of a message it read and could not understand claims
@@ -209,7 +283,16 @@ enum ReplyPanelCopy {
     static let unreadableWords =
         "Overture couldn't read this message, which usually means it's an image or an attachment. Open it in Gmail."
     static let draftWithAI = "Draft with AI"
+    // #2143: the run the button starts, named where Dan is watching for it. The same words the Archive
+    // card's own drafting line uses, shared rather than spelled twice, so the two surfaces cannot drift.
+    static let drafting = "Drafting a reply"
     static let draftWithAIHelp = "Write a first draft of this one reply, which you can then edit"
+    // #2143: a draft came back while Dan was writing his own. States what happened and nothing else: what
+    // it would do to his words is the button's job to say, not this line's.
+    static let draftArrivedWhileWriting = "An AI draft came back while you were writing."
+    static let useTheDraft = "Use it instead"
+    static let useTheDraftHelp = "Replace what you've written here with the AI's draft"
+
     static let send = "Send reply"
     static let sending = "Sending"
     static let cancel = "Cancel"
