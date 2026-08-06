@@ -202,6 +202,39 @@ case "$(cat "${RESULT}" 2>/dev/null)" in
   *) fail "an install that fails is recorded as a failure" "status=${status} got: $(cat "${RESULT}" 2>/dev/null)" ;;
 esac
 
+# 9. The committed fixtures still match what the writer produces. The app decodes those same two files
+#    (UpdateAttemptTests), so this is the join: a key renamed here without regenerating them breaks this
+#    check rather than silently leaving the app reading every real record as absent. The `at` field is
+#    excluded because it is different on every run by design.
+FIXTURES="${SCRIPT_DIR}/../../fixtures/update-result"
+strip_at() { sed -e 's/,"at":"[^"]*"//' "$1"; }
+rm -rf "${DATA_DIR}"
+( set +u
+  # shellcheck source=lib/update-result.sh
+  . "${SCRIPT_DIR}/lib/update-result.sh"
+  OVERTURE_DATA_DIR="${DATA_DIR}" OVERTURE_UPDATE_PRESS="press-fixture" \
+    overture_update_write_result failed "There is unsaved work in progress in the code folder, and updating would disturb it. Ask Claude to finish or put aside that work, then press Update again." )
+if [ "$(strip_at "${RESULT}")" = "$(strip_at "${FIXTURES}/refused.json")" ]; then
+  pass "the refused fixture the app decodes is what the writer still writes"
+else
+  fail "the refused fixture the app decodes is what the writer still writes" \
+    "wrote:     $(strip_at "${RESULT}")
+ committed: $(strip_at "${FIXTURES}/refused.json")"
+fi
+
+rm -rf "${DATA_DIR}"
+( set +u
+  # shellcheck source=lib/update-result.sh
+  . "${SCRIPT_DIR}/lib/update-result.sh"
+  OVERTURE_DATA_DIR="${DATA_DIR}" OVERTURE_UPDATE_PRESS="press-fixture" overture_update_record_running )
+if [ "$(strip_at "${RESULT}")" = "$(strip_at "${FIXTURES}/running.json")" ]; then
+  pass "the running fixture the app decodes is what the writer still writes"
+else
+  fail "the running fixture the app decodes is what the writer still writes" \
+    "wrote:     $(strip_at "${RESULT}")
+ committed: $(strip_at "${FIXTURES}/running.json")"
+fi
+
 if [ "${FAILURES}" -gt 0 ]; then
   echo "${FAILURES} check(s) failed"
   exit 1

@@ -119,6 +119,41 @@ struct UpdateAttemptTests {
         #expect(HandoffCleanup.owns(UpdateAttempt.recordFilename) == false)
     }
 
+    // MARK: - Against what the writer really writes
+
+    // The reader and the writer are in different languages with no run in between, so the shape is only
+    // as pinned as the sample it is checked against. These two files were PRODUCED BY
+    // `mac/scripts/lib/update-result.sh`, not typed out here (L48, L52): a hand-written sample can only
+    // confirm the assumption of whoever wrote it, and a key renamed on the shell side would leave this
+    // suite green while the app read every real record as absent and called every refusal a run that
+    // never started. `mac/scripts/update-overture.test.sh` holds the other half, and fails if the writer
+    // stops producing what is committed here.
+    private func contractFixture(_ name: String) throws -> UpdateAttemptRecord {
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("fixtures/update-result").appendingPathComponent(name)
+        return try JSONDecoder().decode(UpdateAttemptRecord.self, from: Data(contentsOf: url))
+    }
+
+    @Test func aRefusalTheWriterWroteIsReadAsARefusal() throws {
+        let record = try contractFixture("refused.json")
+        let p = UpdateAttempt.progress(record: record, press: "press-fixture", elapsed: 5)
+
+        #expect(p == .failed(reason: record.reason ?? ""))
+        #expect(record.reason?.contains("unsaved work in progress") == true)
+        // And it is NOT read as the unexplained fallback, which is what a reason that failed to decode
+        // would land on: the sentence would still be honest and the run's own words would be lost.
+        #expect(p != .failed(reason: UpdateAttemptCopy.unexplained))
+    }
+
+    @Test func aRunningRecordTheWriterWroteIsReadAsRunning() throws {
+        let record = try contractFixture("running.json")
+        #expect(UpdateAttempt.progress(record: record, press: "press-fixture", elapsed: 5) == .running)
+        // Its empty reason must not turn it into a failure on the way through.
+        #expect(UpdateAttempt.progress(record: record, press: "press-fixture",
+                                       elapsed: UpdateAttempt.graceSeconds + 1) == .running)
+    }
+
     // MARK: - What it says
 
     @Test func eachStateSaysItsOwnThing() {
