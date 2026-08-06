@@ -78,7 +78,7 @@ What is not, and why:
 - `UI/DraftSignaturePreview.swift`: renders the outbound email's own HTML (body + Gmail signature), not Overture's voice (#1203)
 - `UI/DraftSignaturePreview.swift`: browser-side measuring script, not a sentence Overture says to Dan (#915)
 
-## The same sentence, said in more than one place (47)
+## The same sentence, said in more than one place (46)
 
 Two copies of a sentence will drift. #843 owns fixing these.
 
@@ -145,7 +145,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
   - `UI/DraftReviewView.swift`
 - "Not now"
   - `Domain/BuildFreshnessPanel.swift`
-  - `Domain/UpdateAttempt.swift`
   - `UI/BlockDaysSheet.swift`
 - "Nothing matches this filter"
   - `Domain/EmptyState.swift`
@@ -199,9 +198,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
 - "Their events or season page"
   - `UI/SourceFixConfirmActions.swift`
   - `UI/SourcesView.swift`
-- "Try again"
-  - `App/RootView.swift`
-  - `Domain/UpdateAttempt.swift`
 - "Verbal yes, not booked"
   - `Domain/ConversationReminder.swift`
   - `UI/ReminderSettingsView.swift`
@@ -1029,7 +1025,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/OnboardingView.swift`
 "Not now"
     `Domain/BuildFreshnessPanel.swift`
-    `Domain/UpdateAttempt.swift`
     `UI/BlockDaysSheet.swift`
 "Not one I scout"
     `Domain/ClientCoverage.swift`
@@ -1874,7 +1869,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/EmptyState.swift`
 "Try again"
     `App/RootView.swift`
-    `Domain/UpdateAttempt.swift`
 "Try another link"
     `UI/AddLeadSheet.swift`
 "Undo \(actionLabel) and Days Off: \(subject)"
