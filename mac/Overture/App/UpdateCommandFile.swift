@@ -58,12 +58,14 @@ enum UpdateCommandFile {
     // Both paths are quoted: Dan's checkout lives under "Photography Assets/Dan Wright Photography", so a
     // path with spaces is the normal case here, not an edge one, and unquoted it would cd nowhere.
     // copy-inventory:ignore-start  a shell script for Terminal, not Overture's voice to Dan (#915)
-    static func script(repoPath: String, scriptPath: String) -> String {
+    static func script(repoPath: String, scriptPath: String, press: String = "") -> String {
         """
         #!/bin/sh
         # Written by Overture (#1808) to update itself. It deletes itself when it finishes.
         set -e
         cd "\(repoPath)/mac"
+        OVERTURE_UPDATE_PRESS="\(press)"
+        export OVERTURE_UPDATE_PRESS
         ./scripts/update-overture.sh
         rm -f -- "\(scriptPath)"
         """
@@ -85,7 +87,9 @@ enum UpdateCommandFile {
         // Removed first rather than overwritten, so a second press cannot leave a half-written file with
         // the old contents' tail on the end.
         try? FileManager.default.removeItem(at: url)
-        guard (try? script(repoPath: repoPath, scriptPath: url.path)
+        // The press id IS the filename's token (#2188). One id for the file and the run it starts, so
+        // the outcome the app waits for cannot belong to a different press than the one it made.
+        guard (try? script(repoPath: repoPath, scriptPath: url.path, press: token)
                 .write(to: url, atomically: true, encoding: .utf8)) != nil else { return nil }
         // Terminal will not run a .command that is not executable, and a dead button is worse than no
         // button: it looks like the update ran.
@@ -111,9 +115,14 @@ enum UpdateCommandFile {
     // the file could not be written, rather than opening something that is not there: a button that
     // silently fails reads as an update that ran (L12).
     @MainActor
+    // #2188: returns the id of the press it just made, so the caller can watch for THAT run's outcome,
+    // or nil when nothing was opened. Nil is what stops the app waiting on a run that never existed.
+    @discardableResult
     static func open(repoPath: String, in directory: URL = UpdateCommandFile.directory,
-                     opener: (URL) -> Void = { NSWorkspace.shared.open($0) }) {
-        guard let url = write(repoPath: repoPath, in: directory) else { return }
+                     token: String = UUID().uuidString,
+                     opener: (URL) -> Void = { NSWorkspace.shared.open($0) }) -> String? {
+        guard let url = write(repoPath: repoPath, in: directory, token: token) else { return nil }
         opener(url)
+        return token
     }
 }

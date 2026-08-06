@@ -48,6 +48,10 @@ overture_update_reason() {
   esac
 }
 
+# Set alongside every refusal above, so the caller can hand the SAME sentence to the app (#2188)
+# instead of composing a second copy that drifts from what the Terminal window printed.
+OVERTURE_UPDATE_REASON=""
+
 # overture_bring_checkout_current REPO
 #   Fetches, decides, and acts. Returns 0 when the checkout is standing on the shipped commit (whether
 #   it had to move or was already there), and non-zero after printing a reason when it refused.
@@ -60,7 +64,8 @@ overture_bring_checkout_current() {
 
   if ! git -C "${repo}" fetch --quiet origin main 2>/dev/null; then
     # Fail loud. A silent build on stale code is how the loop looked from the outside.
-    printf '%s\n' "Overture did not update: it could not reach the shared copy of the code to see what has shipped. Check the network and press Update again." >&2
+    OVERTURE_UPDATE_REASON="Overture did not update: it could not reach the shared copy of the code to see what has shipped. Check the network and press Update again."
+    printf '%s\n' "${OVERTURE_UPDATE_REASON}" >&2
     return 1
   fi
 
@@ -84,7 +89,8 @@ overture_bring_checkout_current() {
     ready) return 0 ;;
     sync) : ;;
     *)
-      overture_update_reason "${verdict}" >&2
+      OVERTURE_UPDATE_REASON="$(overture_update_reason "${verdict}")"
+      printf '%s\n' "${OVERTURE_UPDATE_REASON}" >&2
       return 1
       ;;
   esac
@@ -92,11 +98,13 @@ overture_bring_checkout_current() {
   # The move itself, and it must not be able to half-happen: if either step fails the checkout is left
   # where it is and the installer is told not to build, rather than building something nobody chose.
   if ! git -C "${repo}" checkout --quiet main 2>/dev/null; then
-    printf '%s\n' "Overture did not update: it could not switch the code folder to the shared copy. Ask Claude to look." >&2
+    OVERTURE_UPDATE_REASON="Overture did not update: it could not switch the code folder to the shared copy. Ask Claude to look."
+    printf '%s\n' "${OVERTURE_UPDATE_REASON}" >&2
     return 1
   fi
   if ! git -C "${repo}" merge --ff-only --quiet origin/main 2>/dev/null; then
-    printf '%s\n' "Overture did not update: it could not bring the code folder up to what has shipped. Ask Claude to look." >&2
+    OVERTURE_UPDATE_REASON="Overture did not update: it could not bring the code folder up to what has shipped. Ask Claude to look."
+    printf '%s\n' "${OVERTURE_UPDATE_REASON}" >&2
     return 1
   fi
   return 0

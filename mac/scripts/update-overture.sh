@@ -27,6 +27,13 @@ main() {
 
   # shellcheck source=scripts/lib/update-sync.sh
   source "${script_dir}/lib/update-sync.sh"
+  # shellcheck source=scripts/lib/update-result.sh
+  source "${script_dir}/lib/update-result.sh"
+
+  # Before anything is decided (#2188). The app is watching for the outcome of the press that started
+  # this run, and a run that dies where nothing can catch it has to be distinguishable from one that
+  # never started at all: those are different problems and only one of them is worth waiting on.
+  overture_update_record_running
 
   # Overridable so the fixtures can drive this against a throwaway repository and a recording installer,
   # instead of Dan's checkout and a real 90-second build (L2).
@@ -39,11 +46,26 @@ main() {
     # checkout that could not be brought up to date is what made the update loop, because it reinstalled
     # the same commit and the panel went on being right about it.
     echo "Nothing was installed, so Overture is unchanged." >&2
+    # And the app is told, in the words just printed, rather than being left to read a silence as
+    # success (#2188). Dan does not work in a terminal, and this window is the only place the refusal
+    # existed.
+    overture_update_record_failed "${OVERTURE_UPDATE_REASON}"
     return 1
   fi
 
   echo "==> Installing"
-  "${installer}" --launch
+  # The install is part of the update, so a build that fails is an update that failed. Left unguarded it
+  # would leave the record saying "running" for good, and the app would sit waiting on a run that had
+  # already died: exactly the silence this exists to end, one step further along.
+  if ! "${installer}" --launch; then
+    echo "Nothing was installed, so Overture is unchanged." >&2
+    overture_update_record_failed "Overture did not update: the install did not finish. Ask Claude to look."
+    return 1
+  fi
+
+  # Success clears the record rather than recording a success. There is nothing to say: the app is
+  # being replaced and relaunched, and its new installed-build.json is the report.
+  overture_update_clear_result
 }
 
 main "$@"

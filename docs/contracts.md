@@ -45,6 +45,15 @@ the workflow's runbook is its spec.
 | `overture-run-duration-history.json` | App (`RunDurationHistoryStore.record`) | App (`RunDurationHistoryStore.load`) | 1 | none | `RunDurationHistoryTests.swift` |
 | `installed-build.json` | `mac/build-install.sh` (after a successful install) | App (`BuildFreshness.installedRecord`) | 1 | none (three fields, pinned by the decode test) | `BuildFreshnessTests.swift` |
 | `shipped-commit.json` | `scripts/record-shipped-commit.sh` **only**, called by both merge scripts, `scripts/hooks/post-merge`, and `mac/build-install.sh` | App (`BuildFreshness.shippedRecord`) | 1 | none (two fields, pinned on both sides) | `BuildFreshnessTests.swift`, `scripts/record-shipped-commit.test.sh` |
+| `update-result.json` | `mac/scripts/lib/update-result.sh`, called by `mac/scripts/update-overture.sh` (#2188: `running` before it decides anything, the refusal reason if it refuses, REMOVED on success) | App (`UpdateAttempt.record`) | 1 | none (four fields, pinned on both sides) | `UpdateAttemptTests.swift`, `UpdateAttemptStateTests.swift`, `mac/scripts/update-overture.test.sh` |
+
+#2188: `update-result.json` is the return channel for the Update button. Pressing it opens a Terminal window
+the app cannot see, so until this file existed a refused update and a successful one were the same thing from
+inside Overture: nothing. It carries the id of the button press that started the run (`press`), so an outcome
+can never be attributed to a press other than the one that caused it, and an `outcome` of `running` or
+`failed` with the run's own `reason` sentence. Success is expressed by REMOVING the file rather than by a
+value, which is what makes a record that is present and unreadable safe to treat as a failure. Like the two
+records above it describes the app rather than a run, so the retention sweep does not own it.
 
 #1808: `installed-build.json` and `shipped-commit.json` are how the app answers "is the copy Dan is looking
 at behind the code?", which it cannot work out for itself because it has no git at runtime. They are the

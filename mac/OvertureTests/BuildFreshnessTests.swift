@@ -133,10 +133,47 @@ struct BuildFreshnessTests {
 
     // The gap is stated as ONE number, because "how far behind am I" is the only question the panel is
     // answering. Two timestamps side by side would make him do the subtraction.
+    //
+    // #2187: and the number is measured from the shipped commit to NOW, which is what "behind" means to
+    // the person reading it. It used to be the span between the two COMMITS, which is a different
+    // question and answered it wrongly: on 2026-08-06 at 9:56am Dan's copy was built at 9:52pm and main's
+    // tip had landed at 12:46am, so the panel said "2h" about code that had shipped nine hours earlier,
+    // and he read it as something having shipped that morning.
     @Test func itSaysHowFarBehindTheCopyIs() {
         let line = BuildFreshnessCopy.body(.behind(installedAt: date("2026-08-01T23:06:00Z"),
-                                                   shippedAt: date("2026-08-03T23:06:00Z")))
+                                                   shippedAt: date("2026-08-03T23:06:00Z")),
+                                           now: date("2026-08-05T23:06:00Z"))
         #expect(line == "This copy is 2d behind what has shipped, so anything fixed since then is not in front of you.")
+    }
+
+    // Dan's own case, to the minute.
+    @Test func theNumberIsHowLongAgoTheShippedCodeLanded() {
+        let line = BuildFreshnessCopy.body(.behind(installedAt: date("2026-08-06T01:52:41Z"),
+                                                   shippedAt: date("2026-08-06T04:46:15Z")),
+                                           now: date("2026-08-06T13:56:00Z"))
+        #expect(line == "This copy is 9h behind what has shipped, so anything fixed since then is not in front of you.")
+    }
+
+    // The property the old measurement did not have, and the reason it could be wrong for hours without
+    // anything looking broken: a number with both ends in the past is frozen. Sitting still all day has
+    // to make it grow, or the panel goes on stating the distance it had at the moment of the merge.
+    @Test func theNumberGrowsWhileTheCopyStaysBehind() {
+        let verdict = BuildFreshness.Verdict.behind(installedAt: date("2026-08-06T01:52:41Z"),
+                                                    shippedAt: date("2026-08-06T04:46:15Z"))
+        #expect(BuildFreshnessCopy.body(verdict, now: date("2026-08-06T05:46:15Z")).contains("1h behind"))
+        #expect(BuildFreshnessCopy.body(verdict, now: date("2026-08-06T13:46:15Z")).contains("9h behind"))
+        #expect(BuildFreshnessCopy.body(verdict, now: date("2026-08-09T05:46:15Z")).contains("3d behind"))
+    }
+
+    // A clock that disagrees with the commit it is reading. Falling back to the span between the two
+    // commits is the answer that needs no clock at all, and it is the one fact still known to be true:
+    // this copy predates that commit by exactly that much. Never a negative, and never "0m behind",
+    // which would read as up to date on the one screen that exists to say otherwise.
+    @Test func aShippedCommitDatedAheadOfTheClockFallsBackToTheSpanBetweenTheCommits() {
+        let line = BuildFreshnessCopy.body(.behind(installedAt: date("2026-08-06T01:00:00Z"),
+                                                   shippedAt: date("2026-08-06T04:00:00Z")),
+                                           now: date("2026-08-06T02:00:00Z"))
+        #expect(line == "This copy is 3h behind what has shipped, so anything fixed since then is not in front of you.")
     }
 
     // Each reason says its own thing, because the two are different problems for whoever fixes them.
