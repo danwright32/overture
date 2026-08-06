@@ -132,7 +132,7 @@ struct ReplyInvariantsLiveStoreTests {
             for (p, r) in repliedRows(in: shows) {
                 let answering = ReplyIdentity.answering(for: r, in: p)
                 let audience = SendGroup.replyAudience(of: answering)
-                let refusal = ReplyPanel.refusal(body: "a typed reply", audience: audience,
+                let refusal = ReplyPanel.refusal(body: "a typed reply", subject: nil, audience: audience,
                                                  gmailConnected: true,
                                                  writer: answering.replyFromAddress)
                 guard let writer = answering.replyFromAddress, !writer.isEmpty else { continue }
