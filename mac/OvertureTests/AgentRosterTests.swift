@@ -213,15 +213,59 @@ struct AgentRosterTests {
         #expect(AgentRoster.statuses(calm).contains { $0.name == "OmniFocus" } == false)
     }
 
-    // #1134: Reached out is its own stage now, always present in the strip so Dan can navigate to it. It
-    // is informational (never "needs you"): the people actually due for a nudge surface under Follow-ups.
-    @Test func reachedOutIsAlwaysPresentAndNeverNeedsYou() {
+    // #1134: Reached out is its own stage, always present in the strip so Dan can navigate to it. While
+    // nothing in it is due it stays informational: a pill that is always gold is a pill nobody reads.
+    @Test func reachedOutIsAlwaysPresentAndStaysQuietWhileNothingIsDue() {
         var i = calm; i.reachedOut = 5
         let s = status("Reached out", i)
         #expect(s.focus == .reachedOut)
-        #expect(s.state == .idle)                 // never gold/rust: it is not attention
+        #expect(s.state == .idle)
         #expect(s.detail == "5")                  // the count Dan sees, which the reached-out view matches
         #expect(AgentRoster.statuses(i).allSatisfy { $0.state == .idle })
+    }
+
+    // #2114. Dan, 2026-08-05, with Nicole's reply waiting: the "Reached out 4" pill stayed dimmed. His
+    // rule: "if anything requires a response today (a follow-up or a response to an inbound), the pill
+    // should be highlighted."
+    //
+    // The pill used to be hard-coded to idle, on the premise that Follow-ups owned everything due. That
+    // stopped being true when replies owing an answer moved into this queue.
+    @Test func reachedOutGoesGoldWhenSomethingInItIsDue() {
+        var i = calm; i.reachedOut = 4; i.reachedOutDue = 1
+        let s = status("Reached out", i)
+        #expect(s.state == .needsAttention)
+        #expect(s.focus == .reachedOut)
+    }
+
+    // The detail says how many of them, not just that something is, because the pill already carries a
+    // number and a gold pill whose number did not change says nothing about what changed.
+    @Test func reachedOutSaysHowManyAreDue() {
+        var i = calm; i.reachedOut = 4; i.reachedOutDue = 2
+        #expect(status("Reached out", i).detail.contains("2"))
+        #expect(status("Reached out", i).detail != "4")
+    }
+
+    // Overdue counts the same as due today. Dan: "if it's overdue it should be counted." A row that
+    // slipped past its date is more urgent, never less, and nothing about the pill may imply otherwise.
+    @Test func anOverdueRowCountsExactlyLikeOneDueToday() {
+        var today = calm; today.reachedOut = 3; today.reachedOutDue = 1
+        var overdue = calm; overdue.reachedOut = 3; overdue.reachedOutDue = 1
+        #expect(status("Reached out", today).state == status("Reached out", overdue).state)
+    }
+
+    // The invariant that keeps the masthead honest: if ANYTHING is due anywhere, at least one pill says
+    // so. The three surfaces (this pill, Follow-ups, and the toolbar Due badge) each worked it out
+    // separately, which is how they came to disagree on screen at the same moment.
+    @Test func nothingDueIsEverInvisibleAcrossTheWholeStrip() {
+        var i = calm; i.reachedOut = 4; i.reachedOutDue = 1
+        #expect(AgentRoster.statuses(i).contains { $0.state == .needsAttention })
+
+        var f = calm; f.followUpsDue = 1
+        #expect(AgentRoster.statuses(f).contains { $0.state == .needsAttention })
+
+        // And with nothing due anywhere, no pill claims attention, so gold keeps meaning something.
+        var quiet = calm; quiet.reachedOut = 9
+        #expect(AgentRoster.statuses(quiet).allSatisfy { $0.state != .needsAttention })
     }
 
     // With no one reached out yet, the pill still appears (a navigation stop) but carries no bare "0".

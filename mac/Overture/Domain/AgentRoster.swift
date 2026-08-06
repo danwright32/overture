@@ -50,6 +50,10 @@ struct AgentInputs: Sendable {
     // #1134: contacted recipients Dan is still working, counted from ReachedOutQueue (one per recipient),
     // so the Reached out pill's number equals the rows the reached-out view lands him on.
     var reachedOut: Int = 0
+    // #2114: how many of those rows are due NOW or overdue. Dan's rule, 2026-08-05: "if anything requires
+    // a response today (a follow-up or a response to an inbound), the pill should be highlighted." Its own
+    // input rather than a flag, so the pill can say how many and not merely that something is.
+    var reachedOutDue: Int = 0
 }
 
 // #863: every count a pill can show is built HERE, from the same prospects StageNavigation resolves
@@ -93,7 +97,17 @@ extension AgentInputs {
             // #1134: the SAME function the reached-out view lists its rows from, so the pill's count and
             // that list agree by construction (one per contacted recipient still in play).
             reachedOut: ReachedOutQueue.showCount(from: prospects, now: now)   // #1194: shows, not recipients
-                + inquiryCount(.reachedOut)   // #1436: replied inquiries awaiting a response
+                + inquiryCount(.reachedOut),   // #1436: replied inquiries awaiting a response
+            // #2114: how many of those rows are actually due. Counted from the SAME rows the reached-out
+            // view lists, through ReachedOutQueue's own isDueNow, so the pill's gold and the list Dan
+            // lands on cannot disagree about what is waiting.
+            //
+            // An inquiry that has replied is due by definition: somebody is waiting on an answer, which is
+            // the whole reason an inquiry rides this queue at all (AGENTS.md). It carries no reach-out
+            // schedule of its own to consult.
+            reachedOutDue: ReachedOutQueue.activeWithDates(from: prospects, now: now)
+                .filter { ReachedOutQueue.isDueNow(next: $0.next, now: now) }.count
+                + inquiries.filter { StageNavigation.stage(for: $0) == .reachedOut && $0.replied }.count
         )
     }
 }
@@ -263,14 +277,25 @@ enum AgentRoster {
                            focus: .sendApproved, count: 0)
     }
 
-    // #1134: the Reached out stage. Informational, never "needs you" (Follow-ups owns what is due), so it
-    // stays .idle; the count rides in `detail` and the view shows it beside the name even while idle
-    // (agentChip special-cases .reachedOut for exactly this). Empty detail when there is no one yet, so
-    // the pill reads just "Reached out" rather than a bare "0".
+    // #1134: the Reached out stage. The count rides in `detail` and the view shows it beside the name even
+    // while idle (agentChip special-cases .reachedOut for exactly this). Empty detail when there is no one
+    // yet, so the pill reads just "Reached out" rather than a bare "0".
+    //
+    // #2114: it is no longer permanently informational. It was hard-coded to .idle on the premise that
+    // Follow-ups owned everything due, and that premise died when replies owing an answer moved into this
+    // queue: Dan sat looking at a dimmed "Reached out 4" with Nicole waiting on him. It goes gold when any
+    // of its own rows is due now or overdue, and says how many, because a gold pill whose number has not
+    // changed does not say what changed. It stays quiet otherwise, since a pill that is always gold is a
+    // pill nobody reads.
     private static func reachedOut(_ i: AgentInputs) -> AgentStatus {
-        AgentStatus(name: "Reached out", state: .idle,
-                    detail: i.reachedOut > 0 ? "\(i.reachedOut)" : "",
-                    focus: .reachedOut, count: i.reachedOut)
+        let due = i.reachedOutDue > 0
+        // One construction rather than a return per branch, so the pill's NAME is written once: three
+        // copies of it in one function is the drift docs/copy-inventory.md exists to surface.
+        return AgentStatus(name: "Reached out",
+                           state: due ? .needsAttention : .idle,
+                           detail: due ? "\(i.reachedOutDue) due"
+                                       : (i.reachedOut > 0 ? "\(i.reachedOut)" : ""),
+                           focus: .reachedOut, count: i.reachedOut)
     }
 
     private static func shows(_ n: Int) -> String { Plural.word(n, "show") }   // #885: one pluralizer
