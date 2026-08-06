@@ -295,7 +295,7 @@ enum SendService {
     // (#421): threads on recipient.gmailMessageId/gmailThreadId, NOT the lead rollup (the rollup is the
     // first contact's thread, so replying to a second contact on it would land on the wrong
     // conversation). On success it consumes the draft and re-anchors that contact's clock. One of the
-    // two locked send paths (d); the other is copy-out (recordRepliedInGmail), handled in the UI.
+    // two locked send paths (d); the other is copy-out (recordAnswerSent), handled in the UI.
     @discardableResult
     // #2144: what a reply is CALLED, in one place. The confirmation sheet Dan approves and the message
     // that leaves both ask this, so the subject line he reads cannot differ from the one on the email. Two
@@ -332,10 +332,10 @@ enum SendService {
             let receipt = try await sender.send(mail)
             recipient.gmailMessageId = receipt.messageID          // thread the contact's next reply off ours
             if !receipt.threadId.isEmpty { recipient.gmailThreadId = receipt.threadId }
-            recipient.freezeSentReply(now: now)                   // capture the committed copy for voice learning (#463)
-            recipient.replyDraftSubject = nil
-            recipient.replyDraftBody = nil
-            recipient.lastFollowUpAt = now                        // re-anchor this contact's clock
+            // #2170: the same routine the copy-out path runs, rather than the four lines it used to
+            // repeat here. They had drifted into two copies of one idea, and the fact neither of them
+            // recorded (that Dan had ANSWERED) is why the Answer button kept offering itself afterwards.
+            recipient.recordAnswerSent(now: now)
             recipient.sendError = nil
             recipient.replySendClaimedAt = nil
             return true

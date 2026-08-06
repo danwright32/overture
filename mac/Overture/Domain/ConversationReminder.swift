@@ -11,6 +11,15 @@ struct ConversationReminderConfig: Sendable {
     var hasQuestionDays: Int = 2
     // The latest a reminder may fire before the event: due no later than (event - leadBufferDays).
     var leadBufferDays: Int = 3
+    // #2170: how long after ANSWERING a reply Overture waits before asking where the conversation stands,
+    // when Dan has not said. Its own number rather than borrowing one of the three above, which all mean
+    // "how often to re-touch a conversation in a known state" and would be a different claim.
+    //
+    // Two days is a chosen default, not a measured one: short enough that the question arrives while he
+    // still remembers the exchange, long enough that answering does not immediately produce another
+    // demand. Dan's rule was that answering clears the pressure and the show stays in Reached out asking
+    // where it stands; this is the gap between those two.
+    var awaitingStateDays: Int = 2
 
     func intervalDays(for state: ConversationState) -> Int? {
         switch state {
@@ -134,11 +143,20 @@ enum ConversationReminder {
     static func nextReminderDate(state: ConversationState?, setAt: Date?, remindedAt: Date?,
                                  performanceDate: String?, isClosed: Bool, hasUnhandledReply: Bool,
                                  repliedAt: Date?, source: OutcomeSource?,
+                                 // #2170: when Dan answered, if he has. Nil on every path that has no
+                                 // answer to report, which is every caller that is not a replied contact.
+                                 answeredAt: Date? = nil,
                                  now: Date, config: ConversationReminderConfig = .init()) -> Date? {
         guard !isClosed else { return nil }
         guard let state else {
             // Replied but uncategorized: needs a state, dated the day the reply ARRIVED (#2111).
-            return hasUnhandledReply ? anchored(repliedAt, now: now) : nil
+            if hasUnhandledReply { return anchored(repliedAt, now: now) }
+            // #2170: he ANSWERED and still has not said where it stands. Dan's rule is that answering
+            // clears the pressure and the show stays in Reached out asking, so this is neither `now`
+            // (which would be the pressure he just cleared) nor nil (which would drop the row out of the
+            // queue and quietly close a live conversation).
+            guard let answeredAt else { return nil }
+            return answeredAt.addingTimeInterval(TimeInterval(config.awaitingStateDays) * 86_400)
         }
         guard state.isActive, let interval = config.intervalDays(for: state) else { return nil }
         // Unconfirmed AI state: still surfaces immediately, dated from when the guess was made (#2116).

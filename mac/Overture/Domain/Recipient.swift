@@ -201,6 +201,10 @@ final class Recipient {
     // #2149: when the repair pass last TRIED to fill in the message text, whether or not it found any.
     // Without it a reply with no decodable body stays in the gap and its thread is refetched forever.
     var replyTextCheckedAt: Date?
+
+    // #2170: when Dan ANSWERED the reply, whichever way he sent it. Its own fact rather than clearing
+    // `replied`, because the reply genuinely happened and replyArrivedAt still dates the row.
+    var replyHandledAt: Date?
     var lastReplyId: String?
     var dismissedReplyId: String?
     var lastReplyText: String?
@@ -397,7 +401,20 @@ final class Recipient {
     // ConversationReminder (plus inline in Prospect.hasUnhandledReply); now the one shared source. A
     // manually hand-set conversation state (#653) is NOT excluded here: only two of the four call
     // sites need that exclusion, so they layer `&& conversationStateSource != .manual` on top.
-    var hasUnhandledReply: Bool { replied && resolution == nil && !bounced }
+    // #2170: and Dan has not ANSWERED it. Nothing in the model used to mean that, so the Answer button
+    // went on offering itself after it had been pressed and succeeded, and the row said somebody was
+    // waiting on him two hours after he had written back (L44, L11).
+    //
+    // Compared against when their message ARRIVED rather than being a plain flag, so a second reply on
+    // the same thread re-opens it. Without that the whole back half of a conversation would be
+    // unanswerable from the queue. It is the same shape freezeSentReply already uses to decide whether
+    // they have written again since the last capture.
+    var hasUnhandledReply: Bool {
+        guard replied, resolution == nil, !bounced else { return false }
+        guard let handled = replyHandledAt else { return true }
+        guard let theirs = replyArrivedAt else { return false }
+        return theirs > handled
+    }
 
     // #2113: when the reply actually ARRIVED, which is what every date surface wants. Prefers the instant
     // they sent it over the instant Overture noticed, and falls back to the notice for a row recorded
@@ -789,11 +806,24 @@ final class Recipient {
         replySentAt = now
     }
 
-    func recordRepliedInGmail(now: Date) {
+    // #2170: everything that is true once Dan's answer has actually gone, whichever way he sent it.
+    //
+    // ONE routine, called by both paths (SendService.sendReplyDraft after a confirmed send, and the
+    // copy-out path in ProspectMutations), because the defect this fixes was present in both and a fix
+    // written into only the in-app send would leave the Answer button sitting there for anyone who
+    // answered by copying the draft into Gmail, which is the harder case to notice (L30).
+    //
+    // Named for what it means rather than for one of the two ways it happens: it used to be called
+    // recordRepliedInGmail, which stopped being true the moment the in-app send started calling it.
+    func recordAnswerSent(now: Date) {
         freezeSentReply(now: now)   // capture the committed copy before consuming the draft (#463)
         replyDraftSubject = nil
         replyDraftBody = nil
         lastFollowUpAt = now
+        // The fact that had no home: Dan answered. Stamped LAST and unconditionally, unlike the freeze
+        // above, which legitimately declines when there is nothing new to capture. An answer that went
+        // out is an answer that went out.
+        replyHandledAt = now
     }
 
     // Dan dismissed a wrong auto-detected reply for THIS contact (#219, per-recipient #418): revert
