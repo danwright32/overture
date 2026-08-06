@@ -781,6 +781,12 @@ final class Recipient {
     var replyDraftWrittenByDan: Bool = false
 
     func applyReplyDraftEdit(_ body: String) {
+        // #2143: text that is the same as what is already stored is not an edit of it. Unreachable while
+        // the reply panel's compose box always opened empty, since the only words that could arrive here
+        // were words Dan had typed; now that the box opens on the waiting draft, sending it back untouched
+        // would claim on the card that he edited it, and would switch the lint off on a draft nobody has
+        // read (L11).
+        guard body != replyDraftBody else { return }
         // Snapshot the AI reply as the learning baseline on the first substantive edit only, mirroring
         // Prospect.applyEdit; trivial / whitespace saves never overwrite it (#463).
         // #2131: only ever the AI's version. Capturing his own first draft here would teach the voice

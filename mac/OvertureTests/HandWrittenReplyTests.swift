@@ -69,6 +69,33 @@ struct HandWrittenReplyTests {
         #expect(r.originalReplyDraftBody == nil, "there was never an AI version to learn from")
     }
 
+    // #2143: sending the AI's draft back exactly as written is not an edit of it.
+    //
+    // Newly reachable, and newly wrong, now that the reply panel opens on the draft already waiting.
+    // While the compose box was always empty, the only text that could reach this call was something Dan
+    // had typed, so "he changed it" was safe to assume. It no longer is: pressing Send on words he left
+    // alone would claim on the card that he edited them, and would switch off the lint on a draft nobody
+    // has read (L11, a message may claim only what its check measured).
+    @Test func sendingAnAiDraftBackUnchangedIsNotAnEdit() throws {
+        let ctx = ModelContext(try container())
+        let r = contact(ctx)
+        r.replyDraftBody = "The AI's attempt."
+        r.applyReplyDraftEdit("The AI's attempt.")
+        #expect(!r.replyDraftEditedByDan)
+        #expect(!r.replyDraftWrittenByDan)
+        #expect(r.originalReplyDraftBody == nil, "nothing was edited, so there is no pair to learn from")
+        #expect(r.replyDraftBody == "The AI's attempt.")
+    }
+
+    // The lint follows from that: words he never touched are still checked.
+    @Test func anAiDraftSentBackUnchangedIsStillLinted() throws {
+        let ctx = ModelContext(try container())
+        let r = contact(ctx)
+        r.replyDraftBody = "What venue is this at, and what date?"
+        r.applyReplyDraftEdit("What venue is this at, and what date?")
+        #expect(!RecipientSnapshot(r).replyDraftFindings(title: "G", knownsDate: true, knownsVenue: true).isEmpty)
+    }
+
     // MARK: what the card says about it
 
     @Test func theCardNamesWhoWroteIt() throws {

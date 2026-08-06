@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1059 sentences**, from 366 source files.
+Every sentence Overture can say to Dan: **1062 sentences**, from 366 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -415,6 +415,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ClientTagCopy.swift`
 "Always skipped"
     `UI/ExcludedTownsView.swift`
+"An AI draft came back while you were writing."
+    `Domain/ReplyPanel.swift`
 "An earlier check included this show but never got an answer for it, so it's still unchecked. Nothing re-checks it on its own; picking its date again is what gets it an answer."
     `Domain/Reachability.swift`
 "An email to \(p.replyWatchDisplayName) bounced, and it went to more than one person (\(addresses)), so Overture cannot tell which address failed. Check the bounce in Gmail and fix or remove the dead address"
@@ -632,7 +634,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Drafted by \(name)"
     `Domain/DraftTrace.swift`
 "Drafting a reply"
-    `UI/ReplyConversationView.swift`
+    `Domain/ReplyPanel.swift`
 "Drafting replies"
     `UI/RunProgressView.swift`
 "Drafting replies \(count)"
@@ -1358,6 +1360,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ProspectRowView.swift`
 "Renamed to \(name)"
     `App/ActionFeedback.swift`
+"Replace what you've written here with the AI's draft"
+    `Domain/ReplyPanel.swift`
 "Replaces the scout's name on this row. Your name stays put across future scouts."
     `UI/ProspectRowView.swift`
 "Replied, needs a state"
@@ -1878,6 +1882,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SourceFixConfirmActions.swift`
 "Updated \(org)'s classification"
     `App/ActionFeedback.swift`
+"Use it instead"
+    `Domain/ReplyPanel.swift`
 "Venue (optional)"
     `UI/InquiryIntakeSheet.swift`
 "Venue TBD"

@@ -139,7 +139,8 @@ struct ReplyConversationView: View {
             // queue, not repeated on every recipient this run is drafting. This per-recipient label keeps
             // its own genuinely per-recipient states: spinner plus elapsed, a stall timeout that flips to
             // Retry, and the run's real heartbeat, so working, still-alive and stalled stay distinguishable.
-            LiveRunLabel(base: "Drafting a reply", since: contact.replyDraftRequestedAt,
+            // #2143: the panel says this too, in the same words, from the one constant.
+            LiveRunLabel(base: ReplyPanelCopy.drafting, since: contact.replyDraftRequestedAt,
                          timeout: RunTimeouts.replyDraft,
                          font: OVType.meta, color: OVColor.inkSoft,
                          onRetry: { onDraftReply(contact.id) },
