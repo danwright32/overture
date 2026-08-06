@@ -1516,6 +1516,7 @@ enum QueueModel {
                 outcome: inquiry.outcome,
                 sentAt: inquiry.sentAt,
                 replied: inquiry.replied,
+                bounced: inquiry.bounced,
                 bookingSuggested: inquiry.bookingSuggested,
                 followUpNudgeDue: inquiry.followUpNudgeDue(now: now),
                 shouldSuggestClosing: inquiry.shouldSuggestClosing(now: now)
