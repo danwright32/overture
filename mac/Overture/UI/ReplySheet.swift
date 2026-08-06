@@ -68,6 +68,7 @@ struct ReplySheet: View {
         VStack(alignment: .leading, spacing: OVSpacing.md) {
             header
             theirReply
+            guessSection
             if let editable = composition.editableSubject {
                 subjectField(placeholder: editable)
             }
@@ -184,6 +185,32 @@ struct ReplySheet: View {
             // lands (#2145).
             Text(reason).font(OVType.meta).foregroundStyle(OVColor.inkFaint)
                 .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    // #2154: Overture's guess at what this reply meant, directly under the words that produced it.
+    //
+    // It lives here and not on the queue row because confirming a guess writes it in as fact, which
+    // changes what the contact is due next and what the conversation track will send them. Dan can only
+    // rule on that with the message in front of him, and this is the one surface that shows it.
+    //
+    // With no captured words there is no Confirm at all, and nothing extra is said about why: the line
+    // above already states that the message could not be shown, and repeating it here is the restatement
+    // #843 exists for. Change stays either way, because saying where a conversation stands is his own
+    // assertion rather than an endorsement of somebody else's reading.
+    @ViewBuilder private var guessSection: some View {
+        if let guess = composition.guess {
+            HStack(spacing: OVSpacing.xs) {
+                Text(ConversationState.looksLikeNote(guess.state))
+                    .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                if guess.mayConfirm {
+                    Button(ReplyPanelCopy.confirmGuess) { guess.confirm() }
+                        .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forest)
+                }
+                ConversationStateMenu(currentState: guess.state, label: ReplyPanelCopy.changeGuess,
+                                      onSet: { guess.change($0) })
+                Spacer()
+            }
         }
     }
 

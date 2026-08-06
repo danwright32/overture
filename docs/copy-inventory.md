@@ -204,7 +204,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
 - "View in Archive"
   - `UI/FollowUpsView.swift`
   - `UI/FollowUpsView.swift`
-  - `UI/QueueView.swift`
 - "Voice guidance"
   - `App/RootView.swift`
   - `UI/VoiceGuidanceView.swift`
@@ -1891,7 +1890,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ReminderSettingsView.swift`
 "View in Archive"
     `UI/FollowUpsView.swift`
-    `UI/QueueView.swift`
 "Voice guidance"
     `App/RootView.swift`
     `UI/VoiceGuidanceView.swift`

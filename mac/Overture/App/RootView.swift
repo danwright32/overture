@@ -373,9 +373,6 @@ struct RootView: View {
     private var queueContent: some View {
         QueueView(deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys, onConnectGmail: connectGmail,
                   onShowFollowUps: { showFollowUps = true },
-                  onOpenInArchive: { key, recipientId in
-                      openArchive(key: key, recipientId: recipientId)
-                  },
                   // #1129: the Prep stage's discoverable "Prep these N" button opens the same #953 per-run
                   // selection sheet the toolbar menu and Cmd+P do, so there is one Prep-start path, not two.
                   onStartPrep: { showPrepSelection = true },

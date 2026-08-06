@@ -21,16 +21,21 @@ struct ArchiveContactDeepLinkGuardTests {
     private var prospectRowFactory: String { source("Overture/UI/ProspectRowFactory.swift") }
     private var prospectRowView: String { source("Overture/UI/ProspectRowView.swift") }
 
-    @Test func queueViewDeclaresTheWidenedCallback() {
-        #expect(queueView.contains("var onOpenInArchive: (_ key: String, _ recipientId: String?) -> Void"),
-                "QueueView's onOpenInArchive doesn't accept a recipient id (#685).")
+    // #2154: QueueView has no open-in-Archive callback any more, because the row that called it no
+    // longer offers the link. What #685 actually widened (a jump carrying the specific contact rather
+    // than only the show) is still proved below on FollowUpsView, which does still offer one.
+    @Test func queueViewNoLongerNeedsTheCallbackAtAll() {
+        #expect(!queueView.contains("var onOpenInArchive:"))
     }
 
-    @Test func reachedOutRowPassesTheRecipient() throws {
+    // #2154: the reached-out row no longer offers this link at all (Dan: "I'm basically never going to
+    // want to view it in the archive"), so what #685 widened is now proved on the Follow-ups rows below,
+    // which still carry it. Asserted as an absence here so the row cannot quietly grow it back with the
+    // narrow, whole-card-only call this issue was about.
+    @Test func theReachedOutRowNoLongerCarriesTheLinkAtAll() throws {
         #expect(!queueView.isEmpty)
         let body = try SourceGuard.functionBody(named: "reachedOutRow", in: queueView)
-        #expect(body.contains("onOpenInArchive(p.naturalKey, r.id)"),
-                "reachedOutRow's View in Archive link doesn't pass the specific recipient (#685).")
+        #expect(!body.contains("onOpenInArchive"))
     }
 
     @Test func followUpsViewDeclaresTheWidenedCallback() {

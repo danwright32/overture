@@ -28,6 +28,10 @@ struct ReplyComposition {
     let editableSubject: String?
     let aiDraft: AIDraft?
     let audienceControls: AudienceControls?
+    // #2154: Overture's guess at what this reply meant, and the two things Dan can do about it. Here
+    // rather than on the queue row because confirming a guess means ruling on a message, and this is the
+    // only surface that shows one.
+    var guess: Guess? = nil
 
     // What Dan is about to approve, and the send itself. Both take the body (and, for an entity that has
     // one, the subject) as they stand NOW, so what he approves cannot differ from what goes out (L64).
@@ -52,6 +56,16 @@ struct ReplyComposition {
         let isRunning: @MainActor () -> Bool
         let requestedAt: @MainActor () -> Date?
         let request: @MainActor () -> Void
+    }
+
+    // #2154: what Overture thinks the reply meant, offered where the reply itself is on screen.
+    struct Guess {
+        let state: ConversationState
+        // False when the words were never captured. Dan can still SAY where it stands, which is his own
+        // assertion, but he cannot endorse a reading of a message nobody can show him.
+        let mayConfirm: Bool
+        let confirm: @MainActor () -> Void
+        let change: @MainActor (ConversationState) -> Void
     }
 
     // Taking an address off the reply, and saving an address that wrote but is on no contact. Both mean
@@ -134,6 +148,22 @@ extension ReplyComposition {
                     guard context.saveOrWarn(org: prospect.groupName, feedback: feedback) else { return }
                     feedback.acknowledge(ReplyPanelCopy.savedWriter(address))
                 }),
+            guess: recipient.conversationState.flatMap { state in
+                guard recipient.conversationStateSource == .auto else { return nil }
+                return Guess(
+                    state: state,
+                    mayConfirm: ReplyPanel.mayConfirmGuess(recipient),
+                    confirm: {
+                        ProspectMutations.confirmRecipientConversationState(
+                            QueueItem(prospect), recipient.id, prospects: [prospect],
+                            context: context, feedback: feedback)
+                    },
+                    change: { newState in
+                        ProspectMutations.setRecipientConversationState(
+                            QueueItem(prospect), recipient.id, newState, prospects: [prospect],
+                            context: context, feedback: feedback)
+                    })
+            },
             confirmation: { body, _ in
                 SendConfirmation(replyFor: recipient, of: prospect, body: body)
             },

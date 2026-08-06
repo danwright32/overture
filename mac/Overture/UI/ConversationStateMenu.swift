@@ -59,6 +59,13 @@ struct ConversationStateControl: View {
     // own kind next to the adjacent "Mark…" outcome menu.
     var systemImage: String? = nil
     var accent: Color? = nil
+    // #2154: whether THIS surface may offer Confirm. Confirming writes Overture's guess in as fact, and
+    // Dan can only rule on that with the message in front of him: "I can't confirm if they want to book
+    // without reading the message first" (2026-08-05). The queue row carries not one word of what was
+    // written, so it passes false and the guess reads as a statement there, with Confirm offered on the
+    // reply screen that shows the message. Change stays either way: saying where a conversation stands is
+    // his own assertion, not an endorsement of a reading.
+    var offersConfirm: Bool = true
     let onSet: (ConversationState) -> Void
     let onConfirm: () -> Void
 
@@ -66,8 +73,10 @@ struct ConversationStateControl: View {
         if let currentState, stateSource == .auto {
             HStack(spacing: 4) {
                 Text(ConversationState.looksLikeNote(currentState)).foregroundStyle(OVColor.inkSoft)
-                Button("Confirm", action: onConfirm)
-                    .buttonStyle(.plain).foregroundStyle(OVColor.forest)
+                if offersConfirm {
+                    Button("Confirm", action: onConfirm)
+                        .buttonStyle(.plain).foregroundStyle(OVColor.forest)
+                }
                 ConversationStateMenu(currentState: currentState, label: "Change",
                                       systemImage: systemImage, accent: accent, onSet: onSet)
             }
