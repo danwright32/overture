@@ -24,25 +24,56 @@ import SwiftData
 // yet) and because a later table entry should reach the rows that were waiting for it.
 enum LocationBackfill {
     // Returns how many rows it placed, so a caller can report what it actually did.
+    //
+    // #1751: `onlySourceId` narrows the pass to one source's shows, for the moment Dan saves an address
+    // and the rows in front of him have to move THEN rather than whenever that calendar next changes.
+    // nil means every row, which is the launch pass.
     @discardableResult
-    static func run(in context: ModelContext) -> Int {
+    static func run(in context: ModelContext, onlySourceId: String? = nil) -> Int {
         // Fetched unfiltered and narrowed in Swift on purpose: the condition is "nil OR empty after
         // trimming", which #Predicate cannot express over an optional string, and a predicate that
         // matched only `nil` would silently skip every row holding a whitespace-only location.
         guard let rows = try? context.fetch(FetchDescriptor<Prospect>()) else { return 0 }
+        let addresses = singleVenueAddresses(in: context)
         var placed = 0
         for p in rows where (p.location ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if let onlySourceId, !p.sourceIds.contains(onlySourceId) { continue }
             // The SCOUT's title, not Dan's rename. The tour-title rule reads a convention the SOURCE
             // writes ("NYO2 in Santo Domingo, Dominican Republic"), and a row Dan has retitled by hand no
             // longer carries it, so reading his name would quietly stop placing exactly the rows he has
             // touched. `scoutGroupName` is nil on rows predating that field, where groupName IS the
             // scout's title.
-            guard let filled = EventLocationFill.location(title: p.scoutGroupName ?? p.groupName,
-                                                          venue: p.venue,
-                                                          published: nil) else { continue }
+            guard let filled = EventLocationFill.location(
+                title: p.scoutGroupName ?? p.groupName,
+                venue: p.venue,
+                published: nil,
+                singleVenueSourceAddress: typedAddress(for: p, from: addresses)) else { continue }
             p.location = filled
             placed += 1
         }
         return placed
+    }
+
+    // #1751: the address on each SINGLE-VENUE source that carries one. Every other kind is excluded here
+    // rather than at the call site, so the #1744 refusal (a multi-room source's own address must never
+    // reach a show it published from somewhere else) cannot be lost by a later caller forgetting it.
+    private static func singleVenueAddresses(in context: ModelContext) -> [String: String] {
+        let sources = (try? context.fetch(FetchDescriptor<WatchedSource>())) ?? []
+        var out: [String: String] = [:]
+        for s in sources where s.kind.isSingleVenue {
+            let typed = (s.venueLocation ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            if !typed.isEmpty { out[s.sourceId] = typed }
+        }
+        return out
+    }
+
+    // A show can arrive from more than one source, which is why `sourceIds` is a list at all. Two
+    // single-venue sources naming DIFFERENT places for one show do not get resolved by picking whichever
+    // sorted first: the row stays blank. An unplaced show is flagged and kept (#970), while a
+    // confidently wrong place is the one failure in this area that can remove a real show from the queue.
+    // A multi-room source alongside is not a dissenting voice; it never had an opinion about this room.
+    private static func typedAddress(for p: Prospect, from addresses: [String: String]) -> String? {
+        let named = Set(p.sourceIds.compactMap { addresses[$0] })
+        return named.count == 1 ? named.first : nil
     }
 }

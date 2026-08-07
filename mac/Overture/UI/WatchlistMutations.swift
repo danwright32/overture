@@ -45,9 +45,9 @@ enum WatchlistMutations {
 
     static func saveVenueLocation(_ source: WatchedSource, to draft: String,
                                   context: ModelContext, feedback: ActionFeedback) {
-        WatchlistEditing.setVenueLocation(source, to: draft, in: context)
+        let placed = WatchlistEditing.setVenueLocation(source, to: draft, in: context)
         guard context.saveOrWarn(org: source.orgName, feedback: feedback) else { return }
-        feedback.acknowledge(VenueLocationCopy.savedAck(org: source.orgName))
+        feedback.acknowledge(VenueLocationCopy.savedAck(org: source.orgName, placed: placed))
     }
 
     // #1529: Dan names the room a ticketing-feed source's shows play in, which is the one thing standing

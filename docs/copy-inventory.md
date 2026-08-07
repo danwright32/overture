@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1100 sentences**, from 385 source files.
+Every sentence Overture can say to Dan: **1101 sentences**, from 386 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1473,7 +1473,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReplyPanel.swift`
 "Saved \(address) to this show. Replies from it are recognised now, and it won't be pitched."
     `Domain/ReplyPanel.swift`
-"Saved \(org)'s address. Its shows are placed on the next read."
+"Saved \(org)'s address, and gave it to \(shows) already in the queue."
+    `UI/SourcesView.swift`
+"Saved \(org)'s address. No show in the queue was waiting on it."
     `UI/SourcesView.swift`
 "Saved \(org)'s venue. Its shows are read again on the next scout."
     `UI/SourcesView.swift`
