@@ -114,7 +114,17 @@ enum Reachability {
 
     static func recheckState(probedAt: Date?, hasInheritedAnswer: Bool,
                              recheckRequestedAt: Date?, now: Date,
-                             checkIsRunning: Bool = false) -> RecheckState {
+                             checkIsRunning: Bool = false,
+                             isStillOpen: Bool = true) -> RecheckState {
+        // #2267: a show past the keep-or-dismiss moment is not offered one, and this is asked FIRST so it
+        // beats even an outstanding request. The candidacy rule already refuses to include such a show in
+        // a check, so an offer here would sell an action the rest of the app declines, and the money would
+        // buy an answer nothing reads. Caught by trying to look at this on a real store, where every
+        // answered show was dismissed and past and all seven wore the control.
+        //
+        // `isStillOpen` is decided by the caller through OpenForDecision, the same predicate the candidacy
+        // rule uses, so the control and the run can never disagree about which shows are still live (L16).
+        guard isStillOpen else { return .notOffered }
         // Asked first, and deliberately without reference to the answer underneath. A request made just
         // before the clock released the answer must keep reading as acknowledged rather than flickering
         // back to an unpressed-looking control the moment the window expires.

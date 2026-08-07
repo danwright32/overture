@@ -866,7 +866,12 @@ struct ProspectRowView: View {
                                          hasInheritedAnswer: item.inheritedReachability != nil,
                                          recheckRequestedAt: item.reachabilityRecheckRequestedAt,
                                          now: Date(),
-                                         checkIsRunning: probeRunning) {
+                                         checkIsRunning: probeRunning,
+                                         // The SAME predicate the candidacy rule uses, so the control
+                                         // and the run cannot disagree about which shows are still live.
+                                         isStillOpen: OpenForDecision.isOpen(
+                                            status: item.status, performanceDate: item.performanceDate,
+                                            isBooked: item.isBooked, sentAt: item.sentAt, today: today)) {
         case .notOffered:
             EmptyView()
         case .offer:

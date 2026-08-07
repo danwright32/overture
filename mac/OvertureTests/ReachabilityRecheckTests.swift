@@ -168,6 +168,24 @@ struct ReachabilityRecheckOfferTests {
                                           recheckRequestedAt: nil, now: justAfter,
                                           checkIsRunning: true) == .offer)
     }
+
+    // Found by trying to look at this on a real store: every answered show in it was dismissed and past,
+    // and the control offered to spend a lookup on all seven. A show past the keep-or-dismiss moment is
+    // excluded from a check by the candidacy rule, so the money would buy an answer nothing would ever
+    // read, and the card would be offering an action the rest of the app refuses.
+    @Test func aShowPastDecidingIsNotOfferedARecheck() {
+        #expect(Reachability.recheckState(probedAt: probedAt, hasInheritedAnswer: false,
+                                          recheckRequestedAt: nil, now: justAfter,
+                                          isStillOpen: false) == .notOffered)
+    }
+
+    // And the same for one already asked for: a show dismissed after the request was made must stop
+    // claiming a re-check is coming, rather than sitting in the archive promising work nobody will do.
+    @Test func aRequestOnAShowPastDecidingStopsClaimingARecheck() {
+        #expect(Reachability.recheckState(probedAt: probedAt, hasInheritedAnswer: false,
+                                          recheckRequestedAt: justAfter, now: justAfter,
+                                          checkIsRunning: true, isStillOpen: false) == .notOffered)
+    }
 }
 
 // #2267: what the confirmation says before a single-show re-check spends anything. It is the last screen
