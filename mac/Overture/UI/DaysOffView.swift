@@ -51,14 +51,13 @@ struct DaysOffView: View {
 
             if showAdd { addForm; Divider().overlay(OVColor.line) }
 
-            ScrollView {
+            CappedScrollView(maxHeight: 460) {
                 VStack(alignment: .leading, spacing: OVSpacing.lg) {
                     bookedShoots
                     myDaysOff
                 }
                 .padding(OVSpacing.lg)
             }
-            .frame(maxHeight: 460)
         }
         .frame(width: 560)
         .background(OVColor.canvas)

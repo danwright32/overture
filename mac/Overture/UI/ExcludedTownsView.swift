@@ -36,7 +36,7 @@ struct ExcludedTownsView: View {
             header
             Divider().overlay(OVColor.line)
 
-            ScrollView {
+            CappedScrollView(maxHeight: 460) {
                 VStack(alignment: .leading, spacing: OVSpacing.lg) {
                     yourTowns
                     allowedBack
@@ -44,7 +44,6 @@ struct ExcludedTownsView: View {
                 }
                 .padding(OVSpacing.lg)
             }
-            .frame(maxHeight: 460)
         }
         .frame(width: 560)
         .background(OVColor.canvas)

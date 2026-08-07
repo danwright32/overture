@@ -171,12 +171,14 @@ struct ReplySheet: View {
 
     @ViewBuilder private var theirReply: some View {
         if let words = ReplyPanel.theirWords(composition.contact) {
-            ScrollView {
+            // #2159: capped, and saying so. An email Dan is answering routinely carries the whole point
+            // below the fold (the one that found this listed a season's dates there), and a box that reads
+            // as a complete quotation gets answered as one.
+            CappedScrollView(maxHeight: 160) {
                 Text(words).font(OVType.body).foregroundStyle(OVColor.inkSoft)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .frame(maxHeight: 160)
             .padding(OVSpacing.sm)
             .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(OVColor.surfaceSunk.opacity(0.6)))
         } else if let reason = ReplyPanel.missingWordsReason(composition.contact) {

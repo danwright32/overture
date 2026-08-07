@@ -53,7 +53,7 @@ struct PrepSelectionSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            ScrollView {
+            CappedScrollView(maxHeight: 360) {
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(rows) { row in
                         rowView(row)
@@ -61,7 +61,6 @@ struct PrepSelectionSheet: View {
                     }
                 }
             }
-            .frame(maxHeight: 360)
 
             HStack {
                 Button("Cancel") { dismiss() }

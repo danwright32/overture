@@ -119,11 +119,13 @@ struct SendConfirmSheet: View {
                     // Drawing `confirmation.body` here showed the fallback part instead, which is a
                     // version of his own signature he has not used since #1144, on the one screen that
                     // is captioned "The email that will send".
-                    ScrollView {
+                    // #2159: the last screen before a real email leaves, in a 180pt box. A message longer
+                    // than that read as the whole message, on the one surface captioned "The email that
+                    // will send", so what Dan approved and what left could differ below the fold (L64).
+                    CappedScrollView(maxHeight: 180) {
                         DraftSignaturePreview(draftBody: current.bodyBeforeSignOff,
                                               signature: current.signature)
                     }
-                    .frame(maxHeight: 180)
                     .padding(OVSpacing.sm)
                     .background(OVColor.surfaceSunk)
                     .clipShape(RoundedRectangle(cornerRadius: 9))
