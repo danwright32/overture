@@ -101,6 +101,10 @@ struct AnsweringAReplyMarksItAnsweredTests {
 
     // 4. They write again. A newer inbound reply re-opens it, or the second half of a conversation could
     // never be answered from the queue at all.
+    //
+    // This one sets the arrival time by hand, so it proves the MODEL reopens and nothing more. For two
+    // months nothing in the shipping pipeline performed that write and this still read as full coverage
+    // of the rule (L3, #2196). `ASecondReplyReachesDanTests` is the pipeline half: keep both.
     @Test func aNewReplyAfterTheAnswerMakesItAnswerableAgain() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx)
