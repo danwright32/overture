@@ -41,6 +41,11 @@ enum NaturalKeyVenueMigration {
     static func run(in context: ModelContext) -> Summary {
         let prospects = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         var summary = Summary()
+        // #1606: every rename this pass makes, recorded so work already in flight can still find the row
+        // it was about. A paid check's marker and its results file both hold the OLD key, and without this
+        // the settle's intersection matched nothing: the answer was lost, the show read as unchecked, and
+        // Dan paid again. Silent by construction, since nothing reports a settle that matched zero rows.
+        var renames: [(from: String, to: String)] = []
 
         // Group every row by the key it WOULD have under the new normalization. Two rows share a group
         // exactly when they now fold to the same natural key.
@@ -58,6 +63,7 @@ enum NaturalKeyVenueMigration {
             if members.count == 1 {
                 let only = members[0]
                 if only.naturalKey != newKey {
+                    renames.append((from: only.naturalKey, to: newKey))
                     only.naturalKey = newKey
                     summary.rekeyed += 1
                 }
@@ -132,11 +138,16 @@ enum NaturalKeyVenueMigration {
                 summary.duplicatesDeleted += 1
             }
             if survivor.naturalKey != newKey {
+                renames.append((from: survivor.naturalKey, to: newKey))
                 survivor.naturalKey = newKey
                 summary.rekeyed += 1
             }
         }
 
+        // Recorded after the pass, so a run that threw partway leaves no claim that a rename happened.
+        // A failure to record is not a reason to fail the migration: the rows are already correct, and the
+        // cost is the one this protects against (a paid answer that cannot be matched), not corruption.
+        try? NaturalKeyRemap.record(renames, at: Date())
         return summary
     }
 

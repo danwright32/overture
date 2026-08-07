@@ -265,9 +265,18 @@ enum PrepQueueService {
                            in context: ModelContext, now: Date,
                            anIngestIsStillToCome: Bool,
                            saveFailed: inout Bool,
-                           queueURL: URL? = nil) -> Set<String> {
-        let answered = PrepImporter.answeredKeys(at: resultsURL, queueURL: queueURL)
-        let toStamp = keys.intersection(answered)
+                           queueURL: URL? = nil,
+                           // #1606: injectable so a test can rehearse a rekey without touching the file.
+                           remapURL: URL = NaturalKeyRemap.defaultURL) -> Set<String> {
+        // #1606: BOTH ends are translated, and both is the point. A launch that rewrote natural keys
+        // leaves the marker's keys AND the results file's keys stale in the same way, so translating one
+        // would still intersect to nothing. A key nothing renamed answers with itself, so this is
+        // unconditional rather than a branch that could be skipped.
+        let remap = (try? NaturalKeyRemap.read(from: remapURL)) ?? NaturalKeyRemap(entries: [])
+        let answered = Set(PrepImporter.answeredKeys(at: resultsURL, queueURL: queueURL)
+                            .map(remap.current))
+        let asked = Set(keys.map(remap.current))
+        let toStamp = asked.intersection(answered)
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         for p in all where toStamp.contains(p.naturalKey) {
             // #1596 Phase 3: the pre-guard default. This runs BEFORE the probe-safe ingest, so the venue
@@ -314,7 +323,9 @@ enum PrepQueueService {
         //
         // On a re-settle (`consumeIfNew` refuses a file it has already read) this function is the only
         // writer that runs at all, which is precisely why the record has to live in it.
-        let missed = keys.subtracting(toStamp)
+        // #1606: the shortfall is judged in CURRENT keys too, or a rekeyed show would read as missed by a
+        // run that answered it perfectly well.
+        let missed = asked.subtracting(toStamp)
         for p in all where missed.contains(p.naturalKey) {
             p.reachabilityUnansweredAt = now
             // #2261: the re-check request is deliberately NOT spent here. This run never reached this
