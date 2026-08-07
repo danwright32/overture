@@ -12,12 +12,12 @@ before this was codified.
 ## Input / output (exact)
 
 - **Read:** `~/Library/Application Support/Overture/overture-prep-queue.json`
-  (`PrepQueue` version `10`: a run-level `houses[]` (see "The queue names the houses" in §1),
+  (`PrepQueue` version `11`: a run-level `houses[]` (see "The queue names the houses" in §1),
   plus `items[]` each with `naturalKey`, `groupName`, `venue`,
   `performanceDate`, `runEndDate`, `discipline`, `websiteURL`, `sourceListingURL`,
   `possibleMatchName`, `priorRelationship`, `production`, `reprepMode`,
   `openingNightPassed`, `experimentArmInstruction`, `alsoAnswersFor`, `showListing`, `onlyTheActIsNamed`,
-  `venueHistory`). `production` is `self` / `agency` / `unknown`; a v1 item omits it
+  `venueHistory`, `organisationNamedOnListing`). `production` is `self` / `agency` / `unknown`; a v1 item omits it
   (treat as `unknown`). `reprepMode` is `draft_only` / `contacts_only`; absent (the normal case
   for a fresh, never-drafted prospect) means do both, exactly as today. See "Re-prep mode" under
   "Per prospect" below for what each value means for that item. `runEndDate` is the run's closing
@@ -38,11 +38,19 @@ before this was codified.
   `read` (with the page's `text`, plus `truncated` when the page had to be cut at 4000 characters) or
   `unreadable`, and is ABSENT when there was no page to look at. See §2's step on grounding a draft in the
   listing; the three states are three different answers and you say a different thing about each.
-  `onlyTheActIsNamed` (v9, #1856) is `true` on a show whose listing named NO producing organisation at
-  all: the room it plays in is not the producer, so there is nothing to research as an organisation and
-  the act itself is who you pursue. Absent is not `false`: it means the app said nothing about it (a
-  file predating the field, or a show that names a producer), and you behave exactly as you always did.
-  See §1's route for what to do with it.
+  `onlyTheActIsNamed` (v9, #1856) is `true` on a show that reached the app with NO producing organisation
+  stored for it: the room it plays in is not the producer, so the app has nobody to hand you as the
+  organisation and the act is who you pursue by default. It is a fact about the stored row, NOT a
+  statement that the page names no company: on ICB Productions' "Summer Lovin'" the page's own title line
+  named the producer twice while this flag was `true` (#2259). Absent is not `false`: it means the app said
+  nothing about it (a file predating the field, or a show that names a producer), and you behave exactly as
+  you always did. See §1's route for what to do with it.
+  `organisationNamedOnListing` (v11, #2259) is the producing company the show's OWN listing page credits in
+  front of its title, read by the app off `showListing.text`. When it is present, that organisation is a
+  real research target and a legitimate `provenance: "presenter"`, even on an item whose
+  `onlyTheActIsNamed` is `true`. ABSENT means only that the app's narrow parse (a possessive credit before
+  the title) found nothing; it is never a statement that the page names no company, and you still read the
+  text yourself. See §1's route.
   `venueHistory` (v10, #1887) is how well Dan already knows the ROOM this show plays in, as one of
   `shot_before` / `a_few` / `regularly`. It is a BAND and carries NO COUNT, deliberately: the app
   holds the number and never sends it, so there is nothing for you to state. ABSENT means say
@@ -224,15 +232,27 @@ item's `production` field first:
     confidence per above, never dropped for a weak contact; never block trying to find
     every one. Dan reviews every draft and can hand-add anyone genuinely absent from the
     listing via the manual-recipient path.
-- **`onlyTheActIsNamed == true` (#1856), whatever `production` says:** this listing named
-  no producing organisation at all. The room it plays in is not the producer (the app has
-  already removed the room's own name where one was billed), so there is NOTHING to research
-  under `groupName` as an organisation, and reporting `nothing_published` after hunting for
-  one is a claim you never tested. Pursue the people actually named instead:
-  - Read the item's `showListing.text` FIRST. On these shows the app has rendered the show's
-    own page for you precisely because the act's name is often nowhere else: `groupName` is
-    frequently the show's TITLE ("Broadway's Bad Guys!"), not a company. Take the performer or
-    ensemble names from that text.
+- **`onlyTheActIsNamed == true` (#1856), whatever `production` says:** no producing organisation
+  reached the app for this show. The room it plays in is not the producer (the app has
+  already removed the room's own name where one was billed), so `groupName` is usually the show's
+  TITLE rather than a company, and reporting `nothing_published` after hunting for a company that
+  does not exist is a claim you never tested.
+  - **First, find out whether the PAGE names a company** (#2259). The flag above is a fact about
+    the row the app stored, never about the page. Two things can name one:
+    - `organisationNamedOnListing`, when present, IS a company the app read off this show's own
+      listing page. Research it as an organisation, run the full waterfall below on it, and emit it
+      with `provenance: "presenter"`. It is not a guess and it is not the room (the app refuses the
+      room's own name here).
+    - Otherwise read `showListing.text` yourself and look for one: a possessive credit in the title
+      line, "presented by" / "produced by", or a bio naming a founder's OWN company ("is the
+      Founder/Artistic Director of ICB Productions"). A company you find that way is a legitimate
+      `presenter` target too. Be strict about which company: that same text is full of the
+      performers' PAST credits, and a company named as somewhere a performer once worked is not who
+      is producing this show.
+    - A company found either way is pursued IN ADDITION to the people named, never instead of them.
+  - Read the item's `showListing.text` for the PEOPLE too. On these shows the app has rendered the
+    show's own page for you precisely because the act's name is often nowhere else. Take the
+    performer or ensemble names from that text.
   - Pursue EVERY performer the listing names, however many that is, exactly as the
     `production == "self"` route above does: `provenance: "performer"`, one entry per person,
     each with its own `overrideBody`, and each named performer surfaced even where you found no
@@ -246,9 +266,12 @@ item's `production` field first:
     names no findable person or company), do not fall back to a title-shaped organisation search
     and do not report that nobody publishes an address. Return the entry with `contacts` absent
     and `emptyReason: "no_one_identified"`.
-  - NEVER emit `provenance: "presenter"` for one of these shows. No presenter was
-    established, and the only organisation on the page is the room, which the hard
-    venue-disqualify rule below already forbids.
+  - NEVER emit the ROOM as `provenance: "presenter"` (#2259, replacing #1856's blanket ban on
+    `presenter` here). The room is the one organisation on the page that is certainly not the
+    producer, and the hard venue-disqualify rule below already forbids it. A company established
+    from the page by either route above is a different thing entirely and IS emitted as `presenter`.
+    Where no company was established, emit no `presenter` at all: the show's own TITLE is not an
+    organisation.
   - If `showListing` is absent or `unreadable`, say so honestly: search on `groupName` alone,
     and where that names nobody findable, `nothing_published` is then a true answer about a
     search you actually ran.
@@ -322,6 +345,19 @@ as a contact at any confidence level; fall through to the next waterfall step
 **`websiteURL` may point to the venue, not the act.** If it resolves to the host venue's
 site, do NOT harvest a contact from it; find the act's (or the named performer's) OWN
 site. Landing on the venue's staff page is exactly the bug this rule prevents.
+
+**Search the target's BARE NAME first (#2259).** Whatever the target is, the FIRST query is its name
+and nothing else. Only if that comes back with nothing useful do you narrow, and then in this order:
+the name plus the venue, then the name plus the city. NEVER open with the name fused to a person plus
+several keywords.
+
+This is measured, not a style preference. On 2026-08-07 a run made eleven web calls for ICB
+Productions' "Summer Lovin'" and never once searched `ICB Productions` on its own. Both queries that
+mentioned the company buried it inside a founder's name plus three or four extra words, and both came
+home with the wrong company: a Norwegian firm, an unrelated account, a directory listing, a retail
+chain. The bare name returned the right company as the FIRST result, and its address was two clicks
+further on. Extra keywords do not sharpen a search for a small organisation; they push a 773-follower
+local company below every large one that shares part of its name.
 
 **The waterfall.** Run this once for the act, or once per named performer when pursuing
 performers individually (the target below is whichever of those this run is for). Walk

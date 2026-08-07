@@ -74,13 +74,14 @@ const OPENER_ARCHETYPE = ["reason-first", "direct-intent"] as const;
 const REPLY_INTENT = ["interested", "wants_to_book", "has_question", "declined"] as const;
 const PROVENANCE = ["act", "performer", "presenter"] as const;
 
-// overture-prep-queue.json (versions 1-10, additive: production at v2+ #586, reprepMode at v3+ #367,
+// overture-prep-queue.json (versions 1-11, additive: production at v2+ #586, reprepMode at v3+ #367,
 // runEndDate + openingNightPassed at v4+ #1122, experimentArmInstruction at v5+ #5,
 // alsoAnswersFor at v6+ #1597, run-level houses at v7+ #1720, showListing at v8+ #1824,
-// onlyTheActIsNamed at v9+ #1856, venueHistory at v10+ #1887)
+// onlyTheActIsNamed at v9+ #1856, venueHistory at v10+ #1887,
+// organisationNamedOnListing at v11+ #2259)
 export function assertPrepQueueShape(data: unknown, file: string, expectedVersion: number): void {
   const root = requireObject(data, file, "(root)");
-  const version = requireVersion(root.version, file, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  const version = requireVersion(root.version, file, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
   if (version !== expectedVersion) fail(file, `version ${version} does not match filename version ${expectedVersion}`);
   requireString(root.generatedAt, file, "generatedAt");
   // #1720 v7: the RUN-LEVEL house list, the organisations the app has judged to be the building rather
@@ -126,6 +127,10 @@ export function assertPrepQueueShape(data: unknown, file: string, expectedVersio
   // token would leave the drafter to invent what it means, which is the one thing the band exists to
   // prevent.
   const venueHistoryFieldAllowed = version >= 10;
+  // #2259 v11: the producing company this show's own listing page credits in front of its title. Forbidden
+  // on older versions for the same reason as every field above: a runner predating the rule would ignore
+  // it and go on being told, by onlyTheActIsNamed alone, that the page named nobody.
+  const listingOrganisationFieldAllowed = version >= 11;
   items.forEach((item, i) => {
     const o = requireObject(item, file, `items[${i}]`);
     requireString(o.naturalKey, file, `items[${i}].naturalKey`);
@@ -182,6 +187,20 @@ export function assertPrepQueueShape(data: unknown, file: string, expectedVersio
       }
     } else if (o.venueHistory !== undefined) {
       fail(file, `items[${i}].venueHistory must not be present before version 10`);
+    }
+    if (listingOrganisationFieldAllowed) {
+      optionalString(o.organisationNamedOnListing, file, `items[${i}].organisationNamedOnListing`);
+      // An empty string would read as "the app looked and found a company", which is the opposite of what
+      // it means. Absent is the only way to say nothing here.
+      if (typeof o.organisationNamedOnListing === "string" && o.organisationNamedOnListing.trim() === "") {
+        fail(file, `items[${i}].organisationNamedOnListing must be absent rather than empty`);
+      }
+      // A company credited on a page the app never read cannot have been read off it.
+      if (o.organisationNamedOnListing !== undefined && o.showListing === undefined) {
+        fail(file, `items[${i}].organisationNamedOnListing requires a showListing to have been read from`);
+      }
+    } else if (o.organisationNamedOnListing !== undefined) {
+      fail(file, `items[${i}].organisationNamedOnListing must not be present before version 11`);
     }
   });
 }

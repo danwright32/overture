@@ -147,10 +147,25 @@ export const RUNBOOK_RULES: RunbookRule[] = [
     pattern: /`no_one_identified`[^\n]*\(#1817\)/i },
   { name: "act-pursued-when-no-organiser-named",
     pattern: /`onlyTheActIsNamed == true`[^\n]*whatever\s+`production`\s+says/i },
-  // The other half, and the one that protects Dan rather than the answer rate: on those same shows the
-  // only organisation on the page is the room he is not pitching.
-  { name: "no-presenter-provenance-without-an-organiser",
-    pattern: /NEVER\s+emit\s+`provenance:\s*"presenter"`\s+for\s+one\s+of\s+these\s+shows/i },
+  // The other half, and the one that protects Dan rather than the answer rate: the room is the one
+  // organisation on those pages that is certainly not the producer.
+  //
+  // #2259 narrowed this from #1856's blanket ban on `presenter` here. The blanket version was built on a
+  // claim the flag never made ("this listing named no producing organisation at all") and closed the only
+  // door out of the route: ICB Productions was named twice on the page the run was reading, and the
+  // runbook forbade emitting it. What must never be emitted is the ROOM.
+  { name: "never-the-room-as-presenter",
+    pattern: /NEVER\s+emit\s+the\s+ROOM\s+as\s+`provenance:\s*"presenter"`/i },
+  // #2259: and the door that replaced it. Dropping this rule returns the run to being told there is
+  // nothing to find on a page that names the producer in its own title line, which is what sent eleven
+  // web calls after two individuals and reached Dan as "No email found".
+  { name: "the-page-may-name-a-company",
+    pattern: /First,\s+find\s+out\s+whether\s+the\s+PAGE\s+names\s+a\s+company/i },
+  // #2259: the same run never once searched the company's bare name. Every query fused it to a founder
+  // plus three or four keywords, and every one came home with the wrong company; the bare name returned
+  // the right one first. Dropping this rule loses a fix that costs nothing and decided the answer.
+  { name: "search-the-bare-name-first",
+    pattern: /Search\s+the\s+target's\s+BARE\s+NAME\s+first/i },
   // Dan, 2026-07-31, five rules from one review of one real draft. Each one is a live instruction whose
   // removal reverts the draft to a shape he rejected by name, and none of them can be caught by reading
   // the code: the only evidence is the sentence a stranger receives.

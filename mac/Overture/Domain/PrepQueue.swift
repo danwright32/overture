@@ -121,6 +121,20 @@ struct PrepQueueItem: Codable, Equatable, Sendable {
     // credential the runbook already requires is about that exact room and a venue line beside it
     // would be one fact stated twice (Dan's call, 2026-07-31).
     var venueHistory: String? = nil
+    // v11 (#2259): the producing company this show's own listing page credits in front of its title, read
+    // by the app from `showListing.text`.
+    //
+    // `onlyTheActIsNamed` says one thing (the stored presenter field is empty) and the runbook restated it
+    // as a much bigger one ("this listing named no producing organisation at all"). On ICB Productions'
+    // "Summer Lovin'" the bigger claim was false: the page's own title line named the company, twice, and
+    // the run was told there was nothing there to find. It spent eleven web calls on two individuals and
+    // Dan's card read "No email found".
+    //
+    // Present means the app READ a credit off the page, and that organisation is a legitimate
+    // `provenance: "presenter"` target running the full waterfall. Absent means the app's narrow parse
+    // found none, which is NOT "the page names nobody": the run still reads the text itself, where a
+    // founder's own company is often named in a bio the parse deliberately will not touch.
+    var organisationNamedOnListing: String? = nil
 }
 
 // What the app read at a show's own listing URL, handed to the Prep run as material for the draft.
@@ -147,7 +161,7 @@ struct ShowListing: Codable, Equatable, Sendable {
 }
 
 enum PrepQueueBuilder {
-    static let version = 10
+    static let version = 11
 
     // v4 (#1122): true when `performanceDate` (the opening night) is behind us AND the run is still live
     // (its closing night, runEndDate ?? performanceDate, is today or later). A fully past run is false
@@ -307,6 +321,14 @@ enum PrepQueueBuilder {
         out.items = queue.items.map { item in
             var copy = item
             copy.showListing = listings[item.naturalKey]
+            // #2259: read the page's own credit in the SAME step that attaches the page, so a listing can
+            // never reach the run with a company named on it and nothing said about that company. The
+            // parse is the app's (deterministic, free, and testable against the stored text), not a
+            // sentence of runbook the run is trusted to obey.
+            copy.organisationNamedOnListing = ListingOrganiser.producerNamed(
+                inListingText: copy.showListing?.text,
+                showTitle: item.groupName,
+                venue: item.venue)
             return copy
         }
         return out

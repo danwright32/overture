@@ -1,0 +1,115 @@
+{
+  "name": "listing-credits-the-producing-company",
+  "rule": "A show can carry `onlyTheActIsNamed: true` and still have its producing company named on its own listing page (#2259). The flag says the app stored no presenter; it is not a statement about the page. The company credited in front of the title is researched as an organisation, pursued through its bare name, and emitted with `provenance: \"presenter\"` alongside the people the listing names, while the room is refused exactly as it always was.",
+  "input": {
+    "naturalKey": "summer-sessions|2026-08-11|the-example-room",
+    "groupName": "Summer Sessions",
+    "venue": "The Example Room",
+    "performanceDate": "2026-08-11",
+    "discipline": "other",
+    "production": "unknown",
+    "priorRelationship": "none",
+    "onlyTheActIsNamed": true,
+    "organisationNamedOnListing": "Fenwick Productions",
+    "sourceListingURL": "https://tickets.example/showdetails/mNo345/pQr678",
+    "showListing": {
+      "status": "read",
+      "url": "https://tickets.example/showdetails/mNo345/pQr678",
+      "text": "Events FAQ About Contact Sign in 0 Fenwick Productions' Summer Sessions Singing through the long evenings About the Show Summer Sessions is a cabaret of songs about heat, holidays and endings, sung by a rotating company of eight. Genre Variety Shows Duration 75 minutes Age Restriction All ages Behind the Act: Isla Fenwick Rae Ng 570 Example Avenue New York, NY 10036 View on map Behind the Act ISLA FENWICK Isla Fenwick (Director/Producer) is the Founder and Artistic Director of Fenwick Productions. She is a student at an east coast university and made her debut in this room last autumn in a revue produced by Marlow Stage Company. RAE NG Rae Ng (Music Director) is a pianist and music director based in New York."
+    }
+  },
+  "sources": [
+    {
+      "label": "Fenwick Productions social profile (what the bare-name search returns first)",
+      "url": "https://social.example/fenwickproductionsnyc",
+      "content": "Fenwick Productions (@fenwickproductionsnyc). Independent theatre and cabaret company, New York. UPCOMING: Summer Sessions at The Example Room, 8/11, 9:30pm. Links: https://links.example/fenwickproductions"
+    },
+    {
+      "label": "Fenwick Productions link hub",
+      "url": "https://links.example/fenwickproductions",
+      "content": "Fenwick Productions. Tickets to Summer Sessions. Company news. Contact us: hello@fenwickproductions.example"
+    },
+    {
+      "label": "Isla Fenwick personal page",
+      "url": "https://islafenwick.example",
+      "content": "Isla Fenwick, director and producer, New York. Founder of Fenwick Productions. For anything at all, use the form on this page."
+    },
+    {
+      "label": "Rae Ng personal page",
+      "url": "https://raeng.example",
+      "content": "Rae Ng, music director and pianist. Currently: Summer Sessions at The Example Room. Enquiries via the form below."
+    },
+    {
+      "label": "The Example Room listing host",
+      "url": "https://theexampleroom.example/contact",
+      "content": "The Example Room is a rental cabaret room. Ticketing questions: tickets@theexampleroom.example. To perform here: programming@theexampleroom.example."
+    }
+  ],
+  "expected": {
+    "description": "The failure this fixture exists to catch is the real 2026-08-07 run: eleven web calls chasing two individuals, the company named twice on the page it was reading, and a card that reached Dan saying no email was found. The company is a legitimate presenter target here, and its published address is the one answer worth having, so `requiredEmails` pins that address rather than merely counting contacts: a run that surfaces two form-only people looks complete on every count-based check and is the exact outcome being regressed against. The two people named on the listing are still pursued, because the company is additive and never a replacement. The room's own inboxes stay refused: nothing about naming a producer relaxes the venue rule. The summary term is the STEM, so a correct answer is not failed for pluralising a word differently.",
+    "requirePresenter": true,
+    "requiredEmails": [
+      "hello@fenwickproductions.example"
+    ],
+    "requiredPerformers": [
+      "Isla Fenwick",
+      "Rae Ng"
+    ],
+    "performerOverrideBodyRequired": true,
+    "requireSomeContact": true,
+    "forbiddenEmails": [
+      "tickets@theexampleroom.example",
+      "programming@theexampleroom.example"
+    ],
+    "forbiddenDomains": [
+      "theexampleroom.example"
+    ],
+    "requiredShowSummaryTerms": [
+      "cabaret"
+    ],
+    "requirePortfolioLink": true
+  },
+  "sampleCompliantOutput": {
+    "version": 8,
+    "generatedAt": "2026-08-07T00:00:00.000Z",
+    "results": [
+      {
+        "naturalKey": "summer-sessions|2026-08-11|the-example-room",
+        "showSummary": "A cabaret of songs about heat, holidays and endings, sung by a rotating company of eight, 75 minutes, all ages.",
+        "contacts": [
+          {
+            "provenance": "presenter",
+            "name": "Fenwick Productions",
+            "email": "hello@fenwickproductions.example",
+            "method": "generic_inbox",
+            "confidence": "high",
+            "sourceUrl": "https://links.example/fenwickproductions"
+          },
+          {
+            "provenance": "performer",
+            "name": "Isla Fenwick",
+            "role": "Director/Producer",
+            "method": "form_or_dm",
+            "confidence": "low",
+            "formUrl": "https://islafenwick.example",
+            "overrideBody": "My name is Dan and I'm a professional arts photographer here in New York City. I'm writing in regard to Summer Sessions at The Example Room on August 11. I shoot unobtrusive, no-flash documentary coverage, so the audience doesn't notice me and the performance isn't disturbed. I've been photographing at Carnegie Hall for close to ten years, and you can see my portfolio at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about your photography plans for the night. I look forward to hearing from you."
+          },
+          {
+            "provenance": "performer",
+            "name": "Rae Ng",
+            "role": "Music Director",
+            "method": "form_or_dm",
+            "confidence": "low",
+            "formUrl": "https://raeng.example",
+            "overrideBody": "My name is Dan, I'm an arts photographer based in New York City. I'm writing about Summer Sessions at The Example Room on August 11. I work in a documentary style, no flash and nothing intrusive, so the room stays as it is and the performance isn't interrupted. I've been shooting at Carnegie Hall for nearly ten years, and my portfolio is at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about your photography plans for that night. I look forward to hearing from you."
+          }
+        ],
+        "draft": {
+          "subject": "Photographing Summer Sessions at The Example Room",
+          "body": "My name is Dan and I'm a professional arts photographer here in New York City. I'm writing in regard to Summer Sessions at The Example Room on August 11. I shoot unobtrusive, no-flash documentary coverage, so the audience doesn't notice me and the performance isn't disturbed. I've been photographing at Carnegie Hall for close to ten years, and you can see my portfolio at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about your photography plans for the night. I look forward to hearing from you.",
+          "variant": "reason-first"
+        }
+      }
+    ]
+  }
+}
