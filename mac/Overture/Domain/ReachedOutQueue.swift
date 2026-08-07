@@ -22,6 +22,16 @@ enum ReachedOutQueue {
         // two literal guards it could only ever have meant email, and a show pitched through a form
         // would have matched no stage at all and vanished from the queue with the pitch still live.
         guard r.hasProvenOutreach else { return nil }
+        // #2225: the SHOW booked, so there is nothing left to reach out about on any of its contacts.
+        // Both booking paths freeze only the contacts that were never emailed, so an already-emailed
+        // contact kept its nil resolution, stayed in play, and the row went on counting down to a nudge
+        // on a show that had already landed. FollowUp and ConversationReminder both skip a booked show
+        // when building their own due lists, so the two surfaces disagreed about the same show on the
+        // same night.
+        //
+        // Asked through `isBooked`, which folds the show's own outcome together with a booking recorded
+        // on any one contact, because Dan records his by hand on the contact (L83).
+        guard !p.isBooked else { return nil }
         let standing = r.standing
         guard standing.isInPlay else { return nil }
 
