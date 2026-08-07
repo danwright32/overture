@@ -22,8 +22,12 @@ struct GmailConnectFailureAlertTests {
     // and that alert offers a Try again that clears the error and re-runs the connect.
     @Test func rootViewSurfacesAFailedConnectViaTheGmailRetryAlert() {
         let src = SourceGuardHelper.source("Overture/App/RootView.swift")
-        // The failure lands in the Gmail-specific state, so it can drive its own retry alert.
-        #expect(src.contains("gmailConnectError = error.localizedDescription"))
+        // The failure lands in the Gmail-specific state, so it can drive its own retry alert. #2202: via
+        // the one raiser, which closes whatever is presented first, because an alert raised into a window
+        // already showing a sheet queues behind it and is never seen.
+        #expect(src.contains("reportGmailConnectError(error.localizedDescription)"))
+        #expect(SourceGuardHelper.propertyBody("private func reportGmailConnectError(_ message: String) {", in: src)?
+            .contains("modals.raise { gmailConnectError = message }") == true)
         // A dedicated alert, titled for the Gmail connect, with a one-click Try again that reruns connect.
         #expect(src.contains(#".alert("Couldn't connect Gmail""#))
         #expect(src.contains(#"Button("Try again")"#))
