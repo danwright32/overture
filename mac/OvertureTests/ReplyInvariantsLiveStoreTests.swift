@@ -28,18 +28,17 @@ struct ReplyInvariantsLiveStoreTests {
         FileManager.default.fileExists(atPath: liveStoreURL.path)
     }
 
+    // #1672: through the ONE shared clone. Copying the .store and its sidecars one file at a time
+    // races a live writer, and a clone whose -wal does not match the .store beside it makes
+    // whatever this suite concludes a statement about a torn copy rather than about Dan's data.
+    // LiveStoreClone takes it through SQLite's online backup, which folds the WAL in as it goes,
+    // so the newest writes are still there and there is no sidecar left to mismatch.
     private func copyLiveStore(to dir: URL) throws -> URL {
-        let fm = FileManager.default
-        try fm.createDirectory(at: dir, withIntermediateDirectories: true)
-        let dest = dir.appendingPathComponent("Overture.store")
-        // The sidecars too, or the copy is a snapshot missing the newest writes: on 2026-08-05 the reply
-        // that mattered was in the WAL and not yet in the main file.
-        for suffix in ["", "-wal", "-shm"] {
-            let src = URL(fileURLWithPath: Self.liveStoreURL.path + suffix)
-            guard fm.fileExists(atPath: src.path) else { continue }
-            try fm.copyItem(at: src, to: URL(fileURLWithPath: dest.path + suffix))
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        guard let clone = try LiveStoreClone.makeClone(in: dir) else {
+            throw LiveStoreClone.Refusal.backupFailed("no live store on this machine")
         }
-        return dest
+        return clone
     }
 
     private func withLiveShows(_ body: ([Prospect]) throws -> Void) async throws {

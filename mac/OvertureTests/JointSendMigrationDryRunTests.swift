@@ -61,13 +61,9 @@ struct JointSendMigrationDryRunTests {
         try fm.createDirectory(at: tmpDir, withIntermediateDirectories: true)
         defer { try? fm.removeItem(at: tmpDir) }
 
-        // Clone the store and its WAL/SHM sidecars, or the copy is a snapshot missing the newest writes.
-        let copy = tmpDir.appendingPathComponent("Overture.store")
-        for suffix in ["", "-wal", "-shm"] {
-            let src = URL(fileURLWithPath: live.path + suffix)
-            guard fm.fileExists(atPath: src.path) else { continue }
-            try fm.copyItem(at: src, to: URL(fileURLWithPath: copy.path + suffix))
-        }
+        // #1672: through the ONE shared clone, which takes the copy via SQLite's online backup rather
+        // than racing three file copies against a live writer. See LiveStoreClone.
+        guard let copy = try LiveStoreClone.makeClone(in: tmpDir) else { return }
 
         // Prove the census can read this clone at all BEFORE reading anything into a nil. Z_PK is on every
         // CoreData table and is never null, so a nil here means the counting is broken, not that a column is
