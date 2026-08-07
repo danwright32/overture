@@ -43,13 +43,24 @@ enum EventLocationFill {
     // The same decision from the three fields it actually needs, so the backfill over rows ALREADY in
     // the store (LocationBackfill) runs the identical rule rather than a second copy of it. A stored row
     // is not an ExtractedEvent and never will be again: the extract that produced it is long gone.
-    static func location(title: String, venue: String?, published: String?) -> String? {
+    static func location(title: String, venue: String?, published: String?,
+                         singleVenueSourceAddress: String? = nil) -> String? {
         if let own = published?.trimmingCharacters(in: .whitespacesAndNewlines), !own.isEmpty {
             return own
         }
         if let fromVenue = cityFromVenue(venue) { return fromVenue }
         if let fromTitle = cityFromTitle(title) { return fromTitle }
-        return VenuePlaces.location(for: venue)
+        if let fromTable = VenuePlaces.location(for: venue) { return fromTable }
+        // #1751, rule 5 and deliberately LAST: the address Dan typed on the source row, and only where
+        // that source is a SINGLE-VENUE feed. See the note above about what is not here: a per-source
+        // address is wrong for a multi-room source, because Carnegie's own address would place its Santo
+        // Domingo tour date in New York. A single-venue feed cannot have that date; every show it
+        // publishes is in the one room whose address he typed. Last because every rule above reads text
+        // about THIS show, while this one is a standing fact about the room, and first-hand beats
+        // standing. The caller decides which sources qualify, so this function still never has to know
+        // what a source is.
+        let typed = singleVenueSourceAddress?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (typed?.isEmpty == false) ? typed : nil
     }
 
     // MARK: - Rule 2: the address a page baked into the venue field

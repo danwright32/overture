@@ -135,7 +135,9 @@ struct AcknowledgeOnlyWhenSavedTests {
         WatchlistMutations.saveVenueLocation(try firstSource(ctx), to: "1 Water St, Brooklyn, NY",
                                              context: ctx, feedback: feedback)
 
-        #expect(feedback.message == VenueLocationCopy.savedAck(org: "Bargemusic"))
+        // #1751: no show in this store is from that source, so the save has nothing to place and says so
+        // rather than claiming a count. What is being pinned here is that a save that LANDED still speaks.
+        #expect(feedback.message == VenueLocationCopy.savedAck(org: "Bargemusic", placed: 0))
     }
 
     @Test("a corrected address that cannot be saved warns, and does not report the fix")

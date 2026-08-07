@@ -241,11 +241,25 @@ enum WatchlistEditing {
     // only their place annotation, so the source keeps the baseline it earned. It IS marked for a fresh
     // read so the correction reaches the store on the next scout instead of waiting for the calendar to
     // change on its own. An empty string clears the location back to nil.
-    static func setVenueLocation(_ source: WatchedSource, to newLocation: String, in context: ModelContext) {
+    //
+    // #1751: and it places THIS source's blank rows straight away, returning how many, rather than only
+    // marking the source for a fresh read. Applying the answer at ingest alone meant a correct save
+    // changed nothing about the shows already sitting in Dan's queue until that calendar next happened to
+    // change, and a control that visibly does nothing after a correct save reads as a failed save.
+    // Scoped to this source, so saving one address never quietly re-derives the whole store.
+    @discardableResult
+    static func setVenueLocation(_ source: WatchedSource, to newLocation: String,
+                                 in context: ModelContext) -> Int {
         let trimmed = newLocation.trimmingCharacters(in: .whitespacesAndNewlines)
         source.venueLocation = trimmed.isEmpty ? nil : trimmed
         markForFreshRead(source)
+        // Nothing to place when the answer was withdrawn. The fill is additive, so it could not un-place
+        // rows an earlier save already wrote in any case, and saying "placed 0 shows" about a clear would
+        // be reporting an action nobody asked for.
+        let placed = trimmed.isEmpty ? 0 : LocationBackfill.run(in: context,
+                                                                onlySourceId: source.sourceId)
         try? context.save()
+        return placed
     }
 
     // #1529: Dan names the ROOM every show from this source plays in. Needed where the shows come from a

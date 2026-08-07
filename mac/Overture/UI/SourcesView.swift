@@ -922,8 +922,20 @@ enum VenueLocationCopy {
     static let save = "Save"
     static let cancel = "Cancel"
 
-    static func savedAck(org: String) -> String {
-        "Saved \(org)'s address. Its shows are placed on the next read."
+    // #1751: what the save actually DID, because it now does something immediately. The old line promised
+    // a future read, which was both the only thing that used to happen and the reason a correct save
+    // looked like a failed one.
+    static func savedAck(org: String, placed: Int) -> String {
+        guard placed > 0 else {
+            // Not a failure and not a number: the shows from this source already say where they are, or
+            // there are none yet. Says what is true without implying anything went wrong.
+            return "Saved \(org)'s address. No show in the queue was waiting on it."
+        }
+        // "Gave it to", not "placed": read cold, "placed 12 shows already in the queue" can be heard as
+        // ADDING twelve shows to the queue, which is the opposite of what happened. The address is the
+        // thing that moved, and the sentence says so.
+        let shows = placed == 1 ? "1 show" : "\(placed) shows"
+        return "Saved \(org)'s address, and gave it to \(shows) already in the queue."
     }
 }
 
