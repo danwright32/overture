@@ -407,6 +407,67 @@ struct SourceFetcherTests {
         #expect(PageNormalizer.carriesReadableContent(page.normalizedHTML))
     }
 
+    // #2213. The hop is performed ON BEHALF OF a known source, so that source's own name and location go
+    // with it. The OvationTix and VenueTix adapters carry no venue name of their own and are threaded it
+    // from the source, so a calendar reached BY THE HOP named no place at all and `ExtractedEventGuard`
+    // dropped every show it found.
+    //
+    // Measured 2026-08-06: theplayerstheatre.com/show-schedule.html carries 328 characters and no dates,
+    // so the hop fires; web.ovationtix.com/trs/cal/277 returns 108KB of shows running from that night into
+    // September; and the scout reported the source as having come back with nothing.
+    @Test func thehopCarriesTheSourcesOwnNameAndLocation() async throws {
+        PageStubURLProtocol.reset()
+        let players = "https://theplayerstheatre.com/show-schedule.html"
+        let ovation = "https://web.ovationtix.com/trs/cal/277"
+        PageStubURLProtocol.bodiesByURL = [
+            players: "<html><body><a href=\"\(ovation)\">Buy Tickets</a></body></html>",
+        ]
+        var sawName: String? = nil
+        var sawLocation: String? = nil
+
+        _ = try? await SourceFetcher.fetch(
+            URL(string: players)!, session: stubSession(),
+            render: { _ in "<html><body></body></html>" },
+            sourceName: "The Players Theatre", sourceLocation: "New York, NY",
+            ovationtixFeed: { url, name, location in
+                sawName = name
+                sawLocation = location
+                return FetchedPage(normalizedHTML: "<html><body><h1>A season of shows at a real room, "
+                                   + "running from tonight into September, with dates and times listed "
+                                   + "for every performance.</h1></body></html>",
+                                   finalURL: url.absoluteString, contentHash: "h")
+            })
+
+        #expect(sawName == "The Players Theatre",
+                "the feed carries no venue name of its own, so a nameless hop drops every show it finds")
+        #expect(sawLocation == "New York, NY")
+    }
+
+    // The failure path for the same thread: a hop with no source behind it (nothing pasted a name in)
+    // still hands the adapter nothing rather than inventing something. #1529 removed the hostname
+    // fallback because "2026-07-26 at web.ovationtix.com" is not a room, and the read that met it
+    // correctly refused it.
+    @Test func ahopWithNoSourceBehindItStillNamesNoPlace() async throws {
+        PageStubURLProtocol.reset()
+        let org = "https://org.example/show"
+        let ovation = "https://web.ovationtix.com/trs/cal/9"
+        PageStubURLProtocol.bodiesByURL = [
+            org: "<html><body><a href=\"\(ovation)\">Buy Tickets</a></body></html>",
+        ]
+        var sawName: String? = "not asked"
+
+        _ = try? await SourceFetcher.fetch(
+            URL(string: org)!, session: stubSession(),
+            render: { _ in "<html><body></body></html>" },
+            ovationtixFeed: { url, name, _ in
+                sawName = name
+                return FetchedPage(normalizedHTML: "<html><body><p>x</p></body></html>",
+                                   finalURL: url.absoluteString, contentHash: "h")
+            })
+
+        #expect(sawName == nil, "a hostname is not a room, so with no name the document states no place")
+    }
+
     // It must not hop from the page it hopped TO: one hop, then stop. A ticketing page that links to
     // another ticketing page is not an invitation to crawl the internet on Dan's behalf.
     @Test func theHopHappensOnceAndDoesNotKeepGoing() async throws {

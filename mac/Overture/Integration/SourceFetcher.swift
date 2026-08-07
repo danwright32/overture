@@ -237,15 +237,23 @@ enum SourceFetcher {
         // sibling probe) follows an address the APP derived from a page, not one Dan supplied. Those must
         // never go out unencrypted, and putting the fallback on the entry point is what makes that
         // structural rather than a rule somebody has to remember.
+        // #2213: everything a ticket-link hop needs to know about the source it is acting on behalf of,
+        // built once here so every path below hands the hop the same thing.
+        let hopContext = SourceContext(name: sourceName, location: sourceLocation,
+                                       monthHorizon: monthHorizon, now: now,
+                                       operaFeed: operaFeed, venuetixFeed: venuetixFeed,
+                                       ovationtixFeed: ovationtixFeed)
         let landing: FetchedPage
         do {
             landing = try await fetchSinglePage(secured(url), session: session, render: render,
                                                 allowTicketLinkHop: allowTicketLinkHop,
-                                                allowSiblingProbe: allowSiblingProbe)
+                                                allowSiblingProbe: allowSiblingProbe,
+                                                source: hopContext)
         } catch let tlsFailure as SourceFetchError where mayReadInTheClear(tlsFailure, storedAt: url) {
             landing = try await readInTheClear(url, after: tlsFailure, session: session, render: render,
                                                allowTicketLinkHop: allowTicketLinkHop,
-                                               allowSiblingProbe: allowSiblingProbe)
+                                               allowSiblingProbe: allowSiblingProbe,
+                                               source: hopContext)
         }
 
         // Not asked to paginate, or we are no longer on the page Dan gave us. A ticket-link hop means we
@@ -312,11 +320,13 @@ enum SourceFetcher {
     private static func readInTheClear(_ url: URL, after tlsFailure: SourceFetchError,
                                        session: URLSession, render: ((URL) async throws -> String)?,
                                        allowTicketLinkHop: Bool,
-                                       allowSiblingProbe: Bool) async throws -> FetchedPage {
+                                       allowSiblingProbe: Bool,
+                                       source: SourceContext = SourceContext()) async throws -> FetchedPage {
         do {
             var page = try await fetchSinglePage(url, session: session, render: render,
                                                  allowTicketLinkHop: allowTicketLinkHop,
-                                                 allowSiblingProbe: allowSiblingProbe)
+                                                 allowSiblingProbe: allowSiblingProbe,
+                                                 source: source)
             page.wasReadInsecurely = true
             return page
         } catch let retryFailure as SourceFetchError {
@@ -353,6 +363,9 @@ enum SourceFetcher {
             }
 
             guard let page = try? await fetchSinglePage(month, session: session, render: render,
+                                                        // No context: this call cannot hop
+                                                        // (allowTicketLinkHop is false), so it has
+                                                        // nothing to hand one to.
                                                         allowTicketLinkHop: false,
                                                         allowSiblingProbe: false) else {
                 // NAMED, never merely absent. A month we could not read means fewer shows came back, and
@@ -392,11 +405,26 @@ enum SourceFetcher {
         return CalendarMonthIndex.Month(pathOf: b) == nil && ma == CalendarMonthIndex.Month(now)
     }
 
+    // #2213: what a hop needs to know about the source it is acting ON BEHALF OF. One value rather than
+    // six more parameters at four call sites, and it carries the injected feed adapters for the same
+    // reason it carries the name: without them a hop onto a feed URL calls the real network, which no test
+    // may do (L2).
+    struct SourceContext {
+        var name: String?
+        var location: String?
+        var monthHorizon: Int = 1
+        var now: Date = Date()
+        var operaFeed: ((URL) async throws -> FetchedPage)?
+        var venuetixFeed: ((URL, String?, String?) async throws -> FetchedPage)?
+        var ovationtixFeed: ((URL, String?, String?) async throws -> FetchedPage)?
+    }
+
     private static func fetchSinglePage(_ url: URL,
                                         session: URLSession,
                                         render: ((URL) async throws -> String)?,
                                         allowTicketLinkHop: Bool,
-                                        allowSiblingProbe: Bool = true) async throws -> FetchedPage {
+                                        allowSiblingProbe: Bool = true,
+                                        source: SourceContext = SourceContext()) async throws -> FetchedPage {
         let (html, normalized, finalURL) = try await plainFetch(url, session: session)
 
         // #1127: a tickettailor box-office embed's events live in its widget URL, not this shell (which
@@ -463,8 +491,28 @@ enum SourceFetcher {
             ?? TicketLink.candidate(in: normalized, from: finalURL)
 
         if allowTicketLinkHop, let ticket = ticketCandidate {
+            // #2213: the source's own name and location go WITH the hop, and so do the injected feed
+            // adapters. The hop is performed on behalf of a known source, so that source's name is exactly
+            // the assertion the OvationTix and VenueTix adapters need: neither feed carries a venue name of
+            // its own, and a calendar reached by the hop therefore named no place at all, so
+            // `ExtractedEventGuard` dropped every show it found.
+            //
+            // Measured 2026-08-06: theplayerstheatre.com/show-schedule.html carries 328 characters and no
+            // dates, so the hop fires; web.ovationtix.com/trs/cal/277 returns 108KB of shows running from
+            // that night into September; and the scout reported the source as having come back with
+            // nothing. This is the "exactly one path" the note at the VenueTix branch above names, and
+            // #1529 was right to take away the hostname fallback while leaving the hop with nothing to put
+            // in its place.
+            //
+            // The feed closures ride along for a separate reason: without them a hop onto a feed URL calls
+            // the real network, which no test may do (L2).
             if var followed = try? await fetch(ticket, session: session, render: render,
-                                               allowTicketLinkHop: false, allowSiblingProbe: false),
+                                               allowTicketLinkHop: false, allowSiblingProbe: false,
+                                               monthHorizon: source.monthHorizon, now: source.now,
+                                               sourceName: source.name, sourceLocation: source.location,
+                                               operaFeed: source.operaFeed,
+                                               venuetixFeed: source.venuetixFeed,
+                                               ovationtixFeed: source.ovationtixFeed),
                PageNormalizer.carriesReadableContent(followed.normalizedHTML) {
                 followed.followedTicketLinkFrom = finalURL.absoluteString
                 // We are now reading somebody else's page (a venue's). Remember whose lead this is, or

@@ -1335,6 +1335,7 @@
 		EF2E806D98A529C99E6C1A2F /* KeepAcceptsConflictTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79D27E78C4310952B26B09C6 /* KeepAcceptsConflictTests.swift */; };
 		EF632FC30591AFA373EADEF5 /* RunProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB7282E503DFB2A4A9D4F694 /* RunProgress.swift */; };
 		EF7CAC2CE90E54B3F61B4CF2 /* AppleScriptOmniFocusClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 231902E5D155CC8939CF078E /* AppleScriptOmniFocusClient.swift */; };
+		EFBF461116F86981BE6AF3E7 /* SourceAddressOpensTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13D76BC567B581B412491CBA /* SourceAddressOpensTests.swift */; };
 		EFC964E697651DC1E488C4B3 /* VoiceFeedbackService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29B1B340C5C9A1E6B98D0D4C /* VoiceFeedbackService.swift */; };
 		F042DC4C5E946A85D8C6462C /* FirstSeenBackfill.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7D552AB4D1742A83ACABD09 /* FirstSeenBackfill.swift */; };
 		F0513D3EC424B250D7A81EF1 /* ProspectRowFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AEB2402FA7C0F3A4A82D9F0 /* ProspectRowFactory.swift */; };
@@ -1533,6 +1534,7 @@
 		1384DFCF7C7908F6AE6EC5C2 /* VenueShootHistoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueShootHistoryTests.swift; sourceTree = "<group>"; };
 		13BE0665B3CCB4B2CF5104C3 /* HeldAddressIsNotNoAddressTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeldAddressIsNotNoAddressTests.swift; sourceTree = "<group>"; };
 		13D58A9EC39F7C21595A90CE /* LocationBackfill.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationBackfill.swift; sourceTree = "<group>"; };
+		13D76BC567B581B412491CBA /* SourceAddressOpensTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceAddressOpensTests.swift; sourceTree = "<group>"; };
 		1419836FA8F86910102B0B1D /* WatchedSourceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchedSourceTests.swift; sourceTree = "<group>"; };
 		1454B3FC7DF3862970176170 /* ProducerGateCorpusTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProducerGateCorpusTests.swift; sourceTree = "<group>"; };
 		147078154226A7E9D8CC0124 /* ReachabilityProbeLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReachabilityProbeLaunchTests.swift; sourceTree = "<group>"; };
@@ -3157,6 +3159,7 @@
 				DDA7D52BC8A5464F2BF28951 /* SignatureBorderStripTests.swift */,
 				EEF8220CC0914829266E7CEA /* SilentlyEmptySourceIsActionableTests.swift */,
 				045CEA1B93EA8727E3DF898A /* SingleInstanceInfoPlistTests.swift */,
+				13D76BC567B581B412491CBA /* SourceAddressOpensTests.swift */,
 				F191DF6FE6A63D02EE81A15D /* SourceAttentionTests.swift */,
 				ED4AA2A7DF11509FA708E22B /* SourceExtractorTests.swift */,
 				EB5A2F5574E4996590E04C43 /* SourceFetcherPaginationTests.swift */,
@@ -5077,6 +5080,7 @@
 				BFD743F26A87F309634F7F97 /* SilentlyEmptySourceIsActionableTests.swift in Sources */,
 				E98D996CBFE2AD38E5BE1A03 /* SingleInstanceInfoPlistTests.swift in Sources */,
 				2568E65799224306186408CD /* SleepObserver.swift in Sources */,
+				EFBF461116F86981BE6AF3E7 /* SourceAddressOpensTests.swift in Sources */,
 				04FFD26C4CB902748BF103AD /* SourceAttention.swift in Sources */,
 				E114D882FBC6CA53C8815530 /* SourceAttentionTests.swift in Sources */,
 				192DB140070CE5EF5B0BB864 /* SourceConfirmation.swift in Sources */,

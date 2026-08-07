@@ -629,6 +629,20 @@ struct SourcesView: View {
         try? context.save()
     }
 
+    // #2209: one appearance for both branches, so an openable address and an unopenable one are
+    // pixel-identical and the only difference is whether clicking does anything. Static, because it takes
+    // nothing from the view and a shared appearance that could drift is the thing this exists to stop.
+    static func addressText(_ url: String) -> some View {
+        Text(url).font(.system(size: 11)).foregroundStyle(OVColor.inkFaint).lineLimit(1)
+    }
+
+    // #2209: is this address one a click can open? Decided out here, never inline in the body, because it
+    // is the whole rule and a rule computed inside a SwiftUI view is invisible to the suite.
+    static func opens(_ url: String?) -> URL? {
+        guard let url, !url.isEmpty, let parsed = URL(string: url), parsed.scheme != nil else { return nil }
+        return parsed
+    }
+
     private func row(_ source: WatchedSource) -> some View {
         // #794/#978/#1185: the lifetime tally, reused for the yield line below and for whether a single-venue
         // feed has actually surfaced shows yet (which decides its address nudge). The counting lives in
@@ -643,8 +657,23 @@ struct SourcesView: View {
                 Text(lastChecked(source)).font(.system(size: 11)).foregroundStyle(OVColor.inkFaint)
             }
 
+            // #2209: clicking the address opens it. The only way to look at the page a source is watching
+            // used to be selecting the text, copying it, and pasting it into a browser by hand, while the
+            // scout summary and the queue card both already made the same kind of address a link.
+            //
+            // The APPEARANCE is deliberately unchanged (Dan's call, 2026-08-06): same faint grey, same
+            // 11pt, same single-line truncation. This is a click target, not a decorated link.
+            //
+            // A string that will not parse renders exactly as it does today rather than becoming a link
+            // that silently does nothing when clicked, which is the substitution L75 forbids: an address
+            // that cannot be opened has to stay inert rather than look openable.
             if let url = source.listingsURL {
-                Text(url).font(.system(size: 11)).foregroundStyle(OVColor.inkFaint).lineLimit(1)
+                if let target = SourcesView.opens(url) {
+                    Link(destination: target) { SourcesView.addressText(url) }
+                        .buttonStyle(.plain)
+                } else {
+                    SourcesView.addressText(url)
+                }
             }
 
             // #1175: a single-venue feed carries no city in its own data, so its shows resolve as
