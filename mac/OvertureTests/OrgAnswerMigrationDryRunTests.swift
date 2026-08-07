@@ -24,12 +24,9 @@ struct OrgAnswerMigrationDryRunTests {
         try fm.createDirectory(at: tmpDir, withIntermediateDirectories: true)
         defer { try? fm.removeItem(at: tmpDir) }
 
-        let copy = tmpDir.appendingPathComponent("Overture.store")
-        for suffix in ["", "-wal", "-shm"] {
-            let src = URL(fileURLWithPath: live.path + suffix)
-            guard fm.fileExists(atPath: src.path) else { continue }
-            try fm.copyItem(at: src, to: URL(fileURLWithPath: copy.path + suffix))
-        }
+        // #1672: through the ONE shared clone, which takes the copy via SQLite's online backup
+        // rather than racing three file copies against a live writer. See LiveStoreClone.
+        guard let copy = try LiveStoreClone.makeClone(in: tmpDir) else { return }
 
         // Baseline under the OLD schema (no ledger): what must survive.
         var prospects = 0

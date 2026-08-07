@@ -124,6 +124,7 @@
 		14A01BD8E6B9B11E848F4016 /* ScoutReadAskTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E77431E0968E2490924B4F1 /* ScoutReadAskTests.swift */; };
 		14EDD3F0F93EB6C1600FFCFB /* OrgAnswerLedgerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 156877A6AB1D1EC89DBAFFFE /* OrgAnswerLedgerTests.swift */; };
 		1543D07DA599629491CAF3FF /* GmailSignatureStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7B6482BB9FE1CEA69A3391F /* GmailSignatureStore.swift */; };
+		157C028C5F9A085106C2EF49 /* LiveStoreCloneTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B1F9C8BF4DFD1A0E40B7366 /* LiveStoreCloneTests.swift */; };
 		15A7A60CCA0F4B04509F85BD /* VenueDisplay.swift in Sources */ = {isa = PBXBuildFile; fileRef = C28247DC7A15C79A3B675E23 /* VenueDisplay.swift */; };
 		15D0EEF39CFA0778F63FE084 /* PureSchemeExcludesTheAppTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFE9096685BC65129F078FEE /* PureSchemeExcludesTheAppTests.swift */; };
 		15D1AAEEC918BB3FB48F20DC /* OVSearchField.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7B4A2776E300238324E47BF /* OVSearchField.swift */; };
@@ -1195,6 +1196,7 @@
 		D6DBBB0F66763237F7E8F46F /* ProspectRowGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54CF79CAB26C6A41A123C11E /* ProspectRowGuardTests.swift */; };
 		D738A6AADB29BF30B7560D3C /* PossibleMatchOriginTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B558A2E90A9D8A461179D2D /* PossibleMatchOriginTests.swift */; };
 		D75EFEE48885EBE67F64E3D7 /* BookingMatchable.swift in Sources */ = {isa = PBXBuildFile; fileRef = B67831F1486416786BC080E1 /* BookingMatchable.swift */; };
+		D764216DDEAEFCA2AE7E8D56 /* LiveStoreClone.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DDB429859963ACD024160E6 /* LiveStoreClone.swift */; };
 		D77289212EE5DEEEDCE6E7AB /* AppModalsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18B226D229FED693751DC72D /* AppModalsTests.swift */; };
 		D7779117179C333C10155530 /* RecentOpenersContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB804095950C3B52DB306026 /* RecentOpenersContractTests.swift */; };
 		D8224226DB147BE30BA8DAB8 /* HandoffCompletenessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AFFF2BD478618FF1D29304A /* HandoffCompletenessTests.swift */; };
@@ -1678,6 +1680,7 @@
 		3A30B9ADDD3819FD07425159 /* VenueTixCalendar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueTixCalendar.swift; sourceTree = "<group>"; };
 		3A5209D30FF42AE009C40FFC /* ReachabilityRunReportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReachabilityRunReportTests.swift; sourceTree = "<group>"; };
 		3A93CB79A3E3EC61AFA4E9F8 /* ReplyMirrorsItsAudienceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReplyMirrorsItsAudienceTests.swift; sourceTree = "<group>"; };
+		3B1F9C8BF4DFD1A0E40B7366 /* LiveStoreCloneTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveStoreCloneTests.swift; sourceTree = "<group>"; };
 		3B3CD0C5E4922FEA960B3E87 /* ImmutableStoreFixtureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImmutableStoreFixtureTests.swift; sourceTree = "<group>"; };
 		3BBCB8F0BBF69035E1AFF6FA /* ABookingReachesEverythingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ABookingReachesEverythingTests.swift; sourceTree = "<group>"; };
 		3BEBCF94E20C0F098D5943DD /* ToolbarPopoverGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolbarPopoverGuardTests.swift; sourceTree = "<group>"; };
@@ -1904,6 +1907,7 @@
 		6CFEF50447A6BA2CC02A5D25 /* SourceConfirmation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceConfirmation.swift; sourceTree = "<group>"; };
 		6D242086053633189C1B76E5 /* SourcePlacement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourcePlacement.swift; sourceTree = "<group>"; };
 		6D782E08C651DE5D0AA3A899 /* DraftReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DraftReviewView.swift; sourceTree = "<group>"; };
+		6DDB429859963ACD024160E6 /* LiveStoreClone.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveStoreClone.swift; sourceTree = "<group>"; };
 		6DFDB24D6EE85795B975C07E /* ScoutWarnings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutWarnings.swift; sourceTree = "<group>"; };
 		6E4A5584CFB9ADE233B5895D /* StagePillNavigationGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StagePillNavigationGuardTests.swift; sourceTree = "<group>"; };
 		6E7A77E39B5E546E30919BC2 /* DisciplineSignalGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisciplineSignalGuardTests.swift; sourceTree = "<group>"; };
@@ -2848,6 +2852,8 @@
 				EC6B3947569EE2140564E2EC /* LeadStartsWatchingTests.swift */,
 				4D7804ADCA50E74D9087C569 /* LeadSubmissionsTests.swift */,
 				052B2D6982783DBB0F6F9A22 /* ListingLinkLabelLiveStoreTests.swift */,
+				6DDB429859963ACD024160E6 /* LiveStoreClone.swift */,
+				3B1F9C8BF4DFD1A0E40B7366 /* LiveStoreCloneTests.swift */,
 				B730D9D74C05F700D65AB92D /* LocalHistoryContractTests.swift */,
 				4C7C1703A7C49EFB8B8309E7 /* LocalHistoryTests.swift */,
 				86969889EAB63F6EB6B108A9 /* LocationBackfillTests.swift */,
@@ -4597,6 +4603,8 @@
 				242DDAC7562C0FDE2735D1DC /* LeadSubmissionsTests.swift in Sources */,
 				2F5A10DFB3E31F127CF5F436 /* ListingLinkLabelLiveStoreTests.swift in Sources */,
 				37C48C9C4309F9FFB1ED9423 /* LiveRunLabel.swift in Sources */,
+				D764216DDEAEFCA2AE7E8D56 /* LiveStoreClone.swift in Sources */,
+				157C028C5F9A085106C2EF49 /* LiveStoreCloneTests.swift in Sources */,
 				15E4DB115F5EE55D8D01CE2D /* LocalHistory.swift in Sources */,
 				5A3B535D68CD68F9E18AF534 /* LocalHistoryContractTests.swift in Sources */,
 				FA01CA7C102A7796B07EC9AF /* LocalHistoryTests.swift in Sources */,

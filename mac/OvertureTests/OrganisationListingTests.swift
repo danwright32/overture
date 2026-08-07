@@ -210,12 +210,9 @@ struct OrganisationListingLiveStoreTests {
                 .appendingPathComponent("overture-1776-live-\(UUID().uuidString)", isDirectory: true)
             defer { try? fm.removeItem(at: scratch) }
             try fm.createDirectory(at: scratch, withIntermediateDirectories: true)
-            let dest = scratch.appendingPathComponent("Overture.store")
-            for suffix in ["", "-wal", "-shm"] {
-                let src = URL(fileURLWithPath: Self.liveStoreURL.path + suffix)
-                guard fm.fileExists(atPath: src.path) else { continue }
-                try fm.copyItem(at: src, to: URL(fileURLWithPath: dest.path + suffix))
-            }
+            // #1672: through the ONE shared clone, which takes the copy via SQLite's online backup rather
+            // than racing three file copies against a live writer. See LiveStoreClone.
+            guard let dest = try LiveStoreClone.makeClone(in: scratch) else { return }
             let schema = Schema([Prospect.self, Recipient.self])
             let ctx = ModelContext(try ModelContainer(for: schema,
                 configurations: [ModelConfiguration(schema: schema, url: dest, cloudKitDatabase: .none)]))
