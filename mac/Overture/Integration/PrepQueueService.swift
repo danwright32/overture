@@ -613,10 +613,18 @@ enum PrepQueueService {
     // a normal Prep. A probe and a prep share the single run lock, so isRunning alone can't tell them
     // apart; the probe-run marker, written on launch and cleared on settle, is what distinguishes them.
     // Requires the run to actually be live (a stale lock past a crash is not a running probe).
+    // #1810: and the marker has to belong to THIS run. Presence alone was the whole defect in #1809: a
+    // check's leftover marker was still sitting there when a later Prep run finished, so that run ingested
+    // as a check, short-circuited before any draft handling, and every draft it wrote was discarded with
+    // nothing on screen saying why. The decision is RunKind's, in one place, so every caller of this gets
+    // the same answer and the class is closed rather than the two paths #1809 traced (L30).
     static func isProbeRunning(probeRunURL: URL = defaultProbeRunURL,
-                               markerURL: URL = defaultMarkerURL, now: Date) -> Bool {
+                               markerURL: URL = defaultMarkerURL, now: Date,
+                               runStartedAt: Date? = lastRunStartedAt) -> Bool {
         guard isRunning(markerURL: markerURL, now: now) else { return false }
-        return ((try? ReachabilityProbeMarker.read(from: probeRunURL)) ?? nil) != nil
+        let marker = (try? ReachabilityProbeMarker.read(from: probeRunURL)) ?? nil
+        return RunKind.of(runStartedAt: runStartedAt,
+                          probeMarkerStartedAt: marker?.startedAt) == .reachabilityCheck
     }
 
     // Writes the work-list and launches the detached run. Returns the count queued.
