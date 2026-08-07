@@ -127,6 +127,13 @@ already drifting from the Swift version it mirrored.
   required step, not a good intention. A distinction that is real in the code ("checked" versus
   "read", #803) still collapses to the same sentence twice in the common case, which is exactly what
   the read has to catch.
+  Read the OTHER generated diff in the same pass: `docs/copy-surfaces.md` (#2210) says which surfaces
+  each file renders into, so the cold read answers where a new sentence LANDS as well as what it says.
+  A message in a toolbar item, a menu bar item, an OS alert or an info block can be correct, tested,
+  and still fail to do its job (the platform relocates or covers it, or it arrives somewhere Dan
+  cannot act on it), and that report names those four surfaces and why each one is a risk. Three of
+  the eight defects found on 2026-08-06 were exactly that shape and none was visible in the sentence
+  alone.
 - Changing the AI drafting instructions: those rules live in two places that must stay in sync,
   `docs/prep-runbook.md` §2 inside this repo and the `dan-wright-brand-voice` skill at
   `~/.claude/skills/dan-wright-brand-voice/` (which is NOT tracked by this repo, and is the
