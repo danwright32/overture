@@ -42,7 +42,10 @@ struct CappedScrollView<Content: View>: View {
         self.content = content()
     }
 
-    private static var fadeHeight: CGFloat { 26 }
+    // The cue's geometry lives in ScrollOverflow.Cue, where the relationship its correctness depends on
+    // (the clear strip has to be at least as tall as the glyph) is asserted. Without that strip the
+    // chevron sits wherever the last line of text happens to be and reads as a mark inside a word,
+    // which is how it first shipped and what looking at it caught.
     private static var spaceName: String { "CappedScrollView.viewport" }
 
     var body: some View {
@@ -88,7 +91,8 @@ struct CappedScrollView<Content: View>: View {
         VStack(spacing: 0) {
             Color.black
             LinearGradient(colors: [.black, .black.opacity(0)], startPoint: .top, endPoint: .bottom)
-                .frame(height: moreBelow ? Self.fadeHeight : 0)
+                .frame(height: moreBelow ? ScrollOverflow.Cue.fadeHeight : 0)
+            Color.clear.frame(height: moreBelow ? ScrollOverflow.Cue.clearStrip : 0)
         }
     }
 
@@ -97,9 +101,9 @@ struct CappedScrollView<Content: View>: View {
     // announcing "more below" would describe a problem it does not have.
     private var chevron: some View {
         Image(systemName: "chevron.down")
-            .font(.system(size: 10, weight: .semibold))
+            .font(.system(size: ScrollOverflow.Cue.glyphSize, weight: .semibold))
             .foregroundStyle(OVColor.inkSoft)
-            .padding(.bottom, 3)
+            .padding(.bottom, ScrollOverflow.Cue.glyphInset)
             .opacity(moreBelow ? 1 : 0)
             .accessibilityHidden(true)
     }

@@ -56,6 +56,24 @@ struct ScrollOverflowTests {
         #expect(ScrollOverflow.showsMoreBelow(contentHeight: 420, visibleHeight: 0, scrolledBy: 0) == false)
     }
 
+    // MARK: - What the cue occupies
+
+    // The defect this pins was found by looking, not by a test: the chevron sat at the bottom of the box
+    // wherever the last line of text happened to be, and rendered as a mark inside a word ("I w[v]ll put
+    // you on the list"). The fix is that the gradient reaches FULLY clear before the bottom edge, leaving
+    // a strip of nothing for the glyph to sit in. That only holds while the strip is at least as tall as
+    // the glyph, which is a relationship between two numbers rather than a restatement of either.
+    @Test func theClearStripFullyClearsTheChevron() {
+        #expect(ScrollOverflow.Cue.clearStrip >= ScrollOverflow.Cue.glyphSize + ScrollOverflow.Cue.glyphInset)
+    }
+
+    // The cue erases the bottom of the content while it shows. On the shortest box in the app (the reply
+    // panel's 160) that has to stay a hem rather than a bite: a cue eating a quarter of the box would
+    // hide more than the scroll it is reporting.
+    @Test func theCueNeverEatsAMeaningfulShareOfTheSmallestBox() {
+        #expect(ScrollOverflow.Cue.erasedHeight < 160 * 0.25)
+    }
+
     // L50: a measurement must never feed the comparison directly. A NaN compares false against every
     // threshold, so an unguarded version lands on whichever side the operator happens to give.
     @Test func anUnusableMeasurementSaysNothing() {

@@ -9,6 +9,24 @@ import Foundation
 // in a view body where nothing could exercise it.
 enum ScrollOverflow {
 
+    // What the cue occupies at the bottom of the box while it is showing. Here rather than inside the
+    // view because the relationship between these numbers is the fix for a real defect and nothing in a
+    // view body can be tested: the first version drew the chevron wherever the last line of text happened
+    // to be, and it rendered as a mark inside a word.
+    enum Cue {
+        // The gradient, from fully drawn to fully clear.
+        static let fadeHeight: CGFloat = 14
+        // Nothing at all under the gradient, which is where the chevron sits. Only the strip makes the
+        // glyph land on empty space whatever the content happens to be.
+        static let clearStrip: CGFloat = 13
+        static let glyphSize: CGFloat = 10
+        static let glyphInset: CGFloat = 3
+
+        // How much of the content the cue erases while it shows. Nothing is lost to it permanently: at
+        // the bottom of the content the cue clears, the mask goes flat, and the last line is fully drawn.
+        static var erasedHeight: CGFloat { fadeHeight + clearStrip }
+    }
+
     // Below this, what is left is layout rounding rather than content. A cue for half a point would sit
     // on panels showing everything they have, and a cue that is sometimes wrong is one Dan learns to
     // disregard on the panels that mean it.
