@@ -58,10 +58,52 @@ enum TicketingFeedRead {
         return page.followedTicketLinkFrom == nil ? source.orgName : nil
     }
 
-    // Whether this row's shows come off a ticketing feed rather than off the page Dan is watching. It is
-    // the one row that has to be asked which room its shows play in, so the Sources sheet asks here and
-    // nowhere else, and it stays asked (as an Edit) once answered.
+    // Whether this row's shows come off a ticketing feed rather than off the page Dan is watching.
     static func readsATicketingFeed(_ source: WatchedSource) -> Bool {
         source.ticketingFeedURL != nil
+    }
+
+    // #1588: whether this row has to be asked which room its shows play in. The Sources sheet asks here
+    // and nowhere else, and the ask stays (as an Edit) once answered, because a room named wrongly has to
+    // be correctable.
+    //
+    // Two ways to be that row, and the second is the one that was missing. `readsATicketingFeed` alone was
+    // the gate, and it reads a field written in ONE branch of ONE scout path: measured against Dan's live
+    // store on 2026-08-07, 0 of 73 sources carried it, so the control this gates rendered on nothing at
+    // all and the question could not be answered anywhere. Meanwhile a source watched AT a single-venue
+    // feed goes through SourceExtractorRegistry, which already reads `venueName ?? orgName`: the answer had
+    // a reader the whole time and no way in (L46 the other way round, a field with a reader and no writer).
+    //
+    // Keyed on the KIND, which every row already carries, rather than on a stamp a particular run may or
+    // may not have left.
+    static func needsVenueName(_ source: WatchedSource) -> Bool {
+        source.kind.isSingleVenue || readsATicketingFeed(source)
+    }
+
+    // What is happening to this source's shows while nobody has named the room. The two cases are
+    // genuinely different and must not share a sentence: one loses the shows, the other files them under a
+    // guess, and telling Dan they were dropped while they sit in the queue in front of him would be the app
+    // stating something untrue about what it just did (L11).
+    enum UnnamedVenue: Equatable {
+        /// Watched at its own single-venue feed: the extractor falls back to the org name as the room.
+        case filedUnder(String)
+        /// A page we had to leave: the venue resolves to nil and the rows are dropped.
+        case keptOutOfTheQueue
+
+        /// Whether this state is actually costing Dan shows. Only that one earns gold on the row; a
+        /// plausible default is worth saying and is not a loss.
+        var isCostingShows: Bool {
+            switch self {
+            case .keptOutOfTheQueue: return true
+            case .filedUnder: return false
+            }
+        }
+    }
+
+    // The kind decides, because the kind is what picks the extractor: a row can be watched at its own feed
+    // AND carry a stamped feed URL from some run, and in that case the fallback-to-org-name path is the one
+    // that runs.
+    static func whileUnnamed(_ source: WatchedSource) -> UnnamedVenue {
+        source.kind.isSingleVenue ? .filedUnder(source.orgName) : .keptOutOfTheQueue
     }
 }
