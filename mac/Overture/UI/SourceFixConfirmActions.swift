@@ -34,6 +34,12 @@ struct SourceFixConfirmActions: View {
     // and find that same row in the sheet. Same removal (WatchlistMutations.stopWatching), same banner,
     // same Undo: this is a second PLACE to take the action, never a second way to take it.
     var offersStopWatching: Bool = false
+    // #2207: this page read FINE and came back with nothing, on a source that has listed shows before.
+    // That is not a recorded failure (nothing failed), and it is exactly the state Confirm settles: "yes,
+    // this page is right, it is just quiet". Passed in rather than inferred, because the fact lives in the
+    // run's results and not on the row: by the time the row is read, a silently empty source and a
+    // genuinely healthy one are indistinguishable.
+    var readFineAndCameBackEmpty: Bool = false
 
     // #1177: whether each control is offered, decided here (not in the body) so a test can pin the default
     // for a healthy row. Fix defaults on (a wrong address is plausible on any editable source); Confirm
@@ -55,22 +61,33 @@ struct SourceFixConfirmActions: View {
         return failure?.offersFix ?? true
     }
 
-    static func offersConfirm(_ failure: SourceFailure?, kind: SourceKind) -> Bool {
+    static func offersConfirm(_ failure: SourceFailure?, kind: SourceKind,
+                              readFineAndCameBackEmpty: Bool = false) -> Bool {
         guard kind.hasEditablePage else { return false }
+        // #2207: a page that read fine and returned nothing is the same thing Confirm exists for, whether
+        // or not a failure was recorded against it. `confirmEmpty` anchors to the bytes last read either
+        // way, so the confirmation means the same and can only ever fail to suppress, never suppress the
+        // wrong page.
+        if readFineAndCameBackEmpty { return true }
         return failure?.offersConfirm ?? false
     }
 
     // Whether this component has anything at all to draw. The Sources sheet no longer gates it on the
     // kind, so it is asked to render for Carnegie's row, where it must produce nothing rather than an
     // empty strip of controls.
-    static func offersAnything(failure: SourceFailure?, kind: SourceKind, stopWatching: Bool) -> Bool {
-        stopWatching || offersFix(failure, kind: kind) || offersConfirm(failure, kind: kind)
+    static func offersAnything(failure: SourceFailure?, kind: SourceKind, stopWatching: Bool,
+                               readFineAndCameBackEmpty: Bool = false) -> Bool {
+        stopWatching || offersFix(failure, kind: kind)
+            || offersConfirm(failure, kind: kind, readFineAndCameBackEmpty: readFineAndCameBackEmpty)
     }
 
     private var offersFix: Bool { Self.offersFix(failure, kind: source.kind) }
-    private var offersConfirm: Bool { Self.offersConfirm(failure, kind: source.kind) }
+    private var offersConfirm: Bool {
+        Self.offersConfirm(failure, kind: source.kind, readFineAndCameBackEmpty: readFineAndCameBackEmpty)
+    }
     private var offersAnything: Bool {
-        Self.offersAnything(failure: failure, kind: source.kind, stopWatching: offersStopWatching)
+        Self.offersAnything(failure: failure, kind: source.kind, stopWatching: offersStopWatching,
+                            readFineAndCameBackEmpty: readFineAndCameBackEmpty)
     }
 
     @Environment(\.modelContext) private var context

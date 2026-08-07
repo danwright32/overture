@@ -70,10 +70,20 @@ struct ScoutSummaryView: View {
     // run whose popup carries only informational notes would be promising a Fix/Confirm that is not there.
     // #1426: the still-watched list, never the raw one. Stop watching the last failing source and the
     // subtitle's promise goes with the cards it was describing.
+    // #2207: the silently empty sources count as actionable too, because they now carry the same
+    // controls. That is the whole of #2207: the copy was written to be acted on (#1531 added the source's
+    // NAME on the grounds that it was "the only actionable fact in the warning") and the surface was built
+    // to say there was nothing to do.
     private var hasActionableFailures: Bool {
         warnings.sections.contains {
-            if case .failures(let results) = $0 { return !ScoutSummaryRow.stillWorthShowing(results, in: sources).isEmpty }
-            return false
+            switch $0 {
+            case .failures(let results):
+                return !ScoutSummaryRow.stillWorthShowing(results, in: sources).isEmpty
+            case .silentlyEmptyFeed(let empties):
+                return !ScoutSummaryRow.silentlyEmptyStillWorthShowing(empties, in: sources).isEmpty
+            default:
+                return false
+            }
         }
     }
 
@@ -140,7 +150,11 @@ struct ScoutSummaryView: View {
         case .unqueued(let ids):
             infoBlock(ScoutWarningCopy.unqueued(ids: ids))
         case .silentlyEmptyFeed(let empties):
-            infoBlock(ScoutWarningCopy.silentlyEmptyFeed(orgNames: empties.map(\.orgName)))
+            // #2207: the shape of a page whose format changed, and the case that most needs looking at,
+            // because it is invisible everywhere else: nothing failed. Same filter as the failures above,
+            // so a source Dan settles on this screen leaves it.
+            let stillEmpty = ScoutSummaryRow.silentlyEmptyStillWorthShowing(empties, in: sources)
+            if !stillEmpty.isEmpty { silentlyEmptyBlock(stillEmpty) }
         case .pastClientList(let message):
             infoBlock(message)
         }
@@ -150,6 +164,61 @@ struct ScoutSummaryView: View {
     private func infoBlock(_ message: String) -> some View {
         Text(message).font(.system(size: 12)).foregroundStyle(OVColor.ink)
             .fixedSize(horizontal: false, vertical: true)
+    }
+
+    // #2207: the sources that read fine and came back with nothing. Its own section rather than folded in
+    // with the failures, because it is a different fact and a different sentence: nothing failed, which is
+    // exactly why it is easy to miss. Same card, same controls, same "Read the ones I fixed" follow
+    // through, because "what am I supposed to do with this" (Dan, 2026-08-06) has the same three answers
+    // here: correct the address, say the page is right, or stop watching it.
+    private func silentlyEmptyBlock(_ results: [ScoutService.SourceResult]) -> some View {
+        VStack(alignment: .leading, spacing: OVSpacing.xs) {
+            Text(ScoutSummaryCopy.silentlyEmptyHeading(results.count))
+                .font(.system(size: 12, weight: .semibold)).foregroundStyle(OVColor.rust)
+            Text(ScoutWarningCopy.silentlyEmptyFeed(orgNames: results.map(\.orgName)))
+                .font(.system(size: 12)).foregroundStyle(OVColor.ink)
+                .fixedSize(horizontal: false, vertical: true)
+
+            VStack(spacing: 0) {
+                ForEach(results, id: \.sourceId) { result in
+                    silentlyEmptyRow(result)
+                    if result.sourceId != results.last?.sourceId {
+                        Divider().overlay(OVColor.line)
+                    }
+                }
+            }
+            .background(OVColor.surface)
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(OVColor.line))
+        }
+    }
+
+    @ViewBuilder
+    private func silentlyEmptyRow(_ result: ScoutService.SourceResult) -> some View {
+        let source = sources.first { $0.sourceId == result.sourceId }
+        VStack(alignment: .leading, spacing: 3) {
+            Text(result.orgName).font(.system(size: 13, weight: .medium)).foregroundStyle(OVColor.ink)
+            if let urlString = ScoutSummaryRow.displayURL(result: result, source: source) {
+                if let url = URL(string: urlString) {
+                    Link(urlString, destination: url)
+                        .font(.system(size: 11)).foregroundStyle(OVColor.forest).lineLimit(1)
+                } else {
+                    Text(urlString).font(.system(size: 11)).foregroundStyle(OVColor.inkFaint).lineLimit(1)
+                }
+            }
+            if let source {
+                // No failure to pass: nothing failed. `readFineAndCameBackEmpty` is what says this row is
+                // the state Confirm settles, since by the time the row is read a silently empty source and
+                // a healthy one are indistinguishable.
+                SourceFixConfirmActions(source: source, failure: nil,
+                                        onFixed: { fixedIds.insert($0) },
+                                        offersStopWatching: true,
+                                        readFineAndCameBackEmpty: true)
+            }
+        }
+        .padding(.horizontal, OVSpacing.sm)
+        .padding(.vertical, OVSpacing.xs)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // The actionable section: the per-source failures, each with fix/confirm where it applies.
@@ -242,6 +311,24 @@ enum ScoutSummaryRow {
         sourceIds.filter { hasSomethingLeftToSay($0, in: sources) }
     }
 
+    // #2207: the same question for a source that read fine and came back with nothing, which needs its own
+    // answer because `hasSomethingLeftToSay` cannot give one. That rule asks the live row whether it
+    // reports a problem, and a silently empty source's row reports none: nothing failed, which is the
+    // whole difficulty. Read through that rule every such card would vanish the instant it was drawn.
+    //
+    // So it asks what would actually settle this one: Dan said the page is right (confirmEmpty stamps the
+    // anchor), or he stopped watching it. A CORRECTED address deliberately leaves the card, exactly as it
+    // does for a failure: the new address has not been read yet, and that card is what "Read the ones I
+    // fixed" is about.
+    static func silentlyEmptyStillWorthShowing(_ results: [ScoutService.SourceResult],
+                                               in sources: [WatchedSource]) -> [ScoutService.SourceResult] {
+        results.filter { result in
+            guard let source = sources.first(where: { $0.sourceId == result.sourceId }) else { return true }
+            guard source.isActive else { return false }
+            return source.confirmedEmptyHash == nil
+        }
+    }
+
     // Two ways a card stops having anything to say, and one deliberate way it does not.
     //
     // Not watched any more: deliberately "is it still watched" rather than "did Dan remove it", because a
@@ -299,6 +386,13 @@ enum ScoutSummaryCopy {
 
     static func failuresHeading(_ count: Int) -> String {
         count == 1 ? "One source couldn't be checked." : "\(count) sources couldn't be checked."
+    }
+
+    // #2207: says what happened, not that something failed, because nothing did. Rust like the failures
+    // heading because it is the same kind of thing to Dan (a source he may need to do something about),
+    // and the sentence under it is what tells the two apart.
+    static func silentlyEmptyHeading(_ count: Int) -> String {
+        count == 1 ? "One source went quiet." : "\(count) sources went quiet."
     }
 
     static func readFixed(_ count: Int) -> String {
