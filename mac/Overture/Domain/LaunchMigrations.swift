@@ -61,6 +61,11 @@ enum LaunchMigrations {
         // and defers any collision where two rows both carry outreach history. Can delete a row, so the
         // launch backup (#601/#602) taken just before this matters here most.
         NaturalKeyVenueMigration.run(in: context)
+        // #1784: move each stored organisation answer onto the key today's shared fold computes, so an
+        // answer written under the old spelling of a bracketed name is still found rather than paid for
+        // again. Idempotent (a row already on its computed key is skipped). Can delete a row, but only a
+        // provably redundant one: two answers that DISAGREE are left exactly as they are.
+        OrgKeyRealignmentMigration.run(in: context)
         // #1559: collapse the duplicate rows a drifting opening night left behind before #1528 stopped
         // them appearing. Idempotent (a collapsed group is a singleton, which it skips). Deletes rows, so
         // like the migration above it leans on the launch backup taken just before this, and it refuses
