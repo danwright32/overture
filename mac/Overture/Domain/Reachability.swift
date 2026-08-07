@@ -196,6 +196,35 @@ enum Reachability {
         // open the listing for himself. Reporting it as `nothing_published` is the L11 overclaim that
         // opened #1817 in the first place.
         case noOneIdentified = "no_one_identified"
+        // #2259: the check worked out WHO, and no way to reach any of them. The live instance is the
+        // Summer Lovin' run of 2026-08-07, which named Isabella Borte and Ani Chong and gave each
+        // `form_or_dm` with no address and no form URL, so the importer discarded both and the card said
+        // "No email found" about a run that had found two people.
+        //
+        // Its own value, not a shade of the three above, because Dan does a different thing with it.
+        // `nothingPublished` is a finished search he can give up on; `noOneIdentified` is one where his
+        // own knowledge of the room beats the run's; `onlySocialProfile` is a doorway worth another
+        // check. This one hands him NAMES with no route, which is the state where a two-minute hand
+        // search is most likely to beat the machine, because it starts from something.
+        case namedButNoRoute = "named_but_no_route"
+    }
+
+    // #2259: why a check that emitted contacts still left the show with nobody to write to.
+    //
+    // `emptyReason` (#1722) existed only for a run that emitted NO contacts, so a run that emitted two
+    // unusable ones fell through every door and the card said nothing. This closes that: it is asked
+    // after the ingest, when how many contacts SURVIVED is known, which is the only moment the
+    // difference between "found somebody" and "found somebody reachable" is visible.
+    //
+    // nil means there is nothing to explain: either the run emitted nothing (a case #1722 already
+    // covers, and whose own reported reason must not be overwritten here), or somebody usable survived.
+    static func emptyReason(afterIngesting contacts: [PrepContact],
+                            usableRecipients: Int) -> EmptyReason? {
+        guard !contacts.isEmpty, usableRecipients == 0 else { return nil }
+        // A doorway found and not opened keeps its own reason: it is the state most likely to change on
+        // a re-check, and collapsing it into the new one would hide that (#2265).
+        if onlySocialRoutes(contacts) { return .onlySocialProfile }
+        return .namedButNoRoute
     }
 
     // nil means no check has ever run, which is a different thing from a check that came back empty. The
@@ -363,6 +392,9 @@ enum ReachabilityCopy {
         // #2265: says where the check STOPPED, which is a different fact from what it failed to find,
         // and the one Dan can act on: it is the state most likely to change on a re-check.
         case .onlySocialProfile: return "Only a social profile"
+        // #2259: says the check got somewhere, and where it stopped. Deliberately not the words "no
+        // email", which would throw away the part Dan can use: it came back with names.
+        case .namedButNoRoute: return "Found who, not how to reach them"
         case .nothingPublished, nil: return noEmailFoundBadge
         }
     }
@@ -384,6 +416,14 @@ enum ReachabilityCopy {
         // (#843). What only this one can say is the last clause: an address may well exist elsewhere.
         case .onlySocialProfile:
             return "A check ran and got no further than this act's social profile, which needs a login. Their own site may still publish an address, so of all the shows with no contact this is the one most likely to give one up on another check."
+        // #2259: what it DID establish, and the next step that follows from it.
+        //
+        // Careful about one thing, caught reading this cold: a contact with no address and no form is
+        // DISCARDED by the importer, so the people the check named are not on this card and this
+        // sentence must not point at them as though they were. What it can honestly point at is the
+        // listing, which is where the check read them in the first place.
+        case .namedButNoRoute:
+            return "A check worked out who is putting this on and found no way to reach any of them, so it kept none of them. The listing still names them, and a search by name often turns up an address the check missed."
         case .nothingPublished, nil:
             return noEmailFoundHelp
         }

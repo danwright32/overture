@@ -120,8 +120,14 @@ enum PrepImporter {
                     // on a show whose address was a single fetch away. Decided from the routes the run
                     // EMITTED, never from what it said it did, because its own account of what it read
                     // cannot be trusted (#2269).
-                    p.reachabilityEmptyReason = Reachability.onlySocialRoutes(contacts)
-                        ? .onlySocialProfile : nil
+                    // #2259: asked AFTER the ingest, because the question is not what the run emitted
+                    // but what survived it. A contact carrying neither an address nor a form URL is
+                    // discarded here, so a run could emit two people, land nobody, and leave the card
+                    // saying "No email found" about a run that had found two people. Counting the
+                    // recipients this check actually left behind is what closes that door.
+                    p.reachabilityEmptyReason = Reachability.emptyReason(
+                        afterIngesting: contacts,
+                        usableRecipients: p.recipients.filter(\.isSendablePending).count)
                 } else {
                     // #1722: the run answered this show and had nothing to give. THIS is the branch the
                     // whole issue is about: before, it wrote nothing at all, markProbed's `no_email_found`
