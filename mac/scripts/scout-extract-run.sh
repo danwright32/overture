@@ -118,6 +118,9 @@ SCOUT_SCOPE="$(scout_extract_claude_scope "$CLAUDE")" || { echo "scout-extract: 
 CANCEL_POLL="${SCOUT_EXTRACT_CANCEL_POLL_SECONDS:-3}"
 MARKER_INTERVAL=60
 ( since_marker=0
+  # #2109: any way this loop ends stops the run, including a `set -e` death on a bookkeeping
+  # command. See lib/run-heartbeat.sh.
+  heartbeat_guard_exit "$CHUNK_PIDS_FILE"
   while :; do
     sleep "$CANCEL_POLL"
     if cancel_requested "$CANCEL"; then
@@ -130,8 +133,10 @@ MARKER_INTERVAL=60
       since_marker=0
       # #2106: cannot report itself alive => stops the run. Why, in lib/run-heartbeat.sh.
       heartbeat_touch_or_stop "$MARKER" "$CHUNK_PIDS_FILE" || exit
-      merge_chunk_results "$QUEUE" "$CHUNKDIR" "$RESULTS"
-      update_progress_from_results "$QUEUE" "$RESULTS" "$PROGRESS"
+      # #2109: non-fatal. A run whose progress count failed to update is still ALIVE and
+      # must keep beating; killing a paid run over a counting hiccup is the wrong trade.
+      merge_chunk_results "$QUEUE" "$CHUNKDIR" "$RESULTS" || true
+      update_progress_from_results "$QUEUE" "$RESULTS" "$PROGRESS" || true
     fi
   done ) &
 HEARTBEAT_PID=$!

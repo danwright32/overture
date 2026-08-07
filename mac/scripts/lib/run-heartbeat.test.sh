@@ -124,6 +124,13 @@ chmod 700 "${DEADDIR}"
 # an empty string, `[ -s "" ]` is false, and the heartbeat then reports failure without stopping anything,
 # which is the exact defect this file exists to fix, reintroduced while fixing it. That happened here.
 # ---------------------------------------------------------------------------
+# Does <region> call <name> on a line with nothing guarding its exit status? The region is passed as an
+# ARGUMENT, not read from an outer variable, because a subshell that cannot see the variable finds nothing
+# and the check then passes for the wrong reason forever (caught by mutation while writing this).
+calls_unguarded() {
+  printf '%s' "$1" | grep -qE "$2 [^|]*$"
+}
+
 RUNNERS_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 for runner in prep-run.sh scout-extract-run.sh reply-classify-run.sh; do
   path="${RUNNERS_DIR}/${runner}"
@@ -137,6 +144,28 @@ for runner in prep-run.sh scout-extract-run.sh reply-classify-run.sh; do
              | grep -o '\$[A-Z_]*"$' | tr -d '$"')"
   assert "${runner} names a pid-file variable at all" test -n "${pid_var}"
   assert "${runner} passes \$${pid_var}, which it defines" grep -q "^${pid_var}=" "${path}"
+
+  # #2109: and the same variable is what the EXIT guard is armed with. Armed with the WRONG name it is
+  # silent in exactly the way described above: an unset variable expands to empty, `[ -s "" ]` is false,
+  # and the guard stops nothing while looking installed.
+  assert "${runner} arms the heartbeat EXIT guard" \
+    grep -q "heartbeat_guard_exit \"\$${pid_var}\"" "${path}"
+
+  # And the per-tick bookkeeping cannot kill the run. Under `set -eu` any non-zero return in the loop body
+  # ends the subshell, and a progress-count hiccup ending a paid run is the wrong trade in itself.
+  #
+  # Scoped to the heartbeat's OWN region, from the guard it arms to the loop's terminator. The same two
+  # helpers are also called once in the main script body, where a failure genuinely matters and must NOT
+  # be swallowed, so a whole-file check would demand exactly the wrong thing there (L63: check the region
+  # the rule is about, not a proxy for it).
+  loop_body="$(awk '/heartbeat_guard_exit/{f=1} f; /done \) &/{f=0}' "${path}")"
+  assert "${runner}: the heartbeat's own region was found" test -n "${loop_body}"
+  for bookkeeping in merge_chunk_results update_progress_from_results; do
+    if printf '%s' "${loop_body}" | grep -q "${bookkeeping} "; then
+      refute "${runner}: a failing ${bookkeeping} cannot end the heartbeat" \
+        calls_unguarded "${loop_body}" "${bookkeeping}"
+    fi
+  done
 done
 
 if [ "${FAILURES}" -ne 0 ]; then

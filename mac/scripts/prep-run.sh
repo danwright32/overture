@@ -138,6 +138,9 @@ printf '{"version":1,"total":%s,"completed":0}\n' "$TOTAL" > "$PROGRESS"
 CANCEL_POLL="${PREP_CANCEL_POLL_SECONDS:-3}"
 MARKER_INTERVAL=60
 ( since_marker=0
+  # #2109: any way this loop ends stops the run, including a `set -e` death on a bookkeeping
+  # command. See lib/run-heartbeat.sh.
+  heartbeat_guard_exit "$CLAUDE_PID_FILE"
   while :; do
     sleep "$CANCEL_POLL"
     if cancel_requested "$CANCEL"; then
@@ -153,8 +156,10 @@ MARKER_INTERVAL=60
       # #1597: fold whatever the chunks have written so far into the one results file the app polls,
       # BEFORE deriving the count from it, so "N of M" climbs during a chunked run exactly as it does
       # during a sequential one. A no-op when there are no chunk files (every normal Prep run).
-      merge_chunk_results "$QUEUE" "$CHUNKDIR" "$RESULTS" naturalKey 6
-      update_progress_from_results "$QUEUE" "$RESULTS" "$PROGRESS"
+      # #2109: non-fatal. A run whose progress count failed to update is still ALIVE and
+      # must keep beating; killing a paid run over a counting hiccup is the wrong trade.
+      merge_chunk_results "$QUEUE" "$CHUNKDIR" "$RESULTS" naturalKey 6 || true
+      update_progress_from_results "$QUEUE" "$RESULTS" "$PROGRESS" || true
     fi
   done ) &
 HEARTBEAT_PID=$!
