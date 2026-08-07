@@ -722,7 +722,10 @@ enum ScoutService {
         case ScoutExtractService.ExtractLaunchError.runnerUnavailable:
             return "The reader that pulls listings off a page isn't set up yet, so the pages that changed couldn't be read. See docs/scout-extract-runbook.md. Nothing was lost: they'll be read on the next scout once it's configured."
         case ScoutExtractService.ExtractLaunchError.alreadyRunning:
-            return "A previous run is still reading pages. The pages that changed will be read on the next scout."
+            // #2208: the run is refused before it starts now, so reaching this means a read began DURING
+            // the sweep. Nothing is lost (every changed page keeps its unread flag), and the sentence
+            // names the next step rather than leaving Dan to infer it.
+            return "A previous run was still reading pages, so the pages this run found were not handed over. Nothing was lost: press Run scout again once the reading finishes and they will be read."
         default:
             return "The pages that changed couldn't be handed off to be read (\(error)). They'll be tried again on the next scout."
         }

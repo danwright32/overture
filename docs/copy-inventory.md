@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1077 sentences**, from 378 source files.
+Every sentence Overture can say to Dan: **1082 sentences**, from 379 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -246,8 +246,12 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 " Confirm you've checked it and it's fine to send as-is."
     `Domain/DraftReviewNotes.swift`
+" It has about \(PrepStatus.duration(seconds: remaining)) left. "
+    `Domain/ScoutStartGate.swift`
 " One other match is flagged the same way."
     `Domain/PossibleMatchFanOut.swift`
+" Press Run scout again once the reading finishes."
+    `Domain/ScoutStartGate.swift`
 " Their email matches the address on file."
     `Domain/HistoryMatch.swift`
 " Try again, and if it keeps happening the page may be one it can't make sense of."
@@ -315,7 +319,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/BlockedCalendar.swift`
 "A later night of this run is out: you're already shooting on \(day)."
     `Domain/BlockedCalendar.swift`
-"A previous run is still reading pages. The pages that changed will be read on the next scout."
+"A previous run was still reading pages, so the pages this run found were not handed over. Nothing was lost: press Run scout again once the reading finishes and they will be read."
     `Integration/ScoutService.swift`
 "A reachability check couldn't find an email for this show. You can still keep it and add a contact by hand."
     `Domain/Reachability.swift`
@@ -1202,6 +1206,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/BuildFreshnessPanel.swift`
 "Overture is still reading a previous page. Give it a moment and try again."
     `UI/LeadIntakeModel.swift`
+"Overture is still reading the pages the last scout found, so a new scout could fetch "
+    `Domain/ScoutStartGate.swift`
 "Overture knows of no upcoming shoots from Downbeat, so it can't keep clear of them. Block those days here."
     `Domain/DaysOffAttention.swift`
 "Overture knows of no upcoming shoots from Downbeat, so the only days it keeps clear are the ones you add here."
@@ -1271,6 +1277,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ProspectRowView.swift`
 "Prepped drafts land here to read and send."
     `Domain/StageEmptyState.swift`
+"Press Run scout again once it finishes."
+    `Domain/ScoutStartGate.swift`
 "Presumes the booking instead of handing back the decision"
     `Domain/DraftCheck.swift`
 "Put this prospect back in the queue as undecided"
@@ -2299,6 +2307,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/TicketLink.swift`
 "both of these people"
     `UI/SendConfirmSheet.swift`
+"but not read anything."
+    `Domain/ScoutStartGate.swift`
 "couldn't save the producer answers, so other shows by them won't reuse this one"
     `Domain/ReachabilityRunSummary.swift`
 "couldn't save what this check found, so it isn't finished and those shows may be checked again"
