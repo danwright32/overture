@@ -150,6 +150,7 @@
 		1857F1589F02F2423E954D16 /* QueueUndoStackTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61410B8B5EF4F16C9D837125 /* QueueUndoStackTests.swift */; };
 		18700AD6424BB82913D7E382 /* DownbeatExport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 829EE2F8C8D00FB6BD62E196 /* DownbeatExport.swift */; };
 		187DEDC076DBE90FD0088F54 /* PassedShowPenaltyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD6B7A49BB4C01ABD225234B /* PassedShowPenaltyTests.swift */; };
+		188DA5F96D47145648DBD4C9 /* AppModals.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69E9BE251ED385513D31E21F /* AppModals.swift */; };
 		18BFD86BF6AD6816E4D1701D /* SourcePlacementTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C863AD68E9E69A5152B784B /* SourcePlacementTests.swift */; };
 		18CE345D048EAFFCC556DF69 /* ReplyRunLine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52D2EC2363E76CBD2F7BAB90 /* ReplyRunLine.swift */; };
 		18F345FF1AC2E86A029C372D /* ReplyIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA29FD36A165F7F09BF65224 /* ReplyIdentity.swift */; };
@@ -816,6 +817,7 @@
 		8F78C025C4850BAF80DF9F61 /* SendProgressStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49696485F1B28C28A13D53E0 /* SendProgressStateTests.swift */; };
 		8F910767543072A1B22BE208 /* StageNavigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = F02E777592EB365E0D8120A5 /* StageNavigation.swift */; };
 		8FC55EEE1E2A65807E7D83A7 /* VoiceGuidanceGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC7F3F5FCB2179A316B76715 /* VoiceGuidanceGuard.swift */; };
+		8FF6F8007AB2C1A1FA55E169 /* AppModals.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69E9BE251ED385513D31E21F /* AppModals.swift */; };
 		90206CB3772156B9E183715A /* ProspectProvenanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0D2CF2B7A4A5E557A5AC59A /* ProspectProvenanceTests.swift */; };
 		90422E36FC94F83E2304D92B /* PresenterLineLiveStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4AFDB8E0FBD6C94C036E6C8 /* PresenterLineLiveStoreTests.swift */; };
 		90B0EE7B535841BAFD114298 /* ReachabilityRunSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 647334418EA2F723F0EC768A /* ReachabilityRunSummary.swift */; };
@@ -1183,6 +1185,7 @@
 		D6DBBB0F66763237F7E8F46F /* ProspectRowGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54CF79CAB26C6A41A123C11E /* ProspectRowGuardTests.swift */; };
 		D738A6AADB29BF30B7560D3C /* PossibleMatchOriginTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B558A2E90A9D8A461179D2D /* PossibleMatchOriginTests.swift */; };
 		D75EFEE48885EBE67F64E3D7 /* BookingMatchable.swift in Sources */ = {isa = PBXBuildFile; fileRef = B67831F1486416786BC080E1 /* BookingMatchable.swift */; };
+		D77289212EE5DEEEDCE6E7AB /* AppModalsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18B226D229FED693751DC72D /* AppModalsTests.swift */; };
 		D7779117179C333C10155530 /* RecentOpenersContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB804095950C3B52DB306026 /* RecentOpenersContractTests.swift */; };
 		D8224226DB147BE30BA8DAB8 /* HandoffCompletenessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AFFF2BD478618FF1D29304A /* HandoffCompletenessTests.swift */; };
 		D85F98F4C53ED851EEA38FF4 /* DayOffRangeFields.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0A500E2E7E7E7855785849 /* DayOffRangeFields.swift */; };
@@ -1530,6 +1533,7 @@
 		1706C06FAEC94A780797CB95 /* MergedCardRoomNameTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MergedCardRoomNameTests.swift; sourceTree = "<group>"; };
 		178A580B99A434A3D0A30B04 /* ActionFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionFeedback.swift; sourceTree = "<group>"; };
 		17F71B09E351579C5D19331F /* ReplyInvariantsLiveStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReplyInvariantsLiveStoreTests.swift; sourceTree = "<group>"; };
+		18B226D229FED693751DC72D /* AppModalsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModalsTests.swift; sourceTree = "<group>"; };
 		18C833C90E3A64756068B92C /* RealStoreTestLock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealStoreTestLock.swift; sourceTree = "<group>"; };
 		1912B26502F23FF9B423BE95 /* DaysOffAttention.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DaysOffAttention.swift; sourceTree = "<group>"; };
 		1942D70A38A419E78AF4D91D /* BookingMatchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookingMatchTests.swift; sourceTree = "<group>"; };
@@ -1856,6 +1860,7 @@
 		6908EFE958F78F7313DBEAF3 /* GmailMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailMessage.swift; sourceTree = "<group>"; };
 		694D5E32D7521B59A78C9414 /* BackgroundServicesGateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundServicesGateTests.swift; sourceTree = "<group>"; };
 		695F4CBFDC4CCFC00082BB63 /* JointOpening.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JointOpening.swift; sourceTree = "<group>"; };
+		69E9BE251ED385513D31E21F /* AppModals.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModals.swift; sourceTree = "<group>"; };
 		6A2675478B29E365B1F0F2A1 /* OneWaitingOnDanRuleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneWaitingOnDanRuleTests.swift; sourceTree = "<group>"; };
 		6AE0653AFD6DD5DA3BD1EA79 /* LeadIntakeReconcileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeadIntakeReconcileTests.swift; sourceTree = "<group>"; };
 		6AEFF6EC8D64C1453FACB334 /* DraftLintSendGateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DraftLintSendGateTests.swift; sourceTree = "<group>"; };
@@ -2619,6 +2624,7 @@
 				F3607211B9223AB5C5387C39 /* AnsweringAReplyMarksItAnsweredTests.swift */,
 				C2BC50FBBC86C3A3C3DDF829 /* AnsweringMarksTheWholeConversationTests.swift */,
 				4AFC6DE42DEE10EA355CAEB4 /* AppleScriptOmniFocusClientTests.swift */,
+				18B226D229FED693751DC72D /* AppModalsTests.swift */,
 				C40FBB3CB26053014E3B0C21 /* ApproveAndSendIsOneActionTests.swift */,
 				8984348E9678D8BD936D5D1F /* ArchiveContactDeepLinkGuardTests.swift */,
 				62597130B70C8D83770C8BD0 /* ArchiveRevealCancellationTests.swift */,
@@ -3562,6 +3568,7 @@
 				31FE5E9FD0CCD98124C0AEE3 /* ActionFeedbackBanner.swift */,
 				2F7977BAEB60289A4C6914DB /* AddLeadPresenter.swift */,
 				16EE360DB327B84791A4BF49 /* AddLeadSheet.swift */,
+				69E9BE251ED385513D31E21F /* AppModals.swift */,
 				A2E8DF70F15A0686D38907C0 /* ArchiveView.swift */,
 				8A52C826C281C400AA58BF17 /* BlockDaysSheet.swift */,
 				575DA11482AE13D32C4A063F /* BuildFreshnessSheet.swift */,
@@ -3774,6 +3781,7 @@
 				7CC8957B36626B3458012A3D /* AnsweredReplyBackfill.swift in Sources */,
 				736DC21DB32A83706102E1FB /* AppDelegate.swift in Sources */,
 				444A0FA537BDD2DFCCF9C2CB /* AppEnvironment.swift in Sources */,
+				8FF6F8007AB2C1A1FA55E169 /* AppModals.swift in Sources */,
 				5148A6EEA6F7F64EF9814D0C /* AppSchema.swift in Sources */,
 				A5AD8D5BA082FC4CA9E2F5AB /* AppleScriptOmniFocusClient.swift in Sources */,
 				82B254040A491EBEDC7A9EE3 /* ArchiveStatus.swift in Sources */,
@@ -4216,6 +4224,8 @@
 				0050611F9ADF1F2E31AA747E /* AnsweringMarksTheWholeConversationTests.swift in Sources */,
 				BB094B27F68D2BD018D6F21F /* AppDelegate.swift in Sources */,
 				920B5C9B80E4D68B3376F081 /* AppEnvironment.swift in Sources */,
+				188DA5F96D47145648DBD4C9 /* AppModals.swift in Sources */,
+				D77289212EE5DEEEDCE6E7AB /* AppModalsTests.swift in Sources */,
 				3FFCD4BE4A2103C4E602E6E4 /* AppSchema.swift in Sources */,
 				EF7CAC2CE90E54B3F61B4CF2 /* AppleScriptOmniFocusClient.swift in Sources */,
 				482A93BB3026DB627A55C4C8 /* AppleScriptOmniFocusClientTests.swift in Sources */,

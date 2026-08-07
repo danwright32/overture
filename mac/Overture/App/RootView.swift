@@ -45,6 +45,10 @@ struct RootView: View {
     // the run finishes with something to say, so the takeover becomes the results without a dismiss/
     // re-present flicker between two sheets.
     @State private var scoutIsManual = false          // this run is one Dan started (drives the modal)
+    // #2202: the one way to raise something Dan has to answer. macOS presents an alert and a sheet the
+    // same way, so an alert raised while any of the sheets below is up queues behind it and is never
+    // seen. Every raise goes through here, and raising closes what is presented first. See AppModals.
+    @State private var modals = AppModals()
     @State private var scoutSheetShown = false        // the sheet is presented (vs hidden while it runs)
     @State private var scoutNativeSnapshot: RunProgressView.Snapshot?   // latest native-phase heartbeat
     // Supersedes an abandoned run's completion after a stalled-state Retry, so the old Task cannot
@@ -875,6 +879,10 @@ struct RootView: View {
             .sheet(item: Bindable(dayOffOffer).pending) { pending in
                 BlockDaysSheet(pending: pending, undo: undoStack)
             }
+            // #2202: the presenter cannot reach this view's own @State, so it is handed the way to
+            // close it. Here rather than in a .task, because a question can be raised by a launch-time
+            // reattach before any task has run.
+            .onAppear { modals.closesSheetsWith { closeEveryPresentedSheet() } }
             .actionFeedbackBanner()
             // Injected outermost so the sheets above inherit it too (#285).
             .environment(feedback)
@@ -1123,7 +1131,7 @@ struct RootView: View {
                 GmailConnection.shared.refresh()   // #1770: the tokens just landed; re-read them once.
                 status.set("Gmail connected. You can now send approved emails.")
             } catch {
-                gmailConnectError = error.localizedDescription
+                reportGmailConnectError(error.localizedDescription)
             }
             isConnectingGmail = false
             gmailConnectStartedAt = nil
@@ -1153,7 +1161,7 @@ struct RootView: View {
             } catch {
                 // The check never started, so the takeover must not sit there implying it did.
                 prepSheetShown = false
-                errorMessage = error.localizedDescription
+                reportError(error.localizedDescription)
             }
         }
     }
@@ -1189,7 +1197,7 @@ struct RootView: View {
             } catch {
                 // The run never started, so the takeover must not sit there implying it did.
                 prepSheetShown = false
-                errorMessage = error.localizedDescription
+                reportError(error.localizedDescription)
             }
         }
     }
@@ -1241,8 +1249,8 @@ struct RootView: View {
             if let report = PrepQueueService.settleReachabilityProbe(into: context, now: Date()) {
                 reportReachabilityRun(report)
             } else {
-                errorMessage = DetachedRunOutcome.finishedEmptyMessage(
-                    .prep, tail: RunLog.tail(8, from: RunLog.prepURL))
+                reportError(DetachedRunOutcome.finishedEmptyMessage(
+                    .prep, tail: RunLog.tail(8, from: RunLog.prepURL)))
             }
         case .idle:
             break
@@ -1417,8 +1425,8 @@ struct RootView: View {
         case .producedResults:
             ingestReplyClassifications()
         case .finishedEmpty:
-            errorMessage = DetachedRunOutcome.finishedEmptyMessage(
-                .replyClassify, tail: RunLog.tail(8, from: RunLog.replyClassifyURL))
+            reportError(DetachedRunOutcome.finishedEmptyMessage(
+                .replyClassify, tail: RunLog.tail(8, from: RunLog.replyClassifyURL)))
         case .idle:
             break
         }
@@ -1449,18 +1457,72 @@ struct RootView: View {
         }
     }
 
+    // MARK: - #2202: raising something Dan has to answer
+
+    // Every sheet this view can present. A question raised while one of these is up would queue behind
+    // it and never appear, so raising closes all of them.
+    //
+    // Maintained as one list rather than each raiser remembering: `RootViewModalGuardTests` derives the
+    // set from the `.sheet(isPresented:)` modifiers in this file and fails when one is missing here, so a
+    // sheet added later cannot quietly become a place questions go to die (L41).
+    private func closeEveryPresentedSheet() {
+        addLead.isPresented = false
+        dayOffOffer.pending = nil
+        scoutSheetShown = false
+        showArchive = false
+        showPatterns = false
+        showInquiryIntake = false
+        showFollowUps = false
+        showVoiceGuidance = false
+        showPrepSelection = false
+        prepSheetShown = false
+        showSources = false
+        showDaysOff = false
+        showExcludedTowns = false
+        showOrganisations = false
+        showReminderSettings = false
+    }
+
+    // The four raisers. Nothing else in this file may assign these states to a non-nil value: that is the
+    // invariant the guard test pins, because a single forgotten raise site is a whole error message Dan
+    // never sees.
+    private func reportError(_ message: String) {
+        modals.raise { errorMessage = message }
+    }
+
+    private func reportGmailConnectError(_ message: String) {
+        modals.raise { gmailConnectError = message }
+    }
+
+    private func askAboutCancelledRead(count: Int) {
+        modals.raise { cancelledScoutRead = count }
+    }
+
+    // #2200: the read-budget question, which is the instance that surfaced the whole class. A manual
+    // scout that finds more than ScoutReadBudget's threshold suspends here and waits, and this used to be
+    // raised straight into a window already presenting the progress takeover, so all 68 sources fetched,
+    // the takeover froze at "68 of 68 done" and kept counting, and the run waited on an answer that could
+    // not be given.
+    //
+    // The takeover comes BACK once he answers (`answerReadAsk`), because the run is not over: it still
+    // has the reading, the reconcile and the saves to do, and a run that carried on with nothing on
+    // screen would be the same invisibility from the other end.
+    private func askReadBudget(_ ask: ScoutReadAsk) {
+        modals.raise { scoutReadAsk = ask }
+    }
+
     private var errorBinding: Binding<Bool> {
-        Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
+        Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil; modals.settled() } })
     }
 
     // #1163: drives the Gmail-connect failure alert, which unlike the shared error alert offers a Try again.
     private var gmailConnectErrorBinding: Binding<Bool> {
-        Binding(get: { gmailConnectError != nil }, set: { if !$0 { gmailConnectError = nil } })
+        Binding(get: { gmailConnectError != nil }, set: { if !$0 { gmailConnectError = nil; modals.settled() } })
     }
 
     // #1054: presents the keep-or-discard alert while a cancelled read is awaiting Dan's choice.
     private var cancelledReadBinding: Binding<Bool> {
-        Binding(get: { cancelledScoutRead != nil }, set: { if !$0 { cancelledScoutRead = nil } })
+        Binding(get: { cancelledScoutRead != nil }, set: { if !$0 { cancelledScoutRead = nil; modals.settled() } })
     }
 
     // #1498: same shape as the binding above, with one addition that matters. Any dismissal that is not a
@@ -1474,6 +1536,11 @@ struct RootView: View {
                     guard !presented else { return }
                     scoutReadAsk?.replyIfUnanswered()
                     scoutReadAsk = nil
+                    modals.settled()
+                    // #2200: whichever way the question went away, the run carries on, so put the
+                    // takeover back. Including the dismissal routes (Escape, a click away), which answer
+                    // `.none` and still leave a sweep with reconciling and saving left to report.
+                    if isScanning { scoutSheetShown = true }
                 })
     }
 
@@ -1482,6 +1549,9 @@ struct RootView: View {
     private func answerReadAsk(_ ask: ScoutReadAsk, _ choice: ScoutReadBudget.Choice) {
         ask.reply(choice)
         scoutReadAsk = nil
+        modals.settled()
+        // #2200: the run is not over. See askReadBudget.
+        if isScanning { scoutSheetShown = true }
     }
 
     // Run a scout automatically when the daily schedule says one is due and auto-scout is
@@ -1567,7 +1637,7 @@ struct RootView: View {
                     askReadBudget: { pending in
                         guard gen == scoutGeneration, !scoutCancelRequested else { return .none }
                         return await withCheckedContinuation { continuation in
-                            scoutReadAsk = ScoutReadAsk(pending: pending) { continuation.resume(returning: $0) }
+                            askReadBudget(ScoutReadAsk(pending: pending) { continuation.resume(returning: $0) })
                         }
                     })
                 guard gen == scoutGeneration else { return }   // superseded by a Retry / newer run
@@ -1635,10 +1705,16 @@ struct RootView: View {
                 // A scheduled run failing stays quiet (a status line); a manual run shows
                 // the modal Dan expects after clicking (#77).
                 let p = ScoutFailure.presentation(auto: auto, message: String(describing: error))
-                errorMessage = p.alert
                 if let status = p.status { scoutSummary = status }
-                // Close the takeover so the error alert is what Dan sees.
-                scoutSheetShown = false
+                if let alert = p.alert {
+                    // The takeover is closed by the raise itself now (#2202), so the alert is what Dan
+                    // sees rather than a frozen progress screen with a question behind it.
+                    reportError(alert)
+                } else {
+                    // A scheduled run says it quietly, and the takeover still must not sit there
+                    // implying a run that has already died.
+                    scoutSheetShown = false
+                }
             }
             guard gen == scoutGeneration else { return }
             isScanning = false
@@ -1770,7 +1846,7 @@ struct RootView: View {
         scoutIsManual = false
         scoutNativeSnapshot = nil
         scoutCancelRequested = false
-        cancelledScoutRead = count
+        askAboutCancelledRead(count: count)
     }
 
     // #1054: Dan kept the cancelled read's shows. Import the partial file the normal way (dedup and
@@ -1778,6 +1854,7 @@ struct RootView: View {
     private func keepCancelledRead() {
         ingestScoutExtract()
         cancelledScoutRead = nil
+        modals.settled()
     }
 
     // #1054: Dan discarded them. Delete the partial file so the reattach path cannot re-import it on a
@@ -1785,6 +1862,7 @@ struct RootView: View {
     private func discardCancelledRead() {
         ScoutExtractResultsDecoder.discard()
         cancelledScoutRead = nil
+        modals.settled()
     }
 
     // #1034: the stalled-state Retry. A stalled modal means the run's heartbeat has gone dead, so abandon
@@ -1890,7 +1968,7 @@ struct RootView: View {
             } catch {
                 // #239: record even the swallowed automatic failure so it stays visible in the masthead.
                 OmniFocusSyncStatus.recordFailure("\(error)", at: Date())
-                if force { errorMessage = OmniFocusSync.failureMessage(reason: "\(error)") }
+                if force { reportError(OmniFocusSync.failureMessage(reason: "\(error)")) }
             }
             omniFocusSyncStartedAt = nil
         }
