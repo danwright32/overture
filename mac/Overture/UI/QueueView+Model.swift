@@ -1789,6 +1789,26 @@ enum QueueModel {
             && !Reachability.probeIsStale(probedAt: i.reachabilityProbedAt, now: now)
     }
 
+    // #2268: the shows a date-level re-check marks. Dan asked for it directly: the shows needing a re-run
+    // arrive in batches (one producing company re-derived across a run is roughly 22 rows), so a
+    // per-card-only route serves the bulk case worst.
+    //
+    // It MARKS rather than runs, and that is the whole design. Everything after the mark is the ordinary
+    // selection: the date's tick box comes back, the bar states the count and the cost from the same
+    // candidate list as always, and the confirm is the one that already exists. A date-level action that
+    // started its own run would be a second way to spend money with its own sentence about what it costs.
+    //
+    // Two exclusions, both load-bearing. A show past the keep-or-dismiss moment is never marked, because a
+    // date-level action must not quietly widen what a check pays for beyond what the per-card one would
+    // (L16, the count Dan approves is the count that runs). And a show with no answer is left alone: it is
+    // already a candidate and already counted, so marking it would make the action look bigger than it is.
+    static func keysToReofferForRecheck(_ items: [QueueItem], now: Date = Date(),
+                                        today: String = QueueModel.easternToday(),
+                                        geo: GeoRefusals = .none) -> [String] {
+        items.filter { probeIsWorthOffering($0, today: today, geo: geo)
+                        && hasFreshReachabilityAnswer($0, now: now) }.map(\.id)
+    }
+
     // #1617: this date has nothing left to check BECAUSE its shows have been answered, which is a
     // different thing from having nothing to check at all. Dan met the second on his walk of the Debug
     // build (2026-07-31): a Scout date drew a bare heading, no button and no tick box, and he read the
