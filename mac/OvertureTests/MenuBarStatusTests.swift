@@ -68,7 +68,7 @@ struct MenuBarStatusTests {
         let now = Date(timeIntervalSince1970: 1_700_000_000)
         let line = MenuBarStatus.line(lastReconcileAt: now, now: now, omniFocusFailed: false,
                                       hasUnreadLogProblems: false,
-                                      watchReport: .recovered(awakeSeconds: 3 * 86_400,
+                                      watchReport: .recovered(cause: .notRunning, seconds: 3 * 86_400,
                                                               endedAt: now.addingTimeInterval(-600)))
         #expect(line.hasPrefix("Last checked "))
     }

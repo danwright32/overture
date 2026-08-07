@@ -26,6 +26,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     static weak var shared: AppDelegate?
     private var scheduler: ReconcileScheduler?
     private var onboardingWindow: NSWindow?
+    // #2220: held for the process lifetime, because it is the process lifetime it reports on. An
+    // observer released early would leave the watch-gap rule with no sleep to subtract, which is the
+    // false-outage-every-morning defect back again with nothing to show it had returned.
+    private var sleepObserver: SleepObserver?
 
     override init() {
         super.init()
@@ -43,6 +47,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             return
         }
         guard AppEnvironment.shouldStartBackgroundServices else { return }
+        // #2220, and BEFORE anything that could stamp a heartbeat. Three things in order, each of which
+        // the watch-gap rule cannot work without:
+        //
+        // 1. Throw away any verdict reached with the awake clock #2220 retired. That clock ran straight
+        //    through sleep, so what is sitting in defaults on the first launch after this ships is a
+        //    twelve-hour "outage" that was Dan's laptop being shut. It would render for a day.
+        // 2. Record when this process started, which is the only thing that tells "Overture was not
+        //    running" apart from "Overture was running and did not check".
+        // 3. Start watching for sleep, since sleep that nothing observed is sleep that gets counted as a
+        //    failure to watch.
+        WatchHeartbeatStore.discardVerdictsFromTheRetiredClock()
+        ProcessLaunch.stampStart(now: Date())
+        let sleepObserver = SleepObserver()
+        sleepObserver.start()
+        self.sleepObserver = sleepObserver
         // #301: become the notification delegate so a tapped alert is actionable instead of a dead end,
         // and register the action buttons (the OmniFocus-permission alert's Open Settings).
         let center = UNUserNotificationCenter.current()
@@ -112,6 +131,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     // the menu bar's own Quit, and the #1160 duplicate-instance path, both call terminate directly and
     // are untouched by this answer.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+
+    // #2220: quitting is somebody's decision, not a fault. Dan quitting from the menu bar, or a shutdown
+    // asking every app to stop, both arrive here, and without this record the silence that follows would
+    // be reported back to him as Overture having failed. A product that reports a person's own decisions
+    // as failures is one whose reports stop being read (L36).
+    func applicationWillTerminate(_ notification: Notification) {
+        guard AppEnvironment.shouldStartBackgroundServices else { return }
+        ProcessLaunch.stampCleanQuit(now: Date())
+    }
 
     // #301: handle a tapped notification. The decision is the pure NotificationService.route; here we
     // only carry out its side effects. Lead/window routes reuse the existing deep-link handler
