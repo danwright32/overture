@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1091 sentences**, from 383 source files.
+Every sentence Overture can say to Dan: **1093 sentences**, from 383 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -314,6 +314,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "A booking was detected that needs your confirmation. Tap to confirm or dismiss."
     `UI/ProspectRowView.swift`
 "A check missed this show"
+    `Domain/Reachability.swift`
+"A check ran and got no further than this act's social profile, which needs a login. Their own site may still publish an address, so of all the shows with no contact this is the one most likely to give one up on another check."
     `Domain/Reachability.swift`
 "A contact on this show is held back by a check (a venue guess, a press address, a duplicate, the salutation, or the draft lint). Look at it below: dismissing the check releases the email."
     `UI/DraftReviewView.swift`
@@ -1169,6 +1171,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "One source went quiet."
     `UI/ScoutSummaryView.swift`
 "Only a press address"
+    `Domain/Reachability.swift`
+"Only a social profile"
     `Domain/Reachability.swift`
 "Only the venue's address"
     `Domain/Reachability.swift`

@@ -114,7 +114,14 @@ enum PrepImporter {
                     // #1722: this check found something, so any earlier "only the venue's address" is now
                     // false. Cleared here rather than left to age out, because a stale refusal printed
                     // over a real address is worse than no sentence at all (L14).
-                    p.reachabilityEmptyReason = nil
+                    //
+                    // #2265: unless everything it found was a social profile, in which case the check
+                    // reached a doorway and stopped, and saying nothing would put a bare "No email found"
+                    // on a show whose address was a single fetch away. Decided from the routes the run
+                    // EMITTED, never from what it said it did, because its own account of what it read
+                    // cannot be trusted (#2269).
+                    p.reachabilityEmptyReason = Reachability.onlySocialRoutes(contacts)
+                        ? .onlySocialProfile : nil
                 } else {
                     // #1722: the run answered this show and had nothing to give. THIS is the branch the
                     // whole issue is about: before, it wrote nothing at all, markProbed's `no_email_found`
