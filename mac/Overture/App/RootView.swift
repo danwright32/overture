@@ -1587,6 +1587,21 @@ struct RootView: View {
         // false by then). Without this, a double-tap of "Read the ones I fixed" starts two runs, and the
         // second dies on the extract runner's already-running guard.
         guard !isScanning, readingStartedAt == nil else { return }
+        // #2208: and the read that is still running in the BACKGROUND, which the guard above cannot see:
+        // `readingStartedAt` goes nil the moment the takeover is hidden and the app moves on. Without
+        // this, pressing Run scout swept all 68 sources, fetched and hashed every one, worked out which
+        // had changed, and only then discovered it could not hand them off.
+        if case .waitForTheReader(let why) = ScoutStartGate.decide(
+            readerIsRunning: ScoutExtractService.isRunning(now: Date()), depth: depth, auto: auto,
+            // The learned pace applied to the read that is actually in flight. nil when the history is
+            // too thin to have learned one, which leaves the sentence claiming no estimate at all.
+            remaining: {
+                let live = RunProgressView.Snapshot.liveReading()
+                return RunDurationHistoryStore.load().remaining(total: live.total, completed: live.completed)
+            }()) {
+            feedback.acknowledge(why, tone: .warning)
+            return
+        }
         scoutGeneration += 1
         let gen = scoutGeneration   // this run's token; a Retry bumps it so an abandoned Task no-ops
         isScanning = true
