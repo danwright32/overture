@@ -24,7 +24,6 @@ struct WatchGapLine: View {
     // Injected so a test can drive a three-day silence without a real one, defaulting to the live
     // readings the app uses. `body` reads the clock from the timeline instead of these.
     var defaults: UserDefaults = .standard
-    var uptime: TimeInterval = ProcessInfo.processInfo.systemUptime
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
@@ -38,7 +37,7 @@ struct WatchGapLine: View {
     // which exists because a shipped detector's warning was never confirmed to reach the screen).
     @ViewBuilder
     func content(now: Date) -> some View {
-        if let report = WatchHeartbeatStore.currentReport(now: now, uptime: uptime, defaults: defaults) {
+        if let report = WatchHeartbeatStore.currentReport(now: now, defaults: defaults) {
             Text(WatchGap.line(for: report, now: now))
                 .font(.system(size: 11))
                 .foregroundStyle(OVColor.rust)

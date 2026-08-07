@@ -83,17 +83,20 @@ final class ReconcileScheduler {
         p.hasUnhandledReply || p.outcome == .replied
     }
 
-    // #2091: `defaults` and `uptime` are injected (both defaulting to the real ones) so the watch
-    // heartbeat this tick writes can be driven against a scratch suite and a fake clock, and so the
+    // #2091: `defaults` and the watch readings are injected (both defaulting to the real ones) so the
+    // watch heartbeat this tick writes can be driven against a scratch suite and a fake Mac, and so the
     // existing lastReconcileAt write stops landing in the real defaults during a test run too.
+    // #2220: one set of readings for the whole tick, taken once. Read twice, the observe and the stamp
+    // could straddle a wake and disagree about how much sleep this tick sat on top of.
     @discardableResult
     func runSafeReconcilesOnce(now: Date = Date(), defaults: UserDefaults = .standard,
-                               uptime: TimeInterval = ProcessInfo.processInfo.systemUptime)
+                               watchReadings: WatchGap.Readings? = nil)
         async -> ReconcileSummary {
+        let readings = watchReadings ?? WatchHeartbeatStore.readings(now: now, defaults: defaults)
         // #2091: note a silence this tick is resuming after, BEFORE the stamp at the end hides it. Why
         // that ordering is the whole design, and why it lives here rather than in start(), is in WatchGap.
         WatchHeartbeatStore.observeResume(
-            now: now, uptime: uptime,
+            now: now, readings: readings,
             intervalSeconds: ReconcileScheduler.intervalSeconds(defaults: defaults), into: defaults)
         // #269: snapshot which leads are already replied/booked BEFORE mutating, so the diff after the
         // reconcile names exactly what arrived this tick (each item reported once).
@@ -142,9 +145,9 @@ final class ReconcileScheduler {
         DueBadge.publish(DueWork.counts(prospects: after, now: now,
                                         reminder: ConversationReminderConfig.loaded()).total,
                          into: defaults)
-        // #2091: the watch heartbeat, carrying the awake clock alongside the wall clock so the next tick
-        // can tell a sleeping Mac (nothing missed) from a dead process (everything missed).
-        WatchHeartbeatStore.stamp(now: now, uptime: uptime, into: defaults)
+        // #2091: the watch heartbeat, carrying the observed sleep alongside the wall clock so the next
+        // tick can tell a sleeping Mac (nothing missed) from a dead process (everything missed).
+        WatchHeartbeatStore.stamp(now: now, readings: readings, into: defaults)
         return ReconcileSummary(omniFocusChanged: omniFocusChanged,
                                 newReplies: newReplies, newBookings: newBookings,
                                 newReplyKeys: newReplyKeys, newBookingKeys: newBookingKeys,

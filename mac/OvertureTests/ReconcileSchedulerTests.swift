@@ -244,9 +244,10 @@ struct ReconcileSchedulerTests {
         let scheduler = ReconcileScheduler(context: ctx)
         let now = Date(timeIntervalSince1970: 1_700_000_000)
 
-        await scheduler.runSafeReconcilesOnce(now: now, defaults: defaults, uptime: 5_000)
+        await scheduler.runSafeReconcilesOnce(now: now, defaults: defaults,
+                                              watchReadings: liveSince(now, sleptSeconds: 5_000))
 
-        #expect(WatchHeartbeatStore.load(defaults) == WatchGap.heartbeat(now: now, uptime: 5_000))
+        #expect(WatchHeartbeatStore.load(defaults) == WatchGap.heartbeat(now: now, sleptSeconds: 5_000))
         // A first tick has no prior heartbeat to compare against, so it can never invent an outage.
         #expect(WatchHeartbeatStore.loadOutage(defaults) == nil)
     }
@@ -259,20 +260,47 @@ struct ReconcileSchedulerTests {
         let defaults = freshDefaults()
         let scheduler = ReconcileScheduler(context: ctx)
         let before = Date(timeIntervalSince1970: 1_700_000_000)
-        await scheduler.runSafeReconcilesOnce(now: before, defaults: defaults, uptime: 5_000)
+        await scheduler.runSafeReconcilesOnce(now: before, defaults: defaults,
+                                              watchReadings: liveSince(before))
 
         let threeDays = 3 * 86_400.0
         let resumedAt = before.addingTimeInterval(threeDays)
-        await scheduler.runSafeReconcilesOnce(now: resumedAt, defaults: defaults, uptime: 5_000 + threeDays)
+        await scheduler.runSafeReconcilesOnce(now: resumedAt, defaults: defaults,
+                                              watchReadings: liveSince(before))
 
         let outage = try #require(WatchHeartbeatStore.loadOutage(defaults))
-        #expect(outage.awakeSeconds == threeDays)
+        #expect(outage.seconds == threeDays)
+        #expect(outage.cause == .notWatching, "the process was there the whole time; it just did not check")
         #expect(outage.endedAt == resumedAt.timeIntervalSince1970)
         // And the surface reads it: the heartbeat is fresh again, so only the recorded outage can speak.
         #expect(WatchHeartbeatStore.currentReport(now: resumedAt.addingTimeInterval(60),
-                                                  uptime: 5_000 + threeDays + 60,
                                                   intervalSeconds: 30 * 60, defaults: defaults)
-                == .recovered(awakeSeconds: threeDays, endedAt: resumedAt))
+                == .recovered(cause: .notWatching, seconds: threeDays, endedAt: resumedAt))
+    }
+
+    // The other fault, through the real tick: the process itself was gone for three days and came back.
+    // It reads as a different silence with a different sentence, because nothing was there to measure
+    // awake time and claiming any would be inventing it (L11).
+    @Test func aTickAfterTheProcessWasGoneRecordsThatInstead() async throws {
+        let ctx = ModelContext(try container())
+        let defaults = freshDefaults()
+        let scheduler = ReconcileScheduler(context: ctx)
+        let before = Date(timeIntervalSince1970: 1_700_000_000)
+        await scheduler.runSafeReconcilesOnce(now: before, defaults: defaults,
+                                              watchReadings: liveSince(before))
+
+        let threeDays = 3 * 86_400.0
+        let relaunched = before.addingTimeInterval(threeDays)
+        await scheduler.runSafeReconcilesOnce(
+            now: relaunched, defaults: defaults,
+            watchReadings: WatchGap.Readings(sleptSeconds: 0,
+                                             processStartedAt: relaunched.timeIntervalSince1970,
+                                             quitCleanlyAt: 0,
+                                             bootedAt: before.timeIntervalSince1970 - 86_400))
+
+        let outage = try #require(WatchHeartbeatStore.loadOutage(defaults))
+        #expect(outage.cause == .notRunning)
+        #expect(outage.seconds == threeDays)
     }
 
     // A Mac that merely slept between two ticks records nothing: the alert Dan would otherwise get every
@@ -282,11 +310,22 @@ struct ReconcileSchedulerTests {
         let defaults = freshDefaults()
         let scheduler = ReconcileScheduler(context: ctx)
         let before = Date(timeIntervalSince1970: 1_700_000_000)
-        await scheduler.runSafeReconcilesOnce(now: before, defaults: defaults, uptime: 5_000)
+        await scheduler.runSafeReconcilesOnce(now: before, defaults: defaults,
+                                              watchReadings: liveSince(before))
 
-        // Eight hours of wall clock later, but the Mac was awake for only a minute of it.
-        await scheduler.runSafeReconcilesOnce(now: before.addingTimeInterval(8 * 3_600),
-                                              defaults: defaults, uptime: 5_060)
+        // Eight hours of wall clock later, and the Mac was asleep for all but a minute of it.
+        await scheduler.runSafeReconcilesOnce(
+            now: before.addingTimeInterval(8 * 3_600), defaults: defaults,
+            watchReadings: liveSince(before, sleptSeconds: 8 * 3_600 - 60))
         #expect(WatchHeartbeatStore.loadOutage(defaults) == nil)
+    }
+
+    // A Mac that has been running Overture since before `at`, with `sleptSeconds` of observed sleep on
+    // the clock. The shape every healthy tick sees.
+    private func liveSince(_ at: Date, sleptSeconds: Double = 0) -> WatchGap.Readings {
+        WatchGap.Readings(sleptSeconds: sleptSeconds,
+                          processStartedAt: at.timeIntervalSince1970 - 86_400,
+                          quitCleanlyAt: 0,
+                          bootedAt: at.timeIntervalSince1970 - 2 * 86_400)
     }
 }

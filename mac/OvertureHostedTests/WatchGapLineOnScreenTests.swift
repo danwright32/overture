@@ -18,6 +18,14 @@ struct WatchGapLineOnScreenTests {
         try #require(UserDefaults(suiteName: "watch-line-\(UUID().uuidString)"))
     }
 
+    // A Mac that has been running Overture since before `at`, with `sleptSeconds` of observed sleep.
+    private func liveSince(_ at: Date, sleptSeconds: Double = 0) -> WatchGap.Readings {
+        WatchGap.Readings(sleptSeconds: sleptSeconds,
+                          processStartedAt: at.timeIntervalSince1970 - 86_400,
+                          quitCleanlyAt: 0,
+                          bootedAt: at.timeIntervalSince1970 - 2 * 86_400)
+    }
+
     private func texts(_ view: some View) -> [String] {
         ((try? view.inspect().findAll(ViewType.Text.self)) ?? []).compactMap { try? $0.string() }
     }
@@ -26,17 +34,17 @@ struct WatchGapLineOnScreenTests {
     // masthead does not grow a permanent row of reassurance.
     @Test func aHealthyWatchDrawsNothing() throws {
         let defaults = try scratch()
-        WatchHeartbeatStore.stamp(now: now, uptime: 10_000, into: defaults)
-        let line = WatchGapLine(defaults: defaults, uptime: 10_000 + 60)
+        WatchHeartbeatStore.stamp(now: now, readings: liveSince(now), into: defaults)
+        let line = WatchGapLine(defaults: defaults)
         #expect(texts(line.content(now: now.addingTimeInterval(60))).isEmpty)
     }
 
     // The live fault: the ticks have stopped and the queue says so, in words, where Dan triages.
     @Test func aStoppedWatchPutsItsSentenceOnScreen() throws {
         let defaults = try scratch()
-        WatchHeartbeatStore.stamp(now: now, uptime: 10_000, into: defaults)
+        WatchHeartbeatStore.stamp(now: now, readings: liveSince(now), into: defaults)
         let elapsed = 2 * 3_600.0
-        let line = WatchGapLine(defaults: defaults, uptime: 10_000 + elapsed)
+        let line = WatchGapLine(defaults: defaults)
         #expect(texts(line.content(now: now.addingTimeInterval(elapsed)))
                 == ["Overture has not checked for replies or bookings in 2h"])
     }
@@ -47,14 +55,14 @@ struct WatchGapLineOnScreenTests {
     @Test func aSilenceThatEndedIsStillExplainedOnScreen() throws {
         let defaults = try scratch()
         let threeDays = 3 * 86_400.0
-        WatchHeartbeatStore.stamp(now: now, uptime: 10_000, into: defaults)
+        WatchHeartbeatStore.stamp(now: now, readings: liveSince(now), into: defaults)
         WatchHeartbeatStore.observeResume(now: now.addingTimeInterval(threeDays),
-                                          uptime: 10_000 + threeDays, intervalSeconds: 30 * 60,
+                                          readings: liveSince(now), intervalSeconds: 30 * 60,
                                           into: defaults)
-        WatchHeartbeatStore.stamp(now: now.addingTimeInterval(threeDays), uptime: 10_000 + threeDays,
+        WatchHeartbeatStore.stamp(now: now.addingTimeInterval(threeDays), readings: liveSince(now),
                                   into: defaults)
 
-        let line = WatchGapLine(defaults: defaults, uptime: 10_000 + threeDays + 720)
+        let line = WatchGapLine(defaults: defaults)
         #expect(texts(line.content(now: now.addingTimeInterval(threeDays + 720)))
                 == ["Overture was not checking for replies or bookings for 3d, and resumed 12m ago"])
     }

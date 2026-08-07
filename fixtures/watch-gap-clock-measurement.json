@@ -1,0 +1,22 @@
+{
+  "_why": "#2220. Every clock macOS offers was read against kern.boottime in one process on Dan's Mac, to settle by measurement whether any of them excludes sleep. None does. The watch-gap rule (#2091) was built on ProcessInfo.systemUptime's documented promise that it counts awake time only, and reported his laptop being asleep as Overture having failed, every morning. This is the sample that retired it. Do not regenerate it: a window with a long real sleep in it is what makes it evidence, and that cannot be arranged by a test (L48, L82).",
+  "measuredAt": "2026-08-06T23:20:00-04:00",
+  "machine": "Apple Silicon, macOS 25.5.0",
+  "bootedAt": "2026-08-04T17:20:56-04:00",
+
+  "wallClockSinceBootSeconds": 195093.9,
+  "processInfoSystemUptimeSeconds": 194639.5,
+  "clockUptimeRawSeconds": 194639.5,
+  "machAbsoluteTimeSeconds": 194639.5,
+  "clockMonotonicSeconds": 195093.9,
+  "machContinuousTimeSeconds": 195104.1,
+
+  "_sleepSource": "pmset -g log, every Sleep entry paired with the Wake that followed it, summed from the boot above.",
+  "observedSleepSecondsInWindow": 71341.0,
+  "longestSleepSpans": [
+    { "from": "2026-08-04T23:34:04-04:00", "to": "2026-08-05T09:11:37-04:00", "seconds": 34653 },
+    { "from": "2026-08-05T23:23:23-04:00", "to": "2026-08-06T09:34:48-04:00", "seconds": 36685 }
+  ],
+
+  "_conclusion": "19.82 hours of the 54.19 hour window were spent asleep, and the clock documented to exclude sleep excluded 454.4 seconds of it (7.6 minutes). CLOCK_MONOTONIC and mach_continuous_time track wall clock, as documented. There is no awake clock to read on this hardware, so sleep is observed through NSWorkspace's sleep and wake notifications instead (see mac/Overture/Domain/SystemSleep.swift)."
+}

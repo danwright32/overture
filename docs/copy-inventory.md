@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1066 sentences**, from 373 source files.
+Every sentence Overture can say to Dan: **1068 sentences**, from 375 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1202,6 +1202,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreShrinkCheck.swift`
 "Overture was not checking for replies or bookings for \(PrepStatus.duration(seconds: seconds)), "
     `Domain/WatchGap.swift`
+"Overture was not running for \(PrepStatus.duration(seconds: seconds)), "
+    `Domain/WatchGap.swift`
 "Overture's data file doesn't look like Overture's own database. Another app may "
     `App/StoreSchemaGuard.swift`
 "Overture's data is unavailable"
@@ -2266,6 +2268,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "all the same title"
     `Domain/OrganisationListing.swift`
 "and resumed \(PrepStatus.relative(from: endedAt, to: now))"
+    `Domain/WatchGap.swift`
+"and started again \(PrepStatus.relative(from: endedAt, to: now))"
     `Domain/WatchGap.swift`
 "another show"
     `Domain/SelfBookingConflict.swift`
