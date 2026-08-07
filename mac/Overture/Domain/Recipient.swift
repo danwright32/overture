@@ -64,6 +64,19 @@ enum RecipientResolution: String, Codable, CaseIterable, Sendable {
     // is the ONE closed state that still raises a post-event closing note, because that note serves the
     // NEXT event. See ConversationReminder.
     case stoodDown = "stood_down"
+    // #2112: Dan closed this out because nobody ever answered. Its own case, and NOT `Outcome.noResponse`,
+    // which is the DEFAULT every sent contact carries and means "nothing has happened yet". Writing the
+    // affirmative "they never answered, I am closing this" into the same field as "still waiting to hear"
+    // would make the two the same record forever, and the difference can only be captured at the moment
+    // he closes it out.
+    //
+    // Its raw value and its wording match `InquiryLostReason.neverHeardBack`, because the two halves of
+    // the funnel are answering the same question and a second vocabulary for it is how a report ends up
+    // unable to add them together.
+    //
+    // A silence is not a refusal, so it closes the door as gently as `declinedSoft` does: the org is not
+    // recorded as having turned Dan down, and nothing may rank them lower for it.
+    case neverHeardBack = "never_heard_back"
 }
 
 // One party emailed for a performance: an act contact, a presenter, or a manual add. A performance

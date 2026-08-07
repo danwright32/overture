@@ -35,6 +35,36 @@ enum ProspectMutations {
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
+    // #2112/#2224: Dan closes a pitch out from the Reached out row itself, without opening Archive.
+    //
+    // Its own entry point rather than a second caller of `markContact`, because two things beyond the
+    // contact write have to happen and both are easy to forget at a call site: a booking has to reach the
+    // SHOW's outcome so the report counts it (#2226), and the acknowledgment has to name the outcome back
+    // because the row leaves the stage the instant it lands.
+    //
+    // The save is checked. A failure warns and leaves the row exactly as it was, so nothing ever looks
+    // closed out on the strength of a write that did not land (L12).
+    @discardableResult
+    static func closeOutFromRow(_ item: QueueItem, _ recipientId: String,
+                                _ outcome: ReachedOutClose.Outcome,
+                                prospects: [Prospect], context: ModelContext,
+                                feedback: ActionFeedback) -> Bool {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return false }
+        model.updateRecipient(id: recipientId) {
+            $0.markOutcomeManually(resolution: outcome.resolution, bounced: false)
+        }
+        // A booking Dan recorded is HIS call, and the show has to say so or detection will come along and
+        // claim it. The report reads `Prospect.isBooked`, which already folds in the contact, so this is
+        // not a second home for the fact (#2226): it is the manual SOURCE, which is the only thing that
+        // stops the next Downbeat reconcile auto-booking the same show and silently moving it from the
+        // manual half of the split to the automatic one.
+        if outcome == .booked { model.markOutcomeManually(.booked, now: Date()) }
+        model.resumePausedRecipients()
+        guard context.saveOrWarn(org: item.groupName, feedback: feedback) else { return false }
+        feedback.acknowledge(ReachedOutClose.recordedLine(outcome, org: item.groupName))
+        return true
+    }
+
     // Dan manually adds a contact by hand (#399): runs the exact-duplicate/org/venue check first,
     // then creates a fresh Recipient, resumes one pursuit had stopped on, or is blocked if the
     // email already belongs to an active or settled contact. The venue/org flags never block; they

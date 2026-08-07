@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1082 sentences**, from 379 source files.
+Every sentence Overture can say to Dan: **1088 sentences**, from 381 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -78,7 +78,7 @@ What is not, and why:
 - `UI/DraftSignaturePreview.swift`: renders the outbound email's own HTML (body + Gmail signature), not Overture's voice (#1203)
 - `UI/DraftSignaturePreview.swift`: browser-side measuring script, not a sentence Overture says to Dan (#915)
 
-## The same sentence, said in more than one place (46)
+## The same sentence, said in more than one place (47)
 
 Two copies of a sentence will drift. #843 owns fixing these.
 
@@ -99,11 +99,13 @@ Two copies of a sentence will drift. #843 owns fixing these.
 - "Closed (not interested)"
   - `Domain/ArchiveStatus.swift`
   - `Domain/PerformanceStatus.swift`
+  - `Domain/ReachedOutClose.swift`
   - `UI/DraftReviewView.swift`
   - `UI/QueueView+Model.swift`
 - "Closed (not now)"
   - `Domain/ArchiveStatus.swift`
   - `Domain/PerformanceStatus.swift`
+  - `Domain/ReachedOutClose.swift`
   - `UI/DraftReviewView.swift`
   - `UI/QueueView+Model.swift`
 - "Confirm booking"
@@ -137,6 +139,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
 - "Interested, going quiet"
   - `Domain/ConversationReminder.swift`
   - `UI/ReminderSettingsView.swift`
+- "Never heard back"
+  - `Domain/Inquiry.swift`
+  - `Domain/ReachedOutClose.swift`
+  - `UI/QueueView+Model.swift`
 - "Not a booking"
   - `UI/ProspectRowView.swift`
   - `UI/ProspectRowView.swift`
@@ -504,16 +510,20 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ScoutSweepStep.swift`
 "Click \"Sync to OmniFocus\" to retry, and check that OmniFocus is installed and has "
     `Domain/AppNotice.swift`
+"Close this out"
+    `Domain/ReachedOutClose.swift`
 "Close this out without sending"
     `Domain/FollowUp.swift`
 "Closed (not interested)"
     `Domain/ArchiveStatus.swift`
     `Domain/PerformanceStatus.swift`
+    `Domain/ReachedOutClose.swift`
     `UI/DraftReviewView.swift`
     `UI/QueueView+Model.swift`
 "Closed (not now)"
     `Domain/ArchiveStatus.swift`
     `Domain/PerformanceStatus.swift`
+    `Domain/ReachedOutClose.swift`
     `UI/DraftReviewView.swift`
     `UI/QueueView+Model.swift`
 "Closing note sent to \(org)"
@@ -943,6 +953,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DraftReviewNotes.swift`
 "Never heard back"
     `Domain/Inquiry.swift`
+    `Domain/ReachedOutClose.swift`
+    `UI/QueueView+Model.swift`
 "Never show me shows in \(town)"
     `UI/QueueView+Model.swift`
 "New finds land here to keep or dismiss."
@@ -1837,6 +1849,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/AddLeadSheet.swift`
 "This show"
     `Domain/SelfBookingConflict.swift`
+"This show has been and gone."
+    `Domain/ReachedOutClose.swift`
 "This show opened before you triaged it, so it is no longer waiting on you"
     `UI/ProspectRowView.swift`
 "This show was checked over 90 days ago, so that earlier result may have changed. Run Check reachability again to refresh it before you decide."
@@ -2164,6 +2178,12 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "\(org) can be drafted despite the clash"
     `App/ActionFeedback.swift`
+"\(org) closed out, not interested."
+    `Domain/ReachedOutClose.swift`
+"\(org) closed out, not now."
+    `Domain/ReachedOutClose.swift`
+"\(org) closed out: never heard back."
+    `Domain/ReachedOutClose.swift`
 "\(org) has already been sent to, so there's nothing to redraft"
     `App/ActionFeedback.swift`
 "\(org) has already been sent to; re-prepping to find new contacts only"
@@ -2178,6 +2198,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "\(org) is on a night you're already booked, so nothing will re-prep until you clear the clash"
     `App/ActionFeedback.swift`
+"\(org) recorded as booked."
+    `Domain/ReachedOutClose.swift`
 "\(orgName) asked not to be contacted, so Overture won't watch their calendar."
     `Domain/WatchlistEditing.swift`
 "\(orgName) asked not to be contacted, so Overture won't watch them again."

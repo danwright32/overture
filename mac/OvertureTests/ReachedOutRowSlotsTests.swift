@@ -49,31 +49,55 @@ struct ReachedOutRowSlotsTests {
     @Test func nobodyWaitingGetsTheCountdown() {
         let slots = ReachedOutRowSlots.slots(replyOffered: false, showsStateControl: false,
                                              dueActionLabel: nil)
-        #expect(slots == [.timing])
+        #expect(slots == [.timing, .closeOut])
     }
 
-    // The ceiling. Three is the most the row may ever show, and this is the assertion that fails the day
-    // somebody adds a fourth control without deciding it belongs.
-    @Test func theRowNeverShowsMoreThanThreeThings() {
+    // The ceiling. #2112/#2224 raised it from three to four, deliberately and once: the control that ENDS
+    // a pitch had lived only on the Archive card, which Dan does not open, so the outcome was in practice
+    // not recorded at all. This is the assertion that fails the day somebody adds a FIFTH without deciding
+    // it belongs.
+    @Test func theRowNeverShowsMoreThanFourThings() {
         for replyOffered in [true, false] {
-            for stateControl in [true, false] {
-                for action in [nil, "Send a follow-up", "Send a closing note"] {
-                    let slots = ReachedOutRowSlots.slots(replyOffered: replyOffered,
-                                                         showsStateControl: stateControl,
-                                                         dueActionLabel: action)
-                    #expect(slots.count <= 3, "the row showed \(slots.count) things at once")
-                    #expect(Set(slots).count == slots.count, "the row showed the same slot twice")
+            for showPassed in [true, false] {
+                for stateControl in [true, false] {
+                    for action in [nil, "Send a follow-up", "Send a closing note"] {
+                        let slots = ReachedOutRowSlots.slots(replyOffered: replyOffered,
+                                                             showPassed: showPassed,
+                                                             showsStateControl: stateControl,
+                                                             dueActionLabel: action)
+                        #expect(slots.count <= 4, "the row showed \(slots.count) things at once")
+                        #expect(Set(slots).count == slots.count, "the row showed the same slot twice")
+                    }
                 }
             }
         }
     }
 
+    // #2112: the hint REPLACES the countdown rather than stacking on it. A row counting down to a
+    // follow-up on a night that has already happened is a promise it cannot keep.
+    @Test func apassedShowSaysSoInsteadOfCountingDown() {
+        let slots = ReachedOutRowSlots.slots(replyOffered: false, showPassed: true,
+                                             showsStateControl: false, dueActionLabel: nil)
+        #expect(slots.contains(.passedHint))
+        #expect(!slots.contains(.timing))
+    }
+
+    // And somebody actively waiting still outranks the date, because a person is a stronger claim on Dan
+    // than a night that has gone.
+    @Test func somebodyWaitingOutranksAPassedShow() {
+        let slots = ReachedOutRowSlots.slots(replyOffered: true, showPassed: true,
+                                             showsStateControl: false, dueActionLabel: nil)
+        #expect(slots.contains(.answer))
+        #expect(!slots.contains(.passedHint))
+        #expect(!slots.contains(.timing))
+    }
+
     // The busiest real row: answered, in a known state, with a nudge now due. Three different questions,
     // three answers, no duplication.
-    @Test func theBusiestRowShowsThreeDifferentThings() {
+    @Test func theBusiestRowShowsFourDifferentThings() {
         let slots = ReachedOutRowSlots.slots(replyOffered: false, showsStateControl: true,
                                              dueActionLabel: "Send a follow-up")
-        #expect(slots == [.timing, .conversationState, .dueAction])
+        #expect(slots == [.timing, .conversationState, .closeOut, .dueAction])
     }
 
     // Order is part of the rule, not an accident of where the `if`s happen to sit. Timing leads, the
@@ -81,7 +105,7 @@ struct ReachedOutRowSlotsTests {
     @Test func theOrderIsFixedRegardlessOfWhichSlotsAppear() {
         let all = ReachedOutRowSlots.slots(replyOffered: true, showsStateControl: true,
                                            dueActionLabel: "Send a closing note")
-        #expect(all == [.answer, .conversationState, .dueAction])
+        #expect(all == [.answer, .conversationState, .closeOut, .dueAction])
     }
 
     // A row can never be blank. Whatever else is missing, the timing slot is always filled, so there is
@@ -117,6 +141,10 @@ struct ReachedOutRowSlotsTests {
         let drawn = column.components(separatedBy: "Text(").count - 1
             + column.components(separatedBy: "Button(").count - 1
             + column.components(separatedBy: "ConversationStateControl(").count - 1
+            // #2112/#2224: a named view is one control to a person and one construct here. A Menu spelled
+            // out inline would put its ITEMS' buttons in this count, so the guard would read four where
+            // he sees one, which is why the close-out is its own view.
+            + column.components(separatedBy: "CloseOutMenu {").count - 1
         #expect(drawn == ReachedOutRowSlots.Slot.allCases.count,
                 """
                 the trailing column draws \(drawn) things but \
@@ -160,6 +188,9 @@ struct ReachedOutRowSlotsTests {
         "Text(ReachedOutQueue.timingLabel": .timing,
         "Button(ReplyPanelCopy.answer": .answer,
         "ConversationStateControl(": .conversationState,
-        "Button(label)": .dueAction
+        "Button(label)": .dueAction,
+        // #2112/#2224
+        "Text(hint)": .passedHint,
+        "CloseOutMenu {": .closeOut
     ]
 }
