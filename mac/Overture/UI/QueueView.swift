@@ -345,6 +345,19 @@ struct QueueView: View {
         return data.items.filter { wanted.contains($0.id) }
     }
 
+    // #2268: Dan pressed "Check again" on a finished date. Every answered, still-open show on it is
+    // marked, which makes them candidates again, and the date is ticked so the selection bar takes over
+    // with its own count, cost and confirm. Nothing is spent here.
+    private func reofferDateForRecheck(_ group: QueueModel.DateGroup) {
+        let keys = QueueModel.keysToReofferForRecheck(group.items, geo: geo)
+        guard !keys.isEmpty else { return }
+        for item in group.items where keys.contains(item.id) {
+            ProspectMutations.requestReachabilityRecheck(item, prospects: prospects,
+                                                         context: context, feedback: feedback)
+        }
+        probeSelection.toggle(group.id)
+    }
+
     // #2267: Dan pressed "Check again" on one card. It raises the SAME confirm sheet the date selection
     // raises, carrying the same cost sentence, and the same approval starts the same kind of run. The
     // only thing that differs is that the work-list holds one key.
@@ -640,7 +653,12 @@ struct QueueView: View {
                     items: group.items, dateLabel: group.monthDay,
                     geo: geo,
                     isRunning: prepRunning,
-                    onTap: { keys, label in pendingProbe = ProbeConfirm(keys: keys, dateLabel: label) })
+                    onTap: { keys, label in pendingProbe = ProbeConfirm(keys: keys, dateLabel: label) },
+                    // #2268: mark this date's answered shows, then tick the date. Everything after that is
+                    // the ordinary selection: the bar appears with the count and the cost, and he can add
+                    // other dates before running them together, which is the case a per-card route serves
+                    // worst and the reason he asked for this.
+                    onReofferDate: { reofferDateForRecheck(group) })
             }
             .padding(.bottom, OVSpacing.xxs)
             .overlay(alignment: .bottom) { Rectangle().fill(OVColor.line).frame(height: 1) }
@@ -1612,6 +1630,9 @@ struct ReachabilityProbeControl: View {
     // while any run is already in flight rather than failing after the tap with alreadyRunning.
     let isRunning: Bool
     let onTap: (_ keys: [String], _ dateLabel: String) -> Void
+    // #2268: re-offer this whole date. Optional so a surface without the selection machinery simply
+    // passes nothing and the finished marker renders exactly as it did.
+    var onReofferDate: (() -> Void)? = nil
 
     var body: some View {
         let keys = QueueModel.reachabilityProbeCandidateKeys(items, geo: geo)
@@ -1637,11 +1658,23 @@ struct ReachabilityProbeControl: View {
             // capsule, no icon, faint): it is a resting state Dan walks past, not a thing to act on, and
             // the #1595 cutback of this control was about exactly that. It appears only on a date whose
             // shows were really answered, so it stays rare rather than joining the 169.
-            HStack(spacing: 0) {
+            HStack(spacing: OVSpacing.xs) {
                 Spacer(minLength: OVSpacing.sm)
                 Text(ReachabilityProbeCopy.dateCheckedMarker)
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(OVColor.inkFaint)
+                // #2268: and a way back in. Dan asked for it: "is there a way to re-check an entire date
+                // with multiple events?" It MARKS this date's answered shows rather than starting a run,
+                // so what follows is the ordinary selection, with the same count, the same cost sentence
+                // and the same confirm. Quiet, like the marker beside it, because a finished date is
+                // still a resting state and this is a way out of it rather than something to act on.
+                if let onReofferDate {
+                    Button(ReachabilityProbeCopy.recheckThisDate) { onReofferDate() }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 11))
+                        .foregroundStyle(OVColor.forest)
+                        .help(ReachabilityProbeCopy.recheckThisDateHelp)
+                }
             }
         }
     }

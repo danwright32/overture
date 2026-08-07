@@ -322,3 +322,61 @@ struct ReachabilityRecheckSettleTests {
                 "the run never reached this show, so the re-check Dan asked for is still outstanding")
     }
 }
+
+// #2268: re-checking a whole night rather than a card at a time. Dan, 2026-08-07: "is there a way to
+// re-check an entire date with multiple events?"
+//
+// The shows that need re-running arrive in batches (one producing company re-derived across a run of
+// shows is roughly 22 rows), so a per-card-only route serves the bulk case worst, which is backwards.
+//
+// This decides WHICH shows a date-level re-check marks. It marks rather than runs, so what happens next
+// is the ordinary selection: the date's tick box comes back, the bar states the count and the cost from
+// the same candidate list as always, and the confirm Dan approves is the one that already exists. No
+// second cost sentence, and no second way to spend money.
+@MainActor
+@Suite("Re-checking a whole date (#2268)")
+struct RecheckAWholeDateTests {
+
+    private let probedAt = Date(timeIntervalSince1970: 1_780_000_000)
+    private var justAfter: Date { probedAt.addingTimeInterval(100) }
+
+    private func item(_ key: String, status: ReviewStatus = .new, booked: Bool = false,
+                      sent: Bool = false, probed: Bool = true, date: String = "2026-09-12") -> QueueItem {
+        var i = QueueItem(id: key, groupName: key, discipline: "music", venue: "Weill Recital Hall",
+                          performanceDate: date, sourceListingURL: nil, websiteURL: nil,
+                          priorRelationship: "none", production: "self", profile: "strong",
+                          coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
+                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                          status: status)
+        if booked { i.performanceStatus = .booked }
+        if sent { i.sentAt = probedAt }
+        if probed { i.reachabilityProbedAt = probedAt }
+        return i
+    }
+
+    // The whole point: a night whose shows are all answered can be re-offered in one action.
+    @Test func everyAnsweredShowOnTheDateIsMarked() {
+        let keys = QueueModel.keysToReofferForRecheck([item("a"), item("b")], now: justAfter,
+                                                       today: "2026-09-01")
+        #expect(Set(keys) == ["a", "b"])
+    }
+
+    // The candidacy rule still holds, exactly as it does for a per-card press. A date-level action must
+    // not quietly widen what a check will spend money on: the count Dan approves has to be the count that
+    // runs (L16).
+    @Test func showsPastDecidingAreNeverMarked() {
+        let keys = QueueModel.keysToReofferForRecheck(
+            [item("a"), item("booked", booked: true), item("sent", sent: true),
+             item("kept", status: .queued)],
+            now: justAfter, today: "2026-09-01")
+        #expect(Set(keys) == ["a"])
+    }
+
+    // A show with no answer is already a candidate and already in the date's count. Marking it too would
+    // be a no-op that makes the action look bigger than it is.
+    @Test func aShowWithNoAnswerIsNotMarkedAgain() {
+        let keys = QueueModel.keysToReofferForRecheck([item("answered"), item("fresh", probed: false)],
+                                                       now: justAfter, today: "2026-09-01")
+        #expect(Set(keys) == ["answered"])
+    }
+}
