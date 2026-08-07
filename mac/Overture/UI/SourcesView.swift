@@ -530,9 +530,14 @@ struct SourcesView: View {
                 }
             }
         } else {
+            // #1588: gold only where the state is actually costing shows. A row filing its shows under the
+            // org name has something worth saying and has lost nothing, and gold on it would spend the
+            // colour Dan reserves for what he must act on.
+            let unnamed = TicketingFeedRead.whileUnnamed(source)
             HStack(alignment: .firstTextBaseline, spacing: OVSpacing.xs) {
-                Text(VenueNameCopy.promptWhenUnset)
-                    .font(.system(size: 11)).foregroundStyle(OVColor.gold)
+                Text(VenueNameCopy.promptWhenUnset(unnamed))
+                    .font(.system(size: 11))
+                    .foregroundStyle(unnamed.isCostingShows ? OVColor.gold : OVColor.inkSoft)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer()
                 OVCapsuleButton(label: VenueNameCopy.add, tint: OVColor.forest) {
@@ -688,10 +693,12 @@ struct SourcesView: View {
             // VenueTix one and asserted that "every other source's shows carry their own place", which was
             // false on 342 of 498 untriaged shows and left SoHo Playhouse, a single-venue OvationTix feed,
             // with no address box at all.
-            if TicketingFeedRead.readsATicketingFeed(source) {
+            // #1588: ONE predicate for both asks. They were spelled out separately, and the venue-name half
+            // read a field nothing in the live store ever carried, so the row asked where a room is while
+            // never asking which room it is. The two questions are halves of one answer and cannot appear
+            // one without the other.
+            if TicketingFeedRead.needsVenueName(source) {
                 venueNameControl(source)
-            }
-            if source.kind.isSingleVenue || TicketingFeedRead.readsATicketingFeed(source) {
                 venueLocationControl(source, hasSurfacedShows: tally.found > 0)
             }
 
@@ -927,7 +934,16 @@ enum VenueLocationCopy {
 enum VenueNameCopy {
     static let placeholder = "The room its shows play in"
 
-    static let promptWhenUnset = "Its shows are sold through a ticketing feed that names no room, so they stay out of the queue."
+    // #1588: what is happening to the shows RIGHT NOW, which differs by how this row is read. Neither line
+    // tells Dan to do anything: the control beside it is what says that (#843).
+    static func promptWhenUnset(_ state: TicketingFeedRead.UnnamedVenue) -> String {
+        switch state {
+        case .keptOutOfTheQueue:
+            return "Its shows are sold through a ticketing feed that names no room, so they stay out of the queue."
+        case .filedUnder(let org):
+            return "Nothing on this feed names a room, so its shows are filed under \(org)."
+        }
+    }
 
     static let add = "Name the venue"
     static let edit = "Edit"
