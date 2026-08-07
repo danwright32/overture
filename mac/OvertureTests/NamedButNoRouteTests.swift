@@ -109,6 +109,11 @@ struct NamedButNoRouteTests {
 
     @Test func theCardSaysWhoWasFoundRatherThanThatNothingWas() {
         let line = ReachabilityCopy.emptyAnswerBadge(.namedButNoRoute)
+        // Dan's own wording, chosen 2026-08-07 from four rendered against the lines it sits beside.
+        // Pinned exactly, because a decision recorded only in a conversation is one that comes back:
+        // the next person to touch this file has no way to know the sentence was picked rather than
+        // written, and would reword it freely.
+        #expect(line == "Only names, no way to reach them")
         #expect(line.isEmpty == false)
         #expect(line != ReachabilityCopy.emptyAnswerBadge(.nothingPublished))
         #expect(line != ReachabilityCopy.emptyAnswerBadge(.noOneIdentified))

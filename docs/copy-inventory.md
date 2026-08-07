@@ -733,8 +733,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/LeadIntakeModel.swift`
 "Found by Overture for this show, never written to"
     `Domain/ManualPrepPrefill.swift`
-"Found who, not how to reach them"
-    `Domain/Reachability.swift`
 "Freshly found events waiting for you to keep or dismiss."
     `Domain/AgentRoster.swift`
 "From Downbeat"
@@ -1190,6 +1188,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Only a press address"
     `Domain/Reachability.swift`
 "Only a social profile"
+    `Domain/Reachability.swift`
+"Only names, no way to reach them"
     `Domain/Reachability.swift`
 "Only the venue's address"
     `Domain/Reachability.swift`

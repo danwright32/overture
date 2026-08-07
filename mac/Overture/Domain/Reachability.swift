@@ -394,7 +394,11 @@ enum ReachabilityCopy {
         case .onlySocialProfile: return "Only a social profile"
         // #2259: says the check got somewhere, and where it stopped. Deliberately not the words "no
         // email", which would throw away the part Dan can use: it came back with names.
-        case .namedButNoRoute: return "Found who, not how to reach them"
+        //
+        // Dan's wording, chosen 2026-08-07 from four rendered against the lines it sits beside. It leads
+        // with "Only", matching three of the five, so the set reads as one family rather than as one
+        // sentence dropped among labels.
+        case .namedButNoRoute: return "Only names, no way to reach them"
         case .nothingPublished, nil: return noEmailFoundBadge
         }
     }
