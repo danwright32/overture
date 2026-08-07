@@ -159,6 +159,13 @@ enum Reachability {
         // The check looked and this show's people genuinely publish no address anywhere. This is the one
         // case where today's "No email found" was always true, so it keeps that wording exactly.
         case nothingPublished = "nothing_published"
+        // #2265: the check reached a social profile and stopped there. Its own value, and deliberately
+        // NOT a shade of `nothingPublished`, whose wording is documented above as the one case that was
+        // always true: a run that found a doorway and did not open it has not established that nothing is
+        // published, and on 2026-08-07 the address really was one fetch away
+        // (ryan@ryanjamesmonroe.com, published, no login). Collapsing the two made that documentation
+        // false and hid the state where a re-check is most likely to succeed.
+        case onlySocialProfile = "only_social_profile"
         // #1817: the check could not work out WHO to write to. No producing organisation was named, and no
         // performer could be named either (the listing page could not be read, or it named nobody), so the
         // search for an address never had a target and never really ran.
@@ -237,6 +244,23 @@ enum Reachability {
     // #1626 made it internal rather than adding a second list: the question "is this link a social page
     // behind a login" is now asked in two places (the free heuristic here, and whether a contact form is
     // one Dan will actually use), and two lists would eventually disagree about Instagram.
+    // #2265: every route this run found is a social profile and nothing else. That is the shape the
+    // 2026-08-07 run produced on 2 of its 3 shows, and it is checkable from what it EMITTED without
+    // trusting its account of what it read (#2269).
+    //
+    // Every one of them, not merely one: a run that also found a real address or a form on the target's
+    // own site did reach somewhere Dan can use, and labelling that a social dead end would be false. An
+    // empty list is not this case either; that is the run coming back with nothing, which has its own
+    // reason and its own branch.
+    static func onlySocialRoutes(_ contacts: [PrepContact]) -> Bool {
+        guard !contacts.isEmpty else { return false }
+        return contacts.allSatisfy { contact in
+            let hasEmail = !(contact.email ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            guard !hasEmail, let form = contact.formUrl else { return false }
+            return isSocialOnly(form)
+        }
+    }
+
     static func isSocialOnly(_ urlString: String) -> Bool {
         guard let url = URL(string: urlString.trimmingCharacters(in: .whitespacesAndNewlines)) else { return false }
         return LeadIntake.knownUnreadableHost(url) != nil
@@ -305,6 +329,9 @@ enum ReachabilityCopy {
         // opening the same way, one under the other, is the #843 shape. This one is about the CHECK
         // coming back with nobody to research, which is the thing the other line does not say.
         case .noOneIdentified: return "Nobody found to write to"
+        // #2265: says where the check STOPPED, which is a different fact from what it failed to find,
+        // and the one Dan can act on: it is the state most likely to change on a re-check.
+        case .onlySocialProfile: return "Only a social profile"
         case .nothingPublished, nil: return noEmailFoundBadge
         }
     }
@@ -317,6 +344,15 @@ enum ReachabilityCopy {
             return "A reachability check found an address for this show, but only a press or PR desk, which is the wrong department to pitch photography to. You can still keep it and add a contact by hand."
         case .noOneIdentified:
             return "The check couldn't name anyone to research for this show, so it never got as far as looking for an address. If you know who puts this on, add a contact by hand and it's back in play."
+        // #2265: says what it DID reach and what that is worth, because the difference matters here.
+        // A social profile is a login wall rather than an address, but it also means somebody was found,
+        // which is a better starting point than nothing and often means an address exists elsewhere.
+        // Deliberately NOT phrased like `hardToReachHelp`, which also mentions a social page behind a
+        // login. That one is about the LISTING Overture was given before any check ran; this is about
+        // where a check that really ran ended up, and the two would otherwise read as one sentence twice
+        // (#843). What only this one can say is the last clause: an address may well exist elsewhere.
+        case .onlySocialProfile:
+            return "A check ran and got no further than this act's social profile, which needs a login. Their own site may still publish an address, so of all the shows with no contact this is the one most likely to give one up on another check."
         case .nothingPublished, nil:
             return noEmailFoundHelp
         }

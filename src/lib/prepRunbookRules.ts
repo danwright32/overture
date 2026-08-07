@@ -82,6 +82,19 @@ export const RUNBOOK_RULES: RunbookRule[] = [
   { name: "named-performer-never-dropped", pattern: /Dropping a named\s+performer\s+is the failure/i },
   { name: "high-confidence-only-when-read", pattern: /allowed ONLY for an\s+address actually READ from a real page/i },
   { name: "no-pattern-guessed-high", pattern: /NEVER emit a pattern-guessed address/i },
+  // #2265: a social profile stopped the waterfall dead on 2 of the 3 shows in the 2026-08-07 run, while
+  // a freely published address sat one fetch away. Two rules, and they fail in different directions.
+  //
+  // Dropping the canonical-domain rule loses the case that was actually measured: search returned
+  // Facebook, Apple Music and LinkedIn for the literal string "ryanjamesmonroe.com", so search was
+  // never going to reach the site, and one direct fetch did (`ryan@ryanjamesmonroe.com`, 200 on the
+  // first try). Dropping the pointer rule lets a DM keep satisfying step 3, which is what made the run
+  // stop looking at all.
+  { name: "try-the-canonical-domain", pattern: /fetch the canonical guess directly/i },
+  { name: "social-profile-is-a-pointer", pattern: /a social profile is a pointer, not a destination/i },
+  // #2269: and neither rule means anything if the run reports links it never received. Measured
+  // 2026-08-07: it summarised a profile as carrying "and 2 more" links when the fetched page held one.
+  { name: "only-what-the-fetch-returned", pattern: /only what the fetch actually returned counts/i },
   { name: "partial-performer-results-ok", pattern: /Partial results are fine/i },
   // #1597: a grouped item researches one producer and answers for several shows. Two halves must hold,
   // and each fails in a different direction. Dropping the "emit every key" rule silently reverts the

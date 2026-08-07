@@ -343,9 +343,35 @@ in order, stop at the first that works:
    an explicit name actually read from a real page counts, never inferred or pattern-guessed.
    This never changes the contact's `method` or `confidence` (still `generic_inbox` / `medium`)
    and never applies to a `form_or_dm` contact.
-3. **The target's contact form / Instagram DM** when it publishes no email. Record it
-   as `method: "form_or_dm"` with the form URL in `formUrl` (the app surfaces it as a
-   tappable link). This outranks any venue inbox.
+   **Before you settle for a form or a DM, two more cheap moves (#2265).** Both were measured on the
+   2026-08-07 run, where 2 of 3 shows reported "no email" while a freely published address sat one
+   fetch away.
+
+   **(a) A social profile is a pointer, not a destination.** Reaching an Instagram, Facebook or X
+   profile does NOT satisfy step 3. If the page you fetched carries an outbound link to the target's
+   own site, or to a link hub (Linktree, Beacons, Carrd, Milkshake), OPEN it and run steps 1 and 2
+   there. That is where a small independent act publishes its address, and you have already paid for
+   the fetch that revealed the link.
+
+   **(b) When search has not surfaced the target's own site, fetch the canonical guess directly**,
+   once: `firstnamelastname.com` for a person, the organisation's name for an organisation. Search is
+   not a reliable route to a small act's own site: on 2026-08-07 the literal string
+   `"ryanjamesmonroe.com"` was searched and returned Facebook, Apple Music, SoundCloud and LinkedIn,
+   while one direct fetch of that domain returned the site and its published address.
+
+   This does NOT relax the strict verification rule. An address READ off a page a fetch returned is
+   read, so it qualifies as `high` with `sourceUrl` set. A guessed DOMAIN is not a guessed ADDRESS:
+   the domain is verified the moment it resolves and the page identifies the right target. If it does
+   not resolve, or the page is somebody else, that is the end of it, and you record nothing.
+
+   **And only what the fetch actually returned counts.** Describe links, addresses and pages from the
+   bytes you received, never from what such a page would usually show a person. On 2026-08-07 a run
+   reported a profile carrying "and 2 more" links when the page it was given held exactly one; that is
+   a fabricated observation, and every rule above is worthless on top of one (#2269).
+
+3. **The target's contact form / Instagram DM** when it publishes no email, and only after (a) and
+   (b) above have come back with nothing. Record it as `method: "form_or_dm"` with the form URL in
+   `formUrl` (the app surfaces it as a tappable link). This outranks any venue inbox.
 4. **A genuine presenting org** (the presenter named for the show, NOT the venue). Find its
    contact the SAME way, running steps 1-3 above once more with the presenting org itself as
    the target (so it too can carry a named decision-maker, a generic inbox with a named
