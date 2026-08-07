@@ -67,11 +67,19 @@ enum OutcomePatterns {
         prospects.map { p in
             // Phase F: with the A3 rollup gone, a reply lives on the contact, not the lead outcome.
             // Count an otherwise-unresolved lead as replied when a contact wrote back.
-            let effectiveOutcome: Outcome =
-                (p.outcome == .noResponse && p.recipients.contains(where: \.replied)) ? .replied : p.outcome
+            // #2226: booked FIRST, and asked of the show rather than of its `outcome` field. The only
+            // way Dan can record a booking by hand is the Mark… menu, which writes the CONTACT, so the
+            // show's own outcome stayed `noResponse` with a reply on a contact and the line below turned
+            // every hand-recorded booking into a reply. That is every booking there has been, inside the
+            // report whose headline number is the booking rate.
+            let effectiveOutcome: Outcome = p.isBooked ? .booked
+                : (p.outcome == .noResponse && p.recipients.contains(where: \.replied)) ? .replied : p.outcome
             return OutcomeSample(wasContacted: p.wasProvablyContacted, outcome: effectiveOutcome,
                                  dimension: dimensionValue(of: p, by: dimension),
-                                 outcomeSource: p.outcomeSourceRaw.flatMap(OutcomeSource.init))
+                                 // And the source from wherever the booking was recorded, or the auto and
+                                 // manual halves stop summing to the total they split.
+                                 outcomeSource: p.isBooked ? p.bookingSource
+                                     : p.outcomeSourceRaw.flatMap(OutcomeSource.init))
         }
     }
 

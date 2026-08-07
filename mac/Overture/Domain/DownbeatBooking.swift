@@ -71,7 +71,19 @@ enum DownbeatBooking {
         for p in sorted {
             if p.bookingManualOutcome { continue }
             if p.bookingIsBooked { continue }
-            if p.bookingPriorRelationshipBooked { continue }
+            // #2223: an organisation that was ALREADY a client when this went out used to be skipped here,
+            // before `classify` was ever called. That conflated two different facts: "this organisation
+            // was already a client" and "this booking is not new". A booking for THIS show's date, created
+            // after the pitch went out, is a new booking whatever the history.
+            //
+            // The causation the skip was reaching for is enforced one level down, per booking:
+            // `BookingMatch.classify` requires `booking.startDate >= sendDay` for an exact match and
+            // demotes anything earlier to `.possible`. So it was redundant against a real booking and
+            // total against everything else, which closed the loop off for the segment most likely to
+            // book. Measured 2026-08-06 on the first show that actually booked (Prospect 645, Every Voice
+            // Choirs, matched on the client id): every other guard would have passed.
+            //
+            // What it WAS doing usefully is suppressed where it belongs, in the `.none` branch below.
             switch BookingMatch.classify(entity: p, bookings: bookings) {
             case .exact(let booking):
                 // Dan rejected this exact booking as a wrong match (#203), or rejected a legacy
@@ -100,6 +112,12 @@ enum DownbeatBooking {
                 // Soft signal: don't re-suggest if dismissed
                 if !p.bookingSuggestionDismissed { p.bookingSuggested = true }
             case .none:
+                // #2223: no booking matched, so all this fallback can say is "this organisation is in the
+                // client list". On a show pitched to an org that was ALREADY a client that is not news, it
+                // is the thing the row already records, and it would fire on every past-client pitch
+                // forever. That noise is the real work the org-level skip above was doing, and this is
+                // where it belongs: it suppresses a guess, not a matched booking.
+                if p.bookingPriorRelationshipBooked { break }
                 // Fall back to old client-list org match, downgraded to suggestion
                 let orgMatch = clients.contains { client in
                     GroupNameMatch.isConfident(client.displayName, p.groupName)

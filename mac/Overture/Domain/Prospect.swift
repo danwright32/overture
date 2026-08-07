@@ -949,6 +949,27 @@ final class Prospect {
     // Phase F (#424): the show's status derived from its contacts (Booked > Active > Lost > New).
     var performanceStatus: PerformanceStatus { PerformanceStatus.of(self) }
 
+    // #2225/#2226: the ONE place that answers "has this show booked".
+    //
+    // The fact can be written at either level and both writers are real: auto-detection sets the show's
+    // own `outcome`, and the Mark… menu, which is the only way Dan can record a booking by hand, sets a
+    // CONTACT's resolution. Two readers each picked a different level and each looked right on its own,
+    // which is L83 exactly. The reached-out queue read the contact and kept counting a booked show down
+    // to a nudge; the outcome report read the show and counted every hand-recorded booking as a reply.
+    //
+    // Derived rather than mirrored, so nothing has to remember to write it twice, and `performanceStatus`
+    // already folds both levels for the card.
+    var isBooked: Bool { performanceStatus == .booked }
+
+    // Who decided it, wherever it was recorded, so the auto/manual split in the report keeps summing.
+    // A booking that names no source is counted and left unattributed, exactly as a legacy row is: a
+    // guessed attribution would silently move the number the split exists to keep honest.
+    var bookingSource: OutcomeSource? {
+        if outcome == .booked, let raw = outcomeSourceRaw { return OutcomeSource(rawValue: raw) }
+        return recipients.first { $0.resolution == .booked }?
+            .outcomeSourceRaw.flatMap(OutcomeSource.init)
+    }
+
     // Closed for routine follow-ups/reminders: booked, every contact resolved (derived), or Dan closed
     // the lead by hand / with a closing note (a lead lostSoft/lostHard not yet written through to a
     // contact). A fresh reply still surfaces independently via `hasUnhandledReply`.
