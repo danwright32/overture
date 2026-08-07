@@ -1046,7 +1046,12 @@ struct QueueView: View {
                 // next touch is due, and it renders the future case too. ReachedOutRowChrome owns the
                 // rule so it is testable and so #2168's guard can see the label is covered.
                 if ReachedOutRowChrome.showsTimingLabel(replyOffered: replyOffered) {
-                    Text(ReachedOutQueue.timingLabel(next: pair.next, now: now, channel: r.outreachChannel))
+                    // #2169: a dated form pitch names the NIGHT here ("tonight", "3 days ago") instead of
+                    // counting down to a send that will never happen. eventDay/today are threaded in
+                    // rather than read inside, so the label is decided from the same date the row's clock
+                    // is set to and the two cannot drift.
+                    Text(ReachedOutQueue.timingLabel(next: pair.next, now: now, channel: r.outreachChannel,
+                                                     eventDay: p.performanceDate, today: today))
                         .font(OVType.meta).foregroundStyle(dueNow ? OVColor.rust : OVColor.inkSoft)
                 }
                 // #2128: somebody is waiting on an answer, which is the actual job on this row, so it
@@ -1071,6 +1076,9 @@ struct QueueView: View {
                         // #2154: no Confirm here. The row cannot show what they wrote, so confirming from
                         // it is Dan endorsing a reading he has not seen. It is offered on the reply
                         // screen, beside the message it is about.
+                        // #2169: on a form row the slot above names the night rather than repeating this
+                        // control's own instruction, so the urgency rides here or it is lost.
+                        accent: ReachedOutRowChrome.stateControlAccent(isDue: dueNow),
                         offersConfirm: false,
                         onSet: { state in
                             ProspectMutations.setRecipientConversationState(QueueItem(p), r.id, state,

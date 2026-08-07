@@ -32,6 +32,22 @@ enum FormOutreachCopy {
     // forgotten. Caught by reading the rendered line cold, which is the only thing that catches it.
     static let elapsedWorthSaying: TimeInterval = 3_600
 
+    // #2169: WHERE the pitch went, for the slot that names who the next email reaches on every other row.
+    //
+    // Dan, reading the Alex Syiek row cold: "why does it say 'no contact' and 'sent through their form'".
+    // The slot fell back to "no contact" because a form pitch has no address, while the record it renders
+    // from was holding the form URL the whole time. A line may claim only what its check measured, and
+    // what was measured is "no email address", not "no contact" (L11).
+    //
+    // The host alone, without the scheme, the leading www or the path: "alexsyiek.com" reads as a place
+    // Dan recognises, where the full URL reads as a link he has to parse. Nil rather than a guess when
+    // there is no usable host, so the caller decides what to say instead of being handed a fragment.
+    static func routeLine(formURL: String?) -> String? {
+        guard let formURL, !formURL.isEmpty,
+              let host = URL(string: formURL)?.host(), !host.isEmpty else { return nil }
+        return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+    }
+
     static func awaitingQuestion(startedAt: Date, now: Date) -> String {
         guard now.timeIntervalSince(startedAt) >= elapsedWorthSaying else { return "Did you send it?" }
         let f = RelativeDateTimeFormatter()

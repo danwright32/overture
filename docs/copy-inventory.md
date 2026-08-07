@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1064 sentences**, from 373 source files.
+Every sentence Overture can say to Dan: **1066 sentences**, from 373 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -2014,6 +2014,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ShootHistory.swift`
 "Zankel Hall"
     `Domain/VenueParser.swift`
+"\(-days) days ago"
+    `Domain/ReachedOutQueue.swift`
 "\(Plural.count(count, "new lead")) while you were away"
     `UI/QueueView+Model.swift`
 "\(Plural.count(count, "show")) \(Plural.word(count, "is", "are")) back in \(undoStageWord(for: priorStatuses))"
@@ -2281,6 +2283,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReachabilityRunSummary.swift`
 "couldn't save, try again"
     `Domain/PrepRunSummary.swift`
+"date unknown"
+    `Domain/ReachedOutQueue.swift`
 "delivery failed"
     `Domain/BounceDetection.swift`
 "drafter used this shape on \(Int((rate * 100).rounded()))% of sends"
