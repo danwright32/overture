@@ -1,0 +1,93 @@
+{
+  "name": "social-profile-is-not-the-destination",
+  "rule": "A social profile is a pointer, not a destination (#2265). Reaching one does not satisfy the form-or-DM step: the run must follow what the profile links to, and when search has not surfaced the act's own site it must fetch the canonical guess directly before concluding nothing is published. An address read off a page a fetch returned is READ, so it qualifies as high with a sourceUrl; a guessed DOMAIN is not a guessed ADDRESS.",
+  "input": {
+    "naturalKey": "an-evening-of-songs|2026-08-11|the-supper-room",
+    "groupName": "An Evening of Songs",
+    "venue": "The Supper Room",
+    "performanceDate": "2026-08-11",
+    "discipline": "music",
+    "production": "self",
+    "priorRelationship": "none",
+    "onlyTheActIsNamed": true,
+    "sourceListingURL": "https://tickets.example/showdetails/aBc123/dEf456",
+    "showListing": {
+      "status": "read",
+      "text": "An Evening of Songs Ryan Example Monroe returns to The Supper Room for one night. Doors 6:30pm, show 7pm. 570 Example Avenue, New York, NY. Tickets from $35 plus a two item minimum. Powered by an example ticketing host"
+    }
+  },
+  "sources": [
+    {
+      "label": "Web search: Ryan Example Monroe singer official website",
+      "url": "search://ryan-example-monroe-official-website",
+      "content": "Results: 1. Ryan Example Monroe on Facebook. 2. Ryan Example Monroe on Apple Music. 3. Ryan Example Monroe on SoundCloud. 4. Ryan Example Monroe | LinkedIn. 5. The Supper Room: An Evening of Songs, Aug 11."
+    },
+    {
+      "label": "Web search: \"ryan-example-monroe.example\" (the site's own domain, searched literally)",
+      "url": "search://ryan-example-monroe-example-domain",
+      "content": "Results: 1. Ryan Example Monroe on Facebook. 2. Ryan Example Monroe on Apple Music. 3. Ryan Example Monroe on SoundCloud. 4. Ryan Example Monroe | LinkedIn."
+    },
+    {
+      "label": "Instagram profile (fetched, 200)",
+      "url": "https://www.instagram.example/ryanexamplemonroe/",
+      "content": "Ryan Example Monroe. Singer. New York, NY. thesupperroom.example/events/an-evening-of-songs. Log in to see photos and videos from friends and discover other accounts you'll love. Sign up. Log in."
+    },
+    {
+      "label": "The Supper Room event page (where the profile's only link goes)",
+      "url": "https://thesupperroom.example/events/an-evening-of-songs",
+      "content": "An Evening of Songs. Ryan Example Monroe. August 11, 7pm. Tickets from $35. The Supper Room, 570 Example Avenue. Box office: tickets@thesupperroom.example. Private events: events@thesupperroom.example."
+    },
+    {
+      "label": "The act's own site, at the canonical domain (fetched directly, 200)",
+      "url": "https://ryan-example-monroe.example/",
+      "content": "Ryan Example Monroe. Singer. Home. About. Calendar. Contact. Upcoming: An Evening of Songs, The Supper Room, August 11."
+    },
+    {
+      "label": "The act's own contact page",
+      "url": "https://ryan-example-monroe.example/contact",
+      "content": "Contact. For bookings and general enquiries: ryan@ryan-example-monroe.example. Press and management: lindsay@ryan-example-monroe.example."
+    }
+  ],
+  "expected": {
+    "description": "Measured from the real 2026-08-07 run and re-verified the same day (L48). Search does not surface this act's own site, not even when its exact domain is the query, and the ONLY outbound link its social profile carries goes to the venue. So the two routes that exist are: follow the profile's link (which lands on the venue, a dead end by the host-venue rule) or fetch the canonical domain directly (which returns the site, and its contact page publishes the address). A run that stops at the profile and reports a DM has found a doorway and not opened it, which is the failure this fixture exists to catch. The venue's two inboxes are refused as they would be anywhere.",
+    "requiredEmails": [
+      "ryan@ryan-example-monroe.example"
+    ],
+    "requireSomeContact": true,
+    "forbiddenEmails": [
+      "tickets@thesupperroom.example",
+      "events@thesupperroom.example"
+    ],
+    "forbiddenDomains": [
+      "thesupperroom.example",
+      "instagram.example"
+    ],
+    "forbidPresenterProvenance": true,
+    "requirePortfolioLink": true
+  },
+  "sampleCompliantOutput": {
+    "version": 8,
+    "generatedAt": "2026-08-07T00:00:00.000Z",
+    "results": [
+      {
+        "naturalKey": "an-evening-of-songs|2026-08-11|the-supper-room",
+        "showSummary": "A solo singer's one-night cabaret set at a supper club, doors 6:30pm.",
+        "contacts": [
+          {
+            "provenance": "act",
+            "name": "Ryan Example Monroe",
+            "email": "ryan@ryan-example-monroe.example",
+            "method": "named_decision_maker",
+            "confidence": "high",
+            "sourceUrl": "https://ryan-example-monroe.example/contact"
+          }
+        ],
+        "draft": {
+          "subject": "Photographing An Evening of Songs at The Supper Room",
+          "body": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to An Evening of Songs at The Supper Room on August 11. I shoot unobtrusive, no-flash documentary coverage, so the audience doesn't notice me and the performance isn't disturbed. I've been photographing at Carnegie Hall for close to ten years, and you can see my portfolio at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about your photography plans for the night. I look forward to hearing from you.",
+          "variant": "reason-first"
+        }
+      }
+    ]
+  }
+}

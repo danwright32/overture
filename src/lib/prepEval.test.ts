@@ -143,6 +143,44 @@ describe("evaluatePrepResult - universal invariants (always-true runbook rules)"
   });
 });
 
+// #2265: the run reached the act's social profile and stopped, while the address sat on their own site
+// one fetch away. Verified 2026-08-07 against the real case: the site published the address on a plain
+// GET, no login. Scoring "did it surface SOME contact" cannot see that failure, because the run really
+// did surface one, a DM. The only question that separates the two is WHICH address came back.
+describe("evaluatePrepResult - the address that was actually published (#2265)", () => {
+  const expected: PrepEvalExpectation = {
+    description: "the act's own published address, not the social profile it is linked from",
+    requiredEmails: ["ryan@example-performer.example"],
+  };
+
+  it("passes when the run reached the address published on the act's own site", () => {
+    const r = evaluatePrepResult(
+      results([{ name: "Ryan", email: "ryan@example-performer.example", method: "named_decision_maker", confidence: "high", provenance: "performer", sourceUrl: "https://example-performer.example/contact" }]),
+      expected,
+    );
+    expect(r.pass).toBe(true);
+  });
+
+  // The exact shape the 2026-08-07 run produced: a contact, so every count-based check is satisfied,
+  // whose only route is a profile behind a login.
+  it("flags a run that stopped at the social profile", () => {
+    const r = evaluatePrepResult(
+      results([{ name: "Ryan", method: "form_or_dm", confidence: "low", provenance: "performer", formUrl: "https://www.instagram.example/ryan/" }]),
+      expected,
+    );
+    expect(r.pass).toBe(false);
+    expect(r.failures.join(" ")).toMatch(/ryan@example-performer\.example/i);
+  });
+
+  it("is case and whitespace insensitive, since an address read off a page carries neither reliably", () => {
+    const r = evaluatePrepResult(
+      results([{ name: "Ryan", email: "  Ryan@Example-Performer.Example ", method: "named_decision_maker", confidence: "high", provenance: "performer", sourceUrl: "https://example-performer.example/contact" }]),
+      expected,
+    );
+    expect(r.pass).toBe(true);
+  });
+});
+
 describe("evaluatePrepResult - host venue disqualify (#368)", () => {
   const expected: PrepEvalExpectation = {
     description: "never the host venue",
@@ -535,6 +573,7 @@ describe("prep-eval fixtures", () => {
       "returning-client-warm-lead",
       "season-calendar-describes-no-show",
       "self-produced-duo-both-performers",
+      "social-profile-is-not-the-destination",
       "solo-artist-cabaret-not-an-organisation",
       "stale-site-misnamed-co-performer",
       "venue-history-band-says-he-knows-the-room",

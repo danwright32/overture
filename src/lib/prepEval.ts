@@ -43,6 +43,13 @@ export interface PrepEvalExpectation {
   requireAlreadyCoveredNote?: boolean;
   /** The result must carry at least one contact. */
   requireSomeContact?: boolean;
+  /**
+   * #2265: these addresses must actually come back. The only expectation that can see a run which
+   * stopped one hop short: it really did surface a contact, so every count-based check passes, and the
+   * contact is a social DM while the published address sat on the act's own site. What separates the
+   * two answers is WHICH address came back, so that is what this asks.
+   */
+  requiredEmails?: string[];
   /** Every performer contact must carry a second-person overrideBody (#634). */
   performerOverrideBodyRequired?: boolean;
   /**
@@ -431,6 +438,23 @@ function checkExpectation(entry: ResultEntry, allContacts: Contact[], exp: PrepE
 
   if (exp.requireSomeContact && (entry.contacts ?? []).length === 0) {
     failures.push(`at least one contact was expected but none was surfaced`);
+  }
+
+  // #2265: normalized on both sides. An address read off a page carries whatever case and padding that
+  // page had, and failing a correct answer for a capital letter would make the fixture useless.
+  if (exp.requiredEmails?.length) {
+    const found = new Set(
+      (entry.contacts ?? [])
+        .map((c) => (c.email ?? "").trim().toLowerCase())
+        .filter((e) => e.length > 0),
+    );
+    for (const wanted of exp.requiredEmails) {
+      if (!found.has(wanted.trim().toLowerCase())) {
+        failures.push(
+          `expected the published address ${wanted}, which the act's own site carries, but it was not surfaced (#2265)`,
+        );
+      }
+    }
   }
 
   if (exp.requirePortfolioLink) {
