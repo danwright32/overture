@@ -18,6 +18,13 @@ enum ProspectRowFactory {
                     // and passes it down. Deliberately no default: a default would let a call site ship a
                     // silently wrong answer, and being wrong here disables Send on a connected account.
                     gmailConnected: Bool,
+                    // #2267: pressing "Check again" spends money, so the caller raises the same
+                    // confirmation the date selection uses and starts the run. Optional: a surface with
+                    // no run machinery (Archive) simply passes nothing and the control marks the show
+                    // for the next check instead, which is what #2261 shipped.
+                    onRecheckNow: ((QueueItem) -> Void)? = nil,
+                    prepRunning: Bool = false,
+                    probeRunning: Bool = false,
                     // #1414: optional so a surface that does not offer undo (and any future caller)
                     // simply passes nothing rather than every call site growing a parameter it ignores.
                     undoStack: QueueUndoStack? = nil,
@@ -118,7 +125,16 @@ enum ProspectRowFactory {
             },
             onRename: { name in ProspectMutations.renameGroup(item, to: name, prospects: prospects, context: context, feedback: feedback) },
             onResetGroupName: { ProspectMutations.resetGroupName(item, prospects: prospects, context: context, feedback: feedback) },
-            onRequestRecheck: { ProspectMutations.requestReachabilityRecheck(item, prospects: prospects, context: context, feedback: feedback) },
+            // #2267: mark it either way, so the request survives a run that dies before reaching this
+            // show, and only THEN hand it to the caller to confirm and start. Marking first is what makes
+            // the card show "researching" rather than snapping back to an unpressed control.
+            onRequestRecheck: {
+                ProspectMutations.requestReachabilityRecheck(item, prospects: prospects,
+                                                             context: context, feedback: feedback)
+                onRecheckNow?(item)
+            },
+            prepRunning: prepRunning,
+            probeRunning: probeRunning,
             onConfirmBooking: { ProspectMutations.confirmBooking(item, prospects: prospects, context: context, feedback: feedback) },
             onDismissBookingSuggestion: { ProspectMutations.dismissBookingSuggestion(item, prospects: prospects, context: context, feedback: feedback) },
             onRejectBooking: { ProspectMutations.rejectBooking(item, prospects: prospects, context: context, feedback: feedback) },

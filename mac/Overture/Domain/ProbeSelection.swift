@@ -69,6 +69,20 @@ enum ProbeSelection {
         var spansSeveralRounds: Bool { researchCount > maxConcurrentLookups }
     }
 
+    // #2267: the one-show re-check Dan starts from a card. Its own factory rather than a contrived call
+    // into `summarize`, because the date framing does not apply (there is no selection and no producer
+    // amortisation to compute across it), but the COST SENTENCE must be the same one the date confirm
+    // uses, or he would meet two different accounts of what one lookup costs.
+    //
+    // `previouslyMissed` is 1 when an earlier check ran over this show and came home with nothing, which
+    // is exactly the sentence that could change his mind about spending again.
+    static func summarizeOneShowRecheck(previouslyMissed: Bool) -> Summary {
+        Summary(dateCount: 1, showCount: 1, researchCount: 1, organisationCount: 0,
+                performerHuntCount: 0, alreadyAnsweredCount: 0,
+                previouslyMissedCount: previouslyMissed ? 1 : 0,
+                estimatedSeconds: measuredSecondsPerLookup)
+    }
+
     // `candidateKeys` is what the date control already computes: the still-open, not-recently-answered
     // shows on the selected dates. `answeredKeys` is the rest of the selection, carried separately so
     // the confirm can say plainly that they cost nothing rather than silently omitting them (a count
@@ -172,6 +186,19 @@ enum ProbeSelectionCopy {
     // drift and Dan would meet two subtly different versions of one question.
     static func multiDateTitle(_ s: ProbeSelection.Summary) -> String {
         ReachabilityProbeCopy.confirmTitle(count: s.showCount)
+    }
+
+    // #2267: the one-show version. Says what it is doing and what it costs, in that order, using the SAME
+    // cost sentence as the date confirm. It deliberately does not repeat what the buttons say, and it does
+    // not mention blocking other runs: one lookup is a single round, which is the case #1765 decided was
+    // not worth a sentence.
+    static func oneShowRecheckMessage(_ s: ProbeSelection.Summary) -> String {
+        var parts = ["This looks up a real contact for this one show, even though it already has an answer."]
+        parts.append(ProbeSelectionCopy.costLine(s))
+        if s.previouslyMissedCount > 0 {
+            parts.append("A check has already run over this show once and never got an answer for it.")
+        }
+        return parts.joined(separator: "\n\n")
     }
 
     static func multiDateMessage(_ s: ProbeSelection.Summary) -> String {

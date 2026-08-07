@@ -101,17 +101,27 @@ enum Reachability {
         case notOffered
         /// Frozen on an answer, and Dan can ask for it to be run again.
         case offer
-        /// He has asked. L44: the press gets its own state the moment it is accepted, so the control
-        /// stops offering itself rather than looking unpressed while the work is already queued.
+        /// #2267: he pressed and the check is under way for THIS show. Its own state, with its own
+        /// elapsed time on screen, because the run takes about two and a half minutes and a control that
+        /// still looked pressable would get pressed again (L44).
+        case running
+        /// He asked and nothing is running. Either the run has not been started yet, or it ended without
+        /// reaching this show. Deliberately the SAME state for both: from the row's point of view the
+        /// question is outstanding and the answer is to try again, and claiming a run is in flight when
+        /// none is would be a spinner over a dead run, which is the exact thing the global rule forbids.
         case requested
     }
 
     static func recheckState(probedAt: Date?, hasInheritedAnswer: Bool,
-                             recheckRequestedAt: Date?, now: Date) -> RecheckState {
+                             recheckRequestedAt: Date?, now: Date,
+                             checkIsRunning: Bool = false) -> RecheckState {
         // Asked first, and deliberately without reference to the answer underneath. A request made just
         // before the clock released the answer must keep reading as acknowledged rather than flickering
         // back to an unpressed-looking control the moment the window expires.
-        if recheckRequestedAt != nil { return .requested }
+        //
+        // #2267: `checkIsRunning` is only ever consulted for a show that HAS an outstanding request, so a
+        // run in flight for other shows never makes every card in the queue claim to be in it.
+        if recheckRequestedAt != nil { return checkIsRunning ? .running : .requested }
         if hasInheritedAnswer { return .offer }
         guard probedAt != nil, !probeIsStale(probedAt: probedAt, now: now) else { return .notOffered }
         return .offer
@@ -281,12 +291,23 @@ enum ReachabilityCopy {
     // might want it (the check has got better since) is his own knowledge, not a sentence the row repeats
     // on every answered show.
     static let checkAgain = "Check again"
+    // #2267: the press runs it, so the help says that plainly and says it costs. Dan asked for exactly
+    // this: "if we can find their own site we should check it without me."
     static let checkAgainHelp =
-        "Research this show's contacts again on the next check, instead of keeping this answer until it's 90 days old. It costs a lookup like any other check."
-    // The acknowledged state. It says what will happen and where, because the run itself is started from
-    // the date's own control and a line saying only "requested" would leave him waiting for something
-    // that needs one more press.
-    static let recheckQueued = "Will be researched again once you run the check for this date."
+        "Research this show's contacts again now, instead of keeping this answer until it's 90 days old. It costs one lookup, and you'll see what it will spend before it starts."
+    // Why the control is greyed. Names the reason rather than leaving a dead button, since the run it is
+    // waiting on is one Dan started himself and can see elsewhere on screen.
+    static let checkAgainBusyHelp =
+        "Another run is going. This can start once that finishes."
+    static let recheckRunning = "Researching this show again"
+    // Asked for, and nothing running: not started yet, or a run ended before reaching this show. The
+    // sentence says only what is true of both, and the control beside it says what to do.
+    //
+    // NOT "not researched yet", which was the first wording: this line sits directly under a badge naming
+    // what a check already found, so a sentence saying nothing has been researched contradicts the line
+    // above it. What has not happened is the re-run.
+    static let recheckOutstanding = "Waiting to be checked again."
+    static let checkAgainRetry = "Try again"
     static let hardToReachBadge = "Hard to reach"
 
     // #1859: the sentence names the ONE thing that can still produce this badge. It used to offer two
