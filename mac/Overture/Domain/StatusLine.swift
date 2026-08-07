@@ -24,15 +24,20 @@ enum StatusPriority: Int, Comparable, Sendable {
 struct StatusLine: Equatable, Sendable {
     private(set) var text: String?
     private(set) var priority: StatusPriority = .info
+    // #1805: what this message offers to DO, where it offers anything. Carried here rather than inferred
+    // downstream, because only the writer knows what its own sentence is about; `AppNotices` sees a string.
+    private(set) var action: AppNoticeAction? = nil
 
     // The one rule every writer of the status slot goes through. Returns whether the write was applied,
     // so a caller (or a test) can tell a refused informational write apart from one that landed.
     @discardableResult
-    mutating func set(_ newText: String?, priority newPriority: StatusPriority = .info) -> Bool {
+    mutating func set(_ newText: String?, priority newPriority: StatusPriority = .info,
+                      action newAction: AppNoticeAction? = nil) -> Bool {
         // Clearing is always allowed: it is the explicit reset/acknowledgment, not a competing message.
         guard let newText else {
             text = nil
             priority = .info
+            action = nil
             return true
         }
         // Refuse ONLY a strictly lower-priority write over a message already showing: informational copy
@@ -41,6 +46,9 @@ struct StatusLine: Equatable, Sendable {
         if text != nil && newPriority < priority { return false }
         text = newText
         priority = newPriority
+        // #1805: the action belongs to the message that landed. A refused write leaves the previous
+        // message AND its action untouched, so a control can never outlive the sentence it belonged to.
+        action = newAction
         return true
     }
 }

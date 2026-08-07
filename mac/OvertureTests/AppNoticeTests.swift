@@ -92,7 +92,10 @@ struct AppNoticePlacementGuardTests {
         let queue = SourceGuardHelper.source("Overture/UI/QueueView.swift")
         let masthead = try #require(SourceGuardHelper.propertyBody(
             "agentInputs: AgentInputs) -> some View {", in: queue))
-        #expect(masthead.contains("AppNoticeLines(notices: notices"))
+        // #1805: the masthead may filter an offer it cannot serve on the way in, so what this pins is that
+        // the notices REACH it, not the exact call shape.
+        #expect(masthead.contains("AppNoticeLines("))
+        #expect(masthead.contains("notices"))
 
         let root = SourceGuardHelper.source("Overture/App/RootView.swift")
         #expect(root.contains("notices: AppNotices.current(omniFocusFailing: omniFocusFailedAt > 0, status: status)"),

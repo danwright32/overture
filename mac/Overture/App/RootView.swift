@@ -383,6 +383,13 @@ struct RootView: View {
                   onNoticeAction: { action in
                       switch action {
                       case .retryOmniFocusSync: syncOmniFocus(force: true)
+                      // #1805: finish exactly the shows the last check never reached. The set comes from
+                      // the queue's own rule, and it goes through the SAME confirm sheet as every other
+                      // check, so a paid run started from a report costs what the sheet says it costs.
+                      // Handled inside QueueView, which holds the rows this needs. Reaching here would
+                      // mean the queue passed it up rather than serving it, so do nothing rather than
+                      // start a run over a set this view cannot compute.
+                      case .finishShowsACheckMissed: break
                       }
                   },
                   onShowFollowUps: { showFollowUps = true },
@@ -1280,7 +1287,11 @@ struct RootView: View {
     // a later routine receipt, and this is the one thing about a 21-minute run Dan has to see.
     private func reportReachabilityRun(_ report: ReachabilityRunReport) {
         guard let message = report.attentionMessage else { return }
-        status.set(message, priority: .warning)
+        // #1805: the report carries the offer to finish what the run missed. Whether there is anything
+        // LEFT to finish is decided where the queue's rows are (QueueView strips an action it cannot
+        // serve), because this view has no rows: a shortfall sentence for shows since answered would
+        // otherwise put a control on screen that starts a run over nobody.
+        status.set(message, priority: .warning, action: .finishShowsACheckMissed)
     }
 
     // #1143: watch for a Prep run to begin (a per-row Re-prep click, an explicit "Prep kept" run, a

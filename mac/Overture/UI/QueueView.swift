@@ -348,6 +348,24 @@ struct QueueView: View {
         return data.items.filter { wanted.contains($0.id) }
     }
 
+    // #1805: the shows the last check was given and never reached. Read from the same rule the report's
+    // offer is gated on, so the control and the run can never disagree about the set.
+    private var missedByACheckKeys: [String] {
+        QueueModel.keysMissedByACheck(items, today: today, geo: geo)
+    }
+
+    // #1805: finish exactly those, through the SAME confirm sheet as every other check, so a run started
+    // from a report costs what the sheet says it costs. No re-selection by hand, which is the whole point:
+    // the app was holding the list while Dan reconstructed it.
+    private func finishShowsACheckMissed() {
+        let keys = missedByACheckKeys
+        guard !keys.isEmpty else { return }
+        let summary = ProbeSelection.summarizeShowsACheckMissed(count: keys.count)
+        pendingProbe = ProbeConfirm(keys: keys, dateLabel: "",
+                                    title: ProbeSelectionCopy.multiDateTitle(summary),
+                                    message: ProbeSelectionCopy.finishMissedShowsMessage(summary))
+    }
+
     // #2268: Dan pressed "Check again" on a finished date. Every answered, still-open show on it is
     // marked, which makes them candidates again, and the date is ticked so the selection bar takes over
     // with its own count, cost and confirm. Nothing is spent here.
@@ -899,7 +917,15 @@ struct QueueView: View {
             // Overture's own health rather than on the queue's contents.
             // #2250: a notice that names a fault carries the control for it, performed by the caller
             // that owns the app's run state rather than by these lines.
-            AppNoticeLines(notices: notices, perform: { onNoticeAction($0) })
+            // #1805/#2250: an offer this view cannot serve is stripped before it draws, and the one it
+            // CAN serve is served here, where the rows are. Everything else goes up to RootView.
+            AppNoticeLines(
+                notices: AppNotices.servable(notices,
+                                             canFinishMissedShows: !missedByACheckKeys.isEmpty),
+                perform: { action in
+                    if action == .finishShowsACheckMissed { finishShowsACheckMissed() }
+                    else { onNoticeAction(action) }
+                })
             // #1923: its own view, so an idle queue runs no timer for it and a run starting repaints one
             // line instead of re-deriving the store. See ReplyRunLine.
             ReplyRunLine(activity: .replyClassify)

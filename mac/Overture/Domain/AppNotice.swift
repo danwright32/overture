@@ -44,12 +44,19 @@ enum AppNoticeTone: Equatable, Sendable {
 // nothing to do with them.
 enum AppNoticeAction: Equatable, Sendable {
     case retryOmniFocusSync
+    // #1805: a paid check came home short. The report names how many shows never got an answer, and this
+    // is the offer to finish exactly those, rather than leaving Dan to work out which dates they sit on
+    // and re-select them by hand while the app holds the list.
+    case finishShowsACheckMissed
 
     // What the control says. Short, because it sits at the end of a sentence that has just said what is
     // wrong, and repeating that would be the same thing twice (#843).
     var title: String {
         switch self {
         case .retryOmniFocusSync: return "Sync now"
+        // Deliberately not "Retry". A Prep run's shortfall genuinely re-queues itself, and this does not:
+        // it starts a new paid run over a set of shows, through the same confirmation as any other check.
+        case .finishShowsACheckMissed: return "Check the rest"
         }
     }
 }
@@ -84,6 +91,23 @@ enum AppNotices {
             + "permission. A successful sync clears it.",
         action: .retryOmniFocusSync)
 
+    // #1805: an offer nothing can serve is not shown. Whether a shortfall report still has shows left to
+    // finish depends on the queue's rows, which the writer of that report does not have, so the decision
+    // is made where the rows are and applied here. The SENTENCE always stays: what the run did is still
+    // true and still worth reading; only the control goes, because a control that cannot do its job is
+    // worse than none at all (L44).
+    //
+    // Scoped to that one action by name, so this can never quietly disarm an unrelated control.
+    static func servable(_ notices: [AppNotice], canFinishMissedShows: Bool) -> [AppNotice] {
+        guard !canFinishMissedShows else { return notices }
+        return notices.map { notice in
+            guard notice.action == .finishShowsACheckMissed else { return notice }
+            var stripped = notice
+            stripped.action = nil
+            return stripped
+        }
+    }
+
     // Everything the app has to say, in the order it should be read: the standing fault first, then
     // whatever the last run had to report. Never a placeholder and never an empty line, so a quiet app
     // adds no rows to the masthead at all.
@@ -92,7 +116,8 @@ enum AppNotices {
         if isFailing { notices.append(omniFocusFailing) }
         if let text = status.text {
             notices.append(AppNotice(text: text,
-                                     tone: status.priority == .warning ? .warning : .receipt))
+                                     tone: status.priority == .warning ? .warning : .receipt,
+                                     action: status.action))
         }
         return notices
     }
