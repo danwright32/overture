@@ -65,6 +65,7 @@
 		0A64D1AF894C9FCB61A71DDA /* DayOffEditingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA153114B1CD8114A048DE85 /* DayOffEditingTests.swift */; };
 		0A65031FCCB52AF0857F7703 /* QueueRenderPassCostTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D1A9AFFDDCD31EAA825F789 /* QueueRenderPassCostTests.swift */; };
 		0A81C0A8DBB5EA7693A3BB48 /* DayOff.swift in Sources */ = {isa = PBXBuildFile; fileRef = F908765C098BDDF1F2382335 /* DayOff.swift */; };
+		0AEC56F87E41644BA311CE67 /* ImmutableStoreFixtureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B3CD0C5E4922FEA960B3E87 /* ImmutableStoreFixtureTests.swift */; };
 		0B16CEC281BEBC7C7669EA27 /* PerformerMatchVisibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3E631C27DDD963B1A1ED5AD /* PerformerMatchVisibilityTests.swift */; };
 		0B3EDFE1CAE5F4D578DF319C /* DuplicateStatusLine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FEBCCFA2CF1B37F5D5E1EC8 /* DuplicateStatusLine.swift */; };
 		0B3F94BB19E539CB2184E94F /* ShowSearchField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E2C0BEAE1DB8F10FB628901 /* ShowSearchField.swift */; };
@@ -1674,6 +1675,7 @@
 		3A30B9ADDD3819FD07425159 /* VenueTixCalendar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueTixCalendar.swift; sourceTree = "<group>"; };
 		3A5209D30FF42AE009C40FFC /* ReachabilityRunReportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReachabilityRunReportTests.swift; sourceTree = "<group>"; };
 		3A93CB79A3E3EC61AFA4E9F8 /* ReplyMirrorsItsAudienceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReplyMirrorsItsAudienceTests.swift; sourceTree = "<group>"; };
+		3B3CD0C5E4922FEA960B3E87 /* ImmutableStoreFixtureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImmutableStoreFixtureTests.swift; sourceTree = "<group>"; };
 		3BBCB8F0BBF69035E1AFF6FA /* ABookingReachesEverythingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ABookingReachesEverythingTests.swift; sourceTree = "<group>"; };
 		3BEBCF94E20C0F098D5943DD /* ToolbarPopoverGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolbarPopoverGuardTests.swift; sourceTree = "<group>"; };
 		3C0558E748706676537594AF /* VenueKeyStabilityLiveStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueKeyStabilityLiveStoreTests.swift; sourceTree = "<group>"; };
@@ -2811,6 +2813,7 @@
 				D12410D15D2E5425165D9602 /* HouseListLiveStoreTests.swift */,
 				90A97A193666D6A1505E026C /* IdleQueueReadsNoProgressFileTests.swift */,
 				85E60541FE78401BC8EE977C /* ImmutableStoreFixture.swift */,
+				3B3CD0C5E4922FEA960B3E87 /* ImmutableStoreFixtureTests.swift */,
 				00E249B14EA6800EA04D7D00 /* ImporterSaveGuardTests.swift */,
 				2FB39B42F0EFE78B7F566C27 /* InheritedReachabilityTests.swift */,
 				1F46B18A44111090C0B373E1 /* InheritedReachabilityWiringGuardTests.swift */,
@@ -4542,6 +4545,7 @@
 				101F2B022CC884B29FA55D58 /* HouseListLiveStoreTests.swift in Sources */,
 				4CA3EF9402999BA8271BF252 /* IdleQueueReadsNoProgressFileTests.swift in Sources */,
 				846186C80D80177CB1D018BF /* ImmutableStoreFixture.swift in Sources */,
+				0AEC56F87E41644BA311CE67 /* ImmutableStoreFixtureTests.swift in Sources */,
 				5DB6E460E0302B459FD6FA9C /* ImporterSaveGuardTests.swift in Sources */,
 				32228D0E4E88A04AAD4BF603 /* InheritedReachabilityTests.swift in Sources */,
 				B98BEEDAC62606FDE12C6F6B /* InheritedReachabilityWiringGuardTests.swift in Sources */,

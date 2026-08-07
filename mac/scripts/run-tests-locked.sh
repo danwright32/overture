@@ -20,6 +20,12 @@ set -euo pipefail
 # resident Debug test-host Overture.app process before exiting with xcodebuild's own code.
 
 LOCK_FILE="/tmp/overture-mac-tests.lock"
+# #2195: how many tests the last green run on this Mac executed. See the completeness check in main().
+# Overridable so the shell fixtures point it at a throwaway path: they drive main() with a stubbed
+# xcodebuild reporting a handful of tests, and against Dan's real baseline every one of those would read
+# as a catastrophically short run. A test that can reach real state should be structurally unable to
+# (L2), and this is also what stops a fixture rewriting the baseline the real gate is measured against.
+BASELINE_FILE="${OVERTURE_TEST_BASELINE_FILE:-${HOME}/.overture-mac-test-baseline}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MAC_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
@@ -28,9 +34,38 @@ MAC_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # xcodebuild test boots at .../DerivedData/*/Build/Products/Debug/Overture.app/Contents/MacOS/Overture.
 # A Release build (e.g. /Applications/Overture.app, from build-install.sh --launch) never matches,
 # so it's never touched. Pure text match, so it's testable without touching real system state.
+#
+# #1671: takes the DerivedData path this run OWNS and kills nothing outside it. The kill sweeps run
+# outside the flock (one before the lock is ever taken, one after it is released), so with two sessions
+# on this Mac an unscoped matcher lets a finishing run kill the freshly launched host of a run that has
+# just acquired the lock. The victim then dies with no named test failure, which is exactly the shape
+# `run_outcome` calls "crashed" and `should_retry` retries as a known flake, so the retry that exists to
+# absorb a genuine flake also hides this one and nothing points outside the victim's own code.
+#
+# An empty scope matches nothing at all, deliberately. This function only ever KILLS, so failing to
+# resolve the scope must leave every process alone rather than fall back to matching all of them (L42).
 stale_debug_test_host_pids() {
-  local ps_output="$1"
-  echo "${ps_output}" | grep -F '/DerivedData/' | grep -F '/Build/Products/Debug/Overture.app/Contents/MacOS/Overture' | awk '{print $1}'
+  local ps_output="$1" derived_root="${2:-}"
+  [[ -n "${derived_root}" ]] || return 0
+  echo "${ps_output}" \
+    | grep -F "${derived_root}" \
+    | grep -F '/Build/Products/Debug/Overture.app/Contents/MacOS/Overture' \
+    | awk '{print $1}' || true
+}
+
+# The DerivedData directory THIS run builds into, which is what makes a host attributable to it.
+# Resolved from xcodebuild itself rather than guessed, because the path carries a hash of the project's
+# location and a wrong guess would silently scope the sweep to nothing.
+own_derived_data_root() {
+  local root
+  root="$(xcodebuild -scheme Overture -showBuildSettings -json 2>/dev/null \
+    | awk -F'"' '/"BUILD_DIR"/{print $4; exit}' \
+    | sed -E 's#(/DerivedData/[^/]+)/.*#\1#')"
+  # Anything that is not recognisably a DerivedData root is no answer at all, and no answer means the
+  # sweep kills nothing. Fail-safe in the one direction that matters: this function only ever feeds a
+  # `kill` (L42).
+  [[ "${root}" == */DerivedData/* ]] && echo "${root}"
+  return 0
 }
 
 # #1257: the PIDs of any running Debug Overture that is NOT the runner's own test host, i.e. the instance
@@ -105,6 +140,38 @@ run_outcome() {
     return
   fi
   echo "crashed"
+}
+
+# #2195: how many tests a run actually executed, summed across every "Test run with N tests" line
+# (the combined scheme prints one per target). Empty when the output names none, which is itself the
+# answer for a run that died before any suite reported.
+executed_test_count() {
+  local output="$1" total
+  total="$(grep -oE 'Test run with [0-9]+ test' <<< "${output}" | grep -oE '[0-9]+' | paste -sd+ - | bc 2>/dev/null || true)"
+  [[ -n "${total}" ]] && echo "${total}"
+  return 0
+}
+
+# truncated_report <executed> <baseline>. Prints the sentence when a run came back materially short,
+# and nothing when it did not.
+#
+# #2195: a run that dies partway through is indistinguishable from an ordinary red. Three consecutive
+# runs on 2026-08-06 reported 4837, 4836 and 3932 tests against main's 5503, each naming a DIFFERENT
+# innocent bystander that happened to be in flight when the process died. Between 600 and 1,500 tests
+# never executed and nothing said so. Whoever sees the named test finds it passes in isolation, calls it
+# a flake, re-runs, gets a different name, calls it a flake again, and ships. Since #1347 this run is the
+# ONLY thing verifying the Mac app before it reaches main.
+#
+# The threshold is deliberately loose. It exists to catch a run that STOPPED, not to police churn: the
+# observed truncations were 12% and 29% short, while a branch legitimately removing a suite might drop a
+# percent or two. It asserts the QUANTITY it protects (how many tests ran) rather than a proxy for it,
+# which is the objection `run_outcome` above records against a hand-maintained floor (L63).
+truncated_report() {
+  local executed="$1" baseline="$2"
+  [[ -n "${executed}" && -n "${baseline}" && "${baseline}" -gt 0 ]] || return 0
+  local floor=$(( baseline * 90 / 100 ))
+  [[ "${executed}" -lt "${floor}" ]] || return 0
+  echo "this run executed ${executed} tests, $(( baseline - executed )) fewer than the ${baseline} the last green run on this Mac ran. The result is NOT trustworthy: the process almost certainly died partway through, and any test named below was merely in flight when it did, not the cause."
 }
 
 # should_retry <outcome> <attempt> <max_attempts>. Prints "retry" when another attempt should run.
@@ -232,8 +299,10 @@ main() {
   # here, before building, with the one instruction that fixes it. A stale DerivedData test host from a prior
   # aborted run would block the same way, but it is the runner's OWN spawn and safe to clear, so clear it
   # rather than nag; the mac/build instance is Dan's and is never auto-killed.
-  local stale_pid
-  for stale_pid in $(stale_debug_test_host_pids "$(ps -eo pid=,command=)"); do
+  # #1671: scoped to this run's own DerivedData, so a concurrent session's live host is never a candidate.
+  local derived_root stale_pid
+  derived_root="$(own_derived_data_root)"
+  for stale_pid in $(stale_debug_test_host_pids "$(ps -eo pid=,command=)" "${derived_root}"); do
     kill "${stale_pid}" 2>/dev/null || true
   done
   local blockers blocker_pids
@@ -249,7 +318,7 @@ main() {
   # #1331: run the suite, and if the HOST crashes (the run died with no named test failure, a known
   # self-hosted flake) retry once. A genuine failure or a pass is never retried (see should_retry).
   local test_exit_code=0 outcome="" attempt=1 max_attempts=2 output_file pid
-  local host_pid="" started_at=0 log_window=60
+  local host_pid="" started_at=0 log_window=60 last_output=""
   while true; do
     test_exit_code=0
     started_at="${SECONDS}"
@@ -274,7 +343,7 @@ main() {
     test_exit_code="${PIPESTATUS[0]}"
     set -e
 
-    for pid in $(stale_debug_test_host_pids "$(ps -eo pid=,command=)"); do
+    for pid in $(stale_debug_test_host_pids "$(ps -eo pid=,command=)" "${derived_root}"); do
       kill "${pid}" 2>/dev/null || true
     done
 
@@ -287,6 +356,9 @@ main() {
     # its first log line, so the dump covers the run and no more.
     host_pid="$(host_pid_from_output "$(cat "${output_file}")")"
     log_window=$(( SECONDS - started_at + 30 ))
+    # #2195: kept so the completeness check below can read this attempt's counts. The file itself still
+    # goes, since it holds the whole streamed log.
+    last_output="$(cat "${output_file}")"
     rm -f "${output_file}"
 
     [[ -z "$(should_retry "${outcome}" "${attempt}" "${max_attempts}")" ]] && break
@@ -295,6 +367,34 @@ main() {
     echo "flake, #1331). Retrying once (attempt $((attempt + 1)) of ${max_attempts})..." >&2
     attempt=$((attempt + 1))
   done
+
+  # #2195: before anything reads the outcome, say whether the run was COMPLETE. A truncated run is none
+  # of passed, failed or crashed: it is a result that cannot be believed either way, and it has to say so
+  # by name rather than let a bystander take the blame.
+  #
+  # The expected count lives beside the lock this script already owns and NOT in the repo, because a
+  # checked-in number is one somebody has to remember to bump, and a guard people routinely bump is a
+  # guard people stop reading. It is written from this script's own last green run, so it maintains
+  # itself (L41). No baseline yet means no claim: the first green run records one.
+  local executed baseline="" truncated=""
+  executed="$(executed_test_count "${last_output}")"
+  [[ -f "${BASELINE_FILE}" ]] && baseline="$(cat "${BASELINE_FILE}" 2>/dev/null || true)"
+  truncated="$(truncated_report "${executed}" "${baseline}")"
+  if [[ -n "${truncated}" ]]; then
+    echo >&2
+    echo "run-tests-locked.sh: SHORT RUN. ${truncated}" >&2
+    echo "Re-run the suite. If it comes back short again, something is killing the process (#2195, #1006)." >&2
+    echo >&2
+    # And it FAILS. The dangerous case is precisely a short run that still prints a success banner
+    # (#1006 saw one: "Test run with 1574 tests ... passed" over a ~2400-test suite), because
+    # test-all.sh would go on to say "all suites passed" having run two thirds of it. A result that
+    # cannot be believed must never exit 0.
+    [[ "${test_exit_code}" -ne 0 ]] || test_exit_code=1
+  elif [[ -z "${outcome}" && -n "${executed}" ]]; then
+    # Only a genuinely green run may move the baseline, so a truncated or failing one can never quietly
+    # lower the bar it is measured against.
+    echo "${executed}" > "${BASELINE_FILE}"
+  fi
 
   if [[ "${outcome}" == "build-failed" ]]; then
     echo >&2

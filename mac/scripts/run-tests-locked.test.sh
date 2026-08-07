@@ -31,20 +31,80 @@ MIXED_OUTPUT="  501 /sbin/launchd
  1234 /Users/danielhankins-wright/Library/Developer/Xcode/DerivedData/Overture-aocrzmchreuxrpgeehcermgyhegg/Build/Products/Debug/Overture.app/Contents/MacOS/Overture
  5678 /Applications/Overture.app/Contents/MacOS/Overture
  9999 /usr/bin/xcodebuild -scheme Overture -destination platform=macOS test"
+OWN_DERIVED="/Users/danielhankins-wright/Library/Developer/Xcode/DerivedData/Overture-aocrzmchreuxrpgeehcermgyhegg"
+OTHER_DERIVED="/Users/danielhankins-wright/Library/Developer/Xcode/DerivedData/Overture-zzzzzzzzzzzzzzzzzzzzzzzzzzzz"
 assert_equals "picks the DerivedData Debug test host, not the installed Release app or xcodebuild itself" \
-  "1234" "$(stale_debug_test_host_pids "${MIXED_OUTPUT}")"
+  "1234" "$(stale_debug_test_host_pids "${MIXED_OUTPUT}" "${OWN_DERIVED}")"
 
 CLEAN_OUTPUT="  501 /sbin/launchd
  5678 /Applications/Overture.app/Contents/MacOS/Overture"
 assert_equals "no stale Debug host means no pids" \
-  "" "$(stale_debug_test_host_pids "${CLEAN_OUTPUT}")"
+  "" "$(stale_debug_test_host_pids "${CLEAN_OUTPUT}" "${OWN_DERIVED}")"
 
 TWO_STALE_OUTPUT="  501 /sbin/launchd
  1234 /Users/danielhankins-wright/Library/Developer/Xcode/DerivedData/Overture-aocrzmchreuxrpgeehcermgyhegg/Build/Products/Debug/Overture.app/Contents/MacOS/Overture
  2222 /Users/danielhankins-wright/Library/Developer/Xcode/DerivedData/Overture-zzzzzzzzzzzzzzzzzzzzzzzzzzzz/Build/Products/Debug/Overture.app/Contents/MacOS/Overture"
-assert_equals "multiple stale Debug hosts (e.g. an older DerivedData build) are all picked up" \
-  "1234
-2222" "$(stale_debug_test_host_pids "${TWO_STALE_OUTPUT}")"
+assert_equals "multiple stale Debug hosts under THIS run's DerivedData are all picked up" \
+  "1234" "$(stale_debug_test_host_pids "${TWO_STALE_OUTPUT}" "${OWN_DERIVED}")"
+
+# --- #1671: a run only ever kills hosts it can attribute to itself -----------------------
+#
+# The kill sweeps run OUTSIDE the flock, one before the lock is taken and one after it is released, so
+# with two sessions on this Mac a finishing run can reach a host that a run holding the lock has just
+# launched. The victim dies with no named test failure, which is the exact shape `run_outcome` calls
+# "crashed" and `should_retry` retries as a known flake, so the retry meant to absorb a real flake also
+# hides this one and nothing points outside the victim's own code.
+assert_equals "another session's live test host is never a candidate" \
+  "2222" "$(stale_debug_test_host_pids "${TWO_STALE_OUTPUT}" "${OTHER_DERIVED}")"
+
+# The fail-safe direction. This function only ever KILLS, so a scope it could not resolve must leave
+# every process alone rather than fall back to matching all of them (L42).
+assert_equals "an unresolved scope kills nothing at all" \
+  "" "$(stale_debug_test_host_pids "${TWO_STALE_OUTPUT}" "")"
+
+echo
+# --- #2195: a truncated run must not read as an ordinary failure -------------------------
+#
+# Three consecutive runs on 2026-08-06 reported 4837, 4836 and 3932 tests against main's 5503, each
+# naming a DIFFERENT innocent bystander that happened to be in flight when the process died. Between
+# 600 and 1,500 tests never executed and nothing said so.
+
+# The real banner is prefixed with a check glyph, dropped here because the matcher never looks at it and
+# the repo's style gate forbids the literal character in a tracked file.
+COMBINED_OUTPUT='Test Suite started
+Test run with 5428 tests in 771 suites passed after 89.2 seconds.
+Test run with 245 tests in 41 suites passed after 3.9 seconds.
+** TEST SUCCEEDED **'
+assert_equals "the count sums every target the combined scheme reports" \
+  "5673" "$(executed_test_count "${COMBINED_OUTPUT}")"
+
+assert_equals "a run that died before any suite reported has no count to give" \
+  "" "$(executed_test_count 'xcodebuild: error: nothing ran')"
+
+assert_equals "a run 29 percent short says so, by number" \
+  "this run executed 3932 tests, 1571 fewer than the 5503 the last green run on this Mac ran. The result is NOT trustworthy: the process almost certainly died partway through, and any test named below was merely in flight when it did, not the cause." \
+  "$(truncated_report 3932 5503)"
+
+assert_equals "and so does one 12 percent short" \
+  "this run executed 4836 tests, 667 fewer than the 5503 the last green run on this Mac ran. The result is NOT trustworthy: the process almost certainly died partway through, and any test named below was merely in flight when it did, not the cause." \
+  "$(truncated_report 4836 5503)"
+
+# Ordinary churn is not a short run. The guard exists to catch a process that STOPPED, and one tight
+# enough to fire on a branch that removes a suite is one that gets ignored (the same objection
+# run_outcome records against a hand-maintained floor).
+assert_equals "a branch that removes a few tests is not called truncated" \
+  "" "$(truncated_report 5450 5503)"
+
+assert_equals "a run that ADDS tests is not called truncated" \
+  "" "$(truncated_report 5521 5503)"
+
+# No baseline is no claim. The first green run on a Mac records one; until then the guard must say
+# nothing rather than guess in either direction.
+assert_equals "no baseline yet means no verdict" \
+  "" "$(truncated_report 3932 "")"
+
+assert_equals "a zero baseline is treated as no baseline, not as everything being short" \
+  "" "$(truncated_report 3932 0)"
 
 echo
 # --- pre-flight blocker detection (#1257) ------------------------------------------------
@@ -255,7 +315,12 @@ STUB
 
   chmod +x "${bin_dir}/flock" "${bin_dir}/ps" "${bin_dir}/xcodebuild" "${bin_dir}/log"
 
-  output="$(PATH="${bin_dir}:${PATH}" "${SCRIPT_DIR}/run-tests-locked.sh" 2>&1)"
+  # #2195: a throwaway baseline. The stub reports a handful of tests, so against the real one every
+  # wrapper run here would read as a catastrophically short run, and a fixture must never write to the
+  # file the real gate is measured against either (L2).
+  local baseline_file="${bin_dir}/baseline"
+  output="$(PATH="${bin_dir}:${PATH}" OVERTURE_TEST_BASELINE_FILE="${baseline_file}" \
+    "${SCRIPT_DIR}/run-tests-locked.sh" 2>&1)"
   code=$?
   log_calls="$(grep -c . "${bin_dir}/log-calls" 2>/dev/null || echo 0)"
   rm -rf "${bin_dir}"
