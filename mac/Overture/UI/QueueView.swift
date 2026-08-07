@@ -1040,18 +1040,27 @@ struct QueueView: View {
                 // #661 follow-up: the old full card highlighted an overdue reach-out in rust rather
                 // than the plain "in N days" color, so that urgency cue survives the lightweight row.
                 let dueNow = ReachedOutQueue.isDueNow(next: pair.next, now: now)
-                Text(ReachedOutQueue.timingLabel(next: pair.next, now: now, channel: r.outreachChannel))
-                    .font(OVType.meta).foregroundStyle(dueNow ? OVColor.rust : OVColor.inkSoft)
+                let replyOffered = ReplyPanel.isOffered(for: r, in: p)
+                // #2166: the label yields to Answer, whose existence already means "now". Suppressed
+                // rather than deleted: on a row with nobody waiting it is the only thing saying when the
+                // next touch is due, and it renders the future case too. ReachedOutRowChrome owns the
+                // rule so it is testable and so #2168's guard can see the label is covered.
+                if ReachedOutRowChrome.showsTimingLabel(replyOffered: replyOffered) {
+                    Text(ReachedOutQueue.timingLabel(next: pair.next, now: now, channel: r.outreachChannel))
+                        .font(OVType.meta).foregroundStyle(dueNow ? OVColor.rust : OVColor.inkSoft)
+                }
                 // #2128: somebody is waiting on an answer, which is the actual job on this row, so it
                 // leads. Keyed on the peer who WROTE, since the row stands on whoever sorts first.
-                if ReplyPanel.isOffered(for: r, in: p) {
+                // #2166: and it now carries the urgency the label used to, in its own fill.
+                if replyOffered {
                     Button(ReplyPanelCopy.answer) {
                         answeringReply = ReplyTarget(prospect: p,
                                                      recipient: ReplyIdentity.answering(for: r, in: p))
                     }
-                    .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.onForest)
+                    .buttonStyle(.plain).font(OVType.meta)
+                    .foregroundStyle(ReachedOutRowChrome.answerLabel(dueNow: dueNow))
                     .padding(.horizontal, OVSpacing.md).padding(.vertical, 4)
-                    .background(Capsule().fill(OVColor.forest))
+                    .background(Capsule().fill(ReachedOutRowChrome.answerFill(dueNow: dueNow)))
                 }
                 // #1630: a form pitch gets the state control unconditionally. Overture cannot detect its
                 // reply, so waiting for `replied` to become true would mean waiting forever, and the one
