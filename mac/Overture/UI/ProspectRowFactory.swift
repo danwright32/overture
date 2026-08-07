@@ -81,6 +81,13 @@ enum ProspectRowFactory {
             onOverrideSalutationReview: { ProspectMutations.overrideSalutationReview(item, prospects: prospects, context: context, feedback: feedback) },
             onOverrideDraftLint: { ProspectMutations.overrideDraftLint(item, prospects: prospects, context: context, feedback: feedback) },
             onDismissReply: { ProspectMutations.dismissReply(item, prospects: prospects, context: context, feedback: feedback) },
+            // #1752: Dan says where this card's room is. The answer is stored against the ROOM, so it
+            // reaches every show played there and every show that arrives there later, which is why it
+            // goes through the same recorder the Sources sheet's list uses rather than writing this row.
+            onNameRoom: { venue, location in
+                WatchlistMutations.saveRoomPlace(room: UnplacedRooms.Room(key: venue, name: venue, showCount: 0),
+                                                 to: location, context: context, feedback: feedback)
+            },
             onBeginFormPitch: { rid, formURL in
                 ProspectMutations.beginFormPitch(item, rid, formURL, prospects: prospects, context: context, feedback: feedback)
             },
