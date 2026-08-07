@@ -195,8 +195,8 @@ struct SourcesView: View {
         }
         // #1752: the same gate for the unplaced-room list. Answering a room fills its shows' locations,
         // which moves the signature, so the list drops that room without anything having to tell it to.
-        .onChange(of: UnplacedRooms.signature(prospects), initial: true) {
-            unplacedRooms = UnplacedRooms.from(prospects)
+        .onChange(of: UnplacedRooms.signature(prospects, today: QueueModel.easternToday()), initial: true) {
+            unplacedRooms = UnplacedRooms.from(prospects, today: QueueModel.easternToday())
         }
         // Recompute the cached coverage result AND the per-source returning-client flags ONLY when their
         // real inputs change. The signature is cheap to evaluate every redraw; the O(clients x sources)

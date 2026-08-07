@@ -63,9 +63,9 @@ enum UnplacedRooms {
     // Combines only what the list can actually change on: how many shows there are, and for the unplaced
     // ones, which room they name. A row gaining a location drops out of the loop and moves the count, so a
     // fill is caught too.
-    static func signature(_ prospects: [Prospect]) -> Int {
+    static func signature(_ prospects: [Prospect], today: String) -> Int {
         var acc = prospects.count
-        for p in prospects where (p.location ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        for p in prospects where isWaiting(p, today: today) {
             var h = Hasher()
             h.combine(p.venue ?? "")
             acc = acc &+ h.finalize()
@@ -73,15 +73,36 @@ enum UnplacedRooms {
         return acc
     }
 
+    // Whether this show is one an answer would actually help: it has no location, it names a room, and it
+    // HAS NOT ALREADY HAPPENED.
+    //
+    // That last clause was missing when this shipped, and walking the app is what found it: the panel read
+    // "Denny Farrell Riverbank State Park, 2 shows waiting on this" while both of those shows were dated
+    // June against an August clock. Nothing was waiting on that room. Left as it was, the list would
+    // accumulate dead rooms forever and every count in it would drift upward, which is the opposite of the
+    // action list #1029 asked for.
+    //
+    // Judged on the run's LAST date, so a run that opened last week and plays for another month still
+    // counts. A show with NO date cannot be proved past and is kept: a room wrongly listed costs Dan one
+    // glance, while a room wrongly dropped costs him the geography rule on every show in it, silently.
+    private static func isWaiting(_ p: Prospect, today: String) -> Bool {
+        guard (p.location ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        guard let venue = p.venue?.trimmingCharacters(in: .whitespacesAndNewlines), !venue.isEmpty else {
+            return false
+        }
+        guard let last = p.runEndDate ?? p.performanceDate, !last.isEmpty else { return true }
+        return last >= today
+    }
+
     // Every distinct room holding at least one show with no location, most shows first.
     //
     // A show with NO venue at all is excluded: there is no room to name, its card already reads
     // "Venue TBD", and listing it would ask a question with no answer. Ties break on the name so the
     // list is stable from one render to the next rather than dependent on fetch order.
-    static func from(_ prospects: [Prospect]) -> [Room] {
+    static func from(_ prospects: [Prospect], today: String) -> [Room] {
         var byKey: [String: (name: String, count: Int)] = [:]
-        for p in prospects where (p.location ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            guard let venue = p.venue?.trimmingCharacters(in: .whitespacesAndNewlines), !venue.isEmpty,
+        for p in prospects where isWaiting(p, today: today) {
+            guard let venue = p.venue?.trimmingCharacters(in: .whitespacesAndNewlines),
                   let key = VenuePlaces.canonicalKey(for: venue) else { continue }
             // The SHORTEST spelling wins as the display name: sources append addresses and suite numbers
             // to one room ("54 Below" versus "54 Below, 254 W 54th St. Cellar, NYC 10019"), and the bare
