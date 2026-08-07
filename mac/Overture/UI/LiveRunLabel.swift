@@ -66,6 +66,14 @@ struct LiveRunLabel: View {
                     ProgressView().controlSize(.small)
                     styled(Text(RunProgress.stoppingLabel(elapsed: elapsed)))
                 }
+            // #2201: waiting on Dan is not a failure either, so it keeps the spinner and only the words
+            // change. The label is the surface he sees once the takeover is hidden, so a run parked on a
+            // question has to say so here too rather than reading as an ordinary spinner.
+            case .waitingOnYou(let elapsed):
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    styled(Text(RunProgress.waitingOnYouLabel(elapsed: elapsed)))
+                }
             case .running, .idle:
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.small)
@@ -92,7 +100,8 @@ struct LiveRunLabel: View {
         // learns to ignore (L36).
         // #1684: a stopping run joins them, for the same reason: it is not a failure, so the warning
         // triangle stays reserved for a run that has actually gone wrong.
-        case .finishing, .stopping, .running, .idle:
+        // #2201: and a run waiting on an answer, which is not a failure: it is doing the right thing.
+        case .finishing, .stopping, .waitingOnYou, .running, .idle:
             ProgressView()
                 .controlSize(.small)
                 .help(helpText(now: now))
@@ -110,6 +119,8 @@ struct LiveRunLabel: View {
             return RunProgress.finishingLabel(elapsed: elapsed)
         case .stopping(let elapsed):
             return RunProgress.stoppingLabel(elapsed: elapsed)
+        case .waitingOnYou(let elapsed):
+            return RunProgress.waitingOnYouLabel(elapsed: elapsed)
         case .running, .idle:
             return RunProgress.spinnerLabel(base, since: since, now: now, detail: progressDetail?())
         }
