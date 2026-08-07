@@ -21,6 +21,42 @@
 #
 # The runners are POSIX sh, not bash.
 
+# heartbeat_stop_recorded_run <claude_pid_file>
+#
+# Ends whatever process the run recorded. Always succeeds, including with no pid recorded or a process
+# already gone, so it is safe on every path including the ones where the stop has already happened.
+heartbeat_stop_recorded_run() {
+  if [ -s "$1" ]; then
+    # Unquoted on purpose, matching the cancel path, so a file holding several pids stops all of them.
+    # shellcheck disable=SC2046
+    kill $(cat "$1" 2>/dev/null) 2>/dev/null || true
+  fi
+  return 0
+}
+
+# heartbeat_guard_exit <claude_pid_file>
+#
+# #2109: installs the fail-safe. Call it as the FIRST thing inside the heartbeat subshell.
+#
+# #2106 closed one route into an invisible unstoppable run: a heartbeat that cannot touch its marker now
+# stops the run rather than leaving it working invisibly. There is a second, likelier route it does not
+# cover. All three runners run under `set -eu`, and that applies inside the heartbeat subshell, so ANY
+# command in the loop body returning non-zero ends the subshell without stopping claude. That is exactly
+# the #2106 failure again: nothing touches the marker, the app judges the run dead, #1613's sweep files
+# the partial results as the answer and marks those shows researched, and the real run carries on
+# spending tokens, invisible and no longer stoppable, because the cancel sentinel Overture writes is only
+# ever read by the heartbeat that just died.
+#
+# An EXIT trap covers `set -e` termination and every unforeseen way the loop can end, together. It is
+# deliberately unconditional: every deliberate exit from these loops has ALREADY stopped the run, so
+# stopping again is a no-op, and by the time the main script tears the heartbeat down its own trap has
+# stopped claude too. Making it conditional would mean a flag somebody has to remember to set on a path
+# added later, which is the shape of the defect this is closing (L71: a watchdog must not share the
+# abort-on-error behaviour of the work it watches).
+heartbeat_guard_exit() {
+  trap "heartbeat_stop_recorded_run '$1'" EXIT
+}
+
 # heartbeat_touch_or_stop <marker> <claude_pid_file>
 #
 # Touches the marker. Returns 0 when the run may carry on. When the marker cannot be touched, stops the
@@ -38,11 +74,7 @@ heartbeat_touch_or_stop() {
     return 0
   fi
 
-  if [ -s "${claude_pid_file}" ]; then
-    # Same shape as the cancel path's stop: read the pid the run recorded and end it. Unquoted on purpose,
-    # matching the cancel path, so a file holding several pids stops all of them.
-    # shellcheck disable=SC2046
-    kill $(cat "${claude_pid_file}" 2>/dev/null) 2>/dev/null || true
-  fi
+  # Same shape as the cancel path's stop: read the pid the run recorded and end it.
+  heartbeat_stop_recorded_run "${claude_pid_file}"
   return 1
 }
