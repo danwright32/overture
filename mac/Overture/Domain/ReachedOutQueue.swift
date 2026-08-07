@@ -33,7 +33,7 @@ enum ReachedOutQueue {
             answeredAt: r.replyHandledAt,   // #2170: answered, still unstated, stays here without pressure
             now: now, config: reminderConfig)
         return [nextFollowUp(for: r, now: now, config: followUpConfig),
-                nextFormDecision(for: r, config: followUpConfig),
+                nextFormDecision(for: r, of: p, config: followUpConfig),
                 reminderDate]
             .compactMap { $0 }
             .min()
@@ -90,11 +90,64 @@ enum ReachedOutQueue {
     // #1630: a form pitch's due label asks for a DECISION, because there is nothing left to send. Same
     // slot, same threshold, one honest difference at the moment it comes due; the waiting text is
     // identical either way, since a wait is a wait.
-    static func timingLabel(next: Date, now: Date, channel: OutreachChannel = .email) -> String {
+    //
+    // #2169: a DATED form pitch answers from the night instead, through formNightLabel below. Kept as one
+    // entry point rather than letting the view choose, so the row cannot end up asking two different
+    // questions about the same clock. The old wording survives only for a form pitch on an undated show,
+    // which is the one case with no night to name.
+    static func timingLabel(next: Date, now: Date, channel: OutreachChannel = .email,
+                            eventDay: String? = nil, today: String = EasternDate.today()) -> String {
+        if channel == .contactForm, let eventDay, EasternDate.date(from: eventDay) != nil {
+            return formNightLabel(eventDay: eventDay, today: today)
+        }
         let seconds = next.timeIntervalSince(now)
         if seconds <= 0 { return channel == .contactForm ? "Say what happened" : "Reach out now" }
-        let days = Int((seconds / 86_400).rounded(.up))
-        return days == 1 ? "in 1 day" : "in \(days) days"
+        return daysAhead(Int((seconds / 86_400).rounded(.up)))
+    }
+
+    // #2169: a form row's timing slot names the NIGHT, because that is what its clock is now set to.
+    //
+    // Dan's rule, 2026-08-06: "The due date should actually just be the date of the event since I won't
+    // send a follow up if it's a form." Which also makes the question answerable exactly when it is
+    // asked: before the night he has nothing to report, and after it he knows.
+    //
+    // It deliberately does NOT say "Say what happened", even when due. The state control sitting beside
+    // it already reads "Set a state", and one instruction printed twice is the defect #2168 guards
+    // against. The slot says WHEN, the control says WHAT TO DO, and the control carries the urgency.
+    //
+    // Counted in whole Eastern calendar days through the one shared helper rather than by dividing an
+    // interval by 24 hours: on the two clock-change days a day is 23 or 25 hours long, so raw division
+    // is a day out twice a year in the one line whose whole job is saying when (L39).
+    static func formNightLabel(eventDay: String?, today: String) -> String {
+        guard let eventDay, let days = EasternDate.daysUntil(from: today, to: eventDay) else {
+            // Never invented. "Date to be confirmed" is a normal listing state, and a fabricated night
+            // would send Dan looking for a show on a date nobody published.
+            return "date unknown"
+        }
+        switch days {
+        case 0: return "tonight"
+        case -1: return "yesterday"
+        case let ahead where ahead > 0: return daysAhead(ahead)
+        default: return "\(-days) days ago"
+        }
+    }
+
+    // "in 1 day" / "in N days", in one place. Both the email countdown and the form row's night say it,
+    // and two copies of a sentence drift (#843): the copy inventory flagged the second one the moment it
+    // appeared, which is exactly what that inventory is for.
+    private static func daysAhead(_ days: Int) -> String {
+        days == 1 ? "in 1 day" : "in \(days) days"
+    }
+
+    // #2169: when a form pitch comes due, which is the night itself.
+    //
+    // From the night's Eastern midnight rather than the morning after, so the row is asking on the day
+    // Dan is there. Nil for an undated show, and the caller must then keep its old clock rather than
+    // dropping the row: a record that matches no view is gone from the product while still in the data
+    // (L45).
+    static func formDecisionDate(eventDay: String?) -> Date? {
+        guard let eventDay, !eventDay.isEmpty else { return nil }
+        return EasternDate.date(from: eventDay)
     }
 
     // The same "overdue or now" threshold timingLabel's "Reach out now" case uses (#661), so a row's
@@ -112,8 +165,17 @@ enum ReachedOutQueue {
     // Dan saying what happened. Paced by the same gap as a first email follow-up (his call, 2026-07-28)
     // so the product holds one pacing number rather than two. Unlike the nudge track there is no cap: a
     // capped decide clock would simply stop asking and leave the show sitting in Reached out forever.
-    private static func nextFormDecision(for r: Recipient, config: FollowUpConfig) -> Date? {
+    // #2169: the clock is the NIGHT. Dan, 2026-08-06: "The due date should actually just be the date of
+    // the event since I won't send a follow up if it's a form." Which is also when the question becomes
+    // answerable, rather than an arbitrary gap after a pitch he cannot chase.
+    //
+    // The pitched-plus-gap clock survives ONLY for a show with no date. Returning nil there would drop the
+    // row out of the reached-out queue entirely, and a record that matches no view is gone from the
+    // product while still sitting in the data (L45).
+    private static func nextFormDecision(for r: Recipient, of p: Prospect,
+                                         config: FollowUpConfig) -> Date? {
         guard r.outreachChannel == .contactForm, let recordedAt = r.formOutreachRecordedAt else { return nil }
+        if let night = formDecisionDate(eventDay: p.performanceDate) { return night }
         return recordedAt.addingTimeInterval(TimeInterval(config.gapDays) * 86_400)
     }
 

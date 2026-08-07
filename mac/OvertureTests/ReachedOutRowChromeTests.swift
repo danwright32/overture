@@ -48,6 +48,20 @@ struct ReachedOutRowChromeTests {
         }
     }
 
+    // #2169. On a form row the timing slot names the night ("tonight", "3 days ago") rather than
+    // repeating the instruction the control beside it already gives, so the urgency has to ride on the
+    // control or it is lost. Same move as #2166 made for Answer: the signal follows the thing you press.
+    @Test func theStateControlCarriesTheUrgencyOnceTheNightHasCome() {
+        #expect(ReachedOutRowChrome.stateControlAccent(isDue: true) == OVColor.rust)
+        #expect(ReachedOutRowChrome.stateControlAccent(isDue: false) == nil)
+    }
+
+    // Nil rather than a quiet colour, because nil is what the control already treats as "no accent".
+    // Handing it inkSoft would tint every state control in the app on a row that is simply not due yet.
+    @Test func aRowNotYetDueTintsNothing() {
+        #expect(ReachedOutRowChrome.stateControlAccent(isDue: false) == nil)
+    }
+
     // Gold means "Dan can act on this" throughout the app, and #2166's scope note says the urgent colour
     // must not collide with that meaning. Pinned so a later tidy-up cannot reach for gold here.
     @Test func theAnswerControlNeverUsesGold() {

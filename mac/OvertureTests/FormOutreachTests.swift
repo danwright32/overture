@@ -106,12 +106,32 @@ struct FormOutreachTests {
         #expect(FollowUp.dueRecipients(from: [p], now: wellPastTheGap).isEmpty)
     }
 
-    // ...and it still has to be somewhere, so it keeps its own clock: after the same gap a first email
-    // follow-up uses (Dan's call, 2026-07-28), Overture asks him what happened rather than offering to
-    // send anything.
-    @Test func aFormOutreachComesDueForADecisionAfterTheFollowUpGap() throws {
+    // ...and it still has to be somewhere, so it keeps its own clock: the NIGHT.
+    //
+    // #2169, Dan's call on 2026-08-06: "The due date should actually just be the date of the event since
+    // I won't send a follow up if it's a form." It replaces the pitched-plus-gap clock this test used to
+    // assert, and it is the moment the question becomes answerable: before the night he has nothing to
+    // report, and after it he knows.
+    @Test func aFormOutreachComesDueOnTheNightOfTheShow() throws {
+        let ctx = ModelContext(try container())
+        let p = formOnlyDrafted(ctx)          // performanceDate 2026-09-01
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let r = p.recipients[0]
+        p.recordFormOutreach(r, now: now, formURL: "https://aurorastrings.example/contact")
+
+        let due = ReachedOutQueue.nextReachOut(for: r, of: p, now: now)
+
+        #expect(due == EasternDate.date(from: "2026-09-01"))
+    }
+
+    // The fallback, and the reason it exists: an undated show has no night to wait for, and returning
+    // nothing would drop the row out of the reached-out queue entirely. A record that matches no view is
+    // gone from the product while still sitting in the data (L45), so it keeps the old pitched-plus-gap
+    // clock rather than vanishing.
+    @Test func anUndatedFormOutreachKeepsItsOldClockRatherThanDisappearing() throws {
         let ctx = ModelContext(try container())
         let p = formOnlyDrafted(ctx)
+        p.performanceDate = ""
         let now = Date(timeIntervalSince1970: 1_000_000)
         let r = p.recipients[0]
         p.recordFormOutreach(r, now: now, formURL: "https://aurorastrings.example/contact")
@@ -119,6 +139,7 @@ struct FormOutreachTests {
         let due = ReachedOutQueue.nextReachOut(for: r, of: p, now: now)
 
         #expect(due == now.addingTimeInterval(TimeInterval(FollowUpConfig().gapDays) * 86_400))
+        #expect(due != nil, "an undated form pitch must stay in the queue, not vanish from it")
     }
 
     // Dan's call, 2026-07-28: a hand-recorded pitch is real evidence and counts everywhere an emailed

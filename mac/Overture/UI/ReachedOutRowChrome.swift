@@ -28,4 +28,13 @@ enum ReachedOutRowChrome {
     /// instead. A rust capsule wearing the forest label reads perfectly in light mode and is unreadable
     /// in dark, which is the shape of defect a single-background look at it cannot catch (L69).
     static func answerLabel(dueNow: Bool) -> Color { dueNow ? OVColor.onRust : OVColor.onForest }
+
+    /// The conversation-state control's tint.
+    ///
+    /// #2169: on a form row the timing slot names the night rather than repeating the instruction the
+    /// control already gives, so the urgency has to ride on the control or it is simply lost. The same
+    /// move #2166 made for Answer: the signal follows the thing Dan presses.
+    ///
+    /// Nil rather than a quiet colour, because nil is what the control already means by "no accent".
+    static func stateControlAccent(isDue: Bool) -> Color? { isDue ? OVColor.rust : nil }
 }
