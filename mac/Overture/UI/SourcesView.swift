@@ -79,6 +79,10 @@ struct SourcesView: View {
     // identity rather than its name, so two spellings of one room cannot both open an editor.
     @State private var editingRoomKey: String?
     @State private var roomDraft = ""
+    // CACHED, for the reason the coverage list and the tallies above are: building it walks every stored
+    // show, and this sheet re-evaluates its body on every keystroke and scroll tick. Recomputed by the
+    // .onChange below only when a show that the list actually counts changes.
+    @State private var unplacedRooms: [UnplacedRooms.Room] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -189,6 +193,11 @@ struct SourcesView: View {
         .onChange(of: SourceYield.signature(prospects), initial: true) {
             tallies = SourceYield.tallies(in: prospects)
         }
+        // #1752: the same gate for the unplaced-room list. Answering a room fills its shows' locations,
+        // which moves the signature, so the list drops that room without anything having to tell it to.
+        .onChange(of: UnplacedRooms.signature(prospects), initial: true) {
+            unplacedRooms = UnplacedRooms.from(prospects)
+        }
         // Recompute the cached coverage result AND the per-source returning-client flags ONLY when their
         // real inputs change. The signature is cheap to evaluate every redraw; the O(clients x sources)
         // matches behind it run only when the signature differs, so a keystroke or scroll no longer drags
@@ -247,7 +256,7 @@ struct SourcesView: View {
     // to get wrong.
     @ViewBuilder
     private var unplacedRoomsSection: some View {
-        let rooms = UnplacedRooms.from(prospects)
+        let rooms = unplacedRooms
         if !rooms.isEmpty {
             VStack(alignment: .leading, spacing: OVSpacing.xs) {
                 HStack(spacing: OVSpacing.xxs) {

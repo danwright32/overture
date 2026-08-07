@@ -199,3 +199,76 @@ struct UnplacedRoomsTests {
         #expect(UnplacedRoomCopy.waiting(showCount: 2) == "2 shows waiting on this")
     }
 }
+
+// #1752 follow-up: the list is CACHED behind a signature, because building it walks every stored show
+// and the Sources sheet re-evaluates its body on every keystroke and scroll tick. That is the defect
+// #1356 and #1429 each fixed on this very sheet, and shipping the list inline reintroduced it.
+//
+// A signature is only worth anything if it MOVES when the list would. These pin exactly that, because a
+// signature that never changes caches a stale list forever and one that always changes caches nothing.
+@MainActor
+@Suite("The unplaced-room list is not rebuilt on every redraw (#1752)")
+struct UnplacedRoomsSignatureTests {
+
+    private func container() throws -> ModelContainer {
+        try ModelContainer(for: Schema([Prospect.self, Recipient.self, WatchedSource.self,
+                                        VenuePlaceAnswer.self]),
+                           configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+    }
+
+    @discardableResult
+    private func show(_ ctx: ModelContext, key: String, venue: String?, location: String? = nil) -> Prospect {
+        let p = Prospect(naturalKey: key, groupName: "A show", discipline: "music", venue: venue,
+                         performanceDate: "2099-05-05", sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "none", production: "self", profile: "neutral",
+                         coverage: "unknown", fitScore: 3, tier: "longshot", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
+        p.location = location
+        ctx.insert(p)
+        return p
+    }
+
+    private func all(_ ctx: ModelContext) throws -> [Prospect] {
+        try ctx.fetch(FetchDescriptor<Prospect>())
+    }
+
+    // The whole point: an unrelated redraw must not move it, or the cache saves nothing.
+    @Test func readingTheSameStoreTwiceGivesTheSameSignature() throws {
+        let ctx = ModelContext(try container())
+        show(ctx, key: "k1", venue: "54 Below")
+
+        #expect(UnplacedRooms.signature(try all(ctx)) == UnplacedRooms.signature(try all(ctx)))
+    }
+
+    // The change that MUST move it: a room getting an answer fills its shows' locations, and a stale list
+    // would keep asking Dan a question he has already answered.
+    @Test func placingAShowMovesTheSignature() throws {
+        let ctx = ModelContext(try container())
+        let p = show(ctx, key: "k1", venue: "54 Below")
+        let before = UnplacedRooms.signature(try all(ctx))
+
+        p.location = "New York, NY"
+        #expect(UnplacedRooms.signature(try all(ctx)) != before)
+    }
+
+    @Test func aNewUnplacedShowMovesTheSignature() throws {
+        let ctx = ModelContext(try container())
+        show(ctx, key: "k1", venue: "54 Below")
+        let before = UnplacedRooms.signature(try all(ctx))
+
+        show(ctx, key: "k2", venue: "Cherry Lane Theatre")
+        #expect(UnplacedRooms.signature(try all(ctx)) != before)
+    }
+
+    // A show that already knows where it is cannot change this list, so it must not invalidate the cache
+    // either: every scout that places a show would otherwise rebuild it for nothing.
+    @Test func changingAPlacedShowsRoomLeavesTheSignatureAlone() throws {
+        let ctx = ModelContext(try container())
+        show(ctx, key: "k1", venue: "54 Below")
+        let placed = show(ctx, key: "k2", venue: "Merkin Hall", location: "New York, NY")
+        let before = UnplacedRooms.signature(try all(ctx))
+
+        placed.venue = "Somewhere Else Entirely"
+        #expect(UnplacedRooms.signature(try all(ctx)) == before)
+    }
+}
