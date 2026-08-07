@@ -656,6 +656,8 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
             case .declinedHard: return "Closed (not interested)"
             // #1840: says what happened, not what they said. Nobody declined; Dan stopped pitching.
             case .stoodDown: return "You stopped working this"
+            // #2112: says what happened, not what they said. Nobody declined; nobody answered.
+            case .neverHeardBack: return "Never heard back"
             }
         }
         if bounced { return "Bounced" }

@@ -31,7 +31,10 @@ enum ManualRecipientCheck {
             let action: Action
             if match.resolution == .booked || bookedElsewhere {
                 action = .blocked(existingId: match.id)
-            } else if removedByDan || declinedSuppression || match.resolution == .declinedSoft || match.resolution == .declinedHard {
+            // #2112: a contact closed out for never answering resumes like a soft decline. Nothing was
+            // refused, so re-adding the address is Dan trying again, not overriding a "no".
+            } else if removedByDan || declinedSuppression || match.resolution == .declinedSoft
+                        || match.resolution == .declinedHard || match.resolution == .neverHeardBack {
                 action = .resume(existingId: match.id)
             } else {
                 action = .blocked(existingId: match.id)   // still active and unresolved

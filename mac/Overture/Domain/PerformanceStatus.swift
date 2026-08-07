@@ -53,7 +53,11 @@ enum PerformanceStatus: String, Sendable, Equatable, CaseIterable {
         // down is still a decline, because somebody genuinely answered.
         if contacted.allSatisfy({ $0.resolution == .stoodDown || $0.resolution == nil }),
            contacted.contains(where: { $0.resolution == .stoodDown }) { return .stoodDown }
-        if contacted.contains(where: { $0.resolution == .declinedSoft }) { return .lostDoorOpen }
+        // #2112: a silence leaves the door open exactly as a soft decline does. It is a distinct RECORD
+        // (so reporting can tell "they said not now" from "nobody answered") and the same STATUS.
+        if contacted.contains(where: { $0.resolution == .declinedSoft || $0.resolution == .neverHeardBack }) {
+            return .lostDoorOpen
+        }
         return .lostNotInterested
     }
 }

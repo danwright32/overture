@@ -1058,7 +1058,17 @@ struct QueueView: View {
                 // rather than deleted: on a row with nobody waiting it is the only thing saying when the
                 // next touch is due, and it renders the future case too. ReachedOutRowChrome owns the
                 // rule so it is testable and so #2168's guard can see the label is covered.
+                // #2112: the show has been and gone and this pitch is still open, so the row says so
+                // INSTEAD of counting down to a follow-up that can no longer help. A hint, never a cut:
+                // Overture does not decide a pitch is lost on Dan's behalf, which is the same rule that
+                // keeps WentByRetirement off shows he actually pitched. Rust, because it is the app
+                // saying the quiet on this row is not what it looks like.
                 if ReachedOutRowChrome.showsTimingLabel(replyOffered: replyOffered) {
+                    if let hint = ReachedOutClose.passedHint(hasOpened: p.hasOpened(today: today),
+                                                             isStillOpen: r.resolution == nil) {
+                        Text(hint).font(OVType.meta).foregroundStyle(OVColor.rust)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
                     // #2169: a dated form pitch names the NIGHT here ("tonight", "3 days ago") instead of
                     // counting down to a send that will never happen. eventDay/today are threaded in
                     // rather than read inside, so the label is decided from the same date the row's clock
@@ -1066,6 +1076,7 @@ struct QueueView: View {
                     Text(ReachedOutQueue.timingLabel(next: pair.next, now: now, channel: r.outreachChannel,
                                                      eventDay: p.performanceDate, today: today))
                         .font(OVType.meta).foregroundStyle(dueNow ? OVColor.rust : OVColor.inkSoft)
+                    }
                 }
                 // #2128: somebody is waiting on an answer, which is the actual job on this row, so it
                 // leads. Keyed on the peer who WROTE, since the row stands on whoever sorts first.
@@ -1101,6 +1112,15 @@ struct QueueView: View {
                             ProspectMutations.confirmRecipientConversationState(QueueItem(p), r.id,
                                                                                 prospects: prospects, context: context, feedback: feedback)
                         })
+                }
+                // #2112/#2224: closing the pitch out, from the stage Dan stands on rather than the
+                // Archive card he never opens. Unconditional: a show can get its yes at any moment, and a
+                // control that appeared only once the date had passed would be missing on exactly the
+                // night it is wanted. The hint above is the other trigger for the same act.
+                CloseOutMenu { outcome in
+                    ProspectMutations.closeOutFromRow(QueueItem(p), r.id, outcome,
+                                                      prospects: prospects, context: context,
+                                                      feedback: feedback)
                 }
                 // #2130: the control says what is actually due, because "due now" here is min of three
                 // clocks and meant six different things behind one wording. Nothing due, no button: an
