@@ -91,6 +91,32 @@ enum Reachability {
         return now.timeIntervalSince(probedAt) > probeFreshness
     }
 
+    // #2261: what a row says about running the check AGAIN, in three states rather than a bare button.
+    //
+    // Only a row whose answer is FROZEN is offered one. A show already released by the clock is included
+    // by the ordinary control, and a second route beside it would be two controls for one action (#843);
+    // a show never checked at all has no answer to re-run and the offer would imply it had.
+    enum RecheckState: Equatable {
+        /// No frozen answer here: either nothing has ever been checked, or the clock already released it.
+        case notOffered
+        /// Frozen on an answer, and Dan can ask for it to be run again.
+        case offer
+        /// He has asked. L44: the press gets its own state the moment it is accepted, so the control
+        /// stops offering itself rather than looking unpressed while the work is already queued.
+        case requested
+    }
+
+    static func recheckState(probedAt: Date?, hasInheritedAnswer: Bool,
+                             recheckRequestedAt: Date?, now: Date) -> RecheckState {
+        // Asked first, and deliberately without reference to the answer underneath. A request made just
+        // before the clock released the answer must keep reading as acknowledged rather than flickering
+        // back to an unpressed-looking control the moment the window expires.
+        if recheckRequestedAt != nil { return .requested }
+        if hasInheritedAnswer { return .offer }
+        guard probedAt != nil, !probeIsStale(probedAt: probedAt, now: now) else { return .notOffered }
+        return .offer
+    }
+
     // #1596 Phase 3: what a check CONCLUDED, stored on the row rather than re-derived from its recipients
     // every time it draws. Deliberately NOT reusing `Badge`, whose `.none` means "render nothing"; a nil
     // result here means "no check has ever run", and two meanings for one token inside one feature is how
@@ -227,6 +253,16 @@ enum Reachability {
 // #1145 copy. Kept out of the view (testable, #885) and named so the copy-inventory shows the whole
 // sentence Dan reads.
 enum ReachabilityCopy {
+    // #2261: asking for a frozen answer to be researched again. The control says what it DOES; why Dan
+    // might want it (the check has got better since) is his own knowledge, not a sentence the row repeats
+    // on every answered show.
+    static let checkAgain = "Check again"
+    static let checkAgainHelp =
+        "Research this show's contacts again on the next check, instead of keeping this answer until it's 90 days old. It costs a lookup like any other check."
+    // The acknowledged state. It says what will happen and where, because the run itself is started from
+    // the date's own control and a line saying only "requested" would leave him waiting for something
+    // that needs one more press.
+    static let recheckQueued = "Will be researched again once you run the check for this date."
     static let hardToReachBadge = "Hard to reach"
 
     // #1859: the sentence names the ONE thing that can still produce this badge. It used to offer two

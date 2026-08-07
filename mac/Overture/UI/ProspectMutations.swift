@@ -17,6 +17,22 @@ enum ProspectMutations {
         }
     }
 
+    // #2261: Dan asks for a show's frozen reachability answer to be researched again. A flag, never a
+    // clearing of the verdict: the old answer stays on the card until a new one lands on top of it, so a
+    // re-check that then fails leaves him no worse off than before he pressed (L5).
+    static func requestReachabilityRecheck(_ item: QueueItem, prospects: [Prospect],
+                                           context: ModelContext, feedback: ActionFeedback,
+                                           now: Date = Date()) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        // Idempotent. Pressing twice must not move the request's timestamp, which is what the row reads to
+        // decide it has already been acknowledged.
+        guard model.reachabilityRecheckRequestedAt == nil else { return }
+        model.reachabilityRecheckRequestedAt = now
+        // No banner on success: the row swaps in place to say what will happen, which is the
+        // acknowledgement. saveOrWarn still surfaces a FAILED write, which is what a banner is for.
+        context.saveOrWarn(org: item.groupName, feedback: feedback)
+    }
+
     // Dan marked an auto-detected Gmail reply as not real (#219): revert it and remember that
     // reply so it does not re-flag, while a genuinely new reply still will.
     static func dismissReply(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {

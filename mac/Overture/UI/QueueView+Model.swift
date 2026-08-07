@@ -40,6 +40,8 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // #1308 Layer 2: when a reachability probe last researched this show (nil = never). Drives whether the
     // show is still a probe candidate and, later, the firm email-found/not-found badge.
     var reachabilityProbedAt: Date? = nil
+    // #2261: Dan has asked for this show to be checked again despite its existing answer.
+    var reachabilityRecheckRequestedAt: Date? = nil
     var reachabilityResult: Reachability.ProbeResult? = nil
     // #1722: why the check came back with nothing usable, so the badge can say what it measured instead
     // of claiming the search found nothing. Only ever qualifies the noEmailFound badge's wording; it
@@ -1769,6 +1771,19 @@ enum QueueModel {
     // An answer this row can show right now: its own check while it is still fresh (#1332), or the
     // organisation's, inherited from a check paid for on another of its shows (#1598 Phase 5).
     private static func hasFreshReachabilityAnswer(_ i: QueueItem, now: Date) -> Bool {
+        // #2261: a request to re-check releases the show, and it is asked FIRST so it releases BOTH ways a
+        // show can be frozen. The inherited case is the one that would otherwise be missed: a show can be
+        // held not by its own check but by one paid for on a sibling of the same organisation, and a
+        // release that only overrode the own-answer branch would refuse on exactly those rows while the
+        // button sat there offering.
+        //
+        // What a re-check does NOT do is touch the organisation's ledger answer. It cannot need to: the
+        // fan-out skips any show carrying its own answer (`OrgAnswerLedger.inherited`, `!hasOwnAnswer`), so
+        // the re-checked show is immune to its own organisation's older answer the moment its new one
+        // lands. Rewriting the org answer from one re-check would instead reach siblings Dan never
+        // selected. (The ledger holds 0 rows on the live store as of 2026-08-07, so this decides the rule
+        // before the situation exists rather than after.)
+        if i.reachabilityRecheckRequestedAt != nil { return false }
         if i.inheritedReachability != nil { return true }
         return i.reachabilityProbedAt != nil
             && !Reachability.probeIsStale(probedAt: i.reachabilityProbedAt, now: now)
@@ -2062,6 +2077,7 @@ extension QueueItem {
             websiteURL: p.websiteURL,
             presenter: p.presenter,
             reachabilityProbedAt: p.reachabilityProbedAt,
+            reachabilityRecheckRequestedAt: p.reachabilityRecheckRequestedAt,
             reachabilityResult: p.reachabilityResult,
             reachabilityEmptyReason: p.reachabilityEmptyReason,
             reachabilityUnansweredAt: p.reachabilityUnansweredAt,

@@ -79,6 +79,11 @@ final class ActionFeedback {
 // acknowledgment reads on its own, and the send helpers carry an honest failure line (a swallowed
 // send failure was one of the silent no-ops this sweep fixes).
 enum ActionAck {
+    // #2261 deliberately has NO acknowledgement here. The control it fires is on the row and swaps in
+    // place to a line saying what will happen and what is still to do, which is the acknowledgement (L44);
+    // a banner beside it would be that same sentence twice on one screen (#843). A save that FAILS still
+    // reaches the banner through saveOrWarn, which is the case a banner is actually for.
+
     static func voiceLearning(excluded: Bool, org: String) -> String {
         excluded ? "Won't learn from \(org)'s email" : "Learning from \(org)'s email again"
     }
