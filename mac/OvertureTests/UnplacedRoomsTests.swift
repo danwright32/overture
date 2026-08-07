@@ -35,7 +35,7 @@ struct UnplacedRoomsTests {
     }
 
     private func rooms(_ ctx: ModelContext) throws -> [UnplacedRooms.Room] {
-        UnplacedRooms.from(try ctx.fetch(FetchDescriptor<Prospect>()))
+        UnplacedRooms.from(try ctx.fetch(FetchDescriptor<Prospect>()), today: "2026-08-07")
     }
 
     // MARK: - The list
@@ -237,7 +237,7 @@ struct UnplacedRoomsSignatureTests {
         let ctx = ModelContext(try container())
         show(ctx, key: "k1", venue: "54 Below")
 
-        #expect(UnplacedRooms.signature(try all(ctx)) == UnplacedRooms.signature(try all(ctx)))
+        #expect(UnplacedRooms.signature(try all(ctx), today: "2026-08-07") == UnplacedRooms.signature(try all(ctx), today: "2026-08-07"))
     }
 
     // The change that MUST move it: a room getting an answer fills its shows' locations, and a stale list
@@ -245,19 +245,19 @@ struct UnplacedRoomsSignatureTests {
     @Test func placingAShowMovesTheSignature() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx, key: "k1", venue: "54 Below")
-        let before = UnplacedRooms.signature(try all(ctx))
+        let before = UnplacedRooms.signature(try all(ctx), today: "2026-08-07")
 
         p.location = "New York, NY"
-        #expect(UnplacedRooms.signature(try all(ctx)) != before)
+        #expect(UnplacedRooms.signature(try all(ctx), today: "2026-08-07") != before)
     }
 
     @Test func aNewUnplacedShowMovesTheSignature() throws {
         let ctx = ModelContext(try container())
         show(ctx, key: "k1", venue: "54 Below")
-        let before = UnplacedRooms.signature(try all(ctx))
+        let before = UnplacedRooms.signature(try all(ctx), today: "2026-08-07")
 
         show(ctx, key: "k2", venue: "Cherry Lane Theatre")
-        #expect(UnplacedRooms.signature(try all(ctx)) != before)
+        #expect(UnplacedRooms.signature(try all(ctx), today: "2026-08-07") != before)
     }
 
     // A show that already knows where it is cannot change this list, so it must not invalidate the cache
@@ -266,9 +266,105 @@ struct UnplacedRoomsSignatureTests {
         let ctx = ModelContext(try container())
         show(ctx, key: "k1", venue: "54 Below")
         let placed = show(ctx, key: "k2", venue: "Merkin Hall", location: "New York, NY")
-        let before = UnplacedRooms.signature(try all(ctx))
+        let before = UnplacedRooms.signature(try all(ctx), today: "2026-08-07")
 
         placed.venue = "Somewhere Else Entirely"
-        #expect(UnplacedRooms.signature(try all(ctx)) == before)
+        #expect(UnplacedRooms.signature(try all(ctx), today: "2026-08-07") == before)
+    }
+}
+
+// #1752, found by WALKING the app rather than by any test.
+//
+// The panel listed "Denny Farrell Riverbank State Park, 2 shows waiting on this" on the Debug store,
+// and both of those shows were dated June 27 and July 11 against a clock reading August 7. Nothing was
+// waiting on that room: the shows had already happened. The list counted every stored row, so it would
+// have accumulated dead rooms forever and every count in it would drift upward, which is the exact
+// opposite of the action list #1029 asked for.
+//
+// It also explains why no queue card could be found showing the ask: every unplaced show in that store
+// was past, so none of them was in the queue at all. One fact, two symptoms.
+@MainActor
+@Suite("The unplaced-room list only counts shows still ahead (#1752)")
+struct UnplacedRoomsStillAheadTests {
+    private let today = "2026-08-07"
+
+    private func container() throws -> ModelContainer {
+        try ModelContainer(for: Schema([Prospect.self, Recipient.self, WatchedSource.self,
+                                        VenuePlaceAnswer.self]),
+                           configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+    }
+
+    @discardableResult
+    private func show(_ ctx: ModelContext, key: String, venue: String?, date: String?,
+                      runEnd: String? = nil) -> Prospect {
+        let p = Prospect(naturalKey: key, groupName: "A show", discipline: "music", venue: venue,
+                         performanceDate: date, sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "none", production: "self", profile: "neutral",
+                         coverage: "unknown", fitScore: 3, tier: "longshot", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
+        p.runEndDate = runEnd
+        ctx.insert(p)
+        return p
+    }
+
+    private func rooms(_ ctx: ModelContext) throws -> [UnplacedRooms.Room] {
+        UnplacedRooms.from(try ctx.fetch(FetchDescriptor<Prospect>()), today: today)
+    }
+
+    // The live shape from the Debug store: a room whose only shows have already happened.
+    @Test func aRoomWhoseShowsHaveAllHappenedIsNotAsked() throws {
+        let ctx = ModelContext(try container())
+        show(ctx, key: "k1", venue: "Denny Farrell Riverbank State Park", date: "2026-06-27")
+        show(ctx, key: "k2", venue: "Denny Farrell Riverbank State Park", date: "2026-07-11")
+
+        #expect(try rooms(ctx).isEmpty)
+    }
+
+    // And the count is of what is actually still waiting, not of everything the room ever held.
+    @Test func onlyTheShowsStillAheadAreCounted() throws {
+        let ctx = ModelContext(try container())
+        show(ctx, key: "k1", venue: "54 Below", date: "2026-06-27")
+        show(ctx, key: "k2", venue: "54 Below", date: "2026-09-01")
+        show(ctx, key: "k3", venue: "54 Below", date: "2026-09-02")
+
+        #expect(try rooms(ctx).first?.showCount == 2)
+    }
+
+    // Today counts as still ahead: a show tonight is one Dan can still act on.
+    @Test func aShowTodayStillCounts() throws {
+        let ctx = ModelContext(try container())
+        show(ctx, key: "k1", venue: "54 Below", date: today)
+
+        #expect(try rooms(ctx).first?.showCount == 1)
+    }
+
+    // A multi-night run counts while any night of it is ahead, judged on the run's LAST date. Judging on
+    // the first would drop a run that opened last week and plays for another month.
+    @Test func aRunStillPlayingCounts() throws {
+        let ctx = ModelContext(try container())
+        show(ctx, key: "k1", venue: "54 Below", date: "2026-08-01", runEnd: "2026-09-06")
+
+        #expect(try rooms(ctx).first?.showCount == 1)
+    }
+
+    // A show carrying no date at all cannot be proved past, so it is still asked about. The failure
+    // direction matters: a room wrongly listed costs Dan one glance, a room wrongly dropped costs him
+    // the geography rule on every show in it, silently.
+    @Test func aShowWithNoDateIsStillAsked() throws {
+        let ctx = ModelContext(try container())
+        show(ctx, key: "k1", venue: "54 Below", date: nil)
+
+        #expect(try rooms(ctx).first?.showCount == 1)
+    }
+
+    // The signature has to move on the same rule, or the cached list goes stale the moment a show ages
+    // out and the panel keeps naming a room nothing is waiting on.
+    @Test func theSignatureMovesWhenTheLastShowInARoomPasses() throws {
+        let ctx = ModelContext(try container())
+        show(ctx, key: "k1", venue: "54 Below", date: "2026-09-01")
+        let onTheDay = UnplacedRooms.signature(try ctx.fetch(FetchDescriptor<Prospect>()), today: today)
+        let afterwards = UnplacedRooms.signature(try ctx.fetch(FetchDescriptor<Prospect>()),
+                                                 today: "2026-09-02")
+        #expect(onTheDay != afterwards)
     }
 }
