@@ -153,22 +153,87 @@ enum WatchlistEditing {
         }
 
         source.listingsURL = url
-        // Reset feed history + warmup: the new page must re-earn the right to mark anything gone.
+        // #2229: the kind follows the address, exactly as it does on the ADD path above. It decides whether
+        // this source is parsed natively and free on every run or handed to the paid extract run, and which
+        // adapter SourceExtractorRegistry hands it to, so a source repointed onto a ticketing host while
+        // still labelled `.html` sits on the paid path forever and never has Dan's `venueName` threaded in.
+        // Measured: theplayerstheatre-com was watched at web.ovationtix.com carrying kind `html`.
+        //
+        // `.algolia` is the one kind never derivable from a URL (Carnegie's listings URL is a display-only
+        // placeholder over a POST search API), so it is preserved rather than rewritten. `.squarespaceFeed`
+        // is likewise unreachable from `forListingURL`, being assigned by a CONTENT probe, so a correction
+        // demotes it to `.html`; that is right rather than lossy, because the new address may not be
+        // Squarespace at all, and ScoutService re-probes any `.html` source on its next check.
+        if source.kind != .algolia {
+            source.kind = SourceKind.forListingURL(URL(string: url))
+        }
+        clearStateDerivedFromTheWatchedPage(source)
+        source.hasUnreadChanges = true          // so the next scout reads the corrected page
+        try? context.save()
+        return .saved(sourceId: source.sourceId)
+    }
+
+    // #2229: everything the row knows because of the page it USED to watch, cleared in one place.
+    //
+    // This used to be a hand-written list of assignments inside editURL, and the model grew past it. What
+    // survived was not harmless: the sheet went on saying "147 of 147 listings named no venue" and NAMING
+    // two of those shows about an address the source no longer fetches, the row claimed it had been checked
+    // an hour ago when that was true of the previous page, and the stored run note was a paragraph
+    // describing HTML from the old host. A corrected URL is a brand-new source for reconcile (#1027), so a
+    // fact that came from reading the old page has no standing on the new one.
+    //
+    // What is NOT here is as deliberate as what is. Dan's own answers (`venueName`, `venueLocation`, the
+    // client tag, the same-date merge rule) are assertions about the ORG, not observations of a page, and
+    // silently discarding an answer he typed is its own defect (L5). Consent (`isActive`,
+    // `inactiveReasonRaw`) is never a health signal (#800). The id stays because it is stamped on every
+    // prospect the old page ever produced.
+    //
+    // AddressCorrectionTests guards the CLASS rather than today's fields: a stored property added to
+    // WatchedSource must be cleared here or named there as surviving, so the next one cannot be forgotten.
+    static func clearStateDerivedFromTheWatchedPage(_ source: WatchedSource) {
+        // Feed history + warmup: the new page must re-earn the right to mark anything gone.
         source.baselineFeedCount = 0
         source.successfulCheckCount = 0
         source.degradedStreak = 0
         source.lastDegradedCount = 0
+
+        // What the last run managed to read, and what it dropped. All of it was about the old page, and
+        // `readabilityNote` is built from these, so a survivor here becomes a sentence Dan reads.
         source.lastReadableCount = 0
         source.lastUnreadableCount = 0
         source.lastUnreadableTitleCount = 0
+        source.lastStructuralGapCount = 0
+        source.lastDroppedShowLabelsRaw = ""
+        source.lastPlacedCount = 0
+        source.hadPlacedBeforeLastRun = false
+
+        // When it was looked at. #1758 made the row's largest slot say CHECKED only when something was
+        // actually read, because beside an org name it reads as "we have current information about this
+        // org". After a correction that claim belongs to the previous address.
+        source.lastCheckedAt = nil
+        source.lastSucceededAt = nil
+        source.lastManualReadAt = nil
+        source.pageCount = 0
         source.health = .neverChecked          // it has not been checked at this address yet
-        source.lastFailure = nil
-        source.confirmedEmptyHash = nil         // a different page: any prior confirmation is void
+
+        // Bytes, and what was concluded from them. Every hash here anchors to the old page, and a
+        // confirmation of an empty page is void the moment the page is a different one.
         source.lastContentHash = nil
         source.pendingContentHash = nil
-        source.hasUnreadChanges = true          // so the next scout reads the corrected page
-        try? context.save()
-        return .saved(sourceId: source.sourceId)
+        source.pendingPageMonthsRaw = ""
+        source.lastObservedContentHash = nil
+        source.confirmedEmptyHash = nil
+        source.lastFetchWasInsecure = false     // earned by a host this source no longer touches
+
+        // The scout's own account of a specific page, and the failure it ended in.
+        source.notes = nil
+        source.lastErrorRaw = nil
+
+        // #1529: recorded the first time a ticket-link hop landed on a single-venue feed. It is a machine
+        // observation about the OLD page (unlike `venueName` beside it, which is Dan's answer and stays),
+        // and it is what makes the Sources sheet ask for the room on this row, so carrying it onto an
+        // unrelated address asks the question about a page that never prompted it.
+        source.ticketingFeedURL = nil
     }
 
     // #1175: Dan supplies the real location for a single-venue feed source whose synthesized document
