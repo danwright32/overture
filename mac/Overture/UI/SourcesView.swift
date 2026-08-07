@@ -107,7 +107,12 @@ struct SourcesView: View {
                     // The cost is #974: if a scout refreshes the list WHILE the sheet is open it may snap to the
                     // top, a minor annoyance worth trading for a sheet that never hangs. Revisit place-holding only
                     // with an approach that cannot re-enter layout.
-                    ScrollView {
+                    // Sizes to its content rather than to a fixed height, so today's one-source watchlist
+                    // does not open as a mostly empty box, and a long one still scrolls instead of running
+                    // off the screen. #2159: and says so while it is scrolling, which a bare capped
+                    // ScrollView never did. The cue is drawn in an overlay and a mask, neither of which
+                    // feeds anything back into layout, so it cannot reintroduce #1440's freeze.
+                    CappedScrollView(maxHeight: 460) {
                         // #1440: a plain VStack, NOT a LazyVStack. A lazy list does not build off-screen rows, so
                         // it only ESTIMATES the height of the big "watching" section (~35 rows as one child); a
                         // fast flick into it realizes the real, much larger height, the content size snaps, and the
@@ -149,9 +154,6 @@ struct SourcesView: View {
                         }
                         .padding(OVSpacing.lg)
                     }
-                    // Sizes to its content rather than to a fixed height, so today's one-source watchlist does not
-                    // open as a mostly empty box, and a long one still scrolls instead of running off the screen.
-                    .frame(maxHeight: 460)
                 }
             }
         }

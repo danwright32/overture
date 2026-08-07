@@ -36,7 +36,7 @@ struct ScoutSummaryView: View {
 
             // A deferred-only run has no sections; skip the empty scroll box entirely.
             if !warnings.sections.isEmpty {
-                ScrollView { sectionStack }.frame(maxHeight: 460)
+                CappedScrollView(maxHeight: 460) { sectionStack }
                 Divider().overlay(OVColor.line)
             }
             footer

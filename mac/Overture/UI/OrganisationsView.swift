@@ -45,14 +45,13 @@ struct OrganisationsView: View {
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider().overlay(OVColor.line)
-            ScrollView {
+            CappedScrollView(maxHeight: 460) {
                 VStack(alignment: .leading, spacing: OVSpacing.lg) {
                     worthALook(model)
                     sameNameTwice
                 }
                 .padding(OVSpacing.lg)
             }
-            .frame(maxHeight: 460)
         }
         .frame(width: 560)
         .background(OVColor.canvas)
