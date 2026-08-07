@@ -86,9 +86,9 @@ struct PrepQueueContractTests {
         #expect(roundTripped == expected)
     }
 
-    @Test func theBuilderNowStampsVersion10() {
+    @Test func theBuilderNowStampsVersion11() {
         let q = PrepQueueBuilder.build(from: [], generatedAt: "2026-06-25T00:00:00.000Z", houses: [])
-        #expect(q.version == 10)
+        #expect(q.version == 11)
     }
 
     // v2 (#586): the queue item gains an optional `production` (self / agency / unknown, from
@@ -225,6 +225,38 @@ struct PrepQueueContractTests {
         // 2026-07-31). Absent here is a decision, not a gap.
         #expect(decoded.items[0].venue == "Carnegie Hall")
         #expect(decoded.items[0].venueHistory == nil)
+    }
+
+    // v11 (#2259): an item may name the producing company its own listing page credits in front of the
+    // show's title. It rides WITH `onlyTheActIsNamed`, deliberately: that flag means the stored presenter
+    // field is empty, and this field is the app saying the page names a company anyway, which is exactly
+    // the pair the runbook used to get wrong by treating the first as a claim about the page.
+    @Test func theV11FixtureNamesTheCompanyTheListingCredits() throws {
+        let decoded = try JSONDecoder().decode(PrepQueue.self, from: try fixture("v11.json"))
+        #expect(decoded.version == 11)
+        #expect(decoded.items[1].onlyTheActIsNamed == true)
+        #expect(decoded.items[1].organisationNamedOnListing == "Fenwick Productions")
+        #expect(decoded.items[0].organisationNamedOnListing == nil)
+    }
+
+    // The claim the field exists to make, end to end: the app READS that name off the page text rather
+    // than the fixture merely asserting a string it was handed. A fixture pinning a value nobody derives
+    // is a test of its own typing (L1).
+    @Test func attachingReadsTheCreditOffTheListingText() throws {
+        let decoded = try JSONDecoder().decode(PrepQueue.self, from: try fixture("v11.json"))
+        let stripped = PrepQueue(version: decoded.version, generatedAt: decoded.generatedAt,
+                                 items: decoded.items.map { item in
+                                     var copy = item
+                                     copy.showListing = nil
+                                     copy.organisationNamedOnListing = nil
+                                     return copy
+                                 }, houses: decoded.houses)
+        let listings = Dictionary(uniqueKeysWithValues: decoded.items.compactMap { item in
+            item.showListing.map { (item.naturalKey, $0) }
+        })
+        let rebuilt = PrepQueueBuilder.attaching(listings, to: stripped)
+        #expect(rebuilt.items[1].organisationNamedOnListing == "Fenwick Productions")
+        #expect(rebuilt.items[0].organisationNamedOnListing == nil)
     }
 
     // Additive: an earlier queue file decodes as having said NOTHING about the venue, which the runbook

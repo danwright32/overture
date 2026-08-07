@@ -211,57 +211,10 @@ enum VenueTixCalendar {
     // could recover what the ingest destroyed: ICB Productions' "Summer Lovin'" reached Dan as
     // "No email found" while the company sat in the feed's own record for that show.
     //
-    // CALIBRATED against the live feed rather than invented (L48). Fetched 2026-08-07: 229 events, 141
-    // distinct supertitles. A first rule (possessive ending, or any of Productions / Company /
-    // Entertainment / Collective / Theatre / Studio) matched 34 and was wrong on several, taking
-    // "A Jennings Vocal Studio NYC Cabaret" and a twelve-word marketing line. This one matches 25, and
-    // every one of those reads as a real producer.
-    //
-    // The length caps are what separate a NAME from a SENTENCE, and they are the load-bearing part: an
-    // organisation's name is short, marketing runs on.
+    // The rule itself lives in `ProducerShapedName`, because the listing PAGE credits the same companies
+    // in front of the same show titles and has to answer this identically (`ListingOrganiser`).
     static func producerName(inSuperTitle raw: String?) -> String? {
-        guard let raw else { return nil }
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-
-        // A connector names the company after it ("Hosted by Vivace Arts Collective"). The connector is
-        // not part of the name, so it goes; but a phrase that needed one is no longer a bare possessive,
-        // which is why the possessive arm below refuses a stripped string.
-        // copy-inventory:ignore-start  parser tokens matched against a ticketing feed, never Overture's voice
-        let connectors = ["from ", "featuring ", "hosted by ", "based on ", "presented by ",
-                          "starring ", "celebrating "]
-        // copy-inventory:ignore-end
-        var core = trimmed
-        var hadConnector = false
-        for lead in connectors where core.lowercased().hasPrefix(lead) {
-            core = String(core.dropFirst(lead.count)).trimmingCharacters(in: .whitespaces)
-            hadConnector = true
-            break
-        }
-        guard !core.isEmpty else { return nil }
-        let words = core.split(separator: " ").count
-
-        // The trailing possessive belongs to the show title that followed it, never to the company, so it
-        // is removed from what gets stored. Left on, every later search for this organisation would carry
-        // a stray apostrophe.
-        let withoutPossessive: (String) -> String = { s in
-            for suffix in ["\u{2019}s", "'s", "\u{2019}", "'"] where s.hasSuffix(suffix) {
-                return String(s.dropLast(suffix.count)).trimmingCharacters(in: .whitespaces)
-            }
-            return s
-        }
-
-        let endsPossessive = ["\u{2019}s", "'s", "s\u{2019}", "s'"].contains { core.hasSuffix($0) }
-        if endsPossessive, !hadConnector, words <= 5 { return withoutPossessive(core) }
-
-        let organisationWords = ["production", "productions", "company", "entertainment",
-                                 "collective", "media"]
-        let isOrganisation = core.split(separator: " ").contains { word in
-            organisationWords.contains(word.lowercased().trimmingCharacters(
-                in: CharacterSet.alphanumerics.inverted))
-        }
-        if isOrganisation, words <= 6 { return withoutPossessive(core) }
-        return nil
+        ProducerShapedName.from(raw)
     }
 
     static func extractedEvents(from events: [VTEvent], presenter: String, venue: String?,

@@ -57,6 +57,9 @@ person, org, venue, or email address. `.example` domains and made-up names throu
 - `already-covered-photographer`: an explicit "we have a photographer" statement sets the fit-risk note (#611).
 - `returning-client-booked`: a booked returning client opens warm, with no cold self-introduction and no portfolio/gallery scaffolding (#1215).
 - `returning-client-warm-lead`: a warm lead drops the cold self-introduction but keeps one light credential and the portfolio link (#1215).
+- `listing-credits-the-producing-company`: a show whose stored presenter is empty while its listing page
+  credits the producing company in front of the title: the company is pursued as a presenter, and the
+  people on the bill are still pursued beside it (#2259).
 - `listed-house-is-refused`: an organisation on the queue's `houses` list is the building, so its addresses are disqualified even when the listing calls it the presenter (#1720/#1723).
 - `solo-artist-cabaret-not-an-organisation`: the run says back what the listing says the show IS, and describes Dan without categorizing the recipient (#1824).
 - `venue-history-band-says-he-knows-the-room`: the item carries a `venueHistory` band, so the draft says

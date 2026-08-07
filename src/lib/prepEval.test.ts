@@ -567,6 +567,7 @@ describe("prep-eval fixtures", () => {
       "five-named-performers-none-dropped",
       "host-venue-not-target",
       "listed-house-is-refused",
+      "listing-credits-the-producing-company",
       "no-organiser-named-act-pursued",
       "presenter-not-venue",
       "returning-client-booked",
@@ -641,6 +642,24 @@ describe("prep-eval fixtures", () => {
     const r = evaluateFixture(fixture!, produced);
     expect(r.pass).toBe(false);
     expect(r.failures.join(" ")).toMatch(/harbourarts\.example/);
+  });
+
+  // #2259: the same discipline for the company a listing credits. The regression is not an invented
+  // draft, it is exactly what the 2026-08-07 run produced: the two people named on the listing, each with
+  // no address, and no company at all. Every count-based check passes on that answer, which is why the
+  // fixture pins the address the company publishes.
+  it("listing-credits-the-producing-company: flags a run that pursues only the people on the bill", () => {
+    const fixture = fixtures.find((f) => f.name === "listing-credits-the-producing-company");
+    expect(fixture).toBeTruthy();
+    const produced = JSON.parse(JSON.stringify(fixture!.sampleCompliantOutput)) as {
+      results: Array<{ contacts: Array<Record<string, unknown>> }>;
+    };
+    produced.results[0].contacts = produced.results[0].contacts.filter(
+      (c) => c.provenance !== "presenter");
+    const r = evaluateFixture(fixture!, produced);
+    expect(r.pass).toBe(false);
+    expect(r.failures.join(" ")).toMatch(/presenter/);
+    expect(r.failures.join(" ")).toMatch(/hello@fenwickproductions\.example/);
   });
 
   // #1824. Same discipline: each of these fixtures must be seen to FAIL on the exact draft a runbook

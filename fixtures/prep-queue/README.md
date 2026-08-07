@@ -64,3 +64,12 @@ shot Carnegie well over a hundred times. That absence is a decision, not a gap. 
 requires a Carnegie show to lead with the "nearly ten years at Carnegie Hall" tenure credential,
 which is about that same room, so a band beside it would be one fact stated twice (Dan's call,
 2026-07-31). The app omits the field for Carnegie deliberately, in code, so it cannot drift.
+
+`v11.json` (#2259) adds an optional `organisationNamedOnListing` to each item: the producing company the
+show's OWN listing page credits in front of its title, read by the app off `showListing.text`
+(`ListingOrganiser`). It rides WITH `onlyTheActIsNamed`, deliberately. That flag means the app stored no
+presenter for the row, and the runbook had restated it as "this listing named no producing organisation at
+all", which is a claim about the page: on ICB Productions' "Summer Lovin'" the page's title line named the
+company twice while the flag was true, and the run was told there was nothing to find. Additive, so every
+earlier fixture still decodes with it absent. Absent means the app's narrow parse found no credit, never
+that the page names nobody.

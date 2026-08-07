@@ -34,8 +34,8 @@ describe("prep-queue fixture shapes", () => {
   it("covers exactly the known prep-queue files", () => {
     expect(files.sort()).toEqual([
       // Lexicographic, because the assertion compares against files.sort(): "v10" sorts next to "v1".
-      "v1.json", "v10.json", "v2.json", "v3.json", "v4.json", "v5.json", "v6.json", "v7.json",
-      "v8.json", "v9.json",
+      "v1.json", "v10.json", "v11.json", "v2.json", "v3.json", "v4.json", "v5.json", "v6.json",
+      "v7.json", "v8.json", "v9.json",
     ]);
   });
 
@@ -45,6 +45,31 @@ describe("prep-queue fixture shapes", () => {
       expect(() => assertPrepQueueShape(readJson("prep-queue", file), file, version)).not.toThrow();
     });
   }
+
+  // #2259: the company a listing credits is a v11 addition, so it must be rejected on an older fixture
+  // that a runner predating the rule would read.
+  it("rejects a v11 listing organisation appearing in a v10 fixture", () => {
+    const mutated = readJson("prep-queue", "v10.json") as { items: Array<Record<string, unknown>> };
+    mutated.items[0].organisationNamedOnListing = "Fenwick Productions";
+    expect(() => assertPrepQueueShape(mutated, "v10.json", 10))
+      .toThrow(/organisationNamedOnListing.*before version 11/);
+  });
+
+  // Empty is not a company. Written as "" it would read as an answer the app never found, which is the
+  // exact confusion this field exists to end.
+  it("rejects an empty listing organisation in a v11 fixture", () => {
+    const mutated = readJson("prep-queue", "v11.json") as { items: Array<Record<string, unknown>> };
+    mutated.items[1].organisationNamedOnListing = "  ";
+    expect(() => assertPrepQueueShape(mutated, "v11.json", 11)).toThrow(/must be absent rather than empty/);
+  });
+
+  // The app can only have read a credit off a page it read. A name with no listing beside it came from
+  // somewhere else, and the runbook would treat it as read from the page.
+  it("rejects a listing organisation on an item carrying no listing", () => {
+    const mutated = readJson("prep-queue", "v11.json") as { items: Array<Record<string, unknown>> };
+    delete mutated.items[1].showListing;
+    expect(() => assertPrepQueueShape(mutated, "v11.json", 11)).toThrow(/requires a showListing/);
+  });
 
   // #1122: the run fields are v4 additions, so the guard must reject them appearing in an older
   // fixture, the same way the prep-results guard rejects a too-new field below.
