@@ -109,11 +109,7 @@ struct ReachedOutRowSlotsTests {
                                       in: body),
             "the reached-out row's trailing column was not found where the guard expects it")
 
-        let renderers = ["Text(ReachedOutQueue.timingLabel": ReachedOutRowSlots.Slot.timing,
-                         "Button(ReplyPanelCopy.answer": .answer,
-                         "ConversationStateControl(": .conversationState,
-                         "Button(label)": .dueAction]
-        for (token, slot) in renderers {
+        for (token, slot) in Self.renderers {
             #expect(column.contains(token), "the \(slot) slot is no longer rendered by \(token)")
         }
         // Nothing else draws. Counted rather than listed, so a new control cannot hide behind a name the
@@ -129,4 +125,41 @@ struct ReachedOutRowSlotsTests {
                 add it to ReachedOutRowSlots.Slot and say where it sits in the order, or do not add it.
                 """)
     }
+
+    // The order half of the rule, which the check above does not cover. Without this, `Slot`'s declared
+    // order is a comment: the view could draw the action above the timing line and every other assertion
+    // here would still pass, because presence and count are both unchanged by reordering.
+    //
+    // Read from where each renderer actually sits in the source, since that IS the order a vertical stack
+    // draws in. It does not pin pixels, and it is not meant to; it pins the sequence the rule states.
+    @Test func theTrailingColumnDrawsTheSlotsInTheDeclaredOrder() throws {
+        let source = SourceGuardHelper.source("Overture/UI/QueueView.swift")
+        let body = try String(SourceGuard.functionBody(named: "reachedOutRow", in: source))
+        let column = try #require(
+            SourceGuardHelper.between("VStack(alignment: .trailing, spacing: 6) {", and: "\n        }",
+                                      in: body))
+
+        let positions: [(slot: ReachedOutRowSlots.Slot, at: Int)] = try ReachedOutRowSlots.Slot.allCases
+            .map { slot in
+                let token = try #require(Self.renderers.first { $0.value == slot }?.key,
+                                         "no renderer is declared for \(slot)")
+                let range = try #require(column.range(of: token), "\(slot) is not drawn at all")
+                return (slot, column.distance(from: column.startIndex, to: range.lowerBound))
+            }
+
+        let drawnOrder = positions.sorted { $0.at < $1.at }.map(\.slot)
+        #expect(drawnOrder == ReachedOutRowSlots.Slot.allCases,
+                """
+                the row draws its slots as \(drawnOrder) but the rule declares \
+                \(ReachedOutRowSlots.Slot.allCases). Order is part of the rule (#2167): timing leads \
+                because it answers "why am I looking at this", and the action comes last.
+                """)
+    }
+
+    private static let renderers: [String: ReachedOutRowSlots.Slot] = [
+        "Text(ReachedOutQueue.timingLabel": .timing,
+        "Button(ReplyPanelCopy.answer": .answer,
+        "ConversationStateControl(": .conversationState,
+        "Button(label)": .dueAction
+    ]
 }
