@@ -55,11 +55,14 @@ struct AppNoticeTests {
         #expect(notices.first?.text == AppNotices.omniFocusFailing.text)
     }
 
-    // The sync failure says what to do, not just that something is wrong. It is the one notice here whose
-    // remedy is a specific click, and a line naming a fault with nowhere to go is L80's shape.
+    // The sync failure says what to do, not just that something is wrong (L80). #2250 moved the remedy
+    // out of the tooltip: the retry is now a CONTROL on the line, and the line itself states what is at
+    // stake, so neither depends on Dan hovering. What stays in the tooltip is what to look at if the
+    // retry does not clear it, which explains rather than instructs.
     @Test func thesyncFailureSaysWhatToDoAboutIt() throws {
+        #expect(AppNotices.omniFocusFailing.action == .retryOmniFocusSync)
+        #expect(AppNotices.omniFocusFailing.text.contains("follow-up tasks"))
         let help = try #require(AppNotices.omniFocusFailing.help)
-        #expect(help.contains("Sync to OmniFocus"))
         #expect(help.contains("Automation permission"))
     }
 
@@ -89,7 +92,7 @@ struct AppNoticePlacementGuardTests {
         let queue = SourceGuardHelper.source("Overture/UI/QueueView.swift")
         let masthead = try #require(SourceGuardHelper.propertyBody(
             "agentInputs: AgentInputs) -> some View {", in: queue))
-        #expect(masthead.contains("AppNoticeLines(notices: notices)"))
+        #expect(masthead.contains("AppNoticeLines(notices: notices"))
 
         let root = SourceGuardHelper.source("Overture/App/RootView.swift")
         #expect(root.contains("notices: AppNotices.current(omniFocusFailing: omniFocusFailedAt > 0, status: status)"),

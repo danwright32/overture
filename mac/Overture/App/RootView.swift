@@ -379,6 +379,12 @@ struct RootView: View {
                   // #2204: out of the toolbar's status slot, which macOS hides in the overflow chevron at
                   // Dan's ordinary window width, and onto the masthead he reads.
                   notices: AppNotices.current(omniFocusFailing: omniFocusFailedAt > 0, status: status),
+                  // #2250: the remedy a notice names, run from here where the sync lives.
+                  onNoticeAction: { action in
+                      switch action {
+                      case .retryOmniFocusSync: syncOmniFocus(force: true)
+                      }
+                  },
                   onShowFollowUps: { showFollowUps = true },
                   // #1129: the Prep stage's discoverable "Prep these N" button opens the same #953 per-run
                   // selection sheet the toolbar menu and Cmd+P do, so there is one Prep-start path, not two.

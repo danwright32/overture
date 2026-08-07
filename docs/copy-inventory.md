@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1098 sentences**, from 383 source files.
+Every sentence Overture can say to Dan: **1097 sentences**, from 383 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -79,7 +79,7 @@ What is not, and why:
 - `UI/DraftSignaturePreview.swift`: renders the outbound email's own HTML (body + Gmail signature), not Overture's voice (#1203)
 - `UI/DraftSignaturePreview.swift`: browser-side measuring script, not a sentence Overture says to Dan (#915)
 
-## The same sentence, said in more than one place (48)
+## The same sentence, said in more than one place (49)
 
 Two copies of a sentence will drift. #843 owns fixing these.
 
@@ -202,6 +202,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
 - "Source listing"
   - `UI/QueueView+Model.swift`
   - `UI/QueueView+Model.swift`
+- "Sync now"
+  - `App/RootView.swift`
+  - `Domain/AppNotice.swift`
 - "Their events or season page"
   - `UI/SourceFixConfirmActions.swift`
   - `UI/SourcesView.swift`
@@ -467,8 +470,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ClientTagCopy.swift`
 "Automatic sync pushes due follow-ups into the OmniFocus Outreach project. \"Sync now\" force-runs it immediately; the first time, macOS will ask permission to control OmniFocus."
     `App/RootView.swift`
-"Automation permission. A successful sync clears this."
-    `Domain/AppNotice.swift`
 "Awaiting reply"
     `UI/QueueView+Model.swift`
 "Awaiting your first reply"
@@ -520,8 +521,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SourceFixConfirmActions.swift`
 "Clearing out shows in towns you blocked"
     `Domain/ScoutSweepStep.swift`
-"Click \"Sync to OmniFocus\" to retry, and check that OmniFocus is installed and has "
-    `Domain/AppNotice.swift`
 "Close this out"
     `Domain/ReachedOutClose.swift`
 "Close this out without sending"
@@ -817,6 +816,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/FormOutreach.swift`
 "I'll read the ones you fix."
     `UI/ScoutSummaryView.swift`
+"If a sync doesn't clear this, check that OmniFocus is installed and has Automation "
+    `Domain/AppNotice.swift`
 "If another Overture window is open, use that one. Otherwise quit and reopen Overture."
     `App/StoreUnavailableView.swift`
 "If they asked you to stop emailing them, Overture will keep every future show from this org out of your queue. You can undo it from the row."
@@ -1158,7 +1159,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OmniFocusSyncStatus.swift`
 "OmniFocus sync failed: \(reason)"
     `Domain/OmniFocusSync.swift`
-"OmniFocus sync failing"
+"OmniFocus sync failing, so follow-up tasks may not be getting created."
     `Domain/AppNotice.swift`
 "OmniFocus sync needs attention"
     `App/MenuBarStatus.swift`
@@ -1648,6 +1649,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SourcesView.swift`
 "Sync now"
     `App/RootView.swift`
+    `Domain/AppNotice.swift`
 "Tagged a returning client: shows surface up to a year ahead."
     `Domain/ClientTagCopy.swift`
 "Tagged as returning client \(namedClient): shows surface up to a year ahead."
@@ -1704,8 +1706,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DetachedRunOutcome.swift`
 "The act takes messages through the form on their own site. You'd fill that in yourself; Overture can't send it for you."
     `Domain/Reachability.swift`
-"The automatic OmniFocus sync last failed, so follow-up tasks may not be getting created. "
-    `Domain/AppNotice.swift`
 "The calendar reader ran but produced nothing this run."
     `Domain/ScoutWarnings.swift`
 "The calendars Overture re-checks on every scout, and how each one is doing"
@@ -2408,6 +2408,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/FollowUpsView.swift`
 "opened on. Paste \(one ? "that month's" : "a month's") own link and I'll "
     `UI/LeadIntakeModel.swift`
+"permission. A successful sync clears it."
+    `Domain/AppNotice.swift`
 "read it."
     `UI/LeadIntakeModel.swift`
 "redraft and find new contacts"

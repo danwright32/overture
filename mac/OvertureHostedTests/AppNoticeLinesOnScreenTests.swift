@@ -34,7 +34,20 @@ struct AppNoticeLinesOnScreenTests {
             omniFocusFailing: true,
             status: { var s = StatusLine(); s.set("Prep finished", priority: .info); return s }())
 
-        #expect(lines(notices) == ["OmniFocus sync failing", "Prep finished"])
+        // #2250: the fault's own line, the control it carries, then the run's note. The control being in
+        // this list is the point: a remedy that renders only as a tooltip is one nobody reads (L49), so it
+        // is proven to reach the screen rather than merely defined.
+        #expect(lines(notices) == [AppNotices.omniFocusFailing.text,
+                                   AppNoticeAction.retryOmniFocusSync.title,
+                                   "Prep finished"])
+    }
+
+    // #2250: and a receipt grows no control, so an ordinary run's note never sprouts a button beside it.
+    @Test func areceiptCarriesNoControl() {
+        let notices = AppNotices.current(
+            omniFocusFailing: false,
+            status: { var s = StatusLine(); s.set("Prep finished", priority: .info); return s }())
+        #expect(lines(notices) == ["Prep finished"])
     }
 
     // A warning is rust, the colour the possible-match and watch-gap lines beside it use for "this is not

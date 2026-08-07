@@ -32,12 +32,37 @@ enum AppNoticeTone: Equatable, Sendable {
     case receipt
 }
 
+// #2250: what a notice offers to DO about what it says.
+//
+// Named by the domain and performed by the view. A closure here would make a notice neither Equatable nor
+// Sendable, and the masthead diffs these values on every write; a named case keeps the notice a plain
+// value a test can read and leaves the view holding the how.
+//
+// This exists because no message on this surface could carry an action at all. That is L80 (a message
+// identifying a specific fault must carry the action for it) and it is why the OmniFocus failure hid its
+// remedy in a tooltip nobody hovers, and why #1805's shortfall report can name a set of shows and offer
+// nothing to do with them.
+enum AppNoticeAction: Equatable, Sendable {
+    case retryOmniFocusSync
+
+    // What the control says. Short, because it sits at the end of a sentence that has just said what is
+    // wrong, and repeating that would be the same thing twice (#843).
+    var title: String {
+        switch self {
+        case .retryOmniFocusSync: return "Sync now"
+        }
+    }
+}
+
 struct AppNotice: Equatable, Identifiable, Sendable {
     var text: String
     var tone: AppNoticeTone
     // The longer explanation, where one exists. A tooltip is a poor place for anything Dan must read
     // (L49), so this only ever carries detail that expands on a line already saying the actionable part.
     var help: String? = nil
+    // #2250: the control this line offers, where it offers one. Absent on a receipt, so a quiet message
+    // never grows a button.
+    var action: AppNoticeAction? = nil
 
     var id: String { text }
 }
@@ -46,12 +71,18 @@ enum AppNotices {
     // #239/#306: the automatic OmniFocus sync is failing, so follow-up tasks may not be getting created.
     // Persistent rather than momentary: it stays until a sync succeeds, which is what makes it a notice
     // rather than a receipt.
+    // #2250: the line now says what is at stake and carries the retry beside it. The remedy used to live
+    // entirely in the tooltip, so the screen named a fault and hid its fix behind a hover (L49, L80), and
+    // follow-up tasks could be silently going uncreated the whole time.
+    //
+    // What stays in the tooltip is the part that EXPLAINS rather than instructs: the retry is the control,
+    // and the permission check is what to look at if the retry does not clear it.
     static let omniFocusFailing = AppNotice(
-        text: "OmniFocus sync failing",
+        text: "OmniFocus sync failing, so follow-up tasks may not be getting created.",
         tone: .warning,
-        help: "The automatic OmniFocus sync last failed, so follow-up tasks may not be getting created. "
-            + "Click \"Sync to OmniFocus\" to retry, and check that OmniFocus is installed and has "
-            + "Automation permission. A successful sync clears this.")
+        help: "If a sync doesn't clear this, check that OmniFocus is installed and has Automation "
+            + "permission. A successful sync clears it.",
+        action: .retryOmniFocusSync)
 
     // Everything the app has to say, in the order it should be read: the standing fault first, then
     // whatever the last run had to report. Never a placeholder and never an empty line, so a quiet app

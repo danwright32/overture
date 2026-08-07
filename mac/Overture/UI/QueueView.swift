@@ -140,6 +140,9 @@ struct QueueView: View {
     // or receipt). Owned by RootView, which is where every writer of it lives, and drawn here because
     // this is the screen Dan actually looks at.
     var notices: [AppNotice] = []
+    // #2250: performs whatever a notice offers. RootView owns the sync and every other remedy, so this
+    // view only reports the press upward, the same shape as onProbeReachability.
+    var onNoticeAction: (AppNoticeAction) -> Void = { _ in }
     // #338: the Follow-ups pill reuses the existing FollowUpsView sheet (owned by RootView)
     // instead of a second filtered-list implementation of the same thing.
     var onShowFollowUps: () -> Void = {}
@@ -894,7 +897,9 @@ struct QueueView: View {
             // which macOS moves into the overflow chevron at Dan's ordinary window width, where he has
             // never clicked and so has never read any of it. Sits with the other lines that report on
             // Overture's own health rather than on the queue's contents.
-            AppNoticeLines(notices: notices)
+            // #2250: a notice that names a fault carries the control for it, performed by the caller
+            // that owns the app's run state rather than by these lines.
+            AppNoticeLines(notices: notices, perform: { onNoticeAction($0) })
             // #1923: its own view, so an idle queue runs no timer for it and a run starting repaints one
             // line instead of re-deriving the store. See ReplyRunLine.
             ReplyRunLine(activity: .replyClassify)
