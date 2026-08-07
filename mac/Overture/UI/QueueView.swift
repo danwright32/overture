@@ -136,6 +136,10 @@ struct QueueView: View {
     // #488: lets the Reconnect Gmail alert start the same OAuth flow the onboarding screen uses,
     // instead of just telling Dan to go find the button himself.
     var onConnectGmail: () -> Void = {}
+    // #2204: what the app has to say for itself right now (an OmniFocus failure, the last run's warning
+    // or receipt). Owned by RootView, which is where every writer of it lives, and drawn here because
+    // this is the screen Dan actually looks at.
+    var notices: [AppNotice] = []
     // #338: the Follow-ups pill reuses the existing FollowUpsView sheet (owned by RootView)
     // instead of a second filtered-list implementation of the same thing.
     var onShowFollowUps: () -> Void = {}
@@ -431,7 +435,7 @@ struct QueueView: View {
             QueueScrollHolder(jumpTarget: jumpTarget) {
                 VStack(alignment: .leading, spacing: OVSpacing.xl) {
                     masthead(visible: data.visible, items: data.items, fanOutLine: data.fanOutLine,
-                             agentInputs: data.agentInputs)
+                             notices: notices, agentInputs: data.agentInputs)
                     // #1134: stage-only navigation is the only mode. The stage pills in the masthead choose
                     // what shows; this always renders the focused view for the current stage (Scout by
                     // default), or the exact away-alert leads (#308) when focusedStage is nil.
@@ -778,7 +782,11 @@ struct QueueView: View {
     // site has to decide what it shows rather than inherit silence.
     // #1771: agentInputs is threaded in for the same reason visible/items are: the pill strip this draws
     // and the focused stage heading are two readers of one build, so the build belongs to the caller.
+    // #2204: `notices` is what the app has to say for itself, threaded in for the same reason
+    // `fanOutLine` is: the caller decides what is shown rather than this view inheriting silence. It has
+    // no default, so a new call site has to answer the question.
     func masthead(visible: [QueueItem], items: [QueueItem], fanOutLine: String?,
+                  notices: [AppNotice],
                   agentInputs: AgentInputs) -> some View {
         let summary = QueueModel.summary(visible)
         let pendingBookings = QueueModel.pendingBookingCount(items)
@@ -844,6 +852,11 @@ struct QueueView: View {
             // whether the app is still updating them at all: a quiet queue and a dead watcher look
             // identical without it. Its own view for the same reason as ReplyRunLine below.
             WatchGapLine()
+            // #2204: what the app has to say for itself. Here rather than in the toolbar's status slot,
+            // which macOS moves into the overflow chevron at Dan's ordinary window width, where he has
+            // never clicked and so has never read any of it. Sits with the other lines that report on
+            // Overture's own health rather than on the queue's contents.
+            AppNoticeLines(notices: notices)
             // #1923: its own view, so an idle queue runs no timer for it and a run starting repaints one
             // line instead of re-deriving the store. See ReplyRunLine.
             ReplyRunLine(activity: .replyClassify)
