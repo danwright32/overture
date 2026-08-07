@@ -140,6 +140,93 @@ struct ReachabilityRecheckOfferTests {
         #expect(Reachability.recheckState(probedAt: probedAt, hasInheritedAnswer: false,
                                           recheckRequestedAt: justAfter, now: longAfter) == .requested)
     }
+
+    // MARK: - #2267: the press RUNS it, so the row has to distinguish three live situations
+
+    // Working. Dan pressed and the check is under way for this show. The global rule and L44: this must
+    // be visibly its own state, not the control still sitting there looking unpressed, and not a bare
+    // spinner. The run takes about two and a half minutes, so this is not a flicker.
+    @Test func aShowInARunningCheckSaysItIsRunning() {
+        #expect(Reachability.recheckState(probedAt: probedAt, hasInheritedAnswer: false,
+                                          recheckRequestedAt: justAfter, now: justAfter,
+                                          checkIsRunning: true) == .running)
+    }
+
+    // Stalled or dead. The run ended without reaching this show, so the request Dan made is still
+    // outstanding and nothing is happening. That must NOT read as running (it would be a spinner over a
+    // dead run) and must not read as answered. It offers to try again, with the request still on record.
+    @Test func aRequestLeftOverAfterARunEndsOffersToTryAgain() {
+        #expect(Reachability.recheckState(probedAt: probedAt, hasInheritedAnswer: false,
+                                          recheckRequestedAt: justAfter, now: justAfter,
+                                          checkIsRunning: false) == .requested)
+    }
+
+    // A run in flight for OTHER shows must not make this row claim to be in it. Every card in the queue
+    // would otherwise show a running label whenever any check was going.
+    @Test func aRunForOtherShowsDoesNotClaimThisOne() {
+        #expect(Reachability.recheckState(probedAt: probedAt, hasInheritedAnswer: false,
+                                          recheckRequestedAt: nil, now: justAfter,
+                                          checkIsRunning: true) == .offer)
+    }
+
+    // Found by trying to look at this on a real store: every answered show in it was dismissed and past,
+    // and the control offered to spend a lookup on all seven. A show past the keep-or-dismiss moment is
+    // excluded from a check by the candidacy rule, so the money would buy an answer nothing would ever
+    // read, and the card would be offering an action the rest of the app refuses.
+    @Test func aShowPastDecidingIsNotOfferedARecheck() {
+        #expect(Reachability.recheckState(probedAt: probedAt, hasInheritedAnswer: false,
+                                          recheckRequestedAt: nil, now: justAfter,
+                                          isStillOpen: false) == .notOffered)
+    }
+
+    // And the same for one already asked for: a show dismissed after the request was made must stop
+    // claiming a re-check is coming, rather than sitting in the archive promising work nobody will do.
+    @Test func aRequestOnAShowPastDecidingStopsClaimingARecheck() {
+        #expect(Reachability.recheckState(probedAt: probedAt, hasInheritedAnswer: false,
+                                          recheckRequestedAt: justAfter, now: justAfter,
+                                          checkIsRunning: true, isStillOpen: false) == .notOffered)
+    }
+}
+
+// #2267: what the confirmation says before a single-show re-check spends anything. It is the last screen
+// between a press and a real lookup, so what it claims has to be true and has to agree with the sheet the
+// date selection raises: two different accounts of what one lookup costs is worse than either.
+@Suite("The confirmation for a one-show re-check (#2267)")
+struct OneShowRecheckConfirmTests {
+
+    @Test func itIsOneShowAndOneLookup() {
+        let s = ProbeSelection.summarizeOneShowRecheck(previouslyMissed: false)
+        #expect(s.showCount == 1)
+        #expect(s.researchCount == 1)
+        #expect(s.alreadyAnsweredCount == 0)
+        #expect(s.estimatedSeconds == ProbeSelection.measuredSecondsPerLookup)
+    }
+
+    // One lookup is a single round, so it never claims to block other runs. That sentence exists for a
+    // run long enough that losing the single slot is a real cost, and putting it on every one-show press
+    // is how a warning stops being read (L36).
+    @Test func oneLookupNeverClaimsToBlockOtherRuns() {
+        let s = ProbeSelection.summarizeOneShowRecheck(previouslyMissed: false)
+        #expect(s.spansSeveralRounds == false)
+        #expect(ProbeSelectionCopy.oneShowRecheckMessage(s).contains(ProbeSelectionCopy.blocksOtherRuns) == false)
+    }
+
+    // The cost sentence is the SAME one the date confirm uses, not a second phrasing of it.
+    @Test func itCarriesTheSameCostSentenceAsTheDateConfirm() {
+        let s = ProbeSelection.summarizeOneShowRecheck(previouslyMissed: false)
+        #expect(ProbeSelectionCopy.oneShowRecheckMessage(s).contains(ProbeSelectionCopy.costLine(s)))
+    }
+
+    // The fact that could change his mind about spending again, said only when it is true. On every
+    // ordinary press it would be noise.
+    @Test func itSaysWhenAnEarlierCheckAlreadyCameHomeEmpty() {
+        let missed = ProbeSelectionCopy.oneShowRecheckMessage(
+            ProbeSelection.summarizeOneShowRecheck(previouslyMissed: true))
+        let fresh = ProbeSelectionCopy.oneShowRecheckMessage(
+            ProbeSelection.summarizeOneShowRecheck(previouslyMissed: false))
+        #expect(missed.contains("never got an answer"))
+        #expect(fresh.contains("never got an answer") == false)
+    }
 }
 
 // The request has to be SPENT by the check that serves it, or the show is offered forever and Dan pays

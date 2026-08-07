@@ -201,6 +201,10 @@ struct QueueView: View {
         // #1770: the one answer for this render pass, read from the cache rather than from the token file,
         // and threaded to every card instead of each card sourcing its own.
         let gmailConnected: Bool
+        // #2267: the two run facts every card's re-check control needs, read ONCE for the pass for the
+        // same reason as the line above. Both read a marker file, and a per-card read would be a disk
+        // read per row per scroll frame, which is the #1770 defect exactly.
+        let probeRunning: Bool
         // Contacted RECIPIENTS Dan is still working, soonest-first. #652: one entry per recipient, so a
         // multi-contact show can appear more than once, each with its own contact and timing.
         let reachedOut: [(prospect: Prospect, recipient: Recipient, next: Date)]
@@ -242,6 +246,7 @@ struct QueueView: View {
             // #1770: read once for the whole pass, from the cache rather than from the token file.
             gmailConnected: GmailConnection.shared.isConnected,
             prepRunning: PrepQueueService.isRunning(now: now),
+            probeRunning: PrepQueueService.isProbeRunning(now: now),
             replyRunAlive: ReplyClassifyService.isRunning(now: now),
             trace: renderTrace))
     }
@@ -338,6 +343,21 @@ struct QueueView: View {
         let wanted = Set(StageNavigation.focusedKeys(stage: .scout, leadKeys: [],
                                                      in: prospects, today: today, now: Date(), geo: geo))
         return data.items.filter { wanted.contains($0.id) }
+    }
+
+    // #2267: Dan pressed "Check again" on one card. It raises the SAME confirm sheet the date selection
+    // raises, carrying the same cost sentence, and the same approval starts the same kind of run. The
+    // only thing that differs is that the work-list holds one key.
+    //
+    // The show has already been marked by the time this runs (ProspectRowFactory), which is deliberate:
+    // if he cancels the sheet the mark stands, and the card says the question is outstanding with a way
+    // to try again, rather than silently forgetting he asked.
+    private func requestRecheckNow(_ item: QueueItem) {
+        let summary = ProbeSelection.summarizeOneShowRecheck(
+            previouslyMissed: item.reachabilityUnansweredAt != nil)
+        pendingProbe = ProbeConfirm(keys: [item.id], dateLabel: "",
+                                    title: ProbeSelectionCopy.multiDateTitle(summary),
+                                    message: ProbeSelectionCopy.oneShowRecheckMessage(summary))
     }
 
     // #1774: the bar itself is ProbeSelectionBar, in its own file. What stays here is only the handoff of
@@ -1182,6 +1202,12 @@ struct QueueView: View {
                     ProspectRowFactory.row(item, today: today, prospects: prospects, context: context, feedback: feedback,
                                           dayOffOffer: dayOffOffer,
                                           gmailConnected: data.gmailConnected,
+                                          // #2267: the row's own "Check again" spends money, so it goes
+                                          // through the SAME confirm sheet the date selection raises,
+                                          // rather than a second sentence about the same spend.
+                                          onRecheckNow: { requestRecheckNow($0) },
+                                          prepRunning: prepRunning,
+                                          probeRunning: data.probeRunning,
                                           undoStack: undoStack,
                                           highlightedKey: highlightedKey, outboundSendSince: sendingSince,
                                           replySendSince: replySince,

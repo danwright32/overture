@@ -67,6 +67,9 @@ enum QueueRenderPass {
         var focusedKeys: [String]?
         var gmailConnected: Bool = false
         var prepRunning: Bool = false
+        // #2267: whether a reachability check specifically is in flight, so a card's re-check control can
+        // show its own running state without a Prep run making every card claim one.
+        var probeRunning: Bool = false
         var replyRunAlive: Bool = false
         // #1930's fingerprint of what this view derives FROM, gathered by the caller because it describes
         // the caller's own state. DEBUG only in effect: the pass records it and nothing else reads it.
@@ -105,6 +108,7 @@ enum QueueRenderPass {
                                           prepRunning: i.prepRunning, replyRunAlive: i.replyRunAlive,
                                           geo: geo),
             gmailConnected: i.gmailConnected,
+            probeRunning: i.probeRunning,
             reachedOut: reachedOut,
             reachedOutKeys: reachedOutKeys,
             pendingBookings: QueueModel.pendingBookingCount(items),

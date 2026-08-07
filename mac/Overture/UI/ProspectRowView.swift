@@ -59,7 +59,17 @@ struct ProspectRowView: View {
     var onRename: (String) -> Void = { _ in }   // #1274: Dan renames a scout-generated name
     var onResetGroupName: () -> Void = {}        // #1274: hand the name back to the scout
     // #2261: Dan asks for this show's frozen reachability answer to be researched again.
+    // #2267: the press now RUNS it, so the call site raises the spend confirmation and starts the check.
     var onRequestRecheck: () -> Void = {}
+    // #2267: whether ANY detached run holds the single slot (a probe or a Prep share it, #1323), so the
+    // control greys out instead of failing after the press. Handed in like `gmailConnected` rather than
+    // read here: it is one fact about the app, identical for every row, and reading it per card is the
+    // #1770 defect.
+    var prepRunning: Bool = false
+    // #2267: whether a reachability check specifically is in flight. Separate from the line above because
+    // a Prep run occupying the slot must grey the control WITHOUT making the card claim its own check is
+    // under way, which would be a running label over work that is not happening.
+    var probeRunning: Bool = false
     var onConfirmBooking: () -> Void = {}
     var onDismissBookingSuggestion: () -> Void = {}
     var onRejectBooking: () -> Void = {}
@@ -855,22 +865,48 @@ struct ProspectRowView: View {
         switch Reachability.recheckState(probedAt: item.reachabilityProbedAt,
                                          hasInheritedAnswer: item.inheritedReachability != nil,
                                          recheckRequestedAt: item.reachabilityRecheckRequestedAt,
-                                         now: Date()) {
+                                         now: Date(),
+                                         checkIsRunning: probeRunning,
+                                         // The SAME predicate the candidacy rule uses, so the control
+                                         // and the run cannot disagree about which shows are still live.
+                                         isStillOpen: OpenForDecision.isOpen(
+                                            status: item.status, performanceDate: item.performanceDate,
+                                            isBooked: item.isBooked, sentAt: item.sentAt, today: today)) {
         case .notOffered:
             EmptyView()
         case .offer:
+            // #2267: greyed while ANY run holds the single detached slot, rather than failing after the
+            // press with "something is already running" (#1323). A probe and a Prep share that slot.
             Button(ReachabilityCopy.checkAgain) { onRequestRecheck() }
-                .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forest)
-                .help(ReachabilityCopy.checkAgainHelp)
+                .buttonStyle(.plain).font(OVType.meta)
+                .foregroundStyle(prepRunning ? OVColor.inkFaint : OVColor.forest)
+                .disabled(prepRunning)
+                .help(prepRunning ? ReachabilityCopy.checkAgainBusyHelp : ReachabilityCopy.checkAgainHelp)
+                .padding(.top, 2)
+        case .running:
+            // #2267: counting from when the check actually began, not from this redraw, and carrying its
+            // own timeout so a stalled run becomes an actionable state instead of a spinner that never
+            // resolves (L74, and the global working/still-alive/failed rule).
+            LiveRunLabel(base: ReachabilityCopy.recheckRunning,
+                         since: item.reachabilityRecheckRequestedAt,
+                         timeout: RunTimeouts.reachabilityProbe,
+                         font: OVType.meta, color: OVColor.inkSoft,
+                         onRetry: { onRequestRecheck() })
                 .padding(.top, 2)
         case .requested:
-            // L44: an acknowledged state of its own, never the same control still offering itself. It
-            // also names the one thing still to do, because the run is started from the date's control
-            // and a bare "requested" would leave him waiting for something that needs another press.
-            Text(ReachabilityCopy.recheckQueued)
-                .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 2)
+            // Asked for, and nothing running: either not started yet, or a run ended without reaching it.
+            // Both read the same from here, and both are answered by pressing again, so this offers that
+            // rather than leaving a dead sentence on the card.
+            HStack(spacing: OVSpacing.xs) {
+                Text(ReachabilityCopy.recheckOutstanding)
+                    .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button(ReachabilityCopy.checkAgainRetry) { onRequestRecheck() }
+                    .buttonStyle(.plain).font(OVType.meta)
+                    .foregroundStyle(prepRunning ? OVColor.inkFaint : OVColor.forest)
+                    .disabled(prepRunning)
+            }
+            .padding(.top, 2)
         }
     }
 

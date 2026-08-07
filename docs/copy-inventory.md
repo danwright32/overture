@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1093 sentences**, from 383 source files.
+Every sentence Overture can say to Dan: **1097 sentences**, from 383 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -78,7 +78,7 @@ What is not, and why:
 - `UI/DraftSignaturePreview.swift`: renders the outbound email's own HTML (body + Gmail signature), not Overture's voice (#1203)
 - `UI/DraftSignaturePreview.swift`: browser-side measuring script, not a sentence Overture says to Dan (#915)
 
-## The same sentence, said in more than one place (47)
+## The same sentence, said in more than one place (48)
 
 Two copies of a sentence will drift. #843 owns fixing these.
 
@@ -204,6 +204,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
 - "Their events or season page"
   - `UI/SourceFixConfirmActions.swift`
   - `UI/SourcesView.swift`
+- "Try again"
+  - `App/RootView.swift`
+  - `Domain/Reachability.swift`
 - "Verbal yes, not booked"
   - `Domain/ConversationReminder.swift`
   - `UI/ReminderSettingsView.swift`
@@ -313,6 +316,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "A booking was detected that needs your confirmation. Tap to confirm or dismiss."
     `UI/ProspectRowView.swift`
+"A check has already run over this show once and never got an answer for it."
+    `Domain/ProbeSelection.swift`
 "A check missed this show"
     `Domain/Reachability.swift`
 "A check ran and got no further than this act's social profile, which needs a login. Their own site may still publish an address, so of all the shows with no contact this is the one most likely to give one up on another check."
@@ -439,6 +444,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/InquiryCopy.swift`
 "Another pitch is already in progress on this date"
     `Domain/SelfBookingConflict.swift`
+"Another run is going. This can start once that finishes."
+    `Domain/Reachability.swift`
 "Ask Claude to reinstall Overture."
     `Domain/BuildFreshnessPanel.swift`
 "Asking macOS for OmniFocus permission…"
@@ -1414,7 +1421,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/RootView.swift`
 "Requesting notification permission…"
     `UI/OnboardingView.swift`
-"Research this show's contacts again on the next check, instead of keeping this answer until it's 90 days old. It costs a lookup like any other check."
+"Research this show's contacts again now, instead of keeping this answer until it's 90 days old. It costs one lookup, and you'll see what it will spend before it starts."
+    `Domain/Reachability.swift`
+"Researching this show again"
     `Domain/Reachability.swift`
 "Reset to scout name"
     `UI/ProspectRowView.swift`
@@ -1823,6 +1832,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/Reachability.swift`
 "This looks up a real contact for the still-open shows on \(dateLabel), so you can tell which are emailable before you keep one. It spends a little on that lookup, only for the shows you check here."
     `Domain/Reachability.swift`
+"This looks up a real contact for this one show, even though it already has an answer."
+    `Domain/ProbeSelection.swift`
 "This old draft may still have a name in the greeting Overture couldn't safely remove; "
     `Domain/DraftReviewNotes.swift`
 "This opens Terminal and runs the install. Overture quits partway through and comes back on its own."
@@ -1915,6 +1926,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/EmptyState.swift`
 "Try again"
     `App/RootView.swift`
+    `Domain/Reachability.swift`
 "Try another link"
     `UI/AddLeadSheet.swift`
 "Undo \(actionLabel) and Days Off: \(subject)"
@@ -1947,6 +1959,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/VoiceGuidanceView.swift`
 "Waiting for your answer (\(elapsed))"
     `Domain/RunProgress.swift`
+"Waiting to be checked again."
+    `Domain/Reachability.swift`
 "Wants to book"
     `Domain/ReviewStatus.swift`
 "Warm lead from a prior relationship"
@@ -1984,8 +1998,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/DayOffRangeFields.swift`
 "Why lost? (optional note)"
     `UI/DraftReviewView.swift`
-"Will be researched again once you run the check for this date."
-    `Domain/Reachability.swift`
 "Will receive: \(body)"
     `Domain/DraftReviewNotes.swift`
 "Without naming a client"
