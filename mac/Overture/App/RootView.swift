@@ -1270,7 +1270,11 @@ struct RootView: View {
     @discardableResult
     private func sweptADeadPrepRun() -> Bool {
         // Read WHICH kind of run it was before the sweep clears the marker that says so.
-        let wasProbe = ((try? ReachabilityProbeMarker.read(from: PrepQueueService.defaultProbeRunURL)) ?? nil) != nil
+        // #1810: the same rule the rest of the app uses, so a died run cannot be named one thing here and
+        // another everywhere else.
+        let marker = (try? ReachabilityProbeMarker.read(from: PrepQueueService.defaultProbeRunURL)) ?? nil
+        let wasProbe = RunKind.of(runStartedAt: PrepQueueService.lastRunStartedAt,
+                                  probeMarkerStartedAt: marker?.startedAt) == .reachabilityCheck
         guard let outcome = PrepQueueService.clearDeadRun(into: context, now: Date()) else { return false }
         if let report = outcome.probeReport { reportReachabilityRun(report) }
         // .warning, not .info: an .info write can be silently overwritten by a later routine receipt, and
