@@ -43,7 +43,7 @@ struct QueueViewMastheadLayoutTests {
         let view = QueueView(deepLinkedKey: .constant(nil), deepLinkedKeys: .constant(nil))
         let items = [longshotItem(id: "a"), longshotItem(id: "b")]
 
-        #expect(renderedHeight(view.masthead(visible: items, items: items, fanOutLine: nil,
+        #expect(renderedHeight(view.masthead(visible: items, items: items, fanOutLine: nil, notices: [],
                                      agentInputs: calmInputs)) > 0)
     }
 
@@ -55,13 +55,13 @@ struct QueueViewMastheadLayoutTests {
         let view = QueueView(deepLinkedKey: .constant(nil), deepLinkedKeys: .constant(nil))
         let items = [longshotItem(id: "a"), longshotItem(id: "b")]
 
-        let quiet = renderedHeight(view.masthead(visible: items, items: items, fanOutLine: nil,
+        let quiet = renderedHeight(view.masthead(visible: items, items: items, fanOutLine: nil, notices: [],
                                                  agentInputs: calmInputs))
         let warned = renderedHeight(view.masthead(
             visible: items, items: items,
             fanOutLine: "Carnegie Hall Citywide: Ivalas Quartet is flagged as a possible match on 19 "
                 + "shows, which usually means the match is wrong.",
-            agentInputs: calmInputs))
+            notices: [], agentInputs: calmInputs))
 
         #expect(quiet > 0)
         #expect(warned > quiet)
@@ -76,9 +76,9 @@ struct QueueViewMastheadLayoutTests {
         let withHighFit = [highFitItem(id: "a"), longshotItem(id: "b")]
 
         let baseline = renderedHeight(view.masthead(visible: withoutHighFit, items: withoutHighFit,
-                                                    fanOutLine: nil, agentInputs: calmInputs))
+                                                    fanOutLine: nil, notices: [], agentInputs: calmInputs))
         let withHigh = renderedHeight(view.masthead(visible: withHighFit, items: withHighFit,
-                                                    fanOutLine: nil, agentInputs: calmInputs))
+                                                    fanOutLine: nil, notices: [], agentInputs: calmInputs))
 
         #expect(baseline > 0)
         #expect(withHigh == baseline)

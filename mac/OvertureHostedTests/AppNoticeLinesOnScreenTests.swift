@@ -1,0 +1,56 @@
+import Testing
+import Foundation
+import SwiftUI
+import ViewInspector
+@testable import Overture
+
+// #2204: the messages reaching the SCREEN, which is a separate claim from the decision about which to
+// show being right (L3). That gap is the whole issue here: the decision was correct for months, the
+// priority rule protecting it was correct, and none of it was ever on screen at the width Dan uses.
+@MainActor
+@Suite("The app's messages on screen (#2204)")
+struct AppNoticeLinesOnScreenTests {
+    // The sentences actually drawn. A tooltip is a Text too as far as ViewInspector is concerned, so the
+    // help strings are dropped: this suite is about what is ON SCREEN, which is the whole point of #2204.
+    private func lines(_ notices: [AppNotice]) -> [String] {
+        let view = AppNoticeLines(notices: notices)
+        let all = ((try? view.inspect().findAll(ViewType.Text.self)) ?? []).compactMap { try? $0.string() }
+        let helps = Set(notices.compactMap(\.help))
+        return all.filter { !helps.contains($0) && !$0.isEmpty }
+    }
+
+    @Test func aquietAppDrawsNothing() {
+        #expect(lines([]).isEmpty)
+    }
+
+    @Test func awarningIsOnScreenInItsOwnWords() {
+        let notices = [AppNotice(text: "12 sources couldn't be checked", tone: .warning)]
+        #expect(lines(notices) == ["12 sources couldn't be checked"])
+    }
+
+    // Both, in order, on separate lines. One slot could only ever show one of them.
+    @Test func afaultAndTheLastRunsNoteBothRender() {
+        let notices = AppNotices.current(
+            omniFocusFailing: true,
+            status: { var s = StatusLine(); s.set("Prep finished", priority: .info); return s }())
+
+        #expect(lines(notices) == ["OmniFocus sync failing", "Prep finished"])
+    }
+
+    // A warning is rust, the colour the possible-match and watch-gap lines beside it use for "this is not
+    // a status, something is wrong". A receipt is the faint ink the freshness line uses. Read off the
+    // rendered view rather than trusted, since the tone is the only thing telling the two apart at a
+    // glance and it renders in both themes.
+    @Test func awarningAndAReceiptAreDrawnDifferently() throws {
+        func colour(_ notice: AppNotice) throws -> Color? {
+            let view = AppNoticeLines(notices: [notice])
+            return try view.inspect().find(ViewType.Text.self).attributes().foregroundColor()
+        }
+        let warned = try colour(AppNotice(text: "12 sources couldn't be checked", tone: .warning))
+        let receipt = try colour(AppNotice(text: "Prep finished", tone: .receipt))
+
+        #expect(warned == OVColor.rust)
+        #expect(receipt == OVColor.inkFaint)
+        #expect(warned != receipt)
+    }
+}

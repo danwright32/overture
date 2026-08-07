@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1073 sentences**, from 377 source files.
+Every sentence Overture can say to Dan: **1075 sentences**, from 378 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -447,6 +447,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ClientTagCopy.swift`
 "Automatic sync pushes due follow-ups into the OmniFocus Outreach project. \"Sync now\" force-runs it immediately; the first time, macOS will ask permission to control OmniFocus."
     `App/RootView.swift`
+"Automation permission. A successful sync clears this."
+    `Domain/AppNotice.swift`
 "Awaiting reply"
     `UI/QueueView+Model.swift`
 "Awaiting your first reply"
@@ -496,6 +498,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SourceFixConfirmActions.swift`
 "Clearing out shows in towns you blocked"
     `Domain/ScoutSweepStep.swift`
+"Click \"Sync to OmniFocus\" to retry, and check that OmniFocus is installed and has "
+    `Domain/AppNotice.swift`
 "Close this out without sending"
     `Domain/FollowUp.swift`
 "Closed (not interested)"
@@ -1127,7 +1131,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "OmniFocus sync failed: \(reason)"
     `Domain/OmniFocusSync.swift`
 "OmniFocus sync failing"
-    `App/RootView.swift`
+    `Domain/AppNotice.swift`
 "OmniFocus sync needs attention"
     `App/MenuBarStatus.swift`
 "On this email"
@@ -1658,8 +1662,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DetachedRunOutcome.swift`
 "The act takes messages through the form on their own site. You'd fill that in yourself; Overture can't send it for you."
     `Domain/Reachability.swift`
-"The automatic OmniFocus sync last failed, so follow-up tasks may not be getting created. Click \"Sync to OmniFocus\" to retry, and check that OmniFocus is installed and has Automation permission. A successful sync clears this."
-    `App/RootView.swift`
+"The automatic OmniFocus sync last failed, so follow-up tasks may not be getting created. "
+    `Domain/AppNotice.swift`
 "The calendar reader ran but produced nothing this run."
     `Domain/ScoutWarnings.swift`
 "The calendars Overture re-checks on every scout, and how each one is doing"
