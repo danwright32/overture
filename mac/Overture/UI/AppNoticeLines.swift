@@ -12,6 +12,9 @@ import SwiftUI
 // without needing a capsule to grow.
 struct AppNoticeLines: View {
     let notices: [AppNotice]
+    // #2250: performs whatever a notice names. Handed in, because starting a sync (or any other remedy)
+    // belongs to the view that owns the app's run state, not to the lines that report on it.
+    var perform: (AppNoticeAction) -> Void = { _ in }
 
     var body: some View {
         // Nothing to say draws nothing at all, so a quiet app adds no rows here.
@@ -21,14 +24,25 @@ struct AppNoticeLines: View {
     // The tooltip is applied only where there IS one. `.help("")` is not a no-op: it hangs an empty
     // string on the view, which renders as a blank line beside the sentence.
     @ViewBuilder private func line(_ notice: AppNotice) -> some View {
-        let text = Text(notice.text)
-            .font(.system(size: 11))
-            .foregroundStyle(notice.tone == .warning ? OVColor.rust : OVColor.inkFaint)
-            .fixedSize(horizontal: false, vertical: true)
-        if let help = notice.help {
-            text.help(help)
-        } else {
-            text
+        // #2250: the control sits at the end of the sentence that explains it, in the same wrapping row,
+        // so a narrow window can never separate a fault from its remedy.
+        HStack(alignment: .firstTextBaseline, spacing: OVSpacing.xs) {
+            let text = Text(notice.text)
+                .font(.system(size: 11))
+                .foregroundStyle(notice.tone == .warning ? OVColor.rust : OVColor.inkFaint)
+                .fixedSize(horizontal: false, vertical: true)
+            if let help = notice.help {
+                text.help(help)
+            } else {
+                text
+            }
+            if let action = notice.action {
+                Button(action.title) { perform(action) }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(OVColor.forest)
+            }
+            Spacer(minLength: 0)
         }
     }
 }
