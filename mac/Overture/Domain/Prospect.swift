@@ -132,6 +132,19 @@ final class Prospect {
     // say "email found"/"no email found" firmly instead of falling back to the free heuristic forever.
     // Defaulted so existing records migrate cleanly.
     var reachabilityProbedAt: Date? = nil
+    // #2261: when Dan asked for this show to be checked AGAIN, despite already carrying an answer (nil =
+    // no request outstanding). Cleared by the check that serves it.
+    //
+    // A FLAG rather than a clearing of the verdict above, and that is the whole design. Wiping the answer
+    // to make the show re-checkable would leave a card that says nothing at all if the re-check then fails,
+    // which is worse than the wrong answer it replaced (L5). The old verdict stands, visibly, until a new
+    // one lands on top of it.
+    //
+    // It exists because the 90-day clock was the only thing that ever released a show. Measured on the live
+    // store 2026-08-07: all 28 shows ever checked were inside that window, 11 of them frozen on "No email
+    // found", the earliest releasing on 2026-10-26. Every improvement to what a check finds was therefore
+    // unable to reach a single show already in the queue (L4).
+    var reachabilityRecheckRequestedAt: Date? = nil
     // #1596 (milestone 32 Phase 3): what the check CONCLUDED, stored rather than re-derived from
     // `recipients` on every render. Raw string so the schema stays additive and a value written by a
     // future version decodes here without a migration. nil means no check has ever run, which is a

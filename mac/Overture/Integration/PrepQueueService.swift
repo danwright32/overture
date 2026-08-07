@@ -296,6 +296,10 @@ enum PrepQueueService {
             // Unconditional, on both branches: a re-settle is still an answer landing, and leaving the mark
             // would put "a check missed this" on a card beside the address the check found.
             p.reachabilityUnansweredAt = nil
+            // #2261: and so is any outstanding request to re-check it, for the same reason and on the same
+            // terms. The question has been asked again and answered; leaving the request standing would
+            // keep offering the show and let Dan pay for the same question every time he looked at it.
+            p.reachabilityRecheckRequestedAt = nil
         }
         // #1724: the shows this check was given and did not answer. Written HERE rather than in
         // `settleReachabilityProbe` for two reasons, both load-bearing:
@@ -313,6 +317,10 @@ enum PrepQueueService {
         let missed = keys.subtracting(toStamp)
         for p in all where missed.contains(p.naturalKey) {
             p.reachabilityUnansweredAt = now
+            // #2261: the re-check request is deliberately NOT spent here. This run never reached this
+            // show, so the question Dan asked has not been answered, and clearing it would drop his
+            // re-run silently: the card would go straight back to its old frozen verdict with nothing
+            // recording that the run he paid for never got to it (L47).
         }
         saveFailed = false
         do {
