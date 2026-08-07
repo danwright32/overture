@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1097 sentences**, from 383 source files.
+Every sentence Overture can say to Dan: **1099 sentences**, from 383 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -509,6 +509,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/Reachability.swift`
 "Check reachability for this show?"
     `Domain/Reachability.swift`
+"Check the rest"
+    `Domain/AppNotice.swift`
 "Checking reachability"
     `UI/RunProgressView.swift`
 "Checking what it found against your bookings"
@@ -1829,6 +1831,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DraftOpeningNotice.swift`
 "This group also performs at this venue on other dates"
     `UI/QueueView+Model.swift`
+"This looks up a contact for the \(s.showCount) shows the last check never reached."
+    `Domain/ProbeSelection.swift`
 "This looks up a real contact for every still-open show on the "
     `Domain/ProbeSelection.swift`
 "This looks up a real contact for the still-open show on \(dateLabel), so you can tell whether it's still emailable before you keep it. It spends a little on that lookup, only for the show you check here."

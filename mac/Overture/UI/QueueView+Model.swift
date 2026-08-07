@@ -1789,6 +1789,29 @@ enum QueueModel {
             && !Reachability.probeIsStale(probedAt: i.reachabilityProbedAt, now: now)
     }
 
+    // #1805: the shows a check was given and never reached, gathered so the shortfall report can offer to
+    // finish them instead of naming a number and stopping.
+    //
+    // No new bookkeeping: the settle already stamps a show it never reached (#1724), and #1594 is
+    // deliberate that such a show is NOT given a probe date, so it is already a candidate. The only thing
+    // missing was collecting them, which is why the report could name the count while Dan reconstructed
+    // the set by hand.
+    //
+    // An ANSWER wins over the mark. A row can carry both if one run missed it and a later one answered it,
+    // and paying for a lookup that already succeeded is the one thing this must never do. The candidacy
+    // rule holds too, so a show past deciding is not offered whatever any run did to it, and the mark ages
+    // on the same clock as every other reachability fact rather than offering to spend money forever.
+    static func keysMissedByACheck(_ items: [QueueItem], now: Date = Date(),
+                                   today: String = QueueModel.easternToday(),
+                                   geo: GeoRefusals = .none) -> [String] {
+        items.filter { i in
+            probeIsWorthOffering(i, today: today, geo: geo)
+                && i.reachabilityProbedAt == nil
+                && i.reachabilityUnansweredAt != nil
+                && !Reachability.probeIsStale(probedAt: i.reachabilityUnansweredAt, now: now)
+        }.map(\.id)
+    }
+
     // #2268: the shows a date-level re-check marks. Dan asked for it directly: the shows needing a re-run
     // arrive in batches (one producing company re-derived across a run is roughly 22 rows), so a
     // per-card-only route serves the bulk case worst.

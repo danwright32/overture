@@ -83,6 +83,15 @@ enum ProbeSelection {
                 estimatedSeconds: measuredSecondsPerLookup)
     }
 
+    // #1805: finishing the shows a check never reached. Every one of them is being paid for a second
+    // time in the sense that a run already ran over the set they were in, so `previouslyMissedCount` is
+    // all of them: that is the honest count, and it is the sentence that could change his mind.
+    static func summarizeShowsACheckMissed(count: Int) -> Summary {
+        Summary(dateCount: 0, showCount: count, researchCount: count, organisationCount: 0,
+                performerHuntCount: 0, alreadyAnsweredCount: 0, previouslyMissedCount: count,
+                estimatedSeconds: estimatedSeconds(forLookups: count))
+    }
+
     // `candidateKeys` is what the date control already computes: the still-open, not-recently-answered
     // shows on the selected dates. `answeredKeys` is the rest of the selection, carried separately so
     // the confirm can say plainly that they cost nothing rather than silently omitting them (a count
@@ -198,6 +207,14 @@ enum ProbeSelectionCopy {
         if s.previouslyMissedCount > 0 {
             parts.append("A check has already run over this show once and never got an answer for it.")
         }
+        return parts.joined(separator: "\n\n")
+    }
+
+    // #1805: what finishing a short run costs, in the same sentence as every other check.
+    static func finishMissedShowsMessage(_ s: ProbeSelection.Summary) -> String {
+        var parts = ["This looks up a contact for the \(s.showCount) shows the last check never reached."]
+        parts.append(ProbeSelectionCopy.costLine(s))
+        if s.spansSeveralRounds { parts.append(blocksOtherRuns) }
         return parts.joined(separator: "\n\n")
     }
 
