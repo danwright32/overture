@@ -39,7 +39,16 @@ enum ReplyService {
             for r in p.replyWatchRecipients {
                 guard let threadId = r.gmailThreadId, !threadId.isEmpty else { continue }
                 if r.replyWatchManualOutcome { continue }
-                if r.replied || r.replyWatchIsBooked { continue }
+                if r.replyWatchIsBooked { continue }
+                // #2196: a contact that has already replied used to be skipped outright, and that skip was
+                // the only route to the fields the reopen rule reads. So they wrote, Dan answered, the row
+                // went quiet, and everything they sent afterwards was invisible: no badge, no task, no row
+                // asking. On the highest-value path Overture has.
+                //
+                // It is re-read while its conversation is still open, which is both the useful set and the
+                // bound on the cost: one thread fetch per live conversation per check.
+                let alreadyReplied = r.replied
+                if alreadyReplied && !r.replyWatchConversationIsOpen { continue }
                 guard let data = fetchThread(threadId),
                       ReplyDetection.hasReply(fromAddresses: ReplyDetection.fromAddresses(threadJSON: data),
                                               selfEmail: selfEmail) else { continue }
@@ -47,6 +56,16 @@ enum ReplyService {
                 // Dan dismissed this exact reply as not real (#219): skip it, but a newer reply
                 // (a different id) still flags. Per-recipient dismiss now.
                 if let replyId, replyId == r.dismissedReplyId { continue }
+                if alreadyReplied {
+                    // The id decides it, so the same thread re-read on every check for the life of a
+                    // conversation changes nothing. Nothing on it since the last look.
+                    guard let replyId, replyId != r.lastReplyId else { continue }
+                    // No baseline recorded, so this build cannot say whether the newest message is new.
+                    // Adopt it and stop: calling an unknown "new" would re-open every such row at once on
+                    // the first check after this ships, which is the alert nobody believes afterwards
+                    // (L36). The next genuinely new message is then found normally.
+                    guard r.lastReplyId != nil else { r.lastReplyId = replyId; continue }
+                }
                 // #1840: through the one reopen, so a contact Dan stood down and who then wrote back is
                 // not left recorded as a closed lead. Written as a call rather than two assignments
                 // because the rule ("a reply clears the stand-down, and only the stand-down") has to hold

@@ -18,6 +18,11 @@ protocol ReplyWatchableRecipient: AnyObject {
     var replyWatchAddress: String? { get }
     var replyWatchManualOutcome: Bool { get }   // Dan hand-set this contact's state; never auto-overwrite.
     var replyWatchIsBooked: Bool { get }         // this contact is booked; stop watching it.
+    // #2196: is this conversation still going? A contact that has already replied is re-read on later
+    // checks only while this is true, which is how a SECOND message on a live thread is found at all.
+    // It is also the bound on that cost: the set of open conversations is small and shrinks as Dan closes
+    // them out, where "every contact that ever replied" would grow with every show he ever pitched.
+    var replyWatchConversationIsOpen: Bool { get }
     var replied: Bool { get set }
     var repliedAt: Date? { get set }
     var lastReplyId: String? { get set }
@@ -75,6 +80,10 @@ extension Recipient: ReplyWatchableRecipient {
     var replyWatchAddress: String? { email }
     var replyWatchManualOutcome: Bool { outcomeSourceRaw == OutcomeSource.manual.rawValue }
     var replyWatchIsBooked: Bool { resolution == .booked }
+    // #2196: nothing has closed it out. Deliberately the same three facts `hasUnhandledReply` reads
+    // before it asks anything else, so a conversation that could still put itself in front of Dan is
+    // exactly the one still being watched, and the two cannot disagree about which those are.
+    var replyWatchConversationIsOpen: Bool { resolution == nil && !bounced }
 }
 
 extension Prospect: ReplyWatchable {

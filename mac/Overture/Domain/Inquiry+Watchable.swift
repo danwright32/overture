@@ -10,6 +10,10 @@ extension Inquiry: ReplyWatchableRecipient {
     var replyWatchAddress: String? { inquirerEmail }
     var replyWatchManualOutcome: Bool { outcomeSourceRaw == OutcomeSource.manual.rawValue }
     var replyWatchIsBooked: Bool { outcome == .booked }
+    // #2196: an inquiry keeps its open/closed judgement in one place already, so the second-reply re-read
+    // rides that rather than restating it. `isOpen` is false for booked and for either lost close, which
+    // is the same "nothing left to watch" the prospect side means.
+    var replyWatchConversationIsOpen: Bool { isOpen }
 }
 
 extension Inquiry: ReplyWatchable {
