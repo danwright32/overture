@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1068 sentences**, from 376 source files.
+Every sentence Overture can say to Dan: **1073 sentences**, from 377 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -486,12 +486,16 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/Reachability.swift`
 "Checking reachability"
     `UI/RunProgressView.swift`
+"Checking what it found against your bookings"
+    `Domain/ScoutSweepStep.swift`
 "City not known"
     `Domain/VenueDisplay.swift`
 "Clear the search"
     `Domain/SourceSearch.swift`
 "Cleared the flag on \(org), but read it once so a quiet page can stay quiet."
     `UI/SourceFixConfirmActions.swift`
+"Clearing out shows in towns you blocked"
+    `Domain/ScoutSweepStep.swift`
 "Close this out without sending"
     `Domain/FollowUp.swift`
 "Closed (not interested)"
@@ -739,6 +743,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView.swift`
 "HIGH FIT"
     `UI/QueueView+Model.swift`
+"Handing the changed pages over to be read"
+    `Domain/ScoutSweepStep.swift`
 "Hard to reach"
     `Domain/Reachability.swift`
 "Has a question"
@@ -1420,6 +1426,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SourcesView.swift`
 "Saved \(org)'s venue. Its shows are read again on the next scout."
     `UI/SourcesView.swift`
+"Saving what this run found"
+    `Domain/ScoutSweepStep.swift`
 "Say what happened"
     `Domain/ReachedOutQueue.swift`
 "Says how many times Dan has shot the venue"
@@ -1901,6 +1909,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Voice guidance"
     `App/RootView.swift`
     `UI/VoiceGuidanceView.swift`
+"Waiting for your answer (\(elapsed))"
+    `Domain/RunProgress.swift`
 "Wants to book"
     `Domain/ReviewStatus.swift`
 "Warm lead from a prior relationship"

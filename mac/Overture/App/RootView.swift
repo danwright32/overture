@@ -1627,6 +1627,17 @@ struct RootView: View {
                         scoutNativeSnapshot = .init(sourceName: name, completed: index, total: total,
                                                     advancedAt: Date())
                     },
+                    // #2203: the SAME phase, once its counted part is done. Keeps `advancedAt` moving
+                    // across the tail (the read hand-off, the booking reconcile, the retirement, the
+                    // saves), which is both what the screen says and its only evidence of still being
+                    // alive. Without it a slow tail was judged stuck by the wall clock alone.
+                    onNativeStep: { step in
+                        guard gen == scoutGeneration else { return }
+                        scoutNativeSnapshot = .init(sourceName: nil,
+                                                    completed: scoutNativeSnapshot?.completed ?? 0,
+                                                    total: scoutNativeSnapshot?.total ?? 0,
+                                                    advancedAt: Date(), step: step)
+                    },
                     // #1037: the native sweep stops between sources when Dan cancels, and launches no read.
                     isCancelled: { scoutCancelRequested },
                     // #1498: the one question in the run, asked only when more pages need reading than
@@ -1806,6 +1817,12 @@ struct RootView: View {
     private func cancelScout() {
         scoutCancelRequested = true
         ScoutExtractService.requestCancel()
+        // #2201: a run parked on the read-budget question is suspended on a continuation, and a stop that
+        // left it there would leak the run rather than end it. `replyIfUnanswered` answers `.none`, which
+        // reads nothing and leaves every page flagged for the next press.
+        scoutReadAsk?.replyIfUnanswered()
+        scoutReadAsk = nil
+        modals.settled()
         scoutSheetShown = false
         scoutIsManual = false
     }
@@ -1869,6 +1886,14 @@ struct RootView: View {
     // this watch (its Task's completion is guarded by the generation token) and start a fresh scout,
     // which re-shows the takeover from the top.
     private func retryScout() {
+        // #2201: a run parked on a question is not stuck, and Retry cannot rescue it. A Task suspended on
+        // `withCheckedContinuation` is not cancellable, so cancelling it leaks the parked run AND its
+        // pending question while a second full sweep starts and ends in the same place. Refuse, and put
+        // the question back in front of him instead, since answering it is the actual next step.
+        //
+        // Belt and braces: the panel withholds Retry in this state, so this is the second of two, and it
+        // is the one that holds if the button is ever reached another way.
+        if let ask = scoutReadAsk { askReadBudget(ask); return }
         scoutTask?.cancel()
         isScanning = false
         readingStartedAt = nil
@@ -1896,7 +1921,10 @@ struct RootView: View {
                 durationHistory: readingStartedAt != nil ? { RunDurationHistoryStore.load() } : { nil },
                 onRetry: { retryScout() },
                 onHide: { scoutSheetShown = false },
-                onCancel: { cancelScout() })
+                onCancel: { cancelScout() },
+                // #2201: parked on the read-budget question. Read live rather than captured, because the
+                // panel re-renders every second and the answer can land between two ticks.
+                waitingOnAnswer: { scoutReadAsk != nil })
             Spacer(minLength: 0)
         }
         .frame(minWidth: 460, minHeight: 280)

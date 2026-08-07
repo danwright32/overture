@@ -48,6 +48,14 @@ enum RunProgress {
         "Stopping the run (\(elapsed))"
     }
 
+    // #2201: the run is parked on a question and cannot go on until Dan answers it. Its own sentence,
+    // because it is its own state: not working, not stuck, and the remedy is his rather than Overture's.
+    // Carries the counter for the same reason every other state here does, as evidence the screen has not
+    // frozen. Says what is needed rather than what is happening, since the whole point is the next move.
+    static func waitingOnYouLabel(elapsed: String) -> String {
+        "Waiting for your answer (\(elapsed))"
+    }
+
     static func spinnerLabel(_ base: String, since start: Date?, now: Date, detail: String? = nil) -> String {
         let label = detail.map { "\(base) \($0)" } ?? base
         if let elapsed = elapsedLabel(since: start, now: now) {
@@ -66,9 +74,14 @@ enum RunProgress {
     // #1822: takes the heartbeat's three states rather than a Bool. See RunHeartbeat for why absence and
     // staleness cannot share one answer. `nil` means the caller has no marker to read at all, which keeps
     // the wall clock in charge exactly as it was before any heartbeat existed.
+    // #2201: `waitingOnAnswer` outranks the clock. A run parked on a question stops advancing by
+    // definition, so its heartbeat goes stale and the wall clock runs on, and it was reported as stuck
+    // with a Retry beside it. Nothing was stuck: it was waiting, and the message pointed Dan away from
+    // the one action that would have delivered the answer (L11).
     static func liveness(since start: Date?, now: Date, timeout: TimeInterval,
                          heartbeat: RunHeartbeat? = nil,
-                         cancelRequested: Bool = false) -> RunLiveness {
+                         cancelRequested: Bool = false,
+                         waitingOnAnswer: Bool = false) -> RunLiveness {
         guard let start, let elapsed = elapsedLabel(since: start, now: now) else { return .idle }
         // A marker that is GONE ends the run whatever the clock says: a runner deletes it in its exit
         // trap, so this is the last thing a healthy run does, not a symptom. Checked BEFORE the stop
@@ -81,6 +94,9 @@ enum RunProgress {
         // otherwise accuse itself of being stuck and offer him a Retry, when nothing has gone wrong and he
         // is the one who stopped it.
         if cancelRequested { return .stopping(elapsed: elapsed) }
+        // Below the two above: a run Dan has stopped, or one whose marker has gone, is over whatever it
+        // was waiting for. Above the clock, which is the whole point.
+        if waitingOnAnswer { return .waitingOnYou(elapsed: elapsed) }
         if now.timeIntervalSince(start) >= timeout {
             return heartbeat == .beating ? .running(elapsed: elapsed) : .stalled(elapsed: elapsed)
         }
@@ -145,6 +161,12 @@ enum RunLiveness: Equatable {
     // at his request. A stop with no state of its own is a control that keeps offering itself after being
     // pressed, which reads as broken (L44).
     case stopping(elapsed: String)
+    // #2201: the run is parked on a question to Dan and cannot proceed until he answers. Its own case for
+    // the same reason `stopping` is: a state with no name of its own gets reported as the nearest one
+    // that has a name, and the nearest one here was "stuck", which is both untrue and points away from
+    // the fix. It also withholds Retry, whose only effect while parked is to abandon a suspended run and
+    // start a second full sweep that ends in the same place.
+    case waitingOnYou(elapsed: String)
     case stalled(elapsed: String)
 }
 

@@ -44,6 +44,12 @@ struct RunProgressView: View {
         // Set by the in-process sweep (the one phase with no marker file to prove it is alive). The
         // detached phases leave it nil and keep passing their marker reading as `heartbeat`.
         var advancedAt: Date? = nil
+        // #2203: what the phase is doing once its COUNTED part is finished. The sweep's count pins at its
+        // total the moment the fetch loop ends, with the read hand-off, the booking reconcile, the
+        // blocked-town retirement and the saves still to come, so a screen showing only the count read as
+        // frozen rather than as finished with one part. Once set it REPLACES the source name and the
+        // count, because a count that can no longer move is a promise the screen cannot keep.
+        var step: ScoutSweepStep? = nil
     }
 
     let phase: Phase
@@ -72,6 +78,10 @@ struct RunProgressView: View {
     // sentinel the runner itself obeys, so the panel and the runner can never disagree about whether the
     // click was honoured. Defaults to "no", so every caller that has no cancel to offer is unaffected.
     var cancelRequested: (() -> Bool)? = nil
+    // #2201: is the run parked on a question to Dan? A run waiting for an answer is neither working nor
+    // stuck, and calling it stuck points him away from the one action that would deliver the answer.
+    // Read each tick like the others; defaults to "no", so every caller with nothing to ask is unaffected.
+    var waitingOnAnswer: (() -> Bool)? = nil
 
     // Each phase's own stall window: an in-process sweep is quick, a detached read that follows detail
     // pages legitimately runs long, so reusing the sweep's 3-minute ceiling for the read would declare a
@@ -111,7 +121,8 @@ struct RunProgressView: View {
         let beat = heartbeat?()
             ?? (RunProgress.sweepIsAlive(lastProgressAt: snap.advancedAt, now: now) ? .beating : .stale)
         let state = RunProgress.liveness(since: since, now: now, timeout: timeout, heartbeat: beat,
-                                         cancelRequested: cancelRequested?() ?? false)
+                                         cancelRequested: cancelRequested?() ?? false,
+                                         waitingOnAnswer: waitingOnAnswer?() ?? false)
         VStack(spacing: OVSpacing.md) {
             switch state {
             case .stalled(let elapsed):
@@ -120,6 +131,8 @@ struct RunProgressView: View {
                 finishing(elapsed: elapsed)
             case .stopping(let elapsed):
                 stopping(elapsed: elapsed)
+            case .waitingOnYou(let elapsed):
+                waiting(elapsed: elapsed)
             case .running, .idle:
                 running(snap, now: now)
             }
@@ -136,13 +149,22 @@ struct RunProgressView: View {
         // #1124: the source being read RIGHT NOW and the overall count are two independent facts, so they
         // sit on separate lines. Gluing them into "name · N of M" read as if the number indexed the named
         // source (and, since the two come from uncoordinated sources, was effectively off by one).
-        if let current = RunProgressCopy.currentSourceLine(name: snap.sourceName) {
-            Text(current).font(OVType.body).foregroundStyle(OVColor.inkSoft)
+        // #2203: once the counted part is done, the step replaces both lines below it. Showing "68 of 68
+        // done" beside a phase that is still working is the count making a promise it cannot keep, and
+        // showing the last source's name is naming something already finished with.
+        if let step = snap.step {
+            Text(step.line).font(OVType.body).foregroundStyle(OVColor.inkSoft)
                 .multilineTextAlignment(.center)
-        }
-        if let progress = RunProgressCopy.overallProgressLine(completed: snap.completed, total: snap.total) {
-            Text(progress).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
-                .monospacedDigit()
+                .fixedSize(horizontal: false, vertical: true)
+        } else {
+            if let current = RunProgressCopy.currentSourceLine(name: snap.sourceName) {
+                Text(current).font(OVType.body).foregroundStyle(OVColor.inkSoft)
+                    .multilineTextAlignment(.center)
+            }
+            if let progress = RunProgressCopy.overallProgressLine(completed: snap.completed, total: snap.total) {
+                Text(progress).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                    .monospacedDigit()
+            }
         }
         if let elapsed = RunProgress.elapsedLabel(since: since, now: now) {
             Text(elapsed).font(OVType.meta).foregroundStyle(OVColor.inkFaint)
@@ -190,6 +212,17 @@ struct RunProgressView: View {
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    // #2201: the run is parked on a question. Calm, like finishing and stopping, because nothing has
+    // gone wrong: it is doing exactly what it should, which is waiting for Dan. The counter keeps ticking
+    // so the screen is still visibly alive, and the phase title goes, because "Scouting" beside a run that
+    // is not scouting is the screen naming the wrong activity.
+    @ViewBuilder private func waiting(elapsed: String) -> some View {
+        ProgressView().controlSize(.large).tint(OVColor.gold)
+        Text(RunProgress.waitingOnYouLabel(elapsed: elapsed))
+            .font(OVType.dateHeading).foregroundStyle(OVColor.ink)
+            .monospacedDigit()
     }
 
     @ViewBuilder private func stalled(elapsed: String) -> some View {

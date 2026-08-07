@@ -248,6 +248,12 @@ enum ScoutService {
                          // "3 of 9" instead of a bare spinner. Default no-op, matching the fetch/pin/
                          // launch injection style above, so every other caller runs unchanged.
                          onNativeProgress: (String, Int, Int) -> Void = { _, _, _ in },
+                         // #2203: the SAME phase's heartbeat after the counted part is over. The fetch
+                         // loop above is only the first half of Scouting; everything from the read
+                         // hand-off to the final save happens with the count pinned at its total, so the
+                         // screen looked frozen and the sweep's only evidence of life expired. Each tail
+                         // step names itself here. Default no-op, like the callback above.
+                         onNativeStep: (ScoutSweepStep) -> Void = { _ in },
                          // #1037: Dan's cooperative cancel, checked between sources in the fetch loop.
                          // When it flips true the sweep stops cleanly and, because the run was abandoned,
                          // NO detached read is launched. Default never-cancelled, so every existing
@@ -397,6 +403,7 @@ enum ScoutService {
         }
 
         if !toRead.isEmpty && !isCancelled() {
+            onNativeStep(.handingPagesToTheReader)
             do {
                 try queueForReading(toRead, pin: pin, launch: launch)
                 // #1498: the fairness clock moves for the sources this run actually READ, and only those.
@@ -431,6 +438,7 @@ enum ScoutService {
         // #1434/#1435: one generic reconcile pass over prospects AND inquiries (suggestion-only, but
         // claiming a booking to win the tie-break). `try?` yields none on a container predating Inquiry.
         // #1960: built inside the call, so an unhealthy export refuses before the store is swept.
+        onNativeStep(.checkingBookings)
         if DownbeatBooking.reconcileBooked(entities: DownbeatBooking.bookingEntities(in: context),
                                            clients: loaded.clients, bookings: loaded.bookings,
                                            health: loaded.health, now: Date()) > 0 {
@@ -444,6 +452,7 @@ enum ScoutService {
         // #1238: retire any show a blocked town this run may have (re-)surfaced, so blocking a town keeps
         // future scouts out too, not just the shows present when Dan blocked it. Idempotent; only saves if
         // it changed something.
+        onNativeStep(.clearingBlockedTowns)
         if ExcludedTownRetirement.run(in: context) > 0 {
             do {
                 try context.save()
@@ -451,6 +460,7 @@ enum ScoutService {
                 outcome.saveFailed = true
             }
         }
+        onNativeStep(.saving)
         // Record that a scout completed, so the masthead can show freshness (#35).
         recordScout(at: Date(), in: defaults)
         return outcome
