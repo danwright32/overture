@@ -91,6 +91,57 @@ struct ReachabilityRecheckTests {
     }
 }
 
+// What the ROW offers about re-checking, decided beside the data rather than in the view body, because
+// it is three distinct states and a view cannot be tested for getting them wrong (#885).
+@Suite("What a row offers about re-checking (#2261)")
+struct ReachabilityRecheckOfferTests {
+
+    private let probedAt = Date(timeIntervalSince1970: 1_780_000_000)
+    private var justAfter: Date { probedAt.addingTimeInterval(100) }
+    private var longAfter: Date { probedAt.addingTimeInterval(Reachability.probeFreshness + 1) }
+
+    // Nothing to re-check. A show no check has ever run over is served by the ordinary check control, and
+    // offering "check again" beside it would claim an answer exists.
+    @Test func aShowWithNoAnswerIsNotOfferedARecheck() {
+        #expect(Reachability.recheckState(probedAt: nil, hasInheritedAnswer: false,
+                                          recheckRequestedAt: nil, now: justAfter) == .notOffered)
+    }
+
+    @Test func aShowCarryingItsOwnFreshAnswerIsOfferedARecheck() {
+        #expect(Reachability.recheckState(probedAt: probedAt, hasInheritedAnswer: false,
+                                          recheckRequestedAt: nil, now: justAfter) == .offer)
+    }
+
+    // The row Dan is most likely to be standing on: its answer was paid for on a sibling show. It is
+    // frozen just as hard, so it must be offered just as readily.
+    @Test func aShowCarryingItsOrganisationsAnswerIsOfferedARecheck() {
+        #expect(Reachability.recheckState(probedAt: nil, hasInheritedAnswer: true,
+                                          recheckRequestedAt: nil, now: justAfter) == .offer)
+    }
+
+    // Already released by the 90-day clock, so the ordinary control already includes it. A second control
+    // saying the same thing is the restatement #843 exists to stop.
+    @Test func aShowWhoseAnswerHasAgedOutIsNotOfferedASecondRoute() {
+        #expect(Reachability.recheckState(probedAt: probedAt, hasInheritedAnswer: false,
+                                          recheckRequestedAt: nil, now: longAfter) == .notOffered)
+    }
+
+    // L44: the press gets its own acknowledged state the instant it is accepted. A control that kept
+    // offering itself after being pressed reads as broken, so Dan presses it again, and the work is
+    // already queued and already going to cost him.
+    @Test func aRequestedRecheckStopsOfferingAndSaysSo() {
+        #expect(Reachability.recheckState(probedAt: probedAt, hasInheritedAnswer: false,
+                                          recheckRequestedAt: justAfter, now: justAfter) == .requested)
+    }
+
+    // The acknowledgement holds even once the underlying answer ages out, so a request made just before
+    // the clock released it does not flicker back into an unpressed-looking control.
+    @Test func anAgedOutShowStillAcknowledgesAnOutstandingRequest() {
+        #expect(Reachability.recheckState(probedAt: probedAt, hasInheritedAnswer: false,
+                                          recheckRequestedAt: justAfter, now: longAfter) == .requested)
+    }
+}
+
 // The request has to be SPENT by the check that serves it, or the show is offered forever and Dan pays
 // for the same question every time he looks at it. Which check spends it is the whole subtlety: a run
 // that never reached the show has not answered the question he asked (L47).

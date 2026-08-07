@@ -58,6 +58,8 @@ struct ProspectRowView: View {
     var onCorrectClassification: (Discipline) -> Void = { _ in }
     var onRename: (String) -> Void = { _ in }   // #1274: Dan renames a scout-generated name
     var onResetGroupName: () -> Void = {}        // #1274: hand the name back to the scout
+    // #2261: Dan asks for this show's frozen reachability answer to be researched again.
+    var onRequestRecheck: () -> Void = {}
     var onConfirmBooking: () -> Void = {}
     var onDismissBookingSuggestion: () -> Void = {}
     var onRejectBooking: () -> Void = {}
@@ -841,8 +843,34 @@ struct ProspectRowView: View {
             // right-justifies under those buttons instead of widening their row (which is what put it
             // beside Dismiss twice and left the cards uneven).
             reachabilityFlag
+            recheckControl
             heldContactFlag
             reachabilityAddresses
+        }
+    }
+
+    // #2261: directly under the answer it re-runs, because that answer is the reason to press it. Which
+    // of the three states this row is in is Reachability.recheckState's call, so the view holds no rule.
+    @ViewBuilder private var recheckControl: some View {
+        switch Reachability.recheckState(probedAt: item.reachabilityProbedAt,
+                                         hasInheritedAnswer: item.inheritedReachability != nil,
+                                         recheckRequestedAt: item.reachabilityRecheckRequestedAt,
+                                         now: Date()) {
+        case .notOffered:
+            EmptyView()
+        case .offer:
+            Button(ReachabilityCopy.checkAgain) { onRequestRecheck() }
+                .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forest)
+                .help(ReachabilityCopy.checkAgainHelp)
+                .padding(.top, 2)
+        case .requested:
+            // L44: an acknowledged state of its own, never the same control still offering itself. It
+            // also names the one thing still to do, because the run is started from the date's control
+            // and a bare "requested" would leave him waiting for something that needs another press.
+            Text(ReachabilityCopy.recheckQueued)
+                .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 2)
         }
     }
 

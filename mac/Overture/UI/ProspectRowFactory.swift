@@ -118,6 +118,7 @@ enum ProspectRowFactory {
             },
             onRename: { name in ProspectMutations.renameGroup(item, to: name, prospects: prospects, context: context, feedback: feedback) },
             onResetGroupName: { ProspectMutations.resetGroupName(item, prospects: prospects, context: context, feedback: feedback) },
+            onRequestRecheck: { ProspectMutations.requestReachabilityRecheck(item, prospects: prospects, context: context, feedback: feedback) },
             onConfirmBooking: { ProspectMutations.confirmBooking(item, prospects: prospects, context: context, feedback: feedback) },
             onDismissBookingSuggestion: { ProspectMutations.dismissBookingSuggestion(item, prospects: prospects, context: context, feedback: feedback) },
             onRejectBooking: { ProspectMutations.rejectBooking(item, prospects: prospects, context: context, feedback: feedback) },
