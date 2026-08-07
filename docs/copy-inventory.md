@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1101 sentences**, from 386 source files.
+Every sentence Overture can say to Dan: **1108 sentences**, from 388 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1451,6 +1451,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ClientCoverage.swift`
 "Review and send"
     `UI/FollowUpsView.swift`
+"Rooms Overture can't place"
+    `UI/SourcesView.swift`
 "Run reconcile now"
     `App/MenuBarContent.swift`
 "Run scout again"
@@ -1479,10 +1481,18 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SourcesView.swift`
 "Saved \(org)'s venue. Its shows are read again on the next scout."
     `UI/SourcesView.swift`
+"Saved where \(room) is, and gave it to \(shows) already in the queue."
+    `UI/SourcesView.swift`
+"Saved where \(room) is. No show in the queue was waiting on it."
+    `UI/SourcesView.swift`
 "Saving what this run found"
     `Domain/ScoutSweepStep.swift`
 "Say what happened"
     `Domain/ReachedOutQueue.swift`
+"Say where \(room) is"
+    `UI/SourcesView.swift`
+"Say where it is"
+    `UI/SourcesView.swift`
 "Says how many times Dan has shot the venue"
     `Domain/DraftCheck.swift`
 "Scout & Prep"
@@ -1720,6 +1730,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SourcesView.swift`
 "The check couldn't name anyone to research for this show, so it never got as far as looking for an address. If you know who puts this on, add a contact by hand and it's back in play."
     `Domain/Reachability.swift`
+"The city and state it's in"
+    `UI/SourcesView.swift`
 "The date is known"
     `UI/InquiryIntakeSheet.swift`
 "The days Overture won't pitch you for."
@@ -2275,6 +2287,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ExperimentReport.swift`
 "\(show) is on a date you already have a pitch in progress for \(others)."
     `Domain/SelfBookingConflict.swift`
+"\(shows) waiting on this"
+    `UI/SourcesView.swift`
 "\(structuralGaps) of \(total) listings named no venue, so Overture left \(left) out of the queue."
     `Domain/SourceReadability.swift`
 "\(subject) a look: failing, or can't mark shows as gone until it reads its calendar properly again"

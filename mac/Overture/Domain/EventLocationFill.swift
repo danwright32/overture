@@ -44,12 +44,21 @@ enum EventLocationFill {
     // the store (LocationBackfill) runs the identical rule rather than a second copy of it. A stored row
     // is not an ExtractedEvent and never will be again: the extract that produced it is long gone.
     static func location(title: String, venue: String?, published: String?,
-                         singleVenueSourceAddress: String? = nil) -> String? {
+                         singleVenueSourceAddress: String? = nil,
+                         roomAnswer: String? = nil) -> String? {
         if let own = published?.trimmingCharacters(in: .whitespacesAndNewlines), !own.isEmpty {
             return own
         }
         if let fromVenue = cityFromVenue(venue) { return fromVenue }
         if let fromTitle = cityFromTitle(title) { return fromTitle }
+        // #1752, rule 3.5: what Dan himself said about this ROOM, above the curated table and below
+        // everything that reads text about THIS show. Above the table because the table is our guess and
+        // this is his answer, and a room he has answered for is by definition one the table got wrong or
+        // never knew. Below rules 1 to 3 because those are first-hand about the show in front of him,
+        // while his answer is a standing fact about the room, and a touring date in that room's building
+        // is exactly the case where the show's own words matter more.
+        let answered = roomAnswer?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if answered?.isEmpty == false { return answered }
         if let fromTable = VenuePlaces.location(for: venue) { return fromTable }
         // #1751, rule 5 and deliberately LAST: the address Dan typed on the source row, and only where
         // that source is a SINGLE-VENUE feed. See the note above about what is not here: a per-source

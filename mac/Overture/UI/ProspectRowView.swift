@@ -36,6 +36,10 @@ struct ProspectRowView: View {
     var onOverrideSalutationReview: () -> Void = {}
     var onOverrideDraftLint: () -> Void = {}
     var onDismissReply: () -> Void = {}
+    // #1752: Dan says where this card's ROOM is. Optional rather than a no-op default, because the
+    // control is only drawn where something is wired to handle it: a link that silently does nothing is
+    // worse than no link, and the queue is not the only surface that renders this row.
+    var onNameRoom: ((_ venue: String, _ location: String) -> Void)?
     // #1630: the copy-then-confirm control for a form-only show.
     var onBeginFormPitch: (_ recipientId: String, _ formURL: String) -> Void = { _, _ in }
     var onRecordFormPitch: (_ recipientId: String) -> Void = { _ in }
@@ -383,9 +387,22 @@ struct ProspectRowView: View {
             // Rare by design, and only worth a line because it is rare: measured against the live store
             // 2026-07-29, the fill places 341 of the 342 rows that used to look like this.
             if let placeLine = venueInfo.locationLine {
-                Text(placeLine.text)
-                    .font(OVType.meta.weight(.regular))
-                    .foregroundStyle(placeLine.isUnknown ? OVColor.inkSoft : OVColor.inkFaint)
+                // #1752: when the city could not be established, the line carries the way to fix it. A
+                // notice that names the room and then classifies itself as informational tells Dan
+                // exactly what is wrong and gives him nowhere to go (L80). The answer is about the ROOM,
+                // so it reaches every show played there rather than only this card.
+                if placeLine.isUnknown, let room = item.venue, let onNameRoom {
+                    HStack(spacing: OVSpacing.xs) {
+                        Text(placeLine.text)
+                            .font(OVType.meta.weight(.regular))
+                            .foregroundStyle(OVColor.inkSoft)
+                        NameRoomControl(room: room) { onNameRoom(room, $0) }
+                    }
+                } else {
+                    Text(placeLine.text)
+                        .font(OVType.meta.weight(.regular))
+                        .foregroundStyle(placeLine.isUnknown ? OVColor.inkSoft : OVColor.inkFaint)
+                }
             }
             HStack(spacing: 6) {
                 Text(QueueModel.runDateLabel(start: item.performanceDate, end: item.runEndDate))

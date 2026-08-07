@@ -50,6 +50,17 @@ enum WatchlistMutations {
         feedback.acknowledge(VenueLocationCopy.savedAck(org: source.orgName, placed: placed))
     }
 
+    // #1752: Dan says where a ROOM is, when no table knows. Distinct from saveVenueLocation above, which
+    // answers where a SOURCE's shows are: this one reaches every show in that room whichever source
+    // published it, and it outlives the shows it was given for.
+    static func saveRoomPlace(room: UnplacedRooms.Room, to draft: String,
+                              context: ModelContext, feedback: ActionFeedback) {
+        let placed = VenuePlaceAnswering.record(venue: room.name, location: draft,
+                                                in: context, now: Date())
+        guard context.saveOrWarn(org: room.name, feedback: feedback) else { return }
+        feedback.acknowledge(UnplacedRoomCopy.savedAck(room: room.name, placed: placed))
+    }
+
     // #1529: Dan names the room a ticketing-feed source's shows play in, which is the one thing standing
     // between those shows and the queue.
     static func saveVenueName(_ source: WatchedSource, to draft: String,

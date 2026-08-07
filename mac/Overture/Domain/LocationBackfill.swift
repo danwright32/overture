@@ -28,16 +28,25 @@ enum LocationBackfill {
     // #1751: `onlySourceId` narrows the pass to one source's shows, for the moment Dan saves an address
     // and the rows in front of him have to move THEN rather than whenever that calendar next changes.
     // nil means every row, which is the launch pass.
+    //
+    // #1752: `onlyVenueKey` narrows it to one ROOM, for the moment Dan says where a room is and every
+    // show played there has to take that answer immediately. The two narrowings are separate parameters
+    // rather than one because they answer different questions ("this source's shows" and "this room's
+    // shows"), and no caller ever needs both at once.
     @discardableResult
-    static func run(in context: ModelContext, onlySourceId: String? = nil) -> Int {
+    static func run(in context: ModelContext, onlySourceId: String? = nil,
+                    onlyVenueKey: String? = nil) -> Int {
         // Fetched unfiltered and narrowed in Swift on purpose: the condition is "nil OR empty after
         // trimming", which #Predicate cannot express over an optional string, and a predicate that
         // matched only `nil` would silently skip every row holding a whitespace-only location.
         guard let rows = try? context.fetch(FetchDescriptor<Prospect>()) else { return 0 }
         let addresses = singleVenueAddresses(in: context)
+        let answers = roomAnswers(in: context)
         var placed = 0
         for p in rows where (p.location ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             if let onlySourceId, !p.sourceIds.contains(onlySourceId) { continue }
+            let roomKey = VenuePlaces.canonicalKey(for: p.venue)
+            if let onlyVenueKey, roomKey != onlyVenueKey { continue }
             // The SCOUT's title, not Dan's rename. The tour-title rule reads a convention the SOURCE
             // writes ("NYO2 in Santo Domingo, Dominican Republic"), and a row Dan has retitled by hand no
             // longer carries it, so reading his name would quietly stop placing exactly the rows he has
@@ -47,11 +56,24 @@ enum LocationBackfill {
                 title: p.scoutGroupName ?? p.groupName,
                 venue: p.venue,
                 published: nil,
-                singleVenueSourceAddress: typedAddress(for: p, from: addresses)) else { continue }
+                singleVenueSourceAddress: typedAddress(for: p, from: addresses),
+                roomAnswer: roomKey.flatMap { answers[$0] }) else { continue }
             p.location = filled
             placed += 1
         }
         return placed
+    }
+
+    // #1752: Dan's own answers, by room identity. Read once per pass rather than per row, because the
+    // fill walks every stored show and a fetch inside that loop would pay for the whole table each time.
+    private static func roomAnswers(in context: ModelContext) -> [String: String] {
+        let answers = (try? context.fetch(FetchDescriptor<VenuePlaceAnswer>())) ?? []
+        var out: [String: String] = [:]
+        for a in answers {
+            let place = a.location.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !place.isEmpty { out[a.venueKey] = place }
+        }
+        return out
     }
 
     // #1751: the address on each SINGLE-VENUE source that carries one. Every other kind is excluded here

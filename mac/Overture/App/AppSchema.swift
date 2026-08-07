@@ -25,6 +25,9 @@ enum AppSchema {
         PromotedProducer.self,        // #1719: Dan's own producer/house corrections. Two more independent
         DemotedHouse.self,            // entities, no relationship to Prospect, so the migration is purely
                                       // additive and no re-key or sweep can take a correction with it.
+        VenuePlaceAnswer.self,        // #1752: where Dan says a room is, when no table knows. Independent
+                                      // for the same reason, and keyed on the ROOM so one answer reaches
+                                      // every spelling of it and every show played there.
     ]
 
     static var schema: Schema { Schema(models) }

@@ -75,6 +75,11 @@ struct SourcesView: View {
     // SourceSearch, so none of it sits in a view the suite cannot run (#863).
     @State private var searchQuery = ""
 
+    // #1752: which unplaced room is being answered, and what has been typed for it. Keyed on the room's
+    // identity rather than its name, so two spellings of one room cannot both open an editor.
+    @State private var editingRoomKey: String?
+    @State private var roomDraft = ""
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
@@ -132,6 +137,11 @@ struct SourcesView: View {
                             // field brings it straight back without recomputing anything.
                             if !SourceSearch.isSearching(searchQuery) {
                                 coverageSection
+                                // #1752: the rooms no table can place, each with what is waiting on it and
+                                // somewhere to answer. Hidden while searching for the same reason the
+                                // coverage list is: it is a fact about the whole queue, not a search result.
+                                // Absent when there is nothing to ask, exactly like every other section.
+                                unplacedRoomsSection
                             }
                             // Sectioning, ordering and the omit-empty rule all come from the tested domain
                             // function, so this view has no judgement of its own to get wrong. #1432: it is handed
@@ -230,6 +240,76 @@ struct SourcesView: View {
                 }
             }
         }
+    }
+
+    // #1752: the rooms Overture could not place, as questions Dan can answer rather than as a statistic.
+    // The list itself is computed by a tested domain function, so this view has no judgement of its own
+    // to get wrong.
+    @ViewBuilder
+    private var unplacedRoomsSection: some View {
+        let rooms = UnplacedRooms.from(prospects)
+        if !rooms.isEmpty {
+            VStack(alignment: .leading, spacing: OVSpacing.xs) {
+                HStack(spacing: OVSpacing.xxs) {
+                    Image(systemName: "mappin.slash").font(.system(size: 11))
+                    Text(UnplacedRoomCopy.heading).font(.system(size: 12, weight: .semibold))
+                }
+                .foregroundStyle(OVColor.ink)
+                VStack(spacing: 0) {
+                    ForEach(rooms) { room in
+                        unplacedRoomRow(room)
+                        if room.id != rooms.last?.id { Divider().overlay(OVColor.line) }
+                    }
+                }
+                .background(OVColor.surface)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(OVColor.line))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func unplacedRoomRow(_ room: UnplacedRooms.Room) -> some View {
+        VStack(alignment: .leading, spacing: OVSpacing.xxs) {
+            HStack(alignment: .firstTextBaseline, spacing: OVSpacing.xs) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(room.name).font(.system(size: 12)).foregroundStyle(OVColor.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                    // Gold, because this one IS costing Dan shows: until it is answered the geography
+                    // rule cannot judge them at all.
+                    Text(UnplacedRoomCopy.waiting(showCount: room.showCount))
+                        .font(.system(size: 11)).foregroundStyle(OVColor.gold)
+                }
+                Spacer()
+                if editingRoomKey != room.key {
+                    OVCapsuleButton(label: UnplacedRoomCopy.add, tint: OVColor.forest) {
+                        roomDraft = ""
+                        editingRoomKey = room.key
+                    }
+                }
+            }
+            if editingRoomKey == room.key {
+                TextField(UnplacedRoomCopy.placeholder, text: $roomDraft)
+                    .textFieldStyle(.roundedBorder).font(.system(size: 12))
+                    .onSubmit { saveRoomPlace(room) }
+                HStack(spacing: OVSpacing.xs) {
+                    Spacer()
+                    OVCapsuleButton(label: UnplacedRoomCopy.cancel, tint: OVColor.inkSoft) {
+                        editingRoomKey = nil
+                    }
+                    OVCapsuleButton(label: UnplacedRoomCopy.save, tint: OVColor.forest) {
+                        saveRoomPlace(room)
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, OVSpacing.sm)
+        .padding(.vertical, OVSpacing.xs)
+    }
+
+    private func saveRoomPlace(_ room: UnplacedRooms.Room) {
+        WatchlistMutations.saveRoomPlace(room: room, to: roomDraft, context: context, feedback: feedback)
+        editingRoomKey = nil
     }
 
     @ViewBuilder
@@ -969,4 +1049,45 @@ enum VenueNameCopy {
     static func savedAck(org: String) -> String {
         "Saved \(org)'s venue. Its shows are read again on the next scout."
     }
+}
+
+// #1752: naming a room Overture could not place. Its own copy, not folded into VenueLocationCopy: that
+// one is about a SOURCE's address (where this feed's shows are), and this is about a ROOM (where this
+// venue is, whichever source published it). Two different questions with two different answers, and a
+// shared sentence would eventually be wrong for one of them.
+enum UnplacedRoomCopy {
+    static let heading = "Rooms Overture can't place"
+
+    // Says what the room is costing, and nothing about coverage. #1029 removed "N of M shows say where
+    // they are" because Dan did not find that framing useful; a count here is a promise about what
+    // answering THIS room reaches, which is a different thing and the only reason it earns a number.
+    static func waiting(showCount: Int) -> String {
+        let shows = showCount == 1 ? "1 show" : "\(showCount) shows"
+        return "\(shows) waiting on this"
+    }
+
+    static let placeholder = "The city and state it's in"
+    static let add = "Say where it is"
+    static let edit = "Edit"
+    static let save = "Save"
+    static let cancel = "Cancel"
+
+    // The card uses the SAME sentence as the row above, deliberately: it is the same action on the same
+    // kind of thing, and two spellings of one instruction is exactly the #843 defect. On both surfaces
+    // the thing "it" refers to is named immediately beside the control, the room on the sheet and the
+    // venue on the card.
+
+    // The screen-reader label, which has to carry the room the button is about: "Say where this is" is
+    // unambiguous beside the card and meaningless read on its own, and every show in the queue would
+    // otherwise announce the identical control.
+    static func askOnCardAccessible(room: String) -> String { "Say where \(room) is" }
+
+    static func savedAck(room: String, placed: Int) -> String {
+        guard placed > 0 else {
+            return "Saved where \(room) is. No show in the queue was waiting on it."
+        }
+        let shows = placed == 1 ? "1 show" : "\(placed) shows"
+        return "Saved where \(room) is, and gave it to \(shows) already in the queue."
+    }
+
 }
