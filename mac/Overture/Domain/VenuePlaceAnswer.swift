@@ -55,6 +55,24 @@ enum UnplacedRooms {
         var id: String { key }
     }
 
+    // Cheap to evaluate on every redraw, unlike `from` itself, which walks every stored show and builds a
+    // dictionary. The Sources sheet re-evaluates its body on every keystroke and every scroll tick, and
+    // computing the list there directly is the defect #1356 and #1429 already fixed twice on this very
+    // sheet (the coverage list, then the per-source tallies), each time after it froze the sheet.
+    //
+    // Combines only what the list can actually change on: how many shows there are, and for the unplaced
+    // ones, which room they name. A row gaining a location drops out of the loop and moves the count, so a
+    // fill is caught too.
+    static func signature(_ prospects: [Prospect]) -> Int {
+        var acc = prospects.count
+        for p in prospects where (p.location ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            var h = Hasher()
+            h.combine(p.venue ?? "")
+            acc = acc &+ h.finalize()
+        }
+        return acc
+    }
+
     // Every distinct room holding at least one show with no location, most shows first.
     //
     // A show with NO venue at all is excluded: there is no room to name, its card already reads
