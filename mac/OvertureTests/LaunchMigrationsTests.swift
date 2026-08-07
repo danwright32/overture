@@ -201,4 +201,49 @@ struct LaunchMigrationsTests {
             throw error
         }
     }
+
+    // #1784: OrgKeyRealignmentMigration working and OrgKeyRealignmentMigration being RUN are two separate
+    // claims, and only the second one reaches an answer sitting in Dan's ledger. Its own suite proves the
+    // rules; this proves the launch calls it and that the rewritten key was SAVED, which is the whole
+    // point of the pass (an answer nobody can look up is an answer paid for twice).
+    @Test func launchMovesALedgerAnswerOntoTheKeyTheSharedFoldComputes() async throws {
+        await RealStoreTestLock.shared.acquire()
+        do {
+            let fm = FileManager.default
+            let scratch = fm.temporaryDirectory
+                .appendingPathComponent("overture-1784-launch-\(UUID().uuidString)", isDirectory: true)
+            defer { try? fm.removeItem(at: scratch) }
+            try fm.createDirectory(at: scratch, withIntermediateDirectories: true)
+            let storeURL = scratch.appendingPathComponent("default.store")
+
+            let schema = Schema([Prospect.self, Recipient.self, OrgReachabilityAnswer.self])
+            func open() throws -> ModelContext {
+                ModelContext(try ModelContainer(for: schema,
+                                                configurations: [ModelConfiguration(schema: schema,
+                                                                                    url: storeURL,
+                                                                                    cloudKitDatabase: .none)]))
+            }
+
+            let presenter = "The Golden Hour Series (curated with Jalopy Theatre, and others)"
+            let context = try open()
+            context.insert(OrgReachabilityAnswer(orgKey: "presenter:" + presenter.lowercased(),
+                                                 result: .emailFound,
+                                                 probedAt: Date(timeIntervalSince1970: 1_800_000_000),
+                                                 sourceNaturalKey: "k|2026-09-12|jalopy theatre",
+                                                 sourceGroupName: "A night of songs",
+                                                 presenterName: presenter,
+                                                 foundEmails: ["hello@example.org"]))
+            try context.save()
+
+            #expect(LaunchMigrations.run(in: context))
+
+            let reContext = try open()
+            let reloaded = try #require(try reContext.fetch(FetchDescriptor<OrgReachabilityAnswer>()).first)
+            #expect(reloaded.orgKey == OrgKey.stored(for: "The Golden Hour Series"))
+            await RealStoreTestLock.shared.release()
+        } catch {
+            await RealStoreTestLock.shared.release()
+            throw error
+        }
+    }
 }

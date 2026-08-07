@@ -27,9 +27,11 @@ enum ProducerGate {
     //     Theater Company plays it, spelled both ways, and nothing else.
     static func key(_ raw: String?) -> String? {
         guard let raw else { return nil }
-        var folded = VenueNormalization.normalizeForKey(raw)
-            .replacingOccurrences(of: #"\s*\([^)]*\)"#, with: "", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        // #1784: through VenueNormalization's one shared strip rather than a second copy of the same
+        // regex. Keeping a private copy here is exactly how this fold and OrgKey's drifted apart on the
+        // single question they have to answer the same way.
+        var folded = VenueNormalization
+            .strippingParentheticals(VenueNormalization.normalizeForKey(raw))
             .lowercased()
         if folded.hasPrefix("the ") { folded.removeFirst(4) }
         folded = folded.trimmingCharacters(in: .whitespacesAndNewlines)

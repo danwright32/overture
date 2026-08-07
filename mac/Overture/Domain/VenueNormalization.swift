@@ -77,9 +77,7 @@ enum VenueNormalization {
     // so it needs no migration (contrast NaturalKeyVenueMigration, which #1064 did need). A live-store
     // guard pins the zero so a future venue of this shape cannot slip a silent re-key past us.
     static func keyName(_ raw: String) -> String {
-        let withoutSpanningParenthetical = raw
-            .replacingOccurrences(of: #"\s*\([^)]*\)"#, with: "", options: .regularExpression)
-            .trimmingCharacters(in: .whitespaces)
+        let withoutSpanningParenthetical = strippingParentheticals(raw)
         // A name that is ENTIRELY a parenthetical keeps its raw form rather than becoming empty.
         let source = withoutSpanningParenthetical.isEmpty ? raw : withoutSpanningParenthetical
         let firstClause = source.split(separator: ",", omittingEmptySubsequences: false)[0]
@@ -89,10 +87,29 @@ enum VenueNormalization {
         // Kept, rather than replaced by the pass above: a bracket can also be left behind by the comma
         // reduction itself, and an UNBALANCED one (a stray "(" the source never closed) still reaches
         // here untouched.
-        let withoutParenthetical = firstClause
-            .replacingOccurrences(of: #"\s*\([^)]*\)"#, with: "", options: .regularExpression)
-            .trimmingCharacters(in: .whitespaces)
+        let withoutParenthetical = strippingParentheticals(firstClause)
         return withoutParenthetical.isEmpty ? firstClause : withoutParenthetical
+    }
+
+    // #1784: the ONE implementation of "drop a balanced parenthetical qualifier". Three folds in this app
+    // need it (the natural key here, ProducerGate's producer-or-room comparison, and OrgKey's ledger
+    // identity) and only two had it, which is precisely how the gate and the ledger came to disagree about
+    // what one organisation was: the gate saw "The Golden Hour Series", the ledger saw that plus its
+    // "(curated with ...)" bracket, and the same series sat in the ledger twice, paid for twice.
+    //
+    // Whatever sits in those brackets says WHERE the thing is, what it is ALSO CALLED, or who it did this
+    // one night WITH. None of those says WHICH thing it is, which is the only question a key asks.
+    //
+    // Returns an EMPTY string when the name was nothing but a bracket, rather than quietly falling back to
+    // the raw name here. Each caller decides what that means for it, and they genuinely differ: a key
+    // falls back to the raw name so a whole class of names does not silently lose its identity, while
+    // ProducerGate returns no key at all, which is its fail-safe direction (no key means pay again).
+    // Deciding it here would impose one of those answers on the other caller invisibly.
+    // An UNBALANCED bracket matches nothing and is left exactly as it is, rather than eating the rest of
+    // the name.
+    static func strippingParentheticals(_ raw: String) -> String {
+        raw.replacingOccurrences(of: #"\s*\([^)]*\)"#, with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
     }
 
     // LIVE-STORE-CLAIM verified=2026-07-17 measure="whether every real street-address clause in the live store's venue strings starts with a digit"
