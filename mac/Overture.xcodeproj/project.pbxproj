@@ -484,6 +484,7 @@
 		4DCA874D8ADB734AECF85EE3 /* OmniFocusSyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BA8782BE24D5499DA7D1C9A /* OmniFocusSyncTests.swift */; };
 		4DEFBD2B2BDBAC6D89944CD5 /* OutreachEventPhrasing.swift in Sources */ = {isa = PBXBuildFile; fileRef = C85FC218BCBE32C6D3DB1556 /* OutreachEventPhrasing.swift */; };
 		4E195181E71D012B7EF2C396 /* ReplyFromANewAddressTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75BE0E391AC208A812393A72 /* ReplyFromANewAddressTests.swift */; };
+		4E23D2C85AD02FC1E77C287D /* CopySurfaces.swift in Sources */ = {isa = PBXBuildFile; fileRef = 831F2EF8938E7C23257CAAF2 /* CopySurfaces.swift */; };
 		4E714A9C55362471DE98AFE2 /* ReplyDetection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BEF53A35386C9A1C2BF8967 /* ReplyDetection.swift */; };
 		4E82CB5EA8B368EA7D998E70 /* WatchedSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A6A8FCB7AD6337DA0165681 /* WatchedSource.swift */; };
 		4E8349B4819D7F406991C2BF /* DeadPrepRunTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A7D246F45F50D150C90CBAC /* DeadPrepRunTests.swift */; };
@@ -797,6 +798,7 @@
 		854F6B08FE4452948F427F99 /* DuplicateContactGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A14670939A1D0902000A4FE2 /* DuplicateContactGuard.swift */; };
 		85B768EE7A7468FAED6C8E04 /* ModelContextSaveOrWarnSendNotConfirmedTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C249F67A9849E639DD3CB973 /* ModelContextSaveOrWarnSendNotConfirmedTests.swift */; };
 		85CBF1B3F89C45939014C081 /* CancelledReadDisposition.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BBAEB2C76FDDA8C8553846D /* CancelledReadDisposition.swift */; };
+		85D56AF13AA7928857CE18A3 /* CopySurfacesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23B732F2828EE6317000AABF /* CopySurfacesTests.swift */; };
 		85DEE7E70DB31785FF078578 /* UpdateAttemptTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B9722930780C51F6E593D38 /* UpdateAttemptTests.swift */; };
 		86608992B602DAE4BAA199A5 /* ClientHorizon.swift in Sources */ = {isa = PBXBuildFile; fileRef = AED787476CB20A704F60718B /* ClientHorizon.swift */; };
 		86AE682DB2D6C4F261963A62 /* EmailAddressList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BF3B8C01356B62369B2C3DD /* EmailAddressList.swift */; };
@@ -844,6 +846,7 @@
 		8FF6F8007AB2C1A1FA55E169 /* AppModals.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69E9BE251ED385513D31E21F /* AppModals.swift */; };
 		90206CB3772156B9E183715A /* ProspectProvenanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0D2CF2B7A4A5E557A5AC59A /* ProspectProvenanceTests.swift */; };
 		90422E36FC94F83E2304D92B /* PresenterLineLiveStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4AFDB8E0FBD6C94C036E6C8 /* PresenterLineLiveStoreTests.swift */; };
+		90ABC05C7234226EBF1B516F /* CopySurfaces.swift in Sources */ = {isa = PBXBuildFile; fileRef = 831F2EF8938E7C23257CAAF2 /* CopySurfaces.swift */; };
 		90B0EE7B535841BAFD114298 /* ReachabilityRunSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 647334418EA2F723F0EC768A /* ReachabilityRunSummary.swift */; };
 		90B79E6C352A800BAAE690FA /* OrgDoNotContact.swift in Sources */ = {isa = PBXBuildFile; fileRef = 680233A8052DBD4143F80971 /* OrgDoNotContact.swift */; };
 		90C7C836848F0B7986788C4E /* ShowSearchFieldGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8756FC6C0288732BE6DA264 /* ShowSearchFieldGuardTests.swift */; };
@@ -1627,6 +1630,7 @@
 		227EC7AB68FC6A72D2C13659 /* RecurringShowIsOneCardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecurringShowIsOneCardTests.swift; sourceTree = "<group>"; };
 		22BE3FD3EC62F40DA8058EBA /* BlockedContactVisibilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlockedContactVisibilityTests.swift; sourceTree = "<group>"; };
 		231902E5D155CC8939CF078E /* AppleScriptOmniFocusClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleScriptOmniFocusClient.swift; sourceTree = "<group>"; };
+		23B732F2828EE6317000AABF /* CopySurfacesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CopySurfacesTests.swift; sourceTree = "<group>"; };
 		23D99AA2372E7E6CABBD50A7 /* ReadingHalfVisibleGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingHalfVisibleGuardTests.swift; sourceTree = "<group>"; };
 		242373DDCA3D46E218959411 /* LiveRunLabel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveRunLabel.swift; sourceTree = "<group>"; };
 		2464987B03B22E9EFDA8D8BE /* StoppingIsItsOwnStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoppingIsItsOwnStateTests.swift; sourceTree = "<group>"; };
@@ -2038,6 +2042,7 @@
 		829EE2F8C8D00FB6BD62E196 /* DownbeatExport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownbeatExport.swift; sourceTree = "<group>"; };
 		82C7BC03DCBF8D7D88007436 /* DebugStaging.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugStaging.swift; sourceTree = "<group>"; };
 		8315171A718EFB93A371A5E4 /* RunStartTimes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunStartTimes.swift; sourceTree = "<group>"; };
+		831F2EF8938E7C23257CAAF2 /* CopySurfaces.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CopySurfaces.swift; sourceTree = "<group>"; };
 		832A551D016D3B2F0A76F6AB /* VenueContactFormGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueContactFormGuardTests.swift; sourceTree = "<group>"; };
 		8346725D57DE5FF79B50AF8B /* PrepQueueContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrepQueueContractTests.swift; sourceTree = "<group>"; };
 		83E50BD82E6DB3E9A3A258D4 /* OrganiserNaming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganiserNaming.swift; sourceTree = "<group>"; };
@@ -2599,6 +2604,7 @@
 			isa = PBXGroup;
 			children = (
 				5355745A9BEDD63DFD068F67 /* CopyInventory.swift */,
+				831F2EF8938E7C23257CAAF2 /* CopySurfaces.swift */,
 				0FEBCCFA2CF1B37F5D5E1EC8 /* DuplicateStatusLine.swift */,
 				60202E6AD064F2F94493F91B /* Signature2086Fixture.swift */,
 				51E49C7D7A0552D17A0B564B /* SourceGuardHelper.swift */,
@@ -2777,6 +2783,7 @@
 				BEAEB9856A59888A24A62836 /* ConversationStateMenuConsolidationTests.swift */,
 				03CC1D9B940C2E2847738B71 /* ConversationStateTests.swift */,
 				AA47A8B118CB18FA1D038483 /* CopyInventoryTests.swift */,
+				23B732F2828EE6317000AABF /* CopySurfacesTests.swift */,
 				CA153114B1CD8114A048DE85 /* DayOffEditingTests.swift */,
 				CAA76D5BD734163C5B26CE73 /* DayOffOfferTests.swift */,
 				C8487C82FCF4EE9A617F9C39 /* DaysOffAttentionTests.swift */,
@@ -4294,6 +4301,7 @@
 				6A691F62F43342CC75BADBBC /* ArchiveViewSendStateTests.swift in Sources */,
 				128D9DF451642F593C84985E /* ConfirmOnTheReplyScreenTests.swift in Sources */,
 				813A4C1F97598EBFC410226E /* CopyInventory.swift in Sources */,
+				4E23D2C85AD02FC1E77C287D /* CopySurfaces.swift in Sources */,
 				B23058F8F644F6CE46C3E6EB /* DateCheckedMarkerTests.swift in Sources */,
 				BE4C804C2D593521D8E4B295 /* DeepLinkSchemeRegistrationTests.swift in Sources */,
 				D56C7D8CF11CC3F7E1367260 /* DraftModelTraceDisplayTests.swift in Sources */,
@@ -4468,6 +4476,8 @@
 				CC2314C11B59D0B0BAE7CE95 /* ConversationStateTests.swift in Sources */,
 				E7327FCEFD1B624A72E83BF9 /* CopyInventory.swift in Sources */,
 				2AC26B8F577CF6702BBB5068 /* CopyInventoryTests.swift in Sources */,
+				90ABC05C7234226EBF1B516F /* CopySurfaces.swift in Sources */,
+				85D56AF13AA7928857CE18A3 /* CopySurfacesTests.swift in Sources */,
 				0A81C0A8DBB5EA7693A3BB48 /* DayOff.swift in Sources */,
 				0A64D1AF894C9FCB61A71DDA /* DayOffEditingTests.swift in Sources */,
 				A6A3C12B9F19A9A9C566ED21 /* DayOffMutations.swift in Sources */,
