@@ -61,11 +61,14 @@ final class GmailAuthManager {
     // Traces the connect flow to ~/Library/Logs/Overture/gmail-connect-debug.log. The app runs resident
     // via a LaunchAgent whose stdout/stderr are separate, and NSLog did not surface in `log show`, so a
     // dedicated file is the reliable way to see exactly how far a failing connect got.
+    // #2096: the directory and the filename both come from AgentLogLocation, which owns that folder,
+    // rather than being rebuilt here. Two hand-built copies of one path meant the folder's permissions
+    // depended on which writer created it first, and only AgentLogLocation applies the owner-only
+    // 0700. Being named there is also what puts this file on the capped list, so it is bounded like
+    // every other log beside it instead of growing for the life of the install.
     nonisolated static func connectDebugLog(_ line: String) {
-        let dir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Logs/Overture", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let url = dir.appendingPathComponent("gmail-connect-debug.log")
+        let url = AgentLogLocation.prepareDirectory().url
+            .appendingPathComponent(AgentLogLocation.gmailConnectDebugURL.lastPathComponent)
         let entry = "\(ISO8601DateFormatter().string(from: Date())) \(line)\n"
         if let handle = try? FileHandle(forWritingTo: url) {
             handle.seekToEndOfFile(); handle.write(Data(entry.utf8)); try? handle.close()

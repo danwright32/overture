@@ -21,6 +21,12 @@ enum AgentLogLocation {
     // folder, and a ledger Dan cannot reach from the nudge that mentions it is no use to him.
     static var problemsURL: URL { directory.appendingPathComponent("overture-agent.problems.log") }
 
+    // #2096: the Gmail connect trace, named HERE rather than built by hand at its writer. It used to
+    // assemble this directory itself out of homeDirectoryForCurrentUser, which left the folder with
+    // two uncoordinated definitions and meant its permissions depended on which writer happened to
+    // create it first: only prepareDirectory applies the owner-only 0700.
+    static var gmailConnectDebugURL: URL { directory.appendingPathComponent("gmail-connect-debug.log") }
+
     // #2003: the ledger a diagnostic write in THIS process is allowed to land in.
     //
     // A test run writes into the app's own files. Measured on 2026-08-04, the live ledger held 443 KB,
@@ -106,7 +112,16 @@ enum AgentLogLocation {
     // #1689: the problem ledger is bounded with the other two. An app that keeps naming one recurring
     // problem would otherwise grow a file nothing ever trims, which is how the log this issue is about
     // reached 9 KB of the same three sentences.
-    static var cappedFiles: [URL] { [standardOutURL, standardErrorURL, problemsURL] }
+    // Every log this app writes into that directory. #2096 added the Gmail connect trace, which was
+    // the one writer in there that nothing ever trimmed: it is appended to on every connect attempt,
+    // and the app runs resident and reconnects, so it grew for the life of the install (measured
+    // 668 KB on 2026-08-04, against 1.7 KB for the next largest file beside it).
+    //
+    // Anything new written into this directory belongs on this list. The connect trace got here by
+    // being added somewhere else and never joining it.
+    static var cappedFiles: [URL] {
+        [standardOutURL, standardErrorURL, problemsURL, gmailConnectDebugURL]
+    }
 
     @discardableResult
     static func capLogs(maxBytes: Int = defaultMaxLogBytes,
