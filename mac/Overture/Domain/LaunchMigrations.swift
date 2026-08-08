@@ -55,6 +55,15 @@ enum LaunchMigrations {
         // (499 on the live store). Idempotent: guarded by "still carries the retired string". Without it
         // the sentence would linger for weeks on whichever rows the hash-gated scout has not re-emitted.
         CatchAllFitReasonMigration.run(in: context)
+        // #1657: put each stored fit reason back in step with the axes on its own row. `fitReason` is a
+        // snapshot and a hash-gated scout may not re-emit a given row for weeks, so changing the sentence
+        // in the classifier alone would leave the old wording on an arbitrary subset of the queue: 21 rows
+        // reading "Self-produced other group" (a raw enum value, not a genre) and one still naming the
+        // "choral" genre #350 folded into music. Recomputed through EventClassifier.derived rather than
+        // matched against known strings, so this pass cannot become a second copy of the templates.
+        // Idempotent by construction: it writes the sentence its own condition compares against, and it
+        // never touches a row whose reason is deliberately empty (#1600).
+        FitReasonRealignment.run(in: context)
         // #1064: re-key existing prospects with the new venue normalization so a bare venue name and the
         // same venue with its street address appended stop keying as two separate rows for one show.
         // Idempotent (a re-keyed row already equals its folded key); merges only provably-empty duplicates

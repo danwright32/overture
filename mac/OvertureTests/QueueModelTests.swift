@@ -209,17 +209,20 @@ struct QueueItemPrimaryContactTests {
 
 @Suite("Queue label helpers")
 struct QueueLabelTests {
-    @Test func disciplineFallsBackToPerformance() {
+    // #1657: a stored value the app cannot state (the `other` bucket, or anything outside the enum) says
+    // so, rather than naming a genre. "Performance" was a genre nothing had read, printed as though it
+    // had been, on 53% of the queue.
+    @Test func aGenreTheAppCannotStateSaysSo() {
         #expect(QueueModel.disciplineLabel("dance") == "Dance")
-        #expect(QueueModel.disciplineLabel("other") == "Performance")
-        #expect(QueueModel.disciplineLabel("nonsense") == "Performance")
+        #expect(QueueModel.disciplineLabel("other") == Discipline.other.label)
+        #expect(QueueModel.disciplineLabel("nonsense") == Discipline.other.label)
     }
 
     // #350: Choral is no longer its own category (folded into Music). A leftover raw "choral"
     // string (a legacy value the migration missed, or unmigrated history data) degrades
-    // gracefully to the generic fallback rather than a dedicated label.
-    @Test func legacyChoralStringFallsBackToPerformance() {
-        #expect(QueueModel.disciplineLabel("choral") == "Performance")
+    // gracefully to the same answer rather than a dedicated label.
+    @Test func legacyChoralStringReadsAsAGenreTheAppCannotState() {
+        #expect(QueueModel.disciplineLabel("choral") == Discipline.other.label)
     }
 
     @Test func productionBadgeOnlyWithSignal() {

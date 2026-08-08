@@ -19,10 +19,15 @@ struct GenreControlTests {
 
     // The case that is now common rather than rare: a show whose genre nothing could establish. The
     // stored value is "other" and it must never be what a person hears.
+    //
+    // #1657: and what is heard is the same thing the card shows, which is that no genre was read. It does
+    // not announce a genre and then contradict itself, and it offers to SET one rather than to change a
+    // genre that does not exist.
     @Test func anUnestablishedGenreIsAnnouncedTheWayTheCardShowsIt() {
         let label = GenreControlCopy.accessibilityLabel(for: "other")
-        #expect(label.contains("Performance"))
+        #expect(label.contains(Discipline.other.label))
         #expect(!label.contains("other"), "the raw stored value is not a word Dan uses")
+        #expect(label.lowercased().contains("set it"))
     }
 
     // A label that only names the genre says nothing about what the control DOES, which is the whole

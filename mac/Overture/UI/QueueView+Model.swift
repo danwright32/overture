@@ -967,17 +967,14 @@ enum QueueModel {
     }
 
     // #350: Choral is no longer its own category (folded into Music); a leftover raw "choral"
-    // string degrades to the generic fallback below rather than a dedicated label.
+    // string degrades to the fallback below rather than a dedicated label.
+    //
+    // #1657: the words themselves live on `Discipline`, since the picker and the fit reason say the same
+    // ones and a second copy here is how they would come to disagree. This function survives only because
+    // it takes a RAW STRING: a stored value the enum no longer has is a genre this app cannot state,
+    // which is the same answer as one it never read.
     static func disciplineLabel(_ discipline: String) -> String {
-        switch discipline {
-        case "dance": return "Dance"
-        case "opera": return "Opera"
-        case "theater": return "Theater"
-        case "music": return "Music"
-        case "band": return "Band"
-        case "comedy": return "Comedy"
-        default: return "Performance"
-        }
+        (Discipline(rawValue: discipline) ?? .other).label
     }
 
     static func productionLabel(_ production: String) -> String? {
@@ -2273,6 +2270,12 @@ enum GenreControlCopy {
     static let help = "Set this show's genre"
 
     static func accessibilityLabel(for discipline: String) -> String {
-        "Genre: \(QueueModel.disciplineLabel(discipline)). Change it."
+        // #1657: the two states are different sentences, because "Genre: No genre read. Change it."
+        // announces a genre and then says it is not one. An unread genre has nothing to change, so what
+        // this control offers there is to SET it.
+        guard let read = Discipline(rawValue: discipline), read != .other else {
+            return "\(Discipline.other.label). Set it."
+        }
+        return "Genre: \(read.label). Change it."
     }
 }
