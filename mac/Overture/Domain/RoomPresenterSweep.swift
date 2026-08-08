@@ -54,7 +54,7 @@ enum RoomPresenterSweep {
             // #1533: a genre Dan corrected is his, and this pass is about the producer, not about
             // re-reading a decision he already made.
             if !p.classificationOverriddenByDan {
-                p.discipline = reread.discipline.rawValue
+                GenreVisibility.write(reread.discipline, to: p)   // #1658
             }
             p.production = reread.production.rawValue
             p.profile = reread.profile.rawValue

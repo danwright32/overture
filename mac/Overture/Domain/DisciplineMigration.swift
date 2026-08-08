@@ -10,6 +10,8 @@ enum DisciplineMigration {
     static func run(in context: ModelContext) {
         let descriptor = FetchDescriptor<Prospect>(predicate: #Predicate { $0.discipline == "choral" })
         guard let matches = try? context.fetch(descriptor), !matches.isEmpty else { return }
-        for p in matches { p.discipline = "music" }
+        // #1658: through the one writer. Choral folding into music moves a row onto the stricter
+        // geographic rule, which is exactly the change that must not remove a show Dan can see.
+        for p in matches { GenreVisibility.write(.music, to: p) }
     }
 }
