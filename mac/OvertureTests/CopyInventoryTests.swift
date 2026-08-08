@@ -134,10 +134,30 @@ struct CopyInventoryTests {
         #expect(CopyInventory.isCopy(.init(text: #"\(count) contacts held for a check"#, isRaw: false)))
     }
 
+    // #2124. A value the sentence LEADS with is still a word of that sentence. Counting only the
+    // literal words after it puts a whole category below the two-word floor, and screen reader labels
+    // skew heavily this way because they usually name the value first.
+    //
+    // The one that got away: ReplyIdentity.RowAudience.spokenLabel, added in #2121, never entered the
+    // inventory at all, and the sentence count did not move to say so.
+    @Test func aValueTheSentenceLeadsWithIsStillAWord() {
+        #expect(CopyInventory.isCopy(.init(text: #"\(address), replied"#, isRaw: false)))
+        #expect(CopyInventory.isCopy(.init(text: #"\(count) shows"#, isRaw: false)))
+    }
+
     // A bare value is a number being displayed, not a sentence being built. The RULE behind such a number
     // belongs in a model (#863), and this inventory does not pretend to see it.
     @Test func aBareValueIsNotCopy() {
         #expect(!CopyInventory.isCopy(.init(text: #"\(item.fitScore)"#, isRaw: false)))
+    }
+
+    // The floor still has to hold, or the fix trades one silent gap for thousands of lines of noise.
+    // Two values with nothing said between them is a format string, not a sentence, and a value glued
+    // to a suffix is an identifier being built.
+    @Test func valuesWithNoWordsBetweenThemAreNotCopy() {
+        #expect(!CopyInventory.isCopy(.init(text: #"\(first)\(second)"#, isRaw: false)))
+        #expect(!CopyInventory.isCopy(.init(text: #"\(prefix)-suffix"#, isRaw: false)))
+        #expect(!CopyInventory.isCopy(.init(text: #"\(dir)/\(file) exists"#, isRaw: false)))
     }
 
     // The cost of the "two words" rule, stated out loud rather than discovered later: a one-word label
@@ -226,6 +246,24 @@ struct CopyInventoryTests {
         #expect(!inventory.sentences.contains { $0.contains("out-of-town date from a New York one") })
         #expect(inventory.sources(of: "\\(n) new shows waiting for you") == ["Domain/SourceYield.swift"])
         #expect(inventory.sources(of: "1 new show waiting for you") == ["Domain/SourceYield.swift"])
+    }
+
+    // #2124: the sentence that got away, asserted against the REAL app rather than the classifier alone.
+    // The classifier test above would still pass if the lexer or the writer dropped it somewhere further
+    // down, and "it never reached the file" is the exact failure being fixed, so the end of the pipeline
+    // is where this has to be checked.
+    @Test func aSpokenLabelLeadingWithItsValueReachesTheInventory() throws {
+        let inventory = try CopyInventory.build()
+        #expect(inventory.sources(of: "\\(address), replied") == ["Domain/ReplyIdentity.swift"])
+    }
+
+    // The other half of the same rule: an auth header is not a sentence, and it is kept out by being
+    // marked where it lives rather than by a heuristic here. Pinned because the marking is three
+    // separate comments in three files, and losing one would put a token-bearing header back into the
+    // list Dan cold-reads.
+    @Test func theGmailAuthorizationHeaderIsNotInTheList() throws {
+        let inventory = try CopyInventory.build()
+        #expect(!inventory.sentences.contains { $0.contains("Bearer ") })
     }
 
     // The failure path, and the one worth being loud about. An ignore region opened and never closed

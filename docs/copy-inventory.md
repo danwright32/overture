@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1112 sentences**, from 393 source files.
+Every sentence Overture can say to Dan: **1186 sentences**, from 393 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -59,9 +59,12 @@ What is not, and why:
 - `Integration/GmailAuthManager.swift`: developer diagnostic log, not the app's voice (#915)
 - `Integration/GmailMessage.swift`: a light card surface for the outbound email's own HTML, not Overture's voice (#1203)
 - `Integration/GmailMessage.swift`: RFC822 headers: a mail server reads these, not Dan (#915)
+- `Integration/GmailReplyChecker.swift`: the HTTP Authorization header Google reads, not a sentence
 - `Integration/GmailSender.swift`: developer diagnostic log, not the app's own voice (#915)
+- `Integration/GmailSender.swift`: the HTTP Authorization header Google reads, not a sentence
 - `Integration/GmailSignatureHealth.swift`: developer diagnostic reason (log/badge detail), not the app's own voice (#915)
 - `Integration/GmailSignatureHealth.swift`: developer diagnostic reason (log/badge detail), not the app's own voice (#915)
+- `Integration/GmailSignatureService.swift`: the HTTP Authorization header Google reads, not a sentence
 - `Integration/GmailSignatureService.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Integration/GmailSignatureService.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Integration/GmailSignatureStore.swift`: developer diagnostic log, not the app's own voice (#915)
@@ -80,7 +83,7 @@ What is not, and why:
 - `UI/DraftSignaturePreview.swift`: renders the outbound email's own HTML (body + Gmail signature), not Overture's voice (#1203)
 - `UI/DraftSignaturePreview.swift`: browser-side measuring script, not a sentence Overture says to Dan (#915)
 
-## The same sentence, said in more than one place (49)
+## The same sentence, said in more than one place (54)
 
 Two copies of a sentence will drift. #843 owns fixing these.
 
@@ -231,6 +234,22 @@ Two copies of a sentence will drift. #843 owns fixing these.
 - "Written by you"
   - `UI/QueueView+Model.swift`
   - `UI/QueueView+Model.swift`
+- "\(city), \(state)"
+  - `Domain/EventLocationFill.swift`
+  - `Domain/EventLocationFill.swift`
+- "\(min(progress.completed, progress.total)) of \(progress.total)"
+  - `Domain/ReplyClassifyProgress.swift`
+  - `Domain/ScoutExtractProgress.swift`
+- "\(placed) shows"
+  - `UI/SourcesView.swift`
+  - `UI/SourcesView.swift`
+- "\(s.dateCount) dates"
+  - `Domain/ProbeSelection.swift`
+  - `Domain/ProbeSelection.swift`
+- "\(shortMonth(cal.component(.month, from: d))) \(cal.component(.day, from: d))"
+  - `UI/QueueView+Model.swift`
+  - `UI/QueueView+Model.swift`
+  - `UI/QueueView+Model.swift`
 - "\n\nLast lines of the run log:\n\(tail)"
   - `Domain/DetachedRunOutcome.swift`
   - `UI/LeadIntakeModel.swift`
@@ -276,10 +295,16 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ProbeSelection.swift`
 " and find new contacts"
     `App/ActionFeedback.swift`
+" at \(venue!)"
+    `Domain/ConversationReminder.swift`
 " checked recently and are not looked up again."
     `Domain/ProbeSelection.swift`
 " you picked."
     `Domain/ProbeSelection.swift`
+" · \(tally.booked) booked"
+    `Domain/SourceYield.swift`
+" · \(tally.sent) sent"
+    `Domain/SourceYield.swift`
 "## Dan's notes"
     `Domain/VoiceNotesProtector.swift`
 "## Dan's notes (authoritative, never auto-edited)\n\nWrite any voice guidance you want every draft to follow. This section is yours; Prep runs never change it.\n\n## Observed tendencies (auto-generated; regenerated each run)\n\n_Nothing learned yet. This fills in after you've edited and sent some drafts._"
@@ -459,6 +484,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/OnboardingView.swift`
 "Asks for the date or venue Overture already knows"
     `Domain/DraftCheck.swift`
+"Attn: \(name), \(role)\n\n"
+    `Domain/Salutation.swift`
+"Attn: \(name)\n\n"
+    `Domain/Salutation.swift`
 "Authorize your photography Gmail so you can send approved emails"
     `Domain/DraftReviewNotes.swift`
 "Auto-detected booking, confirm?"
@@ -514,6 +543,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/Reachability.swift`
 "Check the rest"
     `Domain/AppNotice.swift`
+"Checked \(ago)"
+    `Domain/SourceReadState.swift`
 "Checking reachability"
     `UI/RunProgressView.swift`
 "Checking what it found against your bookings"
@@ -677,6 +708,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReplyClassifyProgress.swift`
 "Drafts waiting for you to read, edit, and send."
     `Domain/AgentRoster.swift`
+"Due (\(count))"
+    `Domain/DueWork.swift`
 "Each pair counts as two organisations, so nothing found for one is ever reused for the other. Some are real typos and some are simply different names."
     `UI/OrganisationsView.swift`
 "Edit details..."
@@ -793,6 +826,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/Reachability.swift`
 "Held, not sending"
     `UI/SendConfirmSheet.swift`
+"Hi \(firstName(name)),"
+    `Domain/Salutation.swift`
+"Hi \(last),"
+    `Domain/Salutation.swift`
 "Hidden for a week. Overture still can't keep clear of shoots it doesn't know about."
     `App/ActionFeedback.swift`
 "Hide this for a week"
@@ -1279,6 +1316,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "Performance passed"
     `UI/QueueView+Model.swift`
+"Performance: \(d)"
+    `Domain/OmniFocusSync.swift`
 "Performative enthusiasm or an exclamation point"
     `Domain/DraftCheck.swift`
 "Performs today, too close to book"
@@ -1295,6 +1334,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "Possibly one name twice"
     `UI/OrganisationsView.swift`
+"Prep \(Plural.count(count, "show"))"
+    `Domain/PrepSelectionCopy.swift`
 "Prep \(groupName) by hand"
     `Domain/ManualPrepPrefill.swift`
 "Prep a show on a date you're already pitching?"
@@ -1362,6 +1403,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/CancelledReadDisposition.swift`
 "Read \(reads) times but never turned up a show. It may be pointed at the wrong page."
     `Domain/SourceYield.swift`
+"Read \(relative(at, now: now))"
+    `Domain/SourceReadState.swift`
 "Read all \(pending)"
     `Domain/ScoutReadBudget.swift`
 "Read and edit how Overture drafts in your voice. Your notes stay yours; tendencies are learned from your edits."
@@ -1512,6 +1555,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/CancelledReadDisposition.swift`
 "Scout the venue calendars for new performances (⌘R), then find contacts and draft emails for the ones you keep (⌘P). Auto-scouts about daily."
     `App/RootView.swift`
+"Scouted \(PrepStatus.relative(from: last, to: now))"
+    `Domain/ScoutStatus.swift`
 "Search by name"
     `Domain/SourceSearch.swift`
 "Search shows, venues, contacts"
@@ -1632,6 +1677,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/RootView.swift`
 "Source listing"
     `UI/QueueView+Model.swift`
+"Sources (\(count))"
+    `Domain/SourceAttention.swift`
 "Sources you stopped watching."
     `Domain/SourceGrade.swift`
 "Start a new experiment"
@@ -1670,9 +1717,13 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/RunProgress.swift`
 "Street, city, state"
     `UI/SourcesView.swift`
+"Suggested: \(s.label)"
+    `Domain/ConversationReminder.swift`
 "Sync now"
     `App/RootView.swift`
     `Domain/AppNotice.swift`
+"Synced \(PrepStatus.relative(from: lastSuccessAt, to: now))"
+    `Domain/OmniFocusSyncStatus.swift`
 "Tagged a returning client: shows surface up to a year ahead."
     `Domain/ClientTagCopy.swift`
 "Tagged as returning client \(namedClient): shows surface up to a year ahead."
@@ -1950,6 +2001,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "Treating \(organisation) as the venue, so its address won't answer for other people's shows"
     `App/ActionFeedback.swift`
+"Tried \(ago)"
+    `Domain/SourceReadState.swift`
 "Try a different discipline, or clear the high-fit filter."
     `Domain/EmptyState.swift`
 "Try a different status filter, or clear the search."
@@ -1960,6 +2013,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Try another link"
     `UI/AddLeadSheet.swift`
 "Undo \(actionLabel) and Days Off: \(subject)"
+    `Domain/QueueUndoStack.swift`
+"Undo \(actionLabel): \(subject)"
     `Domain/QueueUndoStack.swift`
 "Unknown contact"
     `UI/QueueView+Model.swift`
@@ -1979,6 +2034,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/VenueDisplay.swift`
 "Venue calendar"
     `UI/QueueView+Model.swift`
+"Venue: \(v)"
+    `Domain/OmniFocusSync.swift`
+"Venue: \(venue)"
+    `UI/SourcesView.swift`
 "Verbal yes, not booked"
     `Domain/ConversationReminder.swift`
     `UI/ReminderSettingsView.swift`
@@ -2106,6 +2165,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ShootHistory.swift`
 "Zankel Hall"
     `Domain/VenueParser.swift`
+"\($0) (\(hall))"
+    `Domain/VenueDisplay.swift`
+"\($0.orgName): \($0.state.failureMessage ?? "couldn't be checked")"
+    `Integration/ScoutService.swift`
 "\(-days) days ago"
     `Domain/ReachedOutQueue.swift`
 "\(Discipline.other.label). Set it."
@@ -2116,6 +2179,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "\(Plural.count(count, "show")) held by a date clash"
     `Domain/StageEmptyState.swift`
+"\(Plural.count(count, "show")) on \(dateLabel)"
+    `Domain/BulkDismiss.swift`
 "\(Plural.count(count, "show")) on \(dateLabel) are dismissed as \(reason.label)"
     `App/ActionFeedback.swift`
 "\(Plural.count(count, "show")) to prep"
@@ -2126,20 +2191,36 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/StageEmptyState.swift`
 "\(Plural.count(count, "show")) you've pitched"
     `Domain/StageEmptyState.swift`
+"\(a) vs \(b) "
+    `UI/ExperimentReportView.swift`
 "\(added) from watched calendars"
     `Domain/ScoutRunSummary.swift`
 "\(address) isn't saved as a contact on this show."
     `Domain/ReplyPanel.swift`
+"\(address), replied"
+    `Domain/ReplyIdentity.swift`
+"\(approved) approved"
+    `Domain/PrepStatus.swift`
 "\(arm.editedExcluded) edited (\(Int((rate * 100).rounded()))% of sends), excluded from the rate"
     `Domain/ExperimentReport.swift`
 "\(arm.editedExcluded) edited, excluded from the rate"
     `Domain/ExperimentReport.swift`
 "\(arm.tally.replied + arm.tally.booked) replied of \(arm.tally.contacted)"
     `Domain/ExperimentReport.swift`
+"\(base) \($0)"
+    `Domain/RunProgress.swift`
 "\(base) looks stuck (\(elapsed))"
     `Domain/RunProgress.swift`
+"\(city), \(state)"
+    `Domain/EventLocationFill.swift`
+"\(clauses[cityIndex]), \(code)"
+    `Domain/VenueDisplay.swift`
+"\(conceptSummary(for: name)) \(detail)"
+    `Domain/AgentRoster.swift`
 "\(contactCount) contacts across \(showCount) \(showCount == 1 ? "show" : "shows")"
     `Domain/ReachedOutQueue.swift`
+"\(contacts.count) contacts"
+    `UI/QueueView+Model.swift`
 "\(contacts.count) found, \(reachable) reachable"
     `UI/QueueView+Model.swift`
 "\(contacts.count) found, none reachable"
@@ -2158,25 +2239,39 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceAttention.swift`
 "\(count) sources went quiet."
     `UI/ScoutSummaryView.swift`
+"\(dates), \(shows)"
+    `Domain/ProbeSelection.swift`
 "\(deferredCount) venues are still waiting to be checked."
     `UI/ScoutSummaryView.swift`
 "\(drafted) to review"
     `Domain/PrepStatus.swift`
+"\(e) at \(v)"
+    `Domain/InquiryCopy.swift`
 "\(empties.count) established calendars came back empty this run."
     `Domain/ScoutWarnings.swift`
 "\(empties[0].orgName) has listed shows before and came back empty this run."
     `Domain/ScoutWarnings.swift`
 "\(entry.distinctShowCount) different titles"
     `Domain/OrganisationListing.swift`
+"\(entry.rowCount) shows, \(titles), \(rooms)."
+    `Domain/OrganisationListing.swift`
 "\(error.localizedDescription). Your data is safe and unchanged at "
     `App/StoreRelocation.swift`
+"\(event.title) \(presenter)"
+    `Domain/EventClassifier.swift`
 "\(f.count) sources couldn't be checked. Open Sources to fix or confirm them."
     `Domain/ScoutWarnings.swift`
 "\(failed.count) sources couldn't be checked.\n\n"
     `Integration/ScoutService.swift`
+"\(filed) \(note)"
+    `Domain/BulkDismiss.swift`
 "\(first) and \(rest) other\(rest == 1 ? "" : "s")"
     `Domain/SelfBookingConflict.swift`
+"\(i.followUpsDue) due"
+    `Domain/AgentRoster.swift`
 "\(i.keptToPrep) ready to prep"
+    `Domain/AgentRoster.swift`
+"\(i.reachedOutDue) due"
     `Domain/AgentRoster.swift`
 "\(i.readyToSend) approved, connect Gmail to send"
     `Domain/AgentRoster.swift`
@@ -2188,14 +2283,27 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AgentRoster.swift`
 "\(kept) to prep"
     `Domain/PrepStatus.swift`
+"\(label), \(calendar.component(.year, from: date))"
+    `Domain/EasternDate.swift`
+"\(label)… \(elapsed)"
+    `Domain/RunProgress.swift`
 "\(list(runs)) run past \(dateLabel), so dismissing them takes their later nights too."
     `Domain/BulkDismiss.swift`
 "\(list) has listed shows before and came back with nothing this run. Its page format may have changed."
     `Domain/ScoutWarningCopy.swift`
+"\(live.name): \(live.detail)"
+    `UI/QueueView.swift`
+"\(lookups), \(wait)."
+    `Domain/ProbeSelection.swift`
 "\(lookups), \(wait): shows by the same producer share one."
     `Domain/ProbeSelection.swift`
 "\(min(completed, total)) of \(total) done"
     `UI/RunProgressView.swift`
+"\(min(progress.completed, progress.total)) of \(progress.total)"
+    `Domain/ReplyClassifyProgress.swift`
+    `Domain/ScoutExtractProgress.swift`
+"\(months[month - 1]) \(year)"
+    `UI/LeadIntakeModel.swift`
 "\(n) \(shows(n)) held by a date clash"
     `Domain/AgentRoster.swift`
 "\(n) \(shows(n)) sent, but replies can't be tracked: check Gmail"
@@ -2204,10 +2312,14 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AgentRoster.swift`
 "\(n) \(shows(n)) with an unconfirmed send: check Gmail"
     `Domain/AgentRoster.swift`
+"\(n) \(word(n, singular, plural))"
+    `Domain/Plural.swift`
 "\(n) new shows waiting for you"
     `Domain/SourceYield.swift`
 "\(n) reply draft\(n == 1 ? "" : "s") stalled"
     `Domain/AgentRoster.swift`
+"\(n) shows"
+    `Domain/ScoutResultAudit.swift`
 "\(name) is a room's name, so Overture reads it as the building, not the presenter."
     `Domain/OrganisationListing.swift`
 "\(name) may already be pitched for a nearby show; blocked from sending."
@@ -2226,6 +2338,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OutreachEventPhrasing.swift`
 "\(narrowedCount) already sent, so \(narrowedCount == 1 ? "it" : "they") only got new contacts"
     `App/ActionFeedback.swift`
+"\(night) \($0)"
+    `Integration/ScoutService.swift`
 "\(omniFocusChanged) follow-up\(omniFocusChanged == 1 ? "" : "s") updated"
     `Domain/ReconcileSummary.swift`
 "\(org) already moved on, so there was nothing to undo"
@@ -2254,12 +2368,20 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "\(org) recorded as booked."
     `Domain/ReachedOutClose.swift`
+"\(org.orgName) (\(Plural.count(org.showCount, "show")))"
+    `Domain/SuppressionReport.swift`
 "\(orgName) asked not to be contacted, so Overture won't watch their calendar."
     `Domain/WatchlistEditing.swift`
 "\(orgName) asked not to be contacted, so Overture won't watch them again."
     `Domain/WatchlistEditing.swift`
 "\(orgNames.count) sources have listed shows before and came back with nothing this run: \(list). Their page formats may have changed."
     `Domain/ScoutWarningCopy.swift`
+"\(outcome.drafted) drafted"
+    `Domain/PrepRunSummary.swift`
+"\(outcome.found) found"
+    `Domain/ScoutRunSummary.swift`
+"\(outcome.inserted) new"
+    `Domain/ScoutRunSummary.swift`
 "\(outcome.skippedEdited) kept your edits"
     `Domain/PrepRunSummary.swift`
 "\(outcome.skippedHandWritten) left as you wrote them"
@@ -2270,14 +2392,20 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OmniFocusSync.swift`
 "\(p.groupName), reply to \(displayName(r))"
     `Domain/OmniFocusSync.swift`
+"\(parts[0]), \(parts[1])"
+    `Domain/EventLocationFill.swift`
 "\(pending) calendars have new listings to read."
     `Domain/ScoutReadBudget.swift`
 "\(piece) is not an email address. No contact was added"
     `App/ActionFeedback.swift`
 "\(piece) is not an email address. Nothing was saved"
     `App/ActionFeedback.swift`
+"\(placed) shows"
+    `UI/SourcesView.swift`
 "\(previous). Nothing has been changed. If that drop is a surprise, quit Overture and "
     `App/StoreShrinkCheck.swift`
+"\(progress.completed) of \(progress.total)"
+    `Domain/PrepProgress.swift`
 "\(range) is no longer blocked"
     `App/ActionFeedback.swift`
 "\(range) is now blocked"
@@ -2286,18 +2414,48 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceReadability.swift`
 "\(runs[0]) runs past \(dateLabel), so dismissing it takes its later nights too."
     `Domain/BulkDismiss.swift`
+"\(s.alreadyAnsweredCount) more "
+    `Domain/ProbeSelection.swift`
+"\(s.dateCount) dates"
+    `Domain/ProbeSelection.swift`
 "\(s.organisationCount) named producers answer for several shows each; "
     `Domain/ProbeSelection.swift`
 "\(s.previouslyMissedCount) of them went through an earlier check and never got an answer."
+    `Domain/ProbeSelection.swift`
+"\(s.researchCount) lookups"
+    `Domain/ProbeSelection.swift`
+"\(s.showCount) shows"
     `Domain/ProbeSelection.swift`
 "\(sends) of \(experimentCallThreshold) sends toward a reliable read"
     `Domain/ExperimentReport.swift`
 "\(sends) sends in, enough for the rate to mean something"
     `Domain/ExperimentReport.swift`
+"\(shortMonth(c.month ?? 1)) \(c.day ?? 0)"
+    `UI/QueueView+Model.swift`
+"\(shortMonth(cal.component(.month, from: d))) \(cal.component(.day, from: d))"
+    `UI/QueueView+Model.swift`
+"\(shortMonth(cal.component(.month, from: d))) \(cal.component(.day, from: d)) at \(joined)"
+    `UI/QueueView+Model.swift`
+"\(shortMonth(cal.component(.month, from: e))) \(cal.component(.day, from: e))"
+    `UI/QueueView+Model.swift`
+"\(shortMonth(calendar.component(.month, from: d))) \(calendar.component(.day, from: d))"
+    `Domain/EasternDate.swift`
 "\(show) is on a date you already have a pitch in progress for \(others)."
     `Domain/SelfBookingConflict.swift`
+"\(showCount) shows"
+    `UI/SourcesView.swift`
 "\(shows) waiting on this"
     `UI/SourcesView.swift`
+"\(stamp(now)) \(message)\n"
+    `App/AgentLog.swift`
+"\(stamp) \(nothingCopiedLogNote)"
+    `App/StoreBackup.swift`
+"\(stamp) \(outcome)"
+    `App/StoreBackup.swift`
+"\(startLabel) to \(endLabel)"
+    `UI/QueueView+Model.swift`
+"\(status.name): \(status.detail)"
+    `UI/QueueView.swift`
 "\(structuralGaps) of \(total) listings named no venue, so Overture left \(left) out of the queue."
     `Domain/SourceReadability.swift`
 "\(subject) a look: failing, or can't mark shows as gone until it reads its calendar properly again"
@@ -2312,6 +2470,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OutcomePatterns.swift`
 "\(tally.kept) of \(reviewed) kept after review"
     `Domain/SourceYield.swift`
+"\(tally.replied + tally.booked) replied"
+    `Domain/OutcomePatterns.swift`
 "\(titleRejected) of \(total) shows had no title, so Overture won't mark anything from this source as gone until it can read its pages again."
     `Domain/SourceReadability.swift`
 "\(titleRejected) of \(total) shows had no title."
@@ -2322,6 +2482,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/PrepRunSummary.swift`
 "\(town) is already on your skip list"
     `App/ActionFeedback.swift`
+"\(trimmed) on \(day)"
+    `Domain/SourceReadability.swift`
 "\(unanswered) of \(requested) shows never got an answer and are still unchecked"
     `Domain/ReachabilityRunSummary.swift`
 "\(undoRestoredNight(count: restored, priorStatuses: priorStatuses)). \(others) already moved on."
@@ -2336,6 +2498,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceReadability.swift`
 "\(venueRejected) of \(total) shows had no venue on their own detail page."
     `Domain/SourceReadability.swift`
+"\(waiting) · \(kept)"
+    `Domain/SourceYield.swift`
+"\(web.items) shows"
+    `Domain/PrepRunSummary.swift`
 "\(what) stopped before it finished. Overture has cleared it, so you can start again."
     `UI/RunProgressView.swift`
 "\(who) is already a recipient on \(org)."
@@ -2377,6 +2543,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/WatchGap.swift`
 "another show"
     `Domain/SelfBookingConflict.swift`
+"at \(v)"
+    `Domain/InquiryCopy.swift`
 "at \(venue) on \(dateLabel)"
     `UI/QueueView+Model.swift`
 "backup before working."

@@ -106,7 +106,9 @@ struct GmailReplyChecker {
         let query = format == "metadata" ? "format=metadata&metadataHeaders=From&metadataHeaders=Subject" : "format=full"
         guard let url = URL(string: "https://gmail.googleapis.com/gmail/v1/users/me/threads/\(id)?\(query)") else { return nil }
         var req = URLRequest(url: url)
+        // copy-inventory:ignore-start  the HTTP Authorization header Google reads, not a sentence
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        // copy-inventory:ignore-end
         guard let (data, resp) = try? await fetch(req),
               (resp as? HTTPURLResponse)?.statusCode == 200 else { return nil }
         return data

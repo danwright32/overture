@@ -27,7 +27,9 @@ enum GmailSignatureService {
         fetch: @Sendable (URLRequest) async throws -> (Data, URLResponse)
     ) async -> String? {
         var req = URLRequest(url: URL(string: "https://gmail.googleapis.com/gmail/v1/users/me/settings/sendAs")!)
+        // copy-inventory:ignore-start  the HTTP Authorization header Google reads, not a sentence
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        // copy-inventory:ignore-end
         do {
             let (data, resp) = try await fetch(req)
             guard let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
