@@ -185,6 +185,118 @@ enum CopyInventory {
         return String(filePath.dropFirst(prefix.count))
     }
 
+    // MARK: - The checked-in file, and who is allowed to rewrite it (#1994)
+
+    // What a run should do about the file on disk. Pure, so the decision can be exercised without a
+    // real stale inventory and, more to the point, without writing anything anywhere.
+    enum CheckedInOutcome: Equatable {
+        case upToDate
+        case regenerated(contents: String, message: String)
+        case stale(message: String)
+    }
+
+    static let regenerationVariable = "REGENERATE_COPY_INVENTORY"
+
+    // xcodebuild does NOT hand its own environment to the test process. It forwards only variables
+    // prefixed `TEST_RUNNER_`, with the prefix stripped. Measured 2026-08-08 against a real run: the
+    // bare name reached nothing and the file was left stale with the request silently ignored, while
+    // the prefixed name arrived and regenerated it. Both spellings are accepted so the opt-in works
+    // whether the suite is driven through xcodebuild or a test binary is run directly, and the
+    // message below quotes the one that actually works from a terminal.
+    static let forwardedRegenerationVariable = "TEST_RUNNER_REGENERATE_COPY_INVENTORY"
+
+    // The command that reaches the test process, quoted in the failure message so nobody has to
+    // rediscover the prefix.
+    static let regenerationCommand =
+        "TEST_RUNNER_REGENERATE_COPY_INVENTORY=1 mac/scripts/run-tests-locked.sh"
+
+    // Whether this run was ASKED to rewrite the file. Only an affirmative value counts: an unset or
+    // empty variable must never read as yes, because that is exactly the state every ordinary run is
+    // in and the whole point is that an ordinary run changes nothing.
+    static func regenerationRequested(
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> Bool {
+        for name in [forwardedRegenerationVariable, regenerationVariable] {
+            switch environment[name]?.lowercased() {
+            case "1", "true", "yes": return true
+            default: continue
+            }
+        }
+        return false
+    }
+
+    // The rule, and the reason it is a rule.
+    //
+    // Regenerating in place is useful when the difference IS a real copy change. The hazard is a run
+    // that was never meant to edit the repo. It happened twice on 2026-08-02 while working #1967: the
+    // app was deliberately broken with a `fatalError("...")` to prove the unhosted suite survives a
+    // launch fault, that string counted as app copy, and the file was rewritten to include it. It then
+    // sat modified in the working tree looking exactly like an ordinary edit, and a `git add -A` would
+    // have shipped a claim about what the app says to Dan that no human wrote and no reviewer would
+    // question. It was caught only because somebody happened to be watching for it.
+    //
+    // The write also used to happen on a run that FAILED, so an aborted or experimental run left the
+    // repo dirty with no obvious cause.
+    //
+    // So a stale file is REPORTED by default and rewritten only on request. Reporting still names what
+    // moved, because "the inventory is stale" alone leaves the reader unable to tell their own copy
+    // change from an accident of the run, which is the distinction that matters here.
+    static func checkCheckedIn(existing: String, generated: String,
+                               regenerate: Bool) -> CheckedInOutcome {
+        guard existing != generated else { return .upToDate }
+
+        if regenerate {
+            return .regenerated(contents: generated, message: """
+                docs/copy-inventory.md was out of date and has been regenerated, because this run \
+                asked for it.
+
+                Read the diff (`git diff docs/copy-inventory.md`): it is every sentence this branch \
+                adds, removes or rewords, in the words Dan will actually read. If it says what you \
+                meant it to say, commit it.
+                """)
+        }
+
+        return .stale(message: """
+            docs/copy-inventory.md is out of date. NOTHING has been written: a run that was not asked \
+            to change the repo does not change it.
+
+            \(differenceReport(existing: existing, generated: generated))
+
+            If that is a copy change you meant to make, regenerate the file and commit it:
+
+                \(regenerationCommand)
+
+            If it is not, something this run did produced it, and the file on disk is the correct one.
+            """)
+    }
+
+    // The lines that moved, both directions, bounded. Bounded is not tidiness: the inventory runs to
+    // over a thousand lines and a single rename near the top shifts every line after it, so an
+    // untruncated dump would bury the one line somebody needs to see.
+    static func differenceReport(existing: String, generated: String, limit: Int = 12) -> String {
+        let before = Set(existing.components(separatedBy: "\n"))
+        let after = Set(generated.components(separatedBy: "\n"))
+
+        let added = after.subtracting(before).sorted()
+        let removed = before.subtracting(after).sorted()
+
+        var out: [String] = []
+        out.append(contentsOf: section("Added", added, limit: limit))
+        out.append(contentsOf: section("Removed", removed, limit: limit))
+        return out.isEmpty ? "The two differ only in whitespace or line order." : out.joined(separator: "\n")
+    }
+
+    private static func section(_ title: String, _ lines: [String], limit: Int) -> [String] {
+        let meaningful = lines.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+        guard !meaningful.isEmpty else { return [] }
+        var out = ["\(title) (\(meaningful.count)):"]
+        out.append(contentsOf: meaningful.prefix(limit).map { "  \($0)" })
+        if meaningful.count > limit {
+            out.append("  ... and \(meaningful.count - limit) more")
+        }
+        return out
+    }
+
     // MARK: - Where things live
 
     static var appRoot: URL {
