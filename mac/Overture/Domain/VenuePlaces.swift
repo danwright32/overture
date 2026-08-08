@@ -85,7 +85,12 @@ enum VenuePlaces {
             if let parent = hit.parent { return key(parent) }
             return key(candidate)
         }
-        return normalize(VenueNormalization.normalizeForKey(raw))
+        // #1802: a room the table has never heard of still gets ONE identity, folded exactly the way a
+        // known room's is. This line used to fold differently from the three above it (no leading article
+        // dropped, and `normalizeForKey` rather than the shared `key`), so an unlisted room's identity
+        // depended on which spelling a source happened to send: "The Green Room 42" and "Green Room 42"
+        // were two rooms, and a shoot-history count and an address Dan typed each landed on one of them.
+        return key(VenueNormalization.normalizeForKey(raw))
     }
 
     // #1896: the formatting a SOURCE wraps a venue in, as opposed to the venue's own name. Both
@@ -138,8 +143,16 @@ enum VenuePlaces {
 
     // Keys are pre-normalized (lowercased, single-spaced) and looked up through VenueNormalization.fold,
     // so a slash-spacing or street-suffix variant of a known venue still resolves (#1064).
+    //
+    // #1802: and a LEADING ARTICLE is dropped, because two folds disagreeing about it is exactly the
+    // parallel-identity defect this issue exists to end. `ProducerGate.key` has always dropped it ("The
+    // Soldiers' and Sailors' Monument" is that monument), and this one did not, so "The Green Room 42" and
+    // "Green Room 42" were two rooms here and one room there: a shoot-history count split across both, and
+    // an address Dan typed against one spelling never found by the other.
     private static func key(_ s: String) -> String {
-        normalize(VenueNormalization.fold(s))
+        var folded = normalize(VenueNormalization.fold(s))
+        if folded.hasPrefix("the ") { folded.removeFirst(4) }
+        return folded.trimmingCharacters(in: .whitespaces)
     }
 
     // Venue-specific normalization. Deliberately NOT GroupNameMatch.normalize, which is an org/
@@ -170,7 +183,15 @@ enum VenuePlaces {
     // Seeded from the venues those 342 rows actually name, plus the ten this table already held. Every
     // entry is a room a real row is playing in, not a guess at what Overture might meet later: a venue
     // nobody has a show at cannot be verified and would rot.
-    private static let table: [String: Entry] = [
+    // #1802: the hand-written keys below are read through the SAME fold every lookup uses, rather than
+    // trusted as already-folded literals. They were written by hand as "pre-normalized" strings, so the
+    // moment the fold learned anything new (here: that a leading article is not part of a room's
+    // identity) every literal carrying one stopped matching, silently, while the table still looked
+    // correct on the page. A table of keys nobody folds is a second fold.
+    private static let table: [String: Entry] = Dictionary(
+        rawTable.map { (key($0.key), $0.value) }, uniquingKeysWith: { first, _ in first })
+
+    private static let rawTable: [String: Entry] = [
         // Carnegie Hall's own rooms.
         "weill recital hall": carnegie,
         "zankel hall": carnegie,
