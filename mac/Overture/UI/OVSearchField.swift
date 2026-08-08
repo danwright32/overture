@@ -43,7 +43,19 @@ struct OVSearchField: View {
     }
 
     @ViewBuilder private var field: some View {
-        let base = TextField(placeholder, text: $query).textFieldStyle(.plain)
+        // #2217. The empty action is the behaviour, not a placeholder. A text field with NO submit
+        // handler lets Return through to whatever the host window has made its default button. On the
+        // Sources sheet that is Done, so the reflex of pressing Return after typing a search term
+        // dismissed the sheet and took the search, the scroll position and any inline edit in progress
+        // with it. Registering a handler makes the field consume the keypress, and there is genuinely
+        // nothing for it to DO: both surfaces search live as you type, so the results are already on
+        // screen by the time Return is pressed.
+        //
+        // It lives here rather than in either sheet so the next surface to host this field inherits
+        // the fix instead of the bug.
+        let base = TextField(placeholder, text: $query)
+            .textFieldStyle(.plain)
+            .onSubmit { }
         if let focused {
             base.focused(focused)
         } else {
