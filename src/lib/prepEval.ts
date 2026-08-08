@@ -110,6 +110,13 @@ export interface PrepEvalFixture {
   input: Record<string, unknown>;
   sources: EvalSource[];
   expected: PrepEvalExpectation;
+  /**
+   * The one runbook rule this fixture exists to prove, in prose. Present on every fixture on disk and
+   * until #1909 not declared here at all, so nothing could read it: a field written by sixteen files
+   * and consumed by none (L46). Declared now because it is what a reader needs in order to judge
+   * whether a sample still demonstrates its own point.
+   */
+  rule: string;
   /** A hand-written PrepResults that satisfies `expected`, a reference for the real-AI harness. */
   sampleCompliantOutput: unknown;
 }
@@ -119,6 +126,29 @@ export interface EvalResult {
   pass: boolean;
   failures: string[];
 }
+
+/**
+ * Which universal rules to apply (#1909).
+ *
+ * `full` is real output from a model: every rule, because that is what the run is being judged on.
+ *
+ * `durable` is a fixture's own stored `sampleCompliantOutput`, which is a hand-written reference
+ * answer rather than something a model produced. It gets the fixture's OWN declared expectation
+ * (unchanged, and the single thing that fixture exists to prove) plus only the invariants that are
+ * structural facts rather than wording choices.
+ *
+ * The distinction is the whole point. Scoring every sample against every WORDING rule meant a change
+ * to any one of them invalidated all sixteen at once: removing the rate from cold pitches (#1906)
+ * turned 29 checks red on 2026-07-31 across fixtures about contact finding, house refusal and
+ * performer handling, none of which have anything to do with pricing, and restoring them cost a full
+ * real-AI run of roughly 25 minutes and 13 model calls. That cost landed on exactly the small copy
+ * corrections Dan makes after reading a real draft, which are the highest-value edits the runbook
+ * gets.
+ *
+ * The standing caveat is unchanged: a sample still freezes at the rules of its day (#1872). This
+ * narrows the set of rules that can un-freeze it; it does not make a sample self-updating.
+ */
+export type EvalScope = "full" | "durable";
 
 interface Contact {
   name?: string;
@@ -285,7 +315,14 @@ function collectBodies(entries: ResultEntry[]): { label: string; body: string }[
   return bodies;
 }
 
-function checkUniversal(entries: ResultEntry[], failures: string[], coldRegister: boolean): void {
+function checkUniversal(entries: ResultEntry[], failures: string[], coldRegister: boolean,
+                       scope: EvalScope = "full"): void {
+  // A wording rule is one Dan retunes by reading a draft and changing his mind about how it should
+  // sound. A durable one is a defect in any output whenever it appears, no matter the register or the
+  // year: a stray dash, an unfilled placeholder, a link somewhere other than the portfolio, a press
+  // inbox, or a "high" confidence with nothing behind it. Only the second kind is scored against a
+  // stored sample.
+  const wordingRules = scope === "full";
   for (const c of collectContacts(entries)) {
     if (c.email) {
       if (PRESS_LOCALPART.test(emailLocalpart(c.email))) {
@@ -298,11 +335,11 @@ function checkUniversal(entries: ResultEntry[], failures: string[], coldRegister
   }
 
   for (const { label, body } of collectBodies(entries)) {
-    if (CONCESSION.test(body)) failures.push(`${label}: contains concession language (discount/flexible/free/complimentary)`);
+    if (wordingRules && CONCESSION.test(body)) failures.push(`${label}: contains concession language (discount/flexible/free/complimentary)`);
     if (DASH.test(body)) failures.push(`${label}: contains an em/en dash`);
-    if (GREETING.test(body)) failures.push(`${label}: opens with a greeting token; the app owns the greeting (#393)`);
+    if (wordingRules && GREETING.test(body)) failures.push(`${label}: opens with a greeting token; the app owns the greeting (#393)`);
     if (PLACEHOLDER.test(body)) failures.push(`${label}: contains an unfilled placeholder (#789)`);
-    if (RECIPIENT_CATEGORY.test(body)) {
+    if (wordingRules && RECIPIENT_CATEGORY.test(body)) {
       failures.push(`${label}: categorizes the recipient instead of describing Dan (#1824)`);
     }
     if (GALLERY_PATH.test(body)) {
@@ -313,19 +350,19 @@ function checkUniversal(entries: ResultEntry[], failures: string[], coldRegister
     // getting sticker shock and then email me asking about it." A cold pitch carries no price and
     // no delivery turnaround; a REPLY to someone who asked still states both, and replies are not
     // scored here.
-    if (/\$\s?\d/.test(body) || /\bplus tax\b/i.test(body) || /within (two|2) weeks/i.test(body)) {
+    if (wordingRules && (/\$\s?\d/.test(body) || /\bplus tax\b/i.test(body) || /within (two|2) weeks/i.test(body))) {
       failures.push(`${label}: a cold pitch must state no rate and no turnaround`);
     }
-    if (VANTAGE_POINT.test(body)) {
+    if (wordingRules && VANTAGE_POINT.test(body)) {
       failures.push(`${label}: names where Dan stands ("back of the house") instead of the effect`);
     }
-    if (STATE_NOT_CITY.test(body)) {
+    if (wordingRules && STATE_NOT_CITY.test(body)) {
       failures.push(`${label}: says "New York" for the city; it is New York City or NYC`);
     }
-    if (INVITES_QUESTIONS.test(body)) {
+    if (wordingRules && INVITES_QUESTIONS.test(body)) {
       failures.push(`${label}: invites the reader to ask questions; the close expects a reply instead`);
     }
-    if (coldRegister) {
+    if (wordingRules && coldRegister) {
       const opener = firstSentence(body);
       if (!SELF_INTRO_NAME.test(opener) || !SELF_INTRO_TRADE.test(opener)) {
         failures.push(`${label}: sentence one must introduce Dan by name and by trade: "${opener}"`);
@@ -344,7 +381,7 @@ function checkUniversal(entries: ResultEntry[], failures: string[], coldRegister
   // draft did (its opening sentence was its showSummary, lightly reworded).
   // Cold only: the archetypes govern what sentence two does once Dan has introduced himself, and a
   // booked or warm draft has no self-introduction to follow, so no archetype applies to it.
-  if (coldRegister) {
+  if (wordingRules && coldRegister) {
     for (const [i, e] of entries.entries()) {
       const variant = e.draft?.variant;
       if (variant !== undefined && !LIVE_OPENER_VARIANTS.has(norm(variant))) {
@@ -551,7 +588,8 @@ function checkExpectation(entry: ResultEntry, allContacts: Contact[], exp: PrepE
  * body-level scans cover every result; entry-level checks use the first result (the eval fixtures are
  * single-item work-lists).
  */
-export function evaluatePrepResult(produced: unknown, expected: PrepEvalExpectation, ctx?: { name?: string }): EvalResult {
+export function evaluatePrepResult(produced: unknown, expected: PrepEvalExpectation,
+                                   ctx?: { name?: string; scope?: EvalScope }): EvalResult {
   const name = ctx?.name ?? expected.description;
   const failures: string[] = [];
 
@@ -583,15 +621,19 @@ export function evaluatePrepResult(produced: unknown, expected: PrepEvalExpectat
   // forbidColdSelfIntro marks a booked/warm fixture (#1215), the one register where reintroducing Dan is
   // the failure. Everything else is a cold pitch, where the self-introduction is REQUIRED, so the flag
   // decides which of the two opposite rules applies rather than each fixture opting in.
-  checkUniversal(entries, failures, !expected.forbidColdSelfIntro);
+  checkUniversal(entries, failures, !expected.forbidColdSelfIntro, ctx?.scope ?? "full");
+  // #1909: NEVER narrowed by scope. This is the fixture's own declared rule, the single thing it
+  // exists to prove, so a stored sample that stopped being scored against it would pass for free and
+  // the whole always-on layer would become decoration.
   checkExpectation(entries[0], allContacts, expected, failures);
 
   return { name, pass: failures.length === 0, failures };
 }
 
 /** Score a produced output against a fixture's own expectation, tagging the result with the fixture name. */
-export function evaluateFixture(fixture: PrepEvalFixture, produced: unknown): EvalResult {
-  return evaluatePrepResult(produced, fixture.expected, { name: fixture.name });
+export function evaluateFixture(fixture: PrepEvalFixture, produced: unknown,
+                                opts?: { scope?: EvalScope }): EvalResult {
+  return evaluatePrepResult(produced, fixture.expected, { name: fixture.name, scope: opts?.scope });
 }
 
 /**
