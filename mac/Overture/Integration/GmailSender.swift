@@ -76,7 +76,9 @@ struct GmailSender: MailSender {
 
         var req = URLRequest(url: URL(string: "https://gmail.googleapis.com/gmail/v1/users/me/messages/send")!)
         req.httpMethod = "POST"
+        // copy-inventory:ignore-start  the HTTP Authorization header Google reads, not a sentence
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        // copy-inventory:ignore-end
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         // Including the original threadId tells Gmail to append this message to that conversation
         // (#74), so a follow-up nudge and any reply to it stay on the thread reply detection watches.

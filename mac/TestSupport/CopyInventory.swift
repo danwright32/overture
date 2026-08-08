@@ -22,7 +22,11 @@ enum CopyInventory {
         // string IS beats sniffing for backslashes and pipes and hoping.
         guard !literal.isRaw else { return false }
 
-        let bare = withoutInterpolations(literal.text)
+        // #2124: interpolations are stood in for, not deleted. A value the sentence LEADS with is still
+        // one of its words, and dropping it puts "\(address), replied" at one word, under the floor
+        // below. That silently excluded a whole category (anything phrased as "<value>, something"),
+        // which screen reader labels skew heavily towards because they name the value first.
+        let bare = withInterpolationsAsWords(literal.text)
         guard bare.contains(" ") else { return false }
 
         // Two real words. This is the whole filter, and it earns its keep: a symbol name
@@ -58,6 +62,21 @@ enum CopyInventory {
     // ("\(DueWork.counts(prospects: p).total)"), and stopping at the first `)` leaves ".total)" behind,
     // which looks exactly like words and would be indistinguishable from a real finding.
     static func withoutInterpolations(_ literal: String) -> String {
+        strippingInterpolations(literal, replacement: "")
+    }
+
+    // The same strip, but each `\(...)` becomes a single placeholder word rather than nothing (#2124).
+    // Used for the "two real words" test only: the inventory still LISTS the literal as written, so
+    // `\(address), replied` appears in docs/copy-inventory.md with its interpolation intact, the way
+    // every other interpolated sentence already does.
+    //
+    // The placeholder is a bare run of letters on purpose, so it counts as exactly one word and nothing
+    // downstream mistakes it for punctuation or an address.
+    static func withInterpolationsAsWords(_ literal: String) -> String {
+        strippingInterpolations(literal, replacement: "value")
+    }
+
+    private static func strippingInterpolations(_ literal: String, replacement: String) -> String {
         var out = ""
         var depth = 0
         var index = literal.startIndex
@@ -66,6 +85,7 @@ enum CopyInventory {
                literal.index(after: index) < literal.endIndex,
                literal[literal.index(after: index)] == "(" {
                 depth = 1
+                out += replacement
                 index = literal.index(index, offsetBy: 2)
                 continue
             }
