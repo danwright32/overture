@@ -28,6 +28,9 @@ LOCK_FILE="/tmp/overture-mac-tests.lock"
 BASELINE_FILE="${OVERTURE_TEST_BASELINE_FILE:-${HOME}/.overture-mac-test-baseline}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MAC_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+# #2193/#2232: the suite's own shape, reported by the run instead of hand-written into a document.
+# shellcheck source=./lib/suite-stats.sh
+source "${SCRIPT_DIR}/lib/suite-stats.sh"
 
 # Given `ps -eo pid=,command=`-style output (one process per line: PID then its full command),
 # returns the PIDs of any resident Debug-configuration Overture.app test host (#632): the one
@@ -145,10 +148,14 @@ run_outcome() {
 # #2195: how many tests a run actually executed, summed across every "Test run with N tests" line
 # (the combined scheme prints one per target). Empty when the output names none, which is itself the
 # answer for a run that died before any suite reported.
+#
+# #2193: reads that line through suite-stats.sh's parser rather than its own, so the short-run gate
+# below and the shape readout at the end of a run can never disagree about how many tests ran. Two
+# parsers of one line is exactly the drift this repo keeps finding (#1073, #987).
 executed_test_count() {
-  local output="$1" total
-  total="$(grep -oE 'Test run with [0-9]+ test' <<< "${output}" | grep -oE '[0-9]+' | paste -sd+ - | bc 2>/dev/null || true)"
-  [[ -n "${total}" ]] && echo "${total}"
+  local totals
+  totals="$(test_run_totals "$1")"
+  [[ -n "${totals}" ]] && awk '{print $1}' <<< "${totals}"
   return 0
 }
 
@@ -395,6 +402,14 @@ main() {
     # lower the bar it is measured against.
     echo "${executed}" > "${BASELINE_FILE}"
   fi
+
+  # #2193/#2232: the suite's shape, every run, pass or fail. It is printed unconditionally because
+  # the number's job is to be a reference someone can check a suspicious run against, and the runs
+  # worth checking are the odd ones. AGENTS.md used to carry these figures by hand and both had
+  # drifted, one by 768 tests, which quietly weakened the very warning it was giving about a scoped
+  # run that executes nothing. A readout the run produces itself cannot drift.
+  echo >&2
+  echo "run-tests-locked.sh: $(suite_report_for_run "${last_output}" "${MAC_DIR}")" >&2
 
   if [[ "${outcome}" == "build-failed" ]]; then
     echo >&2

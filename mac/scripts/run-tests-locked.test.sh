@@ -597,6 +597,43 @@ assert_contains "a build failure never asks the OS log; no host ever started" \
 assert_contains "a retried crash reads the log once, not once per attempt" \
   "logcalls=1" "$(run_wrapper_with_stub_xcodebuild "${CRASHED_OUTPUT}" 65 "${REAL_LOG_OUTPUT}")"
 
+echo
+# --- the wiring: every run states the suite's shape (#2193, #2232) -------------------------
+#
+# suite-stats.test.sh proves the numbers are computed right. These prove the script actually PRINTS
+# them, which is a separate claim (L3), and prints them on the runs that matter. The whole reason
+# this exists is that a figure nobody regenerates goes stale silently: AGENTS.md carried these by
+# hand and both had drifted, one by 768 tests.
+
+SHAPE_ON_PASS="$(run_wrapper_with_stub_xcodebuild "${PASSING_OUTPUT}" 0)"
+
+assert_contains "a passing run states the suite's shape" \
+  "Suite shape:" "${SHAPE_ON_PASS}"
+
+# The counts come from THIS run's output, not from anything remembered or written down. 2400 is the
+# stub's own figure, so a readout quoting a stored number instead would not produce it.
+assert_contains "the shape quotes the run's own totals" \
+  "2400 tests in 348 suites" "${SHAPE_ON_PASS}"
+
+assert_contains "and the wall clock the run reported" \
+  "19.462s" "${SHAPE_ON_PASS}"
+
+# A red run is exactly when someone wants to know whether the count moved, so the readout must not
+# be a reward for passing. A failing run that stays silent about its shape is one where "did this
+# even run the whole suite?" cannot be answered from the output.
+assert_contains "a failing run states its shape too" \
+  "Suite shape:" "$(run_wrapper_with_stub_xcodebuild "${REAL_FAILURE_OUTPUT}" 65 "${REAL_LOG_OUTPUT}")"
+
+# A build failure ran no test at all. It must SAY it could not read the totals rather than print a
+# zero, because "0 tests" is a measurement and this run made none (L11).
+BUILD_FAILURE_SHAPE="$(run_wrapper_with_stub_xcodebuild "${BUILD_FAILURE_OUTPUT}" 65)"
+
+assert_contains "a run that executed nothing says so instead of reporting zero tests" \
+  "could not read the test totals" "${BUILD_FAILURE_SHAPE}"
+
+assert_not_contains "and never claims a zero it did not measure" \
+  "0 tests in 0 suites" "${BUILD_FAILURE_SHAPE}"
+
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All run-tests-locked.sh stale-host fixtures passed."
   exit 0

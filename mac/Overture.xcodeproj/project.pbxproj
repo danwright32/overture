@@ -1256,6 +1256,7 @@
 		DA80901A87643D7ADF92379E /* RenderedPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76DE498B87D94A20E10D7753 /* RenderedPage.swift */; };
 		DAC5893A8F90B32F203F4558 /* GmailAuthExpiryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2787A4F75772AA074BD37003 /* GmailAuthExpiryTests.swift */; };
 		DB03EF0F4A25E616C2A7B6B7 /* RunConflictUsesRealNightsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 389D64AE2438E7D2752A42ED /* RunConflictUsesRealNightsTests.swift */; };
+		DB14247418D010E326C29C49 /* AgentsDocSuiteCountsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E57CB71C59941FFB08CCCEA4 /* AgentsDocSuiteCountsTests.swift */; };
 		DB44017FDAE2E9B1733F0FA3 /* SuppressionReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C22339A676A3008CD2FED1DA /* SuppressionReport.swift */; };
 		DBB0F6F0E16873A57DB7ED9D /* ProducerOverride.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEE4ECC7DC30AFBCA79DA658 /* ProducerOverride.swift */; };
 		DBD752BB5C1053F33A5854A5 /* OmniFocusSyncRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3904520A713106DFBD49967F /* OmniFocusSyncRunner.swift */; };
@@ -2501,6 +2502,7 @@
 		E507C0A339C96A42C60B567F /* SendService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendService.swift; sourceTree = "<group>"; };
 		E51B0E4D5977CCD140484D76 /* DownbeatExportContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownbeatExportContractTests.swift; sourceTree = "<group>"; };
 		E54DB46D246FFF8C44DDCE2A /* ASecondReplyReachesDanTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ASecondReplyReachesDanTests.swift; sourceTree = "<group>"; };
+		E57CB71C59941FFB08CCCEA4 /* AgentsDocSuiteCountsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentsDocSuiteCountsTests.swift; sourceTree = "<group>"; };
 		E5F86F4D9C6982F6D31E9319 /* SourceNoteIngestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceNoteIngestTests.swift; sourceTree = "<group>"; };
 		E677EEF17F776474117D2AEA /* OVPill.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OVPill.swift; sourceTree = "<group>"; };
 		E6B14A0F5BC26A9266102C84 /* ScoutStartGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutStartGate.swift; sourceTree = "<group>"; };
@@ -2751,6 +2753,7 @@
 				881B151BE13017845C46D7ED /* AgentLogLocationTests.swift */,
 				7E3D96D7ADA5914810424D12 /* AgentLogTests.swift */,
 				CD1B2A1E0965458811A3C207 /* AgentRosterTests.swift */,
+				E57CB71C59941FFB08CCCEA4 /* AgentsDocSuiteCountsTests.swift */,
 				BD587798641230016EE94CDA /* AlgoliaCalendarTests.swift */,
 				65B67004DA51921652432C0B /* ANoticeCarriesItsActionTests.swift */,
 				D9126E4D3622FD3B90E463C4 /* AnsweredReplyBackfillLiveStoreTests.swift */,
@@ -4420,6 +4423,7 @@
 				95107C1FA1AF022ECB908C48 /* AgentLogTests.swift in Sources */,
 				CC424CDA428D9DAB97DC6DDF /* AgentRoster.swift in Sources */,
 				FBB014F565369838DFA38489 /* AgentRosterTests.swift in Sources */,
+				DB14247418D010E326C29C49 /* AgentsDocSuiteCountsTests.swift in Sources */,
 				D04778B99CA9BE3A07EB3302 /* AlgoliaCalendar.swift in Sources */,
 				DD72945D29200E20650D5F29 /* AlgoliaCalendarTests.swift in Sources */,
 				0F3A345DF686E0990118A98F /* AnsweredReply.swift in Sources */,
