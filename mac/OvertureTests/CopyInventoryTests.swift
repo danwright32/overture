@@ -304,16 +304,130 @@ struct CopyInventoryTests {
         let generated = inventory.render()
         let url = CopyInventory.inventoryURL
         let existing = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
-        guard existing != generated else { return }
 
-        try generated.write(to: url, atomically: true, encoding: .utf8)
-        Issue.record("""
-            docs/copy-inventory.md was out of date, so it has been regenerated in place.
+        switch CopyInventory.checkCheckedIn(existing: existing, generated: generated,
+                                            regenerate: CopyInventory.regenerationRequested()) {
+        case .upToDate:
+            return
+        case .regenerated(let contents, let message):
+            try contents.write(to: url, atomically: true, encoding: .utf8)
+            Issue.record(Comment(rawValue: message))
+        case .stale(let message):
+            Issue.record(Comment(rawValue: message))
+        }
+    }
 
-            Overture's copy changed. Read the diff (`git diff docs/copy-inventory.md`): it is every
-            sentence this branch adds, removes, or rewords, in the words Dan will actually read. If it
-            says what you meant it to say, commit it.
-            """)
+    // MARK: - #1994: a run that was not asked to change anything changes nothing
+    //
+    // Regenerating in place is genuinely useful when the change is a real copy change. The hazard is
+    // what it does during a run that was never meant to edit the repo. Hit twice on 2026-08-02 while
+    // working #1967: the app was temporarily broken with a `fatalError("...")` to prove the unhosted
+    // suite survives a launch fault, that string counted as app copy, and the inventory was rewritten
+    // to include it. The file then sat modified in the working tree looking exactly like an ordinary
+    // edit, and a `git add -A` would have shipped a claim about what the app says to Dan that no human
+    // wrote and no reviewer would question.
+    //
+    // The decision is pure so it can be tested without a real stale file and without writing anything.
+
+    @Test func anUnchangedInventoryIsLeftAlone() {
+        #expect(CopyInventory.checkCheckedIn(existing: "same", generated: "same", regenerate: false)
+                == .upToDate)
+        #expect(CopyInventory.checkCheckedIn(existing: "same", generated: "same", regenerate: true)
+                == .upToDate)
+    }
+
+    // THE regression. A stale file without an explicit request produces no contents to write at all,
+    // so there is nothing the caller could accidentally put on disk.
+    @Test func aStaleInventoryIsReportedWithoutBeingRewritten() throws {
+        let outcome = CopyInventory.checkCheckedIn(existing: "old", generated: "new", regenerate: false)
+        guard case .stale(let message) = outcome else {
+            Issue.record("expected .stale, got \(outcome)")
+            return
+        }
+        // And it hands over the way to fix it. A refusal that does not say how to proceed just moves
+        // the problem (L80).
+        #expect(message.contains("REGENERATE_COPY_INVENTORY=1"))
+    }
+
+    @Test func anExplicitRequestRegeneratesAndSaysSo() throws {
+        let outcome = CopyInventory.checkCheckedIn(existing: "old", generated: "new", regenerate: true)
+        guard case .regenerated(let contents, let message) = outcome else {
+            Issue.record("expected .regenerated, got \(outcome)")
+            return
+        }
+        #expect(contents == "new")
+        #expect(message.contains("git diff"))
+    }
+
+    // The message has to say WHAT changed, or a failing run tells someone the file is stale and leaves
+    // them to work out whether that is their copy change or an accident of the run.
+    @Test func theStaleReportNamesTheSentencesThatMoved() {
+        let existing = """
+        line one
+        "A sentence that is going away"
+        shared
+        """
+        let generated = """
+        line one
+        "A sentence that is arriving"
+        shared
+        """
+        let outcome = CopyInventory.checkCheckedIn(existing: existing, generated: generated,
+                                                   regenerate: false)
+        guard case .stale(let message) = outcome else {
+            Issue.record("expected .stale, got \(outcome)")
+            return
+        }
+        #expect(message.contains("A sentence that is arriving"))
+        #expect(message.contains("A sentence that is going away"))
+    }
+
+    // A long diff is truncated rather than dumped whole: the inventory is over a thousand lines, and a
+    // rename near the top shifts every line after it, so an untruncated report would bury the finding.
+    @Test func aVeryLongDifferenceIsTruncatedAndSaysItWas() {
+        let existing = (1...500).map { "old line \($0)" }.joined(separator: "\n")
+        let generated = (1...500).map { "new line \($0)" }.joined(separator: "\n")
+        guard case .stale(let message) = CopyInventory.checkCheckedIn(existing: existing,
+                                                                      generated: generated,
+                                                                      regenerate: false) else {
+            Issue.record("expected .stale")
+            return
+        }
+        #expect(message.contains("more"))
+        #expect(message.count < 4_000, "the report is \(message.count) characters; it should be bounded")
+    }
+
+    // The opt-in is read from the environment, and only an affirmative value counts. An unset variable
+    // must never read as "yes", or the guard is back where it started.
+    @Test func onlyAnAffirmativeEnvironmentValueRequestsRegeneration() {
+        #expect(CopyInventory.regenerationRequested(environment: ["REGENERATE_COPY_INVENTORY": "1"]))
+        #expect(CopyInventory.regenerationRequested(environment: [:]) == false)
+        #expect(CopyInventory.regenerationRequested(environment: ["REGENERATE_COPY_INVENTORY": "0"]) == false)
+        #expect(CopyInventory.regenerationRequested(environment: ["REGENERATE_COPY_INVENTORY": ""]) == false)
+    }
+
+    // The spelling that actually reaches the test process, and therefore the one that matters.
+    // xcodebuild does not hand its own environment to the test runner: it forwards only variables
+    // prefixed `TEST_RUNNER_`, with the prefix stripped. Measured against a real run on 2026-08-08,
+    // the bare name reached nothing and the request was silently ignored, leaving the file stale.
+    // Without this the escape hatch would exist and not work, which is worse than not having one.
+    @Test func theForwardedSpellingIsTheOneThatReachesATestRun() {
+        #expect(CopyInventory.regenerationRequested(
+            environment: ["TEST_RUNNER_REGENERATE_COPY_INVENTORY": "1"]))
+        #expect(CopyInventory.regenerationRequested(
+            environment: ["TEST_RUNNER_REGENERATE_COPY_INVENTORY": "0"]) == false)
+    }
+
+    // And the failure message quotes a command that works, rather than one that reads correctly and
+    // silently does nothing.
+    @Test func theStaleMessageQuotesTheCommandThatActuallyReachesTheTest() {
+        guard case .stale(let message) = CopyInventory.checkCheckedIn(existing: "old",
+                                                                      generated: "new",
+                                                                      regenerate: false) else {
+            Issue.record("expected .stale")
+            return
+        }
+        #expect(message.contains("TEST_RUNNER_REGENERATE_COPY_INVENTORY=1"))
     }
 
     // MARK: - Relative source paths survive a symlinked root (#1491)

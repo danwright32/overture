@@ -127,11 +127,21 @@ already drifting from the Swift version it mirrored.
   A corollary for anyone working here: leave the checkout on main when you finish, because a session that
   parks it on a branch is what puts the Update button in front of that state.
 - Changing what the app SAYS: `docs/copy-inventory.md` is every sentence Overture can say to Dan
-  (#915), generated from the source and checked in. The test suite regenerates it and fails when it
-  is stale, so a PR that changes the app's wording shows that change in the diff, in the words Dan
-  will read rather than as a line of Swift. If a run fails saying the inventory was out of date, it
-  has already rewritten the file: read `git diff docs/copy-inventory.md`, and if it says what you
-  meant, commit it. Copy that is NOT the app's own voice (an outbound email body, an RFC822 header,
+  (#915), generated from the source and checked in. The test suite fails when it is stale, so a PR
+  that changes the app's wording shows that change in the diff, in the words Dan will read rather
+  than as a line of Swift. Since #1994 a failing run **writes nothing**: it names the sentences that
+  moved and stops, because a run that was not asked to change the repo must not change it. (It used
+  to rewrite the file in place, and on 2026-08-02 that put a `fatalError` string, added only to break
+  the app on purpose, into the checked-in list of what Overture says to Dan, where a `git add -A`
+  would have shipped it.) When the difference IS your copy change, regenerate and commit it:
+
+  ```
+  TEST_RUNNER_REGENERATE_COPY_INVENTORY=1 mac/scripts/run-tests-locked.sh
+  ```
+
+  The `TEST_RUNNER_` prefix is load-bearing, not decoration: xcodebuild does not pass its own
+  environment to the test process, it forwards only variables with that prefix and strips it. The
+  bare name is silently ignored. Copy that is NOT the app's own voice (an outbound email body, an RFC822 header,
   AppleScript, the draft lint's search terms) is marked at the source with
   `// copy-inventory:ignore-start  <why>`, and every such region is listed in the inventory itself.
   Before opening a PR that adds or changes any of these sentences, read the new and changed ones
