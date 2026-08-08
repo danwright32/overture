@@ -16,6 +16,8 @@ source "${SCRIPT_DIR}/ci-config.sh"
 # Reuses check_mergeable (and its ${PR_NUMBER}-keyed message) rather than duplicating the
 # CONFLICTING guard; sourcing never runs check-pr-ci.sh's own main().
 source "${SCRIPT_DIR}/check-pr-ci.sh"
+# delete_merged_local_branch, shared with merge-when-green.sh and tidy-checkout.sh (#2234).
+source "${SCRIPT_DIR}/lib/checkout-tidy.sh"
 
 usage() {
   echo "Usage: $(basename "$0") <pr-number-or-branch-name>" >&2
@@ -64,8 +66,11 @@ cleanup_worktree() {
 # Merges the PR. Named and extracted so a test can assert it was (or wasn't) called, instead of
 # ever calling gh pr merge for real during a test run.
 merge_pr() {
-  local pr_number="$1"
+  local pr_number="$1" merged_branch="${2:-}"
   gh_as_danwright32 pr merge "${pr_number}" -R "${REPO}" --squash --delete-branch
+  # #2234: --delete-branch only removes the branch on GitHub. Without this the local ref survives
+  # every merge, which is how the checkout reached 496 branches. Never fatal, same reason as below.
+  delete_merged_local_branch "${merged_branch}" || true
   # #1808: something shipped, so record it for the app to compare its own build against, and say the
   # same thing in the terminal (which is what finally gives #1345's freshness check a caller). Neither
   # is fatal: the merge has already happened, and failing here would report it as a failure.
@@ -107,7 +112,7 @@ verify_and_merge() {
   fi
 
   echo "Local suite clean for PR #${PR_NUMBER} (${PR_BRANCH}). Merging..."
-  merge_pr "${PR_NUMBER}"
+  merge_pr "${PR_NUMBER}" "${PR_BRANCH}"
 }
 
 main() {

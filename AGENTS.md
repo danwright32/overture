@@ -47,6 +47,15 @@ already drifting from the Swift version it mirrored.
   `mac/Overture.xcodeproj/project.pbxproj` after a merge that combined Mac source changes and
   stages it for you to commit. It is only a convenience (it cannot fire after a conflicted merge
   finished by a manual commit); `scripts/check-pbxproj-fresh.sh` remains the real gate.
+- Keeping the checkout tidy: `scripts/tidy-checkout.sh` (#2234) removes local branches and agent
+  worktrees whose work has provably shipped. It is a DRY RUN by default and needs `--apply` to
+  delete anything. Note WHY it exists rather than the one-line idiom: this repo squash-merges, so a
+  shipped branch is never an ancestor of main and `git branch --merged main -d` recognises almost
+  none of them (39 of 496, measured 2026-08-06). It proves containment by a merged PR or by
+  `git cherry`, keeps anything with an open PR, anything a worktree has checked out, and any
+  worktree holding uncommitted work, and answers every unanswerable question in the keep direction.
+  From #2234 both merge scripts also delete the local branch they just merged, since
+  `gh pr merge --delete-branch` only removes it on GitHub, which is where the backlog came from.
 - Importer: `pnpm test`, `pnpm typecheck`, `pnpm import-history <csv-path>` (one-shot booking
   history import, see `docs/import-history.md`). The scout itself is entirely native; see
   `docs/scout-runbook.md`.

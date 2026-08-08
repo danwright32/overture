@@ -17,6 +17,8 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 source "${SCRIPT_DIR}/ci-config.sh"
 # The "does this branch touch the Mac project?" predicate, shared with the post-merge hook (#1251 Phase 3).
 source "${SCRIPT_DIR}/lib/mac-project-paths.sh"
+# delete_merged_local_branch, shared with verify-and-merge-branch.sh and tidy-checkout.sh (#2234).
+source "${SCRIPT_DIR}/lib/checkout-tidy.sh"
 
 POLL_INTERVAL_SECONDS=15
 DEFAULT_MAX_WAIT_SECONDS=900
@@ -160,7 +162,12 @@ main() {
 
       echo
       echo "CI genuinely passed. Merging PR #${PR_NUMBER}..."
+      MERGED_BRANCH="$(gh_as_danwright32 pr view "${PR_NUMBER}" -R "${REPO}" --json headRefName --jq .headRefName 2>/dev/null || echo "")"
       gh_as_danwright32 pr merge "${PR_NUMBER}" -R "${REPO}" --squash --delete-branch
+      # #2234: --delete-branch deletes the branch on GitHub only, so the local ref stays forever.
+      # That is where 496 local branches came from. Never fatal, for the same reason as the two
+      # steps below: the merge already happened.
+      delete_merged_local_branch "${MERGED_BRANCH}" || true
       # #1808: something shipped, so record it for the app to compare its own build against. Never fatal:
       # the merge has already happened and failing here would report a successful merge as a failure.
       "${REPO_ROOT}/scripts/record-shipped-commit.sh" || true

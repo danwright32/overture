@@ -28,8 +28,10 @@ assert_equals() {
 
 reset_stubs() {
   MERGE_CALLED=""
+  MERGE_BRANCH=""
   CLEANUP_CALLED=""
   SETUP_CALLED=""
+  LOCAL_BRANCH_DELETED=""
 }
 
 # --- happy path: a clean suite merges the resolved PR and cleans up the worktree ---
@@ -77,6 +79,43 @@ merge_pr() { MERGE_CALLED="$1"; }
 verify_and_merge "does-not-exist" >/dev/null 2>&1
 assert_equals "an unresolvable PR never sets up a worktree" "" "${SETUP_CALLED}"
 assert_equals "an unresolvable PR never merges" "" "${MERGE_CALLED}"
+
+# --- #2234: the merge tidies up the local branch it just landed ---
+# Built is not wired (L3). checkout-tidy.sh's own fixture proves the DECISION is right; these prove
+# this script actually asks it, and asks it about the branch that was merged rather than some other
+# one. Both halves stubbed, so nothing here runs gh or deletes a real ref.
+reset_stubs
+# merge_pr is the REAL one for these two cases, because it is the function under test, and the
+# blocks above left a stub of it in scope. Re-sourcing restores every real definition, so the
+# stubs below have to come after it.
+# shellcheck source=./verify-and-merge-branch.sh
+source "${SCRIPT_DIR}/verify-and-merge-branch.sh"
+# The script under test opens with `set -euo pipefail`, so re-sourcing it turns `errexit` back on
+# and the next failing command would end this run silently, part way through, with no summary. That
+# reads as an ordinary pass to anything checking the exit code of the last thing printed.
+set +e
+resolve_pr() { PR_NUMBER="45"; PR_BRANCH="feature-tidy"; PR_MERGEABLE="MERGEABLE"; }
+setup_worktree() { SETUP_CALLED="$1"; WORKTREE_DIR="/fake/worktree-4"; }
+run_full_suite() { return 0; }
+cleanup_worktree() { CLEANUP_CALLED="$1"; }
+gh_as_danwright32() { :; }
+delete_merged_local_branch() { LOCAL_BRANCH_DELETED="$1"; }
+# merge_pr's two trailing side-effect scripts are neutralised by pointing REPO_ROOT at an empty
+# directory, so they are simply absent; both are already `|| true` in the source, so their absence
+# changes nothing else.
+REPO_ROOT="$(mktemp -d)"
+
+verify_and_merge "45" >/dev/null 2>&1
+assert_equals "the merged branch's local ref is handed to the cleanup" "feature-tidy" "${LOCAL_BRANCH_DELETED}"
+
+# The failing path must not tidy anything: there was no merge, so the branch is still live work.
+reset_stubs
+resolve_pr() { PR_NUMBER="46"; PR_BRANCH="feature-unmerged"; PR_MERGEABLE="MERGEABLE"; }
+run_full_suite() { return 1; }
+delete_merged_local_branch() { LOCAL_BRANCH_DELETED="$1"; }
+
+verify_and_merge "46" >/dev/null 2>&1
+assert_equals "a failed suite never deletes the local branch" "" "${LOCAL_BRANCH_DELETED}"
 
 echo
 if [[ "${FAILURES}" -eq 0 ]]; then
