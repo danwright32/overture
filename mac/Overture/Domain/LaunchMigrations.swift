@@ -75,6 +75,13 @@ enum LaunchMigrations {
         // again. Idempotent (a row already on its computed key is skipped). Can delete a row, but only a
         // provably redundant one: two answers that DISAGREE are left exactly as they are.
         OrgKeyRealignmentMigration.run(in: context)
+        // #1802: the same problem for ROOMS. One venue identity now answers for every spelling of a room
+        // (a leading article dropped, an unlisted room folded the way a listed one is), which changes the
+        // key an answer Dan typed should be filed under. Without this his sentence about where a room is
+        // would sit under a key nothing computes any more, and the room would go back on his unplaced list
+        // asking the same question. Idempotent (a row already on its computed key is skipped); it can
+        // delete a row, but only one provably redundant, and two answers that DISAGREE are left alone.
+        VenueKeyRealignmentMigration.run(in: context)
         // #1559: collapse the duplicate rows a drifting opening night left behind before #1528 stopped
         // them appearing. Idempotent (a collapsed group is a singleton, which it skips). Deletes rows, so
         // like the migration above it leans on the launch backup taken just before this, and it refuses
