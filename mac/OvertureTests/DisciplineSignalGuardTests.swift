@@ -32,10 +32,7 @@ struct DisciplineSignalGuardTests {
     private static let maxFallbackShare = 0.35
 
     private func repoRoot() -> URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // OvertureTests
-            .deletingLastPathComponent()   // mac
-            .deletingLastPathComponent()   // repo root
+        RepoRoot.url
     }
 
     private func loadCorpus() throws -> [CorpusEntry] {

@@ -9,8 +9,7 @@ import Foundation
 @Suite("Reply classify contract fixtures")
 struct ReplyClassifyContractTests {
     private func fixtureDirectory() -> URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        RepoRoot.url
             .appendingPathComponent("fixtures/reply-classify")
     }
 

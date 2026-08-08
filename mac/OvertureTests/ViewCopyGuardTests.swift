@@ -215,9 +215,7 @@ struct ViewCopyGuardTests {
     // MARK: - Which files are views
 
     static func viewFiles() -> [URL] {
-        let root = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // OvertureTests
-            .deletingLastPathComponent()   // mac
+        let root = RepoRoot.mac
             .appendingPathComponent("Overture")
         let enumerator = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil)
         var out: [URL] = []

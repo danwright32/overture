@@ -11,10 +11,7 @@ import Foundation
 @Suite("Shoot history contract fixtures")
 struct ShootHistoryContractTests {
     private func fixtureDirectory() -> URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // OvertureTests
-            .deletingLastPathComponent()   // mac
-            .deletingLastPathComponent()   // repo root
+        RepoRoot.url
             .appendingPathComponent("fixtures/shoot-history")
     }
 

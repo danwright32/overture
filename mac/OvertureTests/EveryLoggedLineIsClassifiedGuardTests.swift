@@ -13,10 +13,10 @@ import Foundation
 struct EveryLoggedLineIsClassifiedGuardTests {
     // Every Swift file under Overture/, with its repo-relative path.
     private func appSources(file: StaticString = #filePath) -> [(path: String, text: String)] {
-        let mac = URL(fileURLWithPath: "\(file)")
-            .deletingLastPathComponent()   // OvertureTests
-            .deletingLastPathComponent()   // mac
-        let root = mac.appendingPathComponent("Overture", isDirectory: true)
+        // #1993: searched for, not counted to. This one is worth naming because it returns [] when the
+        // path is wrong, and a guard that walks an empty list passes over every file it was meant to
+        // check, reporting a clean app rather than a broken path.
+        let root = RepoRoot.app
         guard let walker = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil)
         else { return [] }
         return walker.compactMap { entry in

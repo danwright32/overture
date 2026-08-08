@@ -127,9 +127,7 @@ struct UnverifiedContactMarkTests {
     // hovering the new badge explained the wrong thing entirely. Caught only by re-reading the copy in
     // the place that now produces it, which is the step this project requires and I skipped.
     @Test func theExplanationIsWiredToTheBadgeThatNeedsIt() throws {
-        let source = try String(contentsOf: URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
+        let source = try String(contentsOf: RepoRoot.mac
             .appendingPathComponent("Overture/UI/ProspectRowView.swift"), encoding: .utf8)
         #expect(source.contains("unverifiedEmailFoundHelp"),
                 "hovering an unverified find must explain what unverified means")
@@ -148,9 +146,7 @@ struct UnverifiedContactMarkTests {
     // The per-address caveat is GONE from the row, which is the point of this change: it is what made
     // long addresses wrap. The row must not reintroduce it.
     @Test func theRowNoLongerPrintsAPerAddressCaveat() throws {
-        let source = try String(contentsOf: URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
+        let source = try String(contentsOf: RepoRoot.mac
             .appendingPathComponent("Overture/UI/ProspectRowView.swift"), encoding: .utf8)
         #expect(!source.contains("unverifiedContactMark"),
                 "the per-address caveat was retired; it belongs in the badge now")

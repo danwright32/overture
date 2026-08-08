@@ -9,10 +9,7 @@ import Foundation
 @Suite("Recent openers contract fixtures")
 struct RecentOpenersContractTests {
     private func fixtureDirectory() -> URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // OvertureTests
-            .deletingLastPathComponent()   // mac
-            .deletingLastPathComponent()   // repo root
+        RepoRoot.url
             .appendingPathComponent("fixtures/recent-openers")
     }
 

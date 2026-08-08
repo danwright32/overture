@@ -12,10 +12,7 @@ struct DownbeatExportContractTests {
     // The fixtures live at <repo>/fixtures/downbeat-export, shared with the TS suite. Resolve
     // them from this test file's source path so no bundle-resource wiring is needed.
     private func fixtureDirectory() -> URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // OvertureTests
-            .deletingLastPathComponent()   // mac
-            .deletingLastPathComponent()   // repo root
+        RepoRoot.url
             .appendingPathComponent("fixtures/downbeat-export")
     }
 

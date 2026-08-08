@@ -105,9 +105,7 @@ struct SendDeadlockGuardTests {
     @Test func sendAndAuthSourceHasNoBlockingPrimitives() throws {
         // #filePath resolves to .../mac/OvertureTests/SendDeadlockGuardTests.swift at compile
         // time; walk up to the source tree and scan the four files that make up the send path.
-        let integration = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // OvertureTests/
-            .deletingLastPathComponent()   // mac/
+        let integration = RepoRoot.mac
             .appendingPathComponent("Overture/Integration")
         let files = ["GmailSender.swift", "SendService.swift", "GmailAuthManager.swift", "MailSender.swift"]
         let forbidden = ["DispatchSemaphore", "runBlocking", ".wait()", "DispatchQueue.main.sync", ".sync {"]

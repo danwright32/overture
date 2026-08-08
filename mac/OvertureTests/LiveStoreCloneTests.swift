@@ -78,9 +78,7 @@ struct LiveStoreCloneTests {
 // The structural half: nothing else copies the store by hand.
 @Suite("No test copies the live store by hand (#1672)")
 struct LiveStoreCopyGuardTests {
-    private static var testsRoot: URL {
-        URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-    }
+    private static var testsRoot: URL { RepoRoot.mac.appendingPathComponent("OvertureTests") }
 
     // A file that both reaches for the live store path AND copies files is doing by hand what the shared
     // clone exists to do once, correctly. The helper itself is the one place allowed to.

@@ -42,9 +42,7 @@ struct DetachedRunCeremonyGuardTests {
     // header comment, so a `contains("runner-setup.sh")` stays green with the actual `.` line
     // deleted; the first cut of this test did exactly that, and only a mutation caught it.
     @Test func everyClaudeRunnerSourcesTheSharedSetup() throws {
-        let scripts = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // OvertureTests/
-            .deletingLastPathComponent()   // mac/
+        let scripts = RepoRoot.mac
             .appendingPathComponent("scripts")
 
         let names = try FileManager.default.contentsOfDirectory(atPath: scripts.path)

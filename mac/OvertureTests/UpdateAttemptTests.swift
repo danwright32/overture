@@ -129,8 +129,7 @@ struct UpdateAttemptTests {
     // never started. `mac/scripts/update-overture.test.sh` holds the other half, and fails if the writer
     // stops producing what is committed here.
     private func contractFixture(_ name: String) throws -> UpdateAttemptRecord {
-        let url = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let url = RepoRoot.url
             .appendingPathComponent("fixtures/update-result").appendingPathComponent(name)
         return try JSONDecoder().decode(UpdateAttemptRecord.self, from: Data(contentsOf: url))
     }

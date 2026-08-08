@@ -27,10 +27,7 @@ struct GroupNameDriftTests {
     }
 
     private func loadFixture() throws -> Fixture {
-        let repoRoot = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // OvertureTests
-            .deletingLastPathComponent()   // mac
-            .deletingLastPathComponent()   // repo root
+        let repoRoot = RepoRoot.url
         let data = try Data(contentsOf: repoRoot.appendingPathComponent("fixtures/group-name-match/v1.json"))
         return try JSONDecoder().decode(Fixture.self, from: data)
     }

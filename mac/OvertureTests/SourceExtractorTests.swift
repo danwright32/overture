@@ -92,10 +92,7 @@ struct SourceExtractorTests {
     // came back with, and the model is never told it exists (#856). It has no row in the model-facing
     // table or prompt list, and must not gain one, so it is not part of this sync check.
     @Test func everyModelFacingVerdictIsDocumentedInBothTheRunbookAndTheRunnerPrompt() throws {
-        let repoRoot = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // OvertureTests
-            .deletingLastPathComponent()   // mac
-            .deletingLastPathComponent()   // repo root
+        let repoRoot = RepoRoot.url
         let runbook = try String(
             contentsOf: repoRoot.appendingPathComponent("docs/scout-extract-runbook.md"),
             encoding: .utf8)

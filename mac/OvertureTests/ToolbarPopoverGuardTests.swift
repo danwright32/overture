@@ -17,9 +17,7 @@ import Foundation
 @Suite("Toolbar popover guard (#630)")
 struct ToolbarPopoverGuardTests {
     private static var sourceRoot: URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // OvertureTests/
-            .deletingLastPathComponent()   // mac/
+        RepoRoot.mac
             .appendingPathComponent("Overture")
     }
 

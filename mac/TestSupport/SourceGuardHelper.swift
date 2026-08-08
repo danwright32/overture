@@ -4,12 +4,16 @@ import Foundation
 // assert on the raw source text of a SwiftUI view rather than runtime behavior, for changes
 // with no behavioral surface to exercise.
 enum SourceGuardHelper {
+    // #1993: `mac/` is SEARCHED for, not counted to. This used to climb two levels from the CALLER's
+    // own path, which quietly required every caller to sit exactly at `mac/<Target>/File.swift`. The
+    // first caller in a subdirectory would have got a wrong path, and a wrong path here does not
+    // fail: it returns "" and every `!source.contains(...)` guard standing on it passes, which is
+    // dozens of guards silently protecting nothing.
+    //
+    // `file` is kept because callers pass it through and it is the right thing to name in a failure,
+    // but it no longer decides WHERE the source is read from.
     static func source(_ relativeFromMac: String, file: StaticString = #filePath) -> String {
-        // #filePath -> .../mac/OvertureTests/<Suite>.swift; climb to mac/.
-        let mac = URL(fileURLWithPath: "\(file)")
-            .deletingLastPathComponent()   // OvertureTests
-            .deletingLastPathComponent()   // mac
-        let url = mac.appendingPathComponent(relativeFromMac)
+        let url = RepoRoot.mac.appendingPathComponent(relativeFromMac)
         return (try? String(contentsOf: url, encoding: .utf8)) ?? ""
     }
 

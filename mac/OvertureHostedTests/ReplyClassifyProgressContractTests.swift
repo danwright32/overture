@@ -13,10 +13,7 @@ import ViewInspector
 @Suite("Reply-classify progress contract fixtures (#1081)")
 struct ReplyClassifyProgressContractTests {
     private func fixtureDirectory() -> URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // OvertureTests
-            .deletingLastPathComponent()   // mac
-            .deletingLastPathComponent()   // repo root
+        RepoRoot.url
             .appendingPathComponent("fixtures/reply-classify-progress")
     }
 

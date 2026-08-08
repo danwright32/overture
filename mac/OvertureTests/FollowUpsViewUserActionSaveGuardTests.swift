@@ -14,9 +14,7 @@ struct FollowUpsViewUserActionSaveGuardTests {
     private static let forbidden = "try? context.save()"
 
     @Test func userActionHandlersNeverRevertToSilentSave() throws {
-        let followUpsView = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // OvertureTests/
-            .deletingLastPathComponent()   // mac/
+        let followUpsView = RepoRoot.mac
             .appendingPathComponent("Overture/UI/FollowUpsView.swift")
         let src = try String(contentsOf: followUpsView, encoding: .utf8)
 

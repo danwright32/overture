@@ -23,10 +23,7 @@ import Foundation
 // has to stay honestly shared.
 @Suite("Every detached runner accounts for its queued work (#1020)")
 struct HandoffCompletenessTests {
-    private static let repoRoot = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent()   // OvertureTests/
-        .deletingLastPathComponent()   // mac/
-        .deletingLastPathComponent()   // repo root
+    private static let repoRoot = RepoRoot.url
 
     // Scout's completeness check is shell-side: the runner script itself calls this before it exits.
     private static let shellSideCheck = "ensure_every_queued_source_reported"

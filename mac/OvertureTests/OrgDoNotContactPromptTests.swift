@@ -13,9 +13,7 @@ import Foundation
 @Suite("Org do-not-contact prompt (#769)")
 struct OrgDoNotContactPromptTests {
     private static var draftReviewSource: String {
-        let url = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // OvertureTests/
-            .deletingLastPathComponent()   // mac/
+        let url = RepoRoot.mac
             .appendingPathComponent("Overture/UI/DraftReviewView.swift")
         return (try? String(contentsOf: url, encoding: .utf8)) ?? ""
     }

@@ -247,9 +247,7 @@ struct HandoffCleanupTests {
     // wire was never connected while every test stayed green (#887). A perfect sweep that launch never
     // calls cleans up nothing at all, and looks exactly like one that works.
     @Test func launchActuallyRunsTheSweep() throws {
-        let app = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // OvertureTests/
-            .deletingLastPathComponent()   // mac/
+        let app = RepoRoot.mac
             .appendingPathComponent("Overture/App/OvertureApp.swift")
         let src = try String(contentsOf: app, encoding: .utf8)
 

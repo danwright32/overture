@@ -236,9 +236,7 @@ struct ActionAckTests {
 @Suite("Genre correction acknowledges (#487)")
 struct ConfidenceFeedbackGuardTests {
     private func queueViewSource() throws -> String {
-        let queueView = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // OvertureTests/
-            .deletingLastPathComponent()   // mac/
+        let queueView = RepoRoot.mac
             .appendingPathComponent("Overture/UI/ProspectMutations.swift")
         return try String(contentsOf: queueView, encoding: .utf8)
     }

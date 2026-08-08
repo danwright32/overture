@@ -29,7 +29,7 @@ import Foundation
 @Suite("Source guards cannot silently stop matching (#2192)")
 struct SourceGuardMarkerIntegrityTests {
     private static var macRoot: URL {
-        URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        RepoRoot.mac
     }
 
     private static func regex(_ pattern: String) -> NSRegularExpression {

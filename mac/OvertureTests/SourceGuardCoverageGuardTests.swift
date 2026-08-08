@@ -15,13 +15,9 @@ import Foundation
 @Suite("SourceGuard reference coverage (#629)")
 struct SourceGuardCoverageGuardTests {
 
-    private static var testsRoot: URL {
-        URL(fileURLWithPath: #filePath).deletingLastPathComponent() // OvertureTests/
-    }
+    private static var testsRoot: URL { RepoRoot.mac.appendingPathComponent("OvertureTests") }
 
-    private static var macRoot: URL {
-        testsRoot.deletingLastPathComponent() // mac/
-    }
+    private static var macRoot: URL { RepoRoot.mac }
 
     private static let ownFileName = URL(fileURLWithPath: #filePath).lastPathComponent
 

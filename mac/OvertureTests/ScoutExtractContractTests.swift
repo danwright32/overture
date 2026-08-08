@@ -19,8 +19,7 @@ import Foundation
 @Suite("Scout extract contract fixtures (#799)")
 struct ScoutExtractContractTests {
     private func fixtureDirectory() -> URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        RepoRoot.url
             .appendingPathComponent("fixtures/scout-extract")
     }
 

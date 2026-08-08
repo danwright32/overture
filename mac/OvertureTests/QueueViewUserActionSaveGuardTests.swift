@@ -20,9 +20,7 @@ struct QueueViewUserActionSaveGuardTests {
     private static let forbidden = "try? context.save()"
 
     @Test func userActionHandlersNeverRevertToSilentSave() throws {
-        let queueView = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // OvertureTests/
-            .deletingLastPathComponent()   // mac/
+        let queueView = RepoRoot.mac
             .appendingPathComponent("Overture/UI/ProspectMutations.swift")
         let src = try String(contentsOf: queueView, encoding: .utf8)
 
