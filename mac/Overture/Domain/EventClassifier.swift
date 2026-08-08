@@ -90,7 +90,9 @@ enum EventClassifier {
     private static func detectDiscipline(_ text: String) -> Discipline {
         if matches(text, #"\b(dance|ballet|balletto|tap|choreograph|nutcracker)\b"#) { return .dance }
         if matches(text, #"\b(opera|operetta)\b"#) { return .opera }
-        // "play"/"musical" are too common in names to be reliable theater signals.
+        // "play" is too common in names to be a reliable theater signal, and stays out entirely.
+        // "musical" is not refused any more, it is DEMOTED: see the weak-signal pass at the end, which
+        // only ever reads a row nothing else could (#1946).
         if matches(text, #"\b(theatre|theater|drama|cabaret|playhouse)\b"#) { return .theater }
         // #350: Choral folded into Music; the keyword signal still disambiguates against
         // band/comedy checks below, it just no longer produces a separate discipline bucket.
@@ -99,10 +101,22 @@ enum EventClassifier {
         if matches(text, #"\b(comedy|comedian|stand.?up|improv)\b"#) { return .comedy }
         // #970 Phase 0. Checked last, because these words are weaker signals than the ones above and
         // must lose to them: "Opera in Concert" is opera, "Playhouse Orchestra Night" is theater.
-        // Deliberately NOT here: "musical" (a theater word, already refused as a theater signal above)
-        // and "performance"/"artist", which name no discipline at all. `music` is bounded so it cannot
-        // match inside "musical".
-        if matches(text, #"\b(music|orchestra|philharmoni\w*|symphon\w*|piano|pianist|violin\w*|viola|cello|cellist|flute|clarinet|trumpet|harpsichord|guitar|recital|concerto|sonata|quartet|quintet|octet|sextet|septet|trio|chamber|camerata|conservatory|soprano|tenor|baritone|mezzo|jazz|blues|bluegrass|folk|composer|conductor|concert|song|songs|melodies|sings)\b"#) { return .music }
+        // Deliberately NOT here: "musical" (a theater word, read by the weak pass below) and
+        // "performance"/"artist", which name no discipline at all. `music` is bounded so it cannot match
+        // inside "musical".
+        if matches(text, #"\b(music|orchestra|philharmoni\w*|symphon\w*|piano|pianist|violin\w*|viola|cello|cellist|flute|clarinet|trumpet|harpsichord|guitar|recital|concerto|sonata|quartet|quintet|octet|sextet|septet|trio|chamber|camerata|conservatory|soprano|tenor|baritone|mezzo|jazz|blues|bluegrass|folk|composer|conductor|concert|song|songs|melodies|sing|sings|singing|singalong)\b"#) { return .music }
+
+        // #1946: the weak signals, read LAST and only when nothing above matched, so a word too common to
+        // outrank a real signal can still rescue a row that would otherwise have no genre at all.
+        //
+        // MEASURED on the live store 2026-08-07 (845 rows, 537 with no genre). "musical" appears in 18 of
+        // those unread rows and names a stage musical in nearly all of them: Bone Wars: A New Musical,
+        // Alice in Wonderland the Musical, A Christmas Carol the Musical, Marlise (A New Golden Age
+        // Musical), The Secret Circus Musical, Legends: A New Musical. Read at full strength it would also
+        // have TAKEN four rows that already have a better genre ("Gross Prophets: A Comedy Musical" is
+        // comedy, three times over), which is the cost the original refusal was protecting against and the
+        // reason this pass is last rather than beside the theater check.
+        if matches(text, #"\b(musicals?)\b"#) { return .theater }
         return .other
     }
 

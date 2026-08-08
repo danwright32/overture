@@ -108,10 +108,16 @@ struct ClassifierMiscTests {
         #expect(EventClassifier.classify(ev(title: "Playhouse Orchestra Night")).discipline == .theater)
     }
 
-    // "musical" is a theater word wearing a music word's clothes, and the existing theater rule
-    // already refuses to read it. The music rule must not undo that by matching the prefix.
+    // "musical" is a theater word wearing a music word's clothes. The music rule must not match the
+    // prefix, which is what `music` being bounded is for.
+    //
+    // #1946 changed what happens to the word after that. It used to be refused outright, leaving 18 real
+    // stage musicals with no genre at all; it is now read by the WEAK pass that runs last, so it reaches
+    // a row nothing else could and takes none from a stronger signal (see WeakGenreSignalsTests).
     @Test func doesNotReadMusicalAsMusic() {
-        #expect(EventClassifier.classify(ev(title: "Hell Yeah! An Improvised Musical")).discipline == .other)
+        let read = EventClassifier.classify(ev(title: "Hell Yeah! An Improvised Musical")).discipline
+        #expect(read != .music)
+        #expect(read == .theater)
     }
 
     @Test func doesNotMisreadPlayInAName() {
