@@ -18,9 +18,7 @@ struct RootViewDebugSaveGuardTests {
     private static let forbidden = "try? context.save()"
 
     @Test func debugMenuHandlersNeverRevertToSilentSave() throws {
-        let rootView = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // OvertureTests/
-            .deletingLastPathComponent()   // mac/
+        let rootView = RepoRoot.mac
             .appendingPathComponent("Overture/App/RootView.swift")
         let src = try String(contentsOf: rootView, encoding: .utf8)
 

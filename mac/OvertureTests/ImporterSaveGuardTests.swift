@@ -14,9 +14,7 @@ struct ImporterSaveGuardTests {
     private static let forbidden = "try? context.save()"
 
     @Test func prepImporterIngestNeverRevertsToSilentSave() throws {
-        let prepImporter = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // OvertureTests/
-            .deletingLastPathComponent()   // mac/
+        let prepImporter = RepoRoot.mac
             .appendingPathComponent("Overture/Persistence/PrepImporter.swift")
         let src = try String(contentsOf: prepImporter, encoding: .utf8)
         let body = try SourceGuard.functionBody(named: "ingest", in: src)
@@ -25,9 +23,7 @@ struct ImporterSaveGuardTests {
     }
 
     @Test func replyClassifyImporterIngestNeverRevertsToSilentSave() throws {
-        let replyClassifyImporter = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // OvertureTests/
-            .deletingLastPathComponent()   // mac/
+        let replyClassifyImporter = RepoRoot.mac
             .appendingPathComponent("Overture/Persistence/ReplyClassifyImporter.swift")
         let src = try String(contentsOf: replyClassifyImporter, encoding: .utf8)
         let body = try SourceGuard.functionBody(named: "ingest", in: src)

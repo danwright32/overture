@@ -23,16 +23,10 @@ import Testing
 struct PureSchemeExcludesTheAppTests {
 
     private func projectYAML() throws -> String {
-        var dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-        while dir.path != "/" {
-            let candidate = dir.appendingPathComponent("mac/project.yml")
-            if FileManager.default.fileExists(atPath: candidate.path) {
-                return try String(contentsOf: candidate, encoding: .utf8)
-            }
-            dir = dir.deletingLastPathComponent()
-        }
-        Issue.record("could not find mac/project.yml above \(#filePath)")
-        return ""
+        // #1993: through the shared search rather than a second copy of it here. This file already
+        // had the right IDEA (look for the repo, do not count directories up to it), which is exactly
+        // why it is worth folding in: two searches for one thing drift the moment either is fixed.
+        try String(contentsOf: RepoRoot.mac.appendingPathComponent("project.yml"), encoding: .utf8)
     }
 
     // The scheme's own block, from its name to the next scheme at the same indent.

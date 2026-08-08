@@ -30,10 +30,7 @@ struct PerformerMatchTests {
     }
 
     private func fixtureDirectory() -> URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // OvertureTests
-            .deletingLastPathComponent()   // mac
-            .deletingLastPathComponent()   // repo root
+        RepoRoot.url
             .appendingPathComponent("fixtures/performer-match")
     }
 

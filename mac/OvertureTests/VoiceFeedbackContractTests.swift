@@ -9,10 +9,7 @@ import Foundation
 @Suite("Voice feedback contract fixtures")
 struct VoiceFeedbackContractTests {
     private func fixtureDirectory() -> URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // OvertureTests
-            .deletingLastPathComponent()   // mac
-            .deletingLastPathComponent()   // repo root
+        RepoRoot.url
             .appendingPathComponent("fixtures/voice-feedback")
     }
 

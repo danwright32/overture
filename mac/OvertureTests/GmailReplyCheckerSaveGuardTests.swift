@@ -13,9 +13,7 @@ struct GmailReplyCheckerSaveGuardTests {
     private static let forbidden = "try? context.save()"
 
     @Test func markRepliesNeverRevertsToSilentSave() throws {
-        let gmailReplyChecker = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // OvertureTests/
-            .deletingLastPathComponent()   // mac/
+        let gmailReplyChecker = RepoRoot.mac
             .appendingPathComponent("Overture/Integration/GmailReplyChecker.swift")
         let src = try String(contentsOf: gmailReplyChecker, encoding: .utf8)
 

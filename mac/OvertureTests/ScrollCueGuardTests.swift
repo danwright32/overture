@@ -193,9 +193,7 @@ struct ScrollCueGuardTests {
     // MARK: - The app
 
     private static var appRoot: URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // OvertureTests/
-            .deletingLastPathComponent()   // mac/
+        RepoRoot.mac
             .appendingPathComponent("Overture")
     }
 

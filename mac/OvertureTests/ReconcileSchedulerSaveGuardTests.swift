@@ -14,9 +14,7 @@ struct ReconcileSchedulerSaveGuardTests {
     private static let forbidden = "try? context.save()"
 
     @Test func reconcileBookingsNeverRevertsToSilentSave() throws {
-        let reconcileScheduler = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // OvertureTests/
-            .deletingLastPathComponent()   // mac/
+        let reconcileScheduler = RepoRoot.mac
             .appendingPathComponent("Overture/App/ReconcileScheduler.swift")
         let src = try String(contentsOf: reconcileScheduler, encoding: .utf8)
 

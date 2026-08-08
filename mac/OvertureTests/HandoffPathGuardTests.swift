@@ -13,16 +13,12 @@ struct HandoffPathGuardTests {
     private static let sourceOfTruth = "StoreLocation.swift"
 
     private static var overtureSourceRoot: URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // OvertureTests/
-            .deletingLastPathComponent()   // mac/
+        RepoRoot.mac
             .appendingPathComponent("Overture")
     }
 
     private static var scriptsRoot: URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // OvertureTests/
-            .deletingLastPathComponent()   // mac/
+        RepoRoot.mac
             .appendingPathComponent("scripts")
     }
 

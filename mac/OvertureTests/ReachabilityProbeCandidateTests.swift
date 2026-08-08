@@ -158,9 +158,7 @@ struct ReachabilityProbeCandidateTests {
     // places ask the question in the live view, and a SwiftUI body cannot be asserted on, so the wiring is
     // pinned at the source.
     @Test func everyLiveCallSitePassesDansRealRefusals() throws {
-        let source = try String(contentsOf: URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
+        let source = try String(contentsOf: RepoRoot.mac
             .appendingPathComponent("Overture/UI/QueueView.swift"), encoding: .utf8)
         #expect(!source.contains("reachabilityProbeCandidateKeys(group.items)"),
                 "the per-date tick box must ask with the refusals applied")

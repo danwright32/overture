@@ -12,10 +12,7 @@ import Foundation
 // it would prove nothing about the file that actually runs.
 @Suite("A previous run's results cannot survive into this one (#1011)")
 struct StaleResultsGuardTests {
-    private static let repoRoot = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent() // OvertureTests
-        .deletingLastPathComponent() // mac
-        .deletingLastPathComponent() // repo root
+    private static let repoRoot = RepoRoot.url
 
     private static var lib: String {
         repoRoot.appendingPathComponent("mac/scripts/lib/results-guard.sh").path
@@ -148,9 +145,7 @@ struct StaleResultsGuardTests {
     // know about today: a careful list is exactly what missed prep and reply-classify the first time
     // (mirrors DetachedRunCeremonyGuardTests.everyClaudeRunnerSourcesTheSharedSetup).
     @Test func everyClaudeRunnerDiscardsItsPreviousResultsFirst() throws {
-        let scripts = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // OvertureTests/
-            .deletingLastPathComponent()   // mac/
+        let scripts = RepoRoot.mac
             .appendingPathComponent("scripts")
 
         let names = try FileManager.default.contentsOfDirectory(atPath: scripts.path)

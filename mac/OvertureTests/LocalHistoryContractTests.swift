@@ -10,10 +10,7 @@ import Foundation
 @Suite("Local history contract fixtures")
 struct LocalHistoryContractTests {
     private func fixtureDirectory() -> URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // OvertureTests
-            .deletingLastPathComponent()   // mac
-            .deletingLastPathComponent()   // repo root
+        RepoRoot.url
             .appendingPathComponent("fixtures/local-history")
     }
 

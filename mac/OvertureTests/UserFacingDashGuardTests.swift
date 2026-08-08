@@ -54,11 +54,9 @@ struct UserFacingDashGuardTests {
     // MARK: - Source location
 
     private static func appSourceDirectory(file: StaticString = #filePath) -> URL {
-        // #filePath -> .../mac/OvertureTests/UserFacingDashGuardTests.swift; climb to mac/Overture.
-        URL(fileURLWithPath: "\(file)")
-            .deletingLastPathComponent()        // OvertureTests
-            .deletingLastPathComponent()        // mac
-            .appendingPathComponent("Overture")
+        // #1993: searched for, not counted to. A wrong path here yields no files to walk, so the
+        // guard passes over everything it exists to check and reports a clean app.
+        RepoRoot.app
     }
 
     private static func swiftFiles(under root: URL) -> [URL] {

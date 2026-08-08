@@ -66,9 +66,7 @@ struct LaunchMigrationsFailureTests {
     // the returned false for as long as it existed, which is exactly how this stayed invisible, and a
     // failure that every caller has to remember to check is a failure that some caller will not.
     @Test func runRoutesAFailedSaveIntoTheReporter() throws {
-        let source = try String(contentsOf: URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
+        let source = try String(contentsOf: RepoRoot.mac
             .appendingPathComponent("Overture/Domain/LaunchMigrations.swift"), encoding: .utf8)
         #expect(source.contains("persist(context.save, report: { reportSaveFailure($0) })"),
                 "the launch save's failure path must reach the reporter")

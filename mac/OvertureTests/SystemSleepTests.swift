@@ -114,9 +114,7 @@ struct SystemSleepTests {
     // to make the point). It exists so the next person to reach for `systemUptime` here meets the
     // measurement instead of the documentation.
     @Test func theRecordedMeasurementShowsTheAwakeClockRanThroughTenHoursOfSleep() throws {
-        let url = URL(fileURLWithPath: "\(#filePath)")
-            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("fixtures/watch-gap-clock-measurement.json")
+        let url = RepoRoot.url.appendingPathComponent("fixtures/watch-gap-clock-measurement.json")
         let data = try Data(contentsOf: url)
         let m = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
 

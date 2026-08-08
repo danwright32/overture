@@ -15,9 +15,7 @@ struct ScoutServiceSaveGuardTests {
     private static let forbidden = "try? context.save()"
 
     @Test func runScoutAndApplyNeverRevertToSilentSave() throws {
-        let scoutService = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // OvertureTests/
-            .deletingLastPathComponent()   // mac/
+        let scoutService = RepoRoot.mac
             .appendingPathComponent("Overture/Integration/ScoutService.swift")
         let src = try String(contentsOf: scoutService, encoding: .utf8)
 

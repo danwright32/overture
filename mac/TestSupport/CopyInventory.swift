@@ -195,28 +195,12 @@ enum CopyInventory {
         repoRoot.appendingPathComponent("docs/copy-inventory.md")
     }
 
-    // #1967: SEARCHED for, not counted to. This used to climb a fixed four levels with each one named
-    // in a comment, and moving this file one directory shallower (into TestSupport, shared by both test
-    // targets) silently landed it OUTSIDE the repo. Nothing failed loudly: the scan simply found zero
-    // files, and eleven tests reported the app had no copy in it rather than saying the path was wrong.
-    //
-    // So it climbs until it finds the thing it is actually looking for. Moving this file again cannot
-    // break it, and if the layout ever changes so that nothing is found, it stops with a message naming
-    // the path it started from instead of quietly scanning nothing.
-    private static var repoRoot: URL {
-        var dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-        let start = dir
-        while dir.path != "/" {
-            if FileManager.default.fileExists(atPath: dir.appendingPathComponent("mac/Overture").path) {
-                return dir
-            }
-            dir = dir.deletingLastPathComponent()
-        }
-        fatalError("""
-            CopyInventory could not find the repo root above \(start.path). It looks for a directory \
-            containing mac/Overture. If the repository layout changed, this is the line to update.
-            """)
-    }
+    // #1993: through the shared RepoRoot search. This is where the search was FIRST written, after
+    // #1967 moved this file one directory shallower and its four-level climb silently landed outside
+    // the repo, so eleven tests reported the app had no copy in it rather than saying the path was
+    // wrong. It now lives in one place that every test uses, instead of one place that only this file
+    // did, which is what #1993 is about.
+    private static var repoRoot: URL { RepoRoot.url }
 }
 
 // MARK: - Rendering

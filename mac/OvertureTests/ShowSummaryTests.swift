@@ -66,8 +66,7 @@ struct ShowSummaryTests {
 struct ShowSummaryContractTests {
 
     private func fixture(_ name: String) throws -> Data {
-        try Data(contentsOf: URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        try Data(contentsOf: RepoRoot.url
             .appendingPathComponent("fixtures/prep-results").appendingPathComponent(name))
     }
 

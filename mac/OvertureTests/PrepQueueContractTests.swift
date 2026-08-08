@@ -10,10 +10,7 @@ import Foundation
 @Suite("Prep queue contract fixtures")
 struct PrepQueueContractTests {
     private func fixtureDirectory() -> URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // OvertureTests
-            .deletingLastPathComponent()   // mac
-            .deletingLastPathComponent()   // repo root
+        RepoRoot.url
             .appendingPathComponent("fixtures/prep-queue")
     }
 

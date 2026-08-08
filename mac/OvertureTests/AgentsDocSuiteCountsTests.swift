@@ -18,24 +18,14 @@ import Foundation
 @Suite("AGENTS.md states no hand-written suite size (#2232)")
 struct AgentsDocSuiteCountsTests {
 
+    // #1993: found through the shared search, which halts loudly if the repo is not there. A doc
+    // this could not find would make every assertion below vacuously true, which is #1967's exact
+    // failure and the reason the search exists at all.
     private var agentsDoc: String {
         get throws {
-            var dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-            let start = dir
-            while dir.path != "/" {
-                let candidate = dir.appendingPathComponent("AGENTS.md")
-                if FileManager.default.fileExists(atPath: candidate.path) {
-                    return try String(contentsOf: candidate, encoding: .utf8)
-                }
-                dir = dir.deletingLastPathComponent()
-            }
-            // Never a silent pass on a path problem: a doc this could not find would make every
-            // assertion below vacuously true, which is #1967's exact failure.
-            throw Failure.notFound(start.path)
+            try String(contentsOf: RepoRoot.url.appendingPathComponent("AGENTS.md"), encoding: .utf8)
         }
     }
-
-    enum Failure: Error { case notFound(String) }
 
     // The measurement from 2026-08-02 is the one number allowed to stay, because it is a record of
     // an experiment on a stated date rather than a claim about the suite now (L37). Everything else

@@ -189,10 +189,7 @@ struct RankerFixtureTests {
     }
 
     private func loadCases() throws -> [FixtureCase] {
-        let repoRoot = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // OvertureTests
-            .deletingLastPathComponent()   // mac
-            .deletingLastPathComponent()   // repo root
+        let repoRoot = RepoRoot.url
         let data = try Data(contentsOf: repoRoot.appendingPathComponent("fixtures/ranker/cases.json"))
         return try JSONDecoder().decode([FixtureCase].self, from: data)
     }

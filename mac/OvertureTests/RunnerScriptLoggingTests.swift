@@ -8,10 +8,7 @@ import Foundation
 // with the queue guard forced to fail, to prove the failure now reaches the run log.
 @Suite("Runner script early-failure logging")
 struct RunnerScriptLoggingTests {
-    private static let repoRoot = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent() // OvertureTests
-        .deletingLastPathComponent() // mac
-        .deletingLastPathComponent() // repo root
+    private static let repoRoot = RepoRoot.url
 
     private func runScript(named scriptName: String, logName: String, expectedMessage: String) throws {
         let supportDir = FileManager.default.temporaryDirectory
