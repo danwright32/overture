@@ -94,6 +94,13 @@ struct GeoRefusals: Equatable, Sendable {
     // ExcludedTownRetirement draws before it dismisses anything, shared here so the two cannot drift.
     func hidesFromQueue(_ p: Prospect) -> Bool {
         guard GeoRefusals.isOvertureToCut(p.status) else { return false }
+        // #1658: a row this app was showing, whose GENRE then moved it onto the stricter rule, is judged
+        // by the loose rule it was already being judged by. Dan's call: re-reading a genre must never be
+        // what takes a show away from him. His own town refusals are untouched by this, because they hide
+        // a row under the loose rule too.
+        if p.keptVisibleAfterGenreChange {
+            return hidesFromQueue(location: p.location, discipline: .other)
+        }
         return hidesFromQueue(location: p.location,
                               discipline: Discipline(rawValue: p.discipline) ?? .other)
     }

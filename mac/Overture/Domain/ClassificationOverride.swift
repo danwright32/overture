@@ -46,7 +46,9 @@ enum ClassificationOverride {
     // re-score reads it back off the prospect, so an agency row keeps its 2 point penalty through a genre
     // correction instead of being silently re-ranked as if its production were unknown.
     static func correct(_ p: Prospect, discipline: Discipline, now: Date) {
-        p.discipline = discipline.rawValue
+        // #1658: through the one writer, so Dan's own correction cannot be the thing that removes the
+        // row he just corrected.
+        GenreVisibility.write(discipline, to: p)
         p.classificationOverriddenByDan = true
         let result = rescored(p, now: now)
         p.fitScore = result.score

@@ -1376,7 +1376,7 @@ enum ScoutService {
         // Stamp whenever the value standing is the one this source brought, so "may this source correct
         // what is here" keeps answering yes for the source actually responsible for it.
         if mergedDiscipline == incomingDiscipline { existing.disciplineGenreSourceKey = incomingKey }
-        existing.discipline = mergedDiscipline.rawValue
+        GenreVisibility.write(mergedDiscipline, to: existing)   // #1658
 
         let stored = (production: Production(rawValue: existing.production) ?? .unknown,
                       profile: Profile(rawValue: existing.profile) ?? .neutral)

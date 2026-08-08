@@ -110,7 +110,17 @@ enum EventClassifier {
         let presenter = event.presenter ?? ""
         let venue = event.venue ?? ""
         let haystack = "\(event.title) \(presenter)"
-        let discipline = detectDiscipline(haystack)
+        // #1658: the SHOW decides its own genre, and the organisation's name is only consulted when the
+        // show's own title says nothing. Read together, the presenter's name outranked the show on 11 live
+        // rows: "The 2026 Brooklyn Folk Festival" at Jalopy Theatre read as theater, "Headquarters Comedy"
+        // at SoHo Playhouse read as theater, and a Beethoven symphony billed by an opera company read as
+        // opera. A building's name is a poor witness to what is on inside it tonight.
+        //
+        // The fallback is the JOINED text rather than the presenter alone, so a title that says nothing
+        // lands exactly where it always did: this phase changes which signal WINS, never how many rows are
+        // readable. Title-only would leave 510 of 699 rows unreadable; with this fallback it stays at 377.
+        let fromTitle = detectDiscipline(event.title)
+        let discipline = fromTitle == .other ? detectDiscipline(haystack) : fromTitle
 
         let isAgency = matches(haystack, agencySignal)
         let isProducer = !presenter.isEmpty && matches(presenter, producerSignal) && !isAgency

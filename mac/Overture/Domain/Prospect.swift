@@ -109,6 +109,23 @@ final class Prospect {
     // them. Mirrors confidenceReviewedByDan. Defaulted so existing records migrate cleanly.
     var classificationOverriddenByDan: Bool = false
 
+    // #1658: this row was showing, and then its GENRE changed to one on the stricter geographic rule,
+    // which would have removed it from the queue. Dan's call (2026-08-07): read the title as the genre,
+    // and keep the row visible where the genre change alone is what would have taken it away.
+    //
+    // The genre picks the geographic rule (music and band stop at the five boroughs, everything else
+    // travels), so re-reading a genre has a consequence nothing about genre would suggest. Two live rows
+    // are exactly this: Taconic Opera's Beethoven nights upstate, showing today as opera, read as music
+    // from their own titles.
+    //
+    // What this does NOT do is override Dan's own town refusals. It downgrades this row to the LOOSE
+    // geographic rule, the one it was already being judged by when he could see it, and a town he has
+    // refused is refused under that rule too.
+    //
+    // Defaulted so existing records migrate cleanly, and false is the honest default: a row nothing has
+    // re-read has had nothing taken away from it.
+    var keptVisibleAfterGenreChange: Bool = false
+
     // #1274: Dan-owned display-name override. groupName is normally scout-owned and rewritten every
     // re-ingest (ScoutService.apply). Once Dan renames a show, this flag makes apply() leave his name
     // alone. The rename deliberately does NOT touch naturalKey (still scout-name-derived), so the
