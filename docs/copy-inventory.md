@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1110 sentences**, from 390 source files.
+Every sentence Overture can say to Dan: **1112 sentences**, from 391 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -740,7 +740,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/DaysOffView.swift`
 "From your booking sheet, which often holds an agent's address rather than theirs"
     `Domain/ManualPrepPrefill.swift`
-"Genre: \(QueueModel.disciplineLabel(discipline)). Change it."
+"Genre: \(read.label). Change it."
     `UI/QueueView+Model.swift`
 "Getting your reply ready"
     `Domain/ReplyPanel.swift`
@@ -1003,6 +1003,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "No experiment running. Start one to test two opener styles against each other and see which earns more replies. Nothing changes until you start it."
     `UI/ExperimentReportView.swift`
+"No genre read"
+    `Domain/Ranker.swift`
 "No kept prospects need prepping. Keep some prospects first."
     `Integration/PrepQueueService.swift`
 "No listing page for this show"
@@ -1516,9 +1518,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ShowSearchField.swift`
 "Search the queue"
     `UI/QueueSearchBar.swift`
-"Self-produced \(discipline.rawValue) group, a strong-fit target\(where_)."
+"Self-produced\(genre) group, a strong-fit target\(where_)."
     `Domain/EventClassifier.swift`
-"Self-produced \(discipline.rawValue); worth a look once the fit is confirmed."
+"Self-produced\(genre); worth a look once the fit is confirmed."
     `Domain/EventClassifier.swift`
 "Send Anyway"
     `UI/DraftReviewView.swift`
@@ -2106,6 +2108,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/VenueParser.swift`
 "\(-days) days ago"
     `Domain/ReachedOutQueue.swift`
+"\(Discipline.other.label). Set it."
+    `UI/QueueView+Model.swift`
 "\(Plural.count(count, "new lead")) while you were away"
     `UI/QueueView+Model.swift`
 "\(Plural.count(count, "show")) \(Plural.word(count, "is", "are")) back in \(undoStageWord(for: priorStatuses))"

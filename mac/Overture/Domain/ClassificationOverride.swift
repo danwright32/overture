@@ -51,5 +51,19 @@ enum ClassificationOverride {
         let result = rescored(p, now: now)
         p.fitScore = result.score
         p.tier = result.tier.rawValue
+        // #1657: the reason is a sentence ABOUT the genre, so a correction that left it alone produced a
+        // card whose line says one genre and whose reason names another. The genre editor is one tap from
+        // that line (#1662), which makes it the easiest place in the app to reach that state.
+        //
+        // Through the same `derived` every other writer uses, and coverage rides along with it because the
+        // two are one pair drawn from one set of axes (#1949). Coverage does not depend on the genre, so
+        // this is a no-op for it, and separating them is how they would come to describe different rows.
+        let derived = EventClassifier.derived(discipline: discipline,
+                                              production: Production(rawValue: p.production) ?? .unknown,
+                                              profile: Profile(rawValue: p.profile) ?? .neutral,
+                                              venue: p.venue)
+        // An empty reason stays empty: #1600 retired the catch-all sentence deliberately, and a genre
+        // correction is not the moment to put one back.
+        if !p.fitReason.isEmpty { p.fitReason = derived.fitReason }
     }
 }

@@ -19,6 +19,25 @@ enum PriorRelationship: String, Decodable, Sendable {
 }
 enum Discipline: String, Decodable, Sendable, CaseIterable {
     case dance, opera, theater, music, band, comedy, other
+
+    // #1657: what this genre is CALLED, in one place, because three surfaces show it (the row's genre
+    // line, the genre editor's picker, and the fit reason's sentence) and they were free to disagree.
+    //
+    // `other` is not a genre. It is the classifier finding no genre word in the title or the presenter,
+    // which is true of 53% of the queue, and the line said "Performance": a genre the app never read,
+    // stated as though it had. That line is also the button that opens the genre editor (#1662), so on
+    // more than half the queue the app invited a correction while arguing there was nothing to correct.
+    var label: String {
+        switch self {
+        case .dance: return "Dance"
+        case .opera: return "Opera"
+        case .theater: return "Theater"
+        case .music: return "Music"
+        case .band: return "Band"
+        case .comedy: return "Comedy"
+        case .other: return "No genre read"
+        }
+    }
 }
 enum Tier: String, Decodable, Sendable { case high, longshot }
 

@@ -157,12 +157,19 @@ enum EventClassifier {
         if production == .agency && profile == .weak {
             return "Agency-routed showcase rental, the dead zone that rarely converts."
         }
+        // #1657: the genre word, or NOTHING when no genre was read. The raw enum value used to go
+        // straight into the sentence, so 21 live rows read "Self-produced other group, a strong-fit
+        // target" and one still read "choral" after #350 folded that genre away. `other` is the
+        // classifier finding no genre word at all, so the honest sentence simply does not mention one:
+        // "Self-produced group" is true, and naming the absence here would state twice what the row's own
+        // genre line already says once.
+        let genre = discipline == .other ? "" : " \(discipline.rawValue)"
         if production == .selfProduced && profile == .strong {
             let where_ = coverage == .likelyUncovered ? ", likely without its own photographer" : ""
-            return "Self-produced \(discipline.rawValue) group, a strong-fit target\(where_)."
+            return "Self-produced\(genre) group, a strong-fit target\(where_)."
         }
         if production == .selfProduced {
-            return "Self-produced \(discipline.rawValue); worth a look once the fit is confirmed."
+            return "Self-produced\(genre); worth a look once the fit is confirmed."
         }
         // LIVE-STORE-CLAIM verified=2026-07-26 measure="rows carrying the classifier catch-all fit reason before Phase 7 cleared them, and how many named a room versus a real producer"
         // #1600 (milestone 32 Phase 7.1): the catch-all sentence is GONE, and nothing replaces it. It
