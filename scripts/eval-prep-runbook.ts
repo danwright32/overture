@@ -39,7 +39,10 @@ function selfCheck(): number {
   let failed = 0;
   for (const file of fixtureFiles()) {
     const fixture = loadFixture(`${FIXTURE_DIR}${file}`);
-    const result = evaluateFixture(fixture, fixture.sampleCompliantOutput);
+    // #1909: the same narrowed scope the always-on suite uses. This checks a STORED sample, not a
+    // model's answer, so it is judged on its own rule plus the durable invariants. scoreOne below
+    // keeps the full set, because that is real output being judged on every rule the runbook states.
+    const result = evaluateFixture(fixture, fixture.sampleCompliantOutput, { scope: "durable" });
     report(result);
     if (!result.pass) failed++;
   }

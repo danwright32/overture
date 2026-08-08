@@ -611,8 +611,12 @@ describe("prep-eval fixtures", () => {
       expect(fixture.sampleCompliantOutput).toBeTruthy();
     });
 
+    // #1909: scored against its OWN rule plus the durable invariants, not every wording rule. A
+    // sample is a hand-written reference answer frozen at the rules of its day (#1872); scoring all
+    // sixteen against every wording rule meant one copy correction invalidated the lot, at roughly 25
+    // minutes and 13 real model calls to restore.
     it(`${fixture.name}: its own sampleCompliantOutput passes the eval`, () => {
-      const r = evaluateFixture(fixture, fixture.sampleCompliantOutput);
+      const r = evaluateFixture(fixture, fixture.sampleCompliantOutput, { scope: "durable" });
       expect(r.failures).toEqual([]);
       expect(r.pass).toBe(true);
     });
@@ -897,5 +901,96 @@ describe("evaluatePrepResult - venue history wording (#1905)", () => {
       forbidVenueHistoryClaim: "Harborlight Hall",
     });
     expect(r.failures).toEqual([]);
+  });
+});
+
+// #1909: a stored sample is scored against its OWN rule plus the durable invariants, not the whole
+// wording rule set.
+//
+// Every fixture's `sampleCompliantOutput` used to be scored against every rule, so a change to ANY
+// wording rule invalidated all of them at once. Measured 2026-07-31: removing the rate from cold
+// pitches (#1906) turned 29 checks red across fixtures about contact finding, house refusal and
+// performer handling, none of which have anything to do with pricing. Restoring them meant a full
+// real-AI run, roughly 25 minutes and 13 model calls.
+//
+// That cost fell on exactly the small copy corrections Dan makes after reading a real draft, which
+// are the highest-value edits the runbook gets.
+describe("evaluatePrepResult - sample scope (#1909)", () => {
+  // A body that breaks a WORDING rule (the rate) while breaking nothing structural. This is the shape
+  // of the 2026-07-31 breakage: every sample was written when stating a rate was required.
+  const BODY_WITH_A_RATE = CANONICAL_BODY.replace(
+    "I'd be glad to talk about your photography plans for the night.",
+    "My rate is $650 plus tax. I'd be glad to talk about your photography plans for the night.");
+
+  it("scores a wording rule against real output", () => {
+    const r = evaluatePrepResult(results([NAMED_ACT], {}, BODY_WITH_A_RATE), { description: "x" });
+    expect(r.failures.some((f) => f.includes("no rate"))).toBe(true);
+  });
+
+  it("does not score a wording rule against a stored sample", () => {
+    const r = evaluatePrepResult(results([NAMED_ACT], {}, BODY_WITH_A_RATE), { description: "x" },
+                                 { scope: "durable" });
+    expect(r.failures).toEqual([]);
+    expect(r.pass).toBe(true);
+  });
+
+  // The narrowing has to keep biting, or it has traded a real cost for no coverage at all. Each of
+  // these is a structural fact rather than a wording choice, so none of them churns when Dan retunes
+  // a sentence, and each is a genuine defect in any output whenever it appears.
+  it("still flags an em dash in a stored sample", () => {
+    // The dash is written as an escape, not typed. The pre-push style gate forbids the literal
+    // character in source and is right to, since it cannot tell a line that USES one from a line that
+    // must QUOTE one, and this test has to contain a real em dash to prove the check fires.
+    const body = CANONICAL_BODY.replace("here in NYC.", "here in NYC\u2014yes.");
+    const r = evaluatePrepResult(results([NAMED_ACT], {}, body), { description: "x" },
+                                 { scope: "durable" });
+    expect(r.failures.some((f) => f.includes("em/en dash"))).toBe(true);
+  });
+
+  it("still flags an unfilled placeholder in a stored sample", () => {
+    const body = CANONICAL_BODY.replace("Aurora Strings", "[ACT NAME]");
+    const r = evaluatePrepResult(results([NAMED_ACT], {}, body), { description: "x" },
+                                 { scope: "durable" });
+    expect(r.failures.some((f) => f.includes("placeholder"))).toBe(true);
+  });
+
+  it("still flags a link to somewhere other than the portfolio in a stored sample", () => {
+    const body = CANONICAL_BODY.replace("danwrightphotography.com", "some-other-site.example");
+    const r = evaluatePrepResult(results([NAMED_ACT], {}, body), { description: "x" },
+                                 { scope: "durable" });
+    expect(r.failures.some((f) => f.includes("links a host"))).toBe(true);
+  });
+
+  // Not wording either, and both are the reason the samples are trusted as reference answers at all:
+  // a press inbox is disqualified outright, and an unsourced "high" confidence is a claim with no
+  // evidence behind it.
+  it("still flags a press inbox in a stored sample", () => {
+    const contact = { ...NAMED_ACT, email: "press@carnegiehall.example" };
+    const r = evaluatePrepResult(results([contact]), { description: "x" }, { scope: "durable" });
+    expect(r.failures.some((f) => f.includes("press/media/PR inbox"))).toBe(true);
+  });
+
+  it("still flags a high-confidence contact with no source in a stored sample", () => {
+    const contact = { ...NAMED_ACT, sourceUrl: "" };
+    const r = evaluatePrepResult(results([contact]), { description: "x" }, { scope: "durable" });
+    expect(r.failures.some((f) => f.includes("sourceUrl"))).toBe(true);
+  });
+
+  // THE point of the change. Narrowing the universal rules must not narrow the fixture's own rule,
+  // which is the single thing that fixture exists to prove. If this stopped being checked, every
+  // sample would pass for free and the whole always-on layer would be decoration.
+  it("still scores the fixture's own declared expectation", () => {
+    const r = evaluatePrepResult(results([NAMED_ACT]),
+                                 { description: "x", requiredPerformers: ["Someone Not In This Draft"] },
+                                 { scope: "durable" });
+    expect(r.pass).toBe(false);
+  });
+
+  // And every real fixture passes under the narrowed scope, which is what the always-on suite runs.
+  it("every stored sample passes under its own scope", () => {
+    for (const fixture of loadFixtures()) {
+      const r = evaluateFixture(fixture, fixture.sampleCompliantOutput, { scope: "durable" });
+      expect(r.failures, `${fixture.name}`).toEqual([]);
+    }
   });
 });
