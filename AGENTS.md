@@ -70,25 +70,35 @@ already drifting from the Swift version it mirrored.
   `run-tests-locked.sh`, which takes about a minute and a half.
 - Since #1967 the Swift tests live in TWO targets, and which one a new test belongs in is decided
   by one question: does it need the app RUNNING?
-  - `OvertureTests` (4,802 tests, `mac/OvertureTests/`) is the default and where a new test goes
+  - `OvertureTests` (`mac/OvertureTests/`) holds almost everything and is where a new test goes
     unless it renders a view. It is UNHOSTED: it reaches the app's code by compiling it in, not by
     linking a host, so it has no `TEST_HOST` and no dependency on the app target at all.
-  - `OvertureHostedTests` (162 tests, `mac/OvertureHostedTests/`) is only the ViewInspector ones,
-    which render a real SwiftUI view and so genuinely need the host process.
+  - `OvertureHostedTests` (`mac/OvertureHostedTests/`) is only the ViewInspector ones, which render
+    a real SwiftUI view and so genuinely need the host process. It is a small fraction of the total.
   - `mac/TestSupport/` holds the helpers both compile (`SourceGuardHelper`, `SwiftSource`,
     `CopyInventory`), in one place so a guard helper cannot drift between the two targets.
   This exists because every test used to run inside the launched app, so one launch fault took all
   of them: on 2026-08-01 a crowded menu bar removed the status item, which terminates a
-  `MenuBarExtra` app, and nothing in the Mac app could be verified at all. Measured 2026-08-02 with
-  a deliberate `fatalError()` in `OvertureApp.init`: the pure suite reported
+  `MenuBarExtra` app, and nothing in the Mac app could be verified at all. Measured ON 2026-08-02
+  with a deliberate `fatalError()` in `OvertureApp.init`: the pure suite reported
   `Test run with 4802 tests in 690 suites passed`, `** TEST SUCCEEDED **`, exit 0, while the app
-  could not start.
+  could not start. That figure is what the suite was THAT DAY and is deliberately not updated: it
+  is the record of an experiment, not a claim about the suite's current size. For the current size,
+  see the readout below.
+- **The suite states its own size, every run.** `run-tests-locked.sh` ends with a
+  `Suite shape:` line giving the tests and suites actually executed, the wall clock, the ratio of
+  test Swift to app Swift, and how many test declarations are source-text guards (#2193, #2232).
+  Use that line, never a number written in this file, as the reference for "did this run execute
+  the whole suite?". The counts here used to be hand-written and both had drifted badly, which
+  quietly weakened the warning two paragraphs up: a stated total is exactly what someone checks a
+  suspicious scoped run against, so a wrong one is worse than none (L32). `AgentsDocSuiteCountsTests`
+  fails if a hand-written count is ever put back.
 - The pure suite has its own scheme, `OvertureCore`, which does NOT build the app. Use it
   (`xcodebuild -scheme OvertureCore -destination 'platform=macOS' test`) to verify domain logic while
   the app is broken or mid-refactor; it does not even need the app to compile. This matters because
   `-only-testing:OvertureTests` on the combined `Overture` scheme does NOT avoid the app: xcodebuild
-  still prepares and launches the host, and a crash there decided the exit code even though all 4,802
-  passed. `run-tests-locked.sh` now falls back to this scheme automatically whenever a run CRASHES, so
+  still prepares and launches the host, and a crash there decided the exit code even though every one
+  of the pure tests passed. `run-tests-locked.sh` falls back to this scheme automatically on a CRASH, so
   a dead host reports "the PURE suite PASSED, the failure above is the APP HOST, not your code"
   instead of one undifferentiated red. `PureSchemeExcludesTheAppTests` fails if the app is ever put
   back into that scheme.
