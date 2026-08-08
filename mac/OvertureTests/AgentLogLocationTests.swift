@@ -27,6 +27,38 @@ struct AgentLogLocationTests {
         #expect(AgentLogLocation.cappedFiles.contains(AgentLogLocation.problemsURL))
     }
 
+    // #2096: the Gmail connect trace is bounded too. It was the one unbounded writer left in a folder
+    // where everything else is deliberately capped: written on every connect attempt, by an app that
+    // runs resident and reconnects, so it grew for as long as the install lived. Measured 668 KB on
+    // 2026-08-04 against 1.7 KB for the next largest file in that directory.
+    @Test func theGmailConnectTraceIsCappedAlongsideTheAgentLogs() {
+        #expect(AgentLogLocation.cappedFiles.contains(AgentLogLocation.gmailConnectDebugURL))
+    }
+
+    // And it reaches its directory through THIS type rather than a second hand-built copy of the path.
+    // Two uncoordinated definitions of one folder is how the mode ends up depending on which writer
+    // runs first: only this one applies the owner-only 0700 that prepareDirectory enforces.
+    @Test func theGmailConnectTraceLivesInTheSharedLogDirectory() {
+        #expect(AgentLogLocation.gmailConnectDebugURL.deletingLastPathComponent().standardizedFileURL
+                == AgentLogLocation.directory.standardizedFileURL)
+        #expect(AgentLogLocation.gmailConnectDebugURL.lastPathComponent == "gmail-connect-debug.log")
+    }
+
+    // The whole point of the two above, asserted as the quantity that actually matters rather than as
+    // a list membership: nothing in that directory is written by a path this type does not cap. A new
+    // log added tomorrow and forgotten is exactly how the connect trace got here.
+    @Test func everyLogThisAppWritesIsCapped() {
+        let writtenByTheApp = [
+            AgentLogLocation.standardOutURL,
+            AgentLogLocation.standardErrorURL,
+            AgentLogLocation.problemsURL,
+            AgentLogLocation.gmailConnectDebugURL,
+        ]
+        for log in writtenByTheApp {
+            #expect(AgentLogLocation.cappedFiles.contains(log), "\(log.lastPathComponent) is not capped")
+        }
+    }
+
     @Test func prepareCreatesTheDirectoryOwnerOnly() throws {
         let base = FileManager.default.temporaryDirectory
             .appendingPathComponent("logs-\(UUID().uuidString)", isDirectory: true)

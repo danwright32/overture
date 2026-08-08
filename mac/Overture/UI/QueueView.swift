@@ -1503,7 +1503,8 @@ enum QueueRenderCounter {
     // protected. Same signal the launch-time background work already skips on (#195).
     static func recordDerivation(inputs: [String: String] = [:], rows: [QueueItem]? = nil,
                                  to url: URL? = nil,
-                                 underTests: Bool = AppEnvironment.isRunningUnderTests) {
+                                 underTests: Bool = AppEnvironment.isRunningUnderTests,
+                                 maxLogBytes: Int = AgentLogLocation.defaultMaxLogBytes) {
         derivations += 1
         // #1931: only ever a claim about two sets of rows that both exist. On the first derivation there is
         // nothing to compare against, and saying the rows changed would be inventing a finding.
@@ -1513,7 +1514,8 @@ enum QueueRenderCounter {
         lastReason = reason(for: inputs, since: previous[queueSurface] ?? [:], rowsChanged: rowsChanged)
         previous[queueSurface] = inputs
         guard !underTests else { return }
-        append(line: "\(queueSurface) #\(derivations) \(lastReason)", to: url ?? logURL)
+        append(line: "\(queueSurface) #\(derivations) \(lastReason)", to: url ?? logURL,
+               maxBytes: maxLogBytes)
     }
 
     // #1930: a render of a surface that does not itself sweep the store, recorded so a queue derivation
@@ -1525,13 +1527,14 @@ enum QueueRenderCounter {
     // nobody touches it", and a render that swept nothing must not inflate it.
     @discardableResult
     static func recordRender(surface: String, inputs: [String: String] = [:], to url: URL? = nil,
-                             underTests: Bool = AppEnvironment.isRunningUnderTests) -> String {
+                             underTests: Bool = AppEnvironment.isRunningUnderTests,
+                             maxLogBytes: Int = AgentLogLocation.defaultMaxLogBytes) -> String {
         let n = (renders[surface] ?? 0) + 1
         renders[surface] = n
         let why = reason(for: inputs, since: previous[surface] ?? [:])
         previous[surface] = inputs
         guard !underTests else { return why }
-        append(line: "\(surface) #\(n) \(why)", to: url ?? logURL)
+        append(line: "\(surface) #\(n) \(why)", to: url ?? logURL, maxBytes: maxLogBytes)
         return why
     }
 
@@ -1553,7 +1556,18 @@ enum QueueRenderCounter {
 
     // Best effort, but never silent: a write that fails says so on the masthead beside the count, rather
     // than leaving an empty log to be read as an idle queue that never re-derived.
-    static func append(line: String, to url: URL) {
+    static func append(line: String, to url: URL,
+                       maxBytes: Int = AgentLogLocation.defaultMaxLogBytes) {
+        // #1933: bounded, by the SAME rotation every other log in this app uses (LogRotation.cap),
+        // rather than a second mechanism invented here. One line per whole-store derivation with
+        // nothing trimming it meant an afternoon of scrolling, sending and re-prepping wrote thousands
+        // of lines, and every later run appended to the same file: the diagnostic got harder to read
+        // the more it was used, and it was unbounded disk in the directory that also holds the store.
+        //
+        // Capped on WRITE rather than at launch, matching FeedMovementLog, because this log's whole
+        // purpose is unattended observation over a long session, and a launch-only cap would let one
+        // session grow without limit, which is the case that produced the issue.
+        LogRotation.cap(files: [url], maxBytes: maxBytes)
         let stamped = "\(ISO8601DateFormatter().string(from: Date())) \(line)\n"
         guard let data = stamped.data(using: .utf8) else { return }
         if let handle = try? FileHandle(forWritingTo: url) {
