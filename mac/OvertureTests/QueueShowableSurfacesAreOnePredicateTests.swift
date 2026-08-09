@@ -206,6 +206,30 @@ enum QueueShowableSurfaceAudit {
         }
         return result
     }
+
+    // Every app Swift file, keyed by its path relative to `mac/`, which is the form the inventory and
+    // the predicate path are written in. Takes the root it walks so the derivation can be exercised
+    // against a throwaway tree instead of only ever being watched to work over the real checkout.
+    //
+    // #2361: the relative path goes through CopyInventory's anchored, symlink-canonicalising strip
+    // rather than a `replacingOccurrences` of the root's path. FileManager's enumerator hands back
+    // FULLY RESOLVED paths, so in a checkout reached through a symlink (anything under /tmp, which
+    // macOS resolves to /private/tmp, which is where verify-and-merge-branch.sh puts its worktrees)
+    // the yielded path does not begin with the root's own path, nothing is stripped, and the file's
+    // whole absolute path is glued onto "Overture". The predicate's own file then stops matching
+    // predicatePath and this guard accuses StageNavigation of being a rogue surface: it reports the
+    // exact defect it exists to catch, about the code that is the fix.
+    static func appSources(macRoot: URL) -> [(path: String, source: String)] {
+        let root = macRoot.appendingPathComponent("Overture")
+        guard let walker = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil)
+        else { return [] }
+        var files: [(path: String, source: String)] = []
+        for case let url as URL in walker where url.pathExtension == "swift" {
+            guard let text = try? String(contentsOf: url, encoding: .utf8) else { continue }
+            files.append((path: CopyInventory.relativePath(of: url, under: macRoot), source: text))
+        }
+        return files
+    }
 }
 
 @MainActor
@@ -260,16 +284,7 @@ struct QueueShowableSurfacesAreOnePredicateTests {
     }
 
     private static func appSources() -> [(path: String, source: String)] {
-        let root = RepoRoot.mac.appendingPathComponent("Overture")
-        guard let walker = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil)
-        else { return [] }
-        var files: [(path: String, source: String)] = []
-        for case let url as URL in walker where url.pathExtension == "swift" {
-            guard let text = try? String(contentsOf: url, encoding: .utf8) else { continue }
-            let relative = "Overture" + url.path.replacingOccurrences(of: root.path, with: "")
-            files.append((path: relative, source: text))
-        }
-        return files
+        QueueShowableSurfaceAudit.appSources(macRoot: RepoRoot.mac)
     }
 
     // MARK: - The predicate the surfaces are held to
@@ -317,6 +332,52 @@ struct QueueShowableSurfacesAreOnePredicateTests {
             #expect(sweep.insideThePredicate.contains(name),
                     "the sweep no longer recognises StageNavigation.\(name) as answering the question")
         }
+    }
+
+    // MARK: - Where the checkout lives cannot change the verdict (#2361)
+
+    // A checkout reached through a symlink is the ordinary case for an agent, not an exotic one:
+    // verify-and-merge-branch.sh puts every branch it verifies in a worktree under TMPDIR, and macOS
+    // resolves /tmp to /private/tmp. The sweep keys files by their path relative to mac/, so if that
+    // derivation depends on where the checkout sits, StageNavigation stops being recognised as the
+    // predicate and this suite accuses the shared rule of being a rogue second answer.
+    @Test func theSweepKeysFilesTheSameWayInASymlinkedCheckout() throws {
+        let fm = FileManager.default
+        let base = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("showable-guard-symlink-\(UUID().uuidString)")
+        defer { try? fm.removeItem(at: base) }
+
+        let real = base.appendingPathComponent("checkout/mac/Overture/Domain")
+        try fm.createDirectory(at: real, withIntermediateDirectories: true)
+        try "enum StageNavigation { static func opensInQueue() -> Bool { true } }"
+            .write(to: real.appendingPathComponent("StageNavigation.swift"),
+                   atomically: true, encoding: .utf8)
+        let link = base.appendingPathComponent("link")
+        try fm.createSymbolicLink(at: link, withDestinationURL: base.appendingPathComponent("checkout"))
+
+        let files = QueueShowableSurfaceAudit.appSources(macRoot: link.appendingPathComponent("mac"))
+
+        #expect(files.map(\.path) == [Self.predicatePath])
+    }
+
+    // The same tree read through its real path, so the test above is comparing two routes to one
+    // answer rather than pinning whatever one route happens to produce.
+    @Test func theSweepKeysFilesTheSameWayInAnOrdinaryCheckout() throws {
+        let fm = FileManager.default
+        let base = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("showable-guard-plain-\(UUID().uuidString)")
+        defer { try? fm.removeItem(at: base) }
+
+        let real = base.appendingPathComponent("checkout/mac/Overture/Domain")
+        try fm.createDirectory(at: real, withIntermediateDirectories: true)
+        try "enum StageNavigation { static func opensInQueue() -> Bool { true } }"
+            .write(to: real.appendingPathComponent("StageNavigation.swift"),
+                   atomically: true, encoding: .utf8)
+
+        let files = QueueShowableSurfaceAudit.appSources(
+            macRoot: base.appendingPathComponent("checkout/mac"))
+
+        #expect(files.map(\.path) == [Self.predicatePath])
     }
 
     // MARK: - The guard's own failure paths, seen to fail
