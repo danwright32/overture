@@ -68,8 +68,12 @@ enum PrepQueueService {
                         hasDraft: p.hasDraft,
                         reprepDraftRequested: p.reprepDraftRequested,
                         reprepContactsRequested: p.reprepContactsRequested,
-                        probedWithContact: p.reachabilityProbedAt != nil
-                            && p.recipients.contains(where: { !($0.email ?? "").isEmpty })),
+                        // #1666: through the shared helper, not spelled out here. The queue card has to
+                        // reach the same answer, and two spellings of one rule is exactly the drift
+                        // that put a Prep promise on shows Prep was refusing.
+                        probedWithContact: PrepQueueBuilder.probedWithContact(
+                            probedAt: p.reachabilityProbedAt,
+                            contactEmails: p.recipients.map(\.email))),
                     // #1122: set only when the opening night has passed while later dates remain, so the
                     // drafter pitches only the remaining dates and never names the gone opening. Absent
                     // otherwise (single-night, or a run not yet started), so the common case is unchanged.

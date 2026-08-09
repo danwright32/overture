@@ -160,8 +160,44 @@ struct ShowListing: Codable, Equatable, Sendable {
     static let unreadable = "unreadable"
 }
 
+// #1666: the five facts the Prep-eligibility rule reads. A Prospect carries them and so does the queue
+// card's snapshot of one, so both can be handed to the SAME function instead of a surface spelling the
+// arguments out again. Spelled out is how the card came to promise a Prep run on a show Prep refuses:
+// #1534's "Contact: pending Prep run" was keyed on `isKept`, which is not what decides it. A new fact
+// added to `needsPrep` now has to be added here too, and every conformer fails to compile until it is.
+protocol PrepEligibilityFacts {
+    var status: ReviewStatus { get }
+    var hasDraft: Bool { get }
+    var reprepDraftRequested: Bool { get }
+    var reprepContactsRequested: Bool { get }
+    var hasUnclearedConflict: Bool { get }
+}
+
+extension Prospect: PrepEligibilityFacts {}
+
+// #1666: what the next Prep run will do with ONE show, as one answer. Two rules decide it and a surface
+// stating it has to obey both: `needsPrep` refuses a show with an open date conflict outright, and
+// `prepMode` downgrades a show whose contact a reachability probe already found to writing the draft
+// alone. Anything telling Dan what happens to a show next asks this rather than deriving it again.
+enum PrepRunIntent: Equatable, Sendable {
+    // The next run will not take this show up at all: it is untriaged, dismissed, already drafted with
+    // no re-prep asked for, or kept on a night Dan cannot work.
+    case notQueued
+    // The full prep: research a contact, then write the email.
+    case contactsAndDraft
+    // A contact is already in hand, so only the email is written.
+    case draftOnly
+    // The email stands, only the contact is researched again.
+    case contactsOnly
+}
+
 enum PrepQueueBuilder {
     static let version = 11
+
+    // #1666: the wire vocabulary of a queue item's `reprepMode` (#367), named rather than written out at
+    // each use, so the string that crosses to the run and the string a surface reads back are one spelling.
+    static let draftOnlyMode = "draft_only"
+    static let contactsOnlyMode = "contacts_only"
 
     // v4 (#1122): true when `performanceDate` (the opening night) is behind us AND the run is still live
     // (its closing night, runEndDate ?? performanceDate, is today or later). A fully past run is false
@@ -206,11 +242,40 @@ enum PrepQueueBuilder {
     // A (Prospect) -> Bool wrapper over needsPrep, for passing straight to `.filter(...)` instead
     // of a closure with named arguments and defaults (the latter is slow enough for the Swift
     // type-checker to warn about in a plain-array `.filter { ... }`, this form checks instantly).
-    static func needsPrepEligible(_ p: Prospect) -> Bool {
+    // #1666: generic over PrepEligibilityFacts rather than over Prospect alone, so the queue card's
+    // snapshot reaches this exact function instead of restating its arguments. Behaviour for a Prospect
+    // is unchanged; every existing call site still passes one.
+    static func needsPrepEligible<Facts: PrepEligibilityFacts>(_ p: Facts) -> Bool {
         needsPrep(status: p.status, hasDraft: p.hasDraft,
                  reprepDraftRequested: p.reprepDraftRequested,
                  reprepContactsRequested: p.reprepContactsRequested,
                  hasUnclearedConflict: p.hasUnclearedConflict)
+    }
+
+    // #1666: whether a reachability probe has already found this show a contact, which is the fact
+    // `prepMode` reads to decide a first prep can skip the hunt. One definition, because the queue card
+    // and the service that writes the handoff file both have to reach the same answer, and each spelling
+    // it out would be two copies of one rule (which is the whole shape of this issue).
+    static func probedWithContact(probedAt: Date?, contactEmails: [String?]) -> Bool {
+        probedAt != nil && contactEmails.contains { !($0 ?? "").isEmpty }
+    }
+
+    // #1666: the one accessor a surface asks for "what happens to this show at the next Prep run".
+    // Composed of the two rules that decide it, never a third statement of either: `needsPrepEligible`
+    // says whether the run takes the show up at all (the conflict gate included), and `prepMode` says
+    // which half of the work it does. `probedWithContact` is not defaulted, for the same reason
+    // `needsPrep`'s conflict gate is not: a default is how a caller forgets a gate invisibly.
+    static func nextRunIntent<Facts: PrepEligibilityFacts>(for p: Facts,
+                                                           probedWithContact: Bool) -> PrepRunIntent {
+        guard needsPrepEligible(p) else { return .notQueued }
+        switch prepMode(hasDraft: p.hasDraft,
+                        reprepDraftRequested: p.reprepDraftRequested,
+                        reprepContactsRequested: p.reprepContactsRequested,
+                        probedWithContact: probedWithContact) {
+        case draftOnlyMode: return .draftOnly
+        case contactsOnlyMode: return .contactsOnly
+        default: return .contactsAndDraft
+        }
     }
 
     // #1583/#1691: the same question with the date-clash gate lifted, which is what the `.prepBlocked`
@@ -283,8 +348,8 @@ enum PrepQueueBuilder {
     // has: the run's default behavior.
     static func reprepModeString(draftRequested: Bool, contactsRequested: Bool) -> String? {
         switch (draftRequested, contactsRequested) {
-        case (true, false): return "draft_only"
-        case (false, true): return "contacts_only"
+        case (true, false): return draftOnlyMode
+        case (false, true): return contactsOnlyMode
         default: return nil
         }
     }
@@ -298,7 +363,7 @@ enum PrepQueueBuilder {
         if reprepDraftRequested || reprepContactsRequested {
             return reprepModeString(draftRequested: reprepDraftRequested, contactsRequested: reprepContactsRequested)
         }
-        if !hasDraft && probedWithContact { return "draft_only" }
+        if !hasDraft && probedWithContact { return draftOnlyMode }
         return nil
     }
 
