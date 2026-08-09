@@ -28,8 +28,12 @@
 # measurement that was never made.
 test_run_totals() {
   local output="$1"
+  # #2317: `tests?` and `suites?`, because Swift Testing writes the words singular when there is one of
+  # something ("Test run with 10 tests in 1 suite passed"). Only knowing the plural made a real scoped run
+  # read as one that executed nothing, which is the same false alarm the empty-run gate exists to avoid
+  # ever raising.
   printf '%s\n' "${output}" | awk '
-    match($0, /Test run with [0-9]+ tests in [0-9]+ suites (passed|failed) after [0-9.]+ seconds/) {
+    match($0, /Test run with [0-9]+ tests? in [0-9]+ suites? (passed|failed) after [0-9.]+ seconds/) {
       line = substr($0, RSTART, RLENGTH)
       split(line, f, " ")
       # Test run with <4> tests in <7> suites passed after <11> seconds
@@ -69,7 +73,10 @@ format_suite_report() {
   if [[ -n "${totals}" ]]; then
     local tests suites seconds
     read -r tests suites seconds <<< "${totals}"
-    out+="${tests} tests in ${suites} suites, ${seconds}s."
+    # #2317: a scoped run really can be one suite, and now that scoped runs go through this wrapper the
+    # readout says so in words rather than "1 suites".
+    out+="${tests} test$([[ "${tests}" == 1 ]] || echo s)"
+    out+=" in ${suites} suite$([[ "${suites}" == 1 ]] || echo s), ${seconds}s."
   else
     out+="could not read the test totals from this run."
   fi

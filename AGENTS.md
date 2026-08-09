@@ -70,12 +70,18 @@ already drifting from the Swift version it mirrored.
 - Mac app: `cd mac && xcodegen generate`, then `./scripts/run-tests-locked.sh` (wraps
   `xcodebuild -scheme Overture -destination 'platform=macOS' test` in a lock so it can't
   collide with another test run on this Mac; use it instead of raw `xcodebuild test`). A
-  scoped `-only-testing:OvertureTests/<Suite>/<test>` run can print
-  `** TEST SUCCEEDED **` with 0 tests executed if the path doesn't match anything (for
-  example a `@Suite("...")` display name that differs from its Swift type name),
-  indistinguishable at a glance from a real pass. Confirm a scoped run by grepping its
-  output for the specific test name, or just run the full suite via
-  `run-tests-locked.sh`, which takes about a minute and a half.
+  scoped `-only-testing:OvertureTests/<Suite>/<test>` run prints `** TEST SUCCEEDED **` with 0
+  tests executed if the path doesn't match anything (for example a `@Suite("...")` display name
+  that differs from its Swift type name), and raw `xcodebuild` exits 0 on it, indistinguishable
+  at a glance from a real pass.
+  Since #2317 that is caught rather than watched for: pass the scope to the WRAPPER
+  (`mac/scripts/run-tests-locked.sh -only-testing:OvertureTests/<Suite>`) and a run that reported
+  success while executing no tests at all fails with `NOTHING RAN`, naming the scope as the likely
+  cause. That is the reason to scope through the wrapper rather than around it; a raw `xcodebuild`
+  still has no gate on it. A scoped run is also exempt from the short-run baseline, and cannot move
+  it: the baseline is a full-suite number, so a handful of tests would otherwise read as a 99%
+  truncation and then quietly become the bar every later run is measured against.
+  The full suite via `run-tests-locked.sh` with no arguments takes about a minute and a half.
 - Since #1967 the Swift tests live in TWO targets, and which one a new test belongs in is decided
   by one question: does it need the app RUNNING?
   - `OvertureTests` (`mac/OvertureTests/`) holds almost everything and is where a new test goes
