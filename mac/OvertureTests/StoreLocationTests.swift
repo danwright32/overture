@@ -145,4 +145,73 @@ struct StoreLocationTests {
         #expect(ReplyClassifyQueueBuilder.defaultURL.deletingLastPathComponent() == StoreLocation.handoffDirectory)
         #expect(ReplyClassifyResultsDecoder.defaultURL.deletingLastPathComponent() == StoreLocation.handoffDirectory)
     }
+
+    // MARK: - #2097: a test run cannot reach the live handoff directory
+
+    // The handoff directory is not a scratch folder. It holds the Gmail tokens, the booking history and
+    // every JSON file the scout, the app and the importer hand each other. HandoffCleanup already
+    // carried a pin refusing to write there under test, which is the rule understood and only partly
+    // enforced: any writer not going through that pin still landed in Dan's live data.
+    //
+    // THE guard, and the one that fails if the redirect is ever removed: this runs inside a test run and
+    // asks the app the same question every writer asks, with no argument, exactly as production code
+    // does.
+    @Test func theLiveHandoffDirectoryIsUnreachableFromATestRun() {
+        let live = StoreLocation.handoffDirectory(appSupport: StoreLocation.appSupport,
+                                                  isDebugBuild: StoreLocation.isDebugBuild)
+
+        #expect(StoreLocation.handoffDirectory != live,
+                "a test run resolves the handoff directory to Dan's real folder")
+        #expect(StoreLocation.handoffDirectory == StoreLocation.testRunHandoffDirectory)
+    }
+
+    // And the class, not one instance: every writer derives its path from that one property, so this
+    // asserts the redirect reaches the files rather than only the folder. Named files rather than a
+    // pattern, because the point is that a real writer's real default lands somewhere safe.
+    @Test func everyHandoffWriterResolvesOutsideTheLiveDirectoryUnderTest() {
+        let live = StoreLocation.handoffDirectory(appSupport: StoreLocation.appSupport,
+                                                  isDebugBuild: StoreLocation.isDebugBuild)
+
+        for url in [ReplyClassifyQueueBuilder.defaultURL, ReplyClassifyResultsDecoder.defaultURL] {
+            #expect(url.deletingLastPathComponent() != live,
+                    "\(url.lastPathComponent) still resolves into the live handoff directory")
+        }
+    }
+
+    // It is a redirect, not a refusal. A test exercising a real write path should still exercise it, and
+    // a guard that silently dropped the write would leave the live folder looking exactly like one a
+    // working guard protects (L11).
+    @Test func aHandoffWriteDuringATestRunStillLandsSomewhereReadable() throws {
+        let sentinel = "2097 guard sentinel \(UUID().uuidString)"
+        let file = StoreLocation.handoffDirectory.appendingPathComponent("guard-probe-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: file) }
+
+        try sentinel.write(to: file, atomically: true, encoding: .utf8)
+
+        #expect(try String(contentsOf: file, encoding: .utf8) == sentinel)
+        #expect(file.path.hasPrefix(StoreLocation.testRunHandoffDirectory.path),
+                "the write landed outside the directory this run is redirected to")
+    }
+
+    // The pure resolver still answers for whatever it is handed, so a test naming its OWN throwaway
+    // directory keeps it. Only the computed live path is swapped.
+    @Test func aDirectoryATestNamesItselfIsLeftAlone() {
+        let mine = FileManager.default.temporaryDirectory
+            .appendingPathComponent("my-own-handoff-\(UUID().uuidString)", isDirectory: true)
+
+        #expect(StoreLocation.writableHandoffDirectory(mine, isUnderTest: false) == mine)
+        // The pure resolver derives its folder from the root it is handed, so it stays under `mine`
+        // rather than being swapped for the test run's directory.
+        #expect(StoreLocation.handoffDirectory(appSupport: mine, isDebugBuild: false)
+                    .path.hasPrefix(mine.path))
+    }
+
+    // And outside a test run nothing is swapped, or the app itself would write to a temp folder and Dan
+    // would lose every handoff file. This is the half that a redirect keyed on the wrong flag breaks.
+    @Test func theRealAppStillResolvesToTheRealDirectory() {
+        let live = StoreLocation.handoffDirectory(appSupport: StoreLocation.appSupport,
+                                                  isDebugBuild: StoreLocation.isDebugBuild)
+
+        #expect(StoreLocation.writableHandoffDirectory(live, isUnderTest: false) == live)
+    }
 }
