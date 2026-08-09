@@ -83,6 +83,10 @@ struct SourcesView: View {
     // show, and this sheet re-evaluates its body on every keystroke and scroll tick. Recomputed by the
     // .onChange below only when a show that the list actually counts changes.
     @State private var unplacedRooms: [UnplacedRooms.Room] = []
+    // #2216: the sources the live extract run has been asked for and not yet come back with, read once
+    // per sheet build rather than per row (a per-row file read would put two file reads on every one of
+    // 62 rows on every redraw). Empty whenever no run is in flight.
+    @State private var sourcesBeingReadNow: Set<String> = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -179,6 +183,11 @@ struct SourcesView: View {
         // #1209: the Downbeat client list, read once when the sheet opens, so each row can show whether it
         // matches a known client. Read-only; nothing here writes it.
         .task {
+            // #2216: refreshed with the rest of the sheet's live reads. A run that finishes while the
+            // sheet is open leaves the row saying a read is under way until the next build, which is the
+            // safe direction: the unread flag clears on ingest and the line disappears on its own.
+            sourcesBeingReadNow = ScoutReadInFlight.loadSourceIdsStillToRead(
+                isRunning: ScoutExtractService.isRunning(now: Date()))
             let loaded = DownbeatBridge.loadWithHealth(now: Date())
             // #1429: sort the roster ONCE here, so the "Always" override submenu can iterate it in order
             // without re-sorting every time a row's menu is built. Order is irrelevant to every other reader
@@ -817,9 +826,13 @@ struct SourcesView: View {
             // it rather than repeat it.
             let readState = SourceReadState.of(source)
             if readState.isWorthShowing(lastCheckedAt: source.lastCheckedAt, failure: source.lastFailure) {
-                Text(readState.label)
+                // #2216: a row whose page the live run is reading right now says so, instead of asking
+                // for the scout that is already under way.
+                let beingReadNow = sourcesBeingReadNow.contains(source.sourceId)
+                Text(readState.label(now: Date(), beingReadNow: beingReadNow))
                     .font(.system(size: 11))
-                    .foregroundStyle(readState.needsAScout ? OVColor.gold : OVColor.inkFaint)
+                    .foregroundStyle(readState.needsAScout(beingReadNow: beingReadNow)
+                                     ? OVColor.gold : OVColor.inkFaint)
                     .fixedSize(horizontal: false, vertical: true)
             }
 

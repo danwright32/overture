@@ -25,7 +25,13 @@ enum SourceReadState: Equatable, Sendable {
 
     // The only state that asks Dan for anything: there are listings here nobody has read, and a scout he
     // starts is what reads them. Everything else is just a fact.
-    var needsAScout: Bool {
+    var needsAScout: Bool { needsAScout(beingReadNow: false) }
+
+    // #2216: a source the live run is ALREADY reading needs nothing from Dan. The row was asking for a
+    // scout while the scout he had started was reading that exact page, and a second press cannot help.
+    // Gold is for what he must act on, so a row that is being handled is not gold either.
+    func needsAScout(beingReadNow: Bool) -> Bool {
+        guard !beingReadNow else { return false }
         if case .unreadChangesWaiting = self { return true }
         return false
     }
@@ -84,13 +90,17 @@ enum SourceReadState: Equatable, Sendable {
 
     var label: String { label(now: Date()) }
 
-    func label(now: Date) -> String {
+    func label(now: Date, beingReadNow: Bool = false) -> String {
         switch self {
         case .neverRead:
             return "Not read yet"
         case .read(let at):
             return "Read \(relative(at, now: now))"
         case .unreadChangesWaiting:
+            // #2216: the run Dan started is reading this page right now, so the honest line is what is
+            // happening, not a request for the thing already under way. It clears itself when the results
+            // ingest, exactly as it did the night this was found.
+            if beingReadNow { return "New listings. The scout is reading them now." }
             // What it means, and what to do about it. A state Dan cannot act on is one he learns to
             // scroll past.
             return "New listings, not read yet. Run a scout to read them."

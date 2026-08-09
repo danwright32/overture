@@ -41,3 +41,44 @@ enum ScoutExtractCurrentSource {
         return currentName(queue: queue, results: results)
     }
 }
+
+// #2216: which sources a run in flight is still going to read.
+//
+// Dan pressed scout, looked at the Sources sheet nine minutes later, and saw two rows telling him to run
+// a scout. He had just run one. It was, at that moment, reading those exact two pages: four detached
+// runs were alive, 18 of 30 pages done, and both sources were queued in chunks still working.
+//
+// Every stored fact on those rows was correct. The fetch had landed and set the unread flag, and the read
+// was queued behind a dozen other pages. What was wrong was that one sentence covered two situations:
+// nobody is going to read these unless Dan starts a scout, and the scout he started is reading them right
+// now. Told the second, he does the reasonable thing and presses scout again, which is how he ran two
+// that night. A second press cannot help.
+//
+// Derived from the same two files ScoutExtractCurrentSource already diffs, so there is no second idea of
+// what a run is doing: the queue names every source the run was asked for, and the results file names
+// every one it has come back with.
+enum ScoutReadInFlight {
+    // The sourceIds a live run has been asked for and not yet reported on. Empty when no run is in
+    // flight, so a stale queue file left over from a finished run can never speak for one.
+    static func sourceIdsStillToRead(isRunning: Bool,
+                                     queue: ScoutExtractQueue?,
+                                     results: ScoutExtractResults?) -> Set<String> {
+        guard isRunning, let queue else { return [] }
+        let reported = Set(results?.results.map(\.sourceId) ?? [])
+        return Set(queue.items.map(\.sourceId)).subtracting(reported)
+    }
+
+    // Best-effort live read, the same degrade-safe shape as loadCurrentName: a missing or half-written
+    // file reads as "no run is reading anything", which is the safe direction. It leaves the row asking
+    // for a scout, which is only ever a wasted press, where the opposite mistake would hide a source that
+    // genuinely needs one.
+    static func loadSourceIdsStillToRead(isRunning: Bool,
+                                         queueURL: URL = ScoutExtractQueueBuilder.defaultURL,
+                                         resultsURL: URL = ScoutExtractResultsDecoder.defaultURL) -> Set<String> {
+        guard isRunning else { return [] }
+        guard let queueData = try? Data(contentsOf: queueURL),
+              let queue = try? JSONDecoder().decode(ScoutExtractQueue.self, from: queueData) else { return [] }
+        let results = (try? Data(contentsOf: resultsURL)).flatMap { try? ScoutExtractResultsDecoder.decode($0) }
+        return sourceIdsStillToRead(isRunning: true, queue: queue, results: results)
+    }
+}

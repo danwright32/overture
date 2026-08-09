@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1192 sentences**, from 393 source files.
+Every sentence Overture can say to Dan: **1193 sentences**, from 393 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1014,6 +1014,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "New finds land here to keep or dismiss."
     `Domain/StageEmptyState.swift`
 "New listings, not read yet. Run a scout to read them."
+    `Domain/SourceReadState.swift`
+"New listings. The scout is reading them now."
     `Domain/SourceReadState.swift`
 "No Downbeat client export was found, so the scout treated every prospect as a cold lead. Open Downbeat to export your client list, then run the scout again."
     `Domain/DownbeatExport.swift`
