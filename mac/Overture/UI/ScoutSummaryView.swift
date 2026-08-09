@@ -175,7 +175,7 @@ struct ScoutSummaryView: View {
         VStack(alignment: .leading, spacing: OVSpacing.xs) {
             Text(ScoutSummaryCopy.silentlyEmptyHeading(results.count))
                 .font(.system(size: 12, weight: .semibold)).foregroundStyle(OVColor.rust)
-            Text(ScoutWarningCopy.silentlyEmptyFeed(orgNames: results.map(\.orgName)))
+            Text(ScoutWarningCopy.silentlyEmptyFeed(sources: results.map { ($0.orgName, $0.droppedRowCount) }))
                 .font(.system(size: 12)).foregroundStyle(OVColor.ink)
                 .fixedSize(horizontal: false, vertical: true)
 

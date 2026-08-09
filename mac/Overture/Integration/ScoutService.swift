@@ -87,7 +87,7 @@ enum ScoutService {
             let parts = [failureWarning, unqueuedWarning].compactMap { $0 }
             if !parts.isEmpty { return parts.joined(separator: "\n\n") }
             if !silentlyEmptySources.isEmpty {
-                return ScoutWarningCopy.silentlyEmptyFeed(orgNames: silentlyEmptySources.map(\.orgName))
+                return ScoutWarningCopy.silentlyEmptyFeed(sources: silentlyEmptySources.map { ($0.orgName, $0.droppedRowCount) })
             }
             return clientListWarning
         }
@@ -161,6 +161,14 @@ enum ScoutService {
         // couldn't-be-checked failure, so Dan can judge whether it is the wrong page without leaving the
         // popup for the Sources sheet. nil only for Carnegie's native feed, which has no page to correct.
         var listingsURL: String? = nil
+        // #1539: how many rows this run READ and then dropped. Zero when the page listed nothing at all.
+        //
+        // It is the difference between the only two ways a source with a history comes back empty, and
+        // the warning was explaining both as the first: "Its page format may have changed" was shown for
+        // The Players Theatre on 2026-07-26, whose page had been read fine and listed 149 shows, every
+        // one dropped for having no venue (#1529). Nothing about the format had changed, and the
+        // suggested cause sent Dan to inspect a page that was correct.
+        var droppedRowCount: Int = 0
 
         enum State: Equatable, Sendable {
             case ingested(found: Int)     // ran natively and its shows are in the store (Carnegie)

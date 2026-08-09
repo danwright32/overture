@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1189 sentences**, from 393 source files.
+Every sentence Overture can say to Dan: **1191 sentences**, from 393 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -2377,8 +2377,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/WatchlistEditing.swift`
 "\(orgName) asked not to be contacted, so Overture won't watch them again."
     `Domain/WatchlistEditing.swift`
-"\(orgNames.count) sources have listed shows before and came back with nothing this run: \(list). Their page formats may have changed."
-    `Domain/ScoutWarningCopy.swift`
 "\(outcome.drafted) drafted"
     `Domain/PrepRunSummary.swift`
 "\(outcome.found) found"
@@ -2413,6 +2411,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "\(range) is now blocked"
     `App/ActionFeedback.swift`
+"\(readNothing.count) sources have listed shows before and came back with nothing this run: \(list). Their page formats may have changed."
+    `Domain/ScoutWarningCopy.swift`
 "\(readable) shows listed, down from the usual \(baseline), "
     `Domain/SourceReadability.swift`
 "\(runs[0]) runs past \(dateLabel), so dismissing it takes its later nights too."
@@ -2449,6 +2449,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SourcesView.swift`
 "\(shows) waiting on this"
     `UI/SourcesView.swift`
+"\(source.droppedRowCount) shows"
+    `Domain/ScoutWarningCopy.swift`
+"\(source.orgName) listed \(shows) this run and every one was dropped, so its page is being read fine. Open Sources to see why they were dropped."
+    `Domain/ScoutWarningCopy.swift`
 "\(stamp(now)) \(message)\n"
     `App/AgentLog.swift`
 "\(stamp) \(nothingCopiedLogNote)"
