@@ -19,11 +19,9 @@ enum StoreBackup {
         [StoreLocation.storeFilename, StoreLocation.storeFilename + "-wal", StoreLocation.storeFilename + "-shm"]
     }
 
-    private static let timestampFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "yyyyMMdd-HHmmss"
-        return f
-    }()
+    // #1878: the stamp, the shape and the pruning now live in DatedFolderRotation, shared with the paid
+    // run archive. Same behaviour, one implementation, so the two retentions cannot drift apart.
+    private static func timestamp(_ date: Date) -> String { DatedFolderRotation.stamp(date) }
 
     // #1410: WHY a snapshot is being taken, because it changes what the snapshot is worth. The launch
     // backup is a copy of Dan's data. The one the #663 guard takes before refusing to open is a copy of
@@ -82,7 +80,7 @@ enum StoreBackup {
         let storeURL = dataDirectory.appendingPathComponent(StoreLocation.storeFilename)
         guard fileManager.fileExists(atPath: storeURL.path) else { return nil }
 
-        let stamp = timestampFormatter.string(from: now)
+        let stamp = timestamp(now)
         let backups = backupsDirectory(dataDirectory: dataDirectory)
         let destination = backups.appendingPathComponent(stamp + reason.folderSuffix, isDirectory: true)
         // A second launch in the same second (the app's own crash-relaunch-loop concern, per
@@ -159,23 +157,13 @@ enum StoreBackup {
     // toward `keep` nor deleted. It is evidence of a file that should never have been at that path,
     // and a burst of them must not quietly rotate away every real backup Dan has.
     static func isRotatableBackupFolder(_ name: String) -> Bool {
-        let parts = name.split(separator: "-", omittingEmptySubsequences: false)
-        guard parts.count == 2, parts[0].count == 8, parts[1].count == 6 else { return false }
-        return parts.allSatisfy { $0.allSatisfy(\.isNumber) }
+        DatedFolderRotation.isRotatableFolder(name)
     }
 
     // Deletes all but the `keep` most recent dated backup folders. Folder names are
     // `yyyyMMdd-HHmmss`, which sort chronologically as plain strings, so no date parsing needed.
     static func pruneOldBackups(in backupsDirectory: URL, keep: Int, fileManager: FileManager = .default) {
-        let entries = (try? fileManager.contentsOfDirectory(
-            at: backupsDirectory, includingPropertiesForKeys: [.isDirectoryKey])) ?? []
-        let dated = entries.filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true }
-            .filter { isRotatableBackupFolder($0.lastPathComponent) }
-            .sorted { $0.lastPathComponent < $1.lastPathComponent }
-        guard dated.count > keep else { return }
-        for old in dated.dropLast(keep) {
-            try? fileManager.removeItem(at: old)
-        }
+        DatedFolderRotation.prune(in: backupsDirectory, keep: keep, fileManager: fileManager)
     }
 
     // The launch-time policy, generic over whatever "open the store" returns so it's testable

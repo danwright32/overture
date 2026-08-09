@@ -732,6 +732,12 @@ struct RootView: View {
                 // still needing an intent (#112). Both no-op when there's nothing to do.
                 ingestReplyClassifications()
                 startReplyClassifyIfNeeded()
+                // #1878: a run that ENDED while Overture was closed still has its pair on disk with nobody
+                // to keep it, and the next run overwrites both. Archived here, before any of the settling
+                // below, and only when no run is live: a live run's results file is still being written,
+                // and a copy of it taken now would claim that run's own folder with a half-finished
+                // version the real settle would then decline to replace.
+                if !PrepQueueService.isRunning(now: Date()) { archiveFinishedPrepRun() }
                 // If a run is in flight at launch, watch it to completion; otherwise just ingest any
                 // results already on disk, without nagging about an old failed run (#48).
                 if PrepQueueService.isRunning(now: Date()) {
@@ -1220,6 +1226,10 @@ struct RootView: View {
     // #1938: the waiting itself moved to DetachedRunActivity.followUntilFinished, which polls only while a
     // run is in flight. What is left here is the settling, which is what this always really was.
     private func settleFinishedPrepRun() async {
+        // #1878: keep this run's work-list and results before anything else. FIRST, and above the dead-run
+        // sweep in particular, because that sweep RETURNS: a run that died is the one whose evidence is
+        // worth the most, and archiving after it would be archiving every run except those.
+        archiveFinishedPrepRun()
         // #1130: the run has ended (the marker cleared). Close the takeover so it does not sit showing a
         // finished run; the outcome surfaces below via ingest / the empty-run notice.
         prepSheetShown = false
@@ -1267,6 +1277,19 @@ struct RootView: View {
         case .idle:
             break
         }
+    }
+
+    // #1878: keep the finished run's work-list and results, since the next run overwrites both. One
+    // helper with two callers (the settle above, and launch for a run that ended while Overture was
+    // closed), so the two paths cannot archive different things or drift apart.
+    //
+    // Best effort by construction: archiveFinishedRun never throws, reports its own failure to the
+    // problem ledger, and returns an outcome nothing here depends on. The results are the thing Dan paid
+    // for; this is a copy of them, and insurance must never be able to cost what it insures.
+    private func archiveFinishedPrepRun() {
+        PrepRunArchive.archiveFinishedRun(queueURL: PrepQueueBuilder.defaultURL,
+                                          resultsURL: PrepImporter.defaultURL,
+                                          now: Date())
     }
 
     // #1613: sweep a Prep run that died rather than finished, and say so. Returns whether there was one,
