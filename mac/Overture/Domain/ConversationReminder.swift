@@ -182,14 +182,10 @@ enum ConversationReminder {
     // so it could never read as overdue and never sort above work that had only just arrived. Each case
     // now anchors to the instant its work actually arrived (the reply, the AI guess, the show ending).
     //
-    // Clamped to `now` because an anchor is evidence, not a schedule: a reply stamped in the future (clock
-    // skew) or a show date recorded wrong must not push a due item OUT of the due list. Nothing here
-    // decides whether an item is due, only which day it belongs to; the `now >= date` gate in reminder()
-    // still owns that, and every anchor is at or before now, so everything due before is still due.
+    // #2118: through the shared rule, which is the same anchoring a direct hire inquiry's reply gets. Two
+    // copies of it had already drifted once, and both kinds of row sit under the same date headings.
     private static func anchored(_ arrivedAt: Date?, now: Date) -> Date {
-        // A row with no recorded instant (written before its field was filled) keeps the old reading
-        // rather than dropping out of the due list entirely.
-        min(arrivedAt ?? now, now)
+        NextReachOut.arrived(arrivedAt, now: now)
     }
 
     // Eastern midnight opening the day after the performance, the moment a closing note starts being owed.

@@ -1293,7 +1293,7 @@ enum QueueModel {
         // the persistent model id, which is temporary and not yet distinct for an object that has not
         // been saved, so looking the model up by it silently gave every row the first inquiry's date.
         let inquiryEntries = inquiries.compactMap { inquiry -> ReachedOutEntry? in
-            guard let due = inquiry.nextReachOutDate,
+            guard let due = inquiry.nextReachOutDate(now: now),
                   let row = inquiryRows([inquiry], now: now).first else { return nil }
             return .inquiry(inquiry: inquiry, row: row, next: due)
         }

@@ -192,14 +192,28 @@ extension Inquiry {
     // heading as the shows there ("Grouped by when to reach out next", #1233) instead of carrying its
     // event date into a view where every other date means something else.
     //
-    // Waiting on them: the day the follow-up nudge comes due. Already replied: the day they replied,
+    // Waiting on them: the day the follow-up nudge comes due. Already replied: the day the reply arrived,
     // because it is Dan's move now, and dating it at a nudge that no longer applies would bury the one
     // row actually waiting on him under a future heading. nil when there is nothing to be due about
     // (never sent, so it belongs in Review; or closed).
-    var nextReachOutDate: Date? {
-        guard isOpen, let sentAt else { return nil }
-        if replied { return repliedAt ?? sentAt }
-        return BusinessDay.advance(sentAt, byBusinessDays: Inquiry.followUpNudgeBusinessDays)
+    //
+    // #2118: answered through NextReachOut, the same rule a scouted show's contact answers it through, so
+    // the two kinds of row that share one set of date headings cannot mean different things by them. It
+    // shares only the rule: an inquiry stays a fully separate entity, its own pacing below, and it still
+    // bypasses the queue's lead-time window because somebody is waiting on a reply whatever the event date.
+    //
+    // Takes `now` because a reply that has already landed is dated by its own arrival, clamped to the
+    // clock. Waiting was the divergence this closed: the show half took the moment the person WROTE and
+    // this half took the moment Overture noticed, up to a night apart on the two cards for one reply.
+    func nextReachOutDate(now: Date) -> Date? {
+        NextReachOut.date(isInPlay: isOpen && sentAt != nil, now: now) {
+            guard let sentAt else { return [] }
+            // Falls back to the send for a row that replied before an arrival time was ever captured,
+            // which is a real past instant rather than the reading of the clock `.waiting(since: nil)`
+            // would settle for.
+            if replied { return [.waiting(since: replyArrivedAt ?? sentAt)] }
+            return [.scheduled(BusinessDay.advance(sentAt, byBusinessDays: Inquiry.followUpNudgeBusinessDays))]
+        }
     }
 
     func followUpNudgeDue(now: Date) -> Bool {

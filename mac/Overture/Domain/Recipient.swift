@@ -429,12 +429,9 @@ final class Recipient {
         return theirs > handled
     }
 
-    // #2113: when the reply actually ARRIVED, which is what every date surface wants. Prefers the instant
-    // they sent it over the instant Overture noticed, and falls back to the notice for a row recorded
-    // before the send time was captured. One definition, because the queue, the reminder calculator and
-    // the OmniFocus sync all ask it and two of them asking differently is how a card ends up under the
-    // wrong day (L16).
-    var replyArrivedAt: Date? { inboundReplySentAt ?? repliedAt }
+    // #2113 lives on ReplyWatchableRecipient now (#2118): `replyArrivedAt` is one definition for every
+    // watched thread, an inquiry's included, because the two kinds of row share the reached-out queue's
+    // date headings and two of them dating a reply differently is how a card ends up under the wrong day.
 
     // Ready to actually receive the pitch: still pending and has a real address. A form-only contact
     // (#368) is pending but has no email, so it is never auto-sendable until Dan fills one in. The send
