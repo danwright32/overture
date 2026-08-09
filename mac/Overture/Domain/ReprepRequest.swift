@@ -10,6 +10,15 @@ enum ReprepMode: Sendable, Equatable {
 }
 
 enum ReprepRequest {
+    // #1940: is a Prep run going to rewrite this show? The two flags are independent halves of one
+    // request, and three surfaces now ask that question of them (the "Re-prep queued" badge, the control
+    // it disables, and the Review stage a queued re-prep takes a show out of). One definition rather than
+    // the same `||` written three times, so a third flag added later cannot reach two of them and miss the
+    // third.
+    static func isQueued(draftRequested: Bool, contactsRequested: Bool) -> Bool {
+        draftRequested || contactsRequested
+    }
+
     // #733: guard against repeatedly re-prepping the same prospect. 24 hours from when a Prep run
     // last actually served this prospect (a normal fresh draft, or a served re-prep), simple and
     // predictable rather than tied to the Prep run cadence itself.

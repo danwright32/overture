@@ -236,7 +236,9 @@ enum DebugStaging {
     }
 
     // #1292: a re-prep-queued draft, so the gold "Re-prep queued" badge (#1143) on the review card can be
-    // seen. reprepDraftRequested is the flag isReprepQueued reads; the show stays .drafted in Review.
+    // seen. reprepDraftRequested is the flag isReprepQueued reads. #1940: the show keeps its draft and its
+    // status of .drafted, but the queued re-prep now files it under PREP rather than Review, so that is
+    // the stage to open to find this row.
     static func stageReprepQueuedDraft(in context: ModelContext, now: Date) -> Prospect {
         let key = "debug-of-reprep-\(Int(now.timeIntervalSince1970))"
         let p = Prospect(naturalKey: key, groupName: "Meridian Chorale (debug)", discipline: "choral",

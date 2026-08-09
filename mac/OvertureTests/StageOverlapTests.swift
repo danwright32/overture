@@ -124,7 +124,7 @@ struct StageOverlapTests {
         sentContact(drafted)
         // Approved, waiting on a click.
         show(ctx, key: "approved", status: .approved, hasDraft: true)
-        // Re-prep queued on a drafted show: Prep and Review at once, deliberately.
+        // Re-prep queued on a drafted show: Prep alone since #1940, never Review as well.
         let reprep = show(ctx, key: "reprep", status: .drafted, hasDraft: true)
         reprep.reprepContactsRequested = true
         // Sent, with a contact still held.
@@ -138,14 +138,21 @@ struct StageOverlapTests {
         #expect(violations.isEmpty, "\(violations.map { "\($0.key): \($0.rule.rawValue) \($0.focuses)" })")
     }
 
-    // The re-prep overlap is not merely tolerated by the rules, it is real, and the suite has to hold it:
-    // a rule that forbade it would be satisfied by silently dropping a re-prepped show out of Prep.
-    @Test func aReprepOnADraftedShowIsInPrepAndReviewAtOnce() throws {
+    // #1940 REVERSES this pair, deliberately. It read "the re-prep overlap is not merely tolerated by the
+    // rules, it is real, and the suite has to hold it", because a rule forbidding it could have been
+    // satisfied by silently dropping a re-prepped show out of Prep. Dan's call, 2026-08-01: Review holds
+    // drafts worth reading NOW, and a draft a queued run is about to rewrite is not one of those, so the
+    // show sits under Prep alone until the run ends.
+    //
+    // The half the original test was protecting is unchanged and asserted here too: it is still in Prep, so
+    // nothing was dropped. Where it goes when the run ends without serving it belongs to
+    // ReprepLeavesReviewTests and ReprepReleaseTests.
+    @Test func aReprepOnADraftedShowSitsUnderPrepAloneAndLeavesReview() throws {
         let ctx = makeContext()
         let p = show(ctx, key: "reprep", status: .drafted, hasDraft: true)
         p.reprepContactsRequested = true
 
-        #expect(Set(focuses(p)) == Set([.prep, .review]))
+        #expect(Set(focuses(p)) == Set([.prep]))
         #expect(StageOverlap.violations(in: [p]).isEmpty)
     }
 
@@ -209,6 +216,19 @@ struct StageOverlapTests {
             let stage = StageNavigation.naturalKeys(for: .sendBlocked, in: [p]).count == 1
             #expect(card != stage, "\(p.naturalKey): card=\(card) stage=\(stage)")
         }
+    }
+
+    // #1940: which focuses the one-lifecycle-stage rule actually covers. Before it, the rule was a
+    // hand-written pair, so Prep and Prep blocked escaped it entirely and the sweep over the live store
+    // could not have reported a show sitting in Prep and Review at once even after that became a defect.
+    // Asserted as the whole lifecycle family rather than as four names, so a lifecycle focus added later
+    // joins the rule by declaring its family instead of by somebody remembering this list.
+    @Test func theOneLifecycleStageRuleCoversEveryLifecycleFocus() {
+        let lifecycle = StageNavigation.countedFocuses.filter { StageOverlap.family(of: $0) == .lifecycle }
+
+        #expect(Set(StageOverlap.mutuallyExclusiveLifecycle) == Set(lifecycle))
+        #expect(Set(StageOverlap.mutuallyExclusiveLifecycle)
+                == Set([.scout, .prep, .prepBlocked, .review]))
     }
 
     // Every focus says which half of the funnel it is about. This is what carries the rule forward: a
