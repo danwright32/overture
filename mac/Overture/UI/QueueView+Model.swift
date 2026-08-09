@@ -1093,12 +1093,16 @@ enum QueueModel {
     // `QueueWindowAndScoutHorizonTests` measures all of this from the constants themselves and fails if
     // either moves, so changing one is a deliberate act rather than a silent drift.
     //
-    // #2348, stated plainly so nobody reads a guarantee into it that is not there: no code applies this
-    // window to the queue any more. Membership is StageNavigation's own predicate, which has no far edge
-    // at all, and the last caller of this number was `queueOrder`, the retired second filter deleted with
-    // #2348 (itself already unreachable from the app since #1567). So this is the stated DEMAND the scout
-    // horizon is sized against, read by the test above and by the two doc comments that link to it, and
-    // nothing hides a show for exceeding it.
+    // WHERE THIS IS ENFORCED, and on what (#2359): [[StageNavigation]] applies it, in its `.scout` branch
+    // alone, so a show more than this many days out is not offered for triage. Nothing else is bounded by
+    // it: a show Dan has already kept, prepped, drafted, approved or pitched keeps its place on its stage
+    // whatever its date, and an inquiry ignores the window entirely because somebody is waiting on a reply.
+    //
+    // It reads this constant from the one shared predicate rather than restating 90 anywhere, which is
+    // what #1567 and #1575 are about. Between #2348 and #2359 nothing applied it at all: the last caller
+    // was `queueOrder`, a second filter unreachable from the app since #1567 and deleted in #2348, and
+    // for that gap this comment described a window that did not run. Measured on the live store on
+    // 2026-08-09, 119 of the 585 untriaged shows ahead of Dan were past this edge, out to June 2027.
     static let leadTimeWindowDays = 90
     // Within this many days a booking is unrealistic to land, so the event still shows but
     // sinks below everything bookable rather than sitting up top with the nearest dates.

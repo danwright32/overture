@@ -381,8 +381,8 @@ struct EasternTodayTests {
 // retired second filter, which #1567 had already taken off every surface, and the app had no caller left
 // for it. What is still the product's rule is asserted against the predicate the queue really renders
 // from: a past or opened show leaves triage, and an undated one never does, in
-// PastShowsLeaveTheScoutQueueTests. There is no ninety-day edge left to test (see the note on
-// QueueModel.leadTimeWindowDays).
+// PastShowsLeaveTheScoutQueueTests. #2359 put the ninety-day edge back, in that same predicate rather
+// than beside it, and TriageWindowTests is where it is now asserted.
 
 // #1136: "Drafted by opus" showed twice on a card still in review, once in the row's badge and once
 // inside the draft-review panel (next to "Edited"). The panel renders exactly when the item has a draft

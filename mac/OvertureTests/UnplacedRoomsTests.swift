@@ -21,11 +21,14 @@ struct UnplacedRoomsTests {
 
     private let now = Date(timeIntervalSince1970: 1_800_000_000)
 
+    // #2359: dated inside the queue's lead time window, against the pinned `today` below, rather than
+    // parked in 2099. The room list rides on StageNavigation.queueKeys, which now stops at that window,
+    // so a date far enough out to be "always in the future" is also far enough out to be in no stage.
     @discardableResult
     private func show(_ ctx: ModelContext, key: String, venue: String?, location: String? = nil,
                       title: String = "An evening of songs") -> Prospect {
         let p = Prospect(naturalKey: key, groupName: title, discipline: "music", venue: venue,
-                         performanceDate: "2099-05-05", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-09-01", sourceListingURL: nil, websiteURL: nil,
                          priorRelationship: "none", production: "self", profile: "neutral",
                          coverage: "unknown", fitScore: 3, tier: "longshot", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
@@ -216,10 +219,12 @@ struct UnplacedRoomsSignatureTests {
                            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
     }
 
+    // #2359: inside the lead time window measured from the pinned `today` these tests pass, for the same
+    // reason as the suite above.
     @discardableResult
     private func show(_ ctx: ModelContext, key: String, venue: String?, location: String? = nil) -> Prospect {
         let p = Prospect(naturalKey: key, groupName: "A show", discipline: "music", venue: venue,
-                         performanceDate: "2099-05-05", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-09-01", sourceListingURL: nil, websiteURL: nil,
                          priorRelationship: "none", production: "self", profile: "neutral",
                          coverage: "unknown", fitScore: 3, tier: "longshot", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
