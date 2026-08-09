@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1186 sentences**, from 393 source files.
+Every sentence Overture can say to Dan: **1188 sentences**, from 393 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -21,6 +21,7 @@ What is not, and why:
 ## Excluded at the source
 
 - `App/StoreBackup.swift`: backup.log is a diagnostic record, not the app's voice on screen
+- `App/StoreSchemaGuard.swift`: sqlite's own error text, for backup.log, never shown on screen
 - `App/StoreShrinkCheck.swift`: SQL, not a sentence Overture says to Dan
 - `App/UpdateCommandFile.swift`: a shell script for Terminal, not Overture's voice to Dan (#915)
 - `Domain/CatchAllFitReasonMigration.swift`: the retired sentence, named only so this pass can find and clear it
@@ -1255,6 +1256,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreShrinkCheck.swift`
 "Overture contact: "
     `Domain/OmniFocusSync.swift`
+"Overture could not open its data file to check it at \(path). Nothing has been "
+    `App/StoreSchemaGuard.swift`
 "Overture could not update"
     `Domain/UpdateAttempt.swift`
 "Overture couldn't finish starting up"
@@ -1515,8 +1518,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "Running now…"
     `Domain/AgentRoster.swift`
-"SELECT name FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1;"
-    `App/StoreSchemaGuard.swift`
 "Save changes"
     `Domain/InquiryCopy.swift`
 "Save draft"
@@ -2555,6 +2556,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SendConfirmSheet.swift`
 "but not read anything."
     `Domain/ScoutStartGate.swift`
+"changed. Check that file before reopening Overture."
+    `App/StoreSchemaGuard.swift`
 "couldn't save the producer answers, so other shows by them won't reuse this one"
     `Domain/ReachabilityRunSummary.swift`
 "couldn't save what this check found, so it isn't finished and those shows may be checked again"
@@ -2607,6 +2610,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/FollowUpsView.swift`
 "opened on. Paste \(one ? "that month's" : "a month's") own link and I'll "
     `UI/LeadIntakeModel.swift`
+"opened or changed. The file may be in use by another program, or its permissions may have "
+    `App/StoreSchemaGuard.swift`
 "permission. A successful sync clears it."
     `Domain/AppNotice.swift`
 "read it."
