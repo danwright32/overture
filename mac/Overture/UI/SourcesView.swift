@@ -83,6 +83,15 @@ struct SourcesView: View {
     // show, and this sheet re-evaluates its body on every keystroke and scroll tick. Recomputed by the
     // .onChange below only when a show that the list actually counts changes.
     @State private var unplacedRooms: [UnplacedRooms.Room] = []
+    // #2288: Dan's town refusals, read here for the reason RootView reads them. The room list is a
+    // promise about shows the Queue will put in front of him, so it has to apply the same geography gate
+    // the Queue's own lists apply, and that gate is one of the inputs the shared rule takes.
+    @Query private var excludedTownRows: [ExcludedTown]
+    @Query private var allowedSeedTownRows: [AllowedSeedTown]
+    private var geo: GeoRefusals {
+        GeoRefusals(userExcludedTowns: Set(excludedTownRows.map(\.town)),
+                    allowedSeedTowns: Set(allowedSeedTownRows.map(\.town)))
+    }
     // #2216: the sources the live extract run has been asked for and not yet come back with, read once
     // per sheet build rather than per row (a per-row file read would put two file reads on every one of
     // 62 rows on every redraw). Empty whenever no run is in flight.
@@ -204,8 +213,13 @@ struct SourcesView: View {
         }
         // #1752: the same gate for the unplaced-room list. Answering a room fills its shows' locations,
         // which moves the signature, so the list drops that room without anything having to tell it to.
-        .onChange(of: UnplacedRooms.signature(prospects, today: QueueModel.easternToday()), initial: true) {
-            unplacedRooms = UnplacedRooms.from(prospects, today: QueueModel.easternToday())
+        // #2288: and the same inputs go to both calls, because the signature is built from the list's own
+        // rule, so a signature computed against a different clock or gate would cache a list nobody asked
+        // for.
+        .onChange(of: UnplacedRooms.signature(prospects, today: QueueModel.easternToday(),
+                                              now: Date(), geo: geo), initial: true) {
+            unplacedRooms = UnplacedRooms.from(prospects, today: QueueModel.easternToday(),
+                                               now: Date(), geo: geo)
         }
         // Recompute the cached coverage result AND the per-source returning-client flags ONLY when their
         // real inputs change. The signature is cheap to evaluate every redraw; the O(clients x sources)
