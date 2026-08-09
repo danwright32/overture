@@ -280,8 +280,11 @@ struct CopyInventoryTests {
         """.write(to: directory.appendingPathComponent("Unclosed.swift"),
                   atomically: true, encoding: .utf8)
 
+        // floor: 1, because this fixture tree is deliberately one file. The walk's own refusal
+        // (#2311) is about a path that stopped resolving, and refusing here would be refusing the
+        // test's own setup rather than catching anything.
         #expect(throws: CopyInventory.Failure.self) {
-            try CopyInventory.build(root: directory)
+            try CopyInventory.build(root: directory, floor: 1)
         }
     }
 

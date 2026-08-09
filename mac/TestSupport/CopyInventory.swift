@@ -131,9 +131,12 @@ enum CopyInventory {
         }
     }
 
-    static func build(root: URL = appRoot) throws -> Inventory {
+    // `floor` is what the walk refuses below (#2311). It defaults to the real app's floor and is
+    // lowered only by the fixture tests, which deliberately build a two-file tree: refusing there
+    // would be refusing the test's own setup rather than catching a broken path.
+    static func build(root: URL = appRoot, floor: Int = 50) throws -> Inventory {
         var inventory = Inventory()
-        let files = try swiftFiles(under: root)
+        let files = try swiftFiles(under: root, floor: floor)
         inventory.filesScanned = files.count
 
         for file in files {
@@ -164,13 +167,10 @@ enum CopyInventory {
         }
     }
 
-    private static func swiftFiles(under root: URL) throws -> [URL] {
-        let enumerator = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil)
-        var out: [URL] = []
-        while let url = enumerator?.nextObject() as? URL {
-            if url.pathExtension == "swift" { out.append(url) }
-        }
-        return out.sorted { $0.path < $1.path }
+    // #2311: through the shared walk, which refuses out loud when it comes back short. An inventory
+    // built from no files is an empty list of everything the app says, which is what #1967 shipped.
+    private static func swiftFiles(under root: URL, floor: Int) throws -> [URL] {
+        AppSourceWalk.urls(under: root, floor: floor)
     }
 
     // Internal (not private) so the #1491 regression test can pin it directly. Both paths are

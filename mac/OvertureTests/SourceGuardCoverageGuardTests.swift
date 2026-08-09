@@ -72,12 +72,11 @@ struct SourceGuardCoverageGuardTests {
         return FileReferences(paths: paths, names: names)
     }
 
+    // #2311: through the shared walk, which refuses out loud on an empty result. This guard exists to
+    // find stale references across every other test file, so a walk that finds none of them reports
+    // that nothing is stale, which is the same sentence as "everything is fine".
     private static func otherTestFiles() throws -> [URL] {
-        guard let enumerator = FileManager.default.enumerator(at: testsRoot, includingPropertiesForKeys: nil) else {
-            return []
-        }
-        return enumerator.compactMap { $0 as? URL }
-            .filter { $0.pathExtension == "swift" && $0.lastPathComponent != ownFileName }
+        AppSourceWalk.urls(under: testsRoot).filter { $0.lastPathComponent != ownFileName }
     }
 
     @Test func everyReferencedSourcePathExists() throws {

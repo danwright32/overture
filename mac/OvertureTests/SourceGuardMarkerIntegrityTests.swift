@@ -80,19 +80,17 @@ struct SourceGuardMarkerIntegrityTests {
     }
 
     private static let guardFiles: [GuardFile] = {
-        let fm = FileManager.default
         var out: [GuardFile] = []
         for dir in ["OvertureTests", "OvertureHostedTests"] {
-            let root = macRoot.appendingPathComponent(dir)
-            guard let walker = fm.enumerator(at: root, includingPropertiesForKeys: nil) else { continue }
-            for case let url as URL in walker where url.pathExtension == "swift" {
-                guard let text = try? String(contentsOf: url, encoding: .utf8) else { continue }
-                guard !buildsItsOwnText.contains(url.lastPathComponent) else { continue }
-                guard text.contains("propertyBody(") || text.contains("between(") else { continue }
-                let bodies = Set(captures(pathLiteral, in: text, groups: [1])).compactMap {
+            // #2311: through the shared walk, which refuses out loud rather than handing back an
+            // empty list a guard would read as a clean result.
+            for file in AppSourceWalk.files(under: macRoot.appendingPathComponent(dir), floor: 20) {
+                guard !buildsItsOwnText.contains(file.name) else { continue }
+                guard file.text.contains("propertyBody(") || file.text.contains("between(") else { continue }
+                let bodies = Set(captures(pathLiteral, in: file.text, groups: [1])).compactMap {
                     try? String(contentsOf: macRoot.appendingPathComponent($0), encoding: .utf8)
                 }
-                out.append(GuardFile(name: url.lastPathComponent, text: text,
+                out.append(GuardFile(name: file.name, text: file.text,
                                      haystack: bodies.joined(separator: "\n")))
             }
         }

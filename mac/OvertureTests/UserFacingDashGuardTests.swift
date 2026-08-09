@@ -15,7 +15,7 @@ struct UserFacingDashGuardTests {
 
     @Test func appSourceHasNoForbiddenDashInStringLiterals() throws {
         let appDir = Self.appSourceDirectory()
-        let files = Self.swiftFiles(under: appDir)
+        let files = AppSourceWalk.urls(under: appDir)
         #expect(!files.isEmpty)   // guard against a wrong path silently passing
 
         var offenders: [String] = []
@@ -35,7 +35,7 @@ struct UserFacingDashGuardTests {
     @Test func appSourceHasNoForbiddenDashInComments() throws {
         let allowlistedLines: Set<String> = ["Typography.swift:8", "Typography.swift:9"]
         let appDir = Self.appSourceDirectory()
-        let files = Self.swiftFiles(under: appDir)
+        let files = AppSourceWalk.urls(under: appDir)
         #expect(!files.isEmpty)
 
         var offenders: [String] = []
@@ -55,17 +55,9 @@ struct UserFacingDashGuardTests {
 
     private static func appSourceDirectory(file: StaticString = #filePath) -> URL {
         // #1993: searched for, not counted to. A wrong path here yields no files to walk, so the
-        // guard passes over everything it exists to check and reports a clean app.
+        // guard passes over everything it exists to check and reports a clean app. #2311 moved the
+        // refusal into AppSourceWalk, so this guard inherits it rather than remembering it.
         RepoRoot.app
-    }
-
-    private static func swiftFiles(under root: URL) -> [URL] {
-        let e = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil)
-        var out: [URL] = []
-        while let url = e?.nextObject() as? URL {
-            if url.pathExtension == "swift" { out.append(url) }
-        }
-        return out
     }
 
     // MARK: - Scanner
