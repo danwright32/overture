@@ -167,6 +167,29 @@ enum StageNavigation {
         return result
     }
 
+    // #2359: the queue's far edge, applied to TRIAGE ALONE.
+    //
+    // Private, and asked from exactly one branch of `matches` below, because a second copy of this
+    // judgment is the defect this whole milestone exists to prevent (#1567, #1575). The number itself
+    // stays where it has always been, `QueueModel.leadTimeWindowDays`, beside `daysUntil` and
+    // `tooCloseDays`, which are the rest of the same "how far out is this" family; moving it here alone
+    // would separate it from the helper this line calls to use it.
+    //
+    // Deliberately NOT applied to any other stage. A show Dan has kept, prepped, drafted, approved or
+    // pitched is work in flight, and a row disappearing off the stage holding it reads as deletion
+    // (#1014, #901); the filter retired in #2348 never touched the stage lists either. Inquiries never
+    // reach here at all: `stage(for:)` above places them, and it consults no date, because an inquiry is
+    // live for as long as somebody is waiting on a reply.
+    //
+    // An undated show stays. "Date to be confirmed" is ordinary on a season page, and nothing has
+    // measured such a show as far out, so dropping it would lose a real lead on a fact nobody
+    // established. That is the same call #861 made at the past edge.
+    private static func isWithinLeadTime(_ p: Prospect, today: String) -> Bool {
+        guard let days = QueueModel.daysUntil(performanceDate: p.performanceDate, today: today)
+        else { return true }
+        return days <= QueueModel.leadTimeWindowDays
+    }
+
     private static func matches(_ focus: StageFocus, _ p: Prospect, today: String, now: Date,
                                 geo: GeoRefusals) -> Bool {
         // #1570: the geography gate, asked HERE so every surface inherits it, rather than on the
@@ -183,7 +206,13 @@ enum StageNavigation {
             // asking Prospect.hasOpened. An untriaged show is either waiting on him or already open.
             // #1540: "already open", not "already over" -- once a run has started Dan will not pitch it,
             // so it is not work, and the triage list drops it on the same rule.
-            return p.status == .new && !p.hasOpened(today: today)
+            //
+            // #2359: and the same question has a FAR edge, asked here for the first time. Triage had none
+            // at all, so it ran as far ahead as the scout had read: 585 untriaged shows on the live store
+            // on 2026-08-09, 119 of them past 90 days and out to June 2027. Dan's call that day was to
+            // enforce the window the repo had been describing since #1571, and the shows past it come
+            // back on their own as their dates roll in.
+            return p.status == .new && !p.hasOpened(today: today) && isWithinLeadTime(p, today: today)
 
         case .prep:
             // #901: through needsPrepEligible, not needsPrep with the fields spelled out again. Spelled

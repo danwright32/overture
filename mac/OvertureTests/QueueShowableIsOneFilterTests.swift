@@ -65,9 +65,9 @@ struct QueueShowableIsOneFilterTests {
     // and only if some stage will render it. No second filter gets a say.
     @Test func aLeadOpensTheQueueExactlyWhenAStageWillRenderIt() throws {
         let ctx = try context()
-        show(ctx, "near", date: "2026-08-19")                        // inside the old 90-day window
-        show(ctx, "far-future", date: "2027-03-01")                  // ~232 days out, outside it
-        show(ctx, "to-review", status: .drafted, date: "2027-03-01") // in a stage AND outside it
+        show(ctx, "near", date: "2026-08-19")                        // inside the 90 day window
+        show(ctx, "far-future", date: "2027-03-01")                  // ~232 days out, past its edge
+        show(ctx, "to-review", status: .drafted, date: "2027-03-01") // past the edge, and in a stage
         show(ctx, "contacted-quiet", status: .contacted)             // no stage renders this
         show(ctx, "cut", status: .dismissed)
 
@@ -82,16 +82,33 @@ struct QueueShowableIsOneFilterTests {
 
     // MARK: - The show Dan can see
 
-    // The #1567 case. A show past the old 90-day window is still untriaged work and the Scout list
-    // renders it, so searching for it must land him ON it. It used to route to Archive, which says
-    // "gone" about a row that is right there.
-    @Test func aFarFutureUntriagedShowTheScoutListRendersOpensInTheQueue() throws {
+    // The #1567 case, restated after #2359 rather than deleted, because the invariant it guards is
+    // unchanged and the fixture's answer is not.
+    //
+    // The defect was never "a far out show must be reachable". It was that TWO surfaces answered one
+    // question and disagreed, so a row Dan could see in his Scout list sent him to Archive. #2359 gave
+    // triage the far edge the repo had been describing since #1571, and it lives in the shared predicate
+    // both surfaces ask, so they still agree: the Scout list does not render a show 232 days out, and
+    // searching for it opens Archive, which is now the truth about it rather than a contradiction of a
+    // visible row. The show returns to both the day its date comes inside the window.
+    @Test func theScoutListAndTheSearchAgreeAboutAShowPastTheWindow() throws {
         let ctx = try context()
         show(ctx, "far-future", date: "2027-03-01")
 
         let ps = try all(ctx)
-        #expect(scoutRows(ps) == ["far-future"])
-        #expect(opens(ps, "far-future"))
+        #expect(scoutRows(ps).isEmpty)
+        #expect(!opens(ps, "far-future"))
+    }
+
+    // And the half of #1567 that #2359 leaves exactly as it was: a show INSIDE the window that the
+    // Scout list renders must open in the Queue when Dan searches for it, never in Archive.
+    @Test func anUntriagedShowTheScoutListRendersOpensInTheQueue() throws {
+        let ctx = try context()
+        show(ctx, "in-window", date: "2026-10-10")   // the ninetieth day after 2026-07-12
+
+        let ps = try all(ctx)
+        #expect(scoutRows(ps) == ["in-window"])
+        #expect(opens(ps, "in-window"))
     }
 
     // Same shape, different rule: queueOrder hid a still-untriaged show that had dropped out of the
@@ -109,9 +126,10 @@ struct QueueShowableIsOneFilterTests {
         #expect(opens(ps, "gone"))
     }
 
-    // A show that is in a stage is reachable however far out it is: the stage list has no date window
-    // at all, so a drafted show a year away is real work waiting on Dan.
-    @Test func aDraftedShowBeyondTheOldWindowOpensInTheQueue() throws {
+    // A show that is in a stage is reachable however far out it is. #2359 windowed TRIAGE and nothing
+    // else, precisely so this stays true: a drafted show a year away is real work waiting on Dan, and a
+    // row vanishing off the stage holding it would read as deletion (#1014, #901).
+    @Test func aDraftedShowBeyondTheWindowStillOpensInTheQueue() throws {
         let ctx = try context()
         show(ctx, "drafted-far", status: .drafted, date: "2027-03-01")
 
@@ -174,10 +192,15 @@ struct QueueShowableIsOneFilterTests {
     // LIVE-STORE-CLAIM verified=2026-07-26 measure="the masthead total against the pill beneath it, over untriaged shows"
     // The masthead's "N in the queue" now counts exactly the shows the stages hold, so it can no longer
     // read lower than the pill sitting directly beneath it. On the live store that was 452 against 589.
+    //
+    // #2359: with both far out shows present, so the count states the two halves of the new edge at
+    // once. The untriaged one drops out (triage stops at the window); the drafted one stays, because
+    // work already in flight is never hidden for its date.
     @Test func theMastheadCountsExactlyTheShowsTheStagesRender() throws {
         let ctx = try context()
         show(ctx, "near", date: "2026-08-19")
-        show(ctx, "far-future", date: "2027-03-01")
+        show(ctx, "far-untriaged", date: "2027-03-01")
+        show(ctx, "far-drafted", status: .drafted, date: "2027-03-01")
         show(ctx, "to-review", status: .drafted)
         show(ctx, "contacted-quiet", status: .contacted)
         show(ctx, "cut", status: .dismissed)
@@ -185,7 +208,7 @@ struct QueueShowableIsOneFilterTests {
         let keys = StageNavigation.queueKeys(in: try all(ctx), reachedOutKeys: [],
                                              today: today, now: now)
 
-        #expect(keys == ["near", "far-future", "to-review"])
+        #expect(keys == ["near", "far-drafted", "to-review"])
     }
 
     // Reached-out leads out of the count, as they always were: the masthead line is about work still to
@@ -206,7 +229,8 @@ struct QueueShowableIsOneFilterTests {
     @Test func everyShowTheMastheadCountsOpensTheQueue() throws {
         let ctx = try context()
         show(ctx, "near", date: "2026-08-19")
-        show(ctx, "far-future", date: "2027-03-01")
+        show(ctx, "far-untriaged", date: "2027-03-01")
+        show(ctx, "far-drafted", status: .drafted, date: "2027-03-01")
         show(ctx, "to-review", status: .drafted)
         show(ctx, "contacted-quiet", status: .contacted)
         show(ctx, "cut", status: .dismissed)

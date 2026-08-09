@@ -477,7 +477,11 @@ struct QueueShowableSurfacesAreOnePredicateTests {
     @Test func everyRowAStageRendersIsShowableToEveryOtherSurface() throws {
         let ctx = try context()
         show(ctx, "to-triage")
-        show(ctx, "far-future", date: "2027-03-01")
+        // #2359: one show on each side of the triage window's far edge, so this store keeps holding one
+        // of every kind after the edge existed. The untriaged one is in no stage now; the drafted one is
+        // work in flight and stays, and the loop below proves the surfaces agree about both.
+        show(ctx, "far-untriaged", date: "2027-03-01")
+        show(ctx, "far-drafted", status: .drafted, date: "2027-03-01")
         show(ctx, "to-review", status: .drafted)
         show(ctx, "approved", status: .approved)
         show(ctx, "pitched", status: .contacted, date: "2020-01-01")
@@ -503,5 +507,7 @@ struct QueueShowableSurfacesAreOnePredicateTests {
         #expect(counted == rendered.subtracting(reachedOut))
         #expect(staged.contains("pitched"), "a pitched show is a stage of its own and stays reachable")
         #expect(!staged.contains("cut"), "a dismissed show is in no stage")
+        #expect(staged.contains("far-drafted"), "a drafted show is never hidden for being far out")
+        #expect(!staged.contains("far-untriaged"), "triage stops at the lead time window (#2359)")
     }
 }
