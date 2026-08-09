@@ -53,9 +53,8 @@ struct QueueCopyTests {
 
     // MARK: - The filter feeding the "To send" count
     //
-    // The pill's number is a promise about rows (#863). The windowing that produces it was already
-    // tested (QueueModel.toSendQueue); the three-clause filter feeding that windowing was written in the
-    // view body, so the number was only ever as correct as its untested half.
+    // The pill's number is a promise about rows (#863). The three-clause filter behind it was written in
+    // the view body, so the number was only ever as correct as its untested half.
 
     private func item(_ id: String, discipline: String = "choral", highFit: Bool = false,
                       bookingSuggested: Bool = false) -> QueueItem {

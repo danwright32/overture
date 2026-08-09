@@ -1011,6 +1011,7 @@
 		AC817E29902D86F4B9161CFB /* DetachedRunActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE691FE057A27E4DFDA467B9 /* DetachedRunActivity.swift */; };
 		AC8EA27939BDF14A71787B97 /* SourceSearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7F3DF8E6846879404C861BE /* SourceSearch.swift */; };
 		ACAF2B84AE41CB7B01481CCC /* FilterChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 087ED2BE07F17339FD8E8EE1 /* FilterChip.swift */; };
+		ACC30F6880F640C929958972 /* ReachabilityProbeMarkerContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 372402E6DBA5068E45ED197A /* ReachabilityProbeMarkerContractTests.swift */; };
 		ACDB9E23A293837CB0D8A50C /* BuildFreshness.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CF0846F8FC12B6A26A1A9CB /* BuildFreshness.swift */; };
 		AD9C369148A7FB966F037EBF /* DriftedRunMerge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ED908A59190AE4DDBFCD08C /* DriftedRunMerge.swift */; };
 		ADCFF541721E4CF6AF6161BF /* DetachedRunOutcome.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBE7A32D71DC1E851A130BBD /* DetachedRunOutcome.swift */; };
@@ -1748,6 +1749,7 @@
 		365BBD4D3EDE7039FA3C4328 /* SearchScope.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchScope.swift; sourceTree = "<group>"; };
 		36795807A9F454119154EA6A /* QueueUndoStack.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueUndoStack.swift; sourceTree = "<group>"; };
 		3705BA568ACF80E4BE5ECBEF /* ReplyClassify.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReplyClassify.swift; sourceTree = "<group>"; };
+		372402E6DBA5068E45ED197A /* ReachabilityProbeMarkerContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReachabilityProbeMarkerContractTests.swift; sourceTree = "<group>"; };
 		3735C6986662F056BC9B7B9E /* ToolbarHoverLabel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolbarHoverLabel.swift; sourceTree = "<group>"; };
 		3746A9D92CE84BC07BFA9B1F /* ScoutReadBudgetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutReadBudgetTests.swift; sourceTree = "<group>"; };
 		37915DBA11143AD811598540 /* StatusLine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusLine.swift; sourceTree = "<group>"; };
@@ -3165,6 +3167,7 @@
 				FEC5BB6BC8704C35648658A2 /* ReachabilityProbeCandidateTests.swift */,
 				7AA9D53B56FB6F678C0A57C6 /* ReachabilityProbeCompletionTests.swift */,
 				147078154226A7E9D8CC0124 /* ReachabilityProbeLaunchTests.swift */,
+				372402E6DBA5068E45ED197A /* ReachabilityProbeMarkerContractTests.swift */,
 				8FEDA1F78AE7B4ED5B77970D /* ReachabilityProbeQueueTests.swift */,
 				24F7850C823B37E99EB2E26B /* ReachabilityProbeReuseTests.swift */,
 				7508C64C9CDFAAEE32F7EFA9 /* ReachabilityRecheckTests.swift */,
@@ -5082,6 +5085,7 @@
 				5D9DD034BFA32EAF830F1510 /* ReachabilityProbeCompletionTests.swift in Sources */,
 				386CCC693D855415FE25449F /* ReachabilityProbeLaunchTests.swift in Sources */,
 				8B93C8F96D5EC19634D489D9 /* ReachabilityProbeMarker.swift in Sources */,
+				ACC30F6880F640C929958972 /* ReachabilityProbeMarkerContractTests.swift in Sources */,
 				95E928F561A68B8164E25078 /* ReachabilityProbeQueueTests.swift in Sources */,
 				C5727253134A960439B4E3E0 /* ReachabilityProbeReuseTests.swift in Sources */,
 				2DB59BDCBC2FDC21DE2B7812 /* ReachabilityRecheckTests.swift in Sources */,

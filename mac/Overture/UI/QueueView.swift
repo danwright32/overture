@@ -13,9 +13,11 @@ struct QueueView: View {
     @Environment(ActionFeedback.self) private var feedback   // #285: shared acknowledgment surface
     @Environment(DayOffOfferRequest.self) private var dayOffOffer   // #924: dismiss-to-day-off picker request
 
-    // Dismissed prospects drop out of the queue; the rest sort date asc, fit desc. The
-    // "hide untouched-gone" rule (#133) lives in QueueModel.queueOrder, not here, because a
-    // compound predicate overruns the #Predicate type-checker.
+    // Dismissed prospects drop out of the queue; the rest sort date asc, fit desc. Membership beyond
+    // that is StageNavigation's, never a second predicate here (#1567). A show that vanished from its
+    // feed and was never acted on (#133) is drawn struck-through by ProspectRowView rather than hidden:
+    // the hiding copy of that rule lived in QueueModel.queueOrder, unreachable from the app since #1567
+    // and deleted in #2348.
     @Query(
         filter: #Predicate<Prospect> { $0.statusRaw != "dismissed" },
         sort: [SortDescriptor(\Prospect.performanceDate, order: .forward),

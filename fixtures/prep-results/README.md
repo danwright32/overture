@@ -63,11 +63,11 @@ results as their base, so the results half is the current shape.
 What they exist to pin is the honest/partial split, which is the same split twice:
 
 - `run-metadata-complete-v8.json`: every stream reported, so `runCost` carries `usd` and `durationMs` and
-  `webCalls` carries `total`.
+  `webCalls` carries `total` and `denied`.
 - `run-metadata-partial-v8.json`: one of three chunks died and left no envelope, so `runCost` carries NEITHER
-  `usd` NOR `durationMs`, and `webCalls` carries no `total`. Only the `partial*` keys, plus how many streams
-  reported out of how many. A reader reaching for the field it always reads finds nothing rather than a part
-  of the total presented as the whole.
+  `usd` NOR `durationMs`, and `webCalls` carries neither `total` nor `denied`. Only the `partial*` keys, plus
+  how many streams reported out of how many. A reader reaching for the field it always reads finds nothing
+  rather than a part of the total presented as the whole.
 
 **Where the numbers come from.** The cost and call figures are the run measured on the live store on
 2026-08-07 (`usd` 5.395423, longest stream 389906ms, 3 streams, 59 web calls split 28 fetch and 31 search),
@@ -75,6 +75,13 @@ reproduced by feeding those values through the real writers rather than typed in
 the results file (`items`, `parties`, `allowance`, and therefore the `overCap` verdict) come from `v8.json`'s
 three results, so the complete fixture sits OVER its allowance and says so, while the partial one is under it
 and stays silent, which is the rule for that verdict.
+
+The refusal counts (#1835) are zero here because that run had none, and they are left at zero rather than
+invented: a figure shaped to make a rule fire is a fixture defending a shape nobody measured (L48). The real
+refusals that this counting was built from are in the 2026-07-27 Debug run
+(`prep-run-events.chunk-1.jsonl` and `chunk-3.jsonl`), one refused `mcp__playwright__browser_navigate` in
+each. What these two files pin is that `denied` and `partialDenied` obey the same honest/partial split as
+`total`, and that every route appears even at zero.
 
 `lib/models.test.sh` regenerates both through `record_model`, `record_run_cost` and `record_web_calls` on
 every run and compares the key sets against what is committed here, so neither file can drift into a shape

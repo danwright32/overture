@@ -143,4 +143,85 @@ struct PrepWebCallCountTests {
                                                 allowance: 30, overCap: nil)
         #expect(PrepRunSummary.notes(for: outcome).contains { $0.contains("web") } == false)
     }
+
+    // #1835: a call the permission layer REFUSED never reached anything. The script no longer counts one
+    // as reach, and the refusals it counts separately need a reader here, or the field is written and
+    // never read (L46) and a run blocked at every attempt looks identical to one that never needed the
+    // web. That mattered concretely: the first diagnosis of #1824 read a refused browser call as evidence
+    // the run HAD browser access.
+    @Test func aRunWhoseLookupsWereRefusedSaysSo() {
+        var outcome = PrepImporter.Outcome()
+        outcome.webCalls = PrepResults.WebCalls(recorded: true, total: 6, denied: 2, items: 1,
+                                                capPerItem: 15, allowance: 15, overCap: false)
+        #expect(PrepRunSummary.notes(for: outcome)
+            .contains("2 web lookups refused, that research never happened"))
+    }
+
+    // One refusal is one lookup. Same plural trap the "1 show" sentence fell into, and the same reason it
+    // is worth a test of its own: every other case here uses more than one.
+    @Test func aSingleRefusalIsNotDescribedAsLookups() {
+        var outcome = PrepImporter.Outcome()
+        outcome.webCalls = PrepResults.WebCalls(recorded: true, total: 6, denied: 1, items: 1,
+                                                capPerItem: 15, allowance: 15, overCap: false)
+        #expect(PrepRunSummary.notes(for: outcome)
+            .contains("1 web lookup refused, that research never happened"))
+    }
+
+    // The ordinary run is silent. Refusals are rare, and a sentence that appears when nothing was refused
+    // is an alert nobody reads by the time one is (L36).
+    @Test func aRunWithNothingRefusedSaysNothingAboutRefusals() {
+        var outcome = PrepImporter.Outcome()
+        outcome.webCalls = PrepResults.WebCalls(recorded: true, total: 18, denied: 0, items: 2,
+                                                capPerItem: 15, allowance: 30, overCap: false)
+        #expect(PrepRunSummary.notes(for: outcome).contains { $0.contains("refused") } == false)
+    }
+
+    // A results file written before refusals were counted carries no `denied` at all, and absent is not
+    // zero: it means nobody looked. It must still decode, and must not be reported as a run with none.
+    @Test func aRunFromBeforeRefusalsWereCountedStillReads() {
+        var outcome = PrepImporter.Outcome()
+        outcome.webCalls = PrepResults.WebCalls(recorded: true, total: 47, items: 2, capPerItem: 15,
+                                                allowance: 30, overCap: true)
+        #expect(outcome.webCalls?.denied == nil)
+        #expect(PrepRunSummary.notes(for: outcome).contains { $0.contains("refused") } == false)
+    }
+
+    // The incomplete path publishes `partialDenied` and no `denied` at all, for the same reason it
+    // publishes no `total`. The app must find nothing rather than read one stream's refusals as the run's.
+    @Test func anIncompleteCountSaysNothingAboutRefusals() throws {
+        let r = try results("""
+        "webCalls": {"recorded": false, "items": 1, "capPerItem": 15, "allowance": 15,
+                     "streams": 2, "streamsReported": 1, "partialTotal": 9, "partialDenied": 4,
+                     "byRoute": {"fetch": 5, "search": 4, "browser": 0, "bash": 0},
+                     "deniedByRoute": {"fetch": 0, "search": 0, "browser": 4, "bash": 0}}
+        """)
+        #expect(r.webCalls?.denied == nil)
+        var outcome = PrepImporter.Outcome()
+        outcome.webCalls = r.webCalls
+        #expect(PrepRunSummary.notes(for: outcome).contains { $0.contains("refused") } == false)
+    }
+
+    // And the whole way through, from the file the runner writes to the sentence Dan reads. Setting the
+    // field by hand would prove the rule and nothing about the wiring (L3).
+    @Test func theRefusalCountReachesTheSummaryThroughTheRealImporter() throws {
+        let ctx = ModelContext(try ModelContainer(
+            for: AppSchema.schema, configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("prep-results-\(UUID().uuidString).json")
+        try """
+        {"version": 7, "generatedAt": "2026-07-29T00:00:00Z", "results": [],
+         "webCalls": {"recorded": true, "total": 4, "denied": 2, "items": 1, "capPerItem": 15,
+                      "allowance": 15, "overCap": false, "streams": 1,
+                      "deniedByRoute": {"fetch": 0, "search": 0, "browser": 2, "bash": 0}}}
+        """.write(to: url, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let outcome = PrepImporter.consumeIfNew(
+            at: url, into: ctx,
+            defaults: UserDefaults(suiteName: "PrepWebCalls-\(UUID().uuidString)")!)
+
+        #expect(outcome?.webCalls?.denied == 2)
+        #expect(PrepRunSummary.notes(for: outcome ?? PrepImporter.Outcome())
+            .contains("2 web lookups refused, that research never happened"))
+    }
 }

@@ -706,9 +706,9 @@ enum QueueModel {
 
     // MARK: - Copy and filtering the queue used to do in its own body (#885)
 
-    // The three-clause filter that feeds the "To send (N)" pill. The windowing after it
-    // (toSendQueue) was always tested; THIS half was written in the view, so the pill's number was only
-    // ever as trustworthy as its untested part. A count is a promise about rows (#863).
+    // The three-clause filter that feeds the "To send (N)" pill. It was written in the view body, so the
+    // pill's number was only ever as trustworthy as its untested half. A count is a promise about rows
+    // (#863).
     static func filter(_ items: [QueueItem], discipline: String?, highOnly: Bool,
                        pendingBookingsOnly: Bool, tooFarOnly: Bool = false,
                        userExcludedTowns: Set<String> = [],
@@ -726,8 +726,8 @@ enum QueueModel {
         }
     }
 
-    // #970. The geo gate, asked here and nowhere else, so `filter` and `tooFar` can never disagree
-    // about a row: the chip's number is a promise about the rows behind it (#863).
+    // #970. The geo gate, asked here and nowhere else, so no two surfaces can disagree about a row: a
+    // count is a promise about the rows behind it (#863).
     //
     // ONLY a positive placement hides. Unknown keeps, always (Dan's spec), which is what makes this
     // safe to ship on all 38 sources at once: it can only take shows the resolver can actually place
@@ -791,35 +791,10 @@ enum QueueModel {
         }
     }
 
-    // The rows the gate took, so a filter bug is loud rather than invisible (#887): a hidden show is
-    // one click away, never gone.
-    //
-    // #996: this is the set clicking the chip REVEALS, which is the only set its number may describe.
-    // It therefore runs the identical expression the view renders with (`filter` then `toSendQueue`),
-    // rather than the raw predicate over `items`.
-    //
-    // That distinction was not academic. The first version counted raw `items`, and the queue windows
-    // the filtered set to the bookable date range afterwards, so a show could be counted as too far
-    // and then dropped for being too far in the FUTURE. Dan saw "Too far (4)" open onto one row within
-    // minutes of it shipping. There is deliberately no way to ask for the unwindowed count any more:
-    // the whole justification for hiding rows at all is that the number makes a filter bug loud
-    // (#887), and a number that overstates by 4x cannot do that job.
-    static func tooFar(_ items: [QueueItem], discipline: String?, highOnly: Bool,
-                       pendingBookingsOnly: Bool, reachedOutKeys: Set<String>,
-                       today: String, userExcludedTowns: Set<String> = []) -> [QueueItem] {
-        toSendQueue(filter(items, discipline: discipline, highOnly: highOnly,
-                           pendingBookingsOnly: pendingBookingsOnly, tooFarOnly: true,
-                           userExcludedTowns: userExcludedTowns),
-                    reachedOutKeys: reachedOutKeys, today: today)
-    }
-
-    static func tooFarCount(_ items: [QueueItem], discipline: String?, highOnly: Bool,
-                            pendingBookingsOnly: Bool, reachedOutKeys: Set<String>,
-                            today: String, userExcludedTowns: Set<String> = []) -> Int {
-        tooFar(items, discipline: discipline, highOnly: highOnly,
-               pendingBookingsOnly: pendingBookingsOnly, reachedOutKeys: reachedOutKeys,
-               today: today, userExcludedTowns: userExcludedTowns).count
-    }
+    // #2348: `tooFar` and `tooFarCount` stood here, the rows the gate took and their number. Both ran
+    // the filtered set through the retired second queue filter (`toSendQueue`), and nothing in the app
+    // called either one, so they went with it. The gate itself (`isTooFar`, above) is unchanged and is
+    // still the one place the question is asked.
 
     // #996: the chip must stay clickable while it is ON, even when it now reveals nothing. Changing a
     // discipline filter with the chip active can empty its set, and a chip that vanished at that moment
@@ -1117,6 +1092,13 @@ enum QueueModel {
     //
     // `QueueWindowAndScoutHorizonTests` measures all of this from the constants themselves and fails if
     // either moves, so changing one is a deliberate act rather than a silent drift.
+    //
+    // #2348, stated plainly so nobody reads a guarantee into it that is not there: no code applies this
+    // window to the queue any more. Membership is StageNavigation's own predicate, which has no far edge
+    // at all, and the last caller of this number was `queueOrder`, the retired second filter deleted with
+    // #2348 (itself already unreachable from the app since #1567). So this is the stated DEMAND the scout
+    // horizon is sized against, read by the test above and by the two doc comments that link to it, and
+    // nothing hides a show for exceeding it.
     static let leadTimeWindowDays = 90
     // Within this many days a booking is unrealistic to land, so the event still shows but
     // sinks below everything bookable rather than sitting up top with the nearest dates.
@@ -1225,56 +1207,12 @@ enum QueueModel {
         return name
     }
 
-    // Orders the queue for display: hide past performances and anything beyond the lead-time
-    // window, and keep everything else in its normal date position, undated events included
-    // (they group last anyway). Computed live against `today` so it stays correct as days pass
-    // between scout runs.
-    //
-    // #1014, Dan's call REVISED after his first real walk of the queue (2026-07-16): a too-close show
-    // used to sink to the bottom, graded by closeness, and it read as the show being deleted ("I do
-    // not have anything in my queue before jul 22", when the shows were there, just demoted beneath
-    // October dates). That is exactly #901's ruling for a conflicted show, recorded below: reordering
-    // a single show to the very end of the list reads as its disappearance, whatever the reason. The
-    // existing "likely too close to book" timing line already carries the meaning; the position no
-    // longer needs to.
-    static func queueOrder(_ items: [QueueItem], today: String) -> [QueueItem] {
-        // Hide shows that vanished from the feed and Dan never acted on (#133): pure noise. Ones
-        // he kept/drafted/approved stay (shown struck-through) so a cancellation he was pursuing
-        // stays visible.
-        let items = items.filter { !($0.status == .new && $0.disappearedFromFeed) }
-        var bookable: [QueueItem] = []
-        for item in items {
-            // A confirmed booking is settled and leaves the reach-out queue (#201). An auto-detected
-            // booking is kept (handled just below) so Dan can confirm it or catch a wrong match.
-            if item.isConfirmedBooking { continue }
-            // A detected booking awaiting Dan's confirmation is a separate workflow from
-            // pitching, so it stays put regardless of how near or past its date is.
-            if item.bookingSuggested {
-                bookable.append(item)
-                continue
-            }
-            // #1540, reversing #1122: both edges of the window are judged by the run's OPENING night. A
-            // run that has already started leaves triage (Dan will not pitch a client who has opened),
-            // and a run that opens beyond the lead-time window is still too far out. Asked through
-            // Prospect.hasOpened's twin so the pill's count and this list cannot answer it differently.
-            //
-            // Stage lists (Prep, Review, Reached out) never come through here, so a run Dan kept before
-            // it opened keeps working: hiding work already in flight would read as deletion (#1014/#901).
-            if EasternDate.runHasOpened(openingNight: item.performanceDate, today: today) { continue }
-            guard let days = daysUntil(performanceDate: item.performanceDate, today: today) else {
-                bookable.append(item)
-                continue
-            }
-            if days > leadTimeWindowDays { continue }
-            // #1014: a too-close show is neither hidden nor reordered, only kept (falls through to
-            // the same append as everything else). #901, Dan's call REVISED after he walked the build
-            // (2026-07-14): a conflicted show keeps its normal date position and is NOT reordered
-            // either. The highly visible "Unavailable" badge (and, here, the timing line) does the
-            // telling now, not the position. The fit score is still untouched.
-            bookable.append(item)
-        }
-        return bookable
-    }
+    // #2348: `queueOrder` stood here, the second answer to "will the Queue show this show". #1567 had
+    // already moved that judgment to StageNavigation, which every surface now asks, and nothing in the
+    // app called this any more. Its rules live on where they are still the product's: an opened run
+    // leaves triage through Prospect.hasOpened (StageNavigation `.scout`, pinned by
+    // PastShowsLeaveTheScoutQueueTests), and a too-close show keeps its date position because no surface
+    // reorders rows at all (#1014/#901).
 
     struct DateGroup: Identifiable, Equatable {
         let id: String
@@ -1579,28 +1517,17 @@ enum QueueModel {
         }
     }
 
-    // The unified daily list: scouted shows (run through the SAME pitch windowing as always) plus
-    // inquiries, which are NEVER dropped by that window. THE AUDIT (#1436, the plan's worst failure
-    // mode): an inquiry is live because someone awaits Dan's reply, whatever the event date, so a past,
-    // far-future, or unknown event date must never remove it. Rows interleave by date via a stable sort
-    // (undated last), preserving each source's own order within a date.
-    static func combinedQueueRows(prospectItems: [QueueItem], inquiryRows: [InquiryRow],
-                                  reachedOutKeys: Set<String>, today: String) -> [QueueRow] {
-        let prospectRows = toSendQueue(prospectItems, reachedOutKeys: reachedOutKeys, today: today)
-            .map { QueueRow.prospect($0) }
-        let inquiryQueueRows = inquiryRows.map { QueueRow.inquiry($0) }
-        return (prospectRows + inquiryQueueRows).enumerated().sorted { lhs, rhs in
-            switch (lhs.element.performanceDate, rhs.element.performanceDate) {
-            case let (a?, b?): return a != b ? a < b : lhs.offset < rhs.offset
-            case (nil, .some): return false     // undated groups last
-            case (.some, nil): return true
-            case (nil, nil): return lhs.offset < rhs.offset
-            }
-        }.map { $0.element }
-    }
+    // #2348: `combinedQueueRows` stood here, one list holding both scouted shows and inquiries. It ran
+    // the shows through the retired second filter (`toSendQueue`) and nothing called it: the queue is
+    // stage scoped, so a stage renders its shows and its inquiries as two blocks (QueueRenderPass, then
+    // QueueView). The rule it was written to protect is unchanged and now holds by construction, since no
+    // date window is applied to either kind: an inquiry is live because someone awaits Dan's reply,
+    // whatever the event date, so a past, far-future or unknown date must never remove it. That is pinned
+    // against the live path in InquiryQueueTests.
 
-    // Groups QueueRows by date, mirroring groupByDate exactly (undated bucket last, naming itself). The
-    // caller passes combinedQueueRows output, already date-ordered, so buckets appear in date order.
+    // Groups QueueRows by date, mirroring groupByDate's shape (a bucket per date, the undated one naming
+    // itself). Buckets appear in the order the rows arrive, so a caller wanting date order hands over
+    // rows already in it.
     static func groupRowsByDate(_ rows: [QueueRow]) -> [RowDateGroup] {
         var order: [String] = []
         var buckets: [String: [QueueRow]] = [:]
@@ -1641,11 +1568,9 @@ enum QueueModel {
         return keys.first { ids.contains($0) }
     }
 
-    // #217: the to-send queue is the bookable order with anyone already reached out to removed, so
-    // the "To send" and "Reached out" pipelines never show the same prospect twice.
-    static func toSendQueue(_ items: [QueueItem], reachedOutKeys: Set<String>, today: String) -> [QueueItem] {
-        queueOrder(items.filter { !reachedOutKeys.contains($0.id) }, today: today)
-    }
+    // #2348: `toSendQueue` stood here, `queueOrder` with the already-pitched shows dropped. Its rule (the
+    // "To send" and "Reached out" pipelines never show the same show twice) is StageNavigation.queueKeys',
+    // which excludes the reached-out keys for the same reason, and nothing called this one.
 
     // #1567: isReachableInQueue and isReachableForDeepLink lived here. Whether a show renders in the
     // Queue, and so whether an OmniFocus tap or a search pick opens the Queue or Archive, is now

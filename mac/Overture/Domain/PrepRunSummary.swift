@@ -58,6 +58,14 @@ enum PrepRunSummary {
             let people = parties > web.items ? ", \(parties) people to find" : ""
             notes.append("\(total) web lookups for \(shows)\(people), more than expected")
         }
+        // #1835: lookups the run asked for and was refused. Said separately from the count above because
+        // they are the opposite fact: those calls reached nothing, so whatever the run reported about
+        // those shows it found without them. Silent at zero and silent when the figure is absent (an old
+        // results file, or an incomplete count), because absent means nobody looked, not none.
+        if let web = outcome.webCalls, let denied = web.denied, denied > 0 {
+            let lookups = denied == 1 ? "1 web lookup" : "\(denied) web lookups"
+            notes.append("\(lookups) refused, that research never happened")
+        }
         if !outcome.unmatchedKeys.isEmpty { notes.append("\(outcome.unmatchedKeys.count) didn't match") }
         // #876: shows the run was GIVEN and never answered. Left silent, they sit in "ready to prep" run
         // after run with no explanation, and a show the model chokes on every time is retried forever

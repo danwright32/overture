@@ -83,11 +83,15 @@ enum QueueShowableSurfaceAudit {
     // The tells of a surface deciding queue membership for itself. Each one is an ingredient of the
     // shared predicate, or a piece of the retired second filter #1567 removed, so naming any of them
     // inside a surface means the judgment is being made twice.
+    //
+    // Four of these name declarations that no longer exist anywhere, which is deliberate and is what a
+    // tell is for: the guard's job is to catch a surface REINTRODUCING the retired rule, by that name or
+    // by rebuilding it out of the ingredients below. A tell does not go stale when its subject is deleted.
     static let reDerivationTells = [
         "isReachableForDeepLink",   // the #1567 filter, deleted from QueueView+Model
         "isReachableInQueue",       // its twin
-        "queueOrder(",              // the 90-day window and the untouched-and-gone rule
-        "toSendQueue(",             // that window, one call further out
+        "queueOrder(",              // the 90-day window and the untouched-and-gone rule, deleted in #2348
+        "toSendQueue(",             // that window, one call further out, deleted with it
         "leadTimeWindowDays",
         ".status == .",             // a status membership test written inline
         ".status != .",

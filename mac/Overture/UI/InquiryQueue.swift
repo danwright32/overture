@@ -34,8 +34,9 @@ enum QueueRow: Identifiable, Equatable {
         }
     }
 
-    // The date the row groups under. An inquiry groups by its event date exactly like a show, but
-    // unlike a show it is never DROPPED for that date being past or far out (see combinedQueueRows).
+    // The date the row groups under. An inquiry groups by its event date exactly like a show, and is
+    // never DROPPED for that date being past or far out: its stage is decided by whether Dan owes a
+    // reply (StageNavigation.stage(for:)), which never looks at the date.
     var performanceDate: String? {
         switch self {
         case .prospect(let item): return item.performanceDate

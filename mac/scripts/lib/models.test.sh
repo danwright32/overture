@@ -414,6 +414,96 @@ record_web_calls "${WEBTMP}/broken.json" 3 "${WEBTMP}/events.jsonl"
 assert_equals "an unparsable results file is left exactly as it was" \
   'not json{' "$(cat "${WEBTMP}/broken.json")"
 
+# --- #1835: a REFUSED call is not a call the run made -----------------------------------------------
+#
+# The counter read tool_use blocks and stopped there, so a call the permission layer refused was
+# indistinguishable from one that fetched a page. Dan's 2026-07-30 run recorded `browser: 1` for a
+# navigation that never happened, and the first diagnosis of #1824 then took that 1 as evidence the run
+# HAD browser access. A count that inflates makes a run read as closer to its allowance than it is, and
+# the allowance is the only thing watching a hop cap that otherwise lives in a prompt (L27).
+#
+# The events below are copied VERBATIM from a real refusal in
+# `~/Library/Application Support/Overture-Debug/Overture/prep-run-events.chunk-1.jsonl` (2026-07-27,
+# lines 60 and 61), not shaped so the rule under test fires (L48). Both of that run's refusals had the
+# same two marks, and they are the two the detection uses:
+#
+#   `tool_result_meta: [{ id, non_execution_kind: "user-rejected" }]` on the user event, and
+#   a tool_result whose text is "Claude requested permissions to use <tool>, but you haven't granted it yet."
+#
+# Measured across every prep event stream on this Mac (4 runs, 255 tool calls): 6 tool_results carried
+# `is_error`, and only the 2 refusals carried `tool_result_meta`. The other 4 were calls that really ran
+# and failed (a DNS miss, a curl that got a 302, two Bash exits). So `is_error` is NOT the mark of a
+# refusal, and a counter that used it would drop real web calls, which is the failure this counter exists
+# to prevent.
+cat > "${WEBTMP}/denied.jsonl" <<'EOF'
+{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_ok1","name":"WebFetch","input":{"url":"https://a.example"}}]}}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","content":"Fetched a.example","tool_use_id":"toolu_ok1"}]}}
+{"type":"assistant","message":{"model":"claude-opus-5","id":"msg_011CdSyqvakWhmzkhc2qCZKJ","type":"message","role":"assistant","content":[{"type":"tool_use","id":"toolu_01WtKpJp59k4RBTLGUQrcWm6","name":"mcp__playwright__browser_navigate","input":{"url":"https://www.carnegiehall.org/calendar/2026/08/01/manhattan-international-music-competition-winners-gala-concert-0730pm"},"caller":{"type":"direct"}}],"stop_reason":null,"usage":{"output_tokens":59}},"parent_tool_use_id":null,"session_id":"72af46f2-08a6-412f-b214-665274174501","uuid":"ad80537d-d230-4b9f-b43d-5fc782a7ff06","timestamp":"2026-07-27T17:46:49.465Z","tool_use_meta":[{"id":"toolu_01WtKpJp59k4RBTLGUQrcWm6","display_name":"Navigate to a URL","server_display_name":"Playwright"}]}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","content":"Claude requested permissions to use mcp__playwright__browser_navigate, but you haven't granted it yet.","is_error":true,"tool_use_id":"toolu_01WtKpJp59k4RBTLGUQrcWm6"}]},"parent_tool_use_id":null,"session_id":"72af46f2-08a6-412f-b214-665274174501","uuid":"8dd97996-7c6d-4ac1-84b7-0d2cb991b47c","timestamp":"2026-07-27T17:46:49.469Z","tool_use_result":"Error: Claude requested permissions to use mcp__playwright__browser_navigate, but you haven't granted it yet.","tool_result_meta":[{"id":"toolu_01WtKpJp59k4RBTLGUQrcWm6","non_execution_kind":"user-rejected"}]}
+{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_dns","name":"WebFetch","input":{"url":"https://www.evanoblezada.com"}}]}}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","content":"getaddrinfo ENOTFOUND www.evanoblezada.com","is_error":true,"tool_use_id":"toolu_dns"}]},"parent_tool_use_id":null,"session_id":"533d1eff-2abc-4971-bf07-b6a9a51aa249","uuid":"66e6b565-6423-496f-a775-c74937f9f954","timestamp":"2026-08-04T02:13:00.781Z","tool_use_result":"Error: getaddrinfo ENOTFOUND www.evanoblezada.com"}
+{"type":"result","total_cost_usd":0.5,"duration_ms":1000}
+EOF
+
+echo '{"version":6,"results":[{"naturalKey":"a"}]}' > "${WEBTMP}/results-denied.json"
+record_web_calls "${WEBTMP}/results-denied.json" 5 "${WEBTMP}/denied.jsonl"
+denied="$(cat "${WEBTMP}/results-denied.json")"
+
+assert_contains "a refused call is left out of the total the run is judged on" "${denied}" '"total": 2'
+assert_contains "and the route it was refused on reports nothing reached" "${denied}" '"browser": 0'
+assert_contains "a call that ran and failed on DNS still counts as one the run made" \
+  "${denied}" '"fetch": 2'
+assert_contains "the refusals are counted in their own right, not thrown away" "${denied}" '"denied": 1'
+assert_contains "and named by the route the run was refused on" "${denied}" '"deniedByRoute"'
+
+# Only refusals. The run reached the web zero times, and a counter that still said 3 would be reporting
+# a capability the run does not have, which is exactly how #1824 was first misdiagnosed.
+cat > "${WEBTMP}/all-denied.jsonl" <<'EOF'
+{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_d1","name":"mcp__playwright__browser_navigate","input":{"url":"https://a.example"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","content":"Claude requested permissions to use mcp__playwright__browser_navigate, but you haven't granted it yet.","is_error":true,"tool_use_id":"toolu_d1"}]},"tool_result_meta":[{"id":"toolu_d1","non_execution_kind":"user-rejected"}]}
+{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_d2","name":"mcp__playwright__browser_navigate","input":{"url":"https://b.example"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","content":"Claude requested permissions to use mcp__playwright__browser_navigate, but you haven't granted it yet.","is_error":true,"tool_use_id":"toolu_d2"}]},"tool_result_meta":[{"id":"toolu_d2","non_execution_kind":"user-rejected"}]}
+{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_d3","name":"mcp__playwright__browser_navigate","input":{"url":"https://c.example"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","content":"Claude requested permissions to use mcp__playwright__browser_navigate, but you haven't granted it yet.","is_error":true,"tool_use_id":"toolu_d3"}]},"tool_result_meta":[{"id":"toolu_d3","non_execution_kind":"user-rejected"}]}
+{"type":"result","total_cost_usd":0.1,"duration_ms":100}
+EOF
+echo '{"version":6,"results":[{"naturalKey":"a"}]}' > "${WEBTMP}/results-all-denied.json"
+record_web_calls "${WEBTMP}/results-all-denied.json" 2 "${WEBTMP}/all-denied.jsonl"
+allDenied="$(cat "${WEBTMP}/results-all-denied.json")"
+assert_contains "a run refused every time reached the web zero times" "${allDenied}" '"total": 0'
+assert_contains "and its refusals are still on the record" "${allDenied}" '"denied": 3'
+assert_contains "refusals never spend the allowance, so a blocked run is not reported as overspending" \
+  "${allDenied}" '"overCap": false'
+
+# A refusal marked ONLY by its text, with no `tool_result_meta` at all. The two marks travel together in
+# every refusal on this Mac, but the meta field is the newer of the two and the counter must not go back
+# to counting refusals as reach the day a CLI stops emitting it.
+cat > "${WEBTMP}/text-denied.jsonl" <<'EOF'
+{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_t1","name":"WebSearch","input":{"query":"x"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","content":"Claude requested permissions to use WebSearch, but you haven't granted it yet.","is_error":true,"tool_use_id":"toolu_t1"}]}}
+{"type":"result","total_cost_usd":0.1,"duration_ms":100}
+EOF
+echo '{"version":6,"results":[{"naturalKey":"a"}]}' > "${WEBTMP}/results-text-denied.json"
+record_web_calls "${WEBTMP}/results-text-denied.json" 5 "${WEBTMP}/text-denied.jsonl"
+textDenied="$(cat "${WEBTMP}/results-text-denied.json")"
+assert_contains "a refusal stated only in the result text is still a refusal" \
+  "${textDenied}" '"denied": 1'
+assert_contains "so it does not reach the total either" "${textDenied}" '"total": 0'
+
+# The incomplete path follows the same rule the total already follows: a partial refusal count must not
+# be readable as the run's refusal count by a reader reaching for the field it always reads.
+echo '{"version":6,"results":[{"naturalKey":"a"}]}' > "${WEBTMP}/results-denied-partial.json"
+record_web_calls "${WEBTMP}/results-denied-partial.json" 5 "${WEBTMP}/all-denied.jsonl" "${WEBTMP}/gone.jsonl"
+deniedPartial="$(cat "${WEBTMP}/results-denied-partial.json")"
+assert_contains "an incomplete count carries its refusals as a partial figure" \
+  "${deniedPartial}" '"partialDenied": 3'
+if [[ "${deniedPartial}" == *'"denied":'* ]]; then
+  echo "FAIL - an incomplete count published a 'denied' a reader would take for the run's own"
+  FAILURES=$((FAILURES + 1))
+else
+  echo "ok - and publishes no 'denied' at all on the incomplete path"
+fi
+
 # --- #1678: the committed contract fixtures carry the shape these writers actually produce -----------
 #
 # `fixtures/prep-results/run-metadata-complete-v8.json` and `run-metadata-partial-v8.json` are what the Swift

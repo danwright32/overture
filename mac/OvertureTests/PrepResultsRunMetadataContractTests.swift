@@ -89,6 +89,28 @@ struct PrepResultsRunMetadataContractTests {
         #expect(calls["streams"] as? Int == 3)
     }
 
+    // #1835: refusals are counted in their own right, and they follow the SAME honest/partial split as the
+    // total, for the same reason. A refused call reached nothing, so it must not be inside `total`, and one
+    // stream's refusals must not be readable as the run's by a reader reaching for `denied`.
+    @Test func refusalsAreCountedSeparatelyAndSplitTheSameWay() throws {
+        let completeCalls = try #require(try complete()["webCalls"] as? [String: Any])
+        let partialCalls = try #require(try partial()["webCalls"] as? [String: Any])
+        let completeRefused = try #require(completeCalls["deniedByRoute"] as? [String: Any])
+        let partialRefused = try #require(partialCalls["deniedByRoute"] as? [String: Any])
+
+        #expect(completeCalls["denied"] as? Int == 0)
+        #expect(completeCalls["partialDenied"] == nil)
+        #expect(partialCalls["denied"] == nil,
+                "a partial refusal count must not present itself as the run's own")
+        #expect(partialCalls["partialDenied"] as? Int == 0)
+        // Every route present at zero on both, so a reader never has to tell "none refused" from "this
+        // writer did not look".
+        for route in ["fetch", "search", "browser", "bash"] {
+            #expect(completeRefused[route] as? Int == 0)
+            #expect(partialRefused[route] as? Int == 0)
+        }
+    }
+
     // `overCap` is a VERDICT, not a count, and it is published on the incomplete path only when the
     // partial count already exceeds the allowance, because that verdict can only get truer. The complete
     // fixture is over its allowance and says so; the partial one is under it and stays silent rather than
