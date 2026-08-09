@@ -229,10 +229,13 @@ struct SourcesView: View {
             let ignoredClients = coverageResult.ignored
             if !gaps.isEmpty || !ignoredClients.isEmpty {
                 coverageBox {
+                    // #1547: OUTSIDE the has-gaps branch, so the heading is never left standing over a
+                    // bare count. With no gaps and some clients set aside, this box used to read as N
+                    // uncovered clients when it means the opposite.
+                    Text(CoverageCopy.sectionExplanation(hasGaps: !gaps.isEmpty))
+                        .font(.system(size: 11)).foregroundStyle(OVColor.inkSoft)
+                        .fixedSize(horizontal: false, vertical: true)
                     if !gaps.isEmpty {
-                        Text(CoverageCopy.sectionExplanation)
-                            .font(.system(size: 11)).foregroundStyle(OVColor.inkSoft)
-                            .fixedSize(horizontal: false, vertical: true)
                         VStack(spacing: 0) {
                             ForEach(gaps, id: \.client.id) { gap in
                                 coverageRow(gap)

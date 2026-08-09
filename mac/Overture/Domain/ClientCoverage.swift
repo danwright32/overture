@@ -196,8 +196,18 @@ enum CoverageDismissEditing {
 // like ClientTagCopy. No dashes as punctuation (the style rule); colons and separate sentences instead.
 enum CoverageCopy {
     static let sectionTitle = "Returning clients not covered"
-    static let sectionExplanation =
-        "Downbeat clients no watched source treats as a returning client, so their next season would not surface a year ahead. Add a source for them, or tag an existing one below."
+    // #1547: the box explains itself in EVERY state, not only when there are gaps in it.
+    //
+    // With zero gaps and some clients set aside, the sheet rendered the heading "Returning clients not
+    // covered" directly above a bare collapsed count and nothing else, which reads as N uncovered clients
+    // when it means the opposite. Dan asked what the section meant on 2026-07-26, which is the evidence.
+    // The sentence existed; it was inside the has-gaps branch, so it was compiled out in exactly the
+    // state he was in.
+    static func sectionExplanation(hasGaps: Bool) -> String {
+        hasGaps
+            ? "Downbeat clients no watched source treats as a returning client, so their next season would not surface a year ahead. Add a source for them, or tag an existing one below."
+            : "Every returning client is covered by a watched source, or set aside below."
+    }
     // #1548: ONE verb and ONE noun for this state, everywhere it appears.
     //
     // It was named three ways on one screen: the button that creates it said "Not one I scout", the
