@@ -116,7 +116,7 @@ struct SourcesSheetSaysEachThingOnceTests {
     // is false and no scout can make it go away: `ScoutExtractIngest.fail()` sets the flag on every failed
     // read and only a successful read or a Confirm empty can clear it, so it is pinned on forever here.
     // Same reasoning as notRead and unreadable above, and sharper: this is the ONE failure that offers both
-    // buttons, so the honest next step is "Fix the address" or "This page is right", never "run a scout".
+    // buttons, so the honest next step is "Change the page link" or "This page is right", never "run a scout".
     @Test func aPageWithNoDatedListingsDoesNotSayToRunAScoutThatCannotHelp() {
         let waiting = source(checked: hoursAgo(23), succeeded: hoursAgo(72), unread: true)
         waiting.lastFailure = .verdict(.noDatedContent)
@@ -249,7 +249,7 @@ struct SingleVenueFeedAddressNudgeTests {
 }
 
 // #1177: the address editor is offered on EVERY active, editable (non-algolia) source row, not only on a
-// failed one. Before this, "Fix the address" appeared only inside the failure block, so The Cell (which
+// failed one. Before this, "Change the page link" appeared only inside the failure block, so The Cell (which
 // reads fine but is empty, no failure) could never be re-pointed from the sheet. The safe re-point logic
 // (WatchlistEditing.editURL) and the editor (SourceFixConfirmActions) already existed; this wires them in
 // without a second edit path.

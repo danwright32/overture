@@ -6,7 +6,7 @@ import Foundation
 // Measured on Dan's store 2026-07-26 (66 active sources, badge reading 1): the source being counted was
 // The Players Theatre, sitting under T about fifty rows down an alphabetical list, visually identical to
 // every healthy row. No source was `.failing`, so the Failing section that would at least have grouped it
-// was absent entirely. Meanwhile the FIRST row on screen, 54 Below, carried a prominent "Fix the address"
+// was absent entirely. Meanwhile the FIRST row on screen, 54 Below, carried a prominent "Change the page link"
 // button and was NOT the source the badge meant: it is the shrunken-feed self-healing hold that
 // `SourceAttention` deliberately excludes (#1428). The most actionable-looking thing in the sheet pointed
 // away from the one row Dan was summoned for.

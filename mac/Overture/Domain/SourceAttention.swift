@@ -47,7 +47,7 @@ enum SourceAttention {
     //
     // The toolbar told Dan a source needed him and then dropped him at the top of 66 alphabetical rows
     // with no route to it. Measured 2026-07-26: the source counted was The Players Theatre, fifty rows
-    // down under T, while the FIRST row on screen carried a prominent "Fix the address" button and was a
+    // down under T, while the FIRST row on screen carried a prominent "Change the page link" button and was a
     // different source entirely. The state that fires here grades as `.watching`, so no existing section
     // grouped it.
     //

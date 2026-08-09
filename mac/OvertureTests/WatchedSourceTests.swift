@@ -172,7 +172,7 @@ struct SourceFailureTests {
     }
 
     // #1171: a feed that answered but parsed to nothing is a broken feed, not a fixable address. Re-pointing
-    // cannot change a platform's feed format, so this failure offers no "Fix the address" affordance (like
+    // cannot change a platform's feed format, so this failure offers no "Change the page link" affordance (like
     // notRead), and it names the format change so it reads as broken rather than as a quiet off-season.
     @Test func aFeedShapeChangeIsNamedAndOffersNoAddressFix() {
         #expect(SourceFailure.fetch(.feedShapeChanged).message.isEmpty == false)

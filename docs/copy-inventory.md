@@ -534,6 +534,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/FollowUpsView.swift`
 "Carnegie Hall is added the first time Overture opens your store."
     `UI/SourcesView.swift`
+"Change the page link"
+    `UI/SourceFixConfirmActions.swift`
 "Check again"
     `Domain/Reachability.swift`
 "Check reachability"
@@ -605,8 +607,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/FormOutreach.swift`
 "Copy the draft and mark it replied (paste it into Gmail yourself)"
     `UI/ReplyConversationView.swift`
-"Correct this source's web address, then read it to check"
-    `UI/SourceFixConfirmActions.swift`
 "Couldn't block \(range)"
     `UI/ProspectMutations.swift`
 "Couldn't connect Gmail"
@@ -750,8 +750,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/DayOffRangeFields.swift`
 "Fit tier"
     `Domain/OutcomePatterns.swift`
-"Fix the address"
-    `UI/SourceFixConfirmActions.swift`
 "Follow up"
     `UI/InquiryRowView.swift`
 "Follow-up sent to \(org)"
@@ -1331,6 +1329,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "Pitching other shows that night"
     `Domain/ReviewStatus.swift`
+"Point this source at a different page, then read it to check"
+    `UI/SourceFixConfirmActions.swift`
 "Possible booking, confirm?"
     `UI/ProspectRowView.swift`
 "Possible match to \(possibleMatchOrigin(item.possibleMatchSource)): \(name)?"

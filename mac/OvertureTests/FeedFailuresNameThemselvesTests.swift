@@ -14,7 +14,7 @@ import Foundation
 //   - TWO were "the response was not an HTTP response", which is genuinely odd and for which `unreachable`
 //     is honest. Left alone.
 //   - TWO were OvationTix finding no client id in the stored address. That is a WRONG ADDRESS, the one
-//     case where the "Fix the address" button already on the row is exactly the right next step, and the
+//     case where the "Change the page link" button already on the row is exactly the right next step, and the
 //     only one that earns a new name.
 //
 // All four status guards were separate copies of one rule, so they are now one shared check rather than
@@ -64,7 +64,7 @@ struct FeedFailuresNameThemselvesTests {
 
     // OvationTix reads a venue's calendar by the client id embedded in its address. With no id there,
     // nothing can be fetched, and it is not a network problem: the stored link is wrong or points at the
-    // wrong kind of OvationTix page. "Fix the address" is the honest next step and is already on the row.
+    // wrong kind of OvationTix page. "Change the page link" is the honest next step and is already on the row.
     @Test func anAddressWithNoClientIdSaysSoRatherThanClaimingItIsUnreachable() {
         let failure = SourceFailure.fetch(.addressUnusable)
 

@@ -29,7 +29,7 @@ struct TicketTailorTests {
     // #1502: Ticket Tailor serves the SAME box office in two shapes, `all-tickets/<slug>` (list view) and
     // `all-tickets-calendar/<slug>` (calendar view). Only the calendar shape was recognised, so a venue
     // that embedded the list view fell through to the unreadable verdict and told Dan its calendar was
-    // "drawn by JavaScript, so there is nothing to read", with Fix the address and Stop watching beside it.
+    // "drawn by JavaScript, so there is nothing to read", with Change the page link and Stop watching beside it.
     // Both are wrong advice on a page whose address is right and whose events are perfectly readable.
     //
     // Verified live 2026-07-25 with the header set in widgetRequest: both paths return 200 for the same
@@ -69,7 +69,7 @@ struct TicketTailorTests {
     //
     // After Arts' box office is genuinely empty right now (verified live 2026-07-25: the calendar view
     // returns `var selectableDates = [];`). Before this, the hop never fired, so the shell read as
-    // unreadable and the row said the calendar was drawn by JavaScript, offering Fix the address and Stop
+    // unreadable and the row said the calendar was drawn by JavaScript, offering Change the page link and Stop
     // watching. Now the hop fires, parses an honest zero, and the verdict is noDatedContent: nothing is
     // broken, there is simply nothing on. That is the difference between sending Dan to fix a page that is
     // fine and telling him the truth, and it means the source picks itself up the moment After Arts lists

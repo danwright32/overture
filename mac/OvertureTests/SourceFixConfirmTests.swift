@@ -124,3 +124,36 @@ struct SourceFixConfirmTests {
             verdict: .unreadable, readHash: "H1", confirmedEmptyHash: "H1"))
     }
 }
+
+// #2263: the control is named after what it EDITS.
+//
+// Seen on the rendered Sources row on 2026-08-07: one row carried "Add address", which sets the street
+// address so the source's shows get placed in Dan's area, and four lines below it "Fix the address",
+// which edits the web page Overture reads. Two buttons, near-identical names, unrelated jobs, and the
+// likely misread was the expensive direction.
+//
+// #1177 offers this control on EVERY editable row, including a healthy one, so the old name also
+// asserted a diagnosis on rows where nothing had failed. Dan settled the other reading of the same
+// complaint on 2026-08-07 (#1588): the button stays, because a healthy source pointed at the wrong page
+// needs the escape hatch. So the fix is the name.
+@Suite("The page link control is named after what it edits (#2263)")
+struct PageLinkControlNameTests {
+
+    @Test func itNamesThePageRatherThanAnAddress() {
+        #expect(SourceFixConfirmCopy.fixTitle == "Change the page link")
+    }
+
+    // The word it may not use, because the control four lines above it on the same row owns it for the
+    // street address that places this source's shows.
+    @Test func neitherTheLabelNorItsTooltipSaysAddress() {
+        #expect(!SourceFixConfirmCopy.fixTitle.lowercased().contains("address"))
+        #expect(!SourceFixConfirmCopy.fixHelp.lowercased().contains("address"))
+    }
+
+    // And it no longer claims something is wrong, on a row where it is offered whether or not anything
+    // failed.
+    @Test func itDoesNotAssertADiagnosisItHasNotMade() {
+        #expect(!SourceFixConfirmCopy.fixTitle.lowercased().contains("fix"))
+    }
+}
+
