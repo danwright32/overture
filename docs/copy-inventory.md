@@ -321,7 +321,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/EventClassifier.swift`
 ", so a performer who is a past client may have read as cold"
     `Persistence/PrepImporter.swift`
-"1 ignored client"
+"1 client set aside"
     `Domain/ClientCoverage.swift`
 "1 named producer answers for several of them; \(s.performerHuntCount) "
     `Domain/ProbeSelection.swift`
@@ -865,8 +865,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreUnavailableView.swift`
 "If they asked you to stop emailing them, Overture will keep every future show from this org out of your queue. You can undo it from the row."
     `UI/DraftReviewView.swift`
-"Ignored \(name). It will not show as a coverage gap."
-    `Domain/ClientCoverage.swift`
 "In \(days) day\(days == 1 ? "" : "s"), likely too close to book"
     `UI/QueueView+Model.swift`
 "In \(days) days, good to send"
@@ -1110,8 +1108,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Not now"
     `Domain/BuildFreshnessPanel.swift`
     `UI/BlockDaysSheet.swift`
-"Not one I scout"
-    `Domain/ClientCoverage.swift`
 "Not press/media"
     `UI/DraftReviewView.swift`
 "Not read yet"
@@ -1365,6 +1361,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ScoutStartGate.swift`
 "Presumes the booking instead of handing back the decision"
     `Domain/DraftCheck.swift`
+"Put back"
+    `Domain/ClientCoverage.swift`
 "Put this date's shows back in the check, so their contacts are researched again. You'll see what it will spend before anything starts."
     `Domain/Reachability.swift`
 "Put this prospect back in the queue as undecided"
@@ -1624,6 +1622,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Set a state"
     `UI/ConversationStateMenu.swift`
     `UI/FollowUpsView.swift`
+"Set aside"
+    `Domain/ClientCoverage.swift`
+"Set aside \(name). It will not show as a coverage gap."
+    `Domain/ClientCoverage.swift`
 "Set this show's genre"
     `UI/QueueView+Model.swift`
 "Set up Overture"
@@ -1698,8 +1700,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OnboardingState.swift`
 "Still watched and still checked. Overture will keep reporting these every run rather than quietly giving up on them."
     `Domain/SourceGrade.swift`
-"Stop ignoring this"
-    `Domain/ClientCoverage.swift`
 "Stop sending to this contact"
     `Domain/FollowUp.swift`
 "Stop the reply drafting run"
@@ -2232,10 +2232,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DraftReviewNotes.swift`
 "\(count) \(prospectWord) already pending or re-prepped recently; nothing new queued"
     `App/ActionFeedback.swift`
+"\(count) clients set aside"
+    `Domain/ClientCoverage.swift`
 "\(count) didn't come back, they'll be retried"
     `Domain/HandoffShortfall.swift`
-"\(count) ignored clients"
-    `Domain/ClientCoverage.swift`
 "\(count) sources couldn't be checked."
     `UI/ScoutSummaryView.swift`
 "\(count) sources need"
