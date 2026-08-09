@@ -63,6 +63,17 @@ extension ReplyWatchableRecipient {
         replied = true
         self.repliedAt = repliedAt
     }
+
+    // #2113: when the reply actually ARRIVED, which is what every date surface wants. Prefers the instant
+    // they sent it over the instant Overture noticed, and falls back to the notice for a row recorded
+    // before the send time was captured.
+    //
+    // #2118: stated here rather than on each conformer, so a scouted contact and a direct hire inquiry
+    // cannot answer it differently. They already did: the queue dated a show's reply by when the person
+    // wrote and an inquiry's by when Overture noticed, up to a night apart on two rows sharing one set of
+    // date headings. One definition, because the queue, the reminder calculator and the OmniFocus sync all
+    // ask it and two of them asking differently is how a card ends up under the wrong day (L16).
+    var replyArrivedAt: Date? { inboundReplySentAt ?? repliedAt }
 }
 
 // A contacted entity (a show's lead, or an inquiry) that owns one or more watched threads.

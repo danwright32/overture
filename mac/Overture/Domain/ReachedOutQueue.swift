@@ -8,10 +8,35 @@ import Foundation
 enum ReachedOutQueue {
     // The soonest moment Dan should next reach out to this recipient, or nil if outreach to them has
     // stopped. A past date (overdue) is returned as-is so it sorts to the top of the list.
+    //
+    // #2118: answered through NextReachOut, the one rule a direct hire inquiry answers it through too.
+    // The three tracks below are this entity's own; the fold, the out-of-play guard, and the dating of
+    // work that has already arrived are shared, so the two kinds of row sharing one set of date headings
+    // cannot drift apart again.
     static func nextReachOut(for r: Recipient, of p: Prospect, now: Date,
                              followUpConfig: FollowUpConfig = .init(),
                              reminderConfig: ConversationReminderConfig = .init()) -> Date? {
-        guard r.sentAt != nil else { return nil }                 // only contacted recipients
+        NextReachOut.date(isInPlay: isInPlay(r, of: p), now: now) {
+            let reminderDate = ConversationReminder.nextReminderDate(
+                state: r.conversationState, setAt: r.conversationStateSetAt,
+                remindedAt: r.conversationRemindedAt, performanceDate: p.performanceDate,
+                isClosed: !r.standing.isInPlay, hasUnhandledReply: r.hasUnhandledReply,
+                repliedAt: r.replyArrivedAt, source: r.conversationStateSource,
+                answeredAt: r.replyHandledAt,   // #2170: answered, still unstated, stays here without pressure
+                now: now, config: reminderConfig)
+            // All three are `.scheduled`: each track has already decided which moment it is asking for,
+            // and the conversation track does its own arrival dating for the reply case (through the same
+            // NextReachOut.arrived the inquiry side uses).
+            return [.scheduled(nextFollowUp(for: r, now: now, config: followUpConfig)),
+                    .scheduled(nextFormDecision(for: r, of: p, config: followUpConfig)),
+                    .scheduled(reminderDate)]
+        }
+    }
+
+    // Is there anything left to reach out about on this contact at all? The inquiry side asks the same
+    // question of itself in its own vocabulary; both hand the answer to the shared rule.
+    static func isInPlay(_ r: Recipient, of p: Prospect) -> Bool {
+        guard r.sentAt != nil else { return false }                 // only contacted recipients
         // #331 and #378, now asked through the one shared definition (Recipient.hasProvenOutreach).
         // Both guards said the same thing in two halves: a sent timestamp is not proof of anything, so
         // an emailed contact must carry a real address AND the Gmail message id every genuine send
@@ -21,7 +46,7 @@ enum ReachedOutQueue {
         // hand has neither an address nor a message id and is still a real pitch. Spelled out here as
         // two literal guards it could only ever have meant email, and a show pitched through a form
         // would have matched no stage at all and vanished from the queue with the pitch still live.
-        guard r.hasProvenOutreach else { return nil }
+        guard r.hasProvenOutreach else { return false }
         // #2225: the SHOW booked, so there is nothing left to reach out about on any of its contacts.
         // Both booking paths freeze only the contacts that were never emailed, so an already-emailed
         // contact kept its nil resolution, stayed in play, and the row went on counting down to a nudge
@@ -31,22 +56,8 @@ enum ReachedOutQueue {
         //
         // Asked through `isBooked`, which folds the show's own outcome together with a booking recorded
         // on any one contact, because Dan records his by hand on the contact (L83).
-        guard !p.isBooked else { return nil }
-        let standing = r.standing
-        guard standing.isInPlay else { return nil }
-
-        let unhandledReply = r.hasUnhandledReply
-        let reminderDate = ConversationReminder.nextReminderDate(
-            state: r.conversationState, setAt: r.conversationStateSetAt, remindedAt: r.conversationRemindedAt,
-            performanceDate: p.performanceDate, isClosed: !standing.isInPlay, hasUnhandledReply: unhandledReply,
-            repliedAt: r.replyArrivedAt, source: r.conversationStateSource,
-            answeredAt: r.replyHandledAt,   // #2170: answered, still unstated, stays here without pressure
-            now: now, config: reminderConfig)
-        return [nextFollowUp(for: r, now: now, config: followUpConfig),
-                nextFormDecision(for: r, of: p, config: followUpConfig),
-                reminderDate]
-            .compactMap { $0 }
-            .min()
+        guard !p.isBooked else { return false }
+        return r.standing.isInPlay
     }
 
     // Contacted recipients with outreach still active, each paired with its own next-reach-out date,
@@ -169,7 +180,7 @@ enum ReachedOutQueue {
     // The next silent nudge for a still-silent recipient, mirroring FollowUp.dueRecipients' own
     // eligibility check (r.isAwaitingFollowUp) rather than reimplementing it: paced by gapDays from
     // the last touch, up to maxFollowUps; nothing once this recipient replied/resolved or the cap is
-    // reached. Closed recipients are already excluded by the standing.isInPlay guard in nextReachOut.
+    // reached. Closed recipients are already excluded by the standing.isInPlay guard in isInPlay above.
     // #1630: a form outreach's own clock. It is a DECIDE date, not a nudge date: Overture cannot email
     // this contact and cannot see a reply to them, so the only thing left that moves the show forward is
     // Dan saying what happened. Paced by the same gap as a first email follow-up (his call, 2026-07-28)
