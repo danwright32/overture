@@ -30,6 +30,7 @@ the workflow's runbook is its spec.
 | `overture-prep-queue.json` | App (`PrepQueueBuilder.encode`) | Prep run (workflow) | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 | `fixtures/prep-queue/` | `PrepQueueContractTests.swift` |
 | `overture-prep-results.json` | Prep run (workflow) writes the results; then **`prep-run.sh`** adds three top-level keys of its own (`model`, `runCost`, `webCalls`, all via `lib/models.sh`, after the workflow has finished). See the note below the table. | App (`PrepImporter` / `PrepResultsDecoder`; it ignores all three of those keys) | 1, 2, 3, 4, 5, 6, 7, 8 | `fixtures/prep-results/` (`run-metadata-complete-v8.json` and `run-metadata-partial-v8.json` carry the three keys) | `PrepResultsContractTests.swift`, `PrepResultsRunMetadataContractTests.swift`, `lib/models.test.sh` |
 | `overture-prep-progress.json` | `prep-run.sh` **only**: seeds it, then derives every update from `overture-prep-results.json` itself (`lib/progress-watcher.sh`'s `update_progress_from_results`, the same helper scout uses). #1023: the workflow never writes this file; it rewrites the results file incrementally and the script counts its entries, so a run that forgets to self-report can no longer leave the count wrong. | App (`PrepProgressDecoder`) | 1 | `fixtures/prep-progress/` | `PrepProgressContractTests.swift`, `lib/progress-watcher.test.sh` |
+| `prep-run-archives/<yyyyMMdd-HHmmss>/` | App (`PrepRunArchive.archiveFinishedRun`, #1878: on every run completion, and at launch for a run that ended while Overture was closed) | By hand today (the evidence for "did the run do what the runbook told it to"), and the intended source of history for #1616's wait estimate | n/a: the folder holds byte copies of the two files above under their live names, so each keeps its own version | `fixtures/prep-queue/`, `fixtures/prep-results/` (the same fixtures, read by the archive's own tests) | `PrepRunArchiveTests.swift` |
 | `prep-cancel` | App (`PrepQueueService.requestCancel`) writes it to ask a running Prep run to stop; App (`startPrep`) clears any stale one before a fresh run | `prep-run.sh` (`lib/scout-cancel.sh`'s `cancel_requested`, on each heartbeat tick; `clear_cancel` on exit) | n/a (empty sentinel; presence IS the request, contents never read) | none | `PrepReplyCancelServiceTests.swift`, `lib/scout-cancel.test.sh`, `PrepReplyRunnerWiringGuardTests.swift` |
 | `reachability-probe-run.json` | App (`PrepQueueService.startReachabilityProbe`, via `ReachabilityProbeMarker.write`), rewritten by `settleReachabilityProbe` when a settle could not save, removed when it settles | App (`ReachabilityProbeMarker.read`, from `settleReachabilityProbe` / `settleOrphanedProbe` / `isProbeRunning`); `prep-run.sh` reads its PRESENCE only, to chunk the run and pick the cheaper model | none (two fields; `settleAttempts` added additively and optionally in #1809) | `fixtures/reachability-probe-run/` | `ReachabilityProbeMarkerContractTests.swift`, `UnfinishedCheckTests.swift`, `RunKindGuardTests.swift`, `prep-run-chunking.test.sh` |
 | `overture-reply-classify-queue.json` | App (`ReplyClassifyQueueBuilder.encode`) | Classify+drafter run (workflow) | 1, 2, 3 | `fixtures/reply-classify/` | `ReplyClassifyContractTests.swift` |
@@ -242,6 +243,18 @@ does the research and drafting, and writes `prep-results.json`; the app ingests 
 key the run must echo back verbatim, never rebuild. The Prep run is the counterpart side with no
 automated test, so `fixtures/prep-queue/` and `fixtures/prep-results/` are its spec (see
 `docs/prep-runbook.md`).
+
+Both files are OVERWRITTEN by the next run, so #1878 keeps each finished run's pair in
+`prep-run-archives/<yyyyMMdd-HHmmss>/` beside the live ones, the last 30, through the same rotation the
+store backups use (`DatedFolderRotation`). The folder is named for the RUN, from its own `generatedAt`
+rendered in UTC, so the name and the timestamp inside it are the same moment and archiving one run twice
+(the app archives at launch and again when it settles a run it watched) lands on the one folder rather
+than minting a second copy. The files keep their live names, so anything that can read a live handoff
+file can be pointed at an archived run with nothing to translate, and their fixtures and versions above
+are therefore the archive's too. A run that produced only half a pair is still archived, with
+`archive.log` naming what was missing: a run that went wrong is the one most worth reading later.
+`prep-run-events.jsonl` and `prep-run.log` are 300 KB+ each and are deliberately NOT archived; their
+retention is a separate decision.
 
 The runbook states BOTH versions and names every item field in prose, which drifted from the code
 unnoticed until #1908 (#1897 shipped queue v10 with `venueHistory` while the input spec still said
