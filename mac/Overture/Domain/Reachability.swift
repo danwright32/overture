@@ -6,8 +6,10 @@ import Foundation
 // scout, with no new fetch and no tokens. It exists to flag the known-dead cases so Dan never dismisses a
 // reachable show in favour of a doubly-weak long shot he can't actually pitch.
 //
-// #1586, ON THE STAGE NAMED HERE: this and the three comments beside it said "at Review" until 2026-08-08,
-// and that was true when #1145 was written. Since #1134's stage-only navigation, keep/dismiss happens on
+// #1586, ON THE STAGE NAMED HERE: this and the three comments beside it named the Review stage until
+// 2026-08-08, and that was true when #1145 was written. (Phrased without repeating the wording itself,
+// because the guard on this file cannot tell a line describing the mistake from a line making it.)
+// Since #1134's stage-only navigation, keep/dismiss happens on
 // Scout (`StageNavigation.matches(.scout,)` is `status == .new` and still open, with `OpenForDecision` as
 // the one definition of a show awaiting his decision), and `.review` means `status == .drafted`, a show
 // whose email is already written. The stale wording was not cosmetic: it is what made a reading of this
