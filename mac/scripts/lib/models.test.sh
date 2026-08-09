@@ -414,6 +414,95 @@ record_web_calls "${WEBTMP}/broken.json" 3 "${WEBTMP}/events.jsonl"
 assert_equals "an unparsable results file is left exactly as it was" \
   'not json{' "$(cat "${WEBTMP}/broken.json")"
 
+# --- #1678: the committed contract fixtures carry the shape these writers actually produce -----------
+#
+# `fixtures/prep-results/run-metadata-complete-v8.json` and `run-metadata-partial-v8.json` are what the Swift
+# side asserts against, and a fixture nobody generated is a shape somebody imagined. It would then defend
+# that imagined shape forever, and no reviewer could see the difference (L48).
+#
+# So the fixtures are compared, key for key, against what these three functions emit right now. Values are
+# deliberately NOT compared: the committed figures come from the run measured on the live store on
+# 2026-08-07 and the base results file decides items/parties/allowance. The KEY SET is the contract, and
+# it is the key set the honest/partial split lives in: a `usd` appearing on the incomplete path, or a
+# `partialTotal` disappearing from it, changes it here and fails.
+
+FIXTMP="$(mktemp -d)"
+FIXTURES="$(cd "${SCRIPT_DIR}/../../.." && pwd)/fixtures/prep-results"
+
+emit_tool_uses() {
+  local file="$1" name="$2" count="$3" i url
+  for ((i = 0; i < count; i++)); do
+    if [[ "${name}" == "WebFetch" ]]; then
+      url="{\"url\":\"https://example.org/events/${i}\"}"
+    else
+      url="{\"query\":\"contact ${i}\"}"
+    fi
+    printf '%s\n' "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"name\":\"${name}\",\"input\":${url}}]}}" >> "${file}"
+  done
+}
+
+: > "${FIXTMP}/s1.jsonl"; emit_tool_uses "${FIXTMP}/s1.jsonl" WebFetch 10; emit_tool_uses "${FIXTMP}/s1.jsonl" WebSearch 11
+: > "${FIXTMP}/s2.jsonl"; emit_tool_uses "${FIXTMP}/s2.jsonl" WebFetch 9;  emit_tool_uses "${FIXTMP}/s2.jsonl" WebSearch 10
+: > "${FIXTMP}/s3.jsonl"; emit_tool_uses "${FIXTMP}/s3.jsonl" WebFetch 9;  emit_tool_uses "${FIXTMP}/s3.jsonl" WebSearch 10
+printf '%s\n' '{"type":"result","subtype":"success","total_cost_usd":1.802411,"duration_ms":389906}' >> "${FIXTMP}/s1.jsonl"
+printf '%s\n' '{"type":"result","subtype":"success","total_cost_usd":1.798506,"duration_ms":361204}' >> "${FIXTMP}/s2.jsonl"
+printf '%s\n' '{"type":"result","subtype":"success","total_cost_usd":1.794506,"duration_ms":342117}' >> "${FIXTMP}/s3.jsonl"
+
+# Sorted key list of one top-level object in a JSON file, so the comparison is order-independent.
+keys_of() {
+  node -e '
+    const fs = require("fs");
+    const [file, key] = process.argv.slice(1);
+    const value = JSON.parse(fs.readFileSync(file, "utf8"))[key];
+    if (value === undefined) { console.log("MISSING"); process.exit(0); }
+    console.log(typeof value === "object" ? Object.keys(value).sort().join(",") : "scalar");
+  ' "$1" "$2"
+}
+
+cp "${FIXTURES}/v8.json" "${FIXTMP}/fresh-complete.json"
+record_model "${FIXTMP}/fresh-complete.json" "sonnet"
+record_run_cost "${FIXTMP}/fresh-complete.json" "${FIXTMP}/s1.jsonl" "${FIXTMP}/s2.jsonl" "${FIXTMP}/s3.jsonl"
+record_web_calls "${FIXTMP}/fresh-complete.json" 15 "${FIXTMP}/s1.jsonl" "${FIXTMP}/s2.jsonl" "${FIXTMP}/s3.jsonl"
+
+cp "${FIXTURES}/v8.json" "${FIXTMP}/fresh-partial.json"
+record_model "${FIXTMP}/fresh-partial.json" "sonnet"
+record_run_cost "${FIXTMP}/fresh-partial.json" "${FIXTMP}/s1.jsonl" "${FIXTMP}/s2.jsonl" "${FIXTMP}/never-appeared.jsonl"
+record_web_calls "${FIXTMP}/fresh-partial.json" 15 "${FIXTMP}/s1.jsonl" "${FIXTMP}/s2.jsonl" "${FIXTMP}/never-appeared.jsonl"
+
+for pair in "model:record_model" "runCost:record_run_cost" "webCalls:record_web_calls"; do
+  key="${pair%%:*}"
+  writer="${pair##*:}"
+
+  fresh_keys="$(keys_of "${FIXTMP}/fresh-complete.json" "${key}")"
+  assert_equals "the complete fixture's ${key} is the shape ${writer} writes" \
+    "${fresh_keys}" "$(keys_of "${FIXTURES}/run-metadata-complete-v8.json" "${key}")"
+  if [[ "${fresh_keys}" == "MISSING" ]]; then
+    echo "FAIL - ${key} is absent from a freshly written file, so this comparison proves nothing"
+    FAILURES=$((FAILURES + 1))
+  fi
+
+  assert_equals "the partial fixture's ${key} is the shape ${writer} writes on a partial run" \
+    "$(keys_of "${FIXTMP}/fresh-partial.json" "${key}")" \
+    "$(keys_of "${FIXTURES}/run-metadata-partial-v8.json" "${key}")"
+done
+
+# And the split itself, asserted on the committed fixtures rather than on a temp file, because those are
+# what the Swift side and any future reader actually consult.
+complete_fixture="$(cat "${FIXTURES}/run-metadata-complete-v8.json")"
+partial_fixture="$(cat "${FIXTURES}/run-metadata-partial-v8.json")"
+assert_contains "the complete fixture states a real cost" "${complete_fixture}" '"usd": 5.395423'
+assert_contains "the complete fixture states a real web call total" "${complete_fixture}" '"total": 59'
+if [[ "${partial_fixture}" == *'"usd":'* || "${partial_fixture}" == *'"total":'* ]]; then
+  echo "FAIL - the partial fixture publishes a figure a reader could take for the run's total"
+  FAILURES=$((FAILURES + 1))
+else
+  echo "ok - the partial fixture publishes no figure that could be read as the run's total"
+fi
+assert_contains "the partial fixture says what it DID see, under its own name" \
+  "${partial_fixture}" '"partialUsd": 3.600917'
+
+rm -rf "${FIXTMP}"
+
 if [[ ${FAILURES} -gt 0 ]]; then
   echo "${FAILURES} failure(s)"
   exit 1
