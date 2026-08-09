@@ -6,9 +6,10 @@ set -euo pipefail
 # (#2291). Per-clone because core.hooksPath lives in .git/config, which is not tracked, so each
 # clone/worktree needs it once (documented in AGENTS.md). Safe to re-run.
 #
-# That per-clone step is exactly why #2291 also wanted GitHub branch protection, which cannot be absent:
-# a clone that never ran this has no pre-push guard at all. It needs GitHub Pro on a private repo
-# (measured 2026-08-08), so the hook is the free half and the stronger half is still open.
+# The per-clone step is narrower than it looks: core.hooksPath lives in the SHARED git config (this repo
+# sets no extensions.worktreeConfig), so every worktree inherits it from the main checkout without running
+# this again. #2291's proposed GitHub branch protection was declined on 2026-08-09 on that measurement,
+# and is a decision rather than an outstanding to-do. See AGENTS.md.
 #
 # Usage: scripts/install-git-hooks.sh
 

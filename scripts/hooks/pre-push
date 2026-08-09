@@ -6,10 +6,13 @@
 # A direct push bypasses all of them at once, and on 2026-08-07 one did, with nothing to show for it but
 # "HEAD -> main" in the push output.
 #
-# Deliberately NOT the whole answer. GitHub branch protection would be stronger, because it cannot be
-# absent, and a local hook is absent in any clone or worktree that has not run scripts/install-git-hooks.sh
-# (measured 2026-08-08: it needs GitHub Pro on a private repo, so this is the free half of #2291's two
-# suggested directions, and the paid one remains open).
+# The whole answer, as it turns out. #2291 also proposed GitHub branch protection, which cannot be absent
+# the way a local hook can, and Dan declined it on 2026-08-09 after the gap was measured rather than
+# assumed: the push that caused the issue came from an ordinary working clone, which has this hook, and
+# every agent worktree on this Mac has it too, because core.hooksPath lives in the shared git config and
+# is inherited without running the installer. What is left uncovered is a fresh clone elsewhere whose
+# owner skips scripts/install-git-hooks.sh, which is not worth a paid plan on a solo private repo. See
+# AGENTS.md for the full reasoning; this is a decision, not an outstanding to-do.
 #
 # Degrade-safe in one direction only: if the decision helper is missing this exits 0 rather than blocking
 # a push it cannot judge, because a hook that fails a push over its own missing file would be worse than
