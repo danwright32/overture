@@ -110,10 +110,41 @@ enum StoreLocation {
         return isDebugBuild ? data.appendingPathComponent("Overture", isDirectory: true) : data
     }
 
+    // #2097: where a TEST run's handoff writes go instead.
+    //
+    // The handoff directory is not a scratch folder. It holds the Gmail tokens, the booking history and
+    // every JSON file the scout, the app and the importer hand each other, and a test run reaching it
+    // writes into Dan's live data. `HandoffCleanup` already carried a pin refusing to write there under
+    // test, which meant the rule was understood and only partly enforced: any path not going through
+    // that pin still landed in the real folder.
+    //
+    // Same shape as #2003's fix for the agent problem ledger, and for the same reason: applied where the
+    // path is RESOLVED rather than at each call site, so a writer added later arrives protected instead
+    // of needing to be remembered.
+    //
+    // Redirected rather than refused. A test exercising a real write path should still exercise it, and
+    // a guard that silently dropped the write would leave the live folder looking exactly like one a
+    // working guard protects (L11).
+    //
+    // A directory a test names ITSELF (a throwaway temp folder it then asserts on) is untouched: only
+    // the computed live path is swapped, and the pure `handoffDirectory(appSupport:isDebugBuild:)` above
+    // still answers for whatever it is handed.
+    static var testRunHandoffDirectory: URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("overture-test-run-handoff", isDirectory: true)
+    }
+
+    static func writableHandoffDirectory(_ requested: URL,
+                                         isUnderTest: Bool = AppEnvironment.isRunningUnderTests,
+                                         testRunDirectory: URL = StoreLocation.testRunHandoffDirectory) -> URL {
+        isUnderTest ? testRunDirectory : requested
+    }
+
     // The handoff directory for THIS build. Creates it on first use (dataDirectory already ensures the
     // parent exists), so writers never hit a missing-directory error.
     static var handoffDirectory: URL {
-        let dir = handoffDirectory(appSupport: appSupport, isDebugBuild: isDebugBuild)
+        let dir = writableHandoffDirectory(handoffDirectory(appSupport: appSupport,
+                                                            isDebugBuild: isDebugBuild))
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }
