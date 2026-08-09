@@ -38,7 +38,7 @@ struct ReachedOutMergeTests {
         // Thu 2026-01-01 plus three business days is Tue 2026-01-06 (Fri, Mon, Tue).
         let inq = inquiry(sentAt: day("2026-01-01"))
 
-        #expect(inq.nextReachOutDate.map { EasternDate.dayString(from: $0) } == "2026-01-06")
+        #expect(inq.nextReachOutDate(now: day("2026-01-05")).map { EasternDate.dayString(from: $0) } == "2026-01-06")
     }
 
     // Once they write back it is Dan's move, so it sorts by when they replied rather than by a nudge
@@ -48,17 +48,17 @@ struct ReachedOutMergeTests {
     func repliedInquiryIsDueWhenTheyReplied() {
         let inq = inquiry(sentAt: day("2026-01-01"), replied: true, repliedAt: day("2026-01-02"))
 
-        #expect(inq.nextReachOutDate.map { EasternDate.dayString(from: $0) } == "2026-01-02")
+        #expect(inq.nextReachOutDate(now: day("2026-01-05")).map { EasternDate.dayString(from: $0) } == "2026-01-02")
     }
 
     // Nothing to reach out about: not sent yet (it belongs in Review), or closed.
     @Test("an unsent or closed inquiry has no reach-out date")
     func noDateWhenUnsentOrClosed() {
-        #expect(inquiry(sentAt: nil).nextReachOutDate == nil)
+        #expect(inquiry(sentAt: nil).nextReachOutDate(now: day("2026-01-05")) == nil)
 
         let closed = inquiry(sentAt: day("2026-01-01"))
         closed.markOutcomeManually(.booked, now: day("2026-01-05"))
-        #expect(closed.nextReachOutDate == nil)
+        #expect(closed.nextReachOutDate(now: day("2026-01-05")) == nil)
     }
 
     // The merge itself: both kinds come back in ONE list ordered by that shared date, so the grouping
