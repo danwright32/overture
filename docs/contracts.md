@@ -31,6 +31,7 @@ the workflow's runbook is its spec.
 | `overture-prep-results.json` | Prep run (workflow) writes the results; then **`prep-run.sh`** adds three top-level keys of its own (`model`, `runCost`, `webCalls`, all via `lib/models.sh`, after the workflow has finished). See the note below the table. | App (`PrepImporter` / `PrepResultsDecoder`; it ignores all three of those keys) | 1, 2, 3, 4, 5, 6, 7, 8 | `fixtures/prep-results/` (`run-metadata-complete-v8.json` and `run-metadata-partial-v8.json` carry the three keys) | `PrepResultsContractTests.swift`, `PrepResultsRunMetadataContractTests.swift`, `lib/models.test.sh` |
 | `overture-prep-progress.json` | `prep-run.sh` **only**: seeds it, then derives every update from `overture-prep-results.json` itself (`lib/progress-watcher.sh`'s `update_progress_from_results`, the same helper scout uses). #1023: the workflow never writes this file; it rewrites the results file incrementally and the script counts its entries, so a run that forgets to self-report can no longer leave the count wrong. | App (`PrepProgressDecoder`) | 1 | `fixtures/prep-progress/` | `PrepProgressContractTests.swift`, `lib/progress-watcher.test.sh` |
 | `prep-cancel` | App (`PrepQueueService.requestCancel`) writes it to ask a running Prep run to stop; App (`startPrep`) clears any stale one before a fresh run | `prep-run.sh` (`lib/scout-cancel.sh`'s `cancel_requested`, on each heartbeat tick; `clear_cancel` on exit) | n/a (empty sentinel; presence IS the request, contents never read) | none | `PrepReplyCancelServiceTests.swift`, `lib/scout-cancel.test.sh`, `PrepReplyRunnerWiringGuardTests.swift` |
+| `reachability-probe-run.json` | App (`PrepQueueService.startReachabilityProbe`, via `ReachabilityProbeMarker.write`), rewritten by `settleReachabilityProbe` when a settle could not save, removed when it settles | App (`ReachabilityProbeMarker.read`, from `settleReachabilityProbe` / `settleOrphanedProbe` / `isProbeRunning`); `prep-run.sh` reads its PRESENCE only, to chunk the run and pick the cheaper model | none (two fields; `settleAttempts` added additively and optionally in #1809) | `fixtures/reachability-probe-run/` | `ReachabilityProbeMarkerContractTests.swift`, `UnfinishedCheckTests.swift`, `RunKindGuardTests.swift`, `prep-run-chunking.test.sh` |
 | `overture-reply-classify-queue.json` | App (`ReplyClassifyQueueBuilder.encode`) | Classify+drafter run (workflow) | 1, 2, 3 | `fixtures/reply-classify/` | `ReplyClassifyContractTests.swift` |
 | `overture-reply-classify-results.json` | Classify+drafter run (workflow, rewrites it after every item, not only once at the end; #1081) | App (`ReplyClassifyResultsDecoder`) | 1, 2, 3 | `fixtures/reply-classify/` | `ReplyClassifyContractTests.swift` |
 | `overture-reply-classify-progress.json` | `reply-classify-run.sh` **only**: seeds it, then derives every update from `overture-reply-classify-results.json` itself (`lib/progress-watcher.sh`'s `update_progress_from_results`, the same helper prep and scout use). #1081: the workflow never writes this file; it rewrites the results file incrementally and the script counts its entries, so a run that forgets to self-report can no longer leave the count wrong. | App (`ReplyClassifyProgressDecoder`) | 1 | `fixtures/reply-classify-progress/` | `ReplyClassifyProgressContractTests.swift`, `lib/progress-watcher.test.sh` |
@@ -74,6 +75,23 @@ can never be attributed to a press other than the one that caused it, and an `ou
 `failed` with the run's own `reason` sentence. Success is expressed by REMOVING the file rather than by a
 value, which is what makes a record that is present and unreadable safe to treat as a failure. Like the two
 records above it describes the app rather than a run, so the retention sweep does not own it.
+
+#1813: `reachability-probe-run.json` is the marker that says which KIND of run is in flight, and it is
+registered here late. Both of its programmatic sides are the app, which is why it was missed, but the seam it
+crosses is time rather than language: a check runs detached for twenty minutes or more and can outlive the
+build that launched it, so a marker written by one version is read by whatever version is installed when the
+run comes home. #1809 changed its shape while that was true, adding `settleAttempts`, and got away with it
+only because the field was made optional: Swift's synthesized decoding does not apply a property's default
+value, so a non-optional would have failed to read exactly the paid run the field exists to protect. The
+`launched.json` fixture is that pre-#1809 shape, kept so the next change to this file has to stay compatible
+with it rather than merely intending to.
+
+Misreading it is expensive in both directions, and unequally. A check read as a Prep run drafts over shows
+Dan never kept; a Prep run read as a check ingests probe-safely, short-circuits before any draft handling,
+and discards every draft that run wrote with nothing on screen saying why, which is what #1809 cost. So the
+undecodable case is deliberately resolved as a Prep run: `read` throws, every caller flattens that to nil,
+and `settleReachabilityProbe` declines, which is what sends the completion path to the ordinary ingest with
+the run's drafts intact. `UnreadableCheckMarkerTests` asserts that end to end rather than trusting it.
 
 #1808: `installed-build.json` and `shipped-commit.json` are how the app answers "is the copy Dan is looking
 at behind the code?", which it cannot work out for itself because it has no git at runtime. They are the
