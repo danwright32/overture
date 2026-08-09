@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1196 sentences**, from 396 source files.
+Every sentence Overture can say to Dan: **1196 sentences**, from 398 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -20,6 +20,7 @@ What is not, and why:
 
 ## Excluded at the source
 
+- `App/PrepRunArchive.swift`: archive.log is a diagnostic record, not the app's voice on screen
 - `App/StoreBackup.swift`: backup.log is a diagnostic record, not the app's voice on screen
 - `App/StoreSchemaGuard.swift`: sqlite's own error text, for backup.log, never shown on screen
 - `App/StoreShrinkCheck.swift`: SQL, not a sentence Overture says to Dan
