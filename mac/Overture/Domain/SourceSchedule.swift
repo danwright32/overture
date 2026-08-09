@@ -151,6 +151,14 @@ enum SourceSchedule {
     // `plan.deferred` is empty on every run the app actually makes, so this filter currently decides
     // nothing on screen. It is kept correct rather than deleted because the budget is still honoured when a
     // caller passes one, and a rule that is wrong while dormant is a bug waiting for the day it wakes up.
+    //
+    // #1557, Dan's call on 2026-08-08 between deleting it and keeping it: KEEP IT AS A LEVER, dormant, for
+    // a watchlist large enough to want a runaway guard. Dormant is now a pinned state rather than a claim
+    // in a comment: `DormantFetchBudgetTests` fails if a default run ever defers anything, and fails if any
+    // call site in the app sets a ceiling. That second guard is the one that matters, because waking this
+    // path is otherwise a one-word edit somewhere else entirely, and this filter's own tests all pass
+    // against a deferred list built by hand, so they look like evidence the count is live when it is not.
+    // #1546 was filed on exactly that misreading.
     static func waitingToRead(deferred: [WatchedSource]) -> [WatchedSource] {
         deferred.filter(\.isCarryingUnreadListings)
     }
