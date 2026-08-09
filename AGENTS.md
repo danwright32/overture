@@ -51,10 +51,16 @@ already drifting from the Swift version it mirrored.
   reaches main by pull request, and the checks that make a merge safe run on that path only, so a
   direct push skips every one of them at once: one did on 2026-08-07, and the only sign was
   `HEAD -> main` in the push output. A deliberate direct push is still possible with
-  `ALLOW_PUSH_TO_MAIN=1 git push ...`, which announces itself rather than passing silently. Note the
-  hole it shares with `post-merge`: a clone that never ran the installer has neither hook. GitHub
-  branch protection would close that and cannot be absent, but it needs GitHub Pro on a private repo
-  (measured 2026-08-08), so it stays open as the stronger half of #2291.
+  `ALLOW_PUSH_TO_MAIN=1 git push ...`, which announces itself rather than passing silently.
+  #2291 also proposed GitHub branch protection as the stronger half, since a server side rule cannot be
+  absent the way a local hook can. **Dan's call, 2026-08-09: declined, and not an open to-do.** It needs
+  GitHub Pro on a private repo (both the branch protection and rulesets APIs answer 403 Upgrade to
+  GitHub Pro, measured 2026-08-08), and what it would buy was measured rather than assumed: the direct
+  push that caused the issue came from an ordinary working clone, which has the hook, and all 11 agent
+  worktrees on this Mac have it too, because `core.hooksPath` lives in the shared config (there is no
+  `extensions.worktreeConfig` here), so every future worktree inherits it without running the installer.
+  What remains uncovered is only a FRESH CLONE elsewhere whose owner skips `scripts/install-git-hooks.sh`
+  and then pushes straight to main. Revisit if this ever becomes a repo more than one machine clones.
 - Keeping the checkout tidy: `scripts/tidy-checkout.sh` (#2234) removes local branches and agent
   worktrees whose work has provably shipped. It is a DRY RUN by default and needs `--apply` to
   delete anything. Note WHY it exists rather than the one-line idiom: this repo squash-merges, so a
