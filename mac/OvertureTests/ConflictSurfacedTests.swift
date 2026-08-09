@@ -208,12 +208,14 @@ struct ConflictSurfacedTests {
         run([event("Vienna Philharmonic", date: "2099-09-19"), event("Takács Quartet", date: "2099-09-25")],
             blocked: vacation("2099-09-19", "2099-09-19"), in: ctx)
 
-        // Fed in date order, the way the queue's own query hands them over (queueOrder preserves input
-        // order for same-window shows; it does not sort). The point is that the conflicted show is NOT
-        // pulled out of that order to the bottom.
+        // Fed in date order, the way the queue's own @Query hands them over, then filtered to what the
+        // stages will render exactly as QueueRenderPass does (#2348: this used to run the retired
+        // QueueModel.queueOrder). Filtering preserves input order, so the point stands either way: the
+        // conflicted show is NOT pulled out of that order to the bottom.
         let items = stored(ctx).map(QueueItem.init)
             .sorted { ($0.performanceDate ?? "") < ($1.performanceDate ?? "") }
-        let ordered = QueueModel.queueOrder(items, today: "2099-08-01")
+        let showable = StageNavigation.queueKeys(in: stored(ctx), reachedOutKeys: [], today: "2099-08-01")
+        let ordered = items.filter { showable.contains($0.id) }
 
         #expect(ordered.count == 2)                                     // both present
         #expect(ordered.first?.groupName == "Vienna Philharmonic")      // the earlier date, conflicted, still first

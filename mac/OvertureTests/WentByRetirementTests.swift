@@ -178,15 +178,15 @@ struct WentByRetirementTests {
         #expect(waiting.union(opened) == Set(all.map(\.naturalKey)), "every untriaged show is one or the other")
     }
 
-    // #1540 + #863: the sweep and the triage LIST are separate code (a SwiftData predicate here, a pure
-    // array filter in QueueModel), and a pill's number is a promise about the rows the list will render.
-    // So assert them against each other on the exact row the reversal turns on, rather than trusting that
-    // two hand-written date checks say the same thing.
+    // #1540 + #863: the sweep and the triage LIST are separate code (a SwiftData predicate here, the stage
+    // predicate there), and a pill's number is a promise about the rows the list will render. So assert
+    // them against each other on the exact row the reversal turns on, rather than trusting that two
+    // hand-written date checks say the same thing. #2348 dropped a third assertion from this test, over
+    // QueueModel.toSendQueue, once that filter was deleted: it was the retired copy of the same rule.
     @Test func theSweepAndTheTriageListAgreeAboutAnOpenedRun() throws {
         let ctx = try context()
         let running = show(ctx, "run", date: "2026-07-09", runEnd: "2026-07-20")
 
-        #expect(QueueModel.toSendQueue([QueueItem(running)], reachedOutKeys: [], today: today).isEmpty)
         #expect(running.hasOpened(today: today))
         #expect(StageNavigation.naturalKeys(for: .scout, in: [running], today: today).isEmpty)
     }
