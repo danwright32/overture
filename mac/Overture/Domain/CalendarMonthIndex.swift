@@ -22,6 +22,11 @@ enum CalendarMonthIndex {
     // Four, and it is a HARD cap rather than a target (Dan's call, 2026-07-13). Kaufman lists 21 months
     // out to January 2028. Reading all of them would multiply the cost of every scout forever to reach
     // shows too far out to pitch, and an AI re-read fires whenever ANY fetched page changes.
+    //
+    // #1571: this is the SUPPLY side of a pair. The queue only shows the next
+    // [[QueueModel.leadTimeWindowDays]] days, and the relationship between the two (why they differ,
+    // and the one date a year where four months falls a day short of ninety) is written down in one
+    // place, at that constant. Read it before changing this number.
     static let defaultHorizon = 4
 
     // What a page's own month navigation tells us: the months we can go and read, and the months it

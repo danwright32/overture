@@ -1076,6 +1076,27 @@ enum QueueModel {
 
     // The window the queue shows: past performances drop out, and anything more than this
     // many days out is beyond the planning horizon Dan wants to look at.
+    //
+    // #1571: THIS IS THE ONE PLACE the queue window and the scout horizon are related, because they
+    // are two numbers in two units in two files and nothing used to connect them.
+    //
+    //   DEMAND  this constant, 90 days, is how far ahead Dan wants to look.
+    //   SUPPLY  [[CalendarMonthIndex.defaultHorizon]], 4 whole calendar months, is how far ahead an
+    //           ordinary watched source is read. [[ClientHorizon.clientMonths]], 12 months, is the
+    //           wider supply for a known client's own calendar.
+    //
+    // Dan's call, 2026-08-09: 90 days stays, and the scout keeps reading further on purpose, so a show
+    // is already in the store by the time it rolls into the window. The gap between the two is the
+    // buffer, not an oversight.
+    //
+    // The one place the buffer runs out, recorded here so it is not rediscovered as a bug: four whole
+    // months is 122 days ahead at its furthest and 89 at its shortest, and the short case is 31 January
+    // of a year that is not a leap year (February plus March plus April). Asked on that one date the
+    // queue's ninetieth day is 1 May and only April has been read, so a show that far out is picked up
+    // the following night instead. One day late, one date a year.
+    //
+    // `QueueWindowAndScoutHorizonTests` measures all of this from the constants themselves and fails if
+    // either moves, so changing one is a deliberate act rather than a silent drift.
     static let leadTimeWindowDays = 90
     // Within this many days a booking is unrealistic to land, so the event still shows but
     // sinks below everything bookable rather than sitting up top with the nearest dates.
