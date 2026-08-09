@@ -65,12 +65,19 @@
       "browser": 0,
       "bash": 0
     },
+    "deniedByRoute": {
+      "fetch": 0,
+      "search": 0,
+      "browser": 0,
+      "bash": 0
+    },
     "items": 3,
     "parties": 3,
     "capPerItem": 15,
     "allowance": 45,
     "streams": 3,
     "streamsReported": 2,
-    "partialTotal": 40
+    "partialTotal": 40,
+    "partialDenied": 0
   }
 }

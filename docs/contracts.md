@@ -57,9 +57,9 @@ ignore them, which is what makes them safely additive.
 
 The shape that must not be got wrong is the same split in each of `runCost` and `webCalls`:
 
-- `recorded: true` carries the real figure (`usd` and `durationMs`; `total`)
-- `recorded: false` carries **neither of those keys at all**, only `partialUsd` / `partialDurationMs` and
-  `partialTotal`, plus how many streams reported out of how many
+- `recorded: true` carries the real figure (`usd` and `durationMs`; `total` and `denied`)
+- `recorded: false` carries **none of those keys at all**, only `partialUsd` / `partialDurationMs` and
+  `partialTotal` / `partialDenied`, plus how many streams reported out of how many
 
 That absence is the point. A chunked run is up to ten concurrent claudes, so one dead chunk leaves a real but
 incomplete figure, and a reader reaching for the field it always reads must find nothing rather than a part
@@ -245,6 +245,16 @@ written and, as of #1721, still have no reader. Its `recorded` flag is the field
 a stream did not report, the writer publishes NO `total` at all and carries the figure as
 `partialTotal` instead, so nothing downstream can read a partial count as the real one by reaching
 for the field it always reads. `overCap` is likewise absent when the verdict is not yet knowable.
+
+#1835: `total` and `byRoute` count only the calls that actually RAN. A call the permission layer
+refused reached nothing, and counting one as reach both inflated the figure the allowance is judged
+against and, once, was read as evidence a run could do something it cannot. Refusals are counted in
+their own right instead, as `denied` and `deniedByRoute` (`partialDenied` on the incomplete path,
+following exactly the same rule as `total`), because a run repeatedly asking for a tool it does not
+have is a signal worth keeping rather than one to throw away. A refusal is recognised by the CLI's
+`tool_result_meta[].non_execution_kind` or by the permission sentence in the tool result, both read
+from real refusals in Dan's own event streams; deliberately NOT by `is_error`, which a call that
+really ran and failed also carries.
 
 Queue version 2 (#586, #366 Phase 1) adds an optional `production` (`self` / `agency` / `unknown`,
 from `Prospect.production`/#349) to each item, so the research step knows whether a show is

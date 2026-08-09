@@ -117,6 +117,35 @@ record_model() {
 # run is a single unchunked stream over many shows with nothing in it marking where one show ends. Asking
 # the model to announce those boundaries would be asking nicely again, so the honest unit is the run.
 #
+# #1835: a call the permission layer REFUSED is not a call the run made. This counter used to read
+# tool_use blocks and stop there, so a refusal and a fetched page were the same number. Dan's 2026-07-30
+# run recorded `browser: 1` for a navigation that never happened, and the first diagnosis of #1824 then
+# read that 1 as evidence the run HAD browser access. An inflated count also makes a run read as closer
+# to its allowance than it is, and the allowance is the only thing watching a hop cap that otherwise
+# lives in a prompt.
+#
+# Refusals are counted SEPARATELY rather than dropped (`denied` / `deniedByRoute`, `partialDenied` on
+# the incomplete path), because a run repeatedly asking for a tool it does not have is its own signal:
+# dropping them would leave the two runs that most need telling apart, one that never needed the web and
+# one that was blocked from it every time, reporting exactly the same thing.
+#
+# The two marks of a refusal are MEASURED, not invented. They come from the real refusals in
+# `~/Library/Application Support/Overture-Debug/Overture/prep-run-events.chunk-1.jsonl` (lines 60 and 61,
+# 2026-07-27) and `chunk-3.jsonl`, and both refusals carried both marks:
+#
+#   tool_result_meta: [{ id, non_execution_kind: "user-rejected" }]  on the user event, and
+#   a tool_result reading "Claude requested permissions to use <tool>, but you haven't granted it yet."
+#
+# Any `non_execution_kind` counts, not only the measured "user-rejected": the field says the tool did not
+# run, which is the whole question here, and a kind nobody has seen yet is still a call that reached
+# nothing. That is also why the sentence Dan reads says the research never happened rather than naming a
+# cause this cannot always know (L11).
+#
+# Deliberately NOT `is_error`. Across every prep event stream on this Mac (4 runs, 255 tool calls) 6
+# results carried `is_error` and only the 2 refusals were refusals; the other 4 were calls that really
+# ran and failed (a DNS miss, a curl that got a 302, two Bash exits). Counting those as refusals would
+# DROP real web calls, which is the failure this counter exists to prevent.
+#
 #   $1 = results file, rewritten in place
 #   $2 = cap per item
 #   $3.. = the event stream files, one per parallel claude
@@ -156,8 +185,20 @@ record_web_calls() {
       return null;
     };
 
+    // #1835: the two marks of a REFUSED call, both measured from real refusals rather than imagined.
+    // See the block comment above this function for where they were read and why `is_error` is not one
+    // of them. The apostrophe in the sentence is written as an escape because this whole program is a
+    // single-quoted shell string.
+    const refusalSentence = /requested permissions to use .*, but you haven\u0027t granted it yet/;
+    const resultText = (block) =>
+      typeof block.content === "string" ? block.content : JSON.stringify(block.content || "");
+
     const countIn = (events) => {
-      const out = { fetch: 0, search: 0, browser: 0, bash: 0 };
+      const made = { fetch: 0, search: 0, browser: 0, bash: 0 };
+      const refused = { fetch: 0, search: 0, browser: 0, bash: 0 };
+      const routeById = new Map();
+      const routeless = [];   // a tool_use with no id can never be tied to a result, so it counts as made
+      const refusedIds = new Set();
       const lines = fs.readFileSync(events, "utf8").split("\n");
       for (const raw of lines) {
         const line = raw.trim();
@@ -165,18 +206,37 @@ record_web_calls() {
         let parsed;
         // A killed run leaves a half-written line; skip it rather than failing the whole count.
         try { parsed = JSON.parse(line); } catch (e) { continue; }
+        // The structural mark, which sits beside the message rather than inside it.
+        if (Array.isArray(parsed.tool_result_meta)) {
+          for (const meta of parsed.tool_result_meta) {
+            if (meta && meta.id && meta.non_execution_kind) refusedIds.add(meta.id);
+          }
+        }
         const content = parsed && parsed.message && parsed.message.content;
         if (!Array.isArray(content)) continue;
         for (const block of content) {
-          if (!block || block.type !== "tool_use") continue;
-          const route = routeOf(block.name, block.input);
-          if (route) out[route] += 1;
+          if (!block) continue;
+          if (block.type === "tool_use") {
+            const route = routeOf(block.name, block.input);
+            if (!route) continue;
+            if (block.id) routeById.set(block.id, route); else routeless.push(route);
+            continue;
+          }
+          if (block.type === "tool_result" && block.tool_use_id &&
+              refusalSentence.test(resultText(block))) {
+            refusedIds.add(block.tool_use_id);
+          }
         }
       }
-      return out;
+      for (const [id, route] of routeById) {
+        if (refusedIds.has(id)) refused[route] += 1; else made[route] += 1;
+      }
+      for (const route of routeless) made[route] += 1;
+      return { made, refused };
     };
 
     const byRoute = { fetch: 0, search: 0, browser: 0, bash: 0 };
+    const deniedByRoute = { fetch: 0, search: 0, browser: 0, bash: 0 };
     let reported = 0;
     for (const f of eventFiles) {
       let counts;
@@ -186,10 +246,14 @@ record_web_calls() {
         continue;   // a stream that did not report; counted as missing below
       }
       reported += 1;
-      for (const k of Object.keys(byRoute)) byRoute[k] += counts[k];
+      for (const k of Object.keys(byRoute)) {
+        byRoute[k] += counts.made[k];
+        deniedByRoute[k] += counts.refused[k];
+      }
     }
 
     const total = Object.values(byRoute).reduce((a, n) => a + n, 0);
+    const denied = Object.values(deniedByRoute).reduce((a, n) => a + n, 0);
     const items = Array.isArray(json.results) ? json.results.length : 0;
 
     // #1864: the allowance counts research TARGETS, not shows. It was a flat number per show, sized when
@@ -222,18 +286,20 @@ record_web_calls() {
 
     if (complete) {
       json.webCalls = {
-        recorded: true, total, byRoute, items, parties, capPerItem: cap, allowance,
+        recorded: true, total, byRoute, denied, deniedByRoute, items, parties, capPerItem: cap,
+        allowance,
         overCap: items > 0 && total > allowance,
         streams: eventFiles.length,
       };
     } else {
       // No `total` key at all on the incomplete path, so nothing downstream can read a partial count as
-      // the real one by reaching for the field it always reads. `overCap` is published ONLY when the
-      // partial count already exceeds the allowance, because that verdict can only get truer.
+      // the real one by reaching for the field it always reads. `denied` follows the same rule for the
+      // same reason and rides under `partialDenied`. `overCap` is published ONLY when the partial count
+      // already exceeds the allowance, because that verdict can only get truer.
       json.webCalls = {
-        recorded: false, byRoute, items, parties, capPerItem: cap, allowance,
+        recorded: false, byRoute, deniedByRoute, items, parties, capPerItem: cap, allowance,
         streams: eventFiles.length, streamsReported: reported,
-        partialTotal: total,
+        partialTotal: total, partialDenied: denied,
       };
       if (items > 0 && total > allowance) json.webCalls.overCap = true;
     }
