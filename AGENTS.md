@@ -42,8 +42,11 @@ already drifting from the Swift version it mirrored.
   judges that each change carries a test (and enforces the style rules); it does NOT itself run
   the suites, so `test-all.sh` is what actually runs the full Mac suite plus the TypeScript side
   that CI would otherwise only surface minutes later. Run it before every push.
-- One-time per clone: run `scripts/install-git-hooks.sh` once in each clone/worktree (#1251
-  Phase 3). It points git at `scripts/hooks`, which holds two hooks. `post-merge` regenerates a stale
+- One-time per CLONE: run `scripts/install-git-hooks.sh` once (#1251 Phase 3). Once per clone is the
+  whole of it: `core.hooksPath` lives in the shared git config (this repo sets no
+  `extensions.worktreeConfig`), so every worktree, including ones made later, inherits it without
+  running anything. Measured on 2026-08-09 across 11 worktrees, all of which had it.
+  It points git at `scripts/hooks`, which holds two hooks. `post-merge` regenerates a stale
   `mac/Overture.xcodeproj/project.pbxproj` after a merge that combined Mac source changes and
   stages it for you to commit. It is only a convenience (it cannot fire after a conflicted merge
   finished by a manual commit); `scripts/check-pbxproj-fresh.sh` remains the real gate.
