@@ -28,7 +28,7 @@ the workflow's runbook is its spec.
 | `overture-history.json` | Importer (`scripts/import-history.ts`) | App (`[HistoryRecord]`) | none (plain array; `email` added additively in #762) | `fixtures/local-history/` | `LocalHistoryContractTests.swift` |
 | `overture-shoot-history.json` | Importer (`scripts/import-shoot-history.ts`) | App (`ShootHistory`) | 1 | `fixtures/shoot-history/` | `ShootHistoryContractTests.swift` |
 | `overture-prep-queue.json` | App (`PrepQueueBuilder.encode`) | Prep run (workflow) | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 | `fixtures/prep-queue/` | `PrepQueueContractTests.swift` |
-| `overture-prep-results.json` | Prep run (workflow) | App (`PrepImporter` / `PrepResultsDecoder`) | 1, 2, 3, 4, 5, 6, 7 | `fixtures/prep-results/` | `PrepResultsContractTests.swift` |
+| `overture-prep-results.json` | Prep run (workflow) writes the results; then **`prep-run.sh`** adds three top-level keys of its own (`model`, `runCost`, `webCalls`, all via `lib/models.sh`, after the workflow has finished). See the note below the table. | App (`PrepImporter` / `PrepResultsDecoder`; it ignores all three of those keys) | 1, 2, 3, 4, 5, 6, 7, 8 | `fixtures/prep-results/` (`run-metadata-complete-v8.json` and `run-metadata-partial-v8.json` carry the three keys) | `PrepResultsContractTests.swift`, `PrepResultsRunMetadataContractTests.swift`, `lib/models.test.sh` |
 | `overture-prep-progress.json` | `prep-run.sh` **only**: seeds it, then derives every update from `overture-prep-results.json` itself (`lib/progress-watcher.sh`'s `update_progress_from_results`, the same helper scout uses). #1023: the workflow never writes this file; it rewrites the results file incrementally and the script counts its entries, so a run that forgets to self-report can no longer leave the count wrong. | App (`PrepProgressDecoder`) | 1 | `fixtures/prep-progress/` | `PrepProgressContractTests.swift`, `lib/progress-watcher.test.sh` |
 | `prep-cancel` | App (`PrepQueueService.requestCancel`) writes it to ask a running Prep run to stop; App (`startPrep`) clears any stale one before a fresh run | `prep-run.sh` (`lib/scout-cancel.sh`'s `cancel_requested`, on each heartbeat tick; `clear_cancel` on exit) | n/a (empty sentinel; presence IS the request, contents never read) | none | `PrepReplyCancelServiceTests.swift`, `lib/scout-cancel.test.sh`, `PrepReplyRunnerWiringGuardTests.swift` |
 | `overture-reply-classify-queue.json` | App (`ReplyClassifyQueueBuilder.encode`) | Classify+drafter run (workflow) | 1, 2, 3 | `fixtures/reply-classify/` | `ReplyClassifyContractTests.swift` |
@@ -46,6 +46,26 @@ the workflow's runbook is its spec.
 | `installed-build.json` | `mac/build-install.sh` (after a successful install) | App (`BuildFreshness.installedRecord`) | 1 | none (three fields, pinned by the decode test) | `BuildFreshnessTests.swift` |
 | `shipped-commit.json` | `scripts/record-shipped-commit.sh` **only**, called by both merge scripts, `scripts/hooks/post-merge`, and `mac/build-install.sh` | App (`BuildFreshness.shippedRecord`) | 1 | none (two fields, pinned on both sides) | `BuildFreshnessTests.swift`, `scripts/record-shipped-commit.test.sh` |
 | `update-result.json` | `mac/scripts/lib/update-result.sh`, called by `mac/scripts/update-overture.sh` (#2188: `running` before it decides anything, the refusal reason if it refuses, REMOVED on success) | App (`UpdateAttempt.record`) | 1 | none (four fields, pinned on both sides) | `UpdateAttemptTests.swift`, `UpdateAttemptStateTests.swift`, `mac/scripts/update-overture.test.sh` |
+
+#1678: the results files carry **run metadata written by the runner script, not by the workflow**. On
+`overture-prep-results.json` that is `model` (#1533, which model actually ran), `runCost` (#1593, dollars and
+wall clock) and `webCalls` (#1864, how many web lookups the run made against its allowance). `model` alone is
+also written onto `overture-scout-extract-results.json` and `overture-reply-classify-results.json` by their
+own runners. All of them are added by `lib/models.sh` after the run has finished, and the app's decoders
+ignore them, which is what makes them safely additive.
+
+The shape that must not be got wrong is the same split in each of `runCost` and `webCalls`:
+
+- `recorded: true` carries the real figure (`usd` and `durationMs`; `total`)
+- `recorded: false` carries **neither of those keys at all**, only `partialUsd` / `partialDurationMs` and
+  `partialTotal`, plus how many streams reported out of how many
+
+That absence is the point. A chunked run is up to ten concurrent claudes, so one dead chunk leaves a real but
+incomplete figure, and a reader reaching for the field it always reads must find nothing rather than a part
+of the total presented as the whole. `webCalls.overCap` follows the same rule from the other side: on the
+incomplete path it appears only when the partial count ALREADY exceeds the allowance, because that verdict
+can only get truer. This was registered here after the fact, having shipped without a row or a fixture, and
+#1616 and #1625 are about to build on `runCost.durationMs`.
 
 #2188: `update-result.json` is the return channel for the Update button. Pressing it opens a Terminal window
 the app cannot see, so until this file existed a refused update and a successful one were the same thing from

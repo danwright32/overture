@@ -180,9 +180,14 @@ describe("prep-queue fixture shapes", () => {
 describe("prep-results fixture shapes", () => {
   const files = jsonFilenames("prep-results");
 
+  // #1678: the two run-metadata files are not a new VERSION of the results shape. They carry the three
+  // top-level keys prep-run.sh adds after the workflow has finished (model, runCost, webCalls), on top of
+  // v8's results, hence the -v8 suffix: the version in the name is what this suite validates each file
+  // against, so a fixture whose name does not carry one would be checked against version 1.
   it("covers exactly the known prep-results files", () => {
-    expect(files.sort()).toEqual(["v1.json", "v2.json", "v3.json", "v4.json", "v5.json", "v6.json", "v7.json",
-                                  "v8.json"]);
+    expect(files.sort()).toEqual(["run-metadata-complete-v8.json", "run-metadata-partial-v8.json",
+                                  "v1.json", "v2.json", "v3.json", "v4.json", "v5.json", "v6.json",
+                                  "v7.json", "v8.json"]);
   });
 
   for (const file of files) {

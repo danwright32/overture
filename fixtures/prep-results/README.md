@@ -50,3 +50,32 @@ whenever there is no summary (`no_listing_page` / `page_unreadable` / `no_descri
 fixture carries a summary, an honest absence beside a real draft, and an absence on an entry with no
 contacts at all. Additive, so `v1.json` through `v7.json` still decode with both absent. The absent-reason
 vocabulary is enforced by `assertPrepResultsShape`, which also refuses a v8 entry carrying neither.
+
+## The run metadata fixtures (#1678)
+
+`run-metadata-complete-v8.json` and `run-metadata-partial-v8.json` are a different KIND of fixture from the
+`vN.json` files above. They are not a new version of the results shape: they carry the three top-level keys
+`prep-run.sh` adds AFTER the workflow has finished with the file, through `lib/models.sh`, which the app's
+decoder ignores entirely. `model` (#1533) names the model that actually ran, `runCost` (#1593) the dollars
+and wall clock, `webCalls` (#1864) the web lookups against the run's allowance. Both files use `v8.json`'s
+results as their base, so the results half is the current shape.
+
+What they exist to pin is the honest/partial split, which is the same split twice:
+
+- `run-metadata-complete-v8.json`: every stream reported, so `runCost` carries `usd` and `durationMs` and
+  `webCalls` carries `total`.
+- `run-metadata-partial-v8.json`: one of three chunks died and left no envelope, so `runCost` carries NEITHER
+  `usd` NOR `durationMs`, and `webCalls` carries no `total`. Only the `partial*` keys, plus how many streams
+  reported out of how many. A reader reaching for the field it always reads finds nothing rather than a part
+  of the total presented as the whole.
+
+**Where the numbers come from.** The cost and call figures are the run measured on the live store on
+2026-08-07 (`usd` 5.395423, longest stream 389906ms, 3 streams, 59 web calls split 28 fetch and 31 search),
+reproduced by feeding those values through the real writers rather than typed in. The counts that depend on
+the results file (`items`, `parties`, `allowance`, and therefore the `overCap` verdict) come from `v8.json`'s
+three results, so the complete fixture sits OVER its allowance and says so, while the partial one is under it
+and stays silent, which is the rule for that verdict.
+
+`lib/models.test.sh` regenerates both through `record_model`, `record_run_cost` and `record_web_calls` on
+every run and compares the key sets against what is committed here, so neither file can drift into a shape
+its writer does not produce. `PrepResultsRunMetadataContractTests.swift` asserts the split itself.
