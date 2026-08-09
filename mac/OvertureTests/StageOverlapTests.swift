@@ -16,11 +16,16 @@ struct StageOverlapTests {
                                          configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
     }
 
+    // #2359: the fixture era is pinned and its date sits inside the queue's lead time window, rather
+    // than in 2099. Triage now stops at that window, so a date chosen to be permanently in the future is
+    // permanently outside triage, and the untriaged half of this suite would have had nothing to assert.
+    private let today = ScoutTestClock.stageNavigationAnchor   // 2026-07-12
+
     @discardableResult
     private func show(_ ctx: ModelContext, key: String, status: ReviewStatus,
                       hasDraft: Bool = false, sentAt: Date? = nil) -> Prospect {
         let p = Prospect(naturalKey: key, groupName: key, discipline: "theatre", venue: "Under St Marks",
-                         performanceDate: "2099-08-14", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-08-14", sourceListingURL: nil, websiteURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -50,7 +55,7 @@ struct StageOverlapTests {
 
     private func focuses(_ p: Prospect) -> [StageFocus] {
         StageNavigation.countedFocuses.filter {
-            StageNavigation.naturalKeys(for: $0, in: [p]).count == 1
+            StageNavigation.naturalKeys(for: $0, in: [p], today: today).count == 1
         }
     }
 
@@ -194,7 +199,7 @@ struct StageOverlapTests {
         let item = try #require(QueueModel.items(from: [p]).first)
 
         #expect(item.heldContactAtTriage == nil)
-        #expect(StageNavigation.naturalKeys(for: .sendBlocked, in: [p]) == ["drafted-held"])
+        #expect(StageNavigation.naturalKeys(for: .sendBlocked, in: [p], today: today) == ["drafted-held"])
     }
 
     // The property that matters more than either half: every held contact is spoken for by exactly one
@@ -213,7 +218,7 @@ struct StageOverlapTests {
         for p in all {
             let item = try #require(QueueModel.items(from: [p]).first)
             let card = item.heldContactAtTriage != nil
-            let stage = StageNavigation.naturalKeys(for: .sendBlocked, in: [p]).count == 1
+            let stage = StageNavigation.naturalKeys(for: .sendBlocked, in: [p], today: today).count == 1
             #expect(card != stage, "\(p.naturalKey): card=\(card) stage=\(stage)")
         }
     }
