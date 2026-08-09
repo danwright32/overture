@@ -12,7 +12,7 @@
     "import-shoot-history": "tsx scripts/import-shoot-history.ts"
   },
   "dependencies": {
-    "csv-parse": "^7.0.0"
+    "csv-parse": "^7.0.2"
   },
   "devDependencies": {
     "@types/node": "^26",
