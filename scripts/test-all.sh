@@ -18,6 +18,24 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 cd "${REPO_ROOT}"
+
+# #2318: record the working tree before anything runs, and compare it at the end. A test that writes
+# into the checkout leaves changes indistinguishable from a person's own edits, so review cannot
+# catch them and nobody has a reason to look. Observed from out here because a suite cannot watch
+# what it does to the repo itself.
+#
+# The copy inventory regeneration is the one run that is MEANT to rewrite a checked-in file, so it
+# says the check is off rather than being quietly exempt from it (L65: a control skipped in silence
+# is indistinguishable from a control that is gone).
+TREE_SNAPSHOT="$(mktemp "${TMPDIR:-/tmp}/overture-tree-state.XXXXXX")"
+trap 'rm -f "${TREE_SNAPSHOT}"' EXIT
+if [[ -n "${TEST_RUNNER_REGENERATE_COPY_INVENTORY:-}" ]]; then
+  echo "==> working-tree check OFF: this run regenerates the copy inventory on purpose"
+  TREE_SNAPSHOT=""
+else
+  "${REPO_ROOT}/scripts/check-tree-untouched.sh" record "${REPO_ROOT}" "${TREE_SNAPSHOT}"
+fi
+
 echo "==> pnpm typecheck"
 pnpm typecheck
 
@@ -89,5 +107,10 @@ echo "==> mac/scripts/prune-stale-registrations.sh"
 
 echo "==> mac/scripts/run-tests-locked.sh"
 "${REPO_ROOT}/mac/scripts/run-tests-locked.sh"
+
+if [[ -n "${TREE_SNAPSHOT}" ]]; then
+  echo "==> scripts/check-tree-untouched.sh"
+  "${REPO_ROOT}/scripts/check-tree-untouched.sh" compare "${REPO_ROOT}" "${TREE_SNAPSHOT}"
+fi
 
 echo "==> all suites passed"
