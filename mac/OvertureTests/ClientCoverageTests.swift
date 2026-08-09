@@ -310,3 +310,48 @@ struct CoverageSetAsideCopyTests {
     }
 }
 
+// #1547: the coverage box explains itself in every state it can be in.
+//
+// With zero gaps and some clients set aside, the sheet rendered the heading "Returning clients not
+// covered" directly above a bare collapsed count and nothing else, which reads as N UNCOVERED clients
+// when it means the opposite. Dan asked what the section meant on 2026-07-26.
+//
+// The sentence existed. It was inside the has-gaps branch, so it was compiled out in exactly the state
+// he was in: the failure was not the copy but which branch it lived in, which is why the guard below is
+// about the branches rather than the words.
+@MainActor
+@Suite("The coverage box explains itself in every state (#1547)")
+struct CoverageExplanationTests {
+
+    @Test func theGapStateExplainsWhatIsMissing() {
+        let line = CoverageCopy.sectionExplanation(hasGaps: true)
+        #expect(line.contains("no watched source treats as a returning client"))
+        #expect(line.contains("Add a source for them"))
+    }
+
+    // The state the issue is about: nothing is missing, and some clients were set aside. It must not be
+    // silent, and it must not read as a list of uncovered clients.
+    @Test func theNoGapsStateSaysEverythingIsCoveredOrSetAside() {
+        let line = CoverageCopy.sectionExplanation(hasGaps: false)
+        #expect(!line.isEmpty)
+        #expect(line == "Every returning client is covered by a watched source, or set aside below.")
+    }
+
+    // Both branches say something, and they say different things. A single sentence reused for both would
+    // pass a "not empty" check while being wrong in one of them.
+    @Test func theTwoStatesDoNotShareASentence() {
+        #expect(CoverageCopy.sectionExplanation(hasGaps: true)
+                != CoverageCopy.sectionExplanation(hasGaps: false))
+    }
+
+    // And the view asks in both states rather than only when it has rows to show. This is the assertion
+    // that would have caught the defect: the copy was right and unreachable.
+    @Test func theSheetShowsTheExplanationOutsideTheHasGapsBranch() {
+        let source = SourceGuardHelper.source("Overture/UI/SourcesView.swift")
+        let box = SourceGuardHelper.between("coverageBox {", and: "if !gaps.isEmpty {", in: source)
+
+        #expect(box?.contains("CoverageCopy.sectionExplanation") == true,
+                "the explanation is inside the has-gaps branch again, so a box with no gaps says nothing")
+    }
+}
+

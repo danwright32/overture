@@ -170,6 +170,13 @@ already drifting from the Swift version it mirrored.
   required step, not a good intention. A distinction that is real in the code ("checked" versus
   "read", #803) still collapses to the same sentence twice in the common case, which is exactly what
   the read has to catch.
+  Read a section in EVERY BRANCH it can render, not just the populated one (#1547). The coverage box's
+  explaining sentence was correct, tested and inside the has-gaps branch, so the state Dan was actually
+  in (no gaps, some clients set aside) rendered the heading over a bare count and nothing else, reading
+  as the exact opposite of what it meant. He asked what the section was for. A cold read of the diff
+  cannot catch that, because the sentence it would have him read is the one that never appeared: the
+  question to ask of each conditional is what this surface says when the list is EMPTY, when it holds
+  one, and when the branch that carries the explanation is the one not taken.
   Read the OTHER generated diff in the same pass: `docs/copy-surfaces.md` (#2210) says which surfaces
   each file renders into, so the cold read answers where a new sentence LANDS as well as what it says.
   A message in a toolbar item, a menu bar item, an OS alert or an info block can be correct, tested,
