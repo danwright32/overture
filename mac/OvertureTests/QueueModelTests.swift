@@ -105,17 +105,6 @@ struct DateGroupUnavailableTests {
 
 @Suite("Queue item lifecycle")
 struct QueueItemLifecycleTests {
-    // #200: a contacted (sent) prospect stays "kept" so it remains visible in the queue,
-    // just like the approved-and-sent rows did before the explicit state existed.
-    // #217: the to-send queue drops anyone already in the reached-out pipeline, so the two
-    // never show the same prospect.
-    @Test func toSendQueueExcludesReachedOutProspects() {
-        let a = item(performanceDate: nil, key: "a")
-        let b = item(performanceDate: nil, key: "b")
-        let result = QueueModel.toSendQueue([a, b], reachedOutKeys: ["b"], today: "2026-06-01")
-        #expect(result.map(\.id) == ["a"])
-    }
-
     // #219: an auto-detected Gmail reply is flagged so Dan can dismiss it; a hand-set reply is not.
     @MainActor
     @Test func isAutoRepliedOnlyForAutoDetectedReplies() {
@@ -361,15 +350,10 @@ struct TimingTests {
         #expect(fiveDays.label.contains("5 days"))
     }
 
-    // #1014: the boundary still changes the LABEL (fiveDaysOutIsBookableAndFourIsNot), but it no
-    // longer changes the ORDER. A too-close show keeps its normal date position, same as #901's
-    // ruling for a conflicted one; see tooCloseShowsKeepTheirDatePositionAndAreNotReordered below.
-    @Test func fiveDaysOutIsNotDemoted() {
-        let result = QueueModel.queueOrder(
-            [item(performanceDate: "2026-06-24"), item(performanceDate: "2026-06-27")],
-            today: "2026-06-22")
-        #expect(result.map(\.performanceDate) == ["2026-06-24", "2026-06-27"])
-    }
+    // #2348: fiveDaysOutIsNotDemoted stood here, asserting through QueueModel.queueOrder that a
+    // too-close show keeps its date position rather than sinking (#1014). The queue no longer reorders
+    // rows anywhere, so there is no ordering step left to hold to that ruling; the boundary this suite is
+    // about still changes the LABEL, which fiveDaysOutIsBookableAndFourIsNot above pins.
 
     @Test func urgesOutreachJustPastTheTooCloseWindow() {
         let t = QueueModel.outreachTiming(performanceDate: "2026-06-28", today: "2026-06-22")
@@ -391,54 +375,14 @@ struct EasternTodayTests {
     }
 }
 
-@Suite("Queue date window")
-struct QueueWindowTests {
-    private func dated(_ date: String?) -> QueueItem { item(performanceDate: date) }
-
-    @Test func hidesPastPerformances() {
-        let result = QueueModel.queueOrder([dated("2026-06-22"), dated("2026-07-10")], today: "2026-06-25")
-        #expect(result.map(\.performanceDate) == ["2026-07-10"])
-    }
-
-    @Test func hidesEventsBeyondNinetyDays() {
-        let result = QueueModel.queueOrder([dated("2026-07-10"), dated("2026-12-01")], today: "2026-06-25")
-        #expect(result.map(\.performanceDate) == ["2026-07-10"])
-    }
-
-    @Test func keepsEventExactlyNinetyDaysOut() {
-        let result = QueueModel.queueOrder([dated("2026-09-23")], today: "2026-06-25")
-        #expect(result.count == 1)
-    }
-
-    // #1014, Dan's call REVISED after his first real walk of the queue (2026-07-16): a too-close show
-    // keeps its normal date position and is NOT reordered, the same ruling #901 already made for a
-    // conflicted show. The first build sank it below every bookable show, and in practice a show
-    // sliding to the very bottom read as the show being deleted ("I do not have anything in my queue
-    // before jul 22", when the shows were there, just demoted beneath October dates). The existing
-    // "likely too close to book" timing line does the telling now, not the position.
-    @Test func tooCloseShowsKeepTheirDatePositionAndAreNotReordered() {
-        let result = QueueModel.queueOrder(
-            [dated("2026-06-25"), dated("2026-06-27"), dated("2026-07-10")],
-            today: "2026-06-25"
-        )
-        #expect(result.map(\.performanceDate) == ["2026-06-25", "2026-06-27", "2026-07-10"])
-    }
-
-    @Test func keepsUndatedAmongBookable() {
-        let result = QueueModel.queueOrder([dated(nil), dated("2026-07-10")], today: "2026-06-25")
-        #expect(result.contains { $0.performanceDate == nil })
-        #expect(result.count == 2)
-    }
-
-    // A detected-but-unconfirmed booking is a separate workflow from pitching, so it must
-    // stay visible even once its performance date has passed.
-    @Test func keepsPendingBookingEvenWhenPast() {
-        var pending = dated("2026-06-22"); pending.bookingSuggested = true
-        let result = QueueModel.queueOrder([pending, dated("2026-07-10")], today: "2026-06-25")
-        #expect(result.contains { $0.bookingSuggested })
-        #expect(result.count == 2)
-    }
-}
+// #2348: the "Queue date window" suite stood here, six tests over QueueModel.queueOrder: a past show
+// hidden, a show beyond ninety days hidden, one exactly ninety days out kept, a too-close show not
+// reordered, an undated show kept, and a detected booking kept past its date. Every one of them asked the
+// retired second filter, which #1567 had already taken off every surface, and the app had no caller left
+// for it. What is still the product's rule is asserted against the predicate the queue really renders
+// from: a past or opened show leaves triage, and an undated one never does, in
+// PastShowsLeaveTheScoutQueueTests. There is no ninety-day edge left to test (see the note on
+// QueueModel.leadTimeWindowDays).
 
 // #1136: "Drafted by opus" showed twice on a card still in review, once in the row's badge and once
 // inside the draft-review panel (next to "Edited"). The panel renders exactly when the item has a draft
@@ -482,10 +426,12 @@ struct RowDraftTraceBadgeTests {
 // readings of his own words: a show whose opening night is TONIGHT has not started, so it stays and keeps
 // reading "Performs today, too close to book". Only a run that opened on an EARLIER day goes.
 //
-// Scoped to TRIAGE. The stage lists (Prep, Review, Reached out) bypass queueOrder entirely, so a run Dan
-// kept before it opened keeps working: hiding work already in flight would read as deletion (#1014/#901).
+// Scoped to TRIAGE, which is the `.scout` stage: the rule asks the show's STATUS as well as its date, so
+// a run Dan kept before it opened keeps working in Prep, Review and Reached out. Hiding work already in
+// flight would read as deletion (#1014/#901).
 // Those rows still need a label, so `.underway` survives, but Dan's second ruling the same day was that
 // nothing in the app may call an opened run BOOKABLE.
+@MainActor
 @Suite("The triage queue's near edge is the run's opening night (#1540)")
 struct MultiDateRunQueueTests {
     private func run(_ open: String?, _ close: String?, key: String = "run") -> QueueItem {
@@ -535,19 +481,36 @@ struct MultiDateRunQueueTests {
                                          today: "2026-07-20", isBooked: true).urgency == .booked)
     }
 
-    // MARK: - The To Send queue (surface 2)
+    // MARK: - Which shows triage still holds (surface 2)
+
+    // #2348: this half used to ask QueueModel.queueOrder, the retired second filter, which the app had
+    // stopped calling. It asks the predicate triage really renders from instead, so each of Dan's rulings
+    // below is now pinned against the list he actually sees. `run` builds the QueueItem the label half
+    // above uses; here the same dates are put on a Prospect, because membership is decided per prospect.
+    private func prospect(_ open: String?, _ close: String?, key: String = "run") -> Prospect {
+        let p = Prospect(naturalKey: key, groupName: key, discipline: "music", venue: "Merkin Hall",
+                         performanceDate: open, sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "none", production: "self", profile: "strong",
+                         coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                         status: .new)
+        p.runEndDate = close
+        return p
+    }
+
+    private func triaged(_ prospects: [Prospect], today: String) -> [String] {
+        StageNavigation.naturalKeys(for: .scout, in: prospects, today: today)
+    }
 
     // #1540: the run opened three days ago and plays for another five. It is gone from triage.
     @Test func aRunThatOpenedOnAnEarlierDayLeavesTheQueue() {
-        let result = QueueModel.queueOrder([run("2026-07-17", "2026-07-25")], today: "2026-07-20")
-        #expect(result.isEmpty)
+        #expect(triaged([prospect("2026-07-17", "2026-07-25")], today: "2026-07-20").isEmpty)
     }
 
     // Dan's line: only a run that has STARTED goes. Tonight's opening has not started, so it stays, with
     // the timing line it has always had. Both halves asserted together because the pair IS the ruling.
     @Test func aShowOpeningTonightStaysAndStillReadsTooClose() {
-        let result = QueueModel.queueOrder([run("2026-07-20", "2026-07-28")], today: "2026-07-20")
-        #expect(result.count == 1)
+        #expect(triaged([prospect("2026-07-20", "2026-07-28")], today: "2026-07-20") == ["run"])
         let t = QueueModel.outreachTiming(performanceDate: "2026-07-20", runEndDate: "2026-07-28",
                                           today: "2026-07-20")
         #expect(t.label == "Performs today, too close to book")
@@ -556,35 +519,29 @@ struct MultiDateRunQueueTests {
 
     // A single-night show opening tomorrow is the nearest thing triage still offers.
     @Test func aShowOpeningTomorrowStays() {
-        let result = QueueModel.queueOrder([run("2026-07-21", nil)], today: "2026-07-20")
-        #expect(result.count == 1)
+        #expect(triaged([prospect("2026-07-21", nil)], today: "2026-07-20") == ["run"])
     }
 
     // A run whose closing night has passed is dropped, like any other past show.
     @Test func aFullyPastRunIsDropped() {
-        let result = QueueModel.queueOrder([run("2026-07-10", "2026-07-15")], today: "2026-07-20")
-        #expect(result.isEmpty)
-    }
-
-    // The far-future gate still keys on the OPENING night: a run that has not started yet and opens
-    // beyond the lead-time window is still held out, exactly as a single show that far out would be.
-    @Test func aRunOpeningBeyondTheWindowIsStillHeld() {
-        let result = QueueModel.queueOrder([run("2026-12-01", "2026-12-10")], today: "2026-07-20")
-        #expect(result.isEmpty)
+        #expect(triaged([prospect("2026-07-10", "2026-07-15")], today: "2026-07-20").isEmpty)
     }
 
     // A single-night past show is still dropped (unchanged): the ordinary case never moved.
     @Test func aSingleNightPastShowIsStillDropped() {
-        let result = QueueModel.queueOrder([run("2026-07-17", nil)], today: "2026-07-20")
-        #expect(result.isEmpty)
+        #expect(triaged([prospect("2026-07-17", nil)], today: "2026-07-20").isEmpty)
     }
 
     // An UNDATED show keeps its bypass. "Date to be confirmed" is a normal listing state on a season page,
     // and a show with no opening night has not opened: dropping it would silently lose a real lead (#798).
     @Test func anUndatedShowStillBypassesTheNearEdge() {
-        let result = QueueModel.queueOrder([run(nil, nil)], today: "2026-07-20")
-        #expect(result.count == 1)
+        #expect(triaged([prospect(nil, nil)], today: "2026-07-20") == ["run"])
     }
+
+    // #2348: aRunOpeningBeyondTheWindowIsStillHeld stood here, asserting that a run opening in December
+    // was held out of a July queue by the lead-time window. Nothing applies that window any more (#1567
+    // took the last surface off it), so the assertion described only the dead function it called. The
+    // near edge, which is what this suite is about, is every test above.
 }
 
 @Suite("Grouping and summary")
@@ -863,30 +820,12 @@ struct RunDisplayTests {
     }
 }
 
-@Suite("Disappeared-from-feed queue filtering (#133)")
-struct DisappearedFeedQueueTests {
-    private func gone(id: String, status: ReviewStatus) -> QueueItem {
-        var q = QueueItem(
-            id: id, groupName: id, discipline: "music", venue: "Weill Recital Hall",
-            performanceDate: "2026-07-25", sourceListingURL: nil, websiteURL: nil,
-            priorRelationship: "none", production: "self", profile: "strong",
-            coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
-            matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil, status: status)
-        q.disappearedFromFeed = true
-        return q
-    }
-
-    @Test func hidesUntouchedGoneButKeepsPursuedGone() {
-        // An untouched (.new) vanished show is noise and drops out; one Dan kept stays so the
-        // cancellation is visible (struck-through in the row).
-        let order = QueueModel.queueOrder(
-            [gone(id: "untouched", status: .new), gone(id: "kept", status: .queued)],
-            today: "2026-06-25")
-        let ids = order.map(\.id)
-        #expect(!ids.contains("untouched"))
-        #expect(ids.contains("kept"))
-    }
-}
+// #2348: the "Disappeared-from-feed queue filtering (#133)" suite stood here. Its one test asserted
+// through QueueModel.queueOrder that an untouched show gone from its feed is HIDDEN, which stopped being
+// what Overture does when #1567 moved queue membership to StageNavigation: the Scout list renders that
+// show struck through and still offers Keep and Dismiss, and
+// QueueShowableIsOneFilterTests.aShowGoneFromTheFeedThatScoutStillRendersOpensInTheQueue pins that. So
+// this was not merely testing dead code, it was recording the opposite of the live answer.
 
 // #198: a booked prospect must read as Booked, not as a lead to pitch.
 @Suite("Booked display")
@@ -931,36 +870,13 @@ struct BookedDisplayTests {
     }
 }
 
-// #201: a confirmed booking leaves the reach-out queue; an auto-detected one stays until Dan confirms it.
-@Suite("Booked queue placement")
-struct BookedQueueTests {
-    private func q(_ id: String, outcome: Outcome = .noResponse,
-                   source: OutcomeSource? = nil, date: String? = "2026-07-10") -> QueueItem {
-        var p = QueueItem(
-            id: id, groupName: id, discipline: "music", venue: "V",
-            performanceDate: date, sourceListingURL: nil, websiteURL: nil,
-            priorRelationship: "none", production: "unknown", profile: "neutral",
-            coverage: "unknown", fitScore: 3, tier: "longshot", fitReason: "r",
-            matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil, status: .approved)
-        p.outcome = outcome
-        p.outcomeSourceRaw = source?.rawValue
-        return p
-    }
-
-    @Test func confirmedBookingLeavesTheQueue() {
-        let order = QueueModel.queueOrder(
-            [q("lead"), q("confirmed", outcome: .booked, source: .manual)], today: "2026-06-26")
-        let ids = order.map(\.id)
-        #expect(ids.contains("lead"))
-        #expect(!ids.contains("confirmed"))
-    }
-
-    @Test func autoDetectedBookingStaysUntilConfirmed() {
-        let order = QueueModel.queueOrder(
-            [q("auto", outcome: .booked, source: .auto)], today: "2026-06-26")
-        #expect(order.map(\.id).contains("auto"))
-    }
-}
+// #2348: the "Booked queue placement" suite stood here, two tests over QueueModel.queueOrder for #201's
+// rule (a confirmed booking leaves the reach-out queue, an auto-detected one stays until Dan confirms
+// it). Both are deleted rather than repointed because there is nothing live to point them at: the only
+// implementation of that rule was inside the retired filter, and StageNavigation's own stages are decided
+// by status, drafts and send problems, never by the outcome. Recorded here rather than silently dropped,
+// because "does a confirmed booking still belong out of the queue" is a product question for Dan and not
+// something a deletion should answer on his behalf.
 
 // #1567: the QueueReachabilityTests and DeepLinkReachabilityTests suites lived here. Both asked
 // QueueModel whether a show would render in the Queue, through a date window no stage list

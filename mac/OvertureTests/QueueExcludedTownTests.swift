@@ -55,15 +55,18 @@ struct QueueExcludedTownTests {
         #expect(reason == QueueModel.tooFarReasonSentence(.excludedTown))
     }
 
-    // The chip's number is a promise about rows (#863), so it must move with the user's refusals too.
+    // A count is a promise about rows (#863), so it must move with the user's refusals too. Asked through
+    // the filter since #2348, which is the pair that survived: `tooFarCount` ran this same set through the
+    // retired queue window and had no caller in the app.
     @Test func theCountRespectsTheUserExcludedTowns() {
         let items = [
             item(id: "pough", discipline: "theater", location: "Poughkeepsie, NY"),
             item(id: "nyc", discipline: "theater", location: "New York, NY"),
         ]
-        #expect(QueueModel.tooFarCount(items, discipline: nil, highOnly: false, pendingBookingsOnly: false,
-                                       reachedOutKeys: [], today: "2026-07-16",
-                                       userExcludedTowns: ["poughkeepsie"]) == 1)
+        let revealed = QueueModel.filter(items, discipline: nil, highOnly: false,
+                                         pendingBookingsOnly: false, tooFarOnly: true,
+                                         userExcludedTowns: ["poughkeepsie"])
+        #expect(revealed.map(\.id) == ["pough"])
     }
 }
 

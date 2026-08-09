@@ -80,7 +80,9 @@ struct QueueGeoFilterKeepTests {
 @Suite("Queue geo filter: the count")
 struct QueueGeoFilterCountTests {
     // A hidden row must be countable, or the filter is invisible and a bug in it looks identical to
-    // "nothing was out of town" (#887: a guard that fails closed forever is still a bug).
+    // "nothing was out of town" (#887: a guard that fails closed forever is still a bug). Counted through
+    // the gate itself since #2348, which is where the number came from all along: `tooFarCount` wrapped it
+    // in the retired queue window, and nothing in the app called it.
     @Test func theHiddenRowsAreCounted() {
         let items = [
             item(id: "a", discipline: "music", location: "Beijing, China"),
@@ -88,27 +90,23 @@ struct QueueGeoFilterCountTests {
             item(id: "c", discipline: "music", location: "New York, NY"),
             item(id: "d", discipline: "music", location: nil),
         ]
-        #expect(QueueModel.tooFarCount(items, discipline: nil, highOnly: false,
-                                       pendingBookingsOnly: false, reachedOutKeys: [],
-                                       today: "2026-07-16") == 2)
+        #expect(items.filter(QueueModel.isTooFar).count == 2)
     }
 
-    // The number is a promise about rows (#863): whatever the chip says, clicking it must show exactly
+    // The number is a promise about rows (#863): whatever a count says, revealing them must show exactly
     // that many. Named rows, not a count compared against its own definition (#996): the version of this
     // test that asserted `tooFarCount(items) == tooFar(items).count` could not fail, and it did not,
-    // through the whole life of the bug.
+    // through the whole life of the bug. Both sides moved onto the surviving pair in #2348, the gate and
+    // the filter that inverts it.
     @Test func theCountMatchesTheRowsBehindIt() {
         let items = [
             item(id: "a", discipline: "music", location: "Beijing, China"),
             item(id: "b", discipline: "music", location: "New York, NY"),
         ]
-        let revealed = QueueModel.tooFar(items, discipline: nil, highOnly: false,
-                                         pendingBookingsOnly: false, reachedOutKeys: [],
-                                         today: "2026-07-16")
+        let revealed = QueueModel.filter(items, discipline: nil, highOnly: false,
+                                         pendingBookingsOnly: false, tooFarOnly: true)
         #expect(revealed.map(\.id) == ["a"])
-        #expect(QueueModel.tooFarCount(items, discipline: nil, highOnly: false,
-                                       pendingBookingsOnly: false, reachedOutKeys: [],
-                                       today: "2026-07-16") == 1)
+        #expect(items.filter(QueueModel.isTooFar).count == revealed.count)
     }
 
     // Hidden and shown must partition the set exactly: a row cannot be in both, and none can vanish
@@ -135,16 +133,15 @@ struct QueueGeoFilterCountTests {
         #expect(QueueModel.tooFarLabel(count: 1) == "Too far (1)")
     }
 
-    // #996. The chip counted rows the queue then threw away. Dan found this within minutes of the
-    // feature shipping: it said "Too far (4)" and showed ONE row.
+    // The four real rows from the first scout of Smoke Ring Quartet, with their real dates, read on the
+    // day Dan saw #996: the chip said "Too far (4)" and showed ONE row, because three of them were also
+    // beyond the 90-day window the queue applied after the count was taken. All four ARE out of range, so
+    // the resolver was right and that was purely a counting bug.
     //
-    // These are the four real rows from the first scout of Smoke Ring Quartet, with their real dates,
-    // read on the day he saw it. All four ARE out of range, so the resolver is right and this is purely
-    // a counting bug: three of them are also beyond the 90-day lead-time window, so `toSendQueue`
-    // windows them away AFTER the filter has already counted them.
-    //
-    // The count is the thing under test, and it is a promise about ROWS (#863). Whatever clicking the
-    // chip puts on screen is the only number it may say.
+    // #2348: the window is gone (nothing applies it since #1567), so the mismatch that test reproduced
+    // can no longer be built, and `theCountPromisesOnlyTheRowsClickingActuallyReveals` went with the
+    // functions it called. What survives is the rule the rows still prove: a count is a promise about
+    // ROWS (#863), and it moves with every other filter on the queue.
     private static let smokeRing = [
         item(id: "treble", groupName: "Treble Harmony Brigade", discipline: "music",
              location: "Baltimore, Maryland", date: "2026-07-31"),   // 15 days out: inside the window
@@ -156,28 +153,23 @@ struct QueueGeoFilterCountTests {
              location: "Harrogate, UK", date: "2026-10-30"),         // 106 days: windowed away
     ]
 
-    @Test func theCountPromisesOnlyTheRowsClickingActuallyReveals() {
-        let today = "2026-07-16"
-        let revealed = QueueModel.toSendQueue(
-            QueueModel.filter(Self.smokeRing, discipline: nil, highOnly: false,
-                              pendingBookingsOnly: false, tooFarOnly: true),
-            reachedOutKeys: [], today: today)
+    // All four are out of range, and with no window left to drop three of them, all four are what
+    // revealing them shows.
+    @Test func theCountPromisesTheRowsRevealingThemActuallyShows() {
+        let revealed = QueueModel.filter(Self.smokeRing, discipline: nil, highOnly: false,
+                                         pendingBookingsOnly: false, tooFarOnly: true)
 
-        // What Dan sees when he clicks: one row, not four.
-        #expect(revealed.map(\.id) == ["treble"])
-        #expect(QueueModel.tooFarCount(Self.smokeRing, discipline: nil, highOnly: false,
-                                       pendingBookingsOnly: false, reachedOutKeys: [],
-                                       today: today) == revealed.count)
+        #expect(revealed.map(\.id) == ["treble", "sweeps", "palm", "labbs"])
+        #expect(Self.smokeRing.filter(QueueModel.isTooFar).count == revealed.count)
     }
 
-    // The count must move with the queue's other filters too, for the same reason: clicking through a
-    // discipline filter reveals the intersection, so a count that ignored it would tell the same
-    // shape of lie in a different place.
+    // The count must move with the queue's other filters too, for the same reason: revealing them through
+    // a discipline filter shows the intersection, so a count that ignored it would tell the same shape of
+    // lie in a different place.
     @Test func theCountRespectsTheFiltersAlreadyOnTheQueue() {
-        let today = "2026-07-16"
-        let count = QueueModel.tooFarCount(Self.smokeRing, discipline: "theater", highOnly: false,
-                                           pendingBookingsOnly: false, reachedOutKeys: [], today: today)
-        #expect(count == 0, "every Smoke Ring row is music, so a theater filter reveals none of them")
+        let revealed = QueueModel.filter(Self.smokeRing, discipline: "theater", highOnly: false,
+                                         pendingBookingsOnly: false, tooFarOnly: true)
+        #expect(revealed.isEmpty, "every Smoke Ring row is music, so a theater filter reveals none of them")
     }
 
     // Clicking the chip inverts the gate, which is what makes a hidden show recoverable rather than
@@ -195,9 +187,7 @@ struct QueueGeoFilterCountTests {
                                          pendingBookingsOnly: false, tooFarOnly: true)
         #expect(shown.map(\.id) == ["near", "unknown"])
         #expect(revealed.map(\.id) == ["far"])
-        #expect(QueueModel.tooFarCount(items, discipline: nil, highOnly: false,
-                                       pendingBookingsOnly: false, reachedOutKeys: [],
-                                       today: "2026-07-16") == 1)
+        #expect(items.filter(QueueModel.isTooFar).count == revealed.count)
     }
 
     // #996: the chip is the only way back out of its own filter, so it must not disappear underneath
