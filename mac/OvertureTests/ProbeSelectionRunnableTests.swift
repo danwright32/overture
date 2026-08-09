@@ -2,12 +2,12 @@ import Testing
 
 // #1765: a large reachability selection RUNS. It is not refused.
 //
-// Dan picked 19 dates (77 shows) and was told: "That is 77 lookups, about 21 minutes. Overture stops at 40
+// Dan picked 19 dates (77 shows) and was told: "That is 77 lookups, the better part of an hour. Overture stops at 40
 // in one run so a whole week cannot go on one click. Select fewer dates and run them in batches." His call:
 // "I should never be blocked by what I'm trying to do. If I want to do this, let me."
 //
 // Nothing downstream breaks at 41. `mac/scripts/prep-run.sh` already splits the work-list into up to ten
-// chunks and works each chunk sequentially, so 77 lookups run as roughly 8 rounds, which IS the 21 minutes
+// chunks and works each chunk sequentially, so 77 lookups run as roughly 8 rounds, which IS the wait
 // the bar quoted. The refusal was telling him to do by hand, in two clicks, the batching the runner already
 // does for him (L54).
 //
@@ -56,15 +56,18 @@ struct ProbeSelectionRunnableTests {
     }
 
     // FAILURE PATH, and the reason removing the ceiling cannot quietly change what Dan is promised. The
-    // wait is the number of ROUNDS, because lookups run ten at a time. 77 lookups is 8 rounds, about 21
-    // minutes. Estimated as the SUM it would be about 3.4 hours, and he would never run it. This is the
-    // number the removed refusal used to quote, so it has to keep meaning the same thing without it.
+    // wait is the number of ROUNDS, because lookups run ten at a time. 77 lookups is 8 rounds. Estimated
+    // as the SUM it would be several times that, and he would never run it. This is the shape of number the
+    // removed refusal used to quote, so it has to keep meaning the same thing without it.
+    //
+    // #1616: this summary is priced at the hand-set fallback (no history is injected), so the minute count
+    // below is that constant's, and a change to it is meant to show up here in the words Dan would read.
     @Test func aMultiRoundSelectionIsPromisedTheRoundsNotTheSum() throws {
         let s = summary(dates: 19, shows: oneOffs(77))
         // 8 rounds of ten, not 77 lookups end to end.
-        #expect(s.estimatedSeconds == ProbeSelection.measuredSecondsPerLookup * 8)
+        #expect(s.estimatedSeconds == ProbeSelection.fallbackSecondsPerRound * 8)
         let line = ProbeSelectionCopy.costLine(s)
-        #expect(line.contains("about 21 minutes"))
+        #expect(line.contains("about 52 minutes"))
         #expect(!line.contains("hour"))
         guard case .confirm(_, let message) = ProbeSelection.outcome(for: s) else {
             Issue.record("expected a runnable selection")
@@ -75,7 +78,7 @@ struct ProbeSelectionRunnableTests {
     }
 
     // A long run says what it BLOCKS, which is the one cost neither the title nor the minute figure
-    // carries: a check holds the same single run slot a Prep run does, so for 21 minutes Dan cannot start
+    // carries: a check holds the same single run slot a Prep run does, so for the whole run Dan cannot start
     // either. Modelled on ScoutReadBudget, whose ask states the wait and what the alternative leaves
     // behind and repeats nothing already on screen beside it.
     @Test func aLongRunSaysWhatItBlocks() throws {
@@ -83,14 +86,14 @@ struct ProbeSelectionRunnableTests {
         else { Issue.record("expected a runnable selection"); return }
         #expect(message.contains("No Prep run or other check can start until it finishes."))
         // And it lands beside the wait it qualifies, not after the producer breakdown.
-        let waitAt = try #require(message.range(of: "about 21 minutes"))
+        let waitAt = try #require(message.range(of: "about 52 minutes"))
         let blocksAt = try #require(message.range(of: "No Prep run"))
         let huntAt = try #require(message.range(of: "one-off hunt"))
         #expect(waitAt.lowerBound < blocksAt.lowerBound)
         #expect(blocksAt.lowerBound < huntAt.lowerBound)
     }
 
-    // A check that fits in one round does NOT get that sentence. Losing the slot for three minutes is not
+    // A check that fits in one round does NOT get that sentence. Losing the slot for one round is not
     // worth a line, and one that appears on every confirm is one Dan stops reading (L36).
     @Test func aSingleRoundRunDoesNotMentionWhatItBlocks() throws {
         guard case .confirm(_, let message) = ProbeSelection.outcome(for: summary(dates: 1, shows: oneOffs(4)))

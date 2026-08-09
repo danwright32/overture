@@ -216,7 +216,11 @@ enum PrepQueueService {
             try ReachabilityProbeMarker.write(
                 ReachabilityProbeMarker(
                     keys: Set(queue.items.flatMap { [$0.naturalKey] + ($0.alsoAnswersFor ?? []) }),
-                    startedAt: stamp),
+                    startedAt: stamp,
+                    // #1616: the LOOKUPS, which is the queue's own item count. The runner chunks this list,
+                    // so it is what decides how many rounds the run's wall clock covered, and the keys above
+                    // are a larger number that would make every learned round look faster than it was.
+                    lookups: queue.items.count),
                 to: probeRunURL)
             try launch()
             UserDefaults.standard.set(now, forKey: lastRunKey)

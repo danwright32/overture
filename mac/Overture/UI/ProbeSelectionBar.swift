@@ -48,8 +48,13 @@ struct ProbeSelectionBar: View {
     let onRun: (_ keys: [String], _ title: String, _ message: String) -> Void
 
     private var summaryAndKeys: (ProbeSelection.Summary, [String])? {
-        QueueModel.probeSelection(dates: selection.dates, in: rows(), among: allItems,
-                                  today: today, stage: stage, overrides: overrides, geo: geo)
+        // #1616: the wait comes from the checks that have actually run, not from a constant. The guard is
+        // here rather than inside, so an unticked queue never reads the history file at all: the pace is
+        // only wanted when there is a live selection to price, and this body runs on every render pass.
+        guard !selection.dates.isEmpty else { return nil }
+        return QueueModel.probeSelection(dates: selection.dates, in: rows(), among: allItems,
+                                         today: today, stage: stage, overrides: overrides, geo: geo,
+                                         secondsPerRound: ProbeSelection.liveSecondsPerRound())
     }
 
     var body: some View {

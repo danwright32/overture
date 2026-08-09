@@ -362,7 +362,10 @@ struct QueueView: View {
     private func finishShowsACheckMissed() {
         let keys = missedByACheckKeys
         guard !keys.isEmpty else { return }
-        let summary = ProbeSelection.summarizeShowsACheckMissed(count: keys.count)
+        // #1616: the same learned pace the selection bar quotes, so two ways into one run cannot name two
+        // different waits.
+        let summary = ProbeSelection.summarizeShowsACheckMissed(
+            count: keys.count, secondsPerRound: ProbeSelection.liveSecondsPerRound())
         pendingProbe = ProbeConfirm(keys: keys, dateLabel: "",
                                     title: ProbeSelectionCopy.multiDateTitle(summary),
                                     message: ProbeSelectionCopy.finishMissedShowsMessage(summary))
@@ -390,7 +393,8 @@ struct QueueView: View {
     // to try again, rather than silently forgetting he asked.
     private func requestRecheckNow(_ item: QueueItem) {
         let summary = ProbeSelection.summarizeOneShowRecheck(
-            previouslyMissed: item.reachabilityUnansweredAt != nil)
+            previouslyMissed: item.reachabilityUnansweredAt != nil,
+            secondsPerRound: ProbeSelection.liveSecondsPerRound())
         pendingProbe = ProbeConfirm(keys: [item.id], dateLabel: "",
                                     title: ProbeSelectionCopy.multiDateTitle(summary),
                                     message: ProbeSelectionCopy.oneShowRecheckMessage(summary))

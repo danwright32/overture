@@ -25,7 +25,7 @@ struct ProbeSelectionTests {
         #expect(s.researchCount == 1)
         #expect(s.organisationCount == 1)
         // One lookup is one round, so the wait is one lookup long.
-        #expect(s.estimatedSeconds == ProbeSelection.measuredSecondsPerLookup)
+        #expect(s.estimatedSeconds == ProbeSelection.fallbackSecondsPerRound)
     }
 
     // Dan runs this on a Max plan, where the tool's dollar figure is an API-equivalent number and not a
@@ -49,11 +49,11 @@ struct ProbeSelectionTests {
         let ten = (0..<10).map { show("k\($0)", "Solo \($0)", "Room \($0)") }
         let s10 = ProbeSelection.summarize(dateCount: 1, candidates: ten, alreadyAnswered: 0, among: ten)
         #expect(s10.researchCount == 10)
-        #expect(s10.estimatedSeconds == ProbeSelection.measuredSecondsPerLookup)   // one full round
+        #expect(s10.estimatedSeconds == ProbeSelection.fallbackSecondsPerRound)   // one full round
 
         let eleven = (0..<11).map { show("k\($0)", "Solo \($0)", "Room \($0)") }
         let s11 = ProbeSelection.summarize(dateCount: 2, candidates: eleven, alreadyAnswered: 0, among: eleven)
-        #expect(s11.estimatedSeconds == ProbeSelection.measuredSecondsPerLookup * 2)   // spills to a second
+        #expect(s11.estimatedSeconds == ProbeSelection.fallbackSecondsPerRound * 2)   // spills to a second
     }
 
     // A night of one-off productions shares nothing, so it costs per show. This is the expensive case,
@@ -66,9 +66,8 @@ struct ProbeSelectionTests {
         #expect(s.researchCount == 3)
         #expect(s.performerHuntCount == 3)
         #expect(s.organisationCount == 0)
-        // Three lookups fit in one round, so this is the ~3 minutes the first real check took, not the
-        // 8 minutes it took when they ran one after another.
-        #expect(s.estimatedSeconds == ProbeSelection.measuredSecondsPerLookup)
+        // Three lookups fit in ONE round, so the wait is one round, not three lookups end to end.
+        #expect(s.estimatedSeconds == ProbeSelection.fallbackSecondsPerRound)
     }
 
     // #1765: THE BRAKE IS GONE. A big selection is a decision Dan is allowed to make, and the sheet states
@@ -114,7 +113,7 @@ struct ProbeSelectionTests {
         let one = [show("a", "Solo Co", "The Tank")]
         let s = ProbeSelection.summarize(dateCount: 1, candidates: one, alreadyAnswered: 0, among: one)
         #expect(ProbeSelectionCopy.selectionSummary(s) == "1 date, 1 show")
-        #expect(ProbeSelectionCopy.costLine(s) == "1 lookup, about 3 minutes.")
+        #expect(ProbeSelectionCopy.costLine(s) == "1 lookup, about 7 minutes.")
     }
 
     // The saving is only mentioned when there is one. On a night where every show is its own hunt,

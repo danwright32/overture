@@ -1361,7 +1361,13 @@ enum QueueModel {
                                overrides: ProducerOverrides = .none,
                                // #1609: Dan's geography refusals, so a multi-date confirm can never
                                // include, count, or charge for a show somewhere he will not travel.
-                               geo: GeoRefusals = .none) -> (ProbeSelection.Summary, [String])? {
+                               geo: GeoRefusals = .none,
+                               // #1616: how long one round of concurrent lookups takes, learned by the
+                               // caller from the checks that have actually run. An argument, and defaulted
+                               // to the hand-set constant, so this function stays pure and a test can price
+                               // a selection without reaching Dan's real history file.
+                               secondsPerRound: TimeInterval = ProbeSelection.fallbackSecondsPerRound)
+    -> (ProbeSelection.Summary, [String])? {
         // The bar belongs to Scout, because the checkboxes do. Ticking dates and switching stage left it
         // pinned at the top offering to start a run against a selection Dan could neither see nor change
         // (his walk of the Debug build, 2026-07-27). The selection itself survives the trip: hiding is
@@ -1398,7 +1404,8 @@ enum QueueModel {
             // The producer gate is judged against the WHOLE queue, never just the ticked dates: judged
             // against one night, every producer looks like a single-venue house and nothing amortises.
             among: all.map(asShow),
-            overrides: overrides)
+            overrides: overrides,
+            secondsPerRound: secondsPerRound)
         return (summary, candidateKeys.sorted())
     }
 

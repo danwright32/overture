@@ -44,6 +44,7 @@ the workflow's runbook is its spec.
 | `overture-voice-feedback.json` | App (`VoiceFeedbackBuilder.encode`) | Prep run (workflow) | 1, 2, 3 | `fixtures/voice-feedback/` | `VoiceFeedbackContractTests.swift` |
 | `overture-recent-openers.json` | App (`RecentOpenersBuilder.encode`) | Prep run (workflow) | 1 | `fixtures/recent-openers/` | `RecentOpenersContractTests.swift` |
 | `overture-run-duration-history.json` | App (`RunDurationHistoryStore.record`) | App (`RunDurationHistoryStore.load`) | 1 | none | `RunDurationHistoryTests.swift` |
+| `overture-probe-duration-history.json` | App (`ProbeDurationHistoryStore.record`) | App (`ProbeDurationHistoryStore.load`) | 1 | none | `ProbeDurationHistoryTests.swift` |
 | `installed-build.json` | `mac/build-install.sh` (after a successful install) | App (`BuildFreshness.installedRecord`) | 1 | none (three fields, pinned by the decode test) | `BuildFreshnessTests.swift` |
 | `shipped-commit.json` | `scripts/record-shipped-commit.sh` **only**, called by both merge scripts, `scripts/hooks/post-merge`, and `mac/build-install.sh` | App (`BuildFreshness.shippedRecord`) | 1 | none (two fields, pinned on both sides) | `BuildFreshnessTests.swift`, `scripts/record-shipped-commit.test.sh` |
 | `update-result.json` | `mac/scripts/lib/update-result.sh`, called by `mac/scripts/update-overture.sh` (#2188: `running` before it decides anything, the refusal reason if it refuses, REMOVED on success) | App (`UpdateAttempt.record`) | 1 | none (four fields, pinned on both sides) | `UpdateAttemptTests.swift`, `UpdateAttemptStateTests.swift`, `mac/scripts/update-overture.test.sh` |
@@ -66,7 +67,23 @@ incomplete figure, and a reader reaching for the field it always reads must find
 of the total presented as the whole. `webCalls.overCap` follows the same rule from the other side: on the
 incomplete path it appears only when the partial count ALREADY exceeds the allowance, because that verdict
 can only get truer. This was registered here after the fact, having shipped without a row or a fixture, and
-#1616 and #1625 are about to build on `runCost.durationMs`.
+#1625 is about to build on `runCost.durationMs`.
+
+#1616 now reads `runCost.durationMs` for the reachability check's wait estimate, and what it found is worth
+recording here because it shapes what that key can and cannot be used for. `overture-prep-results.json` is
+OVERWRITTEN by every run and is shared by a Prep run and a check, so exactly ONE `runCost` record exists at a
+time: it is a reading of the last run, not a history. It also does not say WHICH kind of run wrote it (the
+app decides that from the check's own marker, see `RunKind`) and carries no lookup count. What it does carry
+is a real wall clock (`durationMs` is the LONGEST stream, never the sum) and `streams`, the chunk count,
+which for a check is how many lookups ran at once. So the app accumulates its own history
+(`overture-probe-duration-history.json`) from that reading plus the size stamped in the check's marker, and
+never treats the results file as a record of more than the last run.
+
+#1616: `overture-probe-duration-history.json` is app-internal telemetry on the same footing as
+`overture-run-duration-history.json` above (the last 10 completed reachability CHECKS, as lookups, streams
+and wall-clock seconds, for the wait the selection bar quotes before Dan spends anything). The app writes and
+reads it, no script touches it, and a missing or malformed file reads as no history at all, which puts the
+bar back on its hand-set constant rather than on a number nobody measured.
 
 #2188: `update-result.json` is the return channel for the Update button. Pressing it opens a Terminal window
 the app cannot see, so until this file existed a refused update and a successful one were the same thing from
