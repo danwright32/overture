@@ -219,16 +219,12 @@ enum QueueShowableSurfaceAudit {
     // whole absolute path is glued onto "Overture". The predicate's own file then stops matching
     // predicatePath and this guard accuses StageNavigation of being a rogue surface: it reports the
     // exact defect it exists to catch, about the code that is the fix.
-    static func appSources(macRoot: URL) -> [(path: String, source: String)] {
-        let root = macRoot.appendingPathComponent("Overture")
-        guard let walker = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil)
-        else { return [] }
-        var files: [(path: String, source: String)] = []
-        for case let url as URL in walker where url.pathExtension == "swift" {
-            guard let text = try? String(contentsOf: url, encoding: .utf8) else { continue }
-            files.append((path: CopyInventory.relativePath(of: url, under: macRoot), source: text))
-        }
-        return files
+    // The floor is passed in, because this is also called with a two-file fixture tree to prove the
+    // key derivation, and refusing there would be refusing the test's own setup.
+    static func appSources(macRoot: URL, floor: Int = AppSourceWalk.appFloor)
+        -> [(path: String, source: String)] {
+        AppSourceWalk.files(under: macRoot.appendingPathComponent("Overture"), floor: floor)
+            .map { (path: CopyInventory.relativePath(of: $0.url, under: macRoot), source: $0.text) }
     }
 }
 
@@ -355,7 +351,7 @@ struct QueueShowableSurfacesAreOnePredicateTests {
         let link = base.appendingPathComponent("link")
         try fm.createSymbolicLink(at: link, withDestinationURL: base.appendingPathComponent("checkout"))
 
-        let files = QueueShowableSurfaceAudit.appSources(macRoot: link.appendingPathComponent("mac"))
+        let files = QueueShowableSurfaceAudit.appSources(macRoot: link.appendingPathComponent("mac"), floor: 1)
 
         #expect(files.map(\.path) == [Self.predicatePath])
     }
@@ -375,7 +371,7 @@ struct QueueShowableSurfacesAreOnePredicateTests {
                    atomically: true, encoding: .utf8)
 
         let files = QueueShowableSurfaceAudit.appSources(
-            macRoot: base.appendingPathComponent("checkout/mac"))
+            macRoot: base.appendingPathComponent("checkout/mac"), floor: 1)
 
         #expect(files.map(\.path) == [Self.predicatePath])
     }

@@ -164,13 +164,10 @@ enum CopyInventory {
         }
     }
 
+    // #2311: through the shared walk, which refuses out loud when it comes back short. An inventory
+    // built from no files is an empty list of everything the app says, which is what #1967 shipped.
     private static func swiftFiles(under root: URL) throws -> [URL] {
-        let enumerator = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil)
-        var out: [URL] = []
-        while let url = enumerator?.nextObject() as? URL {
-            if url.pathExtension == "swift" { out.append(url) }
-        }
-        return out.sorted { $0.path < $1.path }
+        AppSourceWalk.urls(under: root, floor: 50)
     }
 
     // Internal (not private) so the #1491 regression test can pin it directly. Both paths are

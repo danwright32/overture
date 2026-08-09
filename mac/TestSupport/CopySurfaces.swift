@@ -130,13 +130,10 @@ enum CopySurfaces {
         return report
     }
 
+    // #2311: through the shared walk, for the same reason the inventory does. A report of where the
+    // app's messages render, built from no files, says every message renders nowhere.
     private static func swiftFiles(under root: URL) throws -> [URL] {
-        let enumerator = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil)
-        var out: [URL] = []
-        while let url = enumerator?.nextObject() as? URL {
-            if url.pathExtension == "swift" { out.append(url) }
-        }
-        return out.sorted { $0.path < $1.path }
+        AppSourceWalk.urls(under: root, floor: 50)
     }
 
     static var reportURL: URL {

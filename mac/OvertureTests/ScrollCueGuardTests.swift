@@ -197,16 +197,10 @@ struct ScrollCueGuardTests {
             .appendingPathComponent("Overture")
     }
 
-    private static func swiftFiles(under root: URL) -> [URL] {
-        guard let enumerator = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil)
-        else { return [] }
-        return enumerator.compactMap { $0 as? URL }.filter { $0.pathExtension == "swift" }
-    }
-
     @Test func noCappedScrollBoxHidesContentSilently() throws {
-        let files = Self.swiftFiles(under: Self.appRoot)
-        // A wrong path must not pass silently the way #887's guard did.
-        #expect(files.count > 50)
+        // A wrong path must not pass silently the way #887's guard did. #2311 moved that floor into
+        // the walk itself, so it is one rule rather than a number remembered here.
+        let files = AppSourceWalk.urls(under: Self.appRoot)
 
         var offenders: [String] = []
         var unexplained: [String] = []

@@ -214,17 +214,12 @@ struct ViewCopyGuardTests {
 
     // MARK: - Which files are views
 
+    // #2311: through the shared walk, which refuses out loud when the app directory yields nothing.
+    // A guard over "every view" that walks no files reports that no view computes copy, which reads
+    // exactly like a clean app.
     static func viewFiles() -> [URL] {
-        let root = RepoRoot.mac
-            .appendingPathComponent("Overture")
-        let enumerator = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil)
-        var out: [URL] = []
-        while let url = enumerator?.nextObject() as? URL {
-            guard url.pathExtension == "swift",
-                  let source = try? String(contentsOf: url, encoding: .utf8),
-                  source.contains(": View") || source.contains(": App") else { continue }
-            out.append(url)
-        }
-        return out
+        AppSourceWalk.appFiles()
+            .filter { $0.text.contains(": View") || $0.text.contains(": App") }
+            .map(\.url)
     }
 }

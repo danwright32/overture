@@ -22,13 +22,8 @@ struct HandoffPathGuardTests {
             .appendingPathComponent("scripts")
     }
 
-    private static func swiftFiles(under root: URL) -> [URL] {
-        guard let enumerator = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil) else { return [] }
-        return enumerator.compactMap { $0 as? URL }.filter { $0.pathExtension == "swift" }
-    }
-
     @Test func everyApplicationSupportDirectoryReferenceLivesInStoreLocation() throws {
-        for file in Self.swiftFiles(under: Self.overtureSourceRoot) {
+        for file in AppSourceWalk.urls(under: Self.overtureSourceRoot) {
             let src = try String(contentsOf: file, encoding: .utf8)
             if src.contains(".applicationSupportDirectory") {
                 #expect(file.lastPathComponent == Self.sourceOfTruth,

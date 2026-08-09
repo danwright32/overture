@@ -21,11 +21,6 @@ struct ToolbarPopoverGuardTests {
             .appendingPathComponent("Overture")
     }
 
-    private static func swiftFiles(under root: URL) -> [URL] {
-        guard let enumerator = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil) else { return [] }
-        return enumerator.compactMap { $0 as? URL }.filter { $0.pathExtension == "swift" }
-    }
-
     // A line's code, with any `//` comment stripped, so the very comment explaining this constraint
     // (RootView documents it in prose) can't trip the guard that enforces it.
     private static func code(_ line: String) -> String {
@@ -65,7 +60,7 @@ struct ToolbarPopoverGuardTests {
 
     @Test func noPopoverIsAnchoredInsideAToolbar() throws {
         var offenders: [String] = []
-        for file in Self.swiftFiles(under: Self.sourceRoot) {
+        for file in AppSourceWalk.urls(under: Self.sourceRoot) {
             let source = try String(contentsOf: file, encoding: .utf8)
             for line in Self.toolbarAnchoredPopovers(in: source) {
                 offenders.append("\(file.lastPathComponent):\(line)")

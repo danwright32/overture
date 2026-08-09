@@ -86,19 +86,18 @@ struct LiveStoreCopyGuardTests {
     // Named as a rule about the two things TOGETHER, because either alone is legitimate: several suites
     // read the live store read-only and never copy, and plenty of tests copy fixtures around.
     @Test func nothingButTheHelperCopiesTheLiveStore() throws {
-        let fm = FileManager.default
         var offenders: [String] = []
         for dir in ["", "../OvertureHostedTests"] {
             let root = Self.testsRoot.appendingPathComponent(dir).standardizedFileURL
-            guard let walker = fm.enumerator(at: root, includingPropertiesForKeys: nil) else { continue }
-            for case let url as URL in walker where url.pathExtension == "swift" {
+            // #2311: through the shared walk, so a root that stops resolving refuses instead of
+            // reporting that nothing copies the live store.
+            for file in AppSourceWalk.files(under: root, floor: 20) {
                 // The helper itself, and its own tests, which name the live path to assert the refusal
                 // and to skip when there is no live store.
-                guard !["LiveStoreClone.swift", "LiveStoreCloneTests.swift"].contains(url.lastPathComponent)
+                guard !["LiveStoreClone.swift", "LiveStoreCloneTests.swift"].contains(file.name)
                 else { continue }
-                guard let text = try? String(contentsOf: url, encoding: .utf8) else { continue }
-                guard text.contains("StoreLocation.storeURL(appSupport:") else { continue }
-                if text.contains("copyItem(") { offenders.append(url.lastPathComponent) }
+                guard file.text.contains("StoreLocation.storeURL(appSupport:") else { continue }
+                if file.text.contains("copyItem(") { offenders.append(file.name) }
             }
         }
         #expect(offenders.sorted().isEmpty,

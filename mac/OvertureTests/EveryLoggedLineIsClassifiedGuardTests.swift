@@ -11,19 +11,13 @@ import Foundation
 // instance).
 @Suite("Every line the app logs says what kind it is (#1689)")
 struct EveryLoggedLineIsClassifiedGuardTests {
-    // Every Swift file under Overture/, with its repo-relative path.
-    private func appSources(file: StaticString = #filePath) -> [(path: String, text: String)] {
-        // #1993: searched for, not counted to. This one is worth naming because it returns [] when the
-        // path is wrong, and a guard that walks an empty list passes over every file it was meant to
-        // check, reporting a clean app rather than a broken path.
-        let root = RepoRoot.app
-        guard let walker = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil)
-        else { return [] }
-        return walker.compactMap { entry in
-            guard let url = entry as? URL, url.pathExtension == "swift",
-                  let text = try? String(contentsOf: url, encoding: .utf8) else { return nil }
-            return (path: url.lastPathComponent, text: text)
-        }
+    // Every Swift file under Overture/, with its own name.
+    //
+    // #2311: through the shared walk, which refuses out loud when it comes back empty. A guard that
+    // walks an empty list passes over every file it was meant to check, reporting a clean app rather
+    // than a broken path, and the floor lives in the walk so this one cannot forget it.
+    private func appSources() -> [(path: String, text: String)] {
+        AppSourceWalk.appFiles().map { (path: $0.name, text: $0.text) }
     }
 
     @Test func onlyAgentLogMayCallNSLogDirectly() {
