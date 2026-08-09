@@ -70,6 +70,31 @@ assert_eq "a failed run is counted the same way" \
   "$(test_run_totals "${FAIL_MARK} Test run with 5923 tests in 835 suites failed after 102.546 seconds with 3 issues.")" \
   "5923 835 102.546"
 
+# #2317: Swift Testing writes the words SINGULAR when there is one of something, so a run of a single
+# suite says "in 1 suite" and a run of a single test says "1 test". A parser that only knows the plural
+# reads those runs as having executed nothing at all.
+#
+# Found by running a real scope through the wrapper: `-only-testing:OvertureTests/StoreSchemaGuardTests`
+# printed "Test run with 10 tests in 1 suite passed" and was reported as a run that executed nothing,
+# which is precisely the false alarm that teaches somebody to ignore this gate.
+assert_eq "a run of one suite is counted, not read as nothing" \
+  "$(test_run_totals "${PASS_MARK} Test run with 10 tests in 1 suite passed after 0.029 seconds.")" \
+  "10 1 0.029"
+
+assert_eq "a run of one test is counted too" \
+  "$(test_run_totals "${PASS_MARK} Test run with 1 test in 1 suite passed after 0.004 seconds.")" \
+  "1 1 0.004"
+
+# And the readout says it in words, rather than "1 suites", now that a scoped run of a single suite is
+# something this wrapper can be asked for.
+assert_eq "the readout counts one suite in the singular" \
+  "$(format_suite_report "10 1 0.029" "1.70" "1176" "6219")" \
+  "Suite shape: 10 tests in 1 suite, 0.029s. Test Swift to app Swift 1.70 to 1. Source-text guards are 1176 of 6219 test declarations."
+
+assert_eq "and one test in the singular too" \
+  "$(format_suite_report "1 1 0.004" "1.70" "1176" "6219")" \
+  "Suite shape: 1 test in 1 suite, 0.004s. Test Swift to app Swift 1.70 to 1. Source-text guards are 1176 of 6219 test declarations."
+
 # ---------------------------------------------------------------------------
 # line_ratio: test Swift against app Swift
 # ---------------------------------------------------------------------------

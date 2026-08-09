@@ -181,6 +181,29 @@ truncated_report() {
   echo "this run executed ${executed} tests, $(( baseline - executed )) fewer than the ${baseline} the last green run on this Mac ran. The result is NOT trustworthy: the process almost certainly died partway through, and any test named below was merely in flight when it did, not the cause."
 }
 
+# nothing_executed_report <exit_code> <executed>. Prints the sentence when a run reported success while
+# executing no tests at all, and nothing otherwise.
+#
+# #2317: a scoped run whose `-only-testing:` path matches nothing prints "** TEST SUCCEEDED **" and exits
+# 0, having run zero tests. Hit again on 2026-08-08 while verifying #1994: the scope named one test that
+# did not resolve, reported success against a deliberately stale file that should have failed it, and the
+# same scope at suite level then failed correctly. AGENTS.md documented the trap and told the reader to
+# grep the output for the test name, which makes the safety net somebody remembering to be suspicious of
+# a run that just said it passed. Since #1347 this run is the ONLY thing verifying the Mac app before it
+# reaches main.
+#
+# Deliberately separate from truncated_report. A SHORT RUN started and died partway; this one never
+# started anything, and the two want different responses (re-run and look for what is killing the
+# process, versus fix the scope you typed). Only a run REPORTING SUCCESS is judged here: a build failure
+# and a dead host both arrive with no count too, and each already explains itself, so adding this
+# sentence to a red run would put a second, wrong explanation in front of the real one.
+nothing_executed_report() {
+  local exit_code="$1" executed="$2"
+  [[ "${exit_code}" -eq 0 ]] || return 0
+  [[ -z "${executed}" || "${executed}" -eq 0 ]] || return 0
+  echo "this run reported success but executed NO tests at all. Nothing was verified. A -only-testing: scope that matches nothing (a wrong suite or test name, or a @Suite display name that differs from its Swift type name) does exactly this: xcodebuild prints ** TEST SUCCEEDED ** and exits 0."
+}
+
 # should_retry <outcome> <attempt> <max_attempts>. Prints "retry" when another attempt should run.
 #
 # #1331: the self-hosted swift-tests runner intermittently crashes the test HOST mid-run ("Restarting
@@ -345,7 +368,15 @@ main() {
     # `Failing tests:` list buried, and signed off with "the code was never the problem". The exact
     # inverse of the distinction #1006 built.
     set +e
-    flock "${LOCK_FILE}" xcodebuild -scheme Overture -destination 'platform=macOS' test \
+    # #2317: extra arguments are forwarded to xcodebuild, so a SCOPED run can go through this wrapper
+    # instead of around it. That matters because the trap the empty-run gate below exists for is a
+    # `-only-testing:` path that matches nothing, and until now the only way to pass one was to invoke
+    # xcodebuild directly, which is precisely the path with no gate on it. Usage:
+    #
+    #   mac/scripts/run-tests-locked.sh -only-testing:OvertureTests/StoreSchemaGuardTests
+    #
+    # With no arguments this is exactly what it always was: the whole suite.
+    flock "${LOCK_FILE}" xcodebuild -scheme Overture -destination 'platform=macOS' test "$@" \
       2>&1 | tee "${output_file}"
     test_exit_code="${PIPESTATUS[0]}"
     set -e
@@ -383,10 +414,19 @@ main() {
   # checked-in number is one somebody has to remember to bump, and a guard people routinely bump is a
   # guard people stop reading. It is written from this script's own last green run, so it maintains
   # itself (L41). No baseline yet means no claim: the first green run records one.
-  local executed baseline="" truncated=""
+  #
+  # #2317: the baseline is a FULL-SUITE number, so neither the comparison nor the write applies to a run
+  # that was deliberately scoped. A scoped run legitimately executes a handful of tests, which would read
+  # as a 99% truncation, and a green one would then overwrite the baseline with that handful and disable
+  # the gate for every full run after it. The empty-run gate below is judged on every run either way,
+  # because "nothing ran" is never correct.
+  local executed baseline="" truncated="" scoped=0
+  [[ $# -gt 0 ]] && scoped=1
   executed="$(executed_test_count "${last_output}")"
-  [[ -f "${BASELINE_FILE}" ]] && baseline="$(cat "${BASELINE_FILE}" 2>/dev/null || true)"
-  truncated="$(truncated_report "${executed}" "${baseline}")"
+  if [[ "${scoped}" -eq 0 ]]; then
+    [[ -f "${BASELINE_FILE}" ]] && baseline="$(cat "${BASELINE_FILE}" 2>/dev/null || true)"
+    truncated="$(truncated_report "${executed}" "${baseline}")"
+  fi
   if [[ -n "${truncated}" ]]; then
     echo >&2
     echo "run-tests-locked.sh: SHORT RUN. ${truncated}" >&2
@@ -397,10 +437,23 @@ main() {
     # test-all.sh would go on to say "all suites passed" having run two thirds of it. A result that
     # cannot be believed must never exit 0.
     [[ "${test_exit_code}" -ne 0 ]] || test_exit_code=1
-  elif [[ -z "${outcome}" && -n "${executed}" ]]; then
-    # Only a genuinely green run may move the baseline, so a truncated or failing one can never quietly
-    # lower the bar it is measured against.
+  elif [[ "${scoped}" -eq 0 && -z "${outcome}" && -n "${executed}" ]]; then
+    # Only a genuinely green FULL run may move the baseline, so neither a truncated one, nor a failing
+    # one, nor a scoped one can quietly lower the bar it is measured against.
     echo "${executed}" > "${BASELINE_FILE}"
+  fi
+
+  # #2317: and a run that executed NOTHING is not a pass either. Checked after the baseline write above
+  # so an empty run can never record itself as the count to measure the next one against, which would
+  # disable the short-run gate as well.
+  local nothing_ran
+  nothing_ran="$(nothing_executed_report "${test_exit_code}" "${executed}")"
+  if [[ -n "${nothing_ran}" ]]; then
+    echo >&2
+    echo "run-tests-locked.sh: NOTHING RAN. ${nothing_ran}" >&2
+    echo "Check the -only-testing: path you passed, or run the whole suite with no scope at all." >&2
+    echo >&2
+    test_exit_code=1
   fi
 
   # #2193/#2232: the suite's shape, every run, pass or fail. It is printed unconditionally because

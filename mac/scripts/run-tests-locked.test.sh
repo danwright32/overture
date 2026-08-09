@@ -107,6 +107,44 @@ assert_equals "a zero baseline is treated as no baseline, not as everything bein
   "" "$(truncated_report 3932 0)"
 
 echo
+# --- #2317: a run that executed NOTHING is not a pass -------------------------------------
+#
+# A scoped run whose -only-testing: path matches nothing prints "** TEST SUCCEEDED **" and exits 0
+# having run zero tests. Hit again on 2026-08-08 while verifying #1994: the scope named one test that
+# did not resolve, reported success against a deliberately stale file that should have failed it, and
+# the same scope at suite level then failed correctly.
+#
+# The case where it bites is exactly the case where nobody is suspicious, because the run said it
+# passed. Since #1347 this run is the ONLY thing verifying the Mac app before it reaches main.
+#
+# Distinct from SHORT RUN, which is about a run that started and died partway. This is a run that never
+# started anything at all, and the two need different sentences because they need different responses.
+
+assert_equals "a reported pass that executed no tests is refused" \
+  "this run reported success but executed NO tests at all. Nothing was verified. A -only-testing: scope that matches nothing (a wrong suite or test name, or a @Suite display name that differs from its Swift type name) does exactly this: xcodebuild prints ** TEST SUCCEEDED ** and exits 0." \
+  "$(nothing_executed_report 0 "")"
+
+assert_equals "and so is one that reported a count of zero" \
+  "this run reported success but executed NO tests at all. Nothing was verified. A -only-testing: scope that matches nothing (a wrong suite or test name, or a @Suite display name that differs from its Swift type name) does exactly this: xcodebuild prints ** TEST SUCCEEDED ** and exits 0." \
+  "$(nothing_executed_report 0 0)"
+
+# A run that executed tests is not this failure, however few it ran. One test is a scope that resolved.
+assert_equals "a run that executed even one test is not called empty" \
+  "" "$(nothing_executed_report 0 1)"
+
+assert_equals "a full green run is not called empty" \
+  "" "$(nothing_executed_report 0 6219)"
+
+# A run that already failed says why on its own path. Adding this sentence to a red run would put a
+# second, wrong explanation in front of whoever is reading the real failure: a build failure and a dead
+# host both reach here with no count, and neither is a scope that matched nothing.
+assert_equals "a failing run is left to its own explanation" \
+  "" "$(nothing_executed_report 1 "")"
+
+assert_equals "a crashed run with no count is left to its own explanation" \
+  "" "$(nothing_executed_report 65 "")"
+
+echo
 # --- pre-flight blocker detection (#1257) ------------------------------------------------
 #
 # A running Debug Overture that run-debug.sh launched from mac/build holds the single-instance lock
