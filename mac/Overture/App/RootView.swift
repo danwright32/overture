@@ -1081,7 +1081,9 @@ struct RootView: View {
         let p = DebugStaging.stageReprepQueuedDraft(in: context, now: Date())
         do {
             try context.save()
-            status.set("DEBUG: staged re-prep-queued draft. Open '\(p.groupName)' in Review for the 'Re-prep queued' badge")
+            // #1940: Prep, not Review. A queued re-prep now takes the show out of the Review count, so the
+            // stage this sentence sends you to is the one that no longer holds it.
+            status.set("DEBUG: staged re-prep-queued draft. Open '\(p.groupName)' in Prep for the 'Re-prep queued' badge")
         } catch {
             status.set("DEBUG stage failed: \(error.localizedDescription)")
         }
@@ -1248,6 +1250,10 @@ struct RootView: View {
                 ingestPrep()
             }
         case .finishedEmpty:
+            // #1940: the case that made the release necessary. The run ended having written nothing, so
+            // PrepImporter never sees this run at all and nothing else would ever clear the re-prep flags
+            // it was carrying, leaving a readable draft out of the Review count indefinitely (L45).
+            ReprepRelease.releaseAfterRun(in: context)
             if let report = PrepQueueService.settleReachabilityProbe(into: context, now: Date()) {
                 reportReachabilityRun(report)
             } else {
@@ -1276,6 +1282,10 @@ struct RootView: View {
         let wasProbe = RunKind.of(runStartedAt: PrepQueueService.lastRunStartedAt,
                                   probeMarkerStartedAt: marker?.startedAt) == .reachabilityCheck
         guard let outcome = PrepQueueService.clearDeadRun(into: context, now: Date()) else { return false }
+        // #1940: a run that died is a run that ended, so the re-prep requests it was carrying come back
+        // here too. Without this the one way a run can end that produces nothing AND says so is the one
+        // way a show never returns to Review.
+        ReprepRelease.releaseAfterRun(in: context)
         if let report = outcome.probeReport { reportReachabilityRun(report) }
         // .warning, not .info: an .info write can be silently overwritten by a later routine receipt, and
         // a run Dan was waiting on having died is the one thing about it he has to see.
@@ -2035,7 +2045,15 @@ struct RootView: View {
         // single launch, which re-announced an old run's shortfall ("2 didn't come back") days after the
         // fact, re-announced its drafts, and (the real damage) knocked an approved-but-unsent draft back
         // to "needs review", silently undoing Dan's own approval. Nothing to consume, nothing to say.
-        guard let outcome = PrepImporter.consumeIfNew(into: context) else { return }
+        let outcome = PrepImporter.consumeIfNew(into: context)
+        // #1940: give back every re-prep this run was carrying and did not serve, so a show whose queued
+        // re-prep took it out of the Review count returns to it. AFTER the importer, never before: the
+        // importer reads the same two flags to decide which half of a result is in scope, so clearing them
+        // first would let a contacts-only re-prep's run overwrite the draft it was told to leave alone.
+        // Outside the guard below for the same reason it exists at all: a run that produced nothing new
+        // still ended, and the request it was carrying still has to come back.
+        ReprepRelease.releaseAfterRun(in: context)
+        guard let outcome else { return }
         // #876: every sentence derived from the run's own outcome now lives in PrepRunSummary, where a
         // test can read it. Built here in the view body, this copy was unreachable by any test, which is
         // exactly the shape #863 warns about.

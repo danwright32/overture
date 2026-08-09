@@ -730,11 +730,41 @@ enum PrepQueueService {
             try await launch()
             UserDefaults.standard.set(now, forKey: lastRunKey)
             announce()     // #1938: the run is real and launched; tell the app rather than making it look
+            // #1940: record which re-prep requests this run is carrying, now that it is genuinely under
+            // way. A queued re-prep takes a show out of the Review count, so when the run ends without
+            // serving it, something has to give the request back (ReprepRelease), and only this stamp can
+            // tell a request a run declined from one Dan queued by hand that no run has picked up yet.
+            //
+            // AFTER the launch, so a launch that threw hands nothing over and leaves the request waiting
+            // for the next run. Not inside the do/catch's throwing path either: the catch above releases
+            // the runner lock, which would be wrong once a run is actually live.
+            markHandedToRun(keys: Set(queue.items.map(\.naturalKey)), in: context)
         } catch {
             try? FileManager.default.removeItem(at: markerURL)   // release the lock if we never launched
             throw error
         }
         return queue.items.count
+    }
+
+    // #1940: record which shows' re-prep requests went out with the run that has just launched, keyed on
+    // the items really encoded into the queue file rather than on the eligible set, so a show Dan left
+    // unticked in the Prep sheet is never marked as one this run is carrying.
+    //
+    // Only a show with a request pending is marked: a first prep carries no request to give back, and
+    // marking it would make the release a statement about every show in every run.
+    private static func markHandedToRun(keys: Set<String>, in context: ModelContext) {
+        let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        var marked = false
+        for p in all where keys.contains(p.naturalKey) && p.isReprepQueued {
+            p.reprepHandedToRun = true
+            marked = true
+        }
+        guard marked else { return }
+        // Best effort, and the one place in this file that is: the run is already live, so throwing from
+        // here would unwind into startPrep's catch and release a lock a real runner is holding. A stamp
+        // that fails to save degrades to the pre-#1940 behaviour for that show (its request stands and it
+        // stays under Prep until a run serves it), never to a request silently thrown away.
+        try? context.save()
     }
 
     static let lastRunKey = "prepLastRunStartedAt"

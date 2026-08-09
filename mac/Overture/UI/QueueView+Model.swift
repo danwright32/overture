@@ -240,7 +240,12 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     var isSent: Bool { sentAt != nil }
     // #367: a re-prep still awaiting the next Prep run, shown as a small badge (mirrors the
     // existing "Edited" badge) so Dan can tell which prospects are still waiting versus served.
-    var isReprepQueued: Bool { reprepDraftRequested || reprepContactsRequested }
+    // #1940: through the shared definition, so the badge and the Review stage that now excludes this show
+    // can never disagree about what "queued" means.
+    var isReprepQueued: Bool {
+        ReprepRequest.isQueued(draftRequested: reprepDraftRequested,
+                               contactsRequested: reprepContactsRequested)
+    }
     // #367: re-prep is never offered once sent (.contacted) or given up on (.dismissed); redrafting
     // text already sent, or reviving a dismissed lead, are different actions from re-prep.
     var isReprepEligible: Bool { status != .contacted && status != .dismissed }

@@ -209,7 +209,15 @@ enum StageNavigation {
             //
             // Stated as the two statuses rather than as "drafted, or approved and unsent", so there is no
             // gap between them for a part-sent show (approved with `sentAt` already set) to fall into.
-            return p.status == .drafted || p.status == .approved
+            //
+            // #1940: except while a re-prep is queued on it. Review holds drafts worth reading NOW, and a
+            // draft a queued run is about to rewrite is not one of those (Dan, 2026-08-01), so the show
+            // sits under Prep alone until the run ends. #1800 recorded the old overlap as deliberate; this
+            // reverses that, and the reversal is safe only because of the two halves under it: the same
+            // flag that takes it out of here puts it in `.prep` or `.prepBlocked` above, so it cannot fall
+            // out of every list, and ReprepRelease returns it here when the run ends without serving it
+            // (L45: the filters must cover the whole state space between them).
+            return (p.status == .drafted || p.status == .approved) && !p.isReprepQueued
 
         case .sendApproved:
             return p.status == .approved && p.sentAt == nil

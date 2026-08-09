@@ -352,6 +352,15 @@ final class Prospect {
     // #733: when a Prep run last produced a result for this prospect (a normal fresh draft OR a
     // served re-prep), so the UI can warn before re-prepping something that was just researched.
     var reprepLastServedAt: Date? = nil
+    // #1940: this show's re-prep request went out with the Prep run now in flight.
+    //
+    // Stamped by PrepQueueService.startPrep for the shows whose items really went into the queue file,
+    // and cleared when that run ends (ReprepRelease). It is the ONLY thing that can tell a request the
+    // run carried and declined from one Dan queued by hand and no run has touched, and the two have to
+    // end up in different places: the first returns to Review, the second is still waiting for its run.
+    // False, never nil, so a store written before this field reads as "no run has this", which is the
+    // safe answer for every row that predates it.
+    var reprepHandedToRun: Bool = false
 
     // The voice-learning pair (#240 / #119). originalDraft* is the AI's draft before Dan's first
     // SUBSTANTIVE edit, snapshotted once and never clobbered; sent* is the exact text emailed,
@@ -764,6 +773,13 @@ final class Prospect {
     var disappearedFromFeed: Bool { missedScoutCount >= FeedReconcile.goneThreshold }
 
     var hasDraft: Bool { draftBody != nil }
+
+    // #1940: a Prep run has work queued on this show. Through the same shared definition QueueItem's badge
+    // reads, so the badge Dan sees and the stage he finds the show under are one rule.
+    var isReprepQueued: Bool {
+        ReprepRequest.isQueued(draftRequested: reprepDraftRequested,
+                               contactsRequested: reprepContactsRequested)
+    }
 
     // MARK: - The date conflict (#901)
 

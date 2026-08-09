@@ -9,12 +9,16 @@ import Foundation
 // Aug 14), counted under Scout as untriaged AND under Send issues as a show with a contact held for a
 // check, on a show nothing had ever been sent to.
 //
-// Blanket exclusivity would be the wrong rule. A re-prep requested on a drafted show genuinely belongs
-// to Prep and Review at once (PrepQueue.needsPrep admits `.drafted` and `.approved` when a re-prep is
-// queued), and a show can genuinely have two send problems. So the rule is written down instead, as
-// three invariants over the FAMILY a focus belongs to rather than as a table of pairs, which is what
-// makes it survive a focus added later: `family` is exhaustive, so a new case cannot compile without
-// someone saying which half of the funnel it is about.
+// Blanket exclusivity would still be the wrong rule, because a show can genuinely have two send problems.
+// So the rule is written down instead, as invariants over the FAMILY a focus belongs to rather than as a
+// table of pairs, which is what makes it survive a focus added later: `family` is exhaustive, so a new
+// case cannot compile without someone saying which half of the funnel it is about.
+//
+// #1940 made the LIFECYCLE half exclusive. It was not: a re-prep requested on a drafted show sat in Prep
+// and Review at once, deliberately, because the old draft stayed readable until the run replaced it. Dan's
+// call, 2026-08-01: a draft a queued run is about to rewrite is not one worth reading now, so it leaves
+// Review. That leaves nothing that can hold a show in two lifecycle stages, so the check says so, and
+// would catch the pair coming back.
 enum StageOverlap {
     // Which question a focus asks. Lifecycle focuses ask where a show has got to; send-problem focuses
     // ask what went wrong with a send, which is orthogonal to that (a show can be drafted and also have
@@ -38,18 +42,19 @@ enum StageOverlap {
         }
     }
 
-    // The lifecycle focuses keyed purely on `status`, which is a single value, so a show can be in at
-    // most one of them. `.prep` and `.prepBlocked` are deliberately NOT here: a re-prep request puts a
-    // drafted or approved show in one of them alongside `.review`, which is a real state and not a
-    // defect.
-    static let mutuallyExclusiveByStatus: [StageFocus] = [.scout, .review]
+    // Where a show has GOT TO is one answer, so it is in at most one of these. #1940: DERIVED from
+    // `family` rather than listed by hand, so a lifecycle focus added later is covered by this rule the
+    // moment it declares its family, instead of quietly escaping a list nobody remembered to edit (L41).
+    // It also subsumes the old prep-or-prep-blocked rule, which was this same claim about one pair.
+    static var mutuallyExclusiveLifecycle: [StageFocus] {
+        StageNavigation.countedFocuses.filter { family(of: $0) == .lifecycle }
+    }
 
     // What each rule is, in the words a failure should report. Kept beside the checks so a violation
     // names the rule it broke rather than only the focuses it found.
     // copy-inventory:ignore-start  test failure text, read by whoever broke a rule, never said to Dan (#915)
     enum Rule: String, Equatable, Sendable {
-        case oneStatusFocus = "a show is in at most one status-keyed stage"
-        case prepOrPrepBlocked = "a show is either ready to prep or held from prepping, never both"
+        case oneLifecycleStage = "a show is at one point in its lifecycle, so it is in at most one lifecycle stage"
         case sendProblemNeedsSendHalf = "only a show in the send half of the funnel can have a send problem"
     }
     // copy-inventory:ignore-end
@@ -69,13 +74,9 @@ enum StageOverlap {
             let matched = StageNavigation.countedFocuses.filter {
                 StageNavigation.naturalKeys(for: $0, in: [p], today: today, now: now, geo: geo).count == 1
             }
-            let status = matched.filter { mutuallyExclusiveByStatus.contains($0) }
-            if status.count > 1 {
-                found.append(Violation(key: p.naturalKey, rule: .oneStatusFocus, focuses: status))
-            }
-            if matched.contains(.prep) && matched.contains(.prepBlocked) {
-                found.append(Violation(key: p.naturalKey, rule: .prepOrPrepBlocked,
-                                       focuses: [.prep, .prepBlocked]))
+            let lifecycle = matched.filter { mutuallyExclusiveLifecycle.contains($0) }
+            if lifecycle.count > 1 {
+                found.append(Violation(key: p.naturalKey, rule: .oneLifecycleStage, focuses: lifecycle))
             }
             let problems = matched.filter { family(of: $0) == .sendProblem }
             if !problems.isEmpty && !p.hasEnteredSendHalf {
