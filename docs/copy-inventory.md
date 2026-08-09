@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1193 sentences**, from 395 source files.
+Every sentence Overture can say to Dan: **1196 sentences**, from 395 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -335,6 +335,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceAttention.swift`
 "1 venue is still waiting to be checked."
     `UI/ScoutSummaryView.swift`
+"1 web lookup"
+    `Domain/PrepRunSummary.swift`
 "1px solid rgba(0,0,0,0.12)"
     `Domain/PreviewBackground.swift`
 "1px solid rgba(255,255,255,0.18)"
@@ -2250,6 +2252,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ProbeSelection.swift`
 "\(deferredCount) venues are still waiting to be checked."
     `UI/ScoutSummaryView.swift`
+"\(denied) web lookups"
+    `Domain/PrepRunSummary.swift`
 "\(drafted) to review"
     `Domain/PrepStatus.swift`
 "\(e) at \(v)"
@@ -2300,6 +2304,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ScoutWarningCopy.swift`
 "\(live.name): \(live.detail)"
     `UI/QueueView.swift`
+"\(lookups) refused, that research never happened"
+    `Domain/PrepRunSummary.swift`
 "\(lookups), \(wait)."
     `Domain/ProbeSelection.swift`
 "\(lookups), \(wait): shows by the same producer share one."

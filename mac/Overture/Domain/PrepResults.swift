@@ -28,6 +28,16 @@ struct PrepResults: Codable, Equatable, Sendable {
         // reads. Hence `total` is optional and `recorded` is the thing to branch on.
         var recorded: Bool
         var total: Int? = nil
+        // #1835: lookups the permission layer REFUSED, which reached nothing and so are NOT in `total`.
+        // Kept as their own figure rather than dropped, because a run repeatedly asking for a tool it does
+        // not have is its own signal: dropped, a run blocked at every attempt and one that never needed
+        // the web would report exactly the same thing.
+        //
+        // Absent, not zero, on a results file written before this existed, and on the incomplete path
+        // (which carries `partialDenied` instead, the same rule `total` follows). Absent means nobody
+        // looked, which is a different claim from "none were refused", so this stays optional and the app
+        // says nothing when it is missing.
+        var denied: Int? = nil
         var items: Int = 0
         // #1864: the research TARGETS the allowance was sized for, which is not the number of shows. An
         // organiser-less show pursues every performer its listing names and the runbook puts no headcount
