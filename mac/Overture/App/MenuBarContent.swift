@@ -27,8 +27,10 @@ struct MenuBarContent: View {
         Button("Open Overture") { openWindow(id: "main") }
         Button("Run reconcile now") { AppDelegate.shared?.runReconcileNow() }
         Button("Set up Overture…") { AppDelegate.shared?.showOnboarding() }
-        Button("Open agent logs") {
-            AgentLogLocation.revealInFinder()
+        // #1688: opens the log itself, and when there is none, says so in the label rather than
+        // silently handing Dan a Finder window in answer to "show me the logs".
+        Button(MenuBarStatus.logsMenuTitle(hasLogToOpen: AgentLogLocation.logToOpen() != nil)) {
+            AgentLogLocation.openLogs()
             AgentLogLocation.recordViewed()
         }
         Divider()
