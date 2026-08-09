@@ -1,19 +1,28 @@
 import Foundation
 
-// #1145 Layer 1: a free, always-on reachability heuristic read at Review, before the keep/dismiss
-// decision. The expensive question ("what is the email address") is Prep's job; this answers the cheap,
-// separate question ("is this org reachable at all") from signals already in hand after the scout, with no
-// new fetch and no tokens. It exists to flag the known-dead cases so Dan never dismisses a reachable show
-// in favour of a doubly-weak long shot he can't actually pitch.
+// #1145 Layer 1: a free, always-on reachability heuristic read on SCOUT, where Dan triages, before the
+// keep/dismiss decision. The expensive question ("what is the email address") is Prep's job; this answers
+// the cheap, separate question ("is this org reachable at all") from signals already in hand after the
+// scout, with no new fetch and no tokens. It exists to flag the known-dead cases so Dan never dismisses a
+// reachable show in favour of a doubly-weak long shot he can't actually pitch.
 //
-// Deliberately coarse (the honest limit of free data): at Review a prospect has a presenter name and a
+// #1586, ON THE STAGE NAMED HERE: this and the three comments beside it said "at Review" until 2026-08-08,
+// and that was true when #1145 was written. Since #1134's stage-only navigation, keep/dismiss happens on
+// Scout (`StageNavigation.matches(.scout,)` is `status == .new` and still open, with `OpenForDecision` as
+// the one definition of a show awaiting his decision), and `.review` means `status == .drafted`, a show
+// whose email is already written. The stale wording was not cosmetic: it is what made a reading of this
+// code conclude the feature worked as designed, and it hid #1585 (the check never surfacing where triage
+// happens) for several days. So the older #1145/#1308/#1336 issue text, which predates the rename, should
+// not be read literally where it says Review either.
+//
+// Deliberately coarse (the honest limit of free data): at triage a prospect has a presenter name and a
 // source listing URL, but websiteURL is populated during Prep, so a "real website" can only ever be
 // POSITIVE evidence when present, never required. Pure and exhaustively tested (a rule is only as real as
 // its detection). Layer 2 (an opt-in per-date probe) upgrades this to a firmer email-found/not-found.
 enum Reachability {
     enum Signal: Equatable { case likelyReachable, unclear, hardToReach }
 
-    // #1308 Layer 2 Phase 2: what the Review row actually shows. Before a probe it is the free heuristic,
+    // #1308 Layer 2 Phase 2: what the triage row actually shows. Before a probe it is the free heuristic,
     // and only the hard case surfaces (a named presenter with no proven site stays silent, `.none`, so the
     // badge never over-promises). Once a probe has run it is the FIRM answer.
     // #1324: `weakContactOnly` is a probed show whose only found address is a venue front desk or a press

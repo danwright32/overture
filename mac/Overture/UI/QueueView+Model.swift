@@ -14,8 +14,9 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     let performanceDate: String?
     let sourceListingURL: String?
     let websiteURL: String?
-    // #1145: the presenting org, read by the free reachability heuristic at Review (no presenter => nothing
-    // to email). Defaulted so existing memberwise-init call sites are unaffected.
+    // #1145: the presenting org, read by the free reachability heuristic on Scout, where Dan triages
+    // (#1586: no presenter => nothing to email). Defaulted so existing memberwise-init call sites are
+    // unaffected.
     var presenter: String? = nil
     // #1687: the presenting group's name AS THE CARD SHOWS IT, or nil where showing it would only repeat
     // a line beside it or name the room. Resolved once per queue build by QueueModel.items(from:), for
@@ -284,10 +285,10 @@ struct QueueItem: Identifiable, Equatable, Sendable {
         return weakContactHoldReason
     }
 
-    // #1145/#1308: the reachability badge shown on a Review row. Before a probe it is the free Layer 1
+    // #1145/#1308: the reachability badge shown on a triage row. Before a probe it is the free Layer 1
     // heuristic (only the hard case surfaces); after a probe it is the firm email-found/not-found answer.
-    // A Review-time decision aid, so it only shows while the show is still a candidate (not yet pitched,
-    // not booked); a sent or booked show was clearly reachable.
+    // #1586: an aid to the keep/dismiss decision, which happens on Scout, so it only shows while the show
+    // is still a candidate (not yet pitched, not booked); a sent or booked show was clearly reachable.
     // #1325: a method (not a property) so staleness is decided against an injectable `now`, keeping the
     // freshness logic testable rather than reading the wall clock from inside the view (the #863 lesson).
     // The view calls it with the default; tests pass a fixed `now`.

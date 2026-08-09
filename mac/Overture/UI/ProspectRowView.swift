@@ -536,8 +536,10 @@ struct ProspectRowView: View {
     }
 
 
-    // #1145/#1308: the reachability note read at Review, so Dan doesn't dismiss a reachable show in favour
-    // of one he can't email. Before a probe it is the calm, advisory Layer 1 "Hard to reach" heuristic;
+    // #1145/#1308: the reachability note read on Scout, where keep or dismiss is decided (#1586), so Dan
+    // doesn't dismiss a reachable show in favour of one he can't email. It stays on the card through the
+    // later stages, but Scout is the moment it is FOR.
+    // Before a probe it is the calm, advisory Layer 1 "Hard to reach" heuristic;
     // after a probe it is the firm "Email found" (forest) or "No email found" (rust). A decision aid, never
     // a gate. The decision lives in the model (item.reachabilityBadge), tested; this only renders it.
     @ViewBuilder private var reachabilityFlag: some View {
