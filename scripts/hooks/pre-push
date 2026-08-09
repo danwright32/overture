@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# pre-push hook (#2291, installed per-clone by scripts/install-git-hooks.sh).
+#
+# Refuses a push whose destination is main. Work here reaches main by pull request, and every other
+# control assumes that: the pbxproj freshness check inside both merge scripts, the CI gate, review itself.
+# A direct push bypasses all of them at once, and on 2026-08-07 one did, with nothing to show for it but
+# "HEAD -> main" in the push output.
+#
+# Deliberately NOT the whole answer. GitHub branch protection would be stronger, because it cannot be
+# absent, and a local hook is absent in any clone or worktree that has not run scripts/install-git-hooks.sh
+# (measured 2026-08-08: it needs GitHub Pro on a private repo, so this is the free half of #2291's two
+# suggested directions, and the paid one remains open).
+#
+# Degrade-safe in one direction only: if the decision helper is missing this exits 0 rather than blocking
+# a push it cannot judge, because a hook that fails a push over its own missing file would be worse than
+# the gap it closes. It never degrades the other way, into allowing main silently: the refusal below is
+# the only path that says nothing when it lets a push through.
+set -uo pipefail
+
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+GUARD="${HOOK_DIR}/../lib/push-target-guard.sh"
+PROTECTED="main"
+
+[ -r "${GUARD}" ] || exit 0
+# shellcheck source=../lib/push-target-guard.sh
+source "${GUARD}"
+
+violations="$(protected_push_violations "${PROTECTED}")"
+[ -n "${violations}" ] || exit 0
+
+# The override is loud on purpose. The failure this exists to catch was invisible in the push output, so a
+# deliberate direct push should not be.
+if [ "${ALLOW_PUSH_TO_MAIN:-}" = "1" ]; then
+  echo "pre-push: ALLOW_PUSH_TO_MAIN=1 is set, so this push to ${PROTECTED} is going ahead:" >&2
+  echo "${violations}" >&2
+  exit 0
+fi
+
+echo "pre-push: BLOCK: this push goes straight to ${PROTECTED}." >&2
+echo "${violations}" >&2
+echo "" >&2
+echo "  Work reaches ${PROTECTED} here by pull request, and the checks that make a merge safe run on" >&2
+echo "  that path only: the pbxproj freshness check inside both merge scripts, the CI gate, and review." >&2
+echo "  A direct push skips every one of them at the same time." >&2
+echo "" >&2
+echo "  Put it on a branch instead:" >&2
+echo "    git switch -c <branch> && git push -u origin <branch>" >&2
+echo "    gh pr create   then   scripts/merge-when-green.sh <pr-number>" >&2
+echo "" >&2
+echo "  If this direct push really is what you want, say so once:" >&2
+echo "    ALLOW_PUSH_TO_MAIN=1 git push ..." >&2
+exit 1

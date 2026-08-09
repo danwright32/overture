@@ -43,10 +43,18 @@ already drifting from the Swift version it mirrored.
   the suites, so `test-all.sh` is what actually runs the full Mac suite plus the TypeScript side
   that CI would otherwise only surface minutes later. Run it before every push.
 - One-time per clone: run `scripts/install-git-hooks.sh` once in each clone/worktree (#1251
-  Phase 3). It points git at `scripts/hooks`, whose `post-merge` hook regenerates a stale
+  Phase 3). It points git at `scripts/hooks`, which holds two hooks. `post-merge` regenerates a stale
   `mac/Overture.xcodeproj/project.pbxproj` after a merge that combined Mac source changes and
   stages it for you to commit. It is only a convenience (it cannot fire after a conflicted merge
   finished by a manual commit); `scripts/check-pbxproj-fresh.sh` remains the real gate.
+  `pre-push` (#2291) refuses a push whose destination is `main`, including a deletion of it. Work
+  reaches main by pull request, and the checks that make a merge safe run on that path only, so a
+  direct push skips every one of them at once: one did on 2026-08-07, and the only sign was
+  `HEAD -> main` in the push output. A deliberate direct push is still possible with
+  `ALLOW_PUSH_TO_MAIN=1 git push ...`, which announces itself rather than passing silently. Note the
+  hole it shares with `post-merge`: a clone that never ran the installer has neither hook. GitHub
+  branch protection would close that and cannot be absent, but it needs GitHub Pro on a private repo
+  (measured 2026-08-08), so it stays open as the stronger half of #2291.
 - Keeping the checkout tidy: `scripts/tidy-checkout.sh` (#2234) removes local branches and agent
   worktrees whose work has provably shipped. It is a DRY RUN by default and needs `--apply` to
   delete anything. Note WHY it exists rather than the one-line idiom: this repo squash-merges, so a
