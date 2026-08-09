@@ -33,11 +33,28 @@ enum StoreBackup {
     enum Reason: Equatable {
         case launch
         case foreignFile
+        // #1734: the file could not be READ, so whose it is was never established. Its own reason
+        // because `.foreign` is a claim, and AGENTS.md defines a `.foreign` folder as something that
+        // must never be restored from. An unreadable file may be Dan's own store having a bad day, and
+        // marking his only copy never-restore is the opposite of what that label is for.
+        //
+        // Carries sqlite's own words for WHY it could not be read, which is the only place that detail
+        // is ever consumed: it goes into backup.log, so a refusal can be diagnosed after the fact rather
+        // than leaving "could not read it" as the whole record.
+        case unreadableFile(detail: String)
 
         // Appended to the folder name so the distinction survives in the folder listing, not just in
         // the log. Kept out of the plain `yyyyMMdd-HHmmss` shape on purpose: pruneOldBackups counts and
         // deletes only that shape, so a refusal can never age out a real backup.
-        var folderSuffix: String { self == .foreignFile ? ".foreign" : "" }
+        var folderSuffix: String {
+            switch self {
+            case .launch: return ""
+            case .foreignFile: return ".foreign"
+            case .unreadableFile: return ".unreadable"
+            }
+        }
+
+        var isLaunch: Bool { self == .launch }
     }
 
     // The log's own words. Constants so a test names the same thing the code writes, rather than
@@ -46,6 +63,10 @@ enum StoreBackup {
     static let foreignFileLogNote =
         "refused: the file at the store path was not Overture's own database, so nothing was opened. "
         + "This folder holds a copy of that file, not a backup of your data."
+    static func unreadableFileLogNote(detail: String) -> String {
+        "refused: the file at the store path could not be read (\(detail)), so nothing was opened and "
+        + "whose file it is was never established. This folder holds whatever could be copied of it."
+    }
     static let nothingCopiedLogNote = "failed: nothing was copied, so there is no backup for this launch."
     static func incompleteLogNote(copied: Int, of expected: Int) -> String {
         "incomplete: copied \(copied) of \(expected) files, so this backup may not restore cleanly."
@@ -97,6 +118,7 @@ enum StoreBackup {
         let outcome: String
         switch (reason, copied == present.count) {
         case (.foreignFile, _): outcome = foreignFileLogNote
+        case (.unreadableFile(let detail), _): outcome = unreadableFileLogNote(detail: detail)
         case (.launch, true): outcome = "success"
         case (.launch, false): outcome = incompleteLogNote(copied: copied, of: present.count)
         }

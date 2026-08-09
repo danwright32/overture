@@ -37,6 +37,17 @@ struct StoreSchemaGuardTests {
         }
     }
 
+    // #1734: the container is HELD across the read, rather than discarded with `_ =`.
+    //
+    // Discarded, its lifetime past that statement was whatever ARC decided, so the store could be torn
+    // down at an unpredictable moment relative to the read below. That is the one genuinely
+    // nondeterministic thing in this test, and this test failed once during #1721 with SwiftData "fatal
+    // logic error in DefaultStore" noise in the same log.
+    //
+    // Reproducing it in isolation did not work (150 consecutive rounds all passed on 2026-08-08, with the
+    // WAL already checkpointed and the schema in the main file), so this removes the nondeterminism rather
+    // than claiming to have caught the flake in the act. The finding that IS proven sits in the guard:
+    // a file it cannot read was reported as a file belonging to another app.
     @Test func trueForARealOvertureShapedStore() async throws {
         await RealStoreTestLock.shared.acquire()
         do {
@@ -44,11 +55,92 @@ struct StoreSchemaGuardTests {
             defer { try? FileManager.default.removeItem(at: dir) }
             let storeURL = dir.appendingPathComponent("default.store")
             let schema = Schema([Prospect.self, Recipient.self])
-            _ = try ModelContainer(for: schema,
-                                   configurations: [ModelConfiguration(schema: schema, url: storeURL,
-                                                                       cloudKitDatabase: .none)])
+            let container = try ModelContainer(
+                for: schema,
+                configurations: [ModelConfiguration(schema: schema, url: storeURL, cloudKitDatabase: .none)])
 
-            #expect(StoreSchemaGuard.hasExpectedSchema(at: storeURL))
+            withExtendedLifetime(container) {
+                #expect(StoreSchemaGuard.hasExpectedSchema(at: storeURL))
+                #expect(StoreSchemaGuard.identity(of: storeURL) == .overtures)
+            }
+            await RealStoreTestLock.shared.release()
+        } catch {
+            await RealStoreTestLock.shared.release()
+            throw error
+        }
+    }
+
+    // #1734: the three answers that used to be one `false`, each named.
+    //
+    // "This is another app's database" and "I could not open this file at all" have different
+    // consequences: the first is evidence worth keeping under a label meaning never restore from this,
+    // and the second may be Dan's own store having a bad day. The app said the first while having
+    // measured only the second.
+    @Test func anUnreadableStoreIsNotAccusedOfBelongingToAnotherApp() async throws {
+        await RealStoreTestLock.shared.acquire()
+        do {
+            let dir = try makeSandboxDirectory()
+            defer {
+                try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dir.path)
+                try? FileManager.default.removeItem(at: dir)
+            }
+            let storeURL = dir.appendingPathComponent("default.store")
+            // Built with sqlite3 directly rather than a ModelContainer, so nothing in this test holds the
+            // file open. A live container was enough to let the read below succeed through permissions
+            // that should have refused it, which would make this test pass while proving nothing.
+            var db: OpaquePointer?
+            #expect(sqlite3_open(storeURL.path, &db) == SQLITE_OK)
+            #expect(sqlite3_exec(db, "CREATE TABLE ZPROSPECT (Z_PK INTEGER PRIMARY KEY);",
+                                 nil, nil, nil) == SQLITE_OK)
+            sqlite3_close(db)
+            #expect(StoreSchemaGuard.identity(of: storeURL) == .overtures,
+                    "the file must read as Overture's own before it is made unreadable")
+
+            // The same file, Overture's own, that cannot be opened.
+            try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: storeURL.path)
+            defer {
+                try? FileManager.default.setAttributes([.posixPermissions: 0o644],
+                                                       ofItemAtPath: storeURL.path)
+            }
+
+            let identity = StoreSchemaGuard.identity(of: storeURL)
+            guard case .unreadable = identity else {
+                Issue.record("an unreadable Overture store reported \(identity), not unreadable")
+                await RealStoreTestLock.shared.release()
+                return
+            }
+
+            // Still refused: a guard protecting Dan's data fails closed whatever it could not read.
+            #expect(!StoreSchemaGuard.hasExpectedSchema(at: storeURL))
+
+            let reason = StoreSchemaGuard.refusalReason(storeURL: storeURL, dataDirectory: dir, now: Date())
+            #expect(reason == StoreSchemaGuard.unreadableFileReason(path: storeURL.path))
+            #expect(reason != StoreSchemaGuard.foreignFileReason(path: storeURL.path),
+                    "an unreadable file must not be reported as another app's")
+            await RealStoreTestLock.shared.release()
+        } catch {
+            await RealStoreTestLock.shared.release()
+            throw error
+        }
+    }
+
+    // The 2026-07-23 incident's shape: a real, readable CoreData database that is somebody else's. This
+    // is the ONLY answer that means a foreign file, and it keeps its evidence snapshot.
+    @Test func aReadableDatabaseWithoutOvertuesTableIsStillCalledForeign() async throws {
+        await RealStoreTestLock.shared.acquire()
+        do {
+            let dir = try makeSandboxDirectory()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let storeURL = dir.appendingPathComponent("default.store")
+            var db: OpaquePointer?
+            #expect(sqlite3_open(storeURL.path, &db) == SQLITE_OK)
+            #expect(sqlite3_exec(db, "CREATE TABLE ZAPIREQUESTMODEL (Z_PK INTEGER PRIMARY KEY);",
+                                 nil, nil, nil) == SQLITE_OK)
+            sqlite3_close(db)
+
+            #expect(StoreSchemaGuard.identity(of: storeURL) == .notOvertures)
+            let reason = StoreSchemaGuard.refusalReason(storeURL: storeURL, dataDirectory: dir, now: Date())
+            #expect(reason == StoreSchemaGuard.foreignFileReason(path: storeURL.path))
             await RealStoreTestLock.shared.release()
         } catch {
             await RealStoreTestLock.shared.release()
@@ -86,6 +178,10 @@ struct StoreSchemaGuardTests {
             try "not a sqlite file".write(to: storeURL, atomically: true, encoding: .utf8)
 
             #expect(!StoreSchemaGuard.hasExpectedSchema(at: storeURL))
+            // #1734: a file that is not a database at all was READ, and what it is was established. That
+            // is a finding about the file, not a failure to look, so it keeps the evidence snapshot the
+            // 2026-07-08 and 2026-07-23 collisions are the reason for.
+            #expect(StoreSchemaGuard.identity(of: storeURL) == .notOvertures)
             await RealStoreTestLock.shared.release()
         } catch {
             await RealStoreTestLock.shared.release()
