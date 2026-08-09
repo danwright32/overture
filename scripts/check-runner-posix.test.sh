@@ -78,12 +78,118 @@ EOF
 assert_empty "a #!/usr/bin/env bash script is not held to POSIX" \
   "$(posix_parse_violations "${TMP}/declares-bash.sh")"
 
+# #1619: a helper is EXECUTED by whichever shell sourced it, so its own shebang decides nothing. The
+# runners declare #!/bin/sh and source helpers that declare bash, meaning bash-only syntax in a helper
+# dies at run time while the helper, read alone, looks entitled to it.
+mkdir -p "${TMP}/lib"
+cat > "${TMP}/lib/bash-only-helper.sh" <<'EOF'
+#!/usr/bin/env bash
+emit() { echo hi > >(cat); }
+EOF
+cat > "${TMP}/sources-bash-only.sh" <<'EOF'
+#!/bin/sh
+. "$(dirname "$0")/lib/bash-only-helper.sh"
+emit
+EOF
+violations="$(posix_parse_violations "${TMP}/sources-bash-only.sh")"
+assert_contains "a bash-only helper sourced by a #!/bin/sh runner is caught" \
+  "${violations}" "does not parse under sh"
+assert_contains "the violation names the helper that will not parse" \
+  "${violations}" "lib/bash-only-helper.sh"
+assert_contains "the violation names the runner that sources it" \
+  "${violations}" "sources-bash-only.sh"
+
+# A helper that parses under sh is fine whatever its own shebang says.
+cat > "${TMP}/lib/clean-helper.sh" <<'EOF'
+#!/usr/bin/env bash
+emit() { echo hi; }
+EOF
+cat > "${TMP}/sources-clean.sh" <<'EOF'
+#!/bin/sh
+. "$(dirname "$0")/lib/clean-helper.sh"
+emit
+EOF
+assert_empty "a POSIX-parsing helper sourced by a #!/bin/sh runner passes" \
+  "$(posix_parse_violations "${TMP}/sources-clean.sh")"
+
+# The shebang that decides is the ROOT script's. A bash script may source bash helpers.
+cat > "${TMP}/bash-sources-bash-only.sh" <<'EOF'
+#!/usr/bin/env bash
+. "$(dirname "$0")/lib/bash-only-helper.sh"
+emit
+EOF
+assert_empty "a bash runner's helpers are not held to POSIX" \
+  "$(posix_parse_violations "${TMP}/bash-sources-bash-only.sh")"
+
+# A helper sourcing a helper: $0 is still the root runner, so the deeper file runs under /bin/sh too.
+cat > "${TMP}/lib/middle-helper.sh" <<'EOF'
+#!/usr/bin/env bash
+. "$(dirname "$0")/lib/bash-only-helper.sh"
+EOF
+cat > "${TMP}/sources-transitively.sh" <<'EOF'
+#!/bin/sh
+. "$(dirname "$0")/lib/middle-helper.sh"
+emit
+EOF
+assert_contains "a helper sourced through another helper is still parsed" \
+  "$(posix_parse_violations "${TMP}/sources-transitively.sh")" "lib/bash-only-helper.sh"
+
+# The other sourcing form in the tree: a helper reaching a sibling by BASH_SOURCE rather than $0, which
+# anchors to the helper's own directory instead of the runner's. scout-tools.sh reaches claude-run-scope.sh
+# this way, and reading it as unresolvable would have blocked the real runners on a form that works.
+mkdir -p "${TMP}/lib/nested"
+cat > "${TMP}/lib/nested/sibling-helper.sh" <<'EOF'
+#!/usr/bin/env bash
+emit() { echo hi > >(cat); }
+EOF
+cat > "${TMP}/lib/nested/reaches-sibling.sh" <<'EOF'
+#!/usr/bin/env bash
+. "$(dirname "${BASH_SOURCE[0]}")/sibling-helper.sh"
+EOF
+cat > "${TMP}/sources-via-bash-source.sh" <<'EOF'
+#!/bin/sh
+. "$(dirname "$0")/lib/nested/reaches-sibling.sh"
+emit
+EOF
+violations="$(posix_parse_violations "${TMP}/sources-via-bash-source.sh")"
+assert_contains "a sibling reached by BASH_SOURCE is resolved and parsed" \
+  "${violations}" "lib/nested/sibling-helper.sh"
+assert_empty "resolving a BASH_SOURCE form does not report it as unresolvable" \
+  "$(printf '%s\n' "${violations}" | grep 'cannot resolve')"
+
+# A source line this check cannot resolve must be reported, never quietly skipped: a guard that inspects
+# nothing and says nothing is indistinguishable from a guard that found nothing wrong.
+cat > "${TMP}/sources-unresolvable.sh" <<'EOF'
+#!/bin/sh
+LIB_DIR=/somewhere
+. "${LIB_DIR}/mystery.sh"
+EOF
+assert_contains "a source path the check cannot resolve is reported" \
+  "$(posix_parse_violations "${TMP}/sources-unresolvable.sh")" "cannot resolve"
+
+# A helper named but absent is a violation too, not a silent skip.
+cat > "${TMP}/sources-missing.sh" <<'EOF'
+#!/bin/sh
+. "$(dirname "$0")/lib/not-there.sh"
+EOF
+assert_contains "a sourced helper that does not exist is reported" \
+  "$(posix_parse_violations "${TMP}/sources-missing.sh")" "does not exist"
+
 # And the real thing: every runner the app actually launches.
 real=()
 while IFS= read -r -d '' f; do real+=("$f"); done \
   < <(find "${REPO_ROOT}/mac/scripts" -name '*.sh' ! -name '*.test.sh' -print0 | sort -z)
 assert_empty "every real #!/bin/sh runner under mac/scripts parses under sh" \
   "$(posix_parse_violations "${real[@]}")"
+
+# The assertion above passes just as happily if helper resolution silently stopped working, so pin that
+# the real runners really do reach their real helpers. prep-run.sh sources scout-parallel.sh, the file
+# #1597 put significant new code into, and it is the reason this issue exists.
+resolved="$(sourced_helper_paths "${REPO_ROOT}/mac/scripts/prep-run.sh" "${REPO_ROOT}/mac/scripts")"
+assert_contains "prep-run.sh's helpers resolve to real files on disk" \
+  "${resolved}" "mac/scripts/lib/scout-parallel.sh"
+assert_contains "prep-run.sh's helper list reaches runner-setup.sh too" \
+  "${resolved}" "mac/scripts/lib/runner-setup.sh"
 
 if [[ ${FAILURES} -gt 0 ]]; then
   echo "${FAILURES} failure(s)"
