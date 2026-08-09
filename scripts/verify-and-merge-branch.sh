@@ -43,6 +43,37 @@ setup_worktree() {
   git -C "${REPO_ROOT}" worktree add --detach "${WORKTREE_DIR}" "origin/${branch}"
 }
 
+# Brings current origin/main into the throwaway worktree, so what the suite judges is what will
+# EXIST after merging rather than what the branch was cut from (#2353, L85).
+#
+# Two changes that are each green can merge into a broken main, because each was verified against a
+# base that did not contain the other, and this script's whole reason for existing is the case where
+# several branches land at once. Measured 2026-08-09: PR #2345 was green on its own branch and red
+# once merged onto the main that already carried #1575 and #1940, caught only because that merge was
+# combined by hand.
+#
+# It REFUSES rather than resolving anything. A conflict here is a real question about two people's
+# intent, and the repo has no merge driver for its generated files, so the honest answer is to stop
+# and name what could not be combined. The caller must not run the suite over a conflicted tree: a
+# half-merged tree can come back green just as easily as red, and green is the reading that would
+# send the broken combination to main.
+#
+# Named and extracted so a test can stub it and assert the DECISION without a real fetch or merge.
+combine_with_main() {
+  local dir="$1"
+  git -C "${REPO_ROOT}" fetch origin main || return 1
+  # An identity, because a detached worktree still needs one to record a merge commit, and a Mac
+  # without a global user.email would otherwise fail here for a reason unrelated to the branch.
+  if ! git -C "${dir}" -c user.name="Overture verify" -c user.email="verify@localhost" \
+        merge --no-edit origin/main; then
+    git -C "${dir}" merge --abort 2>/dev/null || true
+    echo "Cannot combine ${PR_BRANCH} with current main: the merge conflicts." >&2
+    echo "Nothing was verified, because a suite run over a conflicted tree judges a state that will never exist." >&2
+    echo "Resolve it on the branch (regenerate mac/Overture.xcodeproj/project.pbxproj if that is the conflict), push, then rerun." >&2
+    return 1
+  fi
+}
+
 # Runs the full local suite in the given worktree. #1368: it used to run `xcodegen generate` FIRST, which
 # silently rewrote a STALE committed .pbxproj in this throwaway worktree so the staleness passed here and
 # then landed on main anyway. Instead, check freshness BEFORE anything regenerates the project:
@@ -100,6 +131,14 @@ verify_and_merge() {
 
   echo "Verifying PR #${PR_NUMBER} (${PR_BRANCH}) in an isolated worktree..."
   setup_worktree "${PR_BRANCH}"
+
+  # #2353: combine BEFORE the suite, and stop here if it cannot be done. The worktree still gets
+  # cleaned up, because a throwaway tree left behind is litter either way.
+  if ! combine_with_main "${WORKTREE_DIR}"; then
+    cleanup_worktree "${WORKTREE_DIR}"
+    echo "Not merging PR #${PR_NUMBER} (${PR_BRANCH})." >&2
+    return 1
+  fi
 
   local suite_exit_code=0
   run_full_suite "${WORKTREE_DIR}" || suite_exit_code=$?

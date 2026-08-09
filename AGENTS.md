@@ -220,6 +220,14 @@ already drifting from the Swift version it mirrored.
   opening a PR (it never merges and never launches the live app); the coordinating
   session then independently re-runs the full suite on every branch under the same
   lock before merging, rather than trusting each agent's self report.
+  That re-run is against CURRENT main, not against the base the branch was cut from (#2353):
+  `verify-and-merge-branch.sh` merges `origin/main` into its throwaway worktree before the suite
+  is allowed to judge anything, and refuses (verifying nothing, merging nothing) when that combine
+  conflicts. An agent's own green run only ever proves the branch works beside the code it was cut
+  from, and when several branches land at once that is the one thing it needs to prove and cannot:
+  PR #2345 was green on its own branch and red on the main that already carried #1575 and #1940
+  (measured 2026-08-09). If you merge some other way, combine current main into the branch and
+  re-run `scripts/test-all.sh` on the combined tree yourself before merging.
 
 The pieces hand off through fixed-shape JSON files, not direct calls. `docs/contracts.md`
 catalogs every one (writer, reader, version, and its `fixtures/` guard); read it before changing

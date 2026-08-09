@@ -31,6 +31,8 @@ reset_stubs() {
   MERGE_BRANCH=""
   CLEANUP_CALLED=""
   SETUP_CALLED=""
+  COMBINE_CALLED=""
+  SUITE_RAN=""
   LOCAL_BRANCH_DELETED=""
 }
 
@@ -38,25 +40,51 @@ reset_stubs() {
 reset_stubs
 resolve_pr() { PR_NUMBER="42"; PR_BRANCH="feature-x"; PR_MERGEABLE="MERGEABLE"; }
 setup_worktree() { SETUP_CALLED="$1"; WORKTREE_DIR="/fake/worktree"; }
-run_full_suite() { return 0; }
+combine_with_main() { COMBINE_CALLED="$1"; return 0; }
+run_full_suite() { SUITE_RAN="yes"; return 0; }
 cleanup_worktree() { CLEANUP_CALLED="$1"; }
 merge_pr() { MERGE_CALLED="$1"; }
 
 verify_and_merge "42" >/dev/null 2>&1
 assert_equals "a clean suite merges the right PR" "42" "${MERGE_CALLED}"
 assert_equals "the worktree is cleaned up after a clean run" "/fake/worktree" "${CLEANUP_CALLED}"
+# #2353: what gets verified must be what will EXIST after merging, not what the branch was cut
+# from. Two changes that are each green can merge into a broken main (L85), so current main is
+# combined into the throwaway worktree before the suite is allowed to judge it.
+assert_equals "current main is combined into the worktree before the suite runs" \
+  "/fake/worktree" "${COMBINE_CALLED}"
 
 # --- failure path: a failing suite never merges, but still cleans up the worktree ---
 reset_stubs
 resolve_pr() { PR_NUMBER="43"; PR_BRANCH="feature-y"; PR_MERGEABLE="MERGEABLE"; }
 setup_worktree() { SETUP_CALLED="$1"; WORKTREE_DIR="/fake/worktree-2"; }
-run_full_suite() { return 1; }
+combine_with_main() { COMBINE_CALLED="$1"; return 0; }
+run_full_suite() { SUITE_RAN="yes"; return 1; }
 cleanup_worktree() { CLEANUP_CALLED="$1"; }
 merge_pr() { MERGE_CALLED="called-with-$1"; }
 
 verify_and_merge "43" >/dev/null 2>&1
 assert_equals "a failing suite never merges" "" "${MERGE_CALLED}"
 assert_equals "the worktree is still cleaned up after a failing run" "/fake/worktree-2" "${CLEANUP_CALLED}"
+
+# --- #2353: a branch that cannot be combined with current main is never verified or merged ---
+# The suite must not run at all in this case. A suite run over a half-merged or conflicted tree
+# would be judging a state that will never exist, and it could just as easily come back GREEN,
+# which is the reading that would send a broken combination to main.
+reset_stubs
+resolve_pr() { PR_NUMBER="47"; PR_BRANCH="feature-conflicted"; PR_MERGEABLE="MERGEABLE"; }
+setup_worktree() { SETUP_CALLED="$1"; WORKTREE_DIR="/fake/worktree-5"; }
+combine_with_main() { COMBINE_CALLED="$1"; return 1; }
+run_full_suite() { SUITE_RAN="yes"; return 0; }
+cleanup_worktree() { CLEANUP_CALLED="$1"; }
+merge_pr() { MERGE_CALLED="$1"; }
+
+verify_and_merge "47" >/dev/null 2>&1
+combine_exit=$?
+assert_equals "a branch that will not combine with main is never merged" "" "${MERGE_CALLED}"
+assert_equals "a branch that will not combine with main is never judged by the suite" "" "${SUITE_RAN}"
+assert_equals "the worktree is cleaned up after a failed combine" "/fake/worktree-5" "${CLEANUP_CALLED}"
+assert_equals "a failed combine reports failure to the caller" "1" "${combine_exit}"
 
 # --- a merge-conflicted PR is never verified (no worktree) or merged ---
 reset_stubs
@@ -96,6 +124,7 @@ source "${SCRIPT_DIR}/verify-and-merge-branch.sh"
 set +e
 resolve_pr() { PR_NUMBER="45"; PR_BRANCH="feature-tidy"; PR_MERGEABLE="MERGEABLE"; }
 setup_worktree() { SETUP_CALLED="$1"; WORKTREE_DIR="/fake/worktree-4"; }
+combine_with_main() { COMBINE_CALLED="$1"; return 0; }
 run_full_suite() { return 0; }
 cleanup_worktree() { CLEANUP_CALLED="$1"; }
 gh_as_danwright32() { :; }
