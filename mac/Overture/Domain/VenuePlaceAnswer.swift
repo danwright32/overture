@@ -55,17 +55,19 @@ enum UnplacedRooms {
         var id: String { key }
     }
 
-    // Cheap to evaluate on every redraw, unlike `from` itself, which walks every stored show and builds a
-    // dictionary. The Sources sheet re-evaluates its body on every keystroke and every scroll tick, and
-    // computing the list there directly is the defect #1356 and #1429 already fixed twice on this very
+    // Cheap to evaluate on every redraw, unlike `from` itself, which builds a dictionary and canonicalises
+    // every room name. The Sources sheet re-evaluates its body on every keystroke and every scroll tick,
+    // and computing the list there directly is the defect #1356 and #1429 already fixed twice on this very
     // sheet (the coverage list, then the per-source tallies), each time after it froze the sheet.
     //
-    // Combines only what the list can actually change on: how many shows there are, and for the unplaced
-    // ones, which room they name. A row gaining a location drops out of the loop and moves the count, so a
-    // fill is caught too.
-    static func signature(_ prospects: [Prospect], today: String) -> Int {
+    // Built from `waitingShows` rather than from a rule of its own, so a show leaving the list for ANY
+    // reason moves it. It used to combine a hand-picked pair (the show count, and the room each unplaced
+    // show names), which caught a fill and an arrival and nothing else: a show Dan cut, or one he pitched,
+    // left the list without moving the signature, and the panel went on asking about it (L40).
+    static func signature(_ prospects: [Prospect], today: String,
+                          now: Date = Date(), geo: GeoRefusals = .none) -> Int {
         var acc = prospects.count
-        for p in prospects where isWaiting(p, today: today) {
+        for p in waitingShows(prospects, today: today, now: now, geo: geo) {
             var h = Hasher()
             h.combine(p.venue ?? "")
             acc = acc &+ h.finalize()
@@ -73,35 +75,58 @@ enum UnplacedRooms {
         return acc
     }
 
-    // Whether this show is one an answer would actually help: it has no location, it names a room, and it
-    // HAS NOT ALREADY HAPPENED.
+    // The half of the question that is about the ROOM rather than about the show: this show has no
+    // location of its own, and it names a room there is something to ask about. A show with NO venue is
+    // left out because there is no question to put: its card already reads "Venue TBD".
     //
-    // That last clause was missing when this shipped, and walking the app is what found it: the panel read
-    // "Denny Farrell Riverbank State Park, 2 shows waiting on this" while both of those shows were dated
-    // June against an August clock. Nothing was waiting on that room. Left as it was, the list would
-    // accumulate dead rooms forever and every count in it would drift upward, which is the opposite of the
-    // action list #1029 asked for.
-    //
-    // Judged on the run's LAST date, so a run that opened last week and plays for another month still
-    // counts. A show with NO date cannot be proved past and is kept: a room wrongly listed costs Dan one
-    // glance, while a room wrongly dropped costs him the geography rule on every show in it, silently.
-    private static func isWaiting(_ p: Prospect, today: String) -> Bool {
+    // Cheap on purpose, and asked FIRST (L62). It is two string tests with no relationship fault in them,
+    // and it is what lets everything below be paid on the handful of shows that could possibly be in this
+    // list (78 of 845 stored shows carried no location, measured on the live store 2026-08-07) instead of
+    // on the whole store, on a sheet whose body runs on every keystroke.
+    private static func needsARoomAnswer(_ p: Prospect) -> Bool {
         guard (p.location ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
-        guard let venue = p.venue?.trimmingCharacters(in: .whitespacesAndNewlines), !venue.isEmpty else {
-            return false
-        }
-        guard let last = p.runEndDate ?? p.performanceDate, !last.isEmpty else { return true }
-        return last >= today
+        let venue = p.venue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return !venue.isEmpty
     }
 
-    // Every distinct room holding at least one show with no location, most shows first.
+    // The shows an answer would actually reach: the ones above that the QUEUE will show Dan.
     //
-    // A show with NO venue at all is excluded: there is no room to name, its card already reads
-    // "Venue TBD", and listing it would ask a question with no answer. Ties break on the name so the
-    // list is stable from one render to the next rather than dependent on fetch order.
-    static func from(_ prospects: [Prospect], today: String) -> [Room] {
+    // #2288: that second half used to be decided here, by comparing the run's last date against today,
+    // while every other surface asked StageNavigation, which weighs status, reached-out state and
+    // geography as well. Two implementations of one question is the drift #1575 exists to stop, and these
+    // two disagreed on three shapes the store really holds: a show Dan has cut, a show he has already
+    // pitched, and a run that has already opened (#1540: he will not pitch one, so no stage renders it).
+    // In each case the panel named a room whose shows the Queue will not show him, and the count beside
+    // it promised work that answering could not reach.
+    //
+    // Asked through `queueKeys`, the masthead's own set, rather than `stagedKeys`: a show already pitched
+    // is waiting on a reply and not on a place, and the geography gate never touches a contacted show.
+    //
+    // Narrowing the input to the candidates cannot change any survivor's answer, because both
+    // `StageNavigation.queueKeys` and `ReachedOutQueue.active` decide one show at a time.
+    // UnplacedRoomsFollowTheQueueTests resolves its expectation over EVERY stored show, so a narrowing
+    // that did change an answer fails there rather than passing quietly here.
+    //
+    // The geography half is inert for everything in this list, and that is the gate's own design rather
+    // than an assumption made here: it refuses only a show it can positively place out of range, and
+    // every show below has no place at all. Routed through the shared rule, the panel follows that gate
+    // wherever it goes next instead of having to be told.
+    static func waitingShows(_ prospects: [Prospect], today: String, now: Date, geo: GeoRefusals) -> [Prospect] {
+        let candidates = prospects.filter(needsARoomAnswer)
+        guard !candidates.isEmpty else { return [] }
+        let reachedOut = Set(ReachedOutQueue.active(from: candidates, now: now).map(\.prospect.naturalKey))
+        let inQueue = StageNavigation.queueKeys(in: candidates, reachedOutKeys: reachedOut,
+                                                today: today, now: now, geo: geo)
+        return candidates.filter { inQueue.contains($0.naturalKey) }
+    }
+
+    // Every distinct room holding at least one show still waiting on an answer, most shows first. Ties
+    // break on the name so the list is stable from one render to the next rather than dependent on fetch
+    // order.
+    static func from(_ prospects: [Prospect], today: String,
+                     now: Date = Date(), geo: GeoRefusals = .none) -> [Room] {
         var byKey: [String: (name: String, count: Int)] = [:]
-        for p in prospects where isWaiting(p, today: today) {
+        for p in waitingShows(prospects, today: today, now: now, geo: geo) {
             guard let venue = p.venue?.trimmingCharacters(in: .whitespacesAndNewlines),
                   let key = VenuePlaces.canonicalKey(for: venue) else { continue }
             // The SHORTEST spelling wins as the display name: sources append addresses and suite numbers

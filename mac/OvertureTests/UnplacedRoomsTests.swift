@@ -338,11 +338,17 @@ struct UnplacedRoomsStillAheadTests {
         #expect(try rooms(ctx).first?.showCount == 1)
     }
 
-    // A multi-night run counts while any night of it is ahead, judged on the run's LAST date. Judging on
-    // the first would drop a run that opened last week and plays for another month.
-    @Test func aRunStillPlayingCounts() throws {
+    // A multi-night run is counted while it has not OPENED yet, not while any night of it is ahead.
+    //
+    // #1752 judged this on the run's LAST date, so a run that opened last week and plays for another
+    // month stayed in the list. #2288 reversed it, because the Queue does not show Dan such a run at all
+    // (#1540: once a run has started he will not pitch it), so the panel was asking him to place a room
+    // whose only show he would never see. The room list follows the Queue now, and this is the case where
+    // the two rules genuinely disagreed. The underway half is pinned in UnplacedRoomsFollowTheQueueTests,
+    // beside the other two shapes that disagreed.
+    @Test func aRunNotYetOpenedCounts() throws {
         let ctx = ModelContext(try container())
-        show(ctx, key: "k1", venue: "54 Below", date: "2026-08-01", runEnd: "2026-09-06")
+        show(ctx, key: "k1", venue: "54 Below", date: "2026-08-20", runEnd: "2026-09-06")
 
         #expect(try rooms(ctx).first?.showCount == 1)
     }
@@ -366,5 +372,116 @@ struct UnplacedRoomsStillAheadTests {
         let afterwards = UnplacedRooms.signature(try ctx.fetch(FetchDescriptor<Prospect>()),
                                                  today: "2026-09-02")
         #expect(onTheDay != afterwards)
+    }
+}
+
+// #2288: the panel asks the QUEUE whether a show is still waiting, rather than answering it again here.
+//
+// The count beside a room is a promise about what answering it reaches, and the room list used to keep
+// that promise with a date comparison of its own (the run's LAST night against today) while every other
+// surface asked StageNavigation, which folds status, reached-out state and geography into the same
+// question. Two implementations of one question is the drift milestone #1575 exists to stop, and these
+// are the cases where the two genuinely disagree: a show Dan has cut, a show he has already pitched, and
+// a run that has already opened. In each one the old rule named a room whose shows the Queue will not
+// show him.
+@MainActor
+@Suite("The unplaced-room list counts exactly what the Queue will show (#2288)")
+struct UnplacedRoomsFollowTheQueueTests {
+    private let today = "2026-08-07"
+    private let now = Date(timeIntervalSince1970: 1_785_000_000)
+
+    private func container() throws -> ModelContainer {
+        try ModelContainer(for: Schema([Prospect.self, Recipient.self, WatchedSource.self,
+                                        VenuePlaceAnswer.self]),
+                           configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+    }
+
+    @discardableResult
+    private func show(_ ctx: ModelContext, key: String, venue: String = "54 Below",
+                      date: String? = "2026-09-01", runEnd: String? = nil,
+                      status: ReviewStatus = .new) -> Prospect {
+        let p = Prospect(naturalKey: key, groupName: "A show", discipline: "music", venue: venue,
+                         performanceDate: date, sourceListingURL: nil, websiteURL: nil,
+                         priorRelationship: "none", production: "self", profile: "neutral",
+                         coverage: "unknown", fitScore: 3, tier: "longshot", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                         status: status)
+        p.runEndDate = runEnd
+        ctx.insert(p)
+        return p
+    }
+
+    private func rooms(_ ctx: ModelContext) throws -> [UnplacedRooms.Room] {
+        UnplacedRooms.from(try ctx.fetch(FetchDescriptor<Prospect>()), today: today, now: now)
+    }
+
+    // A show Dan has cut sits in no stage, so nothing on it is waiting on an answer. The date rule kept
+    // counting it, because by the calendar it is still ahead.
+    @Test func aCutShowIsNotWaitingOnTheRoom() throws {
+        let ctx = ModelContext(try container())
+        show(ctx, key: "k1", status: .dismissed)
+
+        #expect(try rooms(ctx).isEmpty)
+    }
+
+    // #1540: once a run has opened Dan will not pitch it, so no stage renders it. The date rule kept it,
+    // because it judged the run's LAST night, so the panel asked him to place a room whose only show the
+    // Queue would never put in front of him.
+    @Test func aRunAlreadyUnderwayIsNotWaitingOnTheRoom() throws {
+        let ctx = ModelContext(try container())
+        show(ctx, key: "k1", date: "2026-08-01", runEnd: "2026-09-06")
+
+        #expect(try rooms(ctx).isEmpty)
+    }
+
+    // A show already pitched is out of the Queue's own count: the work left on it is a reply, not a
+    // place, and the geography gate never cuts a contacted show anyway. It carries a send error here on
+    // purpose, because that is a show a stage still renders, so only the reached-out half of the shared
+    // rule can take it out, and that is precisely the input the panel never had.
+    @Test func aPitchedShowIsNotWaitingOnTheRoom() throws {
+        let ctx = ModelContext(try container())
+        let p = show(ctx, key: "k1", status: .contacted)
+        p.sendError = "Gmail refused the message"
+        let r = Recipient(id: "info@example.org", email: "info@example.org", provenance: .presenter)
+        r.sendState = .sent
+        r.sentAt = now.addingTimeInterval(-3 * 86_400)
+        r.gmailMessageId = "msg-1"
+        r.gmailThreadId = "t-1"
+        p.addRecipient(r)
+
+        #expect(try rooms(ctx).isEmpty)
+    }
+
+    // And what it does count is the Queue's own set, over a store holding one show of each kind. The
+    // expectation is resolved by asking StageNavigation over EVERY stored show, so this cannot pass by
+    // the panel and the queue sharing one narrowed input.
+    @Test func theCountIsTheQueuesOwnAnswer() throws {
+        let ctx = ModelContext(try container())
+        show(ctx, key: "live-1")
+        show(ctx, key: "live-2", date: "2026-09-02")
+        show(ctx, key: "cut", status: .dismissed)
+        show(ctx, key: "underway", date: "2026-08-01", runEnd: "2026-09-06")
+        show(ctx, key: "placed", date: "2026-09-03").location = "New York, NY"
+
+        let stored = try ctx.fetch(FetchDescriptor<Prospect>())
+        let inQueue = StageNavigation.queueKeys(in: stored, reachedOutKeys: [], today: today, now: now)
+        let waiting = stored.filter { ($0.location ?? "").isEmpty && inQueue.contains($0.naturalKey) }
+
+        #expect(waiting.count == 2, "the fixture must hold shows the queue shows, or this proves nothing")
+        #expect(try rooms(ctx).map(\.showCount).reduce(0, +) == waiting.count)
+    }
+
+    // The cached list is only worth what its signature is worth. A show leaving the Queue for a reason
+    // that is not the calendar has to move it too, or the panel keeps naming a room nothing is waiting
+    // on until something unrelated happens to change.
+    @Test func cuttingTheLastShowInARoomMovesTheSignature() throws {
+        let ctx = ModelContext(try container())
+        let p = show(ctx, key: "k1")
+        let before = UnplacedRooms.signature(try ctx.fetch(FetchDescriptor<Prospect>()),
+                                             today: today, now: now)
+
+        p.status = .dismissed
+        #expect(UnplacedRooms.signature(try ctx.fetch(FetchDescriptor<Prospect>()),
+                                        today: today, now: now) != before)
     }
 }

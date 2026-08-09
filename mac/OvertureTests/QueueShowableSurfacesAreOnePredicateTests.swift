@@ -24,11 +24,12 @@ import SwiftData
 // lookup can only ever prove that lookup self-consistent, so renaming the predicate fails the guard
 // instead of quietly redefining what it is asserting.
 //
-// Out of the guard's reach today, and named rather than left implied: UnplacedRooms.isWaiting in
-// mac/Overture/Domain/VenuePlaceAnswer.swift decides whether a show is still ahead with a date
-// comparison of its own, for the Sources sheet's room list. It is a genuine second answer, it is
-// #2288, and it is not fixed here. The sweep below finds a surface by the question its NAME asks, and
-// that one names a narrower question, so it does not trip it.
+// The Sources sheet's unplaced-room list used to be the standing exception here: UnplacedRooms.isWaiting
+// in mac/Overture/Domain/VenuePlaceAnswer.swift decided whether a show was still ahead with a date
+// comparison of its own, and the sweep below could not see it, because the sweep finds a surface by the
+// question its NAME asks and that one named a narrower question. #2288 put it on the shared rule, so it
+// is an inventoried surface below rather than a note here, and the sweep is no longer the only thing
+// that would have had to notice it.
 
 // The audit itself, as pure functions over source text handed IN, so its own failure paths can be
 // exercised with fixtures instead of only ever being watched to pass over the real repo. A guard that
@@ -240,7 +241,14 @@ struct QueueShowableSurfacesAreOnePredicateTests {
         .init(path: "Overture/Domain/AgentRoster.swift",
               marker: "-> AgentInputs {",
               answers: "the number each stage pill states",
-              mustCall: ["counts"])
+              mustCall: ["counts"]),
+        // #2288: the Sources sheet's room list, whose count beside each room promises what answering it
+        // reaches. It answered the still-ahead half itself until then.
+        .init(path: "Overture/Domain/VenuePlaceAnswer.swift",
+              marker: "static func waitingShows(_ prospects: [Prospect], today: String, "
+                    + "now: Date, geo: GeoRefusals) -> [Prospect] {",
+              answers: "how many shows are waiting on each room Overture cannot place",
+              mustCall: ["queueKeys"])
     ]
 
     private static func read(_ relativeToMac: String) -> String? {
