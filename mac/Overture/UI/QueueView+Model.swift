@@ -252,6 +252,22 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     var isHighFit: Bool { tier == "high" }
     var isKept: Bool { status == .queued || status == .drafted || status == .approved || status == .contacted }
 
+    // #1666: the ONE place this card answers "what happens to this show at the next Prep run", and it
+    // answers by asking the rule rather than deriving it. `isKept` above is the thing it is not: #1534's
+    // "Contact: pending Prep run" was keyed on that, so it promised a run on a show Prep refuses over an
+    // open date conflict, and promised a contact hunt on a show whose contact a probe had already found.
+    // Deleting that line removed the instance; this removes the gap, so the next status line the card
+    // grows has somewhere correct to read from and no reason to work it out again.
+    var nextPrepRun: PrepRunIntent {
+        PrepQueueBuilder.nextRunIntent(
+            for: self,
+            probedWithContact: PrepQueueBuilder.probedWithContact(
+                probedAt: reachabilityProbedAt, contactEmails: contacts.map(\.email)))
+    }
+
+    // The plain yes or no, over the accessor above rather than beside it, so the two cannot disagree.
+    var isAwaitingPrepRun: Bool { nextPrepRun != .notQueued }
+
     // #1583: whether this show clashes with the calendar AT ALL, as opposed to `hasUnclearedConflict`,
     // which is whether that clash still BLOCKS it. Keep is now the acceptance, so the two diverge the
     // moment Dan keeps a flagged show, and everything that merely TELLS him about the night (the card's
@@ -918,7 +934,11 @@ enum QueueModel {
         // Keep is the decision that makes a show prep work at all, and a show that already has an email
         // has nothing to prep, whoever wrote that email.
         guard item.status == .queued, !item.hasDraft else { return .hidden }
-        if item.hasUnclearedConflict {
+        // #1666: the clash half is asked of the eligibility rule, not of the raw flag beside it. This
+        // control's whole promise is that a Prep run's work happens for this show now, so the state it
+        // draws has to come from the same answer the run itself obeys. Given the guard above, a show the
+        // next run will not take up is one a clash is holding, which is exactly the state to say out loud.
+        if !item.isAwaitingPrepRun {
             return .blocked(ActionAck.manualPrepBlockedByClash(org: item.groupName))
         }
         return .shown
@@ -2102,6 +2122,11 @@ enum QueueModel {
     // blocked-calendar note needs ("Nov 14"). One list of month names, not two drifting ones.
     private static func shortMonth(_ component: Int) -> String { EasternDate.shortMonth(component) }
 }
+
+// #1666: the card carries every fact the Prep-eligibility rule reads, so it is handed to that rule
+// whole rather than reciting its arguments. A new fact added to `needsPrep` breaks this conformance
+// until the card carries it too, which is the point: the card cannot silently answer an older rule.
+extension QueueItem: PrepEligibilityFacts {}
 
 extension QueueItem {
     init(_ p: Prospect) {
