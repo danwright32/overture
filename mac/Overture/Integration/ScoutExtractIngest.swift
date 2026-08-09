@@ -193,7 +193,12 @@ enum ScoutExtractIngest {
             outcome.sources.append(ScoutService.SourceResult(
                 sourceId: source.sourceId, orgName: source.orgName,
                 state: .ingested(found: events.count), hadBaseline: health.baseline > 0,
-                listingsURL: source.listingsURL))
+                listingsURL: source.listingsURL,
+                // #1539: the same two counts recorded on the row just above, so the end-of-scout warning
+                // can tell a page that listed nothing from a page whose every row was dropped. Both are
+                // drops: a row rejected outright and a row the page published no venue for are equally
+                // "read, and not usable", and neither is a page format that changed.
+                droppedRowCount: rejection.unreadTotal + rejection.structuralGapCount))
         }
 
         // #888 part B: ONE reconcile, with EVERY source this run landed.

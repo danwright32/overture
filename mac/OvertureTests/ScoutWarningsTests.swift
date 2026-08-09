@@ -233,6 +233,43 @@ struct SilentlyEmptyFeedCopyTests {
                                                     state: .ingested(found: 0), hadBaseline: true)]
         #expect(outcome.warning == ScoutWarningCopy.silentlyEmptyFeed(orgNames: ["Jalopy Theatre"]))
     }
+
+    // MARK: - #1539: a page that was read fine is not a page whose format changed
+
+    // The real run, from the live store on 2026-07-26 at 10:08: The Players Theatre, baseline 153,
+    // readable 0, DROPPED 149. Every row was read and then dropped for having no venue (#1529). The
+    // warning explained it as a format change while the same run had recorded the 149 on that row, so
+    // it named a cause that was not true and sent Dan to inspect a page that was correct.
+    @Test func aSourceThatDroppedEveryRowIsNotBlamedOnItsPageFormat() {
+        let line = ScoutWarningCopy.silentlyEmptyFeed(sources: [("The Players Theatre", 149)])
+
+        #expect(!line.contains("format"), "the page was read fine, so its format is not the finding")
+        #expect(line.contains("149"), "the count the run already recorded is the actionable fact")
+        #expect(line == "The Players Theatre listed 149 shows this run and every one was dropped, so its page is being read fine. Open Sources to see why they were dropped.")
+    }
+
+    // The other case keeps today's sentence, because for a page that really did come back with nothing,
+    // a format change is a fair thing to suspect.
+    @Test func aSourceThatReadNothingKeepsTheFormatExplanation() {
+        let line = ScoutWarningCopy.silentlyEmptyFeed(sources: [("Jalopy Theatre", 0)])
+        #expect(line == "Jalopy Theatre has listed shows before and came back with nothing this run. Its page format may have changed.")
+    }
+
+    // A run can produce both, and picking one explanation would be wrong about the rest of the sources
+    // in the same sentence.
+    @Test func aRunWithBothKindsExplainsEachOfThem() {
+        let line = ScoutWarningCopy.silentlyEmptyFeed(sources: [("Jalopy Theatre", 0),
+                                                                ("The Players Theatre", 149)])
+
+        #expect(line.contains("Jalopy Theatre has listed shows before"))
+        #expect(line.contains("Its page format may have changed."))
+        #expect(line.contains("The Players Theatre listed 149 shows this run and every one was dropped"))
+    }
+
+    @Test func oneDroppedShowIsNotReportedAsShows() {
+        let line = ScoutWarningCopy.silentlyEmptyFeed(sources: [("Jalopy Theatre", 1)])
+        #expect(line.contains("listed 1 show this run"))
+    }
 }
 
 // #1027: the popup's own count-dependent copy, pinned so a plural bug shows in the diff (#863/#885).

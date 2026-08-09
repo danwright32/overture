@@ -16,11 +16,40 @@ enum ScoutWarningCopy {
     // 90-day window. That was Carnegie's Algolia index horizon (WatchedSourceBackfill), written when
     // Carnegie was the only source with a baseline; shown for any other source it was a number about none
     // of them, and it was not the app's own horizon either (a month plus three).
+    // #1539: an established source comes back empty in one of two ways, and this used to explain both as
+    // the first.
+    //
+    // Measured on the live store after Dan's 2026-07-26 10:08 scout, the run that produced this popup:
+    // The Players Theatre, baseline 153, readable 0, DROPPED 149. The page was read fine and listed 149
+    // shows; every one was dropped for having no venue (#1529). The warning said "Its page format may
+    // have changed" while the same run had recorded the 149 on that row, so it named a cause that was
+    // not true and sent Dan to inspect a page that was correct (L11).
+    //
+    // The two are told apart by data the run already has, so each gets its own sentence, and a run that
+    // produced both says both rather than picking one and being wrong about the rest.
     static func silentlyEmptyFeed(orgNames: [String]) -> String {
-        let list = orgNames.joined(separator: ", ")
-        return orgNames.count == 1
-            ? "\(list) has listed shows before and came back with nothing this run. Its page format may have changed."
-            : "\(orgNames.count) sources have listed shows before and came back with nothing this run: \(list). Their page formats may have changed."
+        silentlyEmptyFeed(sources: orgNames.map { ($0, 0) })
+    }
+
+    static func silentlyEmptyFeed(sources: [(orgName: String, droppedRowCount: Int)]) -> String {
+        let readNothing = sources.filter { $0.droppedRowCount == 0 }.map(\.orgName)
+        let droppedEverything = sources.filter { $0.droppedRowCount > 0 }
+
+        var parts: [String] = []
+
+        if !readNothing.isEmpty {
+            let list = readNothing.joined(separator: ", ")
+            parts.append(readNothing.count == 1
+                ? "\(list) has listed shows before and came back with nothing this run. Its page format may have changed."
+                : "\(readNothing.count) sources have listed shows before and came back with nothing this run: \(list). Their page formats may have changed.")
+        }
+
+        for source in droppedEverything {
+            let shows = source.droppedRowCount == 1 ? "1 show" : "\(source.droppedRowCount) shows"
+            parts.append("\(source.orgName) listed \(shows) this run and every one was dropped, so its page is being read fine. Open Sources to see why they were dropped.")
+        }
+
+        return parts.joined(separator: " ")
     }
 
     static func unqueued(ids: [String]) -> String {
