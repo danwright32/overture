@@ -839,8 +839,14 @@ struct SourcesView: View {
 
             // A named failure, never a bare "broken". A source Dan cannot act on is a source he will
             // learn to ignore.
+            // #1549: rust only where the message is an alarm. On a stopped source it is the RECORD of why
+            // the source stopped, not something to go and fix, and the Fix and Confirm controls below are
+            // already withheld from it: alarm colour with no action is a row asking for something nothing
+            // can act on. The decision is SourceGrade's, so this view keeps no rule of its own.
             if let failure = source.lastFailure {
-                Text(failure.message).font(.system(size: 11)).foregroundStyle(OVColor.rust)
+                Text(failure.message).font(.system(size: 11))
+                    .foregroundStyle(SourceGrade(source).failureMessageIsAnAlarm
+                                     ? OVColor.rust : OVColor.inkFaint)
                     .fixedSize(horizontal: false, vertical: true)
             }
 

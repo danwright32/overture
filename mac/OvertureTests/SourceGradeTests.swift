@@ -73,7 +73,28 @@ struct SourceGradeTests {
             #expect(grade.explanation?.isEmpty == false)
         }
     }
+
+    // #1549: a stopped source's recorded failure is the RECORD of why it stopped, not an alarm. The row
+    // drew it in rust, so a calendar Overture is deliberately no longer checking looked like a live error
+    // needing a fix, while the Fix and Confirm controls were correctly withheld from it. Alarm colour and
+    // no action is a row asking for something nothing can act on.
+    @Test func onlyAFailingSourcesMessageIsAnAlarm() {
+        #expect(SourceGrade.failing.failureMessageIsAnAlarm)
+
+        for grade in [SourceGrade.removed, .stoppedAtTheirRequest, .watching, .neverChecked] {
+            #expect(!grade.failureMessageIsAnAlarm,
+                    "\(grade) draws a recorded failure as something to go and fix")
+        }
+    }
+
+    // Every grade is covered, so a grade added later is a deliberate choice rather than one that quietly
+    // inherits whichever answer the rule happens to fall into.
+    @Test func everyGradeAnswersTheAlarmQuestion() {
+        let alarms = SourceGrade.allCases.filter(\.failureMessageIsAnAlarm)
+        #expect(alarms == [.failing])
+    }
 }
+
 
 // The Sources sheet renders exactly what this returns, in exactly this order, so the sheet has no
 // judgement of its own to get wrong and the whole of its behaviour is testable without a UI.
@@ -159,5 +180,12 @@ struct SourcesViewWiringTests {
     @Test func theSheetReadsTheLiveStore() {
         #expect(sourcesView.contains("@Query"))
         #expect(sourcesView.contains("WatchedSource"))
+    }
+
+    // And the view asks the rule rather than keeping its own copy of it. This is what would go red if the
+    // colour were hardcoded back, which is exactly how it was written before.
+    @Test func theRowColoursAFailureThroughTheGrade() {
+        #expect(sourcesView.contains("failureMessageIsAnAlarm"),
+                "SourcesView no longer asks SourceGrade how to colour a recorded failure")
     }
 }

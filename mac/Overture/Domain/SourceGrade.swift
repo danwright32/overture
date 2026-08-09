@@ -38,6 +38,21 @@ enum SourceGrade: Equatable, Sendable, CaseIterable {
     var isStopped: Bool { self == .stoppedAtTheirRequest || self == .removed }
     var isBroken: Bool { self == .failing }
 
+    // #1549: whether the recorded failure message on this row is an ALARM or just the record of why the
+    // source stopped.
+    //
+    // A source Dan removed himself, or one an org asked him to stop, still carries whatever failure was
+    // last recorded on it, and the row drew that in rust. So a calendar Overture is deliberately no
+    // longer checking looked like a live error needing a fix, while the Fix and Confirm controls are
+    // correctly withheld from it: alarm colour and no action, which is the shape of a control offered
+    // where the rule behind it cannot act.
+    //
+    // The same call was already made one block down, where #1428/#1472/#1498 turned the readability note
+    // to plain text for exactly this reason: a line that needs nothing from Dan must not be dressed as
+    // one that does. This is a domain rule rather than a view detail for the same reason the grade
+    // itself is: it is testable here, and unreachable in SwiftUI.
+    var failureMessageIsAnAlarm: Bool { self == .failing }
+
     // The order Dan should read the sections in: what is working, then what needs him, then what he
     // must leave alone. Lives here rather than in the view so the sheet has no ordering of its own to
     // get wrong, and so "a stopped source can never appear in the failing section" is a fact with a
