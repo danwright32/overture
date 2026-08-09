@@ -266,3 +266,47 @@ struct CoverageDismissEditingTests {
         #expect(CoverageDismissEditing.rows(in: ctx).count == 1)
     }
 }
+
+// #1548: one state, one set of words.
+//
+// It was named three ways on one screen: the button that creates it said "Not one I scout", the
+// collapsed count called them "N ignored clients", and the way back said "Stop ignoring this". The noun
+// in the count was the one word Dan never clicked, and "ignored" also collided with the unrelated
+// Removed sources section above it.
+//
+// Pinned rather than merely fixed, because three surfaces drifting apart is exactly what happens when
+// each is edited on its own.
+@Suite("One word for a coverage client set aside (#1548)")
+struct CoverageSetAsideCopyTests {
+
+    @Test func theButtonTheCountAndTheBannerUseTheSameWords() {
+        #expect(CoverageCopy.dismissLabel == "Set aside")
+        #expect(CoverageCopy.ignoredDisclosure(count: 3) == "3 clients set aside")
+        #expect(CoverageCopy.dismissedAck(name: "Aurora Strings")
+                == "Set aside Aurora Strings. It will not show as a coverage gap.")
+    }
+
+    @Test func theCountReadsTheSameWayForOneAsForMany() {
+        #expect(CoverageCopy.ignoredDisclosure(count: 1) == "1 client set aside")
+    }
+
+    @Test func theWayBackIsTheCounterpartOfTheWayIn() {
+        #expect(CoverageCopy.restoreLabel == "Put back")
+    }
+
+    // The word this state may not borrow: the Removed sources section directly above owns it, and two
+    // unrelated things called ignored on one screen is how a reader stops trusting either.
+    @Test func noSurfaceCallsThisStateIgnored() {
+        let surfaces = [CoverageCopy.dismissLabel,
+                        CoverageCopy.restoreLabel,
+                        CoverageCopy.ignoredDisclosure(count: 1),
+                        CoverageCopy.ignoredDisclosure(count: 4),
+                        CoverageCopy.dismissedAck(name: "Aurora Strings")]
+
+        for surface in surfaces {
+            #expect(!surface.lowercased().contains("ignor"),
+                    "\"\(surface)\" reuses the word the Removed sources section owns")
+        }
+    }
+}
+

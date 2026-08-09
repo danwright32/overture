@@ -198,23 +198,33 @@ enum CoverageCopy {
     static let sectionTitle = "Returning clients not covered"
     static let sectionExplanation =
         "Downbeat clients no watched source treats as a returning client, so their next season would not surface a year ahead. Add a source for them, or tag an existing one below."
-    static let dismissLabel = "Not one I scout"
-    static let restoreLabel = "Stop ignoring this"
+    // #1548: ONE verb and ONE noun for this state, everywhere it appears.
+    //
+    // It was named three ways on one screen: the button that creates it said "Not one I scout", the
+    // collapsed count called them "N ignored clients", and the way back said "Stop ignoring this". The
+    // noun in the count was the one word Dan never clicked, and "ignored" also collided with the
+    // unrelated Removed sources section above it.
+    //
+    // "Set aside" is the verb, so the count is the same words as the button he pressed, and it does not
+    // borrow a word another section already owns.
+    static let dismissLabel = "Set aside"
+    static let restoreLabel = "Put back"
 
     // Shown under a gap row when a watched source is probably this client but the name does not match.
     static func nearMiss(sourceName: String) -> String {
         "A source \"\(sourceName)\" may be them: check its name, or tag it a returning client."
     }
 
-    // The collapsed "N ignored" disclosure. Singular/plural so it never reads "1 clients".
+    // The collapsed disclosure. Singular/plural so it never reads "1 clients", and the same words as
+    // the button that put them there (#1548).
     static func ignoredDisclosure(count: Int) -> String {
-        count == 1 ? "1 ignored client" : "\(count) ignored clients"
+        count == 1 ? "1 client set aside" : "\(count) clients set aside"
     }
 
     // The banner shown the moment a client is dismissed, so the row does not just silently vanish. The
     // disclosure below is the durable way back; this Undo is the immediate one (the #845 pairing).
     static func dismissedAck(name: String) -> String {
-        "Ignored \(name). It will not show as a coverage gap."
+        "Set aside \(name). It will not show as a coverage gap."
     }
 
     // Fail loud: when the Downbeat export is missing, stale or unreadable, an empty gap list would look
