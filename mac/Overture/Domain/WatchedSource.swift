@@ -678,7 +678,7 @@ enum SourceFailure: Equatable, Sendable {
     var offersFix: Bool {
         switch self {
         // #1171: a changed feed FORMAT is not a wrong ADDRESS. Re-pointing the URL cannot fix a platform's
-        // feed shape change, so offering "Fix the address" here would be a false affordance (like notRead).
+        // feed shape change, so offering "Change the page link" here would be a false affordance (like notRead).
         case .verdict(.notRead), .inconsistentResult, .fetch(.feedShapeChanged): return false
         default: return true
         }

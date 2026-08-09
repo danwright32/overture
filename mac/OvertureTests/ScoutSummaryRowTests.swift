@@ -3,7 +3,7 @@ import Foundation
 import SwiftData
 
 // #1125: the end-of-scout popup's couldn't-be-checked row was reading its address off the run-time
-// SourceResult snapshot, so a URL Dan corrected with "Fix the address" saved to the live WatchedSource
+// SourceResult snapshot, so a URL Dan corrected with "Change the page link" saved to the live WatchedSource
 // but the row kept showing the OLD address, and a real save read as a no-op. The row now reads the live
 // source when one matches; this pins that choice so the snapshot can never win over a saved correction
 // again.

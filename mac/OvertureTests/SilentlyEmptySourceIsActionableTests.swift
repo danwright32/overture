@@ -102,7 +102,7 @@ struct SilentlyEmptySourceIsActionableTests {
     }
 
     // A source with no editable page still offers neither, whatever it came back with. Carnegie is watched
-    // at a display-only placeholder over a POST search API: "Fix the address" would edit a field nothing
+    // at a display-only placeholder over a POST search API: "Change the page link" would edit a field nothing
     // reads and "This page is right" would confirm a page that does not exist (#1450).
     @Test func asourceWithNoEditablePageStillOffersNeither() {
         #expect(SourceFixConfirmActions.offersConfirm(nil, kind: .algolia, readFineAndCameBackEmpty: true)

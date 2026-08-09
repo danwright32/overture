@@ -856,7 +856,7 @@ struct SourcesView: View {
             // #1027/#1177: the SAME fix/confirm controls the end-of-scout popup offers, on the durable
             // sheet. Moved OUT of the failure block (#1177) so an editable source that reads fine but is
             // empty can be re-pointed too: The Cell read as perfectly healthy while pointed at the wrong,
-            // empty page (#1127), and until now "Fix the address" only ever appeared on a source that had
+            // empty page (#1127), and until now "Change the page link" only ever appeared on a source that had
             // failed. The optional failure lets one component serve both: Fix is always offered here (a
             // wrong address is plausible on any editable source), Confirm only when there is an empty-page
             // failure to confirm. Carnegie's native feed has no URL to correct (algolia is excluded), and a

@@ -38,7 +38,7 @@ enum SourceFetchError: Error, Equatable, LocalizedError {
     case secureConnectionFailed
     // #1555: the stored address is not one this feed can be read from at all. OvationTix reads a venue's
     // calendar by the client id embedded in its link, and with no id there nothing can be fetched. That is
-    // a WRONG ADDRESS, not a network problem, and it is the one failure where the "Fix the address" button
+    // a WRONG ADDRESS, not a network problem, and it is the one failure where the "Change the page link" button
     // already on the row is exactly the right next step.
     case addressUnusable
 

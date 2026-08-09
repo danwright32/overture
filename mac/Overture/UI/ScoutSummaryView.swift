@@ -279,7 +279,7 @@ struct ScoutSummaryView: View {
 
 // #1125: which address a couldn't-be-checked row shows, kept out of the SwiftUI view so it can be tested
 // (logic in a view body is untestable, #863). The `SourceResult` is a SNAPSHOT captured when the scout
-// ran; the live `WatchedSource` is what "Fix the address" writes to. Prefer the live value whenever a row
+// ran; the live `WatchedSource` is what "Change the page link" writes to. Prefer the live value whenever a row
 // matches, so a saved correction is visible immediately instead of reading as a no-op. The snapshot is
 // the fallback only for a result with no live watchlist row of its own.
 enum ScoutSummaryRow {

@@ -14,7 +14,7 @@ enum TicketTailor {
     // #1502: Ticket Tailor serves the SAME box office in two shapes, `all-tickets/<slug>` (list view) and
     // `all-tickets-calendar/<slug>` (calendar view), and only the calendar one was recognised. A venue that
     // embedded the list view (After Arts) therefore fell through to the unreadable verdict and was told its
-    // calendar was "drawn by JavaScript, so there is nothing to read", with Fix the address and Stop
+    // calendar was "drawn by JavaScript, so there is nothing to read", with Change the page link and Stop
     // watching beside it: both wrong advice on a page whose address is right and whose events are readable.
     static func widgetURL(inPage html: String) -> URL? {
         // The events widget URL, wherever it appears (a data-url attribute, an href). The `/<slug>` after

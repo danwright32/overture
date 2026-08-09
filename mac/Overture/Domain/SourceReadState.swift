@@ -61,7 +61,7 @@ enum SourceReadState: Equatable, Sendable {
             //     unhelpful here, it is PINNED: ScoutExtractIngest.fail() sets it on every failed read and
             //     only a successful read or a Confirm empty can clear it, so the row said "Run a scout to
             //     read them" forever on a page with nothing to read. And this is the one failure carrying
-            //     BOTH buttons, so the honest next step is "Fix the address" or "This page is right",
+            //     BOTH buttons, so the honest next step is "Change the page link" or "This page is right",
             //     never a scout. Dan's call, 2026-07-26: hide it rather than reword it, matching the two
             //     above. The row is not left silent; the failure line still says the page is empty.
             // Any other failure (a transient fetch error, say) can genuinely be cleared by another scout,

@@ -47,7 +47,7 @@ struct SourceFixConfirmActions: View {
     // win, so the failing-source behaviour is exactly as before.
     //
     // #1450: the kind gets a say, and exactly one: a source with no editable page offers neither. Carnegie
-    // is watched at a display-only placeholder over a POST search API, so "Fix the address" would edit a
+    // is watched at a display-only placeholder over a POST search API, so "Change the page link" would edit a
     // field nothing reads, and "This page is right" would confirm a page that does not exist. It is
     // deliberately keyed on that ONE kind and not on "ingests natively": the other three feed adapters are
     // host-routed at a real URL, which can be the wrong one, so they keep Fix.
@@ -188,8 +188,16 @@ struct SourceFixConfirmActions: View {
 // The component's own words, kept out of the view body so the copy inventory reads them and a test can
 // pin them (#863/#885).
 enum SourceFixConfirmCopy {
-    static let fixTitle = "Fix the address"
-    static let fixHelp = "Correct this source's web address, then read it to check"
+    // #2263: named after the thing it edits, the PAGE Overture reads, because the row already uses the
+    // word address four lines above for the street address that places this source's shows. Two buttons
+    // with near-identical names doing unrelated jobs, and the likely misread was the expensive direction:
+    // pressing this expecting to correct the street address and being handed the page link instead.
+    //
+    // It also no longer asserts a diagnosis it has not made. #1177 offers this on every editable row,
+    // including a perfectly healthy one, because a wrong page link is plausible anywhere; "Fix" claimed
+    // something was wrong with a row where nothing had failed.
+    static let fixTitle = "Change the page link"
+    static let fixHelp = "Point this source at a different page, then read it to check"
     static let saveTitle = "Save"
     static let cancelTitle = "Cancel"
     static let confirmTitle = "This page is right"
