@@ -1242,9 +1242,13 @@ struct RootView: View {
         // #1769: "settles rather than nagging" used to mean it said NOTHING, which was right for a check
         // that answered its shows and found nobody and wrong for one that came home short. The report now
         // carries that difference, and stays silent when there is genuinely nothing to say.
+        // #1616: read the run's own size BEFORE the settle below clears the marker that carries it.
+        let checkLookups = ((try? ReachabilityProbeMarker.read(from: PrepQueueService.defaultProbeRunURL))
+                            ?? nil)?.lookups
         switch DetachedRunOutcome.phase(runStartedAt: started, resultsModifiedAt: resultsMod ?? nil) {
         case .producedResults:
             if let report = PrepQueueService.settleReachabilityProbe(into: context, now: Date()) {
+                recordCheckPace(lookups: checkLookups, cancelled: report.cancelled)
                 reportReachabilityRun(report)
             } else {
                 ingestPrep()
@@ -1298,7 +1302,23 @@ struct RootView: View {
     // which is how the shortfall came to be computed and discarded in the first place.
     //
     // .warning for the same reason a Prep run's shortfall is: an .info write can be silently overwritten by
-    // a later routine receipt, and this is the one thing about a 21-minute run Dan has to see.
+    // a later routine receipt, and this is the one thing about a run that long Dan has to see.
+    // #1616: teach the wait estimate what this check actually took. Called on the produced-results path
+    // only, which is the one unambiguous "the run worked through its list and finished" signal, and the
+    // same rule `recordReadingRun` follows next door.
+    //
+    // The wall clock is the runner's own recording (`runCost.durationMs` in the results file), not elapsed
+    // time measured here: the run is detached, so anything timed from inside the app also counts however
+    // long Overture took to notice it had ended. Whether the sample counts at all is
+    // ProbeRunPaceRecording's decision, so the rule sits where a test can reach it rather than in a view.
+    // Best-effort in both directions: this must never disturb a run that has just settled paid-for answers.
+    private func recordCheckPace(lookups: Int?, cancelled: Bool) {
+        ProbeDurationHistoryStore.record(
+            ProbeRunPaceRecording.sample(lookups: lookups,
+                                         cost: RecordedRunCost.complete(contentsOf: PrepImporter.defaultURL),
+                                         cancelled: cancelled))
+    }
+
     private func reportReachabilityRun(_ report: ReachabilityRunReport) {
         guard let message = report.attentionMessage else { return }
         // #1805: the report carries the offer to finish what the run missed. Whether there is anything

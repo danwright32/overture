@@ -16,6 +16,18 @@ struct ReachabilityProbeMarker: Codable, Equatable, Sendable {
     // so a non-optional here would fail to decode every marker written before this field existed, which is
     // exactly the paid run whose answers this field was added to protect.
     var settleAttempts: Int?
+    // #1616: how many LOOKUPS this run was launched with, which is the queue's item count and not
+    // `keys.count`: a grouped item answers for several shows, so the keys above are always the larger
+    // number. Recorded here because it decides how many rounds the run's wall clock covered, and the
+    // recorded cost the runner writes carries no count of its own.
+    //
+    // Stamped when the run starts rather than worked out at settle, for the same reason every other fact
+    // about a past run is: by then the queue file may belong to the next one.
+    //
+    // OPTIONAL for the same decoding reason as `settleAttempts`, and it fails safe: a marker written
+    // before this field existed reads as nil, and a run whose size is unknown teaches the estimate
+    // nothing rather than teaching it a guess.
+    var lookups: Int?
 
     // Dan's call (2026-07-30): retry, but give up rather than trying forever. Three is enough to ride out a
     // transient lock or a store busy behind another writer, and few enough that a genuinely broken store is

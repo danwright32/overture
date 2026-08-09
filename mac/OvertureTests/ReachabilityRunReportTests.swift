@@ -4,7 +4,7 @@ import SwiftData
 
 // #1769: what a finished reachability check TELLS Dan when it did not answer everything it was given.
 //
-// A check spends real time (77 shows is about 21 minutes) and runs as up to ten concurrent claudes, one
+// A check spends real time (77 shows is the better part of an hour) and runs as up to ten concurrent claudes, one
 // per chunk of the work-list. A chunk that dies partway leaves the shows it never reached with no answer,
 // and #1594 deliberately leaves those shows UNSTAMPED so the next check picks them up again rather than
 // locking them out for 90 days. That self-healing was invisible: `settleReachabilityProbe` computed the
@@ -59,7 +59,7 @@ struct ReachabilityRunReportTests {
     }
 
     // FAILURE PATH. The shortfall is not the only thing the check path used to drop on the floor: the
-    // whole ingest Outcome was discarded, so a failed save (Dan waited 21 minutes and the answers may not
+    // whole ingest Outcome was discarded, so a failed save (Dan waited the better part of an hour and the answers may not
     // have persisted) and a runaway web-call count were invisible too. Fix the class, not the instance
     // (L30), and reuse Prep's existing wording rather than writing a second copy of it.
     @Test func aFailedSaveIsReportedAlongsideTheShortfall() throws {

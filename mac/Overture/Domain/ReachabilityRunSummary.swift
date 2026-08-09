@@ -2,7 +2,7 @@ import Foundation
 
 // #1769: what a finished reachability check TELLS Dan.
 //
-// A check is the app's most expensive action: 77 shows is about 21 minutes, and it runs as up to ten
+// A check is the app's most expensive action: 77 shows is the better part of an hour, and it runs as up to ten
 // concurrent claudes, one per chunk of the work-list. A chunk that dies partway (a crash, an API error, a
 // process running out of context, a cancel) leaves the shows it never reached with no answer.
 //
@@ -79,7 +79,7 @@ enum ReachabilityRunSummary {
     // It says "still unchecked" rather than Prep's "they'll be retried", and the difference is the whole
     // reason this sentence exists instead of borrowing that one. A Prep run's promise is real, because
     // PrepQueueBuilder re-queues an undrafted prospect on its own. NOTHING re-checks reachability by
-    // itself: Dan has to select those dates and run it again. Telling him a 21-minute run he paid for will
+    // itself: Dan has to select those dates and run it again. Telling him a long run he paid for will
     // pick itself up would be a promise the app does not keep, which is the class of defect L21 is about.
     //
     // Never negative: a results file carrying MORE answers than were asked for is a different failure with

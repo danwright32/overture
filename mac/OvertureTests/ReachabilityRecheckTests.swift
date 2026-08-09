@@ -199,7 +199,7 @@ struct OneShowRecheckConfirmTests {
         #expect(s.showCount == 1)
         #expect(s.researchCount == 1)
         #expect(s.alreadyAnsweredCount == 0)
-        #expect(s.estimatedSeconds == ProbeSelection.measuredSecondsPerLookup)
+        #expect(s.estimatedSeconds == ProbeSelection.fallbackSecondsPerRound)
     }
 
     // One lookup is a single round, so it never claims to block other runs. That sentence exists for a

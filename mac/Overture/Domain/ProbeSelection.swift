@@ -12,14 +12,36 @@ import Foundation
 // check actually spends is his time and his rolling usage window, so that is what the bar says.
 enum ProbeSelection {
 
-    // How long one lookup takes. Measured 2026-07-27: the first real check took 471 seconds for three
-    // shows run one after another, so about 157 seconds each. A single named constant, so a second
-    // measurement changes every sentence quoting a wait at once.
+    // How long one ROUND takes: one wave of concurrent lookups, whose wall clock is its slowest member.
+    // Used only until enough real checks have been recorded to learn the figure (#1616).
     //
-    // One sample, on three Carnegie-affiliated organisations, which are unusually well documented. A
-    // night of small indie productions could take longer (more searching before giving up) or less
-    // (gives up sooner). An order of magnitude, which is all this needs to be.
-    static let measuredSecondsPerLookup: TimeInterval = 157
+    // It says per ROUND because that is how it has always been used (`estimatedSeconds` multiplies it by
+    // the round count), and until #1616 it held a per-LOOKUP number, which is the defect this issue
+    // reports: 157 was measured on 2026-07-27 from three shows run ONE AFTER ANOTHER, 471 seconds for the
+    // three. Since #1597 a check fans out, so that number never described a round at all.
+    //
+    // 390 is measured, from the only recorded check surviving on this Mac (2026-08-07): three shows in
+    // three concurrent chunks, `runCost.durationMs` 389906. Its three streams took 146s, 390s and 150s, so
+    // a lookup is roughly as fast beside two others as it is alone and what makes a round long is its
+    // slowest member. The other observed parallel round was 3m45s (225s), also over three shows, and the
+    // larger of the two is the honest fallback: a round of ten draws more slow lookups than a round of
+    // three, and the failure that matters here is promising a wait the run cannot keep.
+    //
+    // Two samples, both on three shows, which is exactly why this is a fallback and not the answer.
+    static let fallbackSecondsPerRound: TimeInterval = 390
+
+    // #1616: the figure the bar should quote, learned where there is evidence and hand-set where there is
+    // not. One named place, so no surface can consult the history and another the constant.
+    static func secondsPerRound(learnedFrom history: ProbeDurationHistory) -> TimeInterval {
+        history.learnedSecondsPerRound ?? fallbackSecondsPerRound
+    }
+
+    // The live read, and the only impure entry point here. Called from the two places Dan is shown a wait
+    // (the selection bar, and the two confirms QueueView raises), never from a pure summarize, so a test
+    // can exercise every sentence without reaching a file.
+    static func liveSecondsPerRound() -> TimeInterval {
+        secondsPerRound(learnedFrom: ProbeDurationHistoryStore.load())
+    }
 
     // Lookups run concurrently, so the wait is the number of ROUNDS, not the number of lookups. MUST
     // match OVERTURE_PREP_MAX_PARALLEL default in mac/scripts/prep-run.sh: if this is higher than the
@@ -58,14 +80,14 @@ enum ProbeSelection {
         // Its exact opposite: these are the ones being paid for a SECOND time, and until this they were
         // stored as nothing at all, so the sheet counted them as ordinary first-time lookups.
         let previouslyMissedCount: Int
-        // Wall clock, not work: lookups overlap, so this is rounds times one lookup.
+        // Wall clock, not work: lookups overlap, so this is rounds times how long one round takes.
         let estimatedSeconds: TimeInterval
 
         var isEmpty: Bool { showCount == 0 && alreadyAnsweredCount == 0 }
 
         // #1765: a run long enough to span more than one round of concurrent lookups. The confirm says
-        // what such a run BLOCKS, because at that length losing the single run slot is a real cost and at
-        // three minutes it is not worth a sentence.
+        // what such a run BLOCKS, because at that length losing the single run slot is a real cost and for
+        // one round it is not worth a sentence.
         var spansSeveralRounds: Bool { researchCount > maxConcurrentLookups }
     }
 
@@ -76,20 +98,26 @@ enum ProbeSelection {
     //
     // `previouslyMissed` is 1 when an earlier check ran over this show and came home with nothing, which
     // is exactly the sentence that could change his mind about spending again.
-    static func summarizeOneShowRecheck(previouslyMissed: Bool) -> Summary {
+    //
+    // #1616: `secondsPerRound` is passed in rather than read here, so this stays pure and a test never
+    // reaches Dan's real history file. Defaulted to the constant, so a caller that does not know quotes
+    // what the app quoted before any of this existed.
+    static func summarizeOneShowRecheck(previouslyMissed: Bool,
+                                        secondsPerRound: TimeInterval = fallbackSecondsPerRound) -> Summary {
         Summary(dateCount: 1, showCount: 1, researchCount: 1, organisationCount: 0,
                 performerHuntCount: 0, alreadyAnsweredCount: 0,
                 previouslyMissedCount: previouslyMissed ? 1 : 0,
-                estimatedSeconds: measuredSecondsPerLookup)
+                estimatedSeconds: estimatedSeconds(forLookups: 1, secondsPerRound: secondsPerRound))
     }
 
     // #1805: finishing the shows a check never reached. Every one of them is being paid for a second
     // time in the sense that a run already ran over the set they were in, so `previouslyMissedCount` is
     // all of them: that is the honest count, and it is the sentence that could change his mind.
-    static func summarizeShowsACheckMissed(count: Int) -> Summary {
+    static func summarizeShowsACheckMissed(count: Int,
+                                           secondsPerRound: TimeInterval = fallbackSecondsPerRound) -> Summary {
         Summary(dateCount: 0, showCount: count, researchCount: count, organisationCount: 0,
                 performerHuntCount: 0, alreadyAnsweredCount: 0, previouslyMissedCount: count,
-                estimatedSeconds: estimatedSeconds(forLookups: count))
+                estimatedSeconds: estimatedSeconds(forLookups: count, secondsPerRound: secondsPerRound))
     }
 
     // `candidateKeys` is what the date control already computes: the still-open, not-recently-answered
@@ -101,7 +129,8 @@ enum ProbeSelection {
     // caller that does not know keeps the old sentence rather than claiming nothing was missed.
     static func summarize(dateCount: Int, candidates: [ProbeBatch.Show], alreadyAnswered: Int,
                           previouslyMissed: Int = 0,
-                          among all: [ProbeBatch.Show], overrides: ProducerOverrides = .none) -> Summary {
+                          among all: [ProbeBatch.Show], overrides: ProducerOverrides = .none,
+                          secondsPerRound: TimeInterval = fallbackSecondsPerRound) -> Summary {
         let plan = ProbeBatch.plan(selecting: Set(candidates.map(\.key)), among: all, overrides: overrides)
         let researches = plan.keysToRun.count
         return Summary(
@@ -112,7 +141,7 @@ enum ProbeSelection {
             performerHuntCount: plan.performerHuntCount,
             alreadyAnsweredCount: alreadyAnswered,
             previouslyMissedCount: previouslyMissed,
-            estimatedSeconds: estimatedSeconds(forLookups: researches))
+            estimatedSeconds: estimatedSeconds(forLookups: researches, secondsPerRound: secondsPerRound))
     }
 
     // #1765: what clicking Check DOES with a selection. In Domain rather than the button's closure,
@@ -139,10 +168,14 @@ enum ProbeSelection {
 
     // Rounds, never the sum. Estimating the sum would tell Dan a four-minute check takes an hour and a
     // half, and he would never run it.
-    static func estimatedSeconds(forLookups lookups: Int) -> TimeInterval {
+    //
+    // #1616: the pace is an argument, learned by the caller or left at the constant. It is the same
+    // quantity either way, seconds for one wave of concurrent lookups, so nothing here changes with it.
+    static func estimatedSeconds(forLookups lookups: Int,
+                                 secondsPerRound: TimeInterval = fallbackSecondsPerRound) -> TimeInterval {
         guard lookups > 0 else { return 0 }
         let rounds = (lookups + maxConcurrentLookups - 1) / maxConcurrentLookups
-        return Double(rounds) * measuredSecondsPerLookup
+        return Double(rounds) * secondsPerRound
     }
 }
 
@@ -178,7 +211,7 @@ enum ProbeSelectionCopy {
 
     // #1765: what a long run BLOCKS, which is the one cost neither the title nor the wait figure carries.
     // A check holds the same single run slot a Prep run does (PrepQueueService throws .alreadyRunning), so
-    // for 21 minutes Dan cannot start either. The minute count tells him how long he waits for THIS; this
+    // for the length of the run Dan cannot start either. The minute count tells him how long he waits for THIS; this
     // tells him what he also cannot do meanwhile, which is new information rather than a second telling
     // (#843).
     //
@@ -223,7 +256,7 @@ enum ProbeSelectionCopy {
         parts.append("This looks up a real contact for every still-open show on the "
                      + (s.dateCount == 1 ? "date" : "\(s.dateCount) dates") + " you picked.")
         // #1765: the wait comes SECOND, not last. The 40-lookup refusal used to be what stopped Dan walking
-        // into a 21-minute run unaware, and with it gone the sheet has to carry that weight: at this size
+        // into a run of that length unaware, and with it gone the sheet has to carry that weight: at this size
         // the wait is the fact that matters, and it was sitting after the producer-sharing detail where a
         // confirm he has clicked through a dozen times would never show it to him.
         parts.append(ProbeSelectionCopy.costLine(s))
