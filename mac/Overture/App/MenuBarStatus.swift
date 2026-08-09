@@ -28,4 +28,14 @@ enum MenuBarStatus {
         formatter.dateStyle = .none
         return "Last checked \(formatter.string(from: last))"
     }
+
+    // #1688: the menu item names what the click will actually do.
+    //
+    // "Open agent logs" opening a Finder window is the defect Dan reported, and the honest fix has two
+    // halves: open the log when there is one, and when there is not, say so BEFORE he clicks rather
+    // than after. The menu body is rebuilt every time the menu opens, which is exactly when this is
+    // asked, so the label can carry the answer and nothing has to interrupt him to correct it later.
+    static func logsMenuTitle(hasLogToOpen: Bool) -> String {
+        hasLogToOpen ? "Open agent logs" : "Open logs folder (nothing logged yet)"
+    }
 }

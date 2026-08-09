@@ -78,4 +78,16 @@ struct MenuBarStatusTests {
                                       omniFocusFailed: true, hasUnreadLogProblems: true)
         #expect(line == "OmniFocus sync needs attention")
     }
+
+    // #1688: the item promises the logs only when there are logs to open. When there are none it says
+    // what the click will really do, at the moment Dan is choosing whether to click, rather than
+    // opening a Finder window and leaving him to work out that this is not what he asked for.
+    @Test func theLogsItemPromisesTheLogsOnlyWhenThereAreSome() {
+        #expect(MenuBarStatus.logsMenuTitle(hasLogToOpen: true) == "Open agent logs")
+    }
+
+    @Test func theLogsItemSaysSoWhenNothingHasBeenLogged() {
+        #expect(MenuBarStatus.logsMenuTitle(hasLogToOpen: false)
+                == "Open logs folder (nothing logged yet)")
+    }
 }

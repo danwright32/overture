@@ -90,6 +90,90 @@ struct AgentLogLocationTests {
         #expect(FileManager.default.fileExists(atPath: dir.path))
     }
 
+    // #1688, Dan on 2026-07-28: "make open agent logs actually open the logs so I can read them, not
+    // just open finder."
+    //
+    // The menu item says "Open agent logs" and the nudge above it says "Agent logged a problem: open
+    // agent logs". Both promise the logs; handing him the folder is one extra step at precisely the
+    // moment he is trying to find out what went wrong, and the folder holds four files including a
+    // multi-megabyte Gmail trace, so it does not even point at the one the sentence was about.
+    //
+    // WHICH file is decided by what the nudge measures. #1689 moved that to the problems ledger (the
+    // things the app itself called a problem, one line each), so the ledger is what "the logs" means
+    // here. The issue text predates #1689 and names stderr; following it literally would open a file
+    // the nudge is no longer about (L61).
+    private func logSandbox() -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("logs-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("Overture", isDirectory: true)
+    }
+
+    @Test func openLogsOpensTheProblemLedgerTheNudgeIsAbout() throws {
+        let dir = logSandbox()
+        defer { try? FileManager.default.removeItem(at: dir.deletingLastPathComponent()) }
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let problems = dir.appendingPathComponent("overture-agent.problems.log")
+        try "settle reported a partial write\n".write(to: problems, atomically: true, encoding: .utf8)
+        try "some stderr chatter\n".write(to: dir.appendingPathComponent("overture-agent.err.log"),
+                                          atomically: true, encoding: .utf8)
+
+        var opened: URL?
+        let outcome = AgentLogLocation.openLogs(directory: dir, open: { opened = $0 })
+
+        #expect(opened == problems, "the file the nudge is about is the file that opens")
+        #expect(outcome == .openedFile(problems))
+    }
+
+    // No problems recorded, but the agent's stderr has something in it. That is still a log to read,
+    // so it is what opens rather than the folder.
+    @Test func openLogsFallsBackToStandardErrorWhenNoProblemIsRecorded() throws {
+        let dir = logSandbox()
+        defer { try? FileManager.default.removeItem(at: dir.deletingLastPathComponent()) }
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let stderrLog = dir.appendingPathComponent("overture-agent.err.log")
+        try "a crash trace\n".write(to: stderrLog, atomically: true, encoding: .utf8)
+
+        var opened: URL?
+        let outcome = AgentLogLocation.openLogs(directory: dir, open: { opened = $0 })
+
+        #expect(opened == stderrLog)
+        #expect(outcome == .openedFile(stderrLog))
+    }
+
+    // An EMPTY file is not a log to read. Opening a blank window in answer to "show me the logs" looks
+    // exactly like a broken menu item, so an empty ledger is treated as no ledger.
+    @Test func openLogsTreatsAnEmptyLogAsNothingToOpen() throws {
+        let dir = logSandbox()
+        defer { try? FileManager.default.removeItem(at: dir.deletingLastPathComponent()) }
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try "".write(to: dir.appendingPathComponent("overture-agent.problems.log"),
+                     atomically: true, encoding: .utf8)
+        try "".write(to: dir.appendingPathComponent("overture-agent.err.log"),
+                     atomically: true, encoding: .utf8)
+
+        var opened: URL?
+        let outcome = AgentLogLocation.openLogs(directory: dir, open: { opened = $0 })
+
+        #expect(opened == dir, "with nothing to read, the folder is still opened rather than nothing")
+        #expect(outcome == .openedFolder(dir))
+    }
+
+    // The fallback the issue asks to keep: nothing has been logged at all yet. The folder opens, AND
+    // the outcome says that is what happened, so the caller can tell Dan rather than leaving him to
+    // notice that what he asked for is not what he got.
+    @Test func openLogsRevealsTheFolderWhenThereIsNoLogYetAndSaysSo() throws {
+        let dir = logSandbox()
+        defer { try? FileManager.default.removeItem(at: dir.deletingLastPathComponent()) }
+
+        var opened: URL?
+        let outcome = AgentLogLocation.openLogs(directory: dir, open: { opened = $0 })
+
+        #expect(opened == dir)
+        #expect(outcome == .openedFolder(dir))
+        #expect(FileManager.default.fileExists(atPath: dir.path),
+                "the directory is still created first, so the click never opens Finder to nothing")
+    }
+
     // #295: an always-resident agent's stdout/stderr would otherwise grow without bound. A file past
     // the cap is rotated logrotate-style: its contents move to a single ".1" backup and the live file
     // is truncated, so disk stays bounded at ~2x the cap.

@@ -158,4 +158,55 @@ enum AgentLogLocation {
         open(dir)
         return dir
     }
+
+    // #1688: what "Open agent logs" actually did, so the caller can say it rather than leave Dan to
+    // notice that what he asked for is not what he got.
+    enum OpenOutcome: Equatable {
+        case openedFile(URL)
+        case openedFolder(URL)
+    }
+
+    // #1688, Dan on 2026-07-28: "make open agent logs actually open the logs so I can read them, not
+    // just open finder."
+    //
+    // The menu item says "Open agent logs" and the nudge above it says "Agent logged a problem: open
+    // agent logs". Both promise the logs, and revealing the folder is one extra step at exactly the
+    // moment he is trying to find out what went wrong. The folder holds four files, including a
+    // multi-megabyte Gmail trace, so it does not even point at the one the sentence was about.
+    //
+    // WHICH file is decided by what the nudge measures, which #1689 moved to the problems ledger. The
+    // issue text predates that and names stderr; opening stderr would open a file the nudge is no
+    // longer about.
+    //
+    // An EMPTY file is treated as no file. Opening a blank window in answer to "show me the logs" looks
+    // exactly like a broken menu item.
+    @discardableResult
+    static func openLogs(directory: URL = AgentLogLocation.directory,
+                         open: (URL) -> Void = { NSWorkspace.shared.open($0) }) -> OpenOutcome {
+        let dir = prepareDirectory(at: directory).url
+
+        if let file = logToOpen(directory: dir) {
+            open(file)
+            return .openedFile(file)
+        }
+
+        // Nothing written yet. The folder is still the honest answer (there is no log to show), and the
+        // outcome says so so the caller does not present it as having opened the logs.
+        open(dir)
+        return .openedFolder(dir)
+    }
+
+    // The file "Open agent logs" would open, or nil when nothing has been logged yet. Separate from
+    // openLogs so the MENU can ask the same question before Dan clicks, and label the item with what the
+    // click will actually do rather than telling him afterwards.
+    static func logToOpen(directory: URL = AgentLogLocation.directory) -> URL? {
+        let candidates = [directory.appendingPathComponent("overture-agent.problems.log"),
+                          directory.appendingPathComponent("overture-agent.err.log")]
+        return candidates.first { hasContent($0) }
+    }
+
+    private static func hasContent(_ url: URL, fileManager: FileManager = .default) -> Bool {
+        let size = (try? fileManager.attributesOfItem(atPath: url.path))?[.size] as? Int ?? 0
+        return size > 0
+    }
 }
