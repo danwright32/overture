@@ -79,7 +79,17 @@ enum OutcomePatterns {
                                  // And the source from wherever the booking was recorded, or the auto and
                                  // manual halves stop summing to the total they split.
                                  outcomeSource: p.isBooked ? p.bookingSource
-                                     : p.outcomeSourceRaw.flatMap(OutcomeSource.init))
+                                     : p.outcomeSourceRaw.flatMap(OutcomeSource.init),
+                                 // #2399: the ending itself, from the one field. This is what the three
+                                 // groups are counted from, and it is why the lost count is no longer
+                                 // structurally zero: it used to be read off `Outcome.lostSoft`/`.lostHard`,
+                                 // which nothing in the app has ever written (#2401).
+                                 //
+                                 // A booking detected from Downbeat writes the legacy outcome without
+                                 // touching the one field, so `isBooked` is folded in here rather than left
+                                 // to a second reader: a show booked automatically must count as booked.
+                                 showOutcome: p.isBooked ? .booked : p.showOutcome,
+                                 aContactReplied: p.recipients.contains(where: \.replied))
         }
     }
 
