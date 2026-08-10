@@ -20,6 +20,17 @@ export const RUNBOOK_RULES: RunbookRule[] = [
   { name: "never-host-venue-target", pattern: /never the host venue \(#366 \/ #368\)/i },
   { name: "venue-address-disqualified", pattern: /belonging to the host venue is DISQUALIFIED/i },
   { name: "press-media-disqualified", pattern: /Never offer a press\/media\/PR address/i },
+  // #2382: the third hard disqualify, and it needs three separate guards because dropping any one of
+  // its parts puts back a DIFFERENT wrong answer, and each one is a shape a run actually produced on
+  // 2026-08-09. Without the first, an agency's shared inbox satisfies step 2 and the pitch goes to a
+  // desk that exists for casting people. Without the second, the one legitimate case (the target's own
+  // page naming a person at its management) is lost along with the abuse. Without the third, the run
+  // spends its remaining lookups hunting the named agent, which is precisely the trade Dan declined.
+  { name: "agency-inbox-never-satisfies-step-two",
+    pattern: /A third party's generic inbox NEVER satisfies step 2/i },
+  { name: "representative-only-when-the-target-names-a-person",
+    pattern: /the target's OWN page publishes a\s+NAMED person there as its contact route/i },
+  { name: "never-hunt-the-agent", pattern: /do NOT go looking\s+for the agent/i },
   // #1722: an entry with no contacts must say WHY. It is the only trace a refusal leaves, since the two
   // disqualify rules above forbid ever emitting the address that was refused. Drop this and every empty
   // answer silently returns to claiming the search found nothing (L11).
