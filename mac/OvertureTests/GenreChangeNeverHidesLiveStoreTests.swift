@@ -89,8 +89,14 @@ struct GenreChangeNeverHidesLiveStoreTests {
 
             #expect(newlyHidden.isEmpty,
                     "re-reading the genre would remove \(newlyHidden.count) live row(s) from the queue: \(newlyHidden.prefix(5).joined(separator: "; "))")
+            await RealStoreTestLock.shared.release()
+        } catch {
+            // #2198: released on the THROWING path too. The `do` here had no catch, so a throw
+            // inside it skipped the release and left every later suite waiting on a lock nobody
+            // holds, which reads as a hung run with no failing test to point at.
+            await RealStoreTestLock.shared.release()
+            throw error
         }
-        await RealStoreTestLock.shared.release()
     }
 }
 
