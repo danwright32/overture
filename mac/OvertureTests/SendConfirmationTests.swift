@@ -185,7 +185,7 @@ struct SendConfirmationTests {
             r.sentAt = Date()
             r.sendState = .sent
 
-            let c = try #require(SendConfirmation(conversationNudgeFor: r, of: p, kind: .closing,
+            let c = try #require(SendConfirmation(closingNoteFor: r, of: p,
                                                   signature: sig))
 
             #expect(c.body.hasSuffix(sig.plainText))
@@ -301,14 +301,12 @@ struct SendConfirmationTests {
         let p = make(ctx, subject: "Photographs for G")
         let r = p.recipients.first!
 
-        let active = SendConfirmation(conversationNudgeFor: r, of: p, kind: .active(.interested))
-        #expect(active?.title == "Send this note now?")
-        #expect(active?.reassurance == "This sends one message right now, to this recipient only.")
-
-        let closing = SendConfirmation(conversationNudgeFor: r, of: p, kind: .closing)
+        // #2397: there is one note left, and it ALWAYS does the second thing, so it always carries the
+        // clause that says so. The plain reassurance belonged to the per-state re-touch email, which is
+        // retired along with the states that chose its wording.
+        let closing = SendConfirmation(closingNoteFor: r, of: p)
+        #expect(closing?.title == "Send this note now?")
         #expect(closing?.reassurance
                 == "This sends one message right now, to this recipient only. It also closes the lead out (kept warm for next time).")
-
-        #expect(SendConfirmation(conversationNudgeFor: r, of: p, kind: .needsState) == nil)
     }
 }

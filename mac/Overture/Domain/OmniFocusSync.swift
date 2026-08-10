@@ -75,13 +75,15 @@ enum OmniFocusSync {
         var toComplete: [ExistingTask]
     }
 
-    // Tasks that should exist now, one per RECIPIENT (#653): a confirmed (manual) active conversation
-    // state to chase, or a closing note after the event, whose next-reach-out date falls within the
-    // horizon. Excludes unconfirmed AI suggestions and replied-but-uncategorized contacts (those need
-    // Dan IN Overture), and anything booked/lost. The due is the OmniFocus defer date so the task
-    // stays hidden until due.
-    static func desired(from prospects: [Prospect], now: Date, horizonDays: Int,
-                        reminderConfig: ConversationReminderConfig = .init()) -> [DesiredTask] {
+    // Tasks that should exist now, one per RECIPIENT (#653). #2397: two things earn one, and the
+    // conversation-state chase is no longer either of them, because the states it chased are retired.
+    //
+    //   - A post-event prompt (PostEventPrompt): a closing note to send, or a show to close out.
+    //   - A reply Dan has not answered, which would otherwise leave no trace in OmniFocus while he is
+    //     away from his desk (#271): only an in-app badge he cannot see.
+    //
+    // The due is the OmniFocus defer date, so the task stays hidden until due.
+    static func desired(from prospects: [Prospect], now: Date, horizonDays: Int) -> [DesiredTask] {
         let cutoff = now.addingTimeInterval(TimeInterval(horizonDays) * 86_400)
         var tasks: [DesiredTask] = []
         for p in prospects {
@@ -95,24 +97,13 @@ enum OmniFocusSync {
             var earned: [(recipient: Recipient, task: DesiredTask)] = []
             for r in p.recipients {
                 let standing = r.standing
-                let unhandledReply = r.hasUnhandledReply && r.conversationStateSource != .manual
+                let unhandledReply = r.hasUnhandledReply
                 // A closed contact drops out, UNLESS a fresh reply still needs triage (a late reply on
                 // an otherwise-closed contact still deserves a task, #424).
                 guard standing.isInPlay || unhandledReply else { continue }
 
-                // A CONFIRMED (manual, active) conversation state is the normal follow-up: chase it on
-                // its next reach-out date, if that falls within the horizon. A confirmed contact never
-                // triages.
-                let hasConfirmedActiveState = (r.conversationState?.isActive ?? false) && r.conversationStateSource != .auto
-                if hasConfirmedActiveState {
-                    guard let due = ConversationReminder.nextReminderDate(
-                        state: r.conversationState, setAt: r.conversationStateSetAt,
-                        remindedAt: r.conversationRemindedAt, performanceDate: p.performanceDate,
-                        isClosed: !standing.isInPlay, hasUnhandledReply: unhandledReply,
-                        repliedAt: r.replyArrivedAt, source: r.conversationStateSource,
-                        now: now, config: reminderConfig),
-                        due <= cutoff
-                    else { continue }
+                // The post-event prompt, on its own date, if that falls within the horizon.
+                if let due = PostEventPrompt.nextPromptDate(for: r, of: p, now: now), due <= cutoff {
                     let dueDate = easternTime(hour: dueHour, onDayOf: due)
                     earned.append((r, DesiredTask(naturalKey: p.naturalKey, recipientId: r.id, title: title(for: p, r),
                                                   note: note(for: p, r, dueDate: dueDate),
@@ -121,17 +112,13 @@ enum OmniFocusSync {
                     continue
                 }
 
-                // #271 / Phase 7: a reply Dan hasn't categorized (no confirmed active state) would
-                // otherwise leave NO trace in OmniFocus while he's away; only an in-app badge he can't
-                // see. Emit a triage task due today, keyed by the SAME (naturalKey, recipientId) so
-                // reconcile dedupes it against the follow-up once Dan confirms the state (the in-app
-                // badge and this task never compete: one OmniFocus task per contact, and confirming the
-                // state re-anchors it via the due-day diff).
+                // #271: a reply Dan has not answered. Emit a triage task, keyed by the SAME
+                // (naturalKey, recipientId) so reconcile dedupes it against the prompt above.
                 if unhandledReply {
-                    // Anchor the triage due to a STABLE date on the recipient (when its state was last
-                    // touched, else when Dan first reached out), NOT `now`; otherwise the day-token diff
-                    // would complete+recreate the task on every new calendar day until Dan triages it.
-                    let anchor = r.conversationStateSetAt ?? r.sentAt ?? now
+                    // Anchored to a STABLE date on the recipient (when the reply arrived, else when Dan
+                    // first reached out), NOT `now`; otherwise the day-token diff would complete and
+                    // recreate the task on every new calendar day until he answers.
+                    let anchor = r.replyArrivedAt ?? r.sentAt ?? now
                     let dueDate = easternTime(hour: dueHour, onDayOf: anchor)
                     earned.append((r, DesiredTask(naturalKey: p.naturalKey, recipientId: r.id, title: triageTitle(for: p, r),
                                                   note: note(for: p, r, dueDate: dueDate),
@@ -150,10 +137,8 @@ enum OmniFocusSync {
 
     // Read what OmniFocus holds, diff against what should exist, then create/complete via the client.
     // Each step is independent so a single failed Apple event doesn't abort the rest of the sync.
-    static func run(prospects: [Prospect], now: Date, client: OmniFocusClient, horizonDays: Int = 14,
-                    reminderConfig: ConversationReminderConfig = .init()) throws {
-        try apply(desired: desired(from: prospects, now: now, horizonDays: horizonDays,
-                                   reminderConfig: reminderConfig), client: client)
+    static func run(prospects: [Prospect], now: Date, client: OmniFocusClient, horizonDays: Int = 14) throws {
+        try apply(desired: desired(from: prospects, now: now, horizonDays: horizonDays), client: client)
     }
 
     // The OmniFocus I/O half, over value types only, so it can run off the main actor while the

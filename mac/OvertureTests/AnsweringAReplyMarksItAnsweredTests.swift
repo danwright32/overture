@@ -163,17 +163,18 @@ struct AnsweringAReplyMarksItAnsweredTests {
         #expect(afterAnswer > heAnswered)
     }
 
-    // Once he says where it stands, the answered stamp is irrelevant: the state's own cadence takes over.
-    @Test func aConversationStateTakesOverOnceHeSetsOne() throws {
+    // #2397: with the states retired, answering is the whole of it. The reply stops being work Dan owes,
+    // and the row keeps its place in the queue on the tracks that remain (the nudge sequence, and the
+    // post-event prompt once the date passes) rather than on a cadence he had to set by hand.
+    @Test func answeringIsTheWholeOfItNowThatThereIsNoStateToSet() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx)
         let r = awaitingAnAnswer(p)
+
         r.recordAnswerSent(now: heAnswered)
-        r.conversationState = .interested
-        r.conversationStateSetAt = heAnswered
 
         #expect(!r.hasUnhandledReply)
-        #expect(ReachedOutQueue.nextReachOut(for: r, of: p, now: heAnswered) != nil)
+        #expect(!p.hasUnhandledReply, "and the show agrees, from the one predicate")
     }
 }
 

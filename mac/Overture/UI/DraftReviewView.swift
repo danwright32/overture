@@ -42,10 +42,6 @@ struct DraftReviewView: View {
     var onReopenOutcome: () -> Void = {}
     // #769: Dan's answer to "was that this show, or the whole org?"
     var onSetOrgDoNotContact: (Bool) -> Void = { _ in }
-    // Per-contact conversation state (#652): a distinct vocabulary from onMarkContact's terminal
-    // outcomes, mirroring FollowUpsView's own set/confirm split.
-    var onSetRecipientConversationState: (_ recipientId: String, _ state: ConversationState) -> Void = { _, _ in }
-    var onConfirmRecipientConversationState: (_ recipientId: String) -> Void = { _ in }
     var onDismissContactReply: (_ recipientId: String) -> Void = { _ in }
     var onDismissContactBounce: (_ recipientId: String) -> Void = { _ in }
     // #388: Dan dismissing a specific heuristic "looks like the venue" guess as wrong.
@@ -834,7 +830,6 @@ struct DraftReviewView: View {
                             .background(Capsule().strokeBorder(ContactRowControls.Kind.outcome.accent.color.opacity(0.4), lineWidth: 1))
                     }
                     .menuStyle(.borderlessButton).fixedSize()
-                    stateControl(for: c)
                     if c.isAutoReplied {
                         Button("Not a real reply") { onDismissContactReply(c.id) }
                             .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
@@ -920,17 +915,6 @@ struct DraftReviewView: View {
     // right event-aware reminder fires. A distinct control from the "Mark…" menu beside it (a
     // different vocabulary: terminal outcomes there, in-flight conversation state here), mirroring
     // FollowUpsView's own set/confirm split for the same per-recipient state.
-    private func stateControl(for c: RecipientSnapshot) -> some View {
-        // #1139: this control sets the in-flight CONVERSATION STATE, a different kind of thing from the
-        // "Mark…" outcome menu beside it. Its conversation icon and gold accent (from
-        // ContactRowControls.Kind.conversationState, tested) pair with, but stay clearly distinct from,
-        // the outcome menu's flag + forest, so the two read as a deliberate system rather than duplicates.
-        ConversationStateControl(currentState: c.conversationState, stateSource: c.conversationStateSource,
-                                 systemImage: ContactRowControls.Kind.conversationState.icon,
-                                 accent: ContactRowControls.Kind.conversationState.accent.color,
-                                 onSet: { onSetRecipientConversationState(c.id, $0) },
-                                 onConfirm: { onConfirmRecipientConversationState(c.id) })
-    }
 
     // Always visible once Dan marks a lead lost: an optional note for his own reference
     // (it doesn't change the ranking, which is driven by the soft/hard choice).
@@ -989,8 +973,6 @@ struct DraftReviewView: View {
                                  provenance: .act, sendState: .sent, replied: true, lastReplyText: nil,
                                  resolution: nil, bounced: false, outcomeSource: .manual)
     emma.contactConfidence = .high
-    emma.conversationState = .wantsToBook
-    emma.conversationStateSource = .manual
     item.contacts = [emma]
     item.draftSubject = "Photographing Aurora Strings at Carnegie Hall."
     item.draftBody = "Hi Emma, I photograph performing arts in New York and saw Aurora Strings is at Carnegie Hall. I shoot unobtrusive, no-flash documentary coverage and think it would suit this program."

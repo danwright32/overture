@@ -69,6 +69,6 @@ struct SendConfirmSheetTests {
         let source = SourceGuardHelper.source("Overture/Integration/SendService.swift")
         #expect(!source.isEmpty)
         #expect(source.contains("FollowUp.nudgeContent("))
-        #expect(source.contains("ConversationReminder.nudgeContent("))
+        #expect(source.contains("PostEventPrompt.nudgeContent("))
     }
 }

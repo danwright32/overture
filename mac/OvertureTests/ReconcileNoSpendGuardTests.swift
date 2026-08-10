@@ -84,7 +84,7 @@ struct ReconcileNoSpendGuardTests {
         try ctx.save()
 
         #expect(PrepQueueBuilder.needsPrepEligible(p))   // precondition: it WOULD be picked up by a Prep run
-        #expect(r.conversationState == nil)              // precondition: the reply is unclassified
+        #expect(r.intentHint == nil)                     // precondition: the reply is unread by the model
 
         let scheduler = ReconcileScheduler(context: ctx)
         _ = await scheduler.runSafeReconcilesOnce(now: Date(timeIntervalSince1970: 4_000_000_000))
@@ -93,7 +93,7 @@ struct ReconcileNoSpendGuardTests {
         #expect(p.status == .queued)
         #expect(!p.hasDraft)
         #expect(PrepQueueBuilder.needsPrepEligible(p))
-        // The tick classified nothing: the reply still has no AI-assigned conversationState.
-        #expect(r.conversationState == nil)
+        // The tick classified nothing: the reply still carries no AI-assigned hint.
+        #expect(r.intentHint == nil)
     }
 }

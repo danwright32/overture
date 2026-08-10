@@ -21,7 +21,7 @@ struct StandDownOutreachTests {
     // not optional: forgetting it is what let a stood-down show still be nudged.
     private func sentContact(followUps: Int = 0, sentDaysAgo: Int = 30) -> (Prospect, Recipient) {
         let p = Prospect(naturalKey: "k", groupName: "Aurora Strings", discipline: "music",
-                         venue: "The Room", performanceDate: "2026-06-01", sourceListingURL: nil,
+                         venue: "The Room", performanceDate: "2026-05-01", sourceListingURL: nil,
                          websiteURL: nil, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 6, tier: "mid",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
@@ -152,10 +152,10 @@ struct StandDownDueListTests {
 
     @discardableResult
     private func show(_ ctx: ModelContext, contacts: [String]) -> Prospect {
-        let key = Prospect.makeNaturalKey(groupName: "Aurora Strings", performanceDate: "2026-06-01",
+        let key = Prospect.makeNaturalKey(groupName: "Aurora Strings", performanceDate: "2026-05-01",
                                           venue: "The Room")
         let p = Prospect(naturalKey: key, groupName: "Aurora Strings", discipline: "music",
-                         venue: "The Room", performanceDate: "2026-06-01", sourceListingURL: nil,
+                         venue: "The Room", performanceDate: "2026-05-01", sourceListingURL: nil,
                          websiteURL: nil, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 6, tier: "mid",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
@@ -166,6 +166,7 @@ struct StandDownDueListTests {
                               provenance: .act)
             r.sentAt = p.sentAt
             r.sendState = .sent
+            r.gmailMessageId = "msg-r\(i)"
             p.recipients.append(r)
         }
         ctx.insert(p)
@@ -193,12 +194,12 @@ struct StandDownDueListTests {
     @Test func theDueCountDropsWithTheRow() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx, contacts: ["one@example.org"])
-        #expect(DueWork.counts(prospects: [p], now: now, reminder: .init()).followUps == 1)
+        #expect(DueWork.counts(prospects: [p], now: now).followUps == 1)
 
         p.recipients.first!.standDownOutreach(now: now)
         try? ctx.save()
 
-        #expect(DueWork.counts(prospects: [p], now: now, reminder: .init()).followUps == 0)
+        #expect(DueWork.counts(prospects: [p], now: now).followUps == 0)
         #expect(FollowUp.dueRecipients(from: [p], now: now).isEmpty)
     }
 
@@ -253,10 +254,10 @@ struct StandDownClosingNoteTests {
     }
 
     private func showAwaitingAClosingNote(_ ctx: ModelContext) -> Prospect {
-        let key = Prospect.makeNaturalKey(groupName: "Aurora Strings", performanceDate: "2026-06-01",
+        let key = Prospect.makeNaturalKey(groupName: "Aurora Strings", performanceDate: "2026-05-01",
                                           venue: "The Room")
         let p = Prospect(naturalKey: key, groupName: "Aurora Strings", discipline: "music",
-                         venue: "The Room", performanceDate: "2026-06-01", sourceListingURL: nil,
+                         venue: "The Room", performanceDate: "2026-05-01", sourceListingURL: nil,
                          websiteURL: nil, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 6, tier: "mid",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
@@ -266,9 +267,10 @@ struct StandDownClosingNoteTests {
                           provenance: .act)
         r.sentAt = p.sentAt
         r.sendState = .sent
-        r.replied = true
-        r.repliedAt = now.addingTimeInterval(-80 * 86_400)
-        r.setConversationState(.interested, now: now.addingTimeInterval(-80 * 86_400))
+        // #2397: the prompt demands PROOF a send really happened (#331/#378). Without this the fixture's
+        // own precondition was false and the test would have passed for the wrong reason.
+        r.gmailMessageId = "msg-r0"
+        r.reopenOnReply(at: now.addingTimeInterval(-80 * 86_400))
         p.recipients.append(r)
         ctx.insert(p)
         try? ctx.save()
@@ -279,12 +281,12 @@ struct StandDownClosingNoteTests {
         let ctx = ModelContext(try container())
         let p = showAwaitingAClosingNote(ctx)
         // Only meaningful if this contact really is being reminded about in the first place.
-        #expect(!ConversationReminder.dueRecipients(from: [p], now: now).isEmpty)
+        #expect(!PostEventPrompt.dueRecipients(from: [p], now: now).isEmpty)
 
         p.recipients.first!.standDownClosingNote(now: now)
         try? ctx.save()
 
-        #expect(ConversationReminder.dueRecipients(from: [p], now: now).isEmpty)
+        #expect(PostEventPrompt.dueRecipients(from: [p], now: now).isEmpty)
         // "Not sent": no send was recorded, and no commercial answer was invented on his behalf.
         #expect(p.recipients.first!.followUpCount == 0)
         #expect(p.recipients.first!.lastFollowUpAt == nil)
@@ -297,12 +299,12 @@ struct StandDownClosingNoteTests {
         let p = showAwaitingAClosingNote(ctx)
         p.recipients.first!.standDownClosingNote(now: now)
         try? ctx.save()
-        #expect(ConversationReminder.dueRecipients(from: [p], now: now).isEmpty)
+        #expect(PostEventPrompt.dueRecipients(from: [p], now: now).isEmpty)
 
         p.recipients.first!.resumeClosingNote()
         try? ctx.save()
 
-        #expect(!ConversationReminder.dueRecipients(from: [p], now: now).isEmpty)
+        #expect(!PostEventPrompt.dueRecipients(from: [p], now: now).isEmpty)
     }
 }
 
@@ -321,10 +323,10 @@ struct StandDownScopeTests {
     }
 
     private func show(_ ctx: ModelContext, contacts: [String], replied: Bool = false) -> Prospect {
-        let key = Prospect.makeNaturalKey(groupName: "Aurora Strings", performanceDate: "2026-06-01",
+        let key = Prospect.makeNaturalKey(groupName: "Aurora Strings", performanceDate: "2026-05-01",
                                           venue: "The Room")
         let p = Prospect(naturalKey: key, groupName: "Aurora Strings", discipline: "music",
-                         venue: "The Room", performanceDate: "2026-06-01", sourceListingURL: nil,
+                         venue: "The Room", performanceDate: "2026-05-01", sourceListingURL: nil,
                          websiteURL: nil, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 6, tier: "mid",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
@@ -335,11 +337,9 @@ struct StandDownScopeTests {
                               provenance: .act)
             r.sentAt = p.sentAt
             r.sendState = .sent
-            if replied {
-                r.replied = true
-                r.repliedAt = now.addingTimeInterval(-80 * 86_400)
-                r.setConversationState(.interested, now: now.addingTimeInterval(-80 * 86_400))
-            }
+            // #2397: proof a send really happened, which the post-event prompt demands (#331/#378).
+            r.gmailMessageId = "msg-r\(i)"
+            if replied { r.reopenOnReply(at: now.addingTimeInterval(-80 * 86_400)) }
             p.recipients.append(r)
         }
         ctx.insert(p)
@@ -384,7 +384,7 @@ struct StandDownScopeTests {
         p.standDownOutreach(now: now)
         try? ctx.save()
 
-        #expect(!ConversationReminder.dueRecipients(from: [p], now: now).isEmpty)
+        #expect(!PostEventPrompt.dueRecipients(from: [p], now: now).isEmpty)
     }
 
     // And the row carries the context, because by then the decision is months old.

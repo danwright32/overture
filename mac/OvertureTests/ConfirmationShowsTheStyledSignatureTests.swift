@@ -129,7 +129,7 @@ struct ConfirmationShowsTheStyledSignatureTests {
         r.sentAt = Date()
         r.sendState = .sent
 
-        let c = try #require(SendConfirmation(conversationNudgeFor: r, of: p, kind: .closing, signature: sig))
+        let c = try #require(SendConfirmation(closingNoteFor: r, of: p, signature: sig))
         let shown = try #require(GmailMessage.previewCardHTML(body: c.bodyBeforeSignOff,
                                                               signature: c.signature))
 

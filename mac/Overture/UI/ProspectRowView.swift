@@ -49,8 +49,6 @@ struct ProspectRowView: View {
     // one write (ProspectMutations.recordOutcome), not five buttons each doing their own thing.
     var onRecordOutcome: (ShowOutcome) -> Void = { _ in }
     var onReopenOutcome: () -> Void = {}
-    var onSetRecipientConversationState: (_ recipientId: String, _ state: ConversationState) -> Void = { _, _ in }
-    var onConfirmRecipientConversationState: (_ recipientId: String) -> Void = { _ in }
     var onAddRecipient: (_ email: String, _ name: String?) -> Void = { _, _ in }
     var onRemoveRecipient: (_ recipientId: String) -> Void = { _ in }
     // #2392: an address struck on the TRIAGE card, before the show is prepped. It takes the whole
@@ -187,8 +185,6 @@ struct ProspectRowView: View {
                     onRecordOutcome: onRecordOutcome,
                     onReopenOutcome: onReopenOutcome,
                     onSetOrgDoNotContact: onSetOrgDoNotContact,
-                    onSetRecipientConversationState: onSetRecipientConversationState,
-                    onConfirmRecipientConversationState: onConfirmRecipientConversationState,
                     onDismissContactReply: onDismissContactReply,
                     onDismissContactBounce: onDismissContactBounce,
                     onDismissVenueMatch: onDismissVenueMatch,

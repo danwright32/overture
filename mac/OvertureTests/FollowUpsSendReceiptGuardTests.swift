@@ -1,7 +1,7 @@
 import Testing
 import Foundation
 
-// Regression guard for #499: FollowUpsView.performNudge and performConversationNudge send a
+// Regression guard for #499: FollowUpsView.performNudge and performClosingNote send a
 // follow-up/nudge over Gmail, then swallow the local receipt of that fact with a bare try?
 // context.save(), the same risk #477 fixed in QueueView.performSend/sendReply. Nothing else
 // stops a future edit from quietly reverting either do/catch block back to that bare try?, so
@@ -11,10 +11,10 @@ import Foundation
 @Suite("FollowUps send receipt save guard")
 struct FollowUpsSendReceiptGuardTests {
 
-    private static let guardedFunctions = ["performNudge", "performConversationNudge"]
+    private static let guardedFunctions = ["performNudge", "performClosingNote"]
     private static let forbidden = "try? context.save()"
 
-    @Test func performNudgeAndPerformConversationNudgeNeverRevertToSilentSave() throws {
+    @Test func performNudgeAndPerformClosingNoteNeverRevertToSilentSave() throws {
         let followUpsView = RepoRoot.mac
             .appendingPathComponent("Overture/UI/FollowUpsView.swift")
         let src = try String(contentsOf: followUpsView, encoding: .utf8)

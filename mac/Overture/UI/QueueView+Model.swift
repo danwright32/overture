@@ -599,10 +599,6 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     // exactly what this specific contact will receive instead of the shared draft body. Only ever
     // set when provenance == .performer; defaulted so existing call sites don't need updating.
     var overrideBody: String? = nil
-    // #652: this contact's OWN conversation state, mirroring what QueueItem carries lead-level today,
-    // so the per-contact review controls can read and act on it directly.
-    var conversationState: ConversationState? = nil
-    var conversationStateSource: OutcomeSource? = nil
     var conversationRemindedAt: Date? = nil
     // #1740: Dan stood this contact's outreach down, and when. Carried so the card can SAY so rather than
     // just quietly showing no follow-up activity, which reads the same as a contact nobody got to.
@@ -865,9 +861,18 @@ enum QueueModel {
     // #885 (guard sweep): the bookings filter's own label, and the AI's read of an incoming reply. The
     // second one is a claim about what a MODEL concluded, so the words matter: "AI read" says whose
     // conclusion it is, which is the difference between a hint and a fact.
+    //
+    // #2397: the hint is shown as the MODEL wrote it, with no mapping into a vocabulary of ours. It used to
+    // be translated through the conversation states, which are retired, and inventing a second translation
+    // table would claim more than the hint does.
+    //
+    // Only its punctuation is touched: the model writes machine tokens ("wants_to_book"), and an underscore
+    // on screen is the one part of that Dan should not have to read.
     static func confirmBookingsLabel(count: Int) -> String { "Confirm bookings (\(count))" }
 
-    static func aiReadNote(hint: String) -> String { "AI read: \(replyIntentLabel(hint))" }
+    static func aiReadNote(hint: String) -> String {
+        "AI read: \(hint.replacingOccurrences(of: "_", with: " "))"
+    }
 
     // #2063: who ELSE this reply reaches, or nil when it reaches only the contact whose card it sits on.
     // Nil rather than an empty sentence, so the ordinary one-to-one reply shows no line at all instead of
@@ -986,16 +991,6 @@ enum QueueModel {
     private static func url(_ raw: String?) -> URL? {
         guard let raw, !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         return URL(string: raw)
-    }
-    // Plain-language label for the AI's non-binding reply-intent hint (#420 C6).
-    static func replyIntentLabel(_ raw: String) -> String {
-        switch ReplyIntent(rawValue: raw) {
-        case .interested: return "interested"
-        case .wantsToBook: return "wants to book"
-        case .hasQuestion: return "has a question"
-        case .declined: return "declined"
-        case nil: return raw
-        }
     }
 
     // #350: Choral is no longer its own category (folded into Music); a leftover raw "choral"
@@ -2253,8 +2248,6 @@ extension RecipientSnapshot {
                   replyAudience: SendGroup.replyAudience(of: r),
                   replyDraftModel: r.replyDraftModel,
                   overrideBody: r.overrideBody,
-                  conversationState: r.conversationState,
-                  conversationStateSource: r.conversationStateSource,
                   conversationRemindedAt: r.conversationRemindedAt,
             outreachStoodDownAt: r.outreachStoodDownAt,
                   contactConfidence: r.contactConfidence,

@@ -24,9 +24,10 @@ struct OneRowPerGroupTests {
     private var now: Date { Date(timeIntervalSince1970: 1_800_000_000) }
     private func daysAgo(_ d: Double) -> Date { now.addingTimeInterval(-d * 86_400) }
 
-    private func show(_ ctx: ModelContext, _ group: String = "Shared Send") -> Prospect {
+    private func show(_ ctx: ModelContext, _ group: String = "Shared Send",
+                      event: String? = nil) -> Prospect {
         let p = Prospect(naturalKey: group, groupName: group, discipline: "choral", venue: "V",
-                         performanceDate: nil, sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: event, sourceListingURL: nil, websiteURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -54,13 +55,13 @@ struct OneRowPerGroupTests {
     // one thread, two people, so one conversation to categorise.
     @Test func oneSharedEmailRaisesOneConversation() throws {
         let ctx = ModelContext(try container())
-        let p = show(ctx)
+        let p = show(ctx, "Shared Send", event: "2020-01-01")
         for address in ["aaa@org.example", "zzz@org.example"] {
             let r = contact(p, address, sentAt: daysAgo(6))
             r.replied = true
             r.repliedAt = daysAgo(1)
         }
-        let due = ConversationReminder.dueRecipients(from: [p], now: now)
+        let due = PostEventPrompt.dueRecipients(from: [p], now: now)
         #expect(due.count == 1)
         #expect(due.first?.recipient.id == "aaa@org.example")
     }
@@ -68,30 +69,33 @@ struct OneRowPerGroupTests {
     // And the count Dan reads on the sheet says one thing to do, not two.
     @Test func theDueCountCountsTheConversationOnce() throws {
         let ctx = ModelContext(try container())
-        let p = show(ctx)
+        let p = show(ctx, "Shared Send", event: "2020-01-01")
         for address in ["aaa@org.example", "zzz@org.example"] {
             let r = contact(p, address, sentAt: daysAgo(6))
             r.replied = true
             r.repliedAt = daysAgo(1)
         }
-        #expect(DueWork.counts(prospects: [p], now: now, reminder: .init()).conversations == 1)
+        // One post-event prompt for the show, not one per contact on the shared email.
+        #expect(DueWork.counts(prospects: [p], now: now).afterTheShow == 1)
     }
 
     // MARK: the work a naive collapse would delete
 
-    // A state recorded on the SECOND contact is a real decision Dan made. Collapsing to the lowest id
-    // alone would leave that reminder belonging to a row nothing reads: gone from Due and from Follow-ups
-    // with nothing to bring it back.
-    @Test func aStateSetOnTheSecondContactStillRaisesItsReminder() throws {
+    // #2126's rule, on the track that remains: the collapse to one row per email must happen AFTER the due
+    // test, never by lowest id alone. Filtering first would drop the whole group whenever the
+    // alphabetically first contact was the one not due, and the work would be gone from Due and from
+    // Follow-ups with nothing to bring it back.
+    //
+    // #2397: proved with a contact the first one cannot speak for. `aaa` has bounced, so it earns nothing;
+    // `zzz` is live on a show whose date has passed, so it earns the post-event prompt.
+    @Test func thecollapseHappensAfterTheDueTestNotByLowestIdAlone() throws {
         let ctx = ModelContext(try container())
-        let p = show(ctx)
-        contact(p, "aaa@org.example", sentAt: daysAgo(30))          // no reply, no state, nothing due
-        let zzz = contact(p, "zzz@org.example", sentAt: daysAgo(30))
-        zzz.replied = true
-        zzz.repliedAt = daysAgo(20)
-        zzz.setConversationState(.hasQuestion, now: daysAgo(20))     // due again after 2 days
+        let p = show(ctx, "Shared Send", event: "2020-01-01")
+        let aaa = contact(p, "aaa@org.example", sentAt: daysAgo(30))
+        aaa.bounced = true
+        _ = contact(p, "zzz@org.example", sentAt: daysAgo(30))
 
-        let due = ConversationReminder.dueRecipients(from: [p], now: now)
+        let due = PostEventPrompt.dueRecipients(from: [p], now: now)
         #expect(due.count == 1)
         #expect(due.first?.recipient.id == "zzz@org.example", "the row must stand on the contact that is due")
     }
@@ -133,13 +137,13 @@ struct OneRowPerGroupTests {
     // and one row. The two counts below are deliberately different quantities, not a contradiction.
     @Test func twoSeparateSendsAreTwoConversationsAndOneRow() throws {
         let ctx = ModelContext(try container())
-        let p = show(ctx)
+        let p = show(ctx, "Shared Send", event: "2020-01-01")
         for (address, group) in [("aaa@org.example", "g1"), ("zzz@org.example", "g2")] {
             let r = contact(p, address, sentAt: daysAgo(6), group: group)
             r.replied = true
             r.repliedAt = daysAgo(1)
         }
-        #expect(ConversationReminder.dueRecipients(from: [p], now: now).count == 2)
+        #expect(PostEventPrompt.dueRecipients(from: [p], now: now).count == 2)
         #expect(ReachedOutQueue.activeWithDates(from: [p], now: now).count == 1)
     }
 
@@ -147,12 +151,12 @@ struct OneRowPerGroupTests {
     // has, and must not be folded in with anybody.
     @Test func contactsWithNoSendGroupAreEachTheirOwnRow() throws {
         let ctx = ModelContext(try container())
-        let p = show(ctx)
+        let p = show(ctx, "Shared Send", event: "2020-01-01")
         for address in ["aaa@org.example", "zzz@org.example"] {
             let r = contact(p, address, sentAt: daysAgo(6), group: nil)
             r.replied = true
             r.repliedAt = daysAgo(1)
         }
-        #expect(ConversationReminder.dueRecipients(from: [p], now: now).count == 2)
+        #expect(PostEventPrompt.dueRecipients(from: [p], now: now).count == 2)
     }
 }

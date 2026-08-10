@@ -45,18 +45,17 @@ struct DueWorkTests {
         _ = silentLead(context)
         let prospects = try context.fetch(FetchDescriptor<Prospect>())
 
-        let counts = DueWork.counts(prospects: prospects, now: sent.addingTimeInterval(10 * day),
-                                    reminder: ConversationReminderConfig())
+        let counts = DueWork.counts(prospects: prospects, now: sent.addingTimeInterval(10 * day))
 
         #expect(counts.followUps == 1)
-        #expect(counts.conversations == 0)
+        #expect(counts.afterTheShow == 0)
         #expect(counts.total == 1)
     }
 
     // The rule, in one place: the badge and the sheet header are the SAME number by construction, not by
     // two view bodies happening to agree.
     @Test func theTotalIsTheSumOfBothKinds() {
-        let counts = DueWork.Counts(followUps: 3, conversations: 2)
+        let counts = DueWork.Counts(followUps: 3, afterTheShow: 2)
 
         #expect(counts.total == 5)
     }
@@ -72,8 +71,7 @@ struct DueWorkTests {
         }
         let prospects = try context.fetch(FetchDescriptor<Prospect>())
 
-        let counts = DueWork.counts(prospects: prospects, now: sent.addingTimeInterval(10 * day),
-                                    reminder: ConversationReminderConfig())
+        let counts = DueWork.counts(prospects: prospects, now: sent.addingTimeInterval(10 * day))
 
         #expect(counts.total == 0)
     }
@@ -124,20 +122,15 @@ struct FollowUpCopyTests {
                                       venue: "Weill Recital Hall", attempt: 1))
     }
 
-    // The closing note does a SECOND thing (it also closes the lead out), so its content is marked
-    // closing; a prompt kind (needs a state, or an unconfirmed guess) is not a sendable email at all.
-    @Test func aClosingNoteIsMarkedClosingAndAPromptKindHasNoSendableContent() {
-        let active = ConversationReminder.nudgeContent(kind: .active(.interested), originalSubject: "S",
-                                                       groupName: "G", contactName: "A", venue: "V")
-        #expect(active?.isClosing == false)
-
-        let closing = ConversationReminder.nudgeContent(kind: .closing, originalSubject: "S",
-                                                        groupName: "G", contactName: "A", venue: "V")
+    // The closing note does a SECOND thing (it records the show as never heard back), so its content is
+    // marked closing. #2397: the close-out prompt is not a sendable email at all, and asking for its body
+    // returns nothing rather than an empty message.
+    @Test func aClosingNoteIsMarkedClosingAndTheCloseOutPromptHasNoSendableContent() {
+        let closing = PostEventPrompt.nudgeContent(kind: .closingNote, originalSubject: "S",
+                                                   groupName: "G", contactName: "A", venue: "V")
         #expect(closing?.isClosing == true)
 
-        #expect(ConversationReminder.nudgeContent(kind: .needsState, originalSubject: "S",
-                                                  groupName: "G", contactName: "A", venue: "V") == nil)
-        #expect(ConversationReminder.nudgeContent(kind: .suggested(.interested), originalSubject: "S",
-                                                  groupName: "G", contactName: "A", venue: "V") == nil)
+        #expect(PostEventPrompt.nudgeContent(kind: .closeOut, originalSubject: "S",
+                                             groupName: "G", contactName: "A", venue: "V") == nil)
     }
 }

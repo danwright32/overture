@@ -45,7 +45,7 @@ struct ArchiveContactDeepLinkGuardTests {
 
     @Test func bothFollowUpsRowsPassTheRecipient() throws {
         #expect(!followUpsView.isEmpty)
-        for name in ["row", "conversationRow"] {
+        for name in ["row", "postEventRow"] {
             let body = try SourceGuard.functionBody(named: name, in: followUpsView)
             #expect(body.contains("onOpenInArchive(d.prospect.naturalKey, r.id)"),
                     "FollowUpsView's \(name) View in Archive link doesn't pass the specific recipient (#685).")

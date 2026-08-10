@@ -14,22 +14,31 @@ enum ReachedOutQueue {
     // work that has already arrived are shared, so the two kinds of row sharing one set of date headings
     // cannot drift apart again.
     static func nextReachOut(for r: Recipient, of p: Prospect, now: Date,
-                             followUpConfig: FollowUpConfig = .init(),
-                             reminderConfig: ConversationReminderConfig = .init()) -> Date? {
+                             followUpConfig: FollowUpConfig = .init()) -> Date? {
         NextReachOut.date(isInPlay: isInPlay(r, of: p), now: now) {
-            let reminderDate = ConversationReminder.nextReminderDate(
-                state: r.conversationState, setAt: r.conversationStateSetAt,
-                remindedAt: r.conversationRemindedAt, performanceDate: p.performanceDate,
-                isClosed: !r.standing.isInPlay, hasUnhandledReply: r.hasUnhandledReply,
-                repliedAt: r.replyArrivedAt, source: r.conversationStateSource,
-                answeredAt: r.replyHandledAt,   // #2170: answered, still unstated, stays here without pressure
-                now: now, config: reminderConfig)
-            // All three are `.scheduled`: each track has already decided which moment it is asking for,
-            // and the conversation track does its own arrival dating for the reply case (through the same
-            // NextReachOut.arrived the inquiry side uses).
+            // #2397: the post-event prompt, which is all that is left of the conversation track. Its
+            // trigger is the show's DATE, so it never depended on the state that used to key this.
+            let promptDate = PostEventPrompt.nextPromptDate(for: r, of: p, now: now)
+            // All three are `.scheduled`: each track has already decided which moment it is asking for.
+            // #2118: a reply that has ARRIVED and not been answered is dated through the shared rule, the
+            // same one a direct hire inquiry's reply gets, so both kinds of row sit under the same headings.
             return [.scheduled(nextFollowUp(for: r, now: now, config: followUpConfig)),
                     .scheduled(nextFormDecision(for: r, of: p, config: followUpConfig)),
-                    .scheduled(reminderDate)]
+                    .scheduled(promptDate),
+                    r.hasUnhandledReply ? .waiting(since: r.replyArrivedAt) : .scheduled(nil),
+                    // #2397: the FLOOR. A pitch that went out and has no recorded ending stays on this
+                    // stage whatever else is or is not scheduled, because Dan's rule is that nothing is
+                    // closed unless he closed it.
+                    //
+                    // Without this the row vanished in the gap between answering a reply (which used to be
+                    // held open by the two-day "where does this stand" chase, retired with the states) and
+                    // the show's own date. #2170's decision was explicit that answering clears the pressure
+                    // WITHOUT removing the row, and a live pitch disappearing from the only surface that
+                    // tracks it is the worse half of that pair.
+                    //
+                    // Dated at the show, which is the next moment anything actually happens for it, so an
+                    // open pitch sorts among the rest by when it matters rather than by when it was sent.
+                    .scheduled(EasternDate.date(from: p.performanceDate ?? ""))]
         }
     }
 
@@ -68,15 +77,14 @@ enum ReachedOutQueue {
     // Contacted recipients with outreach still active, each paired with its own next-reach-out date,
     // soonest first. The view formats the date with timingLabel.
     static func activeWithDates(from prospects: [Prospect], now: Date,
-                                followUpConfig: FollowUpConfig = .init(),
-                                reminderConfig: ConversationReminderConfig = .init()) -> [(prospect: Prospect, recipient: Recipient, next: Date)] {
+                                followUpConfig: FollowUpConfig = .init()) -> [(prospect: Prospect, recipient: Recipient, next: Date)] {
         prospects
             .compactMap { p -> (prospect: Prospect, recipient: Recipient, next: Date)? in
                 // #2126: built from the contacts that still have a reach-out date, so a resolved first
                 // contact cannot take a live colleague's whole row down with it.
                 let live = p.recipients.compactMap { r -> (recipient: Recipient, next: Date)? in
-                    nextReachOut(for: r, of: p, now: now, followUpConfig: followUpConfig,
-                                 reminderConfig: reminderConfig).map { (recipient: r, next: $0) }
+                    nextReachOut(for: r, of: p, now: now, followUpConfig: followUpConfig)
+                        .map { (recipient: r, next: $0) }
                 }
                 guard !live.isEmpty else { return nil }
                 // #2396: ONE row per SHOW. Dan judges shows, not contacts: "I really don't care about
@@ -100,9 +108,8 @@ enum ReachedOutQueue {
 
     // Contacted recipients with outreach still active, soonest next-reach-out first.
     static func active(from prospects: [Prospect], now: Date,
-                       followUpConfig: FollowUpConfig = .init(),
-                       reminderConfig: ConversationReminderConfig = .init()) -> [(prospect: Prospect, recipient: Recipient)] {
-        activeWithDates(from: prospects, now: now, followUpConfig: followUpConfig, reminderConfig: reminderConfig)
+                       followUpConfig: FollowUpConfig = .init()) -> [(prospect: Prospect, recipient: Recipient)] {
+        activeWithDates(from: prospects, now: now, followUpConfig: followUpConfig)
             .map { (prospect: $0.prospect, recipient: $0.recipient) }
     }
 
@@ -110,10 +117,9 @@ enum ReachedOutQueue {
     // its contacts he has pitched. #2396: the list under the pill counts shows too now, so this and the row
     // count are the same quantity rather than two that needed reconciling (#1232's note, now removed).
     static func showCount(from prospects: [Prospect], now: Date,
-                          followUpConfig: FollowUpConfig = .init(),
-                          reminderConfig: ConversationReminderConfig = .init()) -> Int {
-        Set(activeWithDates(from: prospects, now: now, followUpConfig: followUpConfig,
-                            reminderConfig: reminderConfig).map { $0.prospect.naturalKey }).count
+                          followUpConfig: FollowUpConfig = .init()) -> Int {
+        Set(activeWithDates(from: prospects, now: now, followUpConfig: followUpConfig)
+            .map { $0.prospect.naturalKey }).count
     }
 
     // Plain-language "when to next reach out", shown on each reached-out row (#223). Anything due

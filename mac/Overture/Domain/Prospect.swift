@@ -1077,14 +1077,15 @@ final class Prospect {
         }
     }
 
-    // A contact replied and nobody has dealt with it: not booked, and some replied / unresolved /
-    // un-bounced contact hasn't had ITS OWN conversation state hand-set yet (#653: per-recipient, not
-    // the lead's legacy field, so triaging one contact -- or a stale lead-level value -- never masks
-    // a different, still-uncategorized contact's reply). Deliberately INDEPENDENT of `isClosed` (#424,
-    // Dan's call) so a late reply on a closed show still surfaces for triage.
+    // A contact replied and nobody has answered it: not booked, and some replied / unresolved /
+    // un-bounced contact still owes a reply. Per-recipient (#653), so answering one contact never masks
+    // a different contact's unanswered reply. Deliberately INDEPENDENT of `isClosed` (#424, Dan's call)
+    // so a late reply on a closed show still surfaces.
+    //
+    // #2397: no longer excluded by a hand-set conversation state, because there is no state to set. What
+    // clears a reply now is ANSWERING it, which `Recipient.hasUnhandledReply` already asks.
     var hasUnhandledReply: Bool {
-        performanceStatus != .booked
-            && recipients.contains { $0.hasUnhandledReply && $0.conversationStateSource != .manual }
+        performanceStatus != .booked && recipients.contains(where: \.hasUnhandledReply)
     }
 
     // Record a lead outcome as Dan's own call (manual source, timestamped, booking-suggestion

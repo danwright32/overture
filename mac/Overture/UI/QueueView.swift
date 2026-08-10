@@ -1173,28 +1173,6 @@ struct QueueView: View {
                     .padding(.horizontal, OVSpacing.md).padding(.vertical, 4)
                     .background(Capsule().fill(ReachedOutRowChrome.answerFill(dueNow: dueNow)))
                 }
-                // #1630: a form pitch gets the state control unconditionally. Overture cannot detect its
-                // reply, so waiting for `replied` to become true would mean waiting forever, and the one
-                // thing that moves the show forward is Dan saying where it stands.
-                if r.replied || r.outreachChannel == .contactForm {
-                    ConversationStateControl(
-                        currentState: r.conversationState, stateSource: r.conversationStateSource,
-                        // #2154: no Confirm here. The row cannot show what they wrote, so confirming from
-                        // it is Dan endorsing a reading he has not seen. It is offered on the reply
-                        // screen, beside the message it is about.
-                        // #2169: on a form row the slot above names the night rather than repeating this
-                        // control's own instruction, so the urgency rides here or it is lost.
-                        accent: ReachedOutRowChrome.stateControlAccent(isDue: dueNow),
-                        offersConfirm: false,
-                        onSet: { state in
-                            ProspectMutations.setRecipientConversationState(QueueItem(p), r.id, state,
-                                                                            prospects: prospects, context: context, feedback: feedback)
-                        },
-                        onConfirm: {
-                            ProspectMutations.confirmRecipientConversationState(QueueItem(p), r.id,
-                                                                                prospects: prospects, context: context, feedback: feedback)
-                        })
-                }
                 // #2112/#2224: closing the pitch out, from the stage Dan stands on rather than the
                 // Archive card he never opens. Unconditional: a show can get its yes at any moment, and a
                 // control that appeared only once the date had passed would be missing on exactly the
@@ -1383,28 +1361,19 @@ struct QueueView: View {
     private func startRowAction(_ r: Recipient, of p: Prospect, now: Date) {
         switch ReachedOutAction.of(r, in: p, now: now, today: today) {
         case .sendNudge:
-            // A conversation with a confirmed state nudges through the conversation track; a still-silent
-            // contact through the follow-up sequence. Both are "Send a follow-up" to Dan, and they are two
-            // different emails underneath, so the confirmation is built from whichever actually applies.
-            if let state = r.conversationState, state.isActive, r.conversationStateSource != .auto,
-               let confirmation = SendConfirmation(conversationNudgeFor: r, of: p, kind: .active(state)) {
-                pendingRowNudge = PendingRowNudge(naturalKey: p.naturalKey, recipientId: r.id,
-                                                  confirmation: confirmation, isClosing: false,
-                                                  isConversation: true)
-            } else if let confirmation = SendConfirmation(followUpFor: r, of: p) {
+            // #2397: one kind of nudge now. The conversation track's own re-touch email went with the
+            // states that chose its wording, so a follow-up is always the silent sequence's own.
+            if let confirmation = SendConfirmation(followUpFor: r, of: p) {
                 pendingRowNudge = PendingRowNudge(naturalKey: p.naturalKey, recipientId: r.id,
                                                   confirmation: confirmation, isClosing: false,
                                                   isConversation: false)
             }
         case .sendClosingNote:
-            guard let confirmation = SendConfirmation(conversationNudgeFor: r, of: p, kind: .closing) else { return }
+            guard let confirmation = SendConfirmation(closingNoteFor: r, of: p) else { return }
             pendingRowNudge = PendingRowNudge(naturalKey: p.naturalKey, recipientId: r.id,
                                               confirmation: confirmation, isClosing: true,
                                               isConversation: true)
-        case .confirmState:
-            ProspectMutations.confirmRecipientConversationState(QueueItem(p), r.id, prospects: prospects,
-                                                                context: context, feedback: feedback)
-        case .sayWhatHappened, .none:
+        case .sayHowItEnded, .sayWhatHappened, .none:
             break   // no control is drawn for these
         }
     }
@@ -1412,11 +1381,10 @@ struct QueueView: View {
     private func performRowNudge(_ pending: PendingRowNudge) {
         pendingRowNudge = nil
         if pending.isConversation {
-            ProspectMutations.sendConversationNudge(pending.naturalKey, pending.recipientId,
-                                                    isClosing: pending.isClosing,
-                                                    prospects: prospects, context: context, feedback: feedback,
-                                                    markSending: { sendState.markSending($0) },
-                                                    clearSending: { sendState.clearSending($0) })
+            ProspectMutations.sendClosingNote(pending.naturalKey, pending.recipientId,
+                                              prospects: prospects, context: context, feedback: feedback,
+                                              markSending: { sendState.markSending($0) },
+                                              clearSending: { sendState.clearSending($0) })
         } else {
             ProspectMutations.sendFollowUp(pending.naturalKey, pending.recipientId,
                                            prospects: prospects, context: context, feedback: feedback,

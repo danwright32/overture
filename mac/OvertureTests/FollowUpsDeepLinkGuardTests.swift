@@ -60,7 +60,7 @@ struct FollowUpsDeepLinkGuardTests {
     // it costs nothing to keep, but nothing may claim to highlight a row until something can select one.
     @Test func rowsStillCarryTheirRecipientId() throws {
         #expect(!followUpsView.isEmpty)
-        for name in ["row", "conversationRow"] {
+        for name in ["row", "postEventRow"] {
             let body = try SourceGuard.functionBody(named: name, in: followUpsView)
             #expect(body.contains(".id(r.id)"),
                     "FollowUpsView's \(name) no longer tags itself with the recipient id (#682).")

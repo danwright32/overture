@@ -70,15 +70,6 @@ enum ReplyClassifyImporter {
                             rec.replyDraftModel = results.model
                         }
                     }
-                    // #653: this recipient's OWN conversation-state suggestion, based on its OWN reply.
-                    // suggestConversationState already no-ops if Dan set this recipient's state by hand.
-                    guard let intent = r.replyIntent else { return }
-                    if rec.conversationStateSource == .manual {
-                        outcome.skippedManual += 1
-                    } else {
-                        rec.suggestConversationState(intent.conversationState, now: Date())
-                        outcome.suggested += 1
-                    }
                 }
             }
         }

@@ -105,53 +105,12 @@ struct ProspectMutationsTests {
         #expect(p.recipients.first?.resolution == .declinedSoft)
     }
 
-    // #652: mirrors markContact's exact pattern (updateRecipient then resumePausedRecipients), since
-    // setting a recipient's conversation state is Dan actively engaging with that contact by hand,
-    // the same signal markContact already treats as "resume this show's other paused siblings".
-    @Test func setRecipientConversationStateSetsItAndResumesPausedRecipients() throws {
-        let ctx = ModelContext(try container())
-        let p = makeProspect(ctx)
-        let target = Recipient(id: "r1", email: "act@example.com", provenance: .act)
-        let paused = Recipient(id: "r2", email: "presenter@example.com", provenance: .presenter)
-        paused.sendStateRaw = SendState.pending.rawValue
-        paused.pausedByReply = true
-        p.recipients = [target, paused]
-        try? ctx.save()
-        let feedback = ActionFeedback()
 
-        ProspectMutations.setRecipientConversationState(QueueItem(p), "r1", .wantsToBook,
-                                                         prospects: [p], context: ctx, feedback: feedback)
-
-        let updated = p.recipients.first { $0.id == "r1" }
-        #expect(updated?.conversationState == .wantsToBook)
-        #expect(updated?.conversationStateSource == .manual)
-        #expect(p.recipients.first { $0.id == "r2" }?.pausedByReply == false)   // sibling resumed
-    }
-
-    @Test func confirmRecipientConversationStateMakesItManualAndResetsTheReminderClock() throws {
-        let ctx = ModelContext(try container())
-        let p = makeProspect(ctx)
-        let target = Recipient(id: "r1", email: "act@example.com", provenance: .act)
-        target.conversationState = .interested
-        target.conversationStateSource = .auto
-        target.conversationRemindedAt = Date(timeIntervalSince1970: 1)
-        p.recipients = [target]
-        try? ctx.save()
-        let feedback = ActionFeedback()
-
-        ProspectMutations.confirmRecipientConversationState(QueueItem(p), "r1",
-                                                            prospects: [p], context: ctx, feedback: feedback)
-
-        let updated = p.recipients.first { $0.id == "r1" }
-        #expect(updated?.conversationStateSource == .manual)
-        #expect(updated?.conversationRemindedAt == nil)
-    }
 
     @Test func remindRecipientLaterReanchorsOnlyThatRecipientsClock() throws {
         let ctx = ModelContext(try container())
         let p = makeProspect(ctx)
         let target = Recipient(id: "r1", email: "act@example.com", provenance: .act)
-        target.conversationState = .interested
         let sibling = Recipient(id: "r2", email: "presenter@example.com", provenance: .presenter)
         p.recipients = [target, sibling]
         try? ctx.save()
@@ -422,9 +381,9 @@ struct ProspectMutationsTests {
         var marked: [String] = []
         var cleared: [String] = []
 
-        ProspectMutations.sendConversationNudge("k", "r1", isClosing: false, prospects: [p], context: ctx, feedback: feedback,
-                                                sender: sender,
-                                                markSending: { marked.append($0) }, clearSending: { cleared.append($0) })
+        ProspectMutations.sendClosingNote("k", "r1", prospects: [p], context: ctx, feedback: feedback,
+                                          sender: sender,
+                                          markSending: { marked.append($0) }, clearSending: { cleared.append($0) })
 
         #expect(marked == ["r1"])
         #expect(cleared.isEmpty)

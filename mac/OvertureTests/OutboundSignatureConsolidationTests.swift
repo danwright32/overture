@@ -18,14 +18,11 @@ struct OutboundSignatureConsolidationTests {
         }
     }
 
-    @Test func conversationRemindersEndAtTheirLastSentence() {
-        for state in [ConversationState.interested, .wantsToBook, .hasQuestion] {
-            let body = ConversationReminder.nudgeBody(for: state, contactName: "Sam",
-                                                      groupName: "The Choir", venue: "Merkin Hall")
-            #expect(!hasSignoff(body), "reminder for \(state) still carries an inline sign-off")
-        }
-        let closing = ConversationReminder.closingNudgeBody(contactName: "Sam", groupName: "The Choir",
-                                                            venue: "Merkin Hall")
+    // #2397: the per-state re-touch bodies went with the states that chose their wording, so the closing
+    // note is the only conversation-track email left to check.
+    @Test func theClosingNoteEndsAtItsLastSentence() {
+        let closing = PostEventPrompt.closingNudgeBody(contactName: "Sam", groupName: "The Choir",
+                                                       venue: "Merkin Hall")
         #expect(!hasSignoff(closing))
     }
 

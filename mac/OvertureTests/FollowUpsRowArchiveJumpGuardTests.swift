@@ -24,9 +24,9 @@ struct FollowUpsRowArchiveJumpGuardTests {
                 "FollowUpsView's silent-follow-up row doesn't offer a jump to the full card in Archive (#686).")
     }
 
-    @Test func conversationRowCallsOnOpenInArchive() throws {
+    @Test func postEventRowCallsOnOpenInArchive() throws {
         #expect(!followUpsView.isEmpty)
-        let body = try SourceGuard.functionBody(named: "conversationRow", in: followUpsView)
+        let body = try SourceGuard.functionBody(named: "postEventRow", in: followUpsView)
         #expect(body.contains("onOpenInArchive(d.prospect.naturalKey, r.id)"),
                 "FollowUpsView's conversation row doesn't offer a jump to the full card in Archive (#686).")
     }

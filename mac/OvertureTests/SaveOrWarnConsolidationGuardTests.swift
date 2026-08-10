@@ -18,11 +18,11 @@ struct SaveOrWarnConsolidationGuardTests {
     private static let queueViewFunctions = [
         "toggleVoiceLearning", "dismissReply", "markContact", "dismissContactReply", "dismissContactBounce",
         "draftReply", "editReplyDraft", "copyReply", "setStatus", "saveDraft",
-        "correctClassification", "setRecipientConversationState",
-        "confirmRecipientConversationState", "remindRecipientLater", "confirmBooking",
+        "correctClassification", "recordOutcome", "reopenOutcome",
+        "remindRecipientLater", "confirmBooking",
         "dismissBookingSuggestion", "rejectBooking", "setLostReason",
     ]
-    private static let followUpsViewFunctions = ["remindLater", "setState", "confirm"]
+    private static let followUpsViewFunctions = ["standDown", "pushOut", "closeOut"]
     private static let dismissedViewFunctions = ["restore"]
 
     private func assertHandlersUseSaveOrWarn(

@@ -15,12 +15,14 @@ struct OmniFocusSyncTests {
                            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
     }
 
-    // A show with ONE recipient carrying the given conversation state, mirroring the old lead-level
-    // helper but seeding the state onto the contact directly (the #650/#652 model).
+    // #2397: a show with ONE sent recipient. What earns an OmniFocus task is no longer a conversation
+    // state Dan set (those are retired) but one of two things: a post-event prompt, which needs
+    // `performanceDate` in the past, or a reply he has not answered.
     @discardableResult
-    private func lead(_ ctx: ModelContext, key: String, state: ConversationState?,
-                      source: OutcomeSource?, replied: Bool = true,
-                      setAt: Date?, performanceDate: String? = nil,
+    // The default show date is in the PAST, because the post-event prompt is what most of these tests are
+    // about: it is the one thing that now earns a task on a date Overture computes.
+    private func lead(_ ctx: ModelContext, key: String, replied: Bool = true,
+                      performanceDate: String? = "1970-04-25",
                       recipientName: String? = "Jane Doe") -> (Prospect, Recipient) {
         let p = Prospect(naturalKey: key, groupName: key, discipline: "choral", venue: "V",
                          performanceDate: performanceDate, sourceListingURL: nil, websiteURL: nil,
@@ -31,10 +33,8 @@ struct OmniFocusSyncTests {
         let r = Recipient(id: key + "@e.com", email: key + "@e.com", name: recipientName, provenance: .act)
         r.sendState = .sent
         r.sentAt = Date(timeIntervalSince1970: 1)
-        r.replied = replied
-        r.conversationStateRaw = state?.rawValue
-        r.conversationStateSourceRaw = source?.rawValue
-        r.conversationStateSetAt = setAt
+        r.gmailMessageId = "m-" + key
+        if replied { r.reopenOnReply(at: Date(timeIntervalSince1970: 2)) }
         ctx.insert(r)
         p.setRecipients([r])
         return (p, r)
@@ -43,13 +43,14 @@ struct OmniFocusSyncTests {
     @Test func desiredCarriesDeferElevenAmAndDueSixPmEasternOnTheDueDay() throws {
         let ctx = ModelContext(try container())
         let now = Date(timeIntervalSince1970: 10_000_000)
-        lead(ctx, key: "warm-lead", state: .wantsToBook, source: .manual, setAt: now)  // wantsToBook = 7d
+        // #2397: the task lands on the day AFTER the show, which is when the prompt starts being owed.
+        lead(ctx, key: "warm-lead", replied: false, performanceDate: "1970-04-25")
         let tasks = OmniFocusSync.desired(from: try ctx.fetch(FetchDescriptor<Prospect>()),
                                           now: now, horizonDays: 14)
         #expect(tasks.count == 1)
         let t = try #require(tasks.first)
         let cal = EasternDate.calendar
-        let dueDay = now.addingTimeInterval(7 * 86_400)
+        let dueDay = try #require(EasternDate.date(from: "1970-04-26"))
         #expect(cal.component(.hour, from: t.deferDate) == 11)
         #expect(cal.component(.hour, from: t.dueDate) == 18)
         #expect(cal.isDate(t.deferDate, inSameDayAs: dueDay))
@@ -61,7 +62,7 @@ struct OmniFocusSyncTests {
     @Test func desiredNoteCarriesLeadKeyThenRecipientThenDueDayInFirstThreeLines() throws {
         let ctx = ModelContext(try container())
         let now = Date(timeIntervalSince1970: 10_000_000)
-        lead(ctx, key: "warm-lead", state: .wantsToBook, source: .manual, setAt: now)
+        lead(ctx, key: "warm-lead")
         let t = try #require(OmniFocusSync.desired(from: try ctx.fetch(FetchDescriptor<Prospect>()),
                                                    now: now, horizonDays: 14).first)
         let lines = t.note.components(separatedBy: "\n")
@@ -74,7 +75,7 @@ struct OmniFocusSyncTests {
     @Test func desiredTitleIncludesShowAndContactName() throws {
         let ctx = ModelContext(try container())
         let now = Date(timeIntervalSince1970: 10_000_000)
-        lead(ctx, key: "Aurora Strings", state: .wantsToBook, source: .manual, setAt: now, recipientName: "Jane Doe")
+        lead(ctx, key: "Aurora Strings", recipientName: "Jane Doe")
         let t = try #require(OmniFocusSync.desired(from: try ctx.fetch(FetchDescriptor<Prospect>()),
                                                    now: now, horizonDays: 14).first)
         #expect(t.title.contains("Aurora Strings"))
@@ -86,7 +87,7 @@ struct OmniFocusSyncTests {
         // still carries an active confirmed conversation state.
         let ctx = ModelContext(try container())
         let now = Date(timeIntervalSince1970: 10_000_000)
-        let (p, _) = lead(ctx, key: "dismissed-but-active", state: .wantsToBook, source: .manual, setAt: now)
+        let (p, _) = lead(ctx, key: "dismissed-but-active", replied: false)
         p.status = .dismissed
         let tasks = OmniFocusSync.desired(from: try ctx.fetch(FetchDescriptor<Prospect>()),
                                           now: now, horizonDays: 14)
@@ -96,26 +97,28 @@ struct OmniFocusSyncTests {
     @Test func desiredExcludesUnconfirmedUncategorizedResolvedAndBeyondHorizon() throws {
         let ctx = ModelContext(try container())
         let now = Date(timeIntervalSince1970: 10_000_000)
-        // No-reply contacts: an .auto suggestion and a needsState contact with nothing to triage stay
-        // out of OmniFocus (the #271 triage only fires when there's an actual reply). A resolved
-        // contact is closed; the confirmed contact's next reach-out is beyond the horizon.
-        lead(ctx, key: "auto", state: .wantsToBook, source: .auto, replied: false, setAt: now)
-        lead(ctx, key: "needsState", state: nil, source: nil, replied: false, setAt: nil)
-        let (_, resolved) = lead(ctx, key: "booked", state: .wantsToBook, source: .manual, setAt: now)
+        // #2397: three ways to earn nothing. A show still AHEAD has no post-event prompt and, with no
+        // reply, nothing to answer. A resolved contact is closed. And a show whose prompt is real but
+        // falls outside the horizon stays out until it is near.
+        lead(ctx, key: "ahead", replied: false, performanceDate: "2030-01-01")
+        let (_, resolved) = lead(ctx, key: "booked")
         resolved.resolution = .booked
-        lead(ctx, key: "farOff", state: .interested, source: .manual, setAt: now)  // interested = 10d > 3d horizon
+        lead(ctx, key: "farOff", replied: false, performanceDate: "1999-01-01")
         let tasks = OmniFocusSync.desired(from: try ctx.fetch(FetchDescriptor<Prospect>()),
                                           now: now, horizonDays: 3)
         #expect(tasks.isEmpty)
     }
 
-    // #271 / Phase 7: a reply Dan hasn't categorized would otherwise leave NO trace in OmniFocus while
-    // he's away (the needsState/.auto guards drop it). Emit a "triage" task instead, keyed by the same
-    // (naturalKey, recipientId) so it dedupes against the eventual follow-up.
-    @Test func desiredEmitsTriageTaskForRepliedUncategorizedRecipient() throws {
+    // #271: a reply Dan has not answered would otherwise leave NO trace in OmniFocus while he is away from
+    // his desk: only an in-app badge he cannot see. Emit a triage task, keyed by the same
+    // (naturalKey, recipientId) so reconcile dedupes it against the eventual follow-up.
+    //
+    // #2397: the show is still AHEAD here, so the post-event prompt does not apply and the unanswered reply
+    // is what earns the task. With the date passed the prompt wins, which the suite above covers.
+    @Test func desiredEmitsTriageTaskForAnUnansweredReply() throws {
         let ctx = ModelContext(try container())
         let now = Date(timeIntervalSince1970: 10_000_000)
-        let (_, r) = lead(ctx, key: "fresh-reply", state: nil, source: nil, replied: true, setAt: nil)
+        let (_, r) = lead(ctx, key: "fresh-reply", replied: true, performanceDate: "2030-01-01")
         let tasks = OmniFocusSync.desired(from: try ctx.fetch(FetchDescriptor<Prospect>()), now: now, horizonDays: 3)
         #expect(tasks.count == 1)
         let t = try #require(tasks.first)
@@ -124,10 +127,10 @@ struct OmniFocusSyncTests {
         #expect(t.title.contains("reply to"))
     }
 
-    @Test func desiredTriagesAnAutoSuggestedRepliedRecipient() throws {
+    @Test func desiredTriagesAnUnansweredReplyOnAShowStillAhead() throws {
         let ctx = ModelContext(try container())
         let now = Date(timeIntervalSince1970: 10_000_000)
-        lead(ctx, key: "auto-reply", state: .wantsToBook, source: .auto, replied: true, setAt: now)
+        lead(ctx, key: "auto-reply", replied: true, performanceDate: "2030-01-01")
         let t = try #require(OmniFocusSync.desired(from: try ctx.fetch(FetchDescriptor<Prospect>()),
                                                    now: now, horizonDays: 3).first)
         #expect(t.naturalKey == "auto-reply")
@@ -140,7 +143,7 @@ struct OmniFocusSyncTests {
         let ctx = ModelContext(try container())
         let day1 = Date(timeIntervalSince1970: 10_000_000)
         let day2 = day1.addingTimeInterval(3 * 86_400)
-        lead(ctx, key: "fresh-reply", state: nil, source: nil, replied: true, setAt: nil)
+        lead(ctx, key: "fresh-reply", replied: true, performanceDate: "2030-01-01")
         let prospects = try ctx.fetch(FetchDescriptor<Prospect>())
         let t1 = try #require(OmniFocusSync.desired(from: prospects, now: day1, horizonDays: 3).first)
         let t2 = try #require(OmniFocusSync.desired(from: prospects, now: day2, horizonDays: 3).first)
@@ -150,18 +153,21 @@ struct OmniFocusSyncTests {
     @Test func desiredDoesNotTriageARecipientWithNoReply() throws {
         let ctx = ModelContext(try container())
         let now = Date(timeIntervalSince1970: 10_000_000)
-        lead(ctx, key: "no-reply", state: nil, source: nil, replied: false, setAt: nil)
+        lead(ctx, key: "no-reply", replied: false, performanceDate: "2030-01-01")
         let tasks = OmniFocusSync.desired(from: try ctx.fetch(FetchDescriptor<Prospect>()), now: now, horizonDays: 3)
         #expect(tasks.isEmpty)
     }
 
-    @Test func desiredPrefersFollowUpOverTriageForAConfirmedRepliedRecipient() throws {
+    // #2397: the post-event prompt outranks the reply triage, because once the show is over the thing Dan
+    // owes is an ending rather than an answer. Both are keyed on the same (naturalKey, recipientId), so
+    // reconcile replaces one with the other rather than leaving him two chores for one show.
+    @Test func desiredPrefersThePostEventPromptOverTheReplyTriage() throws {
         let ctx = ModelContext(try container())
         let now = Date(timeIntervalSince1970: 10_000_000)
-        lead(ctx, key: "confirmed", state: .wantsToBook, source: .manual, replied: true, setAt: now)
+        lead(ctx, key: "passed", replied: true, performanceDate: "1970-04-25")
         let t = try #require(OmniFocusSync.desired(from: try ctx.fetch(FetchDescriptor<Prospect>()),
                                                    now: now, horizonDays: 14).first)
-        #expect(t.title.contains("follow up"))      // confirmed → the normal follow-up, not a triage task
+        #expect(t.title.contains("follow up"))
         #expect(!t.title.contains("reply to"))
     }
 
@@ -178,7 +184,7 @@ struct OmniFocusSyncTests {
         ctx.insert(p)
         let confirmed = Recipient(id: "a@e.com", email: "a@e.com", name: "Confirmed Contact", provenance: .act)
         confirmed.sendState = .sent; confirmed.sentAt = Date(timeIntervalSince1970: 1); confirmed.replied = true
-        confirmed.setConversationState(.wantsToBook, now: now)
+        confirmed.reopenOnReply(at: Date())
         let uncategorized = Recipient(id: "b@e.com", email: "b@e.com", name: "Uncategorized Contact", provenance: .presenter)
         uncategorized.sendState = .sent; uncategorized.sentAt = Date(timeIntervalSince1970: 1); uncategorized.replied = true
         p.setRecipients([confirmed, uncategorized])
@@ -202,7 +208,7 @@ struct OmniFocusSyncTests {
     @Test func runCreatesDesiredAndCompletesStaleViaTheClient() throws {
         let ctx = ModelContext(try container())
         let now = Date(timeIntervalSince1970: 10_000_000)
-        lead(ctx, key: "warm-lead", state: .wantsToBook, source: .manual, setAt: now)  // desired, due in 7d
+        lead(ctx, key: "warm-lead")  // desired, due in 7d
         // OmniFocus already has a stale task for a contact that's since resolved.
         let fake = FakeClient(existing: [OmniFocusSync.ExistingTask(naturalKey: "gone", recipientId: "gone@e.com", dueDate: now)])
         try OmniFocusSync.run(prospects: try ctx.fetch(FetchDescriptor<Prospect>()),
@@ -218,7 +224,7 @@ struct OmniFocusSyncTests {
         let ctx = ModelContext(try container())
         let now = Date(timeIntervalSince1970: 10_000_000)
         let key = "Choir A|2026-07-01|Weill Recital Hall"
-        lead(ctx, key: key, state: .wantsToBook, source: .manual, setAt: now)
+        lead(ctx, key: key, replied: false)
         let tasks = OmniFocusSync.desired(from: try ctx.fetch(FetchDescriptor<Prospect>()),
                                           now: now, horizonDays: 14)
         let note = try #require(tasks.first?.note)
