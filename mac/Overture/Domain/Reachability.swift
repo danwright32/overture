@@ -349,6 +349,21 @@ enum ReachabilityCopy {
     // waiting on is one Dan started himself and can see elsewhere on screen.
     static let checkAgainBusyHelp =
         "Another run is going. This can start once that finishes."
+
+    // #2392: striking one address before the show is prepped. The help says what removing it BUYS, which
+    // is the reason to do it here rather than after the draft comes back: the run never researches it and
+    // never writes to it, so the money is not spent on somebody Dan already knew was wrong.
+    //
+    // "Remove", deliberately, and never "do not contact": the row's Dismiss menu already carries a
+    // control called "Do not contact", and that one records that an ORGANISATION asked Dan to stop, which
+    // is the one decision in the app that cannot be taken back. This is an ordinary removal he can undo by
+    // typing the address in again, and it borrows the draft-review panel's own word for the same action
+    // (its "Remove this contact"), so one word means one thing across both surfaces.
+    static let removeAddressHelp =
+        "Remove this address. Prep won't research it or write to it, and later checks won't put it back."
+    // The icon has no words of its own, so this is the only thing VoiceOver can read. It names the
+    // address, because "Remove" over four identical buttons says nothing about which one this is.
+    static func removeAddressLabel(_ email: String) -> String { "Remove \(email)" }
     static let recheckRunning = "Researching this show again"
     // Asked for, and nothing running: not started yet, or a run ended before reaching this show. The
     // sentence says only what is true of both, and the control beside it says what to do.

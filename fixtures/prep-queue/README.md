@@ -73,3 +73,11 @@ all", which is a claim about the page: on ICB Productions' "Summer Lovin'" the p
 company twice while the flag was true, and the run was told there was nothing to find. Additive, so every
 earlier fixture still decodes with it absent. Absent means the app's narrow parse found no credit, never
 that the page names nobody.
+
+`v12.json` (#2392) adds an optional `refusedEmails` to each item: addresses Dan struck on that show
+before the run, which it must neither research, write to, nor report back. Additive, so every earlier
+fixture still decodes with it absent, and ABSENT is deliberately different from an empty list (almost
+every show has nothing to say here, and the run should not be handed a list to reason about). The app
+refuses the same addresses again at ingest through the record the strike wrote, so a run that ignores
+the field costs money rather than putting somebody back on Dan's card. Asserted by
+`PrepQueueContractTests`.

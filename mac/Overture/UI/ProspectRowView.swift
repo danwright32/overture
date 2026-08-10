@@ -49,6 +49,10 @@ struct ProspectRowView: View {
     var onConfirmRecipientConversationState: (_ recipientId: String) -> Void = { _ in }
     var onAddRecipient: (_ email: String, _ name: String?) -> Void = { _, _ in }
     var onRemoveRecipient: (_ recipientId: String) -> Void = { _ in }
+    // #2392: an address struck on the TRIAGE card, before the show is prepped. It takes the whole
+    // address rather than a recipient id because the two kinds are removed by different routes: one has a
+    // Recipient row on this show, the other is printed from the organisation's own answer and has none.
+    var onRemoveContactAddress: (_ address: QueueItem.DisplayedAddress) -> Void = { _ in }
     var onDismissContactReply: (_ recipientId: String) -> Void = { _ in }
     var onDismissContactBounce: (_ recipientId: String) -> Void = { _ in }
     var onDismissVenueMatch: (_ recipientId: String) -> Void = { _ in }
@@ -647,15 +651,31 @@ struct ProspectRowView: View {
             // addresses wrapped. Dan's call, 2026-07-28: the caveat belongs in the badge above, said once,
             // and this line goes back to being a plain right-justified list of addresses.
             VStack(alignment: .trailing, spacing: 1) {
-                ForEach(emails, id: \.self) { email in
-                    Text(email)
-                        .font(OVType.meta)
-                        .foregroundStyle(OVColor.inkSoft)
-                        .textSelection(.enabled)
-                        // Wrap rather than truncate: an address Dan cannot read in full is no better than
-                        // no address, and this column is narrow.
-                        .fixedSize(horizontal: false, vertical: true)
-                        .multilineTextAlignment(.trailing)
+                ForEach(item.displayedContactAddresses) { address in
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        // #2392: the strike, before the prep run. The same xmark.circle the draft-review
+                        // panel uses for a still-pending contact (ContactRowControls), so removing an
+                        // address means the same thing and looks the same wherever Dan meets it.
+                        //
+                        // Visible at rest, not on hover: an interactive element styled like static text
+                        // ships as an invisible feature (L49), and this one exists precisely because he
+                        // was looking straight at the addresses with nothing to do about them.
+                        Button { onRemoveContactAddress(address) } label: {
+                            Image(systemName: "xmark.circle")
+                                .foregroundStyle(OVColor.inkFaint)
+                        }
+                        .buttonStyle(.plain)
+                        .help(ReachabilityCopy.removeAddressHelp)
+                        .accessibilityLabel(ReachabilityCopy.removeAddressLabel(address.email))
+                        Text(address.email)
+                            .font(OVType.meta)
+                            .foregroundStyle(OVColor.inkSoft)
+                            .textSelection(.enabled)
+                            // Wrap rather than truncate: an address Dan cannot read in full is no better
+                            // than no address, and this column is narrow.
+                            .fixedSize(horizontal: false, vertical: true)
+                            .multilineTextAlignment(.trailing)
+                    }
                 }
             }
         } else {

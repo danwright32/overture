@@ -135,6 +135,22 @@ struct PrepQueueItem: Codable, Equatable, Sendable {
     // found none, which is NOT "the page names nobody": the run still reads the text itself, where a
     // founder's own company is often named in a bio the parse deliberately will not touch.
     var organisationNamedOnListing: String? = nil
+    // v12 (#2392): addresses Dan has STRUCK on this show. Do not research them, do not write to them, and
+    // do not report them back as contacts.
+    //
+    // They are here because the removal is meant to stop the run SPENDING on an address he already knew
+    // was wrong, not merely to drop what it brings home. Dan's report was a card reading "10 found, 4
+    // reachable" over three personal gmail accounts and the act's own domain: he could see at a glance
+    // which were useless, and the only control anywhere was in the draft-review panel, after the run had
+    // been paid for.
+    //
+    // The app refuses them again at INGEST regardless (PrepImporter reads the same refusal record), so a
+    // run that ignores this field costs money rather than putting somebody back on Dan's card. Both
+    // halves are wanted: a rule that lives only in a prompt is a hope (L27).
+    //
+    // ABSENT on the overwhelming majority of items and deliberately not an empty array, so the run is not
+    // asked to reason about a list that is almost always nothing.
+    var refusedEmails: [String]? = nil
 }
 
 // What the app read at a show's own listing URL, handed to the Prep run as material for the draft.
@@ -192,7 +208,7 @@ enum PrepRunIntent: Equatable, Sendable {
 }
 
 enum PrepQueueBuilder {
-    static let version = 11
+    static let version = 12
 
     // #1666: the wire vocabulary of a queue item's `reprepMode` (#367), named rather than written out at
     // each use, so the string that crosses to the run and the string a surface reads back are one spelling.

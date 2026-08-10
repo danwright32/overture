@@ -40,6 +40,8 @@ struct ArchiveView: View {
     // #1598 Phase 5: the organisation answer ledger, so an archived row reads the same as it does in the
     // queue. Unlike QueueView this query is already the WHOLE store, so it doubles as the gate's corpus.
     @Query private var orgAnswers: [OrgReachabilityAnswer]
+    // #2392: struck addresses, so an archived card prints the same list the queue does.
+    @Query private var refusedAddresses: [RefusedContactAddress]
     // #1719: the same corrections the queue applies, so one surface cannot disagree with the other.
     @Query private var promotedProducers: [PromotedProducer]
     @Query private var demotedHouses: [DemotedHouse]
@@ -80,7 +82,8 @@ struct ArchiveView: View {
         QueueModel.items(from: prospects, answers: orgAnswers,
                          overrides: ProducerOverrides(promotedRows: promotedProducers,
                                                       demotedRows: demotedHouses),
-                         sources: watchedSources)
+                         sources: watchedSources,
+                         refusals: ContactRefusal.ledger(from: refusedAddresses))
     }
 
     private var filtered: [QueueItem] {

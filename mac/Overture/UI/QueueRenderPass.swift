@@ -59,6 +59,9 @@ enum QueueRenderPass {
         var inquiries: [Inquiry]
         var orgAnswers: [OrgReachabilityAnswer]
         var sources: [WatchedSource] = []
+        // #2392: the addresses Dan has struck, as a value. Read by the CALLER from its own @Query, on the
+        // same rule as everything else here: this pass may not reach the store or the filesystem itself.
+        var refusals: ContactRefusal.Ledger = .none
         var overrides: ProducerOverrides = .none
         var geo: GeoRefusals = .none
         var today: String
@@ -84,7 +87,7 @@ enum QueueRenderPass {
         // computed property that wants a row.
         let items = QueueModel.items(from: i.prospects.all, answers: i.orgAnswers,
                                      corpus: i.allProspects.all, overrides: i.overrides,
-                                     sources: i.sources, now: i.now)
+                                     sources: i.sources, refusals: i.refusals, now: i.now)
         #if DEBUG
         QueueRenderCounter.recordDerivation(inputs: i.trace, rows: items)
         #endif

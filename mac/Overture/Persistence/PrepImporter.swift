@@ -272,8 +272,19 @@ enum PrepImporter {
         // provenance is ambiguous within this batch, every contact of it is always appended fresh.
         let provenanceCounts = Dictionary(grouping: contacts) { $0.provenance ?? "" }.mapValues(\.count)
 
+        // #2392: the addresses Dan struck before this run. Read ONCE per show rather than per contact,
+        // and only when there is something to check.
+        let refusals = ContactRefusal.ledger(in: context)
+        let orgKey = p.presenter.flatMap { OrgKey.stored(for: $0) }
+
         for c in contacts {
             guard let id = Recipient.makeId(email: c.email, formURL: c.formUrl) else { continue }
+            // #2392: an address Dan struck is REFUSED here, not merely dropped from the card. Removing a
+            // still pending recipient hard-deletes it, and the branches below match an incoming contact
+            // to a pending recipient or create one, so without this a deleted row is indistinguishable
+            // from one never found and this very run would put the address straight back. That is the
+            // whole thing striking it before the run exists to prevent.
+            if refusals.isRefused(email: c.email, showKey: p.naturalKey, orgKey: orgKey) { continue }
             let provenance = RecipientProvenance(rawValue: c.provenance ?? "") ?? .act
             let email = (c.email?.isEmpty == false) ? c.email : nil
             let provenanceIsUnambiguous = (provenanceCounts[c.provenance ?? ""] ?? 0) <= 1

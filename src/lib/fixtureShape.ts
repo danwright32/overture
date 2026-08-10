@@ -74,14 +74,14 @@ const OPENER_ARCHETYPE = ["reason-first", "direct-intent"] as const;
 const REPLY_INTENT = ["interested", "wants_to_book", "has_question", "declined"] as const;
 const PROVENANCE = ["act", "performer", "presenter"] as const;
 
-// overture-prep-queue.json (versions 1-11, additive: production at v2+ #586, reprepMode at v3+ #367,
+// overture-prep-queue.json (versions 1-12, additive: production at v2+ #586, reprepMode at v3+ #367,
 // runEndDate + openingNightPassed at v4+ #1122, experimentArmInstruction at v5+ #5,
 // alsoAnswersFor at v6+ #1597, run-level houses at v7+ #1720, showListing at v8+ #1824,
 // onlyTheActIsNamed at v9+ #1856, venueHistory at v10+ #1887,
-// organisationNamedOnListing at v11+ #2259)
+// organisationNamedOnListing at v11+ #2259, refusedEmails at v12+ #2392)
 export function assertPrepQueueShape(data: unknown, file: string, expectedVersion: number): void {
   const root = requireObject(data, file, "(root)");
-  const version = requireVersion(root.version, file, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+  const version = requireVersion(root.version, file, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
   if (version !== expectedVersion) fail(file, `version ${version} does not match filename version ${expectedVersion}`);
   requireString(root.generatedAt, file, "generatedAt");
   // #1720 v7: the RUN-LEVEL house list, the organisations the app has judged to be the building rather
@@ -131,6 +131,10 @@ export function assertPrepQueueShape(data: unknown, file: string, expectedVersio
   // on older versions for the same reason as every field above: a runner predating the rule would ignore
   // it and go on being told, by onlyTheActIsNamed alone, that the page named nobody.
   const listingOrganisationFieldAllowed = version >= 11;
+  // #2392 v12: the addresses Dan struck on this show. Forbidden on older versions for the same reason as
+  // every field above: a runner predating the rule would ignore it and go on spending on an address he
+  // had already refused.
+  const refusedEmailsFieldAllowed = version >= 12;
   items.forEach((item, i) => {
     const o = requireObject(item, file, `items[${i}]`);
     requireString(o.naturalKey, file, `items[${i}].naturalKey`);
@@ -201,6 +205,27 @@ export function assertPrepQueueShape(data: unknown, file: string, expectedVersio
       }
     } else if (o.organisationNamedOnListing !== undefined) {
       fail(file, `items[${i}].organisationNamedOnListing must not be present before version 11`);
+    }
+    if (refusedEmailsFieldAllowed) {
+      if (o.refusedEmails !== undefined) {
+        if (!Array.isArray(o.refusedEmails)) fail(file, `items[${i}].refusedEmails must be an array`);
+        // An empty array would tell the run to reason about a list that says nothing. Absent is the only
+        // way to say "he has struck nothing here", and the writer only ever emits the field when it has
+        // something in it.
+        if ((o.refusedEmails as unknown[]).length === 0) {
+          fail(file, `items[${i}].refusedEmails must be absent rather than empty`);
+        }
+        (o.refusedEmails as unknown[]).forEach((e, j) => {
+          requireString(e, file, `items[${i}].refusedEmails[${j}]`);
+          // A blank entry is an address the run cannot compare anything against, so it would silently
+          // protect nobody while looking like a refusal.
+          if (typeof e === "string" && e.trim() === "") {
+            fail(file, `items[${i}].refusedEmails[${j}] must not be blank`);
+          }
+        });
+      }
+    } else if (o.refusedEmails !== undefined) {
+      fail(file, `items[${i}].refusedEmails must not be present before version 12`);
     }
   });
 }

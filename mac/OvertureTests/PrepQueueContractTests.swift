@@ -83,9 +83,24 @@ struct PrepQueueContractTests {
         #expect(roundTripped == expected)
     }
 
-    @Test func theBuilderNowStampsVersion11() {
+    @Test func theBuilderNowStampsVersion12() {
         let q = PrepQueueBuilder.build(from: [], generatedAt: "2026-06-25T00:00:00.000Z", houses: [])
-        #expect(q.version == 11)
+        #expect(q.version == 12)
+    }
+
+    // v12 (#2392): an item may name the addresses Dan struck on that show before the run, which the run
+    // must neither research, write to, nor report back. Additive, so every earlier fixture still decodes
+    // with the field absent, and absent is deliberately different from an empty list: almost every show
+    // has nothing to say here and the run should not be handed a list to reason about.
+    @Test func theV12FixtureNamesTheAddressesDanStruck() throws {
+        let decoded = try JSONDecoder().decode(PrepQueue.self, from: try fixture("v12.json"))
+        #expect(decoded.version == 12)
+        #expect(decoded.items[1].refusedEmails
+                == ["harbourwindsfan@gmail.com", "info@theexampleroom.example"])
+        #expect(decoded.items[0].refusedEmails == nil)
+        // The earlier fixture, unchanged, still decodes and says nothing about strikes.
+        let v11 = try JSONDecoder().decode(PrepQueue.self, from: try fixture("v11.json"))
+        #expect(v11.items.allSatisfy { $0.refusedEmails == nil })
     }
 
     // v2 (#586): the queue item gains an optional `production` (self / agency / unknown, from
