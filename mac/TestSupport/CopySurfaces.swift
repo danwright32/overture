@@ -143,6 +143,13 @@ enum CopySurfaces {
 }
 
 extension CopySurfaces.Report {
+    // #2349: the scanned-file count is deliberately NOT printed, for the same reason it left the copy
+    // inventory's header. It moves whenever any Swift file is added anywhere in the app, including one
+    // that renders nothing, so two branches open at once each recorded their own and the second went red
+    // on main purely because the number had drifted underneath it. `filesScanned` still exists on this
+    // value and is still asserted in CopySurfacesTests, so what proves the scan ran is the test, never a
+    // number in a checked-in file. What remains is the count of files that DO render a container, which
+    // moves only when one starts or stops doing so.
     func render() -> String {
         var out = """
         # Where Overture's messages render
@@ -159,7 +166,7 @@ extension CopySurfaces.Report {
         That is not knowable from one file, since a sentence declared in one view routinely surfaces
         through another, and a wrong label would be worse than none.
 
-        Scanned \(filesScanned) source files; \(byFile.count) of them render at least one container.
+        \(byFile.count) files render at least one container.
 
         ## Surfaces where a message can go astray
 
