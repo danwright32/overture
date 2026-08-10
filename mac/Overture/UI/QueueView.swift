@@ -824,11 +824,16 @@ struct QueueView: View {
         // group's id is its date either way, and the stage was just set to the one containing this key.
         jumpTarget = QueueModel.scrollGroupID(containing: key, among: items)
             .map(QueueJumpRequest.init(group:))
-        // Stage two: once that group is on screen its rows are realized, so nudge the row itself into
-        // the middle. If this runs before the layout settles it simply no-ops, leaving Dan on the right
-        // date, which is the old behavior's best case rather than its actual one.
+        // Stage two: once that group is on screen its rows are realized, so nudge the row itself to the
+        // top. If this runs before the layout settles it simply no-ops, leaving Dan on the right date,
+        // which is the old behavior's best case rather than its actual one.
+        //
+        // #1928: the top, not the middle. Searching for a show and landing it halfway down the screen
+        // reads as having jumped to the card above it, because the thing you went looking for has
+        // unrelated cards sitting over it. The away-alert jump below already lands at the top, and the
+        // two are one behaviour as far as anyone using this can tell.
         DispatchQueue.main.async {
-            withAnimation { proxy.scrollTo(key, anchor: .center) }
+            withAnimation { proxy.scrollTo(key, anchor: .top) }
         }
         // #1922: clears only if this jump's mark is still the one showing, so a second jump landing inside
         // these 2.5 seconds does not have its mark wiped by the first jump's timer.

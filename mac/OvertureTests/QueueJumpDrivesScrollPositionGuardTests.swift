@@ -57,6 +57,32 @@ struct QueueJumpDrivesScrollPositionGuardTests {
         #expect(holder.contains("topGroup = target.group"))
     }
 
+    // #1928: and both jumps LAND the row in the same place, at the top.
+    //
+    // Dan, walking the Debug build 2026-08-01: searching for a show jumped every time but left the row
+    // "halfway down the screen", which reads as having jumped to the card above it rather than to the
+    // one he asked for. When you search for a specific show you are looking for it, so putting it at the
+    // top with its context below reads as an answer; putting it in the middle puts unrelated cards above
+    // the thing you went looking for.
+    //
+    // Asserted for BOTH jumps together, because they are one behaviour arriving by two routes (a search
+    // pick or an OmniFocus tap, and a tapped away alert) and a person cannot tell which route brought
+    // them. The away-alert path already landed at the top, so the two disagreed about where a jump ends,
+    // which is the kind of difference that is invisible in code and obvious on screen.
+    @Test func bothJumpsLandTheRowAtTheTop() {
+        for jump in ["private func navigateToLead(_ key: String, proxy: ScrollViewProxy) {",
+                     "private func focusOnLeads(_ keys: [String], proxy: ScrollViewProxy) {"] {
+            guard let body = SourceGuardHelper.propertyBody(jump, in: queueView) else {
+                Issue.record("expected to find the body of \(jump)")
+                continue
+            }
+            #expect(body.contains("anchor: .top"),
+                    "\(jump) should leave the row Dan asked for at the top of the queue")
+            #expect(!body.contains("anchor: .center"),
+                    "\(jump) leaves the row mid screen, which reads as jumping to the card above it")
+        }
+    }
+
     // The scroll targets are namespaced at the point they are drawn, so the show group and the hire
     // inquiry group on one date stay two distinct targets in the one layout.
     @Test func theTwoKindsOfGroupAreDrawnWithDistinctIDs() {
