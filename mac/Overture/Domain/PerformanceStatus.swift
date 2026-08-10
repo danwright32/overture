@@ -84,9 +84,14 @@ extension PerformanceStatus {
         }
     }
 
-    // The show's status from its current contacts. Booked stays owned by the lead outcome
-    // (DownbeatBooking / a manual booking); this reads it as the top-precedence input.
+    // #2396: the SHOW's own recorded ending wins, because that is where the fact lives now (#2394). Nothing
+    // has to be copied onto a contact for this to be right, which is what removes the transitional mirror
+    // #2395 declared.
+    //
+    // Falls through to the contact-derived status when no ending is recorded, so this is a precedence rather
+    // than a replacement and every show still in play reads exactly as it did.
     static func of(_ prospect: Prospect) -> PerformanceStatus {
-        derive(prospect.recipients.map(\.standing), leadBooked: prospect.outcome == .booked)
+        if let recorded = prospect.showOutcome?.asPerformanceStatus { return recorded }
+        return derive(prospect.recipients.map(\.standing), leadBooked: prospect.outcome == .booked)
     }
 }

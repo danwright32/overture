@@ -114,18 +114,16 @@ struct ReachedOutMergeTests {
             prospects: [(prospect: p, recipient: a, next: day("2026-01-12")),
                         (prospect: p, recipient: b, next: day("2026-01-12"))],
             inquiries: [inq], now: day("2026-01-05"))
-        let counts = QueueModel.reachedOutNoteCounts(entries)
-
-        // Three rows on screen: two contacts for one show, plus the inquiry.
+        // #2396: the caller hands over one entry per SHOW now, so this asserts what the merge does with
+        // what it is given: it interleaves prospect rows and inquiry rows without dropping either. The
+        // per-contact fan-out it used to count is gone, along with the note that explained it.
         #expect(entries.count == 3)
-        #expect(counts.contacts == 3)
-        #expect(counts.shows == 2)
     }
 
-    // Two contacts on ONE show is the fan-out the note exists to explain, and it must still read that
-    // way when no inquiry is present.
-    @Test("with no inquiries the note counts exactly what it always did")
-    func noteUnchangedWithoutInquiries() throws {
+    // #2396: with no inquiries the merge is a pass-through, and every row it is handed reaches the screen.
+    // The check that matters is that nothing is silently dropped on the way.
+    @Test("with no inquiries every row handed in reaches the screen")
+    func everyProspectRowSurvivesWithoutInquiries() throws {
         let ctx = ModelContext(try container())
         let p = Prospect(naturalKey: "k", groupName: "Test Choir", discipline: "music", venue: "V",
                          performanceDate: "2026-03-01", sourceListingURL: nil, websiteURL: nil,
@@ -141,10 +139,7 @@ struct ReachedOutMergeTests {
             prospects: [(prospect: p, recipient: a, next: day("2026-01-12")),
                         (prospect: p, recipient: b, next: day("2026-01-12"))],
             inquiries: [], now: day("2026-01-05"))
-        let counts = QueueModel.reachedOutNoteCounts(entries)
-
-        #expect(counts.contacts == 2)
-        #expect(counts.shows == 1)
+        #expect(entries.count == 2)
     }
 
     // An inquiry with no reach-out date must not silently vanish from a stage it is placed in. If it

@@ -66,7 +66,9 @@ struct ReachedOutStageTests {
     // Review), even though its LIST stays one row per recipient (#652). So a show pitched to two contacts
     // makes the pill read one fewer than the list, and that is intended: cross-pill consistency (a stage
     // number always means shows) wins over this one pill matching its per-recipient list.
-    @Test func inputsReachedOutPillCountsShowsNotRecipients() throws {
+    // #2396: the list counts shows too now, so the pill and its rows are the same quantity and the tension
+    // this test was written to record is gone.
+    @Test func inputsReachedOutPillAndItsRowsCountTheSameShows() throws {
         let ctx = try context()
         let a = show(ctx, "one", status: .contacted)
         reachedOutContact(ctx, on: a, id: "a@org.example")
@@ -78,8 +80,8 @@ struct ReachedOutStageTests {
         let inputs = AgentInputs.from(prospects: all, now: now, today: today,
                                       gmailConnected: true, prepRunning: false, replyRunAlive: false)
 
-        #expect(ReachedOutQueue.activeWithDates(from: all, now: now).count == 3)   // three recipient rows
-        #expect(inputs.reachedOut == 2)                                           // but two shows
+        #expect(ReachedOutQueue.activeWithDates(from: all, now: now).count == 2)   // two rows, one per show
+        #expect(inputs.reachedOut == 2)                                           // and the pill agrees
     }
 
     // Deep-link routing: a lead already in the reached-out queue focuses the Reached out stage, so a

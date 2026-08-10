@@ -149,10 +149,11 @@ struct ReachedOutQueueTests {
         #expect(list.map(\.prospect.groupName) == ["Overdue", "Fresh"]) // booked excluded; overdue first
     }
 
-    // #652: the actual behavior change from the lead-level version. A show with two contacts, one
-    // overdue and one not yet due, must produce TWO separate entries (not one row for the whole
-    // show), each carrying its own recipient and its own next-reach-out date.
-    @Test func aMultiContactShowProducesOneEntryPerDueRecipient() throws {
+    // #2396 reversed #652 deliberately. A show with two contacts, one overdue and one not yet due, is ONE
+    // row: Dan judges events, not contacts. The row still speaks for a person (nobody replied here, so it is
+    // the contact due soonest) and carries the soonest date across the whole show, so a show cannot sit
+    // lower in the list than its most urgent contact deserves.
+    @Test func aMultiContactShowIsOneRowSpeakingForItsMostUrgentContact() throws {
         let ctx = ModelContext(try container())
         let now = Date(timeIntervalSince1970: 10_000_000)
         let p = makeShow(ctx, group: "Aurora Strings")
@@ -161,15 +162,17 @@ struct ReachedOutQueueTests {
         let fresh = makeRecipient(ctx, on: p, id: "fresh@example.com", sentAt: now, outcome: .noResponse)
 
         let list = ReachedOutQueue.activeWithDates(from: [p], now: now)
-        #expect(list.count == 2)
-        #expect(list.map(\.recipient.id) == [overdue.id, fresh.id])   // soonest (overdue) first
-        #expect(list[0].next < list[1].next)
+        #expect(list.count == 1)
+        #expect(list.first?.recipient.id == overdue.id)
+        #expect(list.first?.next == ReachedOutQueue.nextReachOut(for: overdue, of: p, now: now))
+        #expect(ReachedOutQueue.nextReachOut(for: fresh, of: p, now: now) != nil,
+                "the fresh contact is still being chased, it just does not get a row of its own")
     }
 
-    // #1194: the Reached-out stage PILL counts SHOWS (distinct prospects), like the other stage pills,
-    // even though the LIST under it still shows one row per contacted recipient. A show pitched to two
-    // contacts is one show reached out to, not two, so the pill reads consistently with its neighbours.
-    @Test func showCountCountsDistinctShowsNotRecipients() throws {
+    // #1194 made the PILL count shows while the list counted recipients. #2396 made the list count shows
+    // too, so the pill's number and the rows beneath it are now the same quantity, which is what #1232's
+    // reconciling note existed to explain away.
+    @Test func thepillAndTheRowsCountTheSameThing() throws {
         let ctx = ModelContext(try container())
         let now = Date(timeIntervalSince1970: 10_000_000)
         let sent = now.addingTimeInterval(-86_400)
@@ -180,19 +183,8 @@ struct ReachedOutQueueTests {
         let b = makeShow(ctx, group: "B")
         _ = makeRecipient(ctx, on: b, id: "one@b.org", sentAt: sent)
 
-        #expect(ReachedOutQueue.active(from: [a, b], now: now).count == 3)   // three contacted recipients
-        #expect(ReachedOutQueue.showCount(from: [a, b], now: now) == 2)      // but two shows
+        #expect(ReachedOutQueue.active(from: [a, b], now: now).count == 2)   // two shows, two rows
+        #expect(ReachedOutQueue.showCount(from: [a, b], now: now) == 2)      // and the pill agrees
     }
 }
 
-// #1232: the Reached-out pill counts distinct SHOWS while the list shows one row per contacted recipient,
-// so a show pitched to two contacts makes the pill read lower than the visible rows. A quiet note
-// reconciles the two; it appears only when there are genuinely more contacts than shows.
-extension ReachedOutQueueTests {
-    @Test func contactsAcrossShowsNoteOnlyWhenContactsExceedShows() {
-        #expect(ReachedOutQueue.contactsAcrossShowsNote(contactCount: 3, showCount: 2) == "3 contacts across 2 shows")
-        #expect(ReachedOutQueue.contactsAcrossShowsNote(contactCount: 3, showCount: 1) == "3 contacts across 1 show")
-        #expect(ReachedOutQueue.contactsAcrossShowsNote(contactCount: 2, showCount: 2) == nil)
-        #expect(ReachedOutQueue.contactsAcrossShowsNote(contactCount: 0, showCount: 0) == nil)
-    }
-}

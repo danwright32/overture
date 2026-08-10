@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1217 sentences**, from 402 source files.
+Every sentence Overture can say to Dan: **1216 sentences**, from 402 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1204,7 +1204,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/MenuBarStatus.swift`
 "On this email"
     `UI/SendConfirmSheet.swift`
-"Once you have sent a pitch, the people you are waiting to hear back from show up here, soonest follow-up first. They drop off when you book them, mark them lost, or the follow-ups run out."
+"Once you have sent a pitch, the shows you are waiting to hear back about show up here, soonest follow-up first. A show drops off when you close it out, or when its follow-ups run out."
     `UI/QueueView.swift`
 "One email to everyone"
     `UI/SendConfirmSheet.swift`
@@ -2230,8 +2230,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/VenueDisplay.swift`
 "\(conceptSummary(for: name)) \(detail)"
     `Domain/AgentRoster.swift`
-"\(contactCount) contacts across \(showCount) \(showCount == 1 ? "show" : "shows")"
-    `Domain/ReachedOutQueue.swift`
 "\(contacts.count) contacts"
     `UI/QueueView+Model.swift`
 "\(contacts.count) found, \(reachable) reachable"

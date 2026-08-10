@@ -90,16 +90,10 @@ enum ProspectMutations {
             // reconcile claims it and silently moves it from the manual half of the booking split to the
             // automatic one (#2226).
             if outcome == .booked { model.markOutcomeManually(.booked, now: Date()) }
-            // TRANSITIONAL, removed by #2396. The reached-out stage, the Archive buckets and the derived
-            // performance status all still read the CONTACTS, so writing only the show would leave the row
-            // on screen after Dan closed it, which reads as a control that did nothing. Applied only to
-            // contacts with nothing recorded, so an ending somebody already gave is never overwritten by a
-            // decision about the show.
-            if let resolution = outcome.asRecipientResolution {
-                for r in model.recipients where r.sendState == .sent && r.resolution == nil {
-                    r.markOutcomeManually(resolution: resolution, bounced: false)
-                }
-            }
+            // #2396: nothing is written onto the contacts. The show's own field is what takes the row off
+            // the stage and what every reader of its status goes to, so a copy next to each contact would be
+            // a second home for one fact (L83). Contacts keep only routing facts: this address bounced, this
+            // person replied, use this one next time.
             model.resumePausedRecipients()
         }
         guard context.saveOrWarn(org: item.groupName, feedback: feedback) else { return false }

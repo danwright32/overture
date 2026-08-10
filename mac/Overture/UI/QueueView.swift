@@ -1027,7 +1027,11 @@ struct QueueView: View {
         if entries.isEmpty {
             VStack(spacing: OVSpacing.xs) {
                 Text("No one to follow up with").font(OVType.dateHeading).foregroundStyle(OVColor.ink)
-                Text("Once you have sent a pitch, the people you are waiting to hear back from show up here, soonest follow-up first. They drop off when you book them, mark them lost, or the follow-ups run out.")
+                // #2396: SHOWS, not people. This said "the people you are waiting to hear back from" while
+                // the list drew a row per contact, and both halves changed together: a show is one row now
+                // however many people were emailed about it. "Mark them lost" also went with the old
+                // vocabulary, and the endings are named things now ("Booked", "They said no").
+                Text("Once you have sent a pitch, the shows you are waiting to hear back about show up here, soonest follow-up first. A show drops off when you close it out, or when its follow-ups run out.")
                     .font(OVType.body).foregroundStyle(OVColor.inkSoft).multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity)
@@ -1036,21 +1040,14 @@ struct QueueView: View {
         } else {
             let now = Date()
             let groups = QueueModel.reachOutDateGroups(entries, reachDate: { $0.next })
-            // #1513: counted from the rendered entries, so the note can never describe fewer rows than
-            // the list shows.
-            let counts = QueueModel.reachedOutNoteCounts(entries)
-            let note = ReachedOutQueue.contactsAcrossShowsNote(contactCount: counts.contacts,
-                                                              showCount: counts.shows)
             VStack(alignment: .leading, spacing: OVSpacing.md) {
                 // #1233/#1232: the date headers below are REACH-OUT dates (Dan's call), so say so once here
                 // rather than let them read like the performance-date headers on every other stage.
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Grouped by when to reach out next")
-                        .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
-                    if let note {
-                        Text(note).font(OVType.meta).foregroundStyle(OVColor.inkFaint)
-                    }
-                }
+                // #2396: no reconciling note beneath this any more. It existed because the pill counted
+                // shows while the list counted contacts (#1232), and the list counts shows now, so the two
+                // numbers are the same quantity and there is nothing left to explain away.
+                Text("Grouped by when to reach out next")
+                    .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
                 ForEach(groups) { group in
                     VStack(alignment: .leading, spacing: OVSpacing.sm) {
                         reachOutDateHeader(group)

@@ -96,8 +96,7 @@ struct ClosingAPitchOutFromTheRowTests {
         let waiting = contact(p)
         #expect(waiting.resolution == nil, "the premise: a sent, unanswered contact records nothing")
 
-        waiting.markOutcomeManually(resolution: ShowOutcome.neverHeardBack.asRecipientResolution,
-                                    bounced: false)
+        waiting.markOutcomeManually(resolution: .neverHeardBack, bounced: false)
 
         #expect(waiting.resolution == .neverHeardBack)
         #expect(waiting.resolution != .declinedSoft, "separable from a real 'not now' in reporting")
@@ -136,13 +135,13 @@ struct ClosingAPitchOutFromTheRowTests {
 
     // MARK: - the menu
 
-    // #2395: the endings come from the one vocabulary now, so this asserts the five it offers and the
-    // contact-level record each still keeps in step with while the stage reads the contacts (#2396).
+    // #2395: the endings come from the one vocabulary. #2396: and how each READS as a show status, which is
+    // the reader-side mapping that replaced the contact-level copy this phase removed.
     @Test func themenuOffersTheFiveWaysAPitchEnds() {
         #expect(ShowOutcome.pitched.map(\.label)
                 == ["Booked", "Never heard back", "They said not now", "They said no", "I turned them down"])
-        #expect(ShowOutcome.pitched.map(\.asRecipientResolution)
-                == [.booked, .neverHeardBack, .declinedSoft, .declinedHard, .stoodDown])
+        #expect(ShowOutcome.pitched.map(\.asPerformanceStatus)
+                == [.booked, .lostDoorOpen, .lostDoorOpen, .lostNotInterested, .stoodDown])
     }
 
     // MARK: - recording it
@@ -174,9 +173,11 @@ struct ClosingAPitchOutFromTheRowTests {
                                                  context: ctx, feedback: ActionFeedback())
 
         #expect(ok)
-        #expect(r.resolution == .neverHeardBack)
-        #expect(ReachedOutQueue.nextReachOut(for: r, of: p, now: now) == nil)
         #expect(p.showOutcome == .neverHeardBack, "the ending is recorded on the SHOW (#2394)")
+        // #2396: and NOWHERE else. The contact keeps only routing facts, so the ending is not copied onto
+        // it, and the row leaves the stage because the show's own field says the show is over.
+        #expect(r.resolution == nil)
+        #expect(ReachedOutQueue.nextReachOut(for: r, of: p, now: now) == nil)
         #expect(p.outcome != .booked, "only a booking touches the legacy show-level outcome")
     }
 

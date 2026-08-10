@@ -127,8 +127,11 @@ struct OneRowPerGroupTests {
 
     // MARK: the ordinary cases stay ordinary
 
-    // Two SEPARATE emails on one show are two conversations, not one, and must not be collapsed.
-    @Test func twoSeparateSendsStayTwoRows() throws {
+    // Two SEPARATE emails on one show are two conversations to CHASE, which is why the nudge track still
+    // sees two. #2396 changed what Dan is shown about them: the Reached out stage is one row per SHOW now,
+    // because he judges events rather than contacts, so two conversations about one event are one decision
+    // and one row. The two counts below are deliberately different quantities, not a contradiction.
+    @Test func twoSeparateSendsAreTwoConversationsAndOneRow() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx)
         for (address, group) in [("aaa@org.example", "g1"), ("zzz@org.example", "g2")] {
@@ -137,7 +140,7 @@ struct OneRowPerGroupTests {
             r.repliedAt = daysAgo(1)
         }
         #expect(ConversationReminder.dueRecipients(from: [p], now: now).count == 2)
-        #expect(ReachedOutQueue.activeWithDates(from: [p], now: now).count == 2)
+        #expect(ReachedOutQueue.activeWithDates(from: [p], now: now).count == 1)
     }
 
     // A contact on no send group at all is its own conversation, the shape nearly every row in the store

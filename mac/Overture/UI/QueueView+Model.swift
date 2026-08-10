@@ -1327,27 +1327,6 @@ enum QueueModel {
         return (prospectEntries + inquiryEntries).sorted { $0.next < $1.next }
     }
 
-    // #1513: the numbers behind the "N contacts across M shows" note, counted from the SAME entries the
-    // list renders. Counting only prospects made the note smaller than the rows on screen the moment an
-    // inquiry joined them, and that note sits directly above those rows.
-    //
-    // An inquiry is one contact and one event, so it adds one to each: it can never create the fan-out
-    // (more contacts than shows) the note exists to explain, and it can never hide it either.
-    static func reachedOutNoteCounts(_ entries: [ReachedOutEntry]) -> (contacts: Int, shows: Int) {
-        var showKeys = Set<String>()
-        var contacts = 0
-        for entry in entries {
-            switch entry {
-            case .prospect(let prospect, _, _):
-                contacts += 1
-                showKeys.insert("p:\(prospect.naturalKey)")
-            case .inquiry(_, let row, _):
-                contacts += 1
-                showKeys.insert("i:\(row.id)")
-            }
-        }
-        return (contacts, showKeys.count)
-    }
 
     static func reachOutDateGroups<Row>(_ rows: [Row], reachDate: (Row) -> Date) -> [ReachOutDateGroup<Row>] {
         let cal = easternCalendar
