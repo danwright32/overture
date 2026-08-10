@@ -10,7 +10,9 @@ import Foundation
 @Suite("FollowUpsView user-action save guard")
 struct FollowUpsViewUserActionSaveGuardTests {
 
-    private static let guardedFunctions = ["remindLater", "setState", "confirm"]
+    // #2397: `remindLater`, `setState` and `confirm` went with the conversation-state track. These are the
+    // user actions left on this sheet, and each must still surface a save failure rather than swallow it.
+    private static let guardedFunctions = ["standDown", "pushOut", "closeOut"]
     private static let forbidden = "try? context.save()"
 
     @Test func userActionHandlersNeverRevertToSilentSave() throws {

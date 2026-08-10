@@ -5,23 +5,6 @@ import Foundation
 // fixtures/reply-classify/ guard the shape (#157). naturalKey is an OPAQUE token the workflow must
 // echo back verbatim, never rebuild (the silent-mismatch trap). Sibling in spirit to PrepQueue/PrepResults.
 
-// The AI's read of a reply, mapped to the conversation state it should suggest.
-enum ReplyIntent: String, CaseIterable, Sendable {
-    case interested
-    case wantsToBook = "wants_to_book"
-    case hasQuestion = "has_question"
-    case declined
-
-    var conversationState: ConversationState {
-        switch self {
-        case .interested: return .interested
-        case .wantsToBook: return .wantsToBook
-        case .hasQuestion: return .hasQuestion
-        case .declined: return .declined
-        }
-    }
-}
-
 // #1018: the identity of a single queued reply, used to tell what a run answered from what it dropped
 // (HandoffShortfall). It is the (naturalKey, recipientId) PAIR, not the show alone, because reply-classify
 // is per-recipient: two contacts on one show are two independent queue items, and a run that answers one
@@ -93,8 +76,6 @@ struct ReplyClassifyResult: Codable, Equatable, Sendable {
     var recipientId: String?   // v2 (#392): echoed back so the intent attaches to the right recipient
     var draftSubject: String?  // v3 (#420): the AI-drafted reply subject for this recipient (optional)
     var draftBody: String?     // v3 (#420): the AI-drafted reply body for this recipient (optional)
-
-    var replyIntent: ReplyIntent? { ReplyIntent(rawValue: intent) }
 }
 
 enum ReplyClassifyResultsError: Error, Equatable {

@@ -315,17 +315,17 @@ struct QueueItemSnapshotTests {
         let now = Date(timeIntervalSince1970: 1_000_000)
         let interested = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
         interested.sendState = .sent
-        interested.setConversationState(.interested, now: now)
+        interested.remindLater(now: now)
         let untouched = Recipient(id: "b@present.example", email: "b@present.example", provenance: .presenter)
         untouched.sendState = .sent
         p.setRecipients([interested, untouched])
 
         let item = QueueItem(p)
+        // #2397: the three state fields are retired; the re-anchor stamp survives, because it is what
+        // stops a closing note already sent from coming due again the next morning.
         let a = item.contacts.first { $0.id == "a@act.example" }
-        #expect(a?.conversationState == .interested)
-        #expect(a?.conversationStateSource == .manual)
+        #expect(a?.conversationRemindedAt == now)
         let b = item.contacts.first { $0.id == "b@present.example" }
-        #expect(b?.conversationState == nil)
         #expect(b?.conversationRemindedAt == nil)
     }
 
@@ -402,9 +402,12 @@ struct QueueItemSnapshotTests {
         #expect(s(body: "a draft", requestedAt: Date()).isDraftingReply == false)  // arrived
         #expect(s().isDraftingReply == false)                             // never requested
 
-        #expect(QueueModel.replyIntentLabel("wants_to_book") == "wants to book")
-        #expect(QueueModel.replyIntentLabel("has_question") == "has a question")
-        #expect(QueueModel.replyIntentLabel("weird") == "weird")          // unknown passes through
+        // #2397: the AI's hint is shown verbatim now. It used to be mapped through the conversation-state
+        // vocabulary, and inventing a second translation table for it would say less than the model did.
+        // The model's own words, with only its underscores softened for reading.
+        #expect(QueueModel.aiReadNote(hint: "wants_to_book") == "AI read: wants to book")
+        #expect(QueueModel.aiReadNote(hint: "who_knows") == "AI read: who knows",
+                "an unrecognised hint still reaches Dan, rather than being dropped or renamed")
     }
 
     // #939: QueueModel.items(from:) is what QueueView and ArchiveView actually call to build their rows,

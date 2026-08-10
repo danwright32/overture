@@ -43,13 +43,6 @@ struct ReplyClassifyContractTests {
         }
     }
 
-    @Test func replyIntentMapsToConversationState() {
-        #expect(ReplyIntent.interested.conversationState == .interested)
-        #expect(ReplyIntent.wantsToBook.conversationState == .wantsToBook)
-        #expect(ReplyIntent.hasQuestion.conversationState == .hasQuestion)
-        #expect(ReplyIntent.declined.conversationState == .declined)
-    }
-
     // The exact model the queue fixture encodes: one item with a venue, one with it omitted.
     private let expectedQueue = ReplyClassifyQueue(
         version: 1,
@@ -79,9 +72,9 @@ struct ReplyClassifyContractTests {
         #expect(results.version == 1)
         #expect(results.results.count == 2)
         #expect(results.results[0].naturalKey == "aurora-strings|2026-03-10|carnegie-hall")
-        #expect(results.results[0].replyIntent == .wantsToBook)
+        #expect(results.results[0].intent == "wants_to_book")
         #expect(results.results[1].naturalKey == "lumen-dance|undated|none")
-        #expect(results.results[1].replyIntent == .hasQuestion)
+        #expect(results.results[1].intent == "has_question")
         // v1 carries no recipient discriminator; it decodes to nil under the tolerant gate.
         #expect(results.results[0].recipientId == nil)
     }
@@ -100,7 +93,7 @@ struct ReplyClassifyContractTests {
         let results = try ReplyClassifyResultsDecoder.decode(try fixture("results-v2.json"))
         #expect(results.version == 2)
         #expect(results.results[0].recipientId == "pres@presentingorg.example")
-        #expect(results.results[0].replyIntent == .wantsToBook)
+        #expect(results.results[0].intent == "wants_to_book")
     }
 
     @Test func theBuilderNowStampsVersion3() {
@@ -135,11 +128,11 @@ struct ReplyClassifyContractTests {
         let results = try ReplyClassifyResultsDecoder.decode(try fixture("results-v3.json"))
         #expect(results.version == 3)
         let pres = results.results.first { $0.recipientId == "pres@presentingorg.example" }
-        #expect(pres?.replyIntent == .wantsToBook)
+        #expect(pres?.intent == "wants_to_book")
         #expect(pres?.draftSubject == "Re: Photographing Aurora Strings at Carnegie Hall")
         #expect(pres?.draftBody?.isEmpty == false)
         let act = results.results.first { $0.recipientId == "act@aurorastrings.example" }
-        #expect(act?.replyIntent == .declined)
+        #expect(act?.intent == "declined")
         #expect(act?.draftBody?.isEmpty == false)
     }
 
@@ -184,8 +177,9 @@ struct ReplyClassifyContractTests {
     @Test func anUnknownIntentStillDecodesButAMissingOneDoesNot() throws {
         let unknown = try decoding(
             #"{"version":3,"generatedAt":"now","results":[{"naturalKey":"k","intent":"who_knows"}]}"#)
+        // #2397: the intent is carried as the model wrote it, with no mapping into a vocabulary of ours.
+        // It has always been a non-binding hint; the conversation state it used to map onto is retired.
         #expect(unknown.results[0].intent == "who_knows")
-        #expect(unknown.results[0].replyIntent == nil)   // unrecognized, so no binding intent
 
         #expect(throws: (any Error).self) {
             try decoding(#"{"version":3,"generatedAt":"now","results":[{"naturalKey":"k"}]}"#)

@@ -59,14 +59,13 @@ struct ReconcileSchedulerTests {
                          status: .contacted)
         p.sentAt = Date(timeIntervalSince1970: 1)
         ctx.insert(p)
-        // #653: the conversation state lives on the recipient, not the lead.
+        // #2397: what earns an OmniFocus task is an unanswered reply, or a post-event prompt. No
+        // conversation state to set any more.
         let r = Recipient(id: "contact@warm-lead.example", email: "contact@warm-lead.example", provenance: .act)
         r.sendState = .sent
         r.sentAt = Date(timeIntervalSince1970: 1)
-        r.replied = true
-        r.conversationState = .wantsToBook
-        r.conversationStateSource = .manual
-        r.conversationStateSetAt = now.addingTimeInterval(-30 * 86_400)
+        r.gmailMessageId = "m1"
+        r.reopenOnReply(at: now.addingTimeInterval(-30 * 86_400))
         p.setRecipients([r])
         try ctx.save()
 

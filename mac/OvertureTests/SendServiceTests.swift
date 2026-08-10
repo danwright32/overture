@@ -549,25 +549,10 @@ struct SendServiceTests {
         #expect(p.status == .approved)
     }
 
-    // The same rule on the conversation track, whose claim is shared with the follow-up nudge. `.needsState`
-    // is a prompt for Dan, not a sendable email, so it composes nothing and must hold no claim: a held claim
-    // here would silently refuse the NEXT nudge, including a real one.
-    @Test func anoteThatIsAPromptRatherThanAnEmailHoldsNoClaim() async throws {
-        let ctx = ModelContext(try container())
-        let p = approvedNamed(ctx, group: "Aurora", name: "Emma", email: "emma@act.example",
-                              body: "Hi", ingested: Date(timeIntervalSince1970: 1))
-        let recipient = p.recipients.first!
-        recipient.sentAt = Date(timeIntervalSince1970: 5)
-        recipient.sendState = .sent
-        let sender = CapturingSender()
-
-        #expect(await SendService.sendConversationNudge(recipient, of: p, kind: .needsState,
-                                                        now: Date(timeIntervalSince1970: 10),
-                                                        sender: sender) == false)
-
-        #expect(sender.last == nil)
-        #expect(recipient.nudgeSendClaimedAt == nil, "a claim held here would refuse the next real nudge")
-    }
+    // #2397: the test that used to sit here proved a non-sendable KIND held no claim. That case is now
+    // unrepresentable rather than merely guarded: `sendClosingNote` takes no kind at all, and
+    // `PostEventPrompt.nudgeContent` returns nil for anything but the closing note (asserted in
+    // PostEventPromptTests). A guarantee the type system enforces beats one a test watches for.
 
     @Test func aFailedSendRevertsTheRecipientToPendingNotStuckSending() async throws {
         let ctx = ModelContext(try container())
@@ -885,12 +870,12 @@ struct SendServiceTests {
         let sender = GatedSender()
 
         let firstTask = Task {
-            await SendService.sendConversationNudge(r, of: p, kind: .active(.wantsToBook),
+            await SendService.sendClosingNote(r, of: p,
                                                      now: Date(timeIntervalSince1970: 10), sender: sender)
         }
         while sender.callCount == 0 { await Task.yield() }
 
-        let secondResult = await SendService.sendConversationNudge(r, of: p, kind: .active(.wantsToBook),
+        let secondResult = await SendService.sendClosingNote(r, of: p,
                                                                     now: Date(timeIntervalSince1970: 20), sender: sender)
         #expect(secondResult == false)
         #expect(sender.callCount == 1)
@@ -903,11 +888,11 @@ struct SendServiceTests {
         let ctx = ModelContext(try container())
         let (p, r) = sentContact(ctx, group: "A")
 
-        #expect(await SendService.sendConversationNudge(r, of: p, kind: .active(.wantsToBook),
+        #expect(await SendService.sendClosingNote(r, of: p,
                                                          now: Date(), sender: AlwaysFailSender()) == false)
         #expect(r.nudgeSendClaimedAt == nil)
 
-        #expect(await SendService.sendConversationNudge(r, of: p, kind: .active(.wantsToBook),
+        #expect(await SendService.sendClosingNote(r, of: p,
                                                          now: Date(), sender: FakeSender()) == true)
     }
 
@@ -926,7 +911,7 @@ struct SendServiceTests {
         let replyTask = Task { await SendService.sendReplyDraft(r, of: p, now: Date(timeIntervalSince1970: 10), sender: replySender) }
         while replySender.callCount == 0 { await Task.yield() }
 
-        let nudgeResult = await SendService.sendConversationNudge(r, of: p, kind: .active(.wantsToBook),
+        let nudgeResult = await SendService.sendClosingNote(r, of: p,
                                                                    now: Date(timeIntervalSince1970: 20), sender: CapturingSender())
         #expect(nudgeResult == true)
 

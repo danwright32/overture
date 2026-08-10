@@ -139,7 +139,7 @@ struct RecipientTests {
         r.replyDraftSubject = "Re: Photographing the Clarion Choir"
         r.replyDraftBody = "Thanks for getting back to me. July 4 works well..."
         r.replyDraftRequestedAt = when
-        r.intentHint = ReplyIntent.wantsToBook.rawValue
+        r.intentHint = "wants_to_book"
         #expect(r.replyDraftSubject == "Re: Photographing the Clarion Choir")
         #expect(r.replyDraftBody?.hasPrefix("Thanks") == true)
         #expect(r.replyDraftRequestedAt == when)
@@ -456,7 +456,7 @@ struct RecipientTests {
         r.repliedAt = Date(timeIntervalSince1970: 1_700_000_000)
         r.lastReplyId = "msg-1"
         r.lastReplyText = "Sure, let's talk."
-        r.intentHint = ReplyIntent.wantsToBook.rawValue
+        r.intentHint = "wants_to_book"
         r.replyDraftSubject = "Re: Photographing the Clarion Choir"
         r.replyDraftBody = "Thanks for getting back to me..."
         r.replyDraftRequestedAt = Date(timeIntervalSince1970: 1_700_000_100)
@@ -673,71 +673,6 @@ struct RecipientTests {
         let act = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
         #expect(performer.sendOrderRank == act.sendOrderRank)
         #expect(performer.sendOrderRank == 0)
-    }
-
-    // #650 Phase 1: per-recipient conversation state mirrors the existing Prospect-level one exactly,
-    // except declining resolves only THIS recipient (no cascading suppression of siblings, Dan's
-    // 2026-07-08 decision), and setConversationState also stamps outcomeSource so the recipient drops
-    // out of the separate silent follow-up track (Recipient.isAwaitingFollowUp already reads that flag).
-    @Test func settingAnActiveStateStampsItAndTheManualSource() {
-        let r = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
-        let now = Date(timeIntervalSince1970: 1_000_000)
-        r.setConversationState(.wantsToBook, now: now)
-        #expect(r.conversationState == .wantsToBook)
-        #expect(r.conversationStateSetAt == now)
-        #expect(r.conversationStateSource == .manual)
-        #expect(r.outcomeSource == .manual)
-        #expect(r.resolution == nil)
-    }
-
-    @Test func decliningResolvesOnlyThisRecipientNotTheWholeShow() {
-        let ctx = try! ModelContainer(for: Schema([Prospect.self, Recipient.self]),
-                                      configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
-        let context = ModelContext(ctx)
-        let p = Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: "V",
-                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
-                         priorRelationship: "none", production: "self", profile: "strong",
-                         coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
-                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
-        context.insert(p)
-        let declining = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
-        declining.sendState = .sent
-        let sibling = Recipient(id: "b@presenter.example", email: "b@presenter.example", provenance: .presenter)
-        sibling.sendState = .pending
-        p.setRecipients([declining, sibling])
-
-        declining.setConversationState(.declined, now: Date(timeIntervalSince1970: 2_000_000))
-
-        #expect(declining.resolution == .declinedSoft)
-        #expect(sibling.resolution == nil)            // not cascaded
-        #expect(sibling.sendState == .pending)         // not suppressed
-        #expect(p.outcome != .booked)                  // the lead-level outcome is untouched by this call
-    }
-
-    @Test func suggestSetsAutoAndNeverOverwritesAManualState() {
-        let now = Date(timeIntervalSince1970: 1_000_000)
-        let manual = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
-        manual.setConversationState(.interested, now: now)
-        manual.suggestConversationState(.declined, now: now.addingTimeInterval(100))
-        #expect(manual.conversationState == .interested)   // unchanged
-        #expect(manual.conversationStateSource == .manual)
-
-        let fresh = Recipient(id: "b@act.example", email: "b@act.example", provenance: .act)
-        fresh.suggestConversationState(.wantsToBook, now: now)
-        #expect(fresh.conversationState == .wantsToBook)
-        #expect(fresh.conversationStateSource == .auto)
-        #expect(fresh.outcomeSource == nil)   // an unconfirmed suggestion never stamps manual
-    }
-
-    @Test func confirmFlipsAutoToManualAndRestartsTheClock() {
-        let now = Date(timeIntervalSince1970: 1_000_000)
-        let r = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
-        r.suggestConversationState(.wantsToBook, now: now.addingTimeInterval(-500_000))
-        r.confirmConversationState(now: now)
-        #expect(r.conversationState == .wantsToBook)
-        #expect(r.conversationStateSource == .manual)
-        #expect(r.conversationStateSetAt == now)
-        #expect(r.conversationRemindedAt == nil)
     }
 
     @Test func remindLaterStampsTheReanchor() {

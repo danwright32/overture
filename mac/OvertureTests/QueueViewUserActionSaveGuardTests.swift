@@ -13,8 +13,10 @@ struct QueueViewUserActionSaveGuardTests {
     private static let guardedFunctions = [
         "toggleVoiceLearning", "dismissReply", "markContact", "dismissContactReply", "dismissContactBounce",
         "draftReply", "editReplyDraft", "copyReply", "setStatus", "saveDraft",
-        "correctClassification", "setRecipientConversationState",
-        "confirmRecipientConversationState", "remindRecipientLater", "confirmBooking",
+        // #2397: the two conversation-state mutations went with the state. `recordOutcome` and
+        // `reopenOutcome` are the writes that replaced them, and both must surface a save failure.
+        "correctClassification", "recordOutcome", "reopenOutcome",
+        "remindRecipientLater", "confirmBooking",
         "dismissBookingSuggestion", "rejectBooking", "setLostReason",
     ]
     private static let forbidden = "try? context.save()"

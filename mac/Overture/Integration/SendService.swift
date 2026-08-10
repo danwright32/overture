@@ -245,8 +245,8 @@ enum SendService {
     // decision, already locked in on Recipient.setConversationState). Re-anchors this recipient's own
     // reminder clock. One click = one nudge, never autonomous.
     @discardableResult
-    static func sendConversationNudge(_ recipient: Recipient, of prospect: Prospect,
-                                      kind: ConversationReminder.Kind, now: Date, sender: MailSender) async -> Bool {
+    static func sendClosingNote(_ recipient: Recipient, of prospect: Prospect,
+                                now: Date, sender: MailSender) async -> Bool {
         guard let email = recipient.email, !email.isEmpty, recipient.sentAt != nil else { return false }
         // #2033: the note lands on a thread the whole group is reading, so it is addressed to all of them.
         let group = SendGroup.peers(of: recipient, in: prospect)
@@ -256,10 +256,10 @@ enum SendService {
         //
         // #2030: both refusals now happen BEFORE the claim, so neither can leave it held on a note that
         // was never sent. That is what the explicit claim release here used to be for.
-        guard let content = ConversationReminder.nudgeContent(kind: kind, originalSubject: prospect.draftSubject,
-                                                              groupName: prospect.groupName,
-                                                              isMerged: prospect.isMergedConcert,
-                                                              contactName: recipient.name, venue: prospect.venue),
+        guard let content = PostEventPrompt.nudgeContent(kind: .closingNote, originalSubject: prospect.draftSubject,
+                                                        groupName: prospect.groupName,
+                                                        isMerged: prospect.isMergedConcert,
+                                                        contactName: recipient.name, venue: prospect.venue),
               let mail = OutgoingMail(
                 to: addresses,
                 subject: content.subject,
@@ -275,12 +275,14 @@ enum SendService {
                 r.sendError = nil
                 r.nudgeSendClaimedAt = nil
             }
-            // The closing note still resolves only the contact Dan acted on: Dan's 2026-07-08 decision
-            // that a closing note never cascades to a sibling contact (Recipient.setConversationState) is
-            // about his JUDGEMENT of a person, not about who the email was addressed to.
-            if case .closing = kind {
-                recipient.markOutcomeManually(resolution: .declinedSoft)
-            }
+            // #2397: sending the closing note records the SHOW as never heard back, which is what the note
+            // has always MEANT and what this path did not say. It resolved the lead to a soft decline in
+            // every case, claiming somebody had turned Dan down when nobody had written back at all.
+            //
+            // At the show level, not on the contact, because that is where an ending lives now (#2394) and
+            // because the note is only ever offered when NOBODY on the show replied: there is no per-person
+            // judgement here to keep apart, which is what Dan's 2026-07-08 decision was protecting.
+            prospect.showOutcome = .neverHeardBack
             return true
         } catch {
             for r in group {

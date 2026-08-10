@@ -84,10 +84,10 @@ struct StoodDownClosesTheContactTests {
     }
 
     private func show(_ ctx: ModelContext, contacts: Int = 1, replied: Bool = false) -> Prospect {
-        let key = Prospect.makeNaturalKey(groupName: "Aurora Strings", performanceDate: "2026-06-01",
+        let key = Prospect.makeNaturalKey(groupName: "Aurora Strings", performanceDate: "2026-05-01",
                                           venue: "The Room")
         let p = Prospect(naturalKey: key, groupName: "Aurora Strings", discipline: "music",
-                         venue: "The Room", performanceDate: "2026-06-01", sourceListingURL: nil,
+                         venue: "The Room", performanceDate: "2026-05-01", sourceListingURL: nil,
                          websiteURL: nil, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 6, tier: "mid",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
@@ -102,11 +102,7 @@ struct StoodDownClosesTheContactTests {
             // a staged record. Without this the fixture's own precondition was false and the test would
             // have passed for the wrong reason.
             r.gmailMessageId = "msg-\(i)"
-            if replied {
-                r.replied = true
-                r.repliedAt = now.addingTimeInterval(-80 * 86_400)
-                r.setConversationState(.interested, now: now.addingTimeInterval(-80 * 86_400))
-            }
+            if replied { r.reopenOnReply(at: now.addingTimeInterval(-80 * 86_400)) }
             p.recipients.append(r)
         }
         ctx.insert(p)
@@ -128,21 +124,32 @@ struct StoodDownClosesTheContactTests {
         #expect(ReachedOutQueue.nextReachOut(for: p.recipients.first!, of: p, now: now) == nil)
     }
 
-    // The carve-out Dan asked for, and the reason it is keyed on THIS state rather than on "closed": a
-    // genuine decline still goes quiet, and only a show he stopped working keeps offering the note that
-    // serves the NEXT event.
-    @Test func theClosingNoteStillComesDueButADeclineStaysQuiet() throws {
+    // #2397 changed what silences the post-event prompt, and this is the case that shows why. The old rule
+    // was keyed on a CONTACT's resolution: standing one down kept the note coming, a decline on one made it
+    // go quiet. Both of those are facts about a person, and neither says the SHOW has ended.
+    //
+    // What silences it now is the show carrying a recorded ending, which is Dan's own rule read the other
+    // way round: nothing is closed unless he closed it, so until he does, Overture keeps asking. A contact
+    // declining is exactly when it should ask, because somebody answered and only Dan can say what that
+    // meant for the event.
+    @Test func onlyAnEndingOnTheShowSilencesThePrompt() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx, replied: true)
         let r = p.recipients.first!
 
         ProspectMutations.standDown(prospect: p, recipient: r, scope: .contact, now: now)
         try? ctx.save()
-        #expect(!ConversationReminder.dueRecipients(from: [p], now: now).isEmpty)
+        #expect(!PostEventPrompt.dueRecipients(from: [p], now: now).isEmpty)
 
+        // One contact declining does NOT close the show, so the prompt stays: it is asking Dan what the
+        // event ended as, which is the thing that decline did not answer.
         r.resolution = .declinedSoft
         try? ctx.save()
-        #expect(ConversationReminder.dueRecipients(from: [p], now: now).isEmpty)
+        #expect(!PostEventPrompt.dueRecipients(from: [p], now: now).isEmpty)
+
+        p.showOutcome = .theySaidNo
+        try? ctx.save()
+        #expect(PostEventPrompt.dueRecipients(from: [p], now: now).isEmpty)
     }
 
     // Standing the SHOW down closes every contact on it, which is what "I am not working this event" means.

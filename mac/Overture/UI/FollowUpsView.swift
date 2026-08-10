@@ -33,25 +33,8 @@ struct FollowUpsView: View {
     // within. The recipient reveal below scrolls by a different identity (the contact's id), so this is
     // cleared when a reveal starts, letting proxy.scrollTo own that jump. Its own identity, not the
     // section's display title, so the scroll wiring never becomes a second copy of that copy (#843).
-    private enum ScrollSection: Hashable { case conversations, silent }
+    private enum ScrollSection: Hashable { case afterTheShow, silent }
     @State private var topSection: ScrollSection?
-
-    // The persisted reminder cadence (#178), tunable from the settings popover below. @AppStorage on
-    // the same keys ConversationReminderConfig reads, so the loaded config and the steppers stay in
-    // step. Defaults to the baked values, so timing is unchanged until Dan edits.
-    @AppStorage(ConversationReminderConfig.Keys.wantsToBook)
-    private var wantsToBookDays = ConversationReminderConfig().wantsToBookDays
-    @AppStorage(ConversationReminderConfig.Keys.hasQuestion)
-    private var hasQuestionDays = ConversationReminderConfig().hasQuestionDays
-    @AppStorage(ConversationReminderConfig.Keys.interested)
-    private var interestedDays = ConversationReminderConfig().interestedDays
-    @AppStorage(ConversationReminderConfig.Keys.leadBuffer)
-    private var leadBufferDays = ConversationReminderConfig().leadBufferDays
-
-    private var reminderConfig: ConversationReminderConfig {
-        ConversationReminderConfig(interestedDays: interestedDays, wantsToBookDays: wantsToBookDays,
-                                   hasQuestionDays: hasQuestionDays, leadBufferDays: leadBufferDays)
-    }
 
     // #948: each pending send now carries the branded SendConfirmation the shared SendConfirmSheet
     // renders (the same sheet the main draft send uses), instead of a preview string for a stock alert.
@@ -73,16 +56,17 @@ struct FollowUpsView: View {
             .sorted { ($0.recipient.sentAt ?? .distantPast) < ($1.recipient.sentAt ?? .distantPast) }
     }
 
-    // Already ordered by urgency then soonest event in ConversationReminder.dueRecipients
-    // (domain-owned, #652: per-recipient so one contact on a show can be due while another isn't).
-    private var conversationDue: [ConversationReminder.DueRecipient] {
-        ConversationReminder.dueRecipients(from: prospects, now: Date(), config: reminderConfig)
+    // #2397: the post-event prompts, already ordered by urgency then soonest event in
+    // PostEventPrompt.dueRecipients. The conversation-state chase that used to fill this section is
+    // retired along with the states it chased; what is left is triggered by the show's DATE.
+    private var postEventDue: [PostEventPrompt.DueRecipient] {
+        PostEventPrompt.dueRecipients(from: prospects, now: Date())
     }
 
     // #1770: the cached flag, not the disk read. As written before, this re-opened and JSON-decoded the
     // token file on EVERY access, and the body below reads it once per send button it draws.
     private var gmailConnected: Bool { GmailConnection.shared.isConnected }
-    private var isEmpty: Bool { due.isEmpty && conversationDue.isEmpty }
+    private var isEmpty: Bool { due.isEmpty && postEventDue.isEmpty }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -90,7 +74,7 @@ struct FollowUpsView: View {
                 Text("Due").font(OVType.dateHeading).foregroundStyle(OVColor.ink)
                 // #885: the SAME count RootView's badge shows, from the one definition, so the pill Dan
                 // clicks and the sheet he lands on can never disagree.
-                Text("\(DueWork.counts(prospects: prospects, now: Date(), reminder: reminderConfig).total)")
+                Text("\(DueWork.counts(prospects: prospects, now: Date()).total)")
                     .font(.system(size: 12)).foregroundStyle(OVColor.inkFaint)
                 Spacer()
                 Button("Done") { dismiss() }
@@ -98,21 +82,21 @@ struct FollowUpsView: View {
             .padding(OVSpacing.lg)
             Divider()
             if isEmpty {
-                Text("Nothing to act on. Leads you've emailed show up here for a gentle follow-up, active conversations for a re-touch, and they drop off the moment they reply, book, or you close them out.")
+                Text("Nothing to act on. Shows you've emailed appear here for a gentle follow-up, and again once the date has passed so you can close them out. They drop off the moment you record how one ended.")
                     .font(OVType.body).foregroundStyle(OVColor.inkSoft).multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity, maxHeight: .infinity).padding(OVSpacing.xl)
             } else {
                 ScrollViewReader { proxy in
                     ScrollView {
                         VStack(alignment: .leading, spacing: OVSpacing.lg) {
-                            if !conversationDue.isEmpty {
-                                section("Conversations") {
-                                    ForEach(conversationDue, id: \.recipient.id) { d in
-                                        conversationRow(d, since: sending[d.recipient.id]); Divider()
+                            if !postEventDue.isEmpty {
+                                section("After the show") {
+                                    ForEach(postEventDue, id: \.recipient.id) { d in
+                                        postEventRow(d, since: sending[d.recipient.id]); Divider()
                                     }
                                 }
                                 // #976: identity for the position modifier, so the top section pins.
-                                .id(ScrollSection.conversations)
+                                .id(ScrollSection.afterTheShow)
                             }
                             if !due.isEmpty {
                                 section("Silent follow-ups") {
@@ -143,7 +127,7 @@ struct FollowUpsView: View {
         }
         .sheet(item: $pendingConversation) { p in
             SendConfirmSheet(confirmation: p.confirmation,
-                             onSend: { performConversationNudge(p.id, p.recipientId, isClosing: p.isClosing) },
+                             onSend: { performClosingNote(p.id, p.recipientId) },
                              onCancel: { pendingConversation = nil })
         }
         .actionFeedbackBanner()
@@ -190,15 +174,14 @@ struct FollowUpsView: View {
         .id(r.id)
     }
 
-    // A conversation reminder (#111, per-recipient #652): tagged by reason, with the action its kind
-    // calls for, scoped to ONE contact on the show. #710: see row(_:since:) above for why `since`
-    // is an explicit parameter instead of an internal `self.sending[r.id]` read.
-    func conversationRow(_ d: ConversationReminder.DueRecipient, since: Date?) -> some View {
+    // #2397: a post-event prompt, tagged by reason, with the action its kind calls for. #710: see
+    // row(_:since:) above for why `since` is an explicit parameter rather than an internal read.
+    func postEventRow(_ d: PostEventPrompt.DueRecipient, since: Date?) -> some View {
         let p = d.prospect, r = d.recipient
         return HStack(alignment: .top, spacing: OVSpacing.md) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(p.groupName).font(OVType.groupName).foregroundStyle(OVColor.ink)
-                reasonPill(d.reminder.reason, color: ConversationReminder.accent(for: d.reminder.kind).color)
+                reasonPill(d.prompt.reason, color: PostEventPrompt.accent(for: d.prompt.kind).color)
                 Text(r.email ?? "no contact").font(OVType.body).foregroundStyle(OVColor.inkSoft)
                 // #316: the durable failure surface. A real send failure persists on the recipient
                 // (SendService sets sendError), so it stays visible here until the next successful
@@ -213,30 +196,21 @@ struct FollowUpsView: View {
                     LiveRunLabel(base: "Sending", since: since, timeout: RunTimeouts.send,
                                  font: OVType.meta, color: OVColor.inkSoft)
                 } else {
-                    switch d.reminder.kind {
-                    case .active(let state):
-                        sendButton("Send nudge", enabled: gmailConnected && r.email != nil) {
-                            requestConversationNudge(d, kind: .active(state))
-                        }
-                        Button("Remind me later") { remindLater(d) }
-                            .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
-                    case .closing:
-                        if let note = StandDownCopy.closingNoteOnStoodDownShow(
-                            stoodDownAt: p.outreachStoodDownAt, now: Date()) {
-                            Text(note).font(OVType.tag).foregroundStyle(OVColor.inkFaint)
-                        }
+                    switch d.prompt.kind {
+                    case .closingNote:
                         sendButton("Send closing note", enabled: gmailConnected && r.email != nil) {
-                            requestConversationNudge(d, kind: .closing)
+                            requestClosingNote(d)
                         }
-                        // #1740: Dan may well not want to send a closing note either, and this was the
-                        // same gap as the nudge row: a send button and nothing else.
+                        // #1740: Dan may well not want to send a closing note, and this was the same gap
+                        // as the nudge row: a send button and nothing else.
                         closingNoteMenu(prospect: p, recipient: r)
-                    case .suggested:
-                        // An AI guess awaiting Dan: confirm it (onto the timed track) or correct it.
-                        sendButton("Confirm", enabled: true) { confirm(d) }
-                        setStateMenu(d, label: "Change")
-                    case .needsState:
-                        setStateMenu(d, label: "Set a state")
+                    case .closeOut:
+                        // #2397: somebody replied, so there is nothing to send. Dan already knows how it
+                        // ended; this is the one control that records it, from the row he is standing on.
+                        CloseOutMenu(outcomes: ShowOutcome.menu(wasPitched: p.wasPitched)) { outcome in
+                            ProspectMutations.recordOutcome(QueueItem(p), outcome, prospects: prospects,
+                                                            context: context, feedback: feedback)
+                        }
                     }
                 }
                 // #686: reply text, AI reply drafter, and Mark… only exist on the full card in Archive.
@@ -268,10 +242,6 @@ struct FollowUpsView: View {
         .help(GmailCopy.sendHelp(connected: gmailConnected, whenConnected: "Review and send"))
     }
 
-    private func setStateMenu(_ d: ConversationReminder.DueRecipient, label: String = "Set a state") -> some View {
-        ConversationStateMenu(currentState: d.recipient.conversationState, label: label) { setState(d, $0) }
-    }
-
     private func requestNudge(_ d: FollowUp.DueRecipient) {
         // #948: the branded confirmation is built from the same FollowUp.nudgeContent the sender reads,
         // so what Dan sees on the sheet (From / To / Subject / body) is exactly what goes out. The old
@@ -280,14 +250,13 @@ struct FollowUpsView: View {
         pending = PendingNudge(id: d.prospect.naturalKey, recipientId: d.recipient.id, confirmation: confirmation)
     }
 
-    private func requestConversationNudge(_ d: ConversationReminder.DueRecipient, kind: ConversationReminder.Kind) {
+    private func requestClosingNote(_ d: PostEventPrompt.DueRecipient) {
         let p = d.prospect, r = d.recipient
-        let isClosing: Bool
-        if case .closing = kind { isClosing = true } else { isClosing = false }
-        // Nil for a kind that is a prompt, not a sendable email (handled by confirm / set-a-state).
-        guard let confirmation = SendConfirmation(conversationNudgeFor: r, of: p, kind: kind) else { return }
+        // Nil would mean this kind is not a sendable email at all, which the row's own branch already
+        // rules out; guarded rather than force-unwrapped so a future kind cannot send an empty message.
+        guard let confirmation = SendConfirmation(closingNoteFor: r, of: p) else { return }
         pendingConversation = PendingConversation(id: p.naturalKey, recipientId: r.id,
-                                                  isClosing: isClosing, confirmation: confirmation)
+                                                  isClosing: true, confirmation: confirmation)
     }
 
     // #468 (SUP-006): routed through ProspectMutations so this sheet's send gets the same
@@ -300,12 +269,12 @@ struct FollowUpsView: View {
                                        clearSending: { sending[$0] = nil })
     }
 
-    private func performConversationNudge(_ naturalKey: String, _ recipientId: String, isClosing: Bool) {
+    private func performClosingNote(_ naturalKey: String, _ recipientId: String) {
         pendingConversation = nil
-        ProspectMutations.sendConversationNudge(naturalKey, recipientId, isClosing: isClosing,
-                                                prospects: prospects, context: context, feedback: feedback,
-                                                markSending: { sending[$0] = Date() },
-                                                clearSending: { sending[$0] = nil })
+        ProspectMutations.sendClosingNote(naturalKey, recipientId,
+                                          prospects: prospects, context: context, feedback: feedback,
+                                          markSending: { sending[$0] = Date() },
+                                          clearSending: { sending[$0] = nil })
     }
 
     // #1740: Dan's way of saying "I'm not going to action this". Both futures are offered because he
@@ -377,24 +346,6 @@ struct FollowUpsView: View {
                                                       days: FollowUpConfig().gapDays))
     }
 
-    private func remindLater(_ d: ConversationReminder.DueRecipient) {
-        d.recipient.remindLater(now: Date())
-        if context.saveOrWarn(org: d.prospect.groupName, feedback: feedback) {
-            // #285: the row drops off the due list, which could read as "sent"; say it was snoozed.
-            feedback.acknowledge(ActionAck.remindLater(org: d.prospect.groupName))
-        }
-    }
-
-    private func setState(_ d: ConversationReminder.DueRecipient, _ state: ConversationState) {
-        d.recipient.setConversationState(state, now: Date())
-        d.prospect.resumePausedRecipients()
-        context.saveOrWarn(org: d.prospect.groupName, feedback: feedback)
-    }
-
-    private func confirm(_ d: ConversationReminder.DueRecipient) {
-        d.recipient.confirmConversationState(now: Date())
-        context.saveOrWarn(org: d.prospect.groupName, feedback: feedback)
-    }
 }
 
 private func previewProspect(_ group: String, event: String?) -> Prospect {
@@ -411,30 +362,24 @@ private func previewProspect(_ group: String, event: String?) -> Prospect {
     let ctx = container.mainContext
     let longAgo = Date(timeIntervalSinceNow: -30 * 86_400)
 
-    // Active "wants to book" reminder: state set long ago, event still well ahead.
-    let a = previewProspect("Aurora Strings", event: "2026-12-01")
-    let aContact = Recipient(id: "emma@aurorastrings.example", email: "emma@aurorastrings.example", provenance: .act)
-    aContact.sendState = .sent; aContact.sentAt = longAgo
-    aContact.setConversationState(.wantsToBook, now: longAgo)
-    a.setRecipients([aContact])
-    ctx.insert(a)
-
-    // Post-event closing note: the show has passed, still unbooked.
+    // #2397: post-event closing note. The show has passed and nobody ever wrote back.
     let b = previewProspect("Lumen Dance", event: "2020-01-01")
     let bContact = Recipient(id: "info@lumendance.example", email: "info@lumendance.example", provenance: .act)
     bContact.sendState = .sent; bContact.sentAt = longAgo
-    bContact.setConversationState(.interested, now: longAgo)
+    bContact.gmailMessageId = "preview-b"
     b.setRecipients([bContact])
     ctx.insert(b)
 
-    // Replied but uncategorized: prompt to set a state.
-    let c = previewProspect("City Brass Band", event: "2026-11-01")
+    // #2397: the other post-event kind. The show has passed and somebody DID write back, so there is
+    // nothing to send and Dan is asked to say how it ended.
+    let c = previewProspect("City Brass Band", event: "2020-02-01")
     let cContact = Recipient(id: "hello@citybrass.example", email: "hello@citybrass.example", provenance: .act)
-    cContact.sendState = .sent; cContact.sentAt = longAgo; cContact.replied = true
+    cContact.sendState = .sent; cContact.sentAt = longAgo; cContact.gmailMessageId = "preview-c"
+    cContact.reopenOnReply(at: longAgo)
     c.setRecipients([cContact])
     ctx.insert(c)
 
-    // A plain silent follow-up (no conversation state, no reply).
+    // A plain silent follow-up (nothing has come back, and the show is still ahead).
     let d = previewProspect("Old Town Opera", event: "2026-10-01")
     let dContact = Recipient(id: "box@oldtownopera.example", email: "box@oldtownopera.example", provenance: .act)
     dContact.sendState = .sent; dContact.sentAt = longAgo

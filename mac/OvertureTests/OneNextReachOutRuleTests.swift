@@ -250,9 +250,15 @@ struct NextReachOutIsTheOnlyRuleTests {
         let rule = SourceGuardHelper.source("Overture/Domain/NextReachOut.swift")
         #expect(rule.contains("min(arrivedAt ?? now, now)"))
 
-        let reminder = SourceGuardHelper.source("Overture/Domain/ConversationReminder.swift")
-        #expect(reminder.contains("NextReachOut.arrived("))
-        #expect(!reminder.contains("min(arrivedAt ?? now, now)"),
-                "ConversationReminder grew its own copy of the arrival clamp back")
+        // #2397: the reach-out schedule is where the arrival case is asked now. The conversation reminder
+        // that used to hold it is retired, and its post-event successor is triggered by a DATE rather than
+        // by an arrival, so it has no business owning this clamp.
+        let queue = SourceGuardHelper.source("Overture/Domain/ReachedOutQueue.swift")
+        #expect(queue.contains(".waiting(since:"))
+        #expect(!queue.contains("min(arrivedAt ?? now, now)"),
+                "ReachedOutQueue grew its own copy of the arrival clamp")
+        let prompt = SourceGuardHelper.source("Overture/Domain/PostEventPrompt.swift")
+        #expect(!prompt.contains("min(arrivedAt ?? now, now)"),
+                "PostEventPrompt grew a copy of the arrival clamp it has no use for")
     }
 }

@@ -29,43 +29,7 @@ struct ReplyClassifyImporterTests {
                              results: pairs.map { ReplyClassifyResult(naturalKey: $0.0, intent: $0.1) })
     }
 
-    // #653: the suggestion is per-recipient now, keyed off each reply's own recipientId. A v1/v2
-    // result with no recipientId has no per-contact target, so it gets no suggestion at all.
-    @Test func suggestsTheStateForAMatchedRecipient() throws {
-        let ctx = ModelContext(try container())
-        let p = lead(ctx, key: "k1")
-        let r = Recipient(id: "a@e.com", email: "a@e.com", provenance: .act)
-        r.sendState = .sent; r.replied = true
-        p.setRecipients([r]); try ctx.save()
 
-        let res = ReplyClassifyResults(version: 3, generatedAt: "x", results: [
-            ReplyClassifyResult(naturalKey: "k1", intent: "wants_to_book", recipientId: "a@e.com"),
-        ])
-        let out = ReplyClassifyImporter.ingest(res, into: ctx)
-        let ra = p.recipients.first { $0.id == "a@e.com" }
-        #expect(ra?.conversationState == .wantsToBook)
-        #expect(ra?.conversationStateSource == .auto)
-        #expect(out.suggested == 1)
-        #expect(out.matched == 1)
-    }
-
-    @Test func neverOverwritesARecipientsManualState() throws {
-        let ctx = ModelContext(try container())
-        let p = lead(ctx, key: "k2")
-        let r = Recipient(id: "a@e.com", email: "a@e.com", provenance: .act)
-        r.sendState = .sent; r.replied = true
-        r.conversationState = .interested
-        r.conversationStateSource = .manual
-        p.setRecipients([r]); try ctx.save()
-
-        let res = ReplyClassifyResults(version: 3, generatedAt: "x", results: [
-            ReplyClassifyResult(naturalKey: "k2", intent: "declined", recipientId: "a@e.com"),
-        ])
-        let out = ReplyClassifyImporter.ingest(res, into: ctx)
-        let ra = p.recipients.first { $0.id == "a@e.com" }
-        #expect(ra?.conversationState == .interested)   // Dan's hand-set state untouched (#60)
-        #expect(out.skippedManual == 1)
-    }
 
     @Test func surfacesUnmatchedKeys() throws {
         let ctx = ModelContext(try container())
@@ -75,40 +39,6 @@ struct ReplyClassifyImporterTests {
         #expect(out.suggested == 0)
     }
 
-    // #420 C3/C4, #653: v3, two contacts on one show route their OWN intent hint + AI draft AND their
-    // OWN conversation-state suggestion to their own recipient row (the old "prefer active over
-    // decline" lead-level compromise is gone entirely: each contact suggests off its own reply). The
-    // per-contact hints/suggestions are NON-BINDING (no RecipientResolution is set by the importer).
-    @Test func v3RoutesPerContactDraftHintAndConversationStateIndependently() throws {
-        let ctx = ModelContext(try container())
-        let p = lead(ctx, key: "show")
-        let act = Recipient(id: "act@a.example", email: "act@a.example", provenance: .act)
-        act.sendState = .sent; act.replied = true
-        let pres = Recipient(id: "pres@p.example", email: "pres@p.example", provenance: .presenter)
-        pres.sendState = .sent; pres.replied = true
-        p.setRecipients([act, pres])
-        try ctx.save()
-
-        let res = ReplyClassifyResults(version: 3, generatedAt: "x", results: [
-            ReplyClassifyResult(naturalKey: "show", intent: "declined", recipientId: "act@a.example",
-                                draftSubject: "Re: A", draftBody: "Thanks for letting me know."),
-            ReplyClassifyResult(naturalKey: "show", intent: "wants_to_book", recipientId: "pres@p.example",
-                                draftSubject: "Re: P", draftBody: "Wonderful, I'd be glad to."),
-        ])
-        let out = ReplyClassifyImporter.ingest(res, into: ctx)
-
-        #expect(out.matched == 2)
-        #expect(out.suggested == 2)
-        let ra = p.recipients.first { $0.id == "act@a.example" }
-        let rp = p.recipients.first { $0.id == "pres@p.example" }
-        #expect(ra?.intentHint == "declined")
-        #expect(ra?.replyDraftBody == "Thanks for letting me know.")
-        #expect(rp?.intentHint == "wants_to_book")
-        #expect(rp?.replyDraftBody == "Wonderful, I'd be glad to.")
-        #expect(ra?.conversationState == .declined)         // its OWN reply, not averaged with pres's
-        #expect(rp?.conversationState == .wantsToBook)
-        #expect(ra?.resolution == nil && rp?.resolution == nil)   // hints are non-binding (decision f)
-    }
 
     // #462 — a fresh AI draft must NOT clobber a reply Dan hand-edited. His unsent text wins until he
     // sends or dismisses it, mirroring the cold path (PrepImporter draftEditedByDan). The AI's intent

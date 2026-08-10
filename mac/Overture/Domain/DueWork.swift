@@ -12,17 +12,16 @@ import Foundation
 enum DueWork {
     struct Counts: Equatable, Sendable {
         var followUps: Int          // silent leads waiting on a gentle nudge
-        var conversations: Int      // live conversations waiting on a re-touch
+        // #2397: shows whose date has passed, waiting on a closing note or on Dan saying how it ended.
+        var afterTheShow: Int
 
-        var total: Int { followUps + conversations }
+        var total: Int { followUps + afterTheShow }
     }
 
     static func counts(prospects: [Prospect], now: Date,
-                       reminder: ConversationReminderConfig,
                        followUp: FollowUpConfig = .init()) -> Counts {
         Counts(followUps: FollowUp.dueRecipients(from: prospects, now: now, config: followUp).count,
-               conversations: ConversationReminder.dueRecipients(from: prospects, now: now,
-                                                                 config: reminder).count)
+               afterTheShow: PostEventPrompt.dueRecipients(from: prospects, now: now).count)
     }
 }
 

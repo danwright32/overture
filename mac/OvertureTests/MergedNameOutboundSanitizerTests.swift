@@ -34,7 +34,7 @@ struct MergedNameOutboundSanitizerTests {
 
     @Test func conversationReminderSubstitutesOnlyWhenMerged() {
         func body(_ name: String, isMerged: Bool) -> String {
-            ConversationReminder.nudgeContent(kind: .active(.interested), originalSubject: nil,
+            PostEventPrompt.nudgeContent(kind: .closingNote, originalSubject: nil,
                                               groupName: name, isMerged: isMerged,
                                               contactName: "Sam", venue: "Carnegie Hall")?.body ?? ""
         }
@@ -130,9 +130,9 @@ struct SafeVenueGuardTests {
         #expect(clean.body.contains("photographing Aurora Strings at Merkin Hall."))
     }
 
-    @Test func aConversationReminderDropsTheClauseForAMessyVenueButKeepsACleanOne() {
+    @Test func theClosingNoteDropsTheClauseForAMessyVenueButKeepsACleanOne() {
         func body(venue: String?) -> String {
-            ConversationReminder.nudgeContent(kind: .active(.interested), originalSubject: nil,
+            PostEventPrompt.nudgeContent(kind: .closingNote, originalSubject: nil,
                                               groupName: "Aurora Strings", contactName: "Dana",
                                               venue: venue)?.body ?? ""
         }

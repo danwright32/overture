@@ -236,10 +236,10 @@ final class Recipient {
     // Per-recipient conversation state (#650, Phase 1 of milestone #19), mirroring the four fields
     // already on Prospect exactly. The per-recipient conversation surface that sets these is a later
     // phase; for now this is a pure domain addition plus the migration in Task 3.
-    var conversationStateRaw: String? = nil
-    var conversationStateSetAt: Date? = nil
+    // #2397: the three state fields are gone with the state. `conversationRemindedAt` stays, and is NOT
+    // simply the fourth of a set: it is the anchor the post-event closing note re-stamps on send, which is
+    // what stops a sent note coming due again the next morning.
     var conversationRemindedAt: Date? = nil
-    var conversationStateSourceRaw: String? = nil
     var resolutionRaw: String?
     // Whether Dan hand-set this recipient's state (#418 A1b), mirroring Prospect.outcomeSourceRaw:
     // nil = no manual mark, OutcomeSource.manual = Dan judged this contact by hand. Per-recipient
@@ -349,39 +349,6 @@ final class Recipient {
     var contactConfidence: ContactConfidence? {
         get { contactConfidenceRaw.flatMap(ContactConfidence.init) }
         set { contactConfidenceRaw = newValue?.rawValue }
-    }
-
-    var conversationState: ConversationState? {
-        get { conversationStateRaw.flatMap(ConversationState.init) }
-        set { conversationStateRaw = newValue?.rawValue }
-    }
-
-    // #16: every stage this conversation has DEMONSTRABLY reached, in the order it first reached each.
-    // `conversationStateRaw` holds only where the conversation IS, so a contact who asked a question and
-    // then decided to book stopped recording that a question was ever asked, and nothing could recover
-    // it afterwards. The funnel's middle band counts conversations that PASSED THROUGH a stage, which
-    // the single current value cannot answer.
-    //
-    // A list rather than one Bool per stage: the stages are an enum that may grow, and four parallel
-    // flags would need a fifth adding by hand in every place that reads them (the #1030-class defect
-    // where one concept lives in several switches). Appended to, never removed: this is a record of
-    // where a conversation has been, so changing or clearing the current stage leaves it untouched.
-    //
-    // Written ONLY by Dan's own assertion, setConversationState and confirmConversationState. NOT by
-    // the shared setter above, which the AI's suggestion path also passes through: an automatic guess he
-    // never confirmed (or overrode) must leave no trace, or a wrong AI read would be baked into the
-    // permanent record with no way to tell it from his own call (Dan's decision, 2026-07-23).
-    var conversationStagesReached: [String] = []
-
-    // Idempotent by construction, so a stage set twice counts one conversation rather than two clicks.
-    private func markStageReached(_ state: ConversationState) {
-        guard !conversationStagesReached.contains(state.rawValue) else { return }
-        conversationStagesReached.append(state.rawValue)
-    }
-
-    var conversationStateSource: OutcomeSource? {
-        get { conversationStateSourceRaw.flatMap(OutcomeSource.init) }
-        set { conversationStateSourceRaw = newValue?.rawValue }
     }
 
     // #1630: this contact was provably reached, whichever way it happened. An emailed contact proves it
@@ -577,7 +544,6 @@ final class Recipient {
         if replySentAt != nil || replyDraftBody != nil || replyDraftRequestedAt != nil { return true }
         if replySendClaimedAt != nil || nudgeSendClaimedAt != nil { return true }
         if formOutreachStartedAt != nil || formOutreachRecordedAt != nil { return true }
-        if conversationStateRaw != nil || conversationStateSetAt != nil { return true }
         if outreachStoodDownAt != nil || closingNoteStoodDownAt != nil { return true }
         return false
     }
@@ -635,25 +601,6 @@ final class Recipient {
         self.resolution = resolution
         self.bounced = bounced
         self.outcomeSource = .manual
-    }
-
-    // Dan sets THIS recipient's conversation state by hand (#650). Also stamps outcomeSource =
-    // .manual so isAwaitingFollowUp excludes this recipient from the separate silent follow-up track
-    // (mirrors how the lead-level version marks the whole lead .replied to stand down FollowUp's
-    // lead-grain sequencer; the per-recipient standdown already exists via that same flag). Declining
-    // resolves ONLY this recipient: no cascading suppression of siblings (Dan's 2026-07-08 decision).
-    // Orchestrating a resume of this show's other paused-by-reply recipients is Phase 3's job, at the
-    // UI-mutation layer, mirroring how ProspectMutations already does that for markContact today; this
-    // domain method never reaches into the Prospect or its other recipients.
-    func setConversationState(_ state: ConversationState, now: Date) {
-        conversationState = state
-        markStageReached(state)   // #16: Dan's own call, so it is recorded
-        conversationStateSetAt = now
-        conversationStateSource = .manual
-        outcomeSource = .manual
-        if state == .declined {
-            resolution = .declinedSoft
-        }
     }
 
     // "Remind me later" for this recipient: step its reminder forward by re-anchoring it, without
@@ -737,27 +684,6 @@ final class Recipient {
     // card re-filed itself under today. Measured on the live store, a day-old suggestion carried a stamp
     // from one minute before Dan looked at it, and the card read "Reach out now" (L74, L55).
     //
-    // The anchor records when this judgement first needed him, not when the machine last repeated itself.
-    // A suggestion that actually CHANGES the state is new work and takes the new date.
-    func suggestConversationState(_ state: ConversationState, now: Date) {
-        guard conversationStateSource != .manual else { return }
-        let isRepeat = conversationState == state && conversationStateSource == .auto
-                       && conversationStateSetAt != nil
-        conversationState = state
-        if !isRepeat { conversationStateSetAt = now }
-        conversationStateSource = .auto
-    }
-
-    // Dan accepts a suggestion for this recipient: it becomes his (manual) and the timed reminder
-    // clock restarts from now.
-    func confirmConversationState(now: Date) {
-        guard let state = conversationState else { return }
-        markStageReached(state)   // #16: accepting the suggestion makes it his assertion too
-        conversationStateSource = .manual
-        conversationStateSetAt = now
-        conversationRemindedAt = nil
-    }
-
     // Copy-out path (#421): Dan pasted the draft into the Gmail thread he's reading and sent it there
     // himself, so Overture sends nothing. Consume the draft and re-anchor this contact's clock.
     // #431: a "Drafting a reply…" run that has produced nothing after this long is treated as a dead

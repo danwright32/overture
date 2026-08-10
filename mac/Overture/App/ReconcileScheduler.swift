@@ -142,9 +142,7 @@ final class ReconcileScheduler {
         // because this tick already holds every prospect fetched and already writes to defaults, and
         // because neither surface that draws it can hold a SwiftData query of its own. Same predicate as
         // the toolbar's Due badge, so the three can never state different numbers.
-        DueBadge.publish(DueWork.counts(prospects: after, now: now,
-                                        reminder: ConversationReminderConfig.loaded()).total,
-                         into: defaults)
+        DueBadge.publish(DueWork.counts(prospects: after, now: now).total, into: defaults)
         // #2091: the watch heartbeat, carrying the observed sleep alongside the wall clock so the next
         // tick can tell a sleeping Mac (nothing missed) from a dead process (everything missed).
         WatchHeartbeatStore.stamp(now: now, readings: readings, into: defaults)

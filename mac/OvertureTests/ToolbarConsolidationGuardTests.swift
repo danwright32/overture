@@ -71,7 +71,7 @@ struct ToolbarConsolidationGuardTests {
     }
 
     @Test func omniFocusEnabledToggleSharesTheReminderSettingsKey() {
-        // Must bind through the SAME AppStorage key ReminderSettingsView uses, so toggling from
+        // Must bind through the SAME AppStorage key OmniFocusSettingsView uses, so toggling from
         // either surface stays in sync rather than tracking a second, divergent flag.
         #expect(rootView.contains("OmniFocusSyncConfig.Keys.enabled"))
     }
@@ -106,22 +106,20 @@ struct ToolbarConsolidationGuardTests {
         #expect(daysOff.lowerBound < whatConverts.lowerBound)
     }
 
-    // #931: the reminder-timing settings, orphaned when the Follow-ups reminder button was removed
-    // (#901/#930), are rehomed in the OmniFocus toolbar menu, never back on the Follow-ups header (which
-    // FollowUpsNoReminderButtonGuardTests keeps clear). This pins that RootView opens ReminderSettingsView
-    // again from a "Reminder timing" entry, so the rehome cannot silently rot back into dead code with no
-    // caller.
-    @Test func reminderSettingsAreRehomedInRootView() {
+    // #931's rehome, #2397's trim. The four reminder-interval steppers went with the conversation states
+    // they tuned; the OmniFocus look-ahead window has no other home and stays. Pinned so the sheet cannot
+    // rot back into dead code with no caller.
+    @Test func theOmniFocusSyncWindowIsReachableFromRootView() {
         #expect(!rootView.isEmpty)
-        #expect(rootView.contains("ReminderSettingsView"))       // presented again
-        #expect(rootView.contains("Reminder timing"))            // the menu entry that opens it
+        #expect(rootView.contains("OmniFocusSettingsView"))      // presented
+        #expect(rootView.contains("Sync window"))                // the menu entry that opens it
     }
 
     // #931: on/off for OmniFocus sync lives once, in the toolbar menu that opens the reminder sheet, so
     // the sheet must NOT carry its own duplicate enable toggle (two controls doing one job). The
     // look-ahead window has no other home, so it stays. Re-adding the toggle turns this red.
-    @Test func theReminderSheetDoesNotDuplicateTheOmniFocusToggle() {
-        let sheet = source("Overture/UI/ReminderSettingsView.swift")
+    @Test func theSyncSheetDoesNotDuplicateTheOmniFocusToggle() {
+        let sheet = source("Overture/UI/OmniFocusSettingsView.swift")
         #expect(!sheet.isEmpty)
         #expect(!sheet.contains("Sync due reminders to OmniFocus"))   // the old duplicate toggle's label
         #expect(!sheet.contains("Toggle(isOn: $omniFocusEnabled)"))   // and its control

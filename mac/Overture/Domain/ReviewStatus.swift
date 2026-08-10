@@ -74,29 +74,6 @@ enum OutcomeSource: String, CaseIterable, Sendable {
     case manual    // Dan marked it
 }
 
-// Where an active conversation sits between a bare reply and a booking (#111). The three active
-// states get timed, event-aware reminders; `declined` is terminal (it resolves the lead to
-// lost-soft). Stored on Prospect as a raw string with an OutcomeSource (auto/manual), so #112's AI
-// suggestion never silently overwrites a state Dan set by hand.
-enum ConversationState: String, CaseIterable, Sendable {
-    case interested
-    case wantsToBook = "wants_to_book"
-    case hasQuestion = "has_question"
-    case declined
-
-    var label: String {
-        switch self {
-        case .interested: return "Interested"
-        case .wantsToBook: return "Wants to book"
-        case .hasQuestion: return "Has a question"
-        case .declined: return "Declined"
-        }
-    }
-
-    // The active states (everything but declined) generate reminders.
-    var isActive: Bool { self != .declined }
-}
-
 // The reasons Dan can give when dismissing, mirroring the engine's dismiss_reason set.
 // #864: `wentBy` is the one Overture writes for itself, and the only one that is not a decision at all:
 // the show's last night passed while it sat untriaged. It is a fact about the calendar, so it must never
@@ -139,12 +116,4 @@ enum DismissReason: String, CaseIterable, Sendable {
     // choice: he cannot decide that a date has passed, and blocking a town is a separate action, not a
     // per-show dismiss reason.
     static var danCanChoose: [DismissReason] { allCases.filter { $0 != .wentBy && $0 != .tooFar } }
-}
-
-// #885: the conversation menu's summary line. It lowercases a domain label to sit inside a sentence,
-// which is a copy transform, and it was happening in a view.
-extension ConversationState {
-    static func looksLikeNote(_ state: ConversationState) -> String {
-        "Looks like \(state.label.lowercased())"
-    }
 }

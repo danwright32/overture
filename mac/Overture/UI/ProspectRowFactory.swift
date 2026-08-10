@@ -109,12 +109,6 @@ enum ProspectRowFactory {
                 ProspectMutations.reopenOutcome(item, prospects: prospects,
                                                 context: context, feedback: feedback)
             },
-            onSetRecipientConversationState: { rid, state in
-                ProspectMutations.setRecipientConversationState(item, rid, state, prospects: prospects, context: context, feedback: feedback)
-            },
-            onConfirmRecipientConversationState: { rid in
-                ProspectMutations.confirmRecipientConversationState(item, rid, prospects: prospects, context: context, feedback: feedback)
-            },
             onAddRecipient: { email, name in
                 ProspectMutations.addRecipientManually(item, email: email, name: name,
                                                         prospects: prospects, context: context, feedback: feedback)

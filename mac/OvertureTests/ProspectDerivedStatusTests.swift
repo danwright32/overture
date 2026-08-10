@@ -50,12 +50,17 @@ struct ProspectDerivedStatusTests {
         #expect(p.hasUnhandledReply)
     }
 
-    @Test func noUnhandledReplyOnceThatRecipientsOwnStateIsHandSet() throws {
+    // #2397: what clears a reply is ANSWERING it. It used to be a hand-set conversation state, which is
+    // retired, and the state was never the thing that dealt with the person anyway.
+    @Test func noUnhandledReplyOnceThatRecipientsReplyIsAnswered() throws {
         let ctx = try makeInMemoryContext()
         let p = makeProspect(ctx)
         let r = recipient("a@e.com", sendState: .sent, replied: true)
-        r.conversationStateSource = .manual
         p.setRecipients([r])
+        #expect(p.hasUnhandledReply)
+
+        r.recordAnswerSent(now: Date())
+
         #expect(!p.hasUnhandledReply)
     }
 

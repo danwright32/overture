@@ -6,7 +6,7 @@ import Foundation
 // ConversationReminder.swift (plus a per-recipient-conversation-state-aware version inline in
 // Prospect.hasUnhandledReply), copy pasted rather than shared. Recipient.hasUnhandledReply is now
 // the one place that triplet lives; the two sites that also need to exclude a manually hand-set
-// conversation state (#653) compose it with `&& conversationStateSource != .manual` at the call
+// #2397: nothing composes a conversation state onto it any more; what clears a reply is answering it.
 // site instead of re-deriving the base triplet themselves.
 @Suite("Recipient.hasUnhandledReply")
 struct RecipientHasUnhandledReplyTests {
@@ -36,14 +36,6 @@ struct RecipientHasUnhandledReplyTests {
         #expect(!recipient(replied: true, bounced: true).hasUnhandledReply)
     }
 
-    // hasUnhandledReply itself does NOT know about conversationStateSource: OmniFocusSync and
-    // Prospect.hasUnhandledReply layer that exclusion on at their own call site (#653), so a
-    // manually hand-set state does not change this base property's answer.
-    @Test func manualConversationStateDoesNotAffectTheBasePropertyItself() {
-        let r = recipient(replied: true)
-        r.conversationStateSource = .manual
-        #expect(r.hasUnhandledReply)
-    }
 }
 
 // SourceGuard for #677: each former call site must route through the shared Recipient property
@@ -72,14 +64,9 @@ struct RecipientHasUnhandledReplyCallSiteGuardTests {
                 "ReachedOutQueue must read Recipient.hasUnhandledReply instead of recomputing it (#677).")
     }
 
-    @Test func conversationReminderUsesTheSharedProperty() {
-        let src = SourceGuardHelper.source("Overture/Domain/ConversationReminder.swift")
-        #expect(!src.isEmpty)
-        #expect(!src.contains(Self.oldStandingTriplet),
-                "ConversationReminder must not re-derive the unhandled-reply triplet inline; use Recipient.hasUnhandledReply (#677).")
-        #expect(src.contains(".hasUnhandledReply"),
-                "ConversationReminder must read Recipient.hasUnhandledReply instead of recomputing it (#677).")
-    }
+    // #2397: the conversation reminder that used to be checked here is retired. Its post-event successor
+    // does not ask this question at all (it turns on the show's DATE), and the one place that still reads an
+    // unhandled reply is ReachedOutQueue, guarded above.
 
     @Test func prospectHasUnhandledReplyUsesTheSharedProperty() {
         let src = SourceGuardHelper.source("Overture/Domain/Prospect.swift")

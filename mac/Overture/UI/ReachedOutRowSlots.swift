@@ -7,10 +7,11 @@ import Foundation
 // crowding the issue was filed about, and the row's real maximum is three. What was still missing is a
 // STATED rule, so a fourth control cannot arrive without somebody deciding it belongs.
 //
-// Four slots, each answering a different question, which is why four is not stacking:
+// #2397: THREE slots now. The conversation-state control went with the states it set, and the row's
+// maximum came down with it. Each remaining slot answers a different question, which is why three is not
+// stacking:
 //
 //   timing / answer / passedHint   when is this due, or who is waiting, or that the night has gone
-//   conversationState              what Dan has said this conversation is
 //   closeOut                       ending the pitch
 //   dueAction                      the one thing that is actually due
 //
@@ -37,7 +38,6 @@ enum ReachedOutRowSlots {
         case passedHint
         case timing
         case answer
-        case conversationState
         // #2112/#2224: ending the pitch, from here rather than from the Archive card.
         case closeOut
         case dueAction
@@ -54,11 +54,9 @@ enum ReachedOutRowSlots {
     ///
     /// `closeOut` is unconditional, deliberately. A show can get its yes at any moment, and a control
     /// that appeared only once the date had passed would be missing on exactly the night it is wanted.
-    static func slots(replyOffered: Bool, showPassed: Bool = false, showsStateControl: Bool,
+    static func slots(replyOffered: Bool, showPassed: Bool = false,
                       dueActionLabel: String?) -> [Slot] {
         var slots: [Slot] = [replyOffered ? .answer : (showPassed ? .passedHint : .timing)]
-
-        if showsStateControl { slots.append(.conversationState) }
         slots.append(.closeOut)
         if dueActionLabel != nil { slots.append(.dueAction) }
         return slots

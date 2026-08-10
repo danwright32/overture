@@ -26,28 +26,24 @@ struct ReachedOutRowSlotsTests {
     // The timing question always has exactly one answer on screen. Neither both nor neither.
     @Test func thereIsAlwaysExactlyOneTimingSlot() {
         for replyOffered in [true, false] {
-            for stateControl in [true, false] {
-                for action in [nil, "Send a follow-up"] {
-                    let slots = ReachedOutRowSlots.slots(replyOffered: replyOffered,
-                                                         showsStateControl: stateControl,
-                                                         dueActionLabel: action)
-                    let timing = slots.filter { $0 == .timing || $0 == .answer }
-                    #expect(timing.count == 1,
-                            "replyOffered=\(replyOffered) produced \(timing.count) timing slots")
-                }
+            for action in [nil, "Send a follow-up"] {
+                let slots = ReachedOutRowSlots.slots(replyOffered: replyOffered, dueActionLabel: action)
+                let timing = slots.filter { $0 == .timing || $0 == .answer }
+                #expect(timing.count == 1,
+                        "replyOffered=\(replyOffered) produced \(timing.count) timing slots")
             }
         }
     }
 
     @Test func somebodyWaitingGetsAnswerRatherThanACountdown() {
-        let slots = ReachedOutRowSlots.slots(replyOffered: true, showsStateControl: true,
+        let slots = ReachedOutRowSlots.slots(replyOffered: true,
                                              dueActionLabel: nil)
         #expect(slots.contains(.answer))
         #expect(!slots.contains(.timing))
     }
 
     @Test func nobodyWaitingGetsTheCountdown() {
-        let slots = ReachedOutRowSlots.slots(replyOffered: false, showsStateControl: false,
+        let slots = ReachedOutRowSlots.slots(replyOffered: false,
                                              dueActionLabel: nil)
         #expect(slots == [.timing, .closeOut])
     }
@@ -59,15 +55,13 @@ struct ReachedOutRowSlotsTests {
     @Test func theRowNeverShowsMoreThanFourThings() {
         for replyOffered in [true, false] {
             for showPassed in [true, false] {
-                for stateControl in [true, false] {
-                    for action in [nil, "Send a follow-up", "Send a closing note"] {
-                        let slots = ReachedOutRowSlots.slots(replyOffered: replyOffered,
-                                                             showPassed: showPassed,
-                                                             showsStateControl: stateControl,
-                                                             dueActionLabel: action)
-                        #expect(slots.count <= 4, "the row showed \(slots.count) things at once")
-                        #expect(Set(slots).count == slots.count, "the row showed the same slot twice")
-                    }
+                for action in [nil, "Send a follow-up", "Send a closing note"] {
+                    let slots = ReachedOutRowSlots.slots(replyOffered: replyOffered,
+                                                         showPassed: showPassed,
+                                                         dueActionLabel: action)
+                    // #2397: the ceiling came down to three with the state control.
+                    #expect(slots.count <= 3, "the row showed \(slots.count) things at once")
+                    #expect(Set(slots).count == slots.count, "the row showed the same slot twice")
                 }
             }
         }
@@ -76,8 +70,7 @@ struct ReachedOutRowSlotsTests {
     // #2112: the hint REPLACES the countdown rather than stacking on it. A row counting down to a
     // follow-up on a night that has already happened is a promise it cannot keep.
     @Test func apassedShowSaysSoInsteadOfCountingDown() {
-        let slots = ReachedOutRowSlots.slots(replyOffered: false, showPassed: true,
-                                             showsStateControl: false, dueActionLabel: nil)
+        let slots = ReachedOutRowSlots.slots(replyOffered: false, showPassed: true, dueActionLabel: nil)
         #expect(slots.contains(.passedHint))
         #expect(!slots.contains(.timing))
     }
@@ -85,33 +78,31 @@ struct ReachedOutRowSlotsTests {
     // And somebody actively waiting still outranks the date, because a person is a stronger claim on Dan
     // than a night that has gone.
     @Test func somebodyWaitingOutranksAPassedShow() {
-        let slots = ReachedOutRowSlots.slots(replyOffered: true, showPassed: true,
-                                             showsStateControl: false, dueActionLabel: nil)
+        let slots = ReachedOutRowSlots.slots(replyOffered: true, showPassed: true, dueActionLabel: nil)
         #expect(slots.contains(.answer))
         #expect(!slots.contains(.passedHint))
         #expect(!slots.contains(.timing))
     }
 
-    // The busiest real row: answered, in a known state, with a nudge now due. Three different questions,
-    // three answers, no duplication.
-    @Test func theBusiestRowShowsFourDifferentThings() {
-        let slots = ReachedOutRowSlots.slots(replyOffered: false, showsStateControl: true,
+    // #2397: the busiest real row is three things now, not four. The state control went with the states.
+    @Test func theBusiestRowShowsThreeDifferentThings() {
+        let slots = ReachedOutRowSlots.slots(replyOffered: false,
                                              dueActionLabel: "Send a follow-up")
-        #expect(slots == [.timing, .conversationState, .closeOut, .dueAction])
+        #expect(slots == [.timing, .closeOut, .dueAction])
     }
 
     // Order is part of the rule, not an accident of where the `if`s happen to sit. Timing leads, the
     // action Dan can take comes last, and reordering them is a visible change to a stated rule.
     @Test func theOrderIsFixedRegardlessOfWhichSlotsAppear() {
-        let all = ReachedOutRowSlots.slots(replyOffered: true, showsStateControl: true,
+        let all = ReachedOutRowSlots.slots(replyOffered: true,
                                            dueActionLabel: "Send a closing note")
-        #expect(all == [.answer, .conversationState, .closeOut, .dueAction])
+        #expect(all == [.answer, .closeOut, .dueAction])
     }
 
     // A row can never be blank. Whatever else is missing, the timing slot is always filled, so there is
     // no state in which the trailing column renders as an empty gap.
     @Test func theRowIsNeverEmpty() {
-        let slots = ReachedOutRowSlots.slots(replyOffered: false, showsStateControl: false,
+        let slots = ReachedOutRowSlots.slots(replyOffered: false,
                                              dueActionLabel: nil)
         #expect(!slots.isEmpty)
     }
@@ -187,7 +178,6 @@ struct ReachedOutRowSlotsTests {
     private static let renderers: [String: ReachedOutRowSlots.Slot] = [
         "Text(ReachedOutQueue.timingLabel": .timing,
         "Button(ReplyPanelCopy.answer": .answer,
-        "ConversationStateControl(": .conversationState,
         "Button(label)": .dueAction,
         // #2112/#2224
         "Text(hint)": .passedHint,

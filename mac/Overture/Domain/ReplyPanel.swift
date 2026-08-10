@@ -187,23 +187,6 @@ enum ReplyPanel {
         }
     }
 
-    // #2154: whether Dan can be asked to confirm Overture's guess at what a reply meant.
-    //
-    // Confirming writes the guess in as fact, which changes what the contact is due next and what the
-    // conversation track will send them. He can only rule on that with the message in front of him: "I
-    // can't confirm if they want to book without reading the message first" (2026-08-05). Where the words
-    // were never captured there is nothing to rule on, and the honest answer is that confirming is not
-    // available rather than a control that asks him to endorse a reading he has never seen.
-    //
-    // A state Dan set himself is not a guess: it is already his assertion, so there is nothing to
-    // endorse. Only an AI-sourced state with the words that produced it can be confirmed.
-    static func mayConfirmGuess(_ recipient: Recipient) -> Bool {
-        guard recipient.conversationState != nil, recipient.conversationStateSource == .auto else {
-            return false
-        }
-        return theirWords(recipient) != nil
-    }
-
     // #2152: WHY the send is refused, as a value. The disabled button and the sentence beside it are then
     // one decision asked once, so they cannot drift into a dead button sitting next to a line claiming
     // everything is fine (L16, L70).

@@ -12,7 +12,7 @@ stripped. **What it deliberately does not claim:** which container a given sente
 That is not knowable from one file, since a sentence declared in one view routinely surfaces
 through another, and a wrong label would be worse than none.
 
-Scanned 402 source files; 18 of them render at least one container.
+Scanned 400 source files; 17 of them render at least one container.
 
 ## Surfaces where a message can go astray
 
@@ -57,8 +57,6 @@ macOS may relocate this into the overflow menu or drop it entirely at a narrow w
     OS alert, Menu, Sheet, Toolbar item
 `UI/BuildFreshnessSheet.swift`
     Sheet
-`UI/ConversationStateMenu.swift`
-    Menu
 `UI/DaysOffView.swift`
     Confirmation dialog
 `UI/DraftReviewView.swift`
@@ -74,7 +72,7 @@ macOS may relocate this into the overflow menu or drop it entirely at a narrow w
 `UI/QueueView.swift`
     Menu, Sheet
 `UI/ReplySheet.swift`
-    Menu, Sheet
+    Sheet
 `UI/ScoutSummaryView.swift`
     Info block
 `UI/SendConfirmAndReconnectAlerts.swift`

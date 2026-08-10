@@ -59,24 +59,24 @@ struct ReachedOutActionTests {
         #expect(ReachedOutAction.of(r, in: p, now: now, today: today) == .none)
     }
 
-    // The show has passed, so the sendable thing is the closing note, not a nudge about a date gone by.
-    @Test func aPassedShowEarnsAClosingNote() throws {
+    // The show has passed and NOBODY wrote back, so the sendable thing is the closing note rather than a
+    // nudge about a date gone by.
+    @Test func aPassedShowNobodyAnsweredEarnsAClosingNote() throws {
+        let ctx = ModelContext(try container())
+        let p = show(ctx, event: EasternDate.dayString(from: daysAgo(10)))
+        _ = contact(p, sentAt: daysAgo(30))
+        let only = try #require(p.recipients.first)
+        #expect(ReachedOutAction.of(only, in: p, now: now, today: today) == .sendClosingNote)
+    }
+
+    // #2397: the show has passed and somebody DID write back. The closing note would assert nobody
+    // answered, which is false, so the row asks Dan to say how it ended instead. No email at all.
+    @Test func aPassedShowTheyRepliedToEarnsSayingHowItEnded() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx, event: EasternDate.dayString(from: daysAgo(10)))
         let r = contact(p, sentAt: daysAgo(30))
-        r.replied = true
-        r.setConversationState(.interested, now: daysAgo(20))
-        #expect(ReachedOutAction.of(r, in: p, now: now, today: today) == .sendClosingNote)
-    }
-
-    // An AI guess is a decision to confirm, not an email to send, so the control says so.
-    @Test func anUnconfirmedGuessEarnsAConfirm() throws {
-        let ctx = ModelContext(try container())
-        let p = show(ctx, event: "2026-12-01")
-        let r = contact(p, sentAt: daysAgo(30))
-        r.replied = true
-        r.suggestConversationState(.wantsToBook, now: daysAgo(1))
-        #expect(ReachedOutAction.of(r, in: p, now: now, today: today) == .confirmState)
+        r.reopenOnReply(at: daysAgo(20))
+        #expect(ReachedOutAction.of(r, in: p, now: now, today: today) == .sayHowItEnded)
     }
 
     // A form pitch cannot be emailed or detected, so the only thing that moves it is Dan saying what
@@ -90,9 +90,9 @@ struct ReachedOutActionTests {
         #expect(ReachedOutAction.of(r, in: p, now: now, today: today) == .sayWhatHappened)
     }
 
-    // Somebody wrote back and is waiting on a reply. This slot offers NOTHING: answering has its own
-    // control and the state control asks for the category. Above all it must never be a nudge, because a
-    // generic prod is exactly the wrong email to send somebody who has already written.
+    // Somebody wrote back and is waiting on a reply, on a show still AHEAD. This slot offers nothing:
+    // answering has its own control. Above all it must never be a nudge, because a generic prod is exactly
+    // the wrong email to send somebody who has already written.
     @Test func aContactWhoWroteBackIsNeverOfferedANudge() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx)
@@ -109,9 +109,9 @@ struct ReachedOutActionTests {
     @Test func everyActionHasItsOwnLabel() {
         #expect(ReachedOutAction.sendNudge.label == "Send a follow-up")
         #expect(ReachedOutAction.sendClosingNote.label == "Send a closing note")
-        // #2154: no button of its own either. Confirming an AI guess means ruling on a message, and the
-        // row cannot show one, so it is offered on the reply screen beside the words instead.
-        #expect(ReachedOutAction.confirmState.label == nil)
+        // #2397: no button of its own. The close-out menu beside this slot is how Dan records an ending,
+        // and a second control with the same purpose is the duplicate-copy trap (#843).
+        #expect(ReachedOutAction.sayHowItEnded.label == nil)
         // No button of its own: the row's timing text already says this and the state control is how he
         // says it, so a second control with the same words would be a duplicate (#843).
         #expect(ReachedOutAction.sayWhatHappened.label == nil)
@@ -123,7 +123,7 @@ struct ReachedOutActionTests {
     @Test func onlyTheEmailActionsClaimToSend() {
         #expect(ReachedOutAction.sendNudge.sendsAnEmail)
         #expect(ReachedOutAction.sendClosingNote.sendsAnEmail)
-        #expect(!ReachedOutAction.confirmState.sendsAnEmail)
+        #expect(!ReachedOutAction.sayHowItEnded.sendsAnEmail)
         #expect(!ReachedOutAction.sayWhatHappened.sendsAnEmail)
         #expect(!ReachedOutAction.none.sendsAnEmail)
         // Anything whose label begins with Send must be one that genuinely sends, so the wording and the

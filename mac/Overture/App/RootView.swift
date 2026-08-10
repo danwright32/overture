@@ -131,7 +131,7 @@ struct RootView: View {
     @State private var showDaysOff = false      // #901
     @State private var showExcludedTowns = false   // #1118: review and un-exclude skipped towns
     @State private var showOrganisations = false   // #1731: what Overture reads as a building
-    @State private var showReminderSettings = false   // #931: rehomed reminder-timing settings
+    @State private var showOmniFocusSettings = false   // #931 rehome, #2397 trimmed to the sync window
     // #803: when the DETACHED reading half began, so it has a visible working / still-alive / stalled
     // state of its own. It had none: runScout returned, the spinner went out, and Overture then sat
     // reading calendars for minutes with nothing on screen at all, and nothing to say if that run hung.
@@ -146,7 +146,7 @@ struct RootView: View {
     // the body before, and summed again in FollowUpsView's own body: the pill Dan clicks and the list he
     // lands on stated the same rule twice, with nothing asserting they agreed.
     private var followUpsDue: Int {
-        DueWork.counts(prospects: allProspects, now: Date(), reminder: .loaded()).total
+        DueWork.counts(prospects: allProspects, now: Date()).total
     }
 
     // #805: how many watched sources need Dan's eyes. Counted by SourceAttention and never summed here, for
@@ -328,7 +328,7 @@ struct RootView: View {
             "archiveOpeningQuery": "\(archiveOpeningQuery.count)",
             "sheets": [showArchive, showPatterns, showFollowUps, showVoiceGuidance, showInquiryIntake,
                        showSources, showDaysOff, showExcludedTowns, showOrganisations,
-                       showReminderSettings].map { $0 ? "1" : "0" }.joined(),
+                       showOmniFocusSettings].map { $0 ? "1" : "0" }.joined(),
             "status": "\(status.text?.count ?? -1)/\(status.priority)",
             "scoutTask": "\(scoutTask != nil)",
             "writes.feedback": "\(QueueRenderCounter.writes(QueueWriteTrace.feedback))",
@@ -663,7 +663,7 @@ struct RootView: View {
                         // Follow-ups reminder button was removed (#901/#930), live here now. This menu is
                         // already the follow-up-automation surface, and it is NOT the Follow-ups header
                         // Dan asked to keep clear.
-                        Button("Reminder timing…") { showReminderSettings = true }
+                        Button("Sync window…") { showOmniFocusSettings = true }
                     } label: {
                         // #469: the menu itself stays clickable while syncing (unlike Scout/Prep and
                         // Gmail connect, this doesn't block anything Dan would want to check), but the
@@ -880,9 +880,9 @@ struct RootView: View {
             .sheet(isPresented: $prepSheetShown) { prepProgressModal }
             .sheet(isPresented: $showSources) { SourcesView(readOne: { runScout(only: [$0.sourceId]) }) }
             .sheet(isPresented: $showDaysOff) { DaysOffView() }
+            .sheet(isPresented: $showOmniFocusSettings) { OmniFocusSettingsView() }
             .sheet(isPresented: $showExcludedTowns) { ExcludedTownsView() }
             .sheet(isPresented: $showOrganisations) { OrganisationsView() }
-            .sheet(isPresented: $showReminderSettings) { ReminderSettingsView() }
             // #924: the date picker a multi-night dismissal opens, pre-filled with the run's dates.
             .sheet(item: Bindable(dayOffOffer).pending) { pending in
                 BlockDaysSheet(pending: pending, undo: undoStack)
@@ -1543,7 +1543,7 @@ struct RootView: View {
         showDaysOff = false
         showExcludedTowns = false
         showOrganisations = false
-        showReminderSettings = false
+        showOmniFocusSettings = false
     }
 
     // The four raisers. Nothing else in this file may assign these states to a non-nil value: that is the

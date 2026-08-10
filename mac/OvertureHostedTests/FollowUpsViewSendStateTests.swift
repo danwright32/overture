@@ -43,24 +43,28 @@ struct FollowUpsViewSendStateTests {
         #expect(texts.contains { $0.hasPrefix("Sending") })
     }
 
-    @Test func aConversationRowWithNoInFlightSendShowsTheNudgeButton() throws {
+    // #2397: the post-event closing note is the conversation track's only remaining send, so this is the
+    // row whose in-flight state has to be visible.
+    @Test func aClosingNoteRowWithNoInFlightSendShowsTheSendButton() throws {
         let (p, r) = prospectAndRecipient()
         let view = FollowUpsView()
-        let reminder = ConversationReminder.DueReminder(kind: .active(.wantsToBook), reason: "Wants to book")
-        let d = ConversationReminder.DueRecipient(prospect: p, recipient: r, reminder: reminder)
+        let prompt = PostEventPrompt.Prompt(kind: .closingNote,
+                                           reason: PostEventPrompt.reason(for: .closingNote))
+        let d = PostEventPrompt.DueRecipient(prospect: p, recipient: r, prompt: prompt)
 
-        _ = try view.conversationRow(d, since: nil).inspect().find(button: "Send nudge")
+        _ = try view.postEventRow(d, since: nil).inspect().find(button: "Send closing note")
     }
 
-    @Test func aConversationRowWithAnInFlightSendShowsTheLiveLabelInsteadOfTheButton() throws {
+    @Test func aClosingNoteRowWithAnInFlightSendShowsTheLiveLabelInsteadOfTheButton() throws {
         let (p, r) = prospectAndRecipient()
         let view = FollowUpsView()
-        let reminder = ConversationReminder.DueReminder(kind: .active(.wantsToBook), reason: "Wants to book")
-        let d = ConversationReminder.DueRecipient(prospect: p, recipient: r, reminder: reminder)
+        let prompt = PostEventPrompt.Prompt(kind: .closingNote,
+                                           reason: PostEventPrompt.reason(for: .closingNote))
+        let d = PostEventPrompt.DueRecipient(prospect: p, recipient: r, prompt: prompt)
         let since = Date(timeIntervalSince1970: 1000)
 
-        #expect((try? view.conversationRow(d, since: since).inspect().find(button: "Send nudge")) == nil)
-        let texts = try view.conversationRow(d, since: since).inspect().findAll(ViewType.Text.self).map { try $0.string() }
+        #expect((try? view.postEventRow(d, since: since).inspect().find(button: "Send closing note")) == nil)
+        let texts = try view.postEventRow(d, since: since).inspect().findAll(ViewType.Text.self).map { try $0.string() }
         #expect(texts.contains { $0.hasPrefix("Sending") })
     }
 }

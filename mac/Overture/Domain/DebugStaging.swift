@@ -63,7 +63,6 @@ enum DebugStaging {
         recipient.sentAt = p.sentAt
         recipient.gmailMessageId = "debug-\(recipient.id)-\(Int(now.timeIntervalSince1970))"
         recipient.replied = true
-        recipient.setConversationState(.wantsToBook, now: now)
         p.setRecipients([recipient])
         context.insert(p)
         return p

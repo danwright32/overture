@@ -180,17 +180,17 @@ struct SendConfirmation: Equatable {
         reassurance = SendConfirmCopy.followUpReassurance
     }
 
-    // #948: a conversation note (an active re-touch or a closing note) to one contact. Nil for the kinds
-    // that are a prompt, not a sendable email. A closing note carries the extra reassurance clause,
-    // because it does a second thing Dan must be told about.
+    // #948/#2397: the post-event closing note to one contact. Nil when there is nothing sendable, which is
+    // every kind but this one. It carries the extra reassurance clause, because sending it does a second
+    // thing Dan must be told about: it records the show as never heard back.
     @MainActor
-    init?(conversationNudgeFor recipient: Recipient, of prospect: Prospect, kind: ConversationReminder.Kind,
+    init?(closingNoteFor recipient: Recipient, of prospect: Prospect,
           signature: OutboundSignature = GmailSignatureStore.currentSignature()) {
         guard let email = recipient.email, !email.isEmpty,
-              let content = ConversationReminder.nudgeContent(kind: kind, originalSubject: prospect.draftSubject,
-                                                              groupName: prospect.groupName,
-                                                              isMerged: prospect.isMergedConcert,
-                                                              contactName: recipient.name, venue: prospect.venue)
+              let content = PostEventPrompt.nudgeContent(kind: .closingNote, originalSubject: prospect.draftSubject,
+                                                        groupName: prospect.groupName,
+                                                        isMerged: prospect.isMergedConcert,
+                                                        contactName: recipient.name, venue: prospect.venue)
         else { return nil }
         from = .danWright
         self.recipient = email
