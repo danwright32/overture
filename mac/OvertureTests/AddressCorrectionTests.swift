@@ -284,15 +284,9 @@ struct AddressCorrectionTests {
     // computed property (`var hasEverPlaced: Bool { hadPlacedBeforeLastRun || lastPlacedCount > 0 }`) ends
     // in a CLOSE brace. Reading only the last character reported six computed properties as unaccounted
     // stored ones on this guard's first real run.
+    // #2009: the shared reading, so this guard and the outreach-field one cannot drift into two
+    // definitions of "a stored property" (L26).
     private func storedProperties(in classBody: String) -> [String] {
-        classBody.components(separatedBy: "\n").compactMap { line in
-            let code = line.trimmingCharacters(in: .whitespaces)
-            guard !code.contains("{") else { return nil }               // computed
-            guard let varRange = code.range(of: "var ") else { return nil }
-            guard code.hasPrefix("var ") || code.hasPrefix("@Attribute") else { return nil }
-            let rest = code[varRange.upperBound...]
-            let name = rest.prefix { $0.isLetter || $0.isNumber || $0 == "_" }
-            return name.isEmpty ? nil : String(name)
-        }
+        SourceGuardHelper.storedPropertyNames(inClassBody: classBody)
     }
 }
