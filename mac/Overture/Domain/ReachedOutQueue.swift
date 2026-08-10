@@ -57,6 +57,11 @@ enum ReachedOutQueue {
         // Asked through `isBooked`, which folds the show's own outcome together with a booking recorded
         // on any one contact, because Dan records his by hand on the contact (L83).
         guard !p.isBooked else { return false }
+        // #2396: the SHOW carries how it ended (#2394), and an ended show has nothing left to reach out
+        // about whatever its contacts still say. This is what lets the contact-level mirror #2395 left in
+        // `recordOutcome` come out: the row leaves because the one field says the show is over, rather than
+        // because a resolution was copied onto every contact to make the old readers agree.
+        guard p.showOutcome == nil else { return false }
         return r.standing.isInPlay
     }
 
@@ -66,15 +71,29 @@ enum ReachedOutQueue {
                                 followUpConfig: FollowUpConfig = .init(),
                                 reminderConfig: ConversationReminderConfig = .init()) -> [(prospect: Prospect, recipient: Recipient, next: Date)] {
         prospects
-            .flatMap { p -> [(prospect: Prospect, recipient: Recipient, next: Date)] in
-                // #2033: one row per EMAIL, not per person on it. #2126: chosen from the contacts that
-                // still have a reach-out date, so a resolved first contact cannot take a live colleague's
-                // whole row down with it.
-                let live = p.recipients.compactMap { r -> (prospect: Prospect, recipient: Recipient, next: Date)? in
+            .compactMap { p -> (prospect: Prospect, recipient: Recipient, next: Date)? in
+                // #2126: built from the contacts that still have a reach-out date, so a resolved first
+                // contact cannot take a live colleague's whole row down with it.
+                let live = p.recipients.compactMap { r -> (recipient: Recipient, next: Date)? in
                     nextReachOut(for: r, of: p, now: now, followUpConfig: followUpConfig,
-                                 reminderConfig: reminderConfig).map { (prospect: p, recipient: r, next: $0) }
+                                 reminderConfig: reminderConfig).map { (recipient: r, next: $0) }
                 }
-                return SendGroup.oneRowPerGroup(live) { $0.recipient }
+                guard !live.isEmpty else { return nil }
+                // #2396: ONE row per SHOW. Dan judges shows, not contacts: "I really don't care about
+                // contact level outcomes. All I care about is the event level." It used to be one row per
+                // EMAIL (#2033), which was already a fold, and this finishes it: several emails about one
+                // event are still one decision.
+                //
+                // The row still speaks for a PERSON, because answering has to go back to somebody. Whoever
+                // replied wins, since that is the person Dan is answering and the row names them; with
+                // nobody having replied there is no such person, so it speaks for the contact due soonest,
+                // which is the one the row's own action is about.
+                let representative = live.first(where: { $0.recipient.replied }) ?? live.min { $0.next < $1.next }
+                guard let representative else { return nil }
+                // The DATE is the soonest across the whole show, not the representative's own, so a show
+                // cannot sit lower in the list than its most urgent contact deserves.
+                guard let soonest = live.map(\.next).min() else { return nil }
+                return (prospect: p, recipient: representative.recipient, next: soonest)
             }
             .sorted { $0.next < $1.next }
     }
@@ -88,22 +107,13 @@ enum ReachedOutQueue {
     }
 
     // #1194: how many SHOWS Dan has active outreach on, counting each show once no matter how many of
-    // its contacts he has pitched. The Reached-out stage pill uses this so its number reads like the
-    // other stage pills (Scout/Prep/Review all count shows), while the list under it stays per-recipient.
+    // its contacts he has pitched. #2396: the list under the pill counts shows too now, so this and the row
+    // count are the same quantity rather than two that needed reconciling (#1232's note, now removed).
     static func showCount(from prospects: [Prospect], now: Date,
                           followUpConfig: FollowUpConfig = .init(),
                           reminderConfig: ConversationReminderConfig = .init()) -> Int {
         Set(activeWithDates(from: prospects, now: now, followUpConfig: followUpConfig,
                             reminderConfig: reminderConfig).map { $0.prospect.naturalKey }).count
-    }
-
-    // #1232: the reached-out list shows one row per contacted RECIPIENT, but its stage pill counts distinct
-    // SHOWS (#1194), so a show pitched to two contacts makes the pill read one lower than the visible rows.
-    // This quiet note reconciles the two, and appears ONLY when there are genuinely more contacts than
-    // shows (equal counts need no note). Pure on the two counts, so it is tested without SwiftData.
-    static func contactsAcrossShowsNote(contactCount: Int, showCount: Int) -> String? {
-        guard contactCount > showCount else { return nil }
-        return "\(contactCount) contacts across \(showCount) \(showCount == 1 ? "show" : "shows")"
     }
 
     // Plain-language "when to next reach out", shown on each reached-out row (#223). Anything due

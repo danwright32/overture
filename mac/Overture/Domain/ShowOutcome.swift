@@ -212,20 +212,20 @@ extension DismissReason {
 }
 
 extension ShowOutcome {
-    // TRANSITIONAL, removed by #2396: the contact-level resolution that matches this ending.
+    // #2396: how a recorded ending reads as a show's status. The READER side of the fact, replacing the
+    // writer-side mirror #2395 used while the surfaces still read contacts: one home for the ending, and
+    // every reader goes to it rather than needing a copy written next to them.
     //
-    // The show is the home of the fact from #2394 onward, but the reached-out stage, the Archive buckets
-    // and the derived performance status all still read the CONTACTS, so an ending written only at the
-    // show level would leave the row sitting on screen after Dan closed it, which reads as a control that
-    // did nothing. Phase 3 makes those surfaces read the show, and this goes with them.
-    //
-    // Nil for the never-pitched seven: there is no contact to resolve on a show nothing was sent to.
-    var asRecipientResolution: RecipientResolution? {
+    // Nil for the never-pitched seven and for Overture's own two, and that is not a gap: none of them says
+    // anything about a pitch, so none may be read as a pitch outcome. Those shows are spoken for by being
+    // dismissed, which Archive gives its own bucket.
+    var asPerformanceStatus: PerformanceStatus? {
         switch self {
         case .booked: return .booked
-        case .neverHeardBack: return .neverHeardBack
-        case .theySaidNotNow: return .declinedSoft
-        case .theySaidNo: return .declinedHard
+        // A silence leaves the door open exactly as a soft no does. A distinct RECORD, so the reporting can
+        // tell "they said not now" from "nobody answered", and the same STATUS, because neither is a refusal.
+        case .neverHeardBack, .theySaidNotNow: return .lostDoorOpen
+        case .theySaidNo: return .lostNotInterested
         case .turnedThemDown: return .stoodDown
         case .dateConflict, .hadPaidWork, .pitchingOtherShows, .tooSoon, .notAFit, .dontWantToShoot,
              .duplicate, .wentBy, .tooFar:

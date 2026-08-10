@@ -194,14 +194,17 @@ struct RecordOutcomeTests {
         #expect(p.showOutcome == nil)
     }
 
-    // The contact-level record goes too. Leaving the contacts closed would keep the show reading as closed
-    // everywhere that still derives its status from them, on a decision Dan just reversed.
-    @Test func reopeningAlsoClearsWhatTheContactsRecorded() throws {
+    // #2396: recording an ending writes the SHOW and nothing else, so the contacts have nothing to clear.
+    // Asserted on both sides of the round trip, because the earlier version of this wrote a copy onto every
+    // contact and a reader that still expected one would fail silently rather than loudly.
+    @Test func theContactsAreNeverTouchedByAnEnding() throws {
         let ctx = try context()
         let p = pitched(ctx)
         _ = ProspectMutations.recordOutcome(QueueItem(p), .theySaidNotNow, prospects: [p],
                                             context: ctx, feedback: ActionFeedback())
-        #expect(p.recipients.contains { $0.resolution == .declinedSoft })
+
+        #expect(p.recipients.allSatisfy { $0.resolution == nil })
+        #expect(p.performanceStatus == .lostDoorOpen, "read off the show's own ending")
 
         _ = ProspectMutations.reopenOutcome(QueueItem(p), prospects: [p], context: ctx,
                                             feedback: ActionFeedback())
