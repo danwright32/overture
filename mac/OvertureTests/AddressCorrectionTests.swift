@@ -209,7 +209,10 @@ struct AddressCorrectionTests {
         ctx.insert(s)
         try ctx.save()
 
-        WatchlistEditing.editURL(s, to: "https://new.example/events", in: ctx)
+        // #2233: repointed on the SAME host, which is what "Fix the address" is named for and what every
+        // live use of it has been: a better page for the same venue. Dan's answers about the BUILDING
+        // survive that. Moved across hosts they are cleared instead, which RepointAcrossVenuesTests owns.
+        WatchlistEditing.editURL(s, to: "https://old.example/show-schedule.html", in: ctx)
 
         #expect(s.venueName == "The Players Theatre")
         #expect(s.venueLocation == "115 MacDougal St, New York, NY")
@@ -268,8 +271,14 @@ struct AddressCorrectionTests {
         // address Overture reads them at, and zeroing it would make a corrected source claim it had never
         // listed anything, which is a stronger and falser statement than the one the correction fixed.
         "lastNonEmptyAt": "when this ORG last listed a show, still true at a new address",
-        "venueLocation": "Dan's own answer (#1175), not a fact about the page",
-        "venueName": "Dan's own answer (#1529), not a fact about the page",
+        // #2233: these two survive a correction on the SAME host, which is what "Fix the address" is
+        // named for, and are cleared when it moves to a different one. They describe the building, and a
+        // repoint across venues carried the old room and street onto the new one, where a ticketing feed
+        // threads both into every show it produces. Listed here because `clearStateDerivedFromTheWatched
+        // Page` still does not touch them: the clearing is conditional and lives in `editURL`, beside the
+        // host comparison it depends on.
+        "venueLocation": "Dan's own answer (#1175); cleared by editURL only when the host changes",
+        "venueName": "Dan's own answer (#1529); cleared by editURL only when the host changes",
         "clientTagOverride": "Dan's answer about the ORG (#1209)",
         "clientTagClientId": "Dan's answer about the ORG (#1358)",
         "mergeSameDateVenue": "Dan's answer about how the ORG lists concerts (#1236)",
