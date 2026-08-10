@@ -191,6 +191,25 @@ assert_contains "prep-run.sh's helpers resolve to real files on disk" \
 assert_contains "prep-run.sh's helper list reaches runner-setup.sh too" \
   "${resolved}" "mac/scripts/lib/runner-setup.sh"
 
+# #1710: a guard that finds no scripts to check must say so, not report that every script parses.
+#
+# The check resolves its subject with a `find` over a hardcoded directory, and the whole class this
+# issue is about is a check whose subject silently resolves to nothing and whose "no violations
+# found" then reads exactly like "everything is fine". Here that sentence would be "every #!/bin/sh
+# script under mac/scripts parses under sh", said about no scripts at all.
+EMPTY_DIR="$(mktemp -d "${TMPDIR:-/tmp}/runner-posix-empty.XXXXXX")"
+OUTPUT="$(REPO_ROOT_OVERRIDE="${EMPTY_DIR}" "${SCRIPT_DIR}/check-runner-posix.sh" 2>&1)"
+EXIT=$?
+if [[ "${EXIT}" -eq 0 ]]; then
+  echo "FAIL - a run that finds no scripts reports success"
+  echo "  it said: ${OUTPUT}"
+  FAILURES=$((FAILURES + 1))
+else
+  echo "ok - a run that finds no scripts to check fails instead of reporting them all clean"
+fi
+assert_contains "the refusal names the directory it searched" "${OUTPUT}" "${EMPTY_DIR}"
+rm -rf "${EMPTY_DIR}"
+
 if [[ ${FAILURES} -gt 0 ]]; then
   echo "${FAILURES} failure(s)"
   exit 1

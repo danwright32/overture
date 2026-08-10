@@ -70,8 +70,24 @@ fail() {
 # hard-coded to PROMPT, this guard would have silently skipped it, which is precisely the #855 gap: for
 # months only the scout prompt was ever checked, while prep and reply-classify were built the same way
 # and nobody had looked at what they arrive as.
+#
+# #1710: an empty region is a FAILURE here, not an empty prompt. This helper resolves its subject
+# dynamically (a sed range built from two arguments), and every such helper is one refactor away from
+# matching nothing and handing back "" to a caller that reads it as "there is nothing objectionable
+# in this prompt". That is not a hypothetical: #1597 gave this function a second argument and left one
+# caller passing one, so for months it asked sed for a range beginning `^=`, matched nothing, and the
+# #872 guard reported "asks for no skill" about all three runners, two of which name the brand-voice
+# skill in their first paragraph. It was green and it was measuring nothing.
+#
+# The refusal lives HERE rather than in each caller, so a caller written later inherits it.
 prompt_region() {
-  sed -n "/^$2=/,/^\"$/p" "${SCRIPT_DIR}/$1"
+  local region
+  region="$(sed -n "/^$2=/,/^\"$/p" "${SCRIPT_DIR}/$1")"
+  if [[ -z "${region//[[:space:]]/}" ]]; then
+    echo "no prompt region for \$$2 in $1: the range matched nothing, so every check standing on it would be reading an empty prompt and reporting it clean (#1710)" >&2
+    return 1
+  fi
+  printf '%s\n' "${region}"
 }
 
 # What the model receives: the prompt after bash has finished with it. The runner's own variables are
@@ -164,7 +180,11 @@ assert_tools_can_obey_the_prompt() {
   # guard reported "asks for no skill, so it needs no Skill tool" for all three runners, including the two
   # whose prompts name the brand-voice skill in their first paragraph. It was green and it was measuring
   # nothing.
-  region="$(prompt_region "${script}" "${var}")"
+  if ! region="$(prompt_region "${script}" "${var}")"; then
+    fail "${script}: could not read the \$${var} prompt at all" \
+         "every check below would have run against an empty region and reported it clean (#1710)"
+    return 1
+  fi
 
   if [[ "${region}" != *"skill"* && "${region}" != *"Skill"* ]]; then
     echo "ok - ${script}: asks for no skill, so it needs no Skill tool"
@@ -213,7 +233,11 @@ for target in prep-run.sh:PROMPT prep-run.sh:PROBE_PROMPT \
   script="${target%%:*}"
   var="${target##*:}"
   echo "--- ${script} (${var})"
-  region="$(prompt_region "${script}" "${var}")"
+  if ! region="$(prompt_region "${script}" "${var}")"; then
+    fail "${script}: could not read the \$${var} prompt at all" \
+         "every check below would have run against an empty region and reported it clean (#1710)"
+    continue
+  fi
 
   # The bound itself. If a prompt does not close on a line of its own, the sed range runs to end of file
   # and every check below reads the script's own code as prompt text.
@@ -251,8 +275,13 @@ for target in prep-run.sh:PROMPT prep-run.sh:PROBE_PROMPT \
   # noisy guard gets weakened until it stops guarding).
   expanded="$(printf '%s' "${expanded}" | tr -s '[:space:]' ' ')"
 
+  # #1710: a target with no rule table is a target whose content is never checked, and the loop below
+  # is silent about it: zero iterations reads exactly like zero failures. Counted, so adding a fifth
+  # runner without writing its rules fails here instead of quietly buying it an exemption.
+  rule_count=0
   while IFS=$'\t' read -r desc needle; do
     [[ -n "${desc:-}" ]] || continue
+    rule_count=$((rule_count + 1))
     if [[ "${expanded}" == *"${needle}"* ]]; then
       echo "ok - ${script}: the model actually receives ${desc}"
     else
@@ -260,6 +289,12 @@ for target in prep-run.sh:PROMPT prep-run.sh:PROBE_PROMPT \
            "bash rewrote the prompt on its way out. Check for backticks, \$( ), or raw double quotes."
     fi
   done < <(rules_for "${target}")
+  if [[ "${rule_count}" -eq 0 ]]; then
+    fail "${target}: no load-bearing rules are listed for this prompt" \
+         "rules_for has no entry for it, so nothing about what the model receives was checked (#1710)"
+  else
+    echo "ok - ${script}: ${rule_count} load-bearing rules were actually checked"
+  fi
 
   assert_tools_can_obey_the_prompt "${script}" "${var}"
   assert_no_dashes "${SCRIPT_DIR}/${script}" "${script}'s prompt"
@@ -270,6 +305,33 @@ echo "--- the runbooks the runs read"
 for book in prep-runbook.md reply-classify-runbook.md scout-extract-runbook.md; do
   assert_no_dashes "${SCRIPT_DIR}/../../docs/${book}" "docs/${book}"
 done
+
+# #1710: this guard's own refusals, seen to fire.
+#
+# Everything above is a check that passes when it finds nothing wrong, and the whole point of this
+# issue is that such a check is indistinguishable from one finding nothing at all. So the two places
+# that resolve their subject dynamically are asked to fail, here, on purpose.
+echo "--- the guard's own refusals"
+
+if prompt_region "prep-run.sh" "NO_SUCH_PROMPT" >/dev/null 2>&1; then
+  fail "a prompt variable that does not exist was accepted" \
+       "the sed range matched nothing and this guard would have read it as a prompt with nothing wrong in it"
+else
+  echo "ok - a prompt region that matches nothing is refused, not read as a clean prompt"
+fi
+
+if prompt_region "prep-run.sh" "PROMPT" >/dev/null 2>&1; then
+  echo "ok - a prompt region that does exist is still read"
+else
+  fail "the refusal above rejects a REAL prompt too" \
+       "a guard that refuses everything protects nothing, the same as one that refuses nothing"
+fi
+
+if [[ -z "$(rules_for "some-new-runner.sh:PROMPT")" ]]; then
+  echo "ok - a runner with no rules listed yields none, which the loop above counts and fails on"
+else
+  fail "rules_for invented rules for a runner that has none listed"
+fi
 
 if [[ ${FAILURES} -gt 0 ]]; then
   echo "${FAILURES} failure(s)"
