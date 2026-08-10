@@ -53,6 +53,26 @@ enum OutcomePatterns {
         "\(tally.replied + tally.booked) replied" + percentSuffix(tally.responseRate)
     }
 
+    // #2251: how the lost ones ended, with a confirmed SILENCE named apart from a refusal.
+    //
+    // #2112 gave a closed-out silence its own value precisely because a silence and a no are different
+    // results, and until now nothing read it: `lostReasons` was written on every pass and had no reader
+    // anywhere in the app, which is exactly the shape L46 names. The data only accumulates from the day
+    // it is read, so the reader is the point.
+    //
+    // Counts, never a rate, so this is NOT suppressed at low sample the way the booking rate is: two
+    // shows is a noisy percentage but an honest pair of numbers.
+    static func lostSplitLine(_ tally: OutcomeTally) -> String? {
+        guard tally.lost > 0 else { return nil }
+        let parts = ShowOutcome.pitched
+            .filter { $0 != .booked }
+            .compactMap { outcome -> String? in
+                let count = tally.lostReasons[outcome] ?? 0
+                return count > 0 ? "\(count) \(outcome.countedPhrase)" : nil
+            }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
     static func percentSuffix(_ rate: Double?) -> String {
         guard let rate else { return "" }
         return " · \(Int((rate * 100).rounded()))%"

@@ -87,6 +87,22 @@ enum ShowOutcome: String, CaseIterable, Equatable, Hashable, Sendable {
         }
     }
 
+    // #2251: the same words, cased for use AFTER A NUMBER in a report ("3 never heard back"), where the
+    // menu label is written to be picked rather than counted. Deliberately the label's own words rather
+    // than a second phrasing of the same fact, which is the #843 trap from the naming direction, and a
+    // test asserts the two never drift apart. Only the pitched endings have one, because only those are
+    // counted in a lost split today; a never-pitched ending would need its own reading of the same rule.
+    var countedPhrase: String {
+        switch self {
+        case .booked: return "booked"
+        case .neverHeardBack: return "never heard back"
+        case .theySaidNotNow: return "they said not now"
+        case .theySaidNo: return "they said no"
+        case .turnedThemDown: return "I turned them down"
+        default: return label
+        }
+    }
+
     // MARK: the two halves
 
     // In the order Dan meets them on the menu, so the order is a property of the vocabulary rather

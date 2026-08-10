@@ -80,6 +80,12 @@ struct OutcomePatternsView: View {
                         .foregroundStyle(OVColor.inkSoft)
                     bookingSplit(name: name, tally: tally)
                 }
+                // #2251: how the lost ones ended, a confirmed silence named apart from a refusal.
+                // OUTSIDE the low-sample branch above, because these are counts rather than a rate, and
+                // the suppression there exists for percentages that read as signal over two shows.
+                if let lost = OutcomePatterns.lostSplitLine(tally) {
+                    Text(lost).foregroundStyle(OVColor.inkSoft)
+                }
             }
             .font(OVType.meta)
         }
