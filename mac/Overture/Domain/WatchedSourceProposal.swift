@@ -52,10 +52,15 @@ enum WatchedSourceProposal {
         case .upcomingListings, .allPast, .incompleteExtraction: break
         }
 
-        // Matched on HOST, not on the exact URL. An org publishes /events, /calendar and /concerts and
-        // links between them; three rows for one organization would fetch, hash and read the same
-        // calendar three times a run and report it as three sources.
-        if let match = existing.first(where: { sameHost($0.listingsURL, host) }) {
+        // Matched on CalendarIdentity, not on the exact URL. An org publishes /events, /calendar and
+        // /concerts and links between them; three rows for one organization would fetch, hash and read the
+        // same calendar three times a run and report it as three sources.
+        //
+        // #2377: through the SAME type the Sources sheet's add check uses, because this is the OTHER door
+        // onto one rule. It was a second spelling of the host comparison, so a URL unblocked on the sheet
+        // would still have been refused here, and the identity a lead's insert stamps would still have
+        // been the bare host.
+        if let match = existing.first(where: { CalendarIdentity.same($0.listingsURL, pageURL) }) {
             if !match.isActive, match.inactiveReason == .orgRefusal {
                 return .refused(orgName: match.orgName)
             }
@@ -83,8 +88,4 @@ enum WatchedSourceProposal {
         return host.replacingOccurrences(of: "www.", with: "")
     }
 
-    private static func sameHost(_ urlString: String?, _ host: String) -> Bool {
-        guard let urlString, let other = URL(string: urlString)?.host?.lowercased() else { return false }
-        return other == host || other == "www." + host || host == "www." + other
-    }
 }
