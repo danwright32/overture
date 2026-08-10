@@ -26,15 +26,28 @@ enum LocalHistory {
             if p.orgDoNotContact {
                 return HistoryRecord(groupName: p.groupName, status: "dnc", origin: .overtureActivity)
             }
-            if p.outcome == .booked {
+            if p.isBooked || p.showOutcome == .booked {
                 return HistoryRecord(groupName: p.groupName, status: "booked", origin: .overtureActivity)
             }
-            if p.outcome == .lostHard {
+            // #2399/#2401: read off the ONE field. This used to read `Outcome.lostHard`/`.lostSoft`, which
+            // nothing in the app has ever written, so Overture could learn that an org booked Dan and could
+            // never learn that one turned him down: they came back next season ranked as if nothing had
+            // happened. This is the half of that defect the scout feels.
+            if p.showOutcome == .theySaidNo {
                 return HistoryRecord(groupName: p.groupName, status: "lost_hard", origin: .overtureActivity)
             }
-            if p.outcome == .lostSoft {
+            if p.showOutcome == .theySaidNotNow {
                 return HistoryRecord(groupName: p.groupName, status: "lost_soft", origin: .overtureActivity)
             }
+            // Deliberately NOT recorded as a loss of either kind:
+            //
+            // `neverHeardBack` is a silence, and a silence is not a refusal. Nobody turned Dan down, so the
+            // org must not be ranked lower for never having written back. It falls through to "contacted"
+            // below, which is exactly what happened.
+            //
+            // `turnedThemDown` is DAN'S refusal, about one show. Recording it against the org would say
+            // they refused him, which is the opposite of what happened, and would then penalise an org for
+            // a decision he made about a single event.
             if p.status == .dismissed,
                let reason = p.showOutcome,
                schedulingDismissals.contains(reason) {

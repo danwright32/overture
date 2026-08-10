@@ -17,6 +17,7 @@ struct LocalHistoryTests {
     private func make(_ ctx: ModelContext, group: String, status: ReviewStatus,
                       venue: String = "V",
                       sentAt: Date? = nil, outcome: Outcome = .noResponse,
+                      showOutcome: ShowOutcome? = nil,
                       dismissReason: ShowOutcome? = nil) -> Prospect {
         let p = Prospect(naturalKey: group, groupName: group, discipline: "choral", venue: venue,
                          performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
@@ -26,6 +27,7 @@ struct LocalHistoryTests {
                          status: status, dismissReason: dismissReason)
         p.sentAt = sentAt
         p.outcome = outcome
+        if let showOutcome { p.showOutcome = showOutcome }
         ctx.insert(p)
         return p
     }
@@ -121,18 +123,22 @@ struct LocalHistoryTests {
         #expect(records.first?.status == "contacted")
     }
 
-    @Test func lostSoftOutcomeBecomesLostSoftHistory() throws {
-        // Dan marked it lost but open to the future: a small positive, above a cold stranger.
+    @Test func asoftNoBecomesLostSoftHistory() throws {
+        // They said not now: a small negative, still above a cold stranger. #2399: read off the one field.
+        // This used to be written as `Outcome.lostSoft`, which nothing in the app has ever written, so the
+        // assertion passed on a path no real row could reach (#2401).
         let ctx = ModelContext(try container())
-        make(ctx, group: "Maybe Later Choir", status: .approved, sentAt: Date(), outcome: .lostSoft)
+        make(ctx, group: "Maybe Later Choir", status: .approved, sentAt: Date(),
+             showOutcome: .theySaidNotNow)
         let records = LocalHistory.records(from: try ctx.fetch(FetchDescriptor<Prospect>()))
         #expect(records.first?.status == "lost_soft")
     }
 
-    @Test func lostHardOutcomeBecomesLostHardHistory() throws {
-        // Dan marked it a hard no: a heavy penalty that still stays visible.
+    @Test func arefusalBecomesLostHardHistory() throws {
+        // They said no: a heavy penalty that still stays visible.
         let ctx = ModelContext(try container())
-        make(ctx, group: "Never Again Opera", status: .approved, sentAt: Date(), outcome: .lostHard)
+        make(ctx, group: "Never Again Opera", status: .approved, sentAt: Date(),
+             showOutcome: .theySaidNo)
         let records = LocalHistory.records(from: try ctx.fetch(FetchDescriptor<Prospect>()))
         #expect(records.first?.status == "lost_hard")
     }
