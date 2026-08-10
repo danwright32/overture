@@ -292,6 +292,21 @@ enum PrepImporter {
             if let existing = p.recipients.first(where: { $0.id == id }) {
                 apply(c, email: email, provenance: provenance, venue: p.venue,
                      performanceDate: p.performanceDate, excludingProspectKey: p.naturalKey, context: context, to: existing)
+            } else if let existing = matchSamePerson(in: p, name: c.name, among: contacts) {
+                // #2422: the same person, reached a second way. The id routes above cannot see this by
+                // construction (an email and a `form:` URL are two different ids for one person), and the
+                // provenance routes below are switched off on every multi performer show, so before this
+                // the append branch was the only live branch and a re-run always duplicated rather than
+                // corrected. Dan, 2026-08-10: "and I've got two of the same person."
+                apply(c, email: email, provenance: provenance, venue: p.venue,
+                      performanceDate: p.performanceDate, excludingProspectKey: p.naturalKey,
+                      context: context, to: existing)
+                // Re-keyed from what the row ENDS UP holding rather than from the incoming handle, which
+                // is what makes an address beat a form: `apply` keeps the better of the two on each field,
+                // so recomputing here lands on the email whenever either side had one.
+                if let merged = Recipient.makeId(email: existing.email, formURL: existing.contactFormURL) {
+                    existing.id = merged
+                }
             } else if provenanceIsUnambiguous,
                       let existing = matchPending(in: p, provenance: provenance, formURL: c.formUrl) {
                 // A corrected email for an existing pending act/presenter (or a form-only recipient
@@ -326,6 +341,34 @@ enum PrepImporter {
                 p.addRecipient(recipient)
             }
         }
+    }
+
+    // #2422: an existing recipient that is the same PERSON as this incoming contact.
+    //
+    // Refuses on any ambiguity rather than guessing, because the failure mode of a wrong match is worse
+    // than the duplicate it fixes: it would write one performer's address onto another's row.
+    //
+    //   - The name must fold to something (ContactIdentity.personKey), so two nameless contacts never
+    //     match each other.
+    //   - Exactly one existing recipient may carry that name. Two already means something has gone wrong
+    //     upstream, and picking one of them would be arbitrary.
+    //   - Exactly one contact in the INCOMING batch may carry it, or two payload entries would fight over
+    //     one row, which is the #408 failure the provenance guard exists to prevent.
+    //   - Never a manual recipient (#388: Dan typed it in, and it is not the importer's to rewrite), and
+    //     never an already-sent one, whose address is locked.
+    //
+    // Provenance is deliberately NOT required to match. The live store held Ben Cameron as `act` on one
+    // row and `performer` on the other, disagreeing about what he even is; they are still one person, and
+    // `apply` settles the classification.
+    private static func matchSamePerson(in p: Prospect, name: String?,
+                                        among batch: [PrepContact]) -> Recipient? {
+        guard let key = ContactIdentity.personKey(name) else { return nil }
+        guard batch.filter({ ContactIdentity.personKey($0.name) == key }).count == 1 else { return nil }
+        let candidates = p.recipients.filter {
+            $0.provenance != .manual && $0.sendState == .pending
+                && ContactIdentity.personKey($0.name) == key
+        }
+        return candidates.count == 1 ? candidates.first : nil
     }
 
     // Find a still-pending, non-manual recipient of the same provenance to update in place. When the
@@ -365,7 +408,10 @@ enum PrepImporter {
         r.provenance = provenance
         r.contactMethodRaw = c.method ?? r.contactMethodRaw
         r.contactConfidenceRaw = c.confidence ?? r.contactConfidenceRaw
-        r.contactFormURL = c.formUrl ?? r.contactFormURL
+        // #2422: the BETTER of the two forms, never simply the latest. A row that already offers the act's
+        // own booking page must not be downgraded to an Instagram by a later run that happened to find one,
+        // which is exactly what the store held on two performers.
+        r.contactFormURL = ContactIdentity.preferredFormURL(existing: r.contactFormURL, incoming: c.formUrl)
         r.contactSourceURL = c.sourceUrl ?? r.contactSourceURL
         // #1856: the same bar as a freshly appended contact, judged on the pair this ingest LEAVES
         // BEHIND. The two fields fall back independently above, so a re-run can raise a recipient to
