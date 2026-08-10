@@ -25,4 +25,37 @@ struct ContactRowControlsTests {
         #expect(ContactRowControls.Kind.outcome.icon != ContactRowControls.Kind.conversationState.icon)
         #expect(ContactRowControls.Kind.outcome.accent != ContactRowControls.Kind.conversationState.accent)
     }
+
+    // #2392 follow-up: the triage card's per-address strike follows the SAME rule as the review panel's
+    // leading X, rather than inventing a looser one. The panel deliberately withholds the one-click
+    // remove from a contact Dan has already written to (its removal is the destructive item inside the
+    // "Mark…" menu), and the first cut of the triage control offered it on every address on every card,
+    // including shows already pitched. One action, two surfaces, two different levels of exposure.
+    @Test func theTriageStrikeIsOfferedOnlyWhereTheReviewPanelWouldOfferIt() {
+        // Still pending, on a live card: offered, and it agrees with the panel's own rule.
+        #expect(ContactRowControls.strikeIsOffered(sendState: .pending, showIsResolved: false))
+        #expect(ContactRowControls.strikeIsOffered(sendState: .pending, showIsResolved: false)
+                == ContactRowControls.leadingIsRemove(sendState: .pending))
+
+        // Already written to: withheld, exactly as the panel withholds it.
+        #expect(ContactRowControls.strikeIsOffered(sendState: .sent, showIsResolved: false) == false)
+        #expect(ContactRowControls.strikeIsOffered(sendState: .sent, showIsResolved: false)
+                == ContactRowControls.leadingIsRemove(sendState: .sent))
+        #expect(ContactRowControls.strikeIsOffered(sendState: .suppressed, showIsResolved: false) == false)
+    }
+
+    // An INHERITED address has no contact behind it at all, so there is no send state to judge, and the
+    // card itself is the only thing that can say whether striking it still means anything. A resolved
+    // show is past the decision this control exists to serve.
+    @Test func anInheritedAddressIsJudgedByTheCardBecauseItHasNoContact() {
+        #expect(ContactRowControls.strikeIsOffered(sendState: nil, showIsResolved: false))
+        #expect(ContactRowControls.strikeIsOffered(sendState: nil, showIsResolved: true) == false)
+    }
+
+    // The card-level gate holds even for a contact that is still pending: on a show already sent or
+    // booked, a pending sibling is not somebody Dan is about to be asked to pitch.
+    @Test func aResolvedShowOffersNoStrikeAtAll() {
+        #expect(ContactRowControls.strikeIsOffered(sendState: .pending, showIsResolved: true) == false)
+    }
 }
+

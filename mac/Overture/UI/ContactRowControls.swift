@@ -15,6 +15,21 @@ enum ContactRowControls {
         leadingIsRemove(sendState: sendState) ? "xmark.circle" : "person.crop.circle"
     }
 
+    // #2392 follow-up: whether the TRIAGE card offers its per-address strike. Defined here, beside the
+    // review panel's rule and through it, because they are one action on two surfaces and the first cut
+    // of the triage control quietly disagreed: it offered a one-click remove on addresses of people Dan
+    // had already written to, which #1137 deliberately withholds (there, removing a sent contact is the
+    // destructive item inside the "Mark…" menu instead).
+    //
+    // `sendState` is nil for an INHERITED address, which has no contact on this show to have a state. In
+    // that case the card decides, since a show already sent or booked is past the decision this control
+    // exists to serve.
+    static func strikeIsOffered(sendState: SendState?, showIsResolved: Bool) -> Bool {
+        guard !showIsResolved else { return false }
+        guard let sendState else { return true }
+        return leadingIsRemove(sendState: sendState)
+    }
+
     // #1139: a semantic accent, so the two controls read as a deliberate SYSTEM (forest = a committed
     // outcome, gold = an in-flight/warm conversation), matching Overture's colour language elsewhere,
     // rather than one control being branded and the other left on the system default by accident.
