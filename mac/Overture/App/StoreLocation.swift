@@ -140,6 +140,28 @@ enum StoreLocation {
         isUnderTest ? testRunDirectory : requested
     }
 
+    // #2342: the ONE answer to "is this Dan's real handoff directory?", so the two protections around
+    // that folder cannot drift into disagreeing about it.
+    //
+    // Two exist because they answer different questions: the redirect above swaps the path a test WRITES
+    // to, and `HandoffCleanup`'s pin refuses to DELETE from it. The pin's meaning had shifted underneath
+    // it, though: it compared its argument against `StoreLocation.handoffDirectory`, which since the
+    // redirect IS the temp folder under test. So it had stopped naming the folder it was written to
+    // protect, and a test that built the live path itself would have been swept rather than refused.
+    //
+    // Both build branches count, not just this one. The test bundle is always Debug, so asking only about
+    // the Debug folder would leave the RELEASE folder, the one holding Dan's live store, unnamed by the
+    // rule that exists to protect it.
+    //
+    // Standardised on both sides, because two URLs for one directory ("…/Overture" and "…/Overture/")
+    // compare unequal while naming the same files, and a guard that answered no on a trailing slash would
+    // fail in the one direction that deletes.
+    static func isLiveHandoffDirectory(_ url: URL, appSupport: URL = StoreLocation.appSupport) -> Bool {
+        let live = [handoffDirectory(appSupport: appSupport, isDebugBuild: true),
+                    handoffDirectory(appSupport: appSupport, isDebugBuild: false)]
+        return live.contains { $0.standardizedFileURL.path == url.standardizedFileURL.path }
+    }
+
     // The handoff directory for THIS build. Creates it on first use (dataDirectory already ensures the
     // parent exists), so writers never hit a missing-directory error.
     static var handoffDirectory: URL {

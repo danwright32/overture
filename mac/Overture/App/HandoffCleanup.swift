@@ -60,7 +60,13 @@ enum HandoffCleanup {
         // The pin refuses to WRITE into the live handoff directory under test (#849). Deleting from it is
         // the same trespass, and a quieter one: nothing appears where it should not, something merely
         // stops being there. A test that passes its own temp directory is safe and every one of them does.
-        if AppEnvironment.isRunningUnderTests, handoffDirectory == StoreLocation.handoffDirectory {
+        //
+        // #2342: asked through `StoreLocation.isLiveHandoffDirectory`, the one owner of the rule. This
+        // used to compare against `StoreLocation.handoffDirectory`, which since #2097's redirect resolves
+        // to a per-test-run TEMP folder under test: the pin was refusing to sweep the scratch directory
+        // while no longer naming Dan's real one at all, so a test that built the live path itself would
+        // have been swept. The two protections now read one rule rather than two that had drifted (L55).
+        if AppEnvironment.isRunningUnderTests, StoreLocation.isLiveHandoffDirectory(handoffDirectory) {
             return Result(refusedUnderTest: true)
         }
 

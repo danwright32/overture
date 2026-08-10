@@ -534,6 +534,7 @@
 		52CF1561762147D75C2C187F /* InquiryCopy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CC75D6DE5336B18821F0437 /* InquiryCopy.swift */; };
 		52E76A17AD9CE63A23EB2054 /* OvationTixCalendar.swift in Sources */ = {isa = PBXBuildFile; fileRef = F915CB57556CFB341F37BFEA /* OvationTixCalendar.swift */; };
 		534815A4119D1F98E4E5389D /* NotificationServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10AA74775D09ADD6707F71F /* NotificationServiceTests.swift */; };
+		53C0E986891B0112F222E139 /* HandoffOutOfBoundsAgreementTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1DA68CB95E9EDFDF6A81A4C /* HandoffOutOfBoundsAgreementTests.swift */; };
 		53DE617098EA2D2AA1FFD25D /* DownbeatBooking.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF13A18B3F23144C2AEAF3BD /* DownbeatBooking.swift */; };
 		53E207B63E68B83EC1E413B1 /* JointOpening.swift in Sources */ = {isa = PBXBuildFile; fileRef = 695F4CBFDC4CCFC00082BB63 /* JointOpening.swift */; };
 		53E5FA88C22DA4BD40C90B49 /* SendConfirmAndReconnectAlerts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A082007D0D0F3B3EA1029F1 /* SendConfirmAndReconnectAlerts.swift */; };
@@ -2288,6 +2289,7 @@
 		A14670939A1D0902000A4FE2 /* DuplicateContactGuard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DuplicateContactGuard.swift; sourceTree = "<group>"; };
 		A14B63BB837F86F663211749 /* ScoutExtractContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutExtractContractTests.swift; sourceTree = "<group>"; };
 		A1CC343FE3F73EE47ACE5926 /* PrepQueueEligibilityParityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrepQueueEligibilityParityTests.swift; sourceTree = "<group>"; };
+		A1DA68CB95E9EDFDF6A81A4C /* HandoffOutOfBoundsAgreementTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandoffOutOfBoundsAgreementTests.swift; sourceTree = "<group>"; };
 		A1E34ACF451D3A4FE053FB7E /* ScoutScheduleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutScheduleTests.swift; sourceTree = "<group>"; };
 		A1F8CC2C00BB870172AFAAC3 /* WatchlistEditURLTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchlistEditURLTests.swift; sourceTree = "<group>"; };
 		A2E8DF70F15A0686D38907C0 /* ArchiveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArchiveView.swift; sourceTree = "<group>"; };
@@ -2996,6 +2998,7 @@
 				ABD1EF31EA512A7A4C5EE9CC /* HandoffCleanupTests.swift */,
 				5AFFF2BD478618FF1D29304A /* HandoffCompletenessTests.swift */,
 				29444CAEC02973DC38FC0E88 /* HandoffDirectoryGuardTests.swift */,
+				A1DA68CB95E9EDFDF6A81A4C /* HandoffOutOfBoundsAgreementTests.swift */,
 				47DB12405A6B9085B8C20464 /* HandoffPathGuardTests.swift */,
 				4D59A3483A4B97B41B9F22A1 /* HandWrittenReplyTests.swift */,
 				13BE0665B3CCB4B2CF5104C3 /* HeldAddressIsNotNoAddressTests.swift */,
@@ -4829,6 +4832,7 @@
 				5C2BEA0BD474CBF4063BC469 /* HandoffCleanupTests.swift in Sources */,
 				D8224226DB147BE30BA8DAB8 /* HandoffCompletenessTests.swift in Sources */,
 				3624EF7B94003425372E2F27 /* HandoffDirectoryGuardTests.swift in Sources */,
+				53C0E986891B0112F222E139 /* HandoffOutOfBoundsAgreementTests.swift in Sources */,
 				8AEAE230F42A46977A6E57D0 /* HandoffPathGuardTests.swift in Sources */,
 				BD1F16C2AB183F14484DB1A6 /* HandoffShortfall.swift in Sources */,
 				F101F21AC9C4EE3B5506237F /* HeldAddressIsNotNoAddressTests.swift in Sources */,

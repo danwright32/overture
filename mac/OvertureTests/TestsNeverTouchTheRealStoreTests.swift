@@ -65,8 +65,15 @@ struct TestsNeverTouchTheRealStoreTests {
     //
     // The refusal is REPORTED, not silent, precisely so this can assert on it. A guard whose only
     // evidence is "nothing happened" cannot be told apart from a folder that had nothing to sweep.
+    //
+    // #2342: the directory is resolved the way the APP resolves it, not through
+    // `StoreLocation.handoffDirectory`, which since #2097's redirect returns a per-test-run temp folder
+    // here. This test believed it was sweeping Dan's real folder and was in fact sweeping the scratch
+    // one, so it passed for a reason unrelated to the rule it names, which is the drift #2342 closed.
     @Test func sweepingTheLiveHandoffDirectoryIsRefusedUnderTest() {
-        let result = HandoffCleanup.sweep(handoffDirectory: StoreLocation.handoffDirectory, now: Date())
+        let live = StoreLocation.handoffDirectory(appSupport: StoreLocation.appSupport,
+                                                  isDebugBuild: StoreLocation.isDebugBuild)
+        let result = HandoffCleanup.sweep(handoffDirectory: live, now: Date())
 
         #expect(result.refusedUnderTest)
         #expect(result.deleted.isEmpty)
