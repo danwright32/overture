@@ -75,6 +75,22 @@ enum DayOffEditing {
             || trimmed(draft.note) != trimmed(baseline.note)
     }
 
+    // #2254, from Dan's walk of the days off form on 2026-08-07: moving First day forward to 8/10 left
+    // Last day sitting at 8/7, three days before the range starts, with both fields looking perfectly
+    // normal. The refusal below catches it at the press, but a form that looks correct while holding an
+    // impossible range has already misled him.
+    //
+    // The last day follows the first: when the first day moves past it, it comes with it. Never the other
+    // way round, so extending a trip by moving Last day out is untouched.
+    //
+    // Compared as EASTERN DAYS rather than as instants, through the one date helper (L39): the pickers
+    // carry a time component, so an instant comparison would drag Last day forward for a first day
+    // LATER IN THE SAME DAY, which is not a backwards range at all. Lives here, not in the fields view,
+    // so it is testable and so the two sheets that embed those fields cannot drift apart on it.
+    static func endMovedWithStart(start: Date, end: Date) -> Date {
+        EasternDate.dayString(from: end) < EasternDate.dayString(from: start) ? start : end
+    }
+
     static func message(for result: Result) -> String? {
         switch result {
         case .added: return nil                 // the row appearing in the list is the receipt

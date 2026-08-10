@@ -13,13 +13,22 @@ struct DayOffRangeFields: View {
         VStack(alignment: .leading, spacing: OVSpacing.xs) {
             HStack(spacing: OVSpacing.md) {
                 DatePicker("First day", selection: $start, displayedComponents: .date)
-                DatePicker("Last day", selection: $end, displayedComponents: .date)
+                // #2254: the last day cannot be set before the first, and when the first moves past it it
+                // is carried along. Both halves live here rather than in either sheet, so the Days off
+                // form and the block-these-days picker cannot end up with different rules about the same
+                // two fields.
+                DatePicker("Last day", selection: $end, in: start..., displayedComponents: .date)
                 // Pin the pickers left with a guaranteed gap on the right, so the year's stepper never
                 // crowds the container edge (#901 walk fix).
                 Spacer(minLength: OVSpacing.sm)
             }
             .font(.system(size: 12))
             .datePickerStyle(.compact)
+            // The other half: a range constraint stops a bad END being picked, but it cannot stop the
+            // FIRST day being moved past a good end, which is the case Dan actually hit.
+            .onChange(of: start) { _, moved in
+                end = DayOffEditing.endMovedWithStart(start: moved, end: end)
+            }
 
             TextField("Why (optional): vacation, family, anything", text: $note)
                 .textFieldStyle(.roundedBorder).font(.system(size: 12))
