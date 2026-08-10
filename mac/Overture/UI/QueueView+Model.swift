@@ -1398,7 +1398,10 @@ enum QueueModel {
         let groups = groupByDate(rows()).filter { dates.contains($0.id) }
         guard !groups.isEmpty else { return nil }
         let selected = groups.flatMap(\.items)
-        let candidateKeys = Set(groups.flatMap { reachabilityProbeCandidateKeys($0.items, now: now, today: today, geo: geo) })
+        // #2371: per ticked DATE, so a date with nothing outstanding contributes its answered shows (a
+        // tick on it can only mean "check this again") while a date with work left still contributes only
+        // that work, its answered shows riding along free as they always have.
+        let candidateKeys = Set(groups.flatMap { probeKeysForTickedDate($0.items, now: now, today: today, geo: geo) })
         // Open shows on those dates that were answered recently: free, and named in the confirm rather
         // than quietly dropped, because a count that omits rows stops being a promise about what is there.
         let answered = selected.filter { i in
@@ -1827,6 +1830,31 @@ enum QueueModel {
                                         geo: GeoRefusals = .none) -> [String] {
         items.filter { probeIsWorthOffering($0, today: today, geo: geo)
                         && hasFreshReachabilityAnswer($0, now: now) }.map(\.id)
+    }
+
+    // #2371: what ticking THIS date puts into a run, and, because it is the same question, whether the
+    // date offers a tick box at all. Dan, 2026-08-09: "now that we have the ability to check reachability
+    // again, we shouldn't hide the checkbox on nights that have already been checked."
+    //
+    // A date with something outstanding contributes exactly that (unchanged, and in particular a PARTLY
+    // checked date still rides its answered shows along for free, which is #1597's deliberate pricing).
+    // A date with nothing outstanding contributes its answered-but-still-open shows, because on such a
+    // date that is the only thing a tick could possibly mean, and a tick that adds nothing is a control
+    // that moves neither the selection bar's count nor the confirm's cost.
+    //
+    // Nothing is written to the store either way. That is the whole reason the tick, rather than the
+    // "Check again" link it replaces, is the route: ticking is something Dan undoes by ticking again, and
+    // the link marked every answered show on the date before the selection was even priced, so changing
+    // his mind left the requests standing (#2375).
+    //
+    // One function for both questions on purpose: the tick box appears exactly where it has something to
+    // contribute, so its presence can never promise rows the run does not get (L16).
+    static func probeKeysForTickedDate(_ items: [QueueItem], now: Date = Date(),
+                                       today: String = QueueModel.easternToday(),
+                                       geo: GeoRefusals = .none) -> [String] {
+        let outstanding = reachabilityProbeCandidateKeys(items, now: now, today: today, geo: geo)
+        guard outstanding.isEmpty else { return outstanding }
+        return keysToReofferForRecheck(items, now: now, today: today, geo: geo)
     }
 
     // #1617: this date has nothing left to check BECAUSE its shows have been answered, which is a

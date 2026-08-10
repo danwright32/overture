@@ -376,18 +376,10 @@ struct QueueView: View {
                                     message: ProbeSelectionCopy.finishMissedShowsMessage(summary))
     }
 
-    // #2268: Dan pressed "Check again" on a finished date. Every answered, still-open show on it is
-    // marked, which makes them candidates again, and the date is ticked so the selection bar takes over
-    // with its own count, cost and confirm. Nothing is spent here.
-    private func reofferDateForRecheck(_ group: QueueModel.DateGroup) {
-        let keys = QueueModel.keysToReofferForRecheck(group.items, geo: geo)
-        guard !keys.isEmpty else { return }
-        for item in group.items where keys.contains(item.id) {
-            ProspectMutations.requestReachabilityRecheck(item, prospects: prospects,
-                                                         context: context, feedback: feedback)
-        }
-        probeSelection.toggle(group.id)
-    }
+    // #2268 built a "Check again" link on a finished date, which marked every answered show on it and
+    // then ticked the date. #2371 replaced it with the tick box itself (Dan, 2026-08-09): one control on
+    // the heading rather than two meaning the same thing (#1595), and a tick that writes nothing, so
+    // changing his mind by unticking cannot leave a date carrying requests he never ran (#2375).
 
     // #2267: Dan pressed "Check again" on one card. It raises the SAME confirm sheet the date selection
     // raises, carrying the same cost sentence, and the same approval starts the same kind of run. The
@@ -676,21 +668,21 @@ struct QueueView: View {
                 // candidates, so Dan can see which are emailable before he keeps one and dismisses the rest.
                 // A standalone view (testable, #863) that reports the candidate keys up so the confirm sheet
                 // opens at the QueueView level.
-                // #1597: tick the date to add it to a multi-date check. Scout only, and only where there
-                // is something still to check, so it never appears on a date whose Check button is absent.
-                if focusedStage == .scout, !QueueModel.reachabilityProbeCandidateKeys(group.items, geo: geo).isEmpty {
+                // #1597: tick the date to add it to a multi-date check. Scout only, and only where the
+                // tick would actually contribute shows to a run, so it never appears on a heading that is
+                // bare for some reason nobody checked.
+                // #2371: that now includes a date already fully checked (Dan, 2026-08-09), where the tick
+                // means "check this one again" and carries that date's answered shows. Asked through the
+                // SAME function the selection prices, so the box can never appear on a date it would then
+                // add nothing for.
+                if focusedStage == .scout, !QueueModel.probeKeysForTickedDate(group.items, geo: geo).isEmpty {
                     ProbeDateCheckbox(groupID: group.id, selection: probeSelection)
                 }
                 ReachabilityProbeControl(
                     items: group.items, dateLabel: group.monthDay,
                     geo: geo,
                     isRunning: prepRunning,
-                    onTap: { keys, label in pendingProbe = ProbeConfirm(keys: keys, dateLabel: label) },
-                    // #2268: mark this date's answered shows, then tick the date. Everything after that is
-                    // the ordinary selection: the bar appears with the count and the cost, and he can add
-                    // other dates before running them together, which is the case a per-card route serves
-                    // worst and the reason he asked for this.
-                    onReofferDate: { reofferDateForRecheck(group) })
+                    onTap: { keys, label in pendingProbe = ProbeConfirm(keys: keys, dateLabel: label) })
             }
             .padding(.bottom, OVSpacing.xxs)
             .overlay(alignment: .bottom) { Rectangle().fill(OVColor.line).frame(height: 1) }
@@ -1666,9 +1658,6 @@ struct ReachabilityProbeControl: View {
     // while any run is already in flight rather than failing after the tap with alreadyRunning.
     let isRunning: Bool
     let onTap: (_ keys: [String], _ dateLabel: String) -> Void
-    // #2268: re-offer this whole date. Optional so a surface without the selection machinery simply
-    // passes nothing and the finished marker renders exactly as it did.
-    var onReofferDate: (() -> Void)? = nil
 
     var body: some View {
         let keys = QueueModel.reachabilityProbeCandidateKeys(items, geo: geo)
@@ -1699,18 +1688,10 @@ struct ReachabilityProbeControl: View {
                 Text(ReachabilityProbeCopy.dateCheckedMarker)
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(OVColor.inkFaint)
-                // #2268: and a way back in. Dan asked for it: "is there a way to re-check an entire date
-                // with multiple events?" It MARKS this date's answered shows rather than starting a run,
-                // so what follows is the ordinary selection, with the same count, the same cost sentence
-                // and the same confirm. Quiet, like the marker beside it, because a finished date is
-                // still a resting state and this is a way out of it rather than something to act on.
-                if let onReofferDate {
-                    Button(ReachabilityProbeCopy.recheckThisDate) { onReofferDate() }
-                        .buttonStyle(.plain)
-                        .font(.system(size: 11))
-                        .foregroundStyle(OVColor.forest)
-                        .help(ReachabilityProbeCopy.recheckThisDateHelp)
-                }
+                // #2268 put a "Check again" link here, answering Dan's "is there a way to re-check an
+                // entire date with multiple events?". #2371 moved that job to the tick box beside the
+                // date, which now stays on a finished date: one control, and one that spends nothing and
+                // writes nothing until the selection bar's confirm.
             }
         }
     }

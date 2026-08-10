@@ -557,13 +557,9 @@ enum ReachabilityProbeCopy {
     // so Dan reads it exactly where he went looking for the control, and it names reachability rather
     // than saying a bare "Checked" that leaves the date line claiming nothing in particular.
     static let dateCheckedMarker = "Reachability checked"
-    // #2268: the way back into a finished date. It is the SAME action at a wider scope, so it is the same
-    // words, and deliberately the same CONSTANT: written out again the two would drift and Dan would meet
-    // one label on a card and a different one on the heading above it (#843, which the copy inventory
-    // caught the moment a second copy existed).
-    static var recheckThisDate: String { ReachabilityCopy.checkAgain }
-    static let recheckThisDateHelp =
-        "Put this date's shows back in the check, so their contacts are researched again. You'll see what it will spend before anything starts."
+    // #2268's "Check again" link on the heading, and its help, are GONE with #2371: the tick box beside
+    // the date now stays on a finished date and carries that job, so the words that duplicated it have no
+    // reader left. The per-CARD "Check again" (ReachabilityCopy.checkAgain) is untouched.
 
     // #1334: reads for a single show (a lone stale re-check) as well as several, rather than "these 1 shows".
     static func confirmTitle(count: Int) -> String {
