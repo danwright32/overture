@@ -74,6 +74,13 @@ enum LaunchMigrations {
         // and defers any collision where two rows both carry outreach history. Can delete a row, so the
         // launch backup (#601/#602) taken just before this matters here most.
         NaturalKeyVenueMigration.run(in: context)
+        // #2422: one person found through two handles is one contact. Deliberately AFTER the natural-key
+        // merge above, which can itself move recipients between rows: reconciling first would leave the
+        // pairs that arrive from that merge for another launch. It DELETES a recipient, so it refuses any
+        // group holding a sent or manual row and never lets a blank overwrite a value; the launch backup
+        // (#601/#602) taken just before this is the net under it. Idempotent: a show with one row per
+        // person has no group of two to reconcile.
+        DuplicateContactMerge.run(in: context)
         // #1784: move each stored organisation answer onto the key today's shared fold computes, so an
         // answer written under the old spelling of a bracketed name is still found rather than paid for
         // again. Idempotent (a row already on its computed key is skipped). Can delete a row, but only a
