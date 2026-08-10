@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1205 sentences**, from 401 source files.
+Every sentence Overture can say to Dan: **1209 sentences**, from 402 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1492,6 +1492,12 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/InquiryCopy.swift`
 "Save draft"
     `UI/ManualPrepSheet.swift`
+"Save or cancel the location you're editing first."
+    `Domain/SourcesSheetClose.swift`
+"Save or cancel the room you're placing first."
+    `Domain/SourcesSheetClose.swift`
+"Save or cancel the venue name you're editing first."
+    `Domain/SourcesSheetClose.swift`
 "Save this address"
     `Domain/ReplyPanel.swift`
 "Saved \(address) to this show. Replies from it are recognised now, and it won't be pitched."
@@ -2029,6 +2035,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SourcesView.swift`
 "Watch it"
     `UI/SourcesView.swift`
+"Watch the source you've typed, or clear it, before closing."
+    `Domain/SourcesSheetClose.swift`
 "Watching \(org) again."
     `App/ActionFeedback.swift`
 "Watching for replies and bookings"
