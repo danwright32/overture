@@ -951,6 +951,15 @@ struct SourcesView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            // #2231: this source has never read its calendar once, and is past the grace a new source gets.
+            // GOLD, because unlike the two notes above it is squarely work Dan can act on: the link is the
+            // thing to check, and until somebody does, the calendar he added contributes nothing at all.
+            if let neverRead = source.neverReadNote() {
+                Text(neverRead).font(.system(size: 11))
+                    .foregroundStyle(OVColor.gold)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             // #1544: this source's page came back unencrypted, because its https handshake is broken and
             // Overture fell back to the cleartext address Dan stored. Worth saying: those bytes could have
             // been altered in flight and they feed the reconcile that cancels shows.

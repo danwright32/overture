@@ -265,6 +265,15 @@ final class WatchedSource {
                                                   baseline: baselineFeedCount)
     }
 
+    // #2231: what the row says when this source has never once read its calendar, past the grace window.
+    // Nil in every other case, including a source added this week, which is the state this must not shout
+    // about. Decided beside the data rather than in the view (#863), and read off the SAME rule that put
+    // the row in the section, so the sentence and the badge cannot disagree about which sources it means.
+    func neverReadNote(now: Date = Date()) -> String? {
+        guard isActive, SourceAttention.hasNeverRead(self, now: now) else { return nil }
+        return SourceAttention.neverReadLine(addedAt: addedAt, now: now)
+    }
+
     // #1544: what the row says about an unencrypted fetch, decided beside the data and never in the view
     // (#863). Nil is the overwhelmingly common case and costs the row nothing.
     var insecureFetchNote: String? {
