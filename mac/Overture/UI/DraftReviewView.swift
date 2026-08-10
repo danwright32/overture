@@ -35,6 +35,11 @@ struct DraftReviewView: View {
     var onCancelFormPitch: (_ recipientId: String) -> Void = { _ in }
     // Per-contact manual-judge marking (#418 B1/B2): resolution nil + bounced false = "In conversation".
     var onMarkContact: (_ recipientId: String, _ resolution: RecipientResolution?, _ bounced: Bool) -> Void = { _, _, _ in }
+    // #2395: the show reached an ending. One callback for all five, because they are one vocabulary and
+    // one write (ProspectMutations.recordOutcome), not five buttons each doing their own thing.
+    var onRecordOutcome: (ShowOutcome) -> Void = { _ in }
+    // #2395: Dan takes the ending back, so a mis-pressed close-out is reachable from the card he is on.
+    var onReopenOutcome: () -> Void = {}
     // #769: Dan's answer to "was that this show, or the whole org?"
     var onSetOrgDoNotContact: (Bool) -> Void = { _ in }
     // Per-contact conversation state (#652): a distinct vocabulary from onMarkContact's terminal
@@ -792,19 +797,29 @@ struct DraftReviewView: View {
             if c.sendState == .sent {
                 HStack(spacing: OVSpacing.xs) {
                     Menu {
-                        Button("In conversation") { onMarkContact(c.id, nil, false) }
-                        Button("Booked") { onMarkContact(c.id, .booked, false) }
-                        Button("Closed (not now)") { onMarkContact(c.id, .declinedSoft, false) }
-                        Button("Closed (not interested)") {
-                            onMarkContact(c.id, .declinedHard, false)
-                            // #769: "not interested" is ambiguous, and the two readings have wildly
-                            // different consequences. Ask once, here, in the moment Dan has actually
-                            // read the reply, rather than guessing or relying on him to remember an
-                            // org-level action later, which is exactly when he won't.
-                            askAboutWholeOrg = true
+                        // #2395: the same five endings the reached-out row offers, from the one
+                        // vocabulary, rather than this menu's own four spellings of them. Two of the old
+                        // items were never endings at all and stay below the divider as what they are: a
+                        // delivery fact Overture detects, and taking a contact out of the pursuit.
+                        ForEach(ShowOutcome.pitched, id: \.self) { outcome in
+                            Button(outcome.label) {
+                                onRecordOutcome(outcome)
+                                // #769: a refusal is ambiguous, and the two readings have wildly
+                                // different consequences. Ask once, here, in the moment Dan has actually
+                                // read the reply, rather than guessing or relying on him to remember an
+                                // org-level action later, which is exactly when he won't.
+                                if outcome == .theySaidNo { askAboutWholeOrg = true }
+                            }
                         }
-                        Button("Bounced") { onMarkContact(c.id, nil, true) }
+                        // #2395: taking an ending back. The old "In conversation" item was never an
+                        // ending, and what it actually did was clear one, so that capability keeps its own
+                        // control rather than disappearing with the word. Shown only when there is
+                        // something to reopen, so it never offers to undo nothing.
+                        if item.showOutcome != nil {
+                            Button(ShowOutcome.reopenLabel) { onReopenOutcome() }
+                        }
                         Divider()
+                        Button("Bounced") { onMarkContact(c.id, nil, true) }
                         // #399: distinct from every option above, none of which mean "stop pursuing
                         // without recording an outcome".
                         Button("Remove", role: .destructive) { onRemoveRecipient(c.id) }

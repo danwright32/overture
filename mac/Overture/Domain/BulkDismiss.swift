@@ -70,7 +70,7 @@ enum BulkDismiss {
     // Names the reason every row is about to carry, then the runs that lose their later nights. Bulk
     // dismissal is exactly where a wrong reason gets written to many shows at once, so the reason is
     // stated, never implied by the menu item Dan clicked a moment ago.
-    static func confirmMessage(count: Int, reason: DismissReason, runs: [String], dateLabel: String,
+    static func confirmMessage(count: Int, reason: ShowOutcome, runs: [String], dateLabel: String,
                                offeringChoice: Bool = false) -> String {
         // The count is already in the title above this line, so the message spends its words on the thing
         // the title does not carry: the reason every one of them will be filed under.

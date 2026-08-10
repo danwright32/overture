@@ -39,7 +39,7 @@ struct ProspectMutationsTests {
         let ctx = ModelContext(try container())
         let p = makeProspect(ctx)
         let feedback = ActionFeedback()
-        ProspectMutations.setStatus(QueueItem(p), .dismissed, .notInterested,
+        ProspectMutations.setStatus(QueueItem(p), .dismissed, .notAFit,
                                     prospects: [p], context: ctx, feedback: feedback)
         #expect(p.status == .dismissed)
         #expect(p.showOutcomeRaw == ShowOutcome.notAFit.rawValue)

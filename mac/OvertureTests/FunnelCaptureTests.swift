@@ -129,10 +129,10 @@ struct FunnelCaptureTests {
         let ctx = ModelContext(try container())
         let p = show(ctx)
 
-        ProspectMutations.setStatus(QueueItem(p), .dismissed, .notInterested,
+        ProspectMutations.setStatus(QueueItem(p), .dismissed, .notAFit,
                                     prospects: [p], context: ctx, feedback: ActionFeedback())
 
-        #expect(p.dismissReason == .notInterested)
+        #expect(p.showOutcome == .notAFit)
         #expect(p.dismissedAt != nil)
     }
 
@@ -145,7 +145,7 @@ struct FunnelCaptureTests {
                                     prospects: [p], context: ctx, feedback: ActionFeedback())
         let exited = try #require(p.dismissedAt)
 
-        ProspectMutations.setStatus(QueueItem(p), .dismissed, .notInterested,
+        ProspectMutations.setStatus(QueueItem(p), .dismissed, .notAFit,
                                     prospects: [p], context: ctx, feedback: ActionFeedback())
 
         #expect(p.dismissedAt == exited)
@@ -156,7 +156,7 @@ struct FunnelCaptureTests {
     @Test func restoringFromArchiveClearsTheExitDate() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx)
-        ProspectMutations.setStatus(QueueItem(p), .dismissed, .notInterested,
+        ProspectMutations.setStatus(QueueItem(p), .dismissed, .notAFit,
                                     prospects: [p], context: ctx, feedback: ActionFeedback())
 
         DismissedProspects.restore(p)
@@ -173,7 +173,7 @@ struct FunnelCaptureTests {
 
         _ = WentByRetirement.run(in: ctx, today: "2026-03-01")
 
-        #expect(p.dismissReason == .wentBy)
+        #expect(p.showOutcome == .wentBy)
         #expect(p.dismissedAt != nil)
     }
 
@@ -185,7 +185,7 @@ struct FunnelCaptureTests {
         _ = ExcludedTownEditing.exclude(town: "Chautauqua", into: ctx)
 
         _ = ExcludedTownRetirement.run(in: ctx)
-        #expect(p.dismissReason == .tooFar)
+        #expect(p.showOutcome == .tooFar)
         #expect(p.dismissedAt != nil)
 
         ExcludedTownRetirement.restore(town: "chautauqua", in: ctx)

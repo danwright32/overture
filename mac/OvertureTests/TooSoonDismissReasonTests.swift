@@ -11,30 +11,30 @@ struct TooSoonDismissReasonTests {
 
     // (a) Dan can pick it himself: it rides in the same list the dismiss menu renders from.
     @Test func tooSoonIsOfferedToDan() {
-        #expect(DismissReason.danCanChoose.contains(.tooSoon))
+        #expect(ShowOutcome.neverPitched.contains(.tooSoon))
     }
 
     // (b) It is a genuinely distinct case, never the same value as "Not a fit" or the self-set "Went by".
     @Test func tooSoonIsDistinctFromNotAFitAndWentBy() {
-        #expect(DismissReason.tooSoon != .notInterested)
-        #expect(DismissReason.tooSoon != .wentBy)
-        #expect(DismissReason.tooSoon != .dontWantToShoot)
+        #expect(ShowOutcome.tooSoon != .notAFit)
+        #expect(ShowOutcome.tooSoon != .wentBy)
+        #expect(ShowOutcome.tooSoon != .dontWantToShoot)
         // A unique raw value so the score-vs-outcome capture can tell it apart from every other reason.
-        let raws = DismissReason.allCases.map(\.rawValue)
+        let raws = ShowOutcome.allCases.map(\.rawValue)
         #expect(Set(raws).count == raws.count)
-        #expect(DismissReason.tooSoon.rawValue == "too_soon")
+        #expect(ShowOutcome.tooSoon.rawValue == "too_soon")
     }
 
     // Its own wording, so Dan reads a reason distinct from the others in the menu.
     @Test func tooSoonHasItsOwnLabel() {
-        #expect(DismissReason.tooSoon.label == "Too soon")
-        let labels = DismissReason.allCases.map(\.label)
+        #expect(ShowOutcome.tooSoon.label == "Too soon")
+        let labels = ShowOutcome.allCases.map(\.label)
         #expect(Set(labels).count == labels.count)
     }
 
     // "Went by" stays Overture's own, never offered as a choice (the #864 rule the new case must not break).
     @Test func wentByStillNotOffered() {
-        #expect(!DismissReason.danCanChoose.contains(.wentBy))
+        #expect(!ShowOutcome.neverPitched.contains(.wentBy))
     }
 
     // A "too soon" dismissal is a missed opportunity, not a judgement about the show, so like "Not a fit"

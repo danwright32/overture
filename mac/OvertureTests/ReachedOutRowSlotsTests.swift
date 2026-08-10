@@ -144,7 +144,7 @@ struct ReachedOutRowSlotsTests {
             // #2112/#2224: a named view is one control to a person and one construct here. A Menu spelled
             // out inline would put its ITEMS' buttons in this count, so the guard would read four where
             // he sees one, which is why the close-out is its own view.
-            + column.components(separatedBy: "CloseOutMenu {").count - 1
+            + column.components(separatedBy: "CloseOutMenu(").count - 1
         #expect(drawn == ReachedOutRowSlots.Slot.allCases.count,
                 """
                 the trailing column draws \(drawn) things but \
@@ -191,6 +191,6 @@ struct ReachedOutRowSlotsTests {
         "Button(label)": .dueAction,
         // #2112/#2224
         "Text(hint)": .passedHint,
-        "CloseOutMenu {": .closeOut
+        "CloseOutMenu(": .closeOut
     ]
 }

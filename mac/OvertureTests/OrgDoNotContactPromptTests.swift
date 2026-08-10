@@ -22,9 +22,9 @@ struct OrgDoNotContactPromptTests {
     // filed against one show and forgotten, which is the whole bug.
     @Test func aHardDeclineRaisesTheQuestion() {
         let src = Self.draftReviewSource
-        #expect(src.contains("""
-        Button("Closed (not interested)") {
-        """))
+        // #2395: the five endings are generated from `ShowOutcome.pitched` rather than spelled out, so the
+        // guard pins the CONDITION that raises the question instead of a button's literal text.
+        #expect(src.contains("if outcome == .theySaidNo { askAboutWholeOrg = true }"))
         #expect(src.contains("askAboutWholeOrg = true"),
                 "Marking a contact 'not interested' must ask whether the whole org is off-limits (#769).")
         #expect(src.contains("isPresented: $askAboutWholeOrg"))

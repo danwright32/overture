@@ -14,7 +14,7 @@ struct ProspectRowView: View {
     let item: QueueItem
     let today: String
     let onKeep: () -> Void
-    let onDismiss: (DismissReason) -> Void
+    let onDismiss: (ShowOutcome) -> Void
     var onUnapprove: () -> Void = {}
     var onSkipDraft: () -> Void = {}
     // #367
@@ -45,6 +45,10 @@ struct ProspectRowView: View {
     var onRecordFormPitch: (_ recipientId: String) -> Void = { _ in }
     var onCancelFormPitch: (_ recipientId: String) -> Void = { _ in }
     var onMarkContact: (_ recipientId: String, _ resolution: RecipientResolution?, _ bounced: Bool) -> Void = { _, _, _ in }
+    // #2395: the show reached an ending. One callback for all five, because they are one vocabulary and
+    // one write (ProspectMutations.recordOutcome), not five buttons each doing their own thing.
+    var onRecordOutcome: (ShowOutcome) -> Void = { _ in }
+    var onReopenOutcome: () -> Void = {}
     var onSetRecipientConversationState: (_ recipientId: String, _ state: ConversationState) -> Void = { _, _ in }
     var onConfirmRecipientConversationState: (_ recipientId: String) -> Void = { _ in }
     var onAddRecipient: (_ email: String, _ name: String?) -> Void = { _, _ in }
@@ -180,6 +184,8 @@ struct ProspectRowView: View {
                     onRecordFormPitch: onRecordFormPitch,
                     onCancelFormPitch: onCancelFormPitch,
                     onMarkContact: onMarkContact,
+                    onRecordOutcome: onRecordOutcome,
+                    onReopenOutcome: onReopenOutcome,
                     onSetOrgDoNotContact: onSetOrgDoNotContact,
                     onSetRecipientConversationState: onSetRecipientConversationState,
                     onConfirmRecipientConversationState: onConfirmRecipientConversationState,
@@ -1003,7 +1009,7 @@ struct ProspectRowView: View {
             // #1540: the help text used to say the performance HAPPENED, which is now false for the rows
             // this sweep takes most often: a run that opened days ago and plays for weeks yet. It says
             // "opened" instead, which is true of a one-night show that has been and gone as well.
-            if item.dismissReason == .wentBy {
+            if item.showOutcome == .wentBy {
                 Label("Went by", systemImage: "clock.arrow.circlepath")
                     .ovPill(.neutral)
                     .help("This show opened before you triaged it, so it is no longer waiting on you")
@@ -1043,7 +1049,7 @@ struct ProspectRowView: View {
                 Menu {
                     // #864: `danCanChoose`, not `allCases`. "Went by" is Overture's own reason for a show
                     // whose date passed untriaged; Dan cannot decide that a date has passed.
-                    ForEach(DismissReason.danCanChoose, id: \.self) { reason in
+                    ForEach(ShowOutcome.menu(wasPitched: item.wasPitched), id: \.self) { reason in
                         Button(reason.label) { onDismiss(reason) }
                     }
                     // #991: the geographic refusal, the missing half of the rule (#979). Unlike a dismiss,

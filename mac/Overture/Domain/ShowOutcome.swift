@@ -131,6 +131,60 @@ enum ShowOutcomeGroup: String, CaseIterable, Equatable, Sendable {
     case pitchedAndLost = "pitched_and_lost"
 }
 
+// MARK: - What Dan is told once an ending is recorded
+
+extension ShowOutcome {
+    // #2395: the acknowledgment, beside the words it acknowledges so the two cannot drift.
+    //
+    // It names the outcome back rather than saying "Saved", because the row Dan pressed it on leaves the
+    // stage the instant it lands, so this sentence is the only evidence anything happened at all.
+    static func recordedLine(_ outcome: ShowOutcome, org: String) -> String {
+        switch outcome {
+        case .booked: return "\(org) recorded as booked."
+        case .neverHeardBack: return "\(org) closed out: never heard back."
+        case .theySaidNotNow: return "\(org) closed out: they said not now."
+        case .theySaidNo: return "\(org) closed out: they said no."
+        case .turnedThemDown: return "\(org) closed out: you turned them down."
+        case .dateConflict: return "\(org) dismissed: date conflict."
+        case .hadPaidWork: return "\(org) dismissed: you had paid work."
+        case .pitchingOtherShows: return "\(org) dismissed: pitching other shows that night."
+        case .tooSoon: return "\(org) dismissed: too soon to pitch it."
+        case .notAFit: return "\(org) dismissed: not a fit."
+        case .dontWantToShoot: return "\(org) dismissed: you don't want to shoot this."
+        case .duplicate: return "\(org) dismissed as a duplicate."
+        // Overture's own two are never recorded by hand, so nothing acknowledges them to Dan. They still
+        // need words rather than a crash, because a switch that cannot answer for every value is a trap
+        // waiting for the first caller who does not know the rule.
+        case .wentBy: return "\(org) went by before it was triaged."
+        case .tooFar: return "\(org) is in a town you asked not to see."
+        }
+    }
+
+    // #2395: taking an ending back. Names the ending being removed, because the control that offers this
+    // sits on a card showing several facts and "Reopened" alone would not say which one went.
+    static func reopenedLine(_ outcome: ShowOutcome, org: String) -> String {
+        "\(org) is open again. \"\(outcome.label)\" is no longer recorded against it."
+    }
+
+    // What the reopen control is called. A question about the show, not about a contact, because that is
+    // where the ending lives now.
+    static let reopenLabel = "Reopen this show"
+
+    // #2395: what Dan is told when an ending is refused because the show cannot have reached it. Says
+    // which fact decided it, since the answer depends on something not visible in the menu he used: an
+    // email either went out for this show or it did not.
+    static func refusedLine(_ outcome: ShowOutcome, org: String, wasPitched: Bool) -> String {
+        if outcome.isOverturesOwn {
+            return "\"\(outcome.label)\" isn't yours to set: Overture writes that one itself. "
+                + "\(org) is unchanged."
+        }
+        return wasPitched
+            ? "\(org) was already pitched, so \"\(outcome.label)\" doesn't apply to it. Nothing changed."
+            : "Nothing was ever sent for \(org), so \"\(outcome.label)\" doesn't apply to it. "
+                + "Nothing changed."
+    }
+}
+
 // MARK: - The bridge to the vocabulary being replaced
 //
 // TEMPORARY, and #2395 is the issue that removes it: phase 2 puts the menus over `ShowOutcome`
@@ -158,6 +212,27 @@ extension DismissReason {
 }
 
 extension ShowOutcome {
+    // TRANSITIONAL, removed by #2396: the contact-level resolution that matches this ending.
+    //
+    // The show is the home of the fact from #2394 onward, but the reached-out stage, the Archive buckets
+    // and the derived performance status all still read the CONTACTS, so an ending written only at the
+    // show level would leave the row sitting on screen after Dan closed it, which reads as a control that
+    // did nothing. Phase 3 makes those surfaces read the show, and this goes with them.
+    //
+    // Nil for the never-pitched seven: there is no contact to resolve on a show nothing was sent to.
+    var asRecipientResolution: RecipientResolution? {
+        switch self {
+        case .booked: return .booked
+        case .neverHeardBack: return .neverHeardBack
+        case .theySaidNotNow: return .declinedSoft
+        case .theySaidNo: return .declinedHard
+        case .turnedThemDown: return .stoodDown
+        case .dateConflict, .hadPaidWork, .pitchingOtherShows, .tooSoon, .notAFit, .dontWantToShoot,
+             .duplicate, .wentBy, .tooFar:
+            return nil
+        }
+    }
+
     // Nil for the five pitched endings, which is correct rather than a gap: a show that was closed out
     // after a pitch was never dismissed, so it has no dismiss reason to report.
     var asDismissReason: DismissReason? {

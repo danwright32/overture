@@ -684,15 +684,6 @@ final class Prospect {
         sentAt != nil || recipients.contains { $0.sendState == .sent }
     }
 
-    // #864: the typed reason, so callers stop hand-rolling `DismissReason(rawValue: dismissReasonRaw ?? "")`.
-    //
-    // #2394: now a VIEW over `showOutcome` rather than its own storage, so the never-pitched half has one
-    // home while the surfaces that still speak in dismiss reasons keep working. Nil for a pitched ending,
-    // which is correct: a show that was closed out was never dismissed. Goes away with the menus (#2395).
-    var dismissReason: DismissReason? {
-        get { showOutcome?.asDismissReason }
-        set { showOutcome = newValue?.asShowOutcome }
-    }
 
     // #861/#864/#1540: "is this show past the point where Dan would ever work it?", asked in one place.
     //
@@ -770,7 +761,7 @@ final class Prospect {
         possibleMatchSource: String?,
         possibleMatchName: String?,
         status: ReviewStatus = .new,
-        dismissReason: DismissReason? = nil,
+        dismissReason: ShowOutcome? = nil,
         ingestedAt: Date = Date(),
         runEndDate: String? = nil,
         partOfRelatedRun: Bool = false,
@@ -797,7 +788,7 @@ final class Prospect {
         self.statusRaw = status.rawValue
         // #2394: a new row's ending goes to the one field, never to the legacy column, so nothing inserted
         // after this shipped ever needs backfilling.
-        self.showOutcomeRaw = dismissReason?.asShowOutcome.rawValue
+        self.showOutcomeRaw = dismissReason?.rawValue
         self.ingestedAt = ingestedAt
         // #16: the row exists as of this moment, so its first sighting IS its first ingest. The only
         // place this is ever written for a new row; the scout's refresh path deliberately skips it.

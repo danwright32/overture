@@ -50,7 +50,7 @@ struct ExcludedTownRetirementTests {
 
         #expect(retired == 1)
         #expect(blocked.status == .dismissed)
-        #expect(blocked.dismissReason == .tooFar)
+        #expect(blocked.showOutcome == .tooFar)
     }
 
     // A built-in seed town (Buffalo et al.) is excluded the moment the pass runs, with no refusal needed:
@@ -61,7 +61,7 @@ struct ExcludedTownRetirementTests {
         let buffalo = show(ctx, "buffalo-opera", location: "Buffalo, NY")
 
         #expect(ExcludedTownRetirement.run(in: ctx) == 1)
-        #expect(buffalo.dismissReason == .tooFar)
+        #expect(buffalo.showOutcome == .tooFar)
     }
 
     @Test func anInRangeShowIsLeftAlone() throws {
@@ -104,12 +104,12 @@ struct ExcludedTownRetirementTests {
         block(ctx, "Chautauqua")
         let blocked = show(ctx, "chautauqua-opera", location: "Chautauqua, NY")
         let danCut = show(ctx, "dan-cut", location: "New York, NY", status: .dismissed)
-        danCut.dismissReason = .notInterested
+        danCut.showOutcome = .notAFit
 
         #expect(ExcludedTownRetirement.run(in: ctx) == 1)
         #expect(ExcludedTownRetirement.run(in: ctx) == 0)
-        #expect(blocked.dismissReason == .tooFar)
-        #expect(danCut.dismissReason == .notInterested)
+        #expect(blocked.showOutcome == .tooFar)
+        #expect(danCut.showOutcome == .notAFit)
     }
 
     // MARK: - It must never read as a decision Dan made about the org
@@ -141,22 +141,22 @@ struct ExcludedTownRetirementTests {
         ExcludedTownRetirement.restore(town: "chautauqua", in: ctx)
 
         #expect(blocked.status == .new)
-        #expect(blocked.dismissReason == nil)
+        #expect(blocked.showOutcome == nil)
     }
 
     // Undo restores only THIS town's automatic cuts: never a cut Dan made himself, never another town.
     @Test func undoingATownLeavesOtherCutsAlone() throws {
         let ctx = try context()
         let danCut = show(ctx, "dan-cut", location: "Chautauqua, NY", status: .dismissed)
-        danCut.dismissReason = .notInterested
+        danCut.showOutcome = .notAFit
         let buffalo = show(ctx, "buffalo", location: "Buffalo, NY")
         ExcludedTownRetirement.run(in: ctx)   // buffalo (seed) is retired with tooFar
-        #expect(buffalo.dismissReason == .tooFar)
+        #expect(buffalo.showOutcome == .tooFar)
 
         ExcludedTownRetirement.restore(town: "chautauqua", in: ctx)
 
         #expect(danCut.status == .dismissed, "a cut Dan made himself must survive Undo")
-        #expect(danCut.dismissReason == .notInterested)
+        #expect(danCut.showOutcome == .notAFit)
         #expect(buffalo.status == .dismissed, "undoing Chautauqua must not touch Buffalo")
     }
 }

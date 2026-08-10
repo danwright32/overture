@@ -21,7 +21,7 @@ struct PitchingOtherShowsDismissReasonTests {
                            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
     }
 
-    private func dismissed(_ ctx: ModelContext, group: String, reason: DismissReason) {
+    private func dismissed(_ ctx: ModelContext, group: String, reason: ShowOutcome) {
         let p = Prospect(naturalKey: group, groupName: group, discipline: "music", venue: "The Green Room 42",
                          performanceDate: "2026-08-03", sourceListingURL: nil, websiteURL: nil,
                          priorRelationship: "none", production: "unknown", profile: "strong",
@@ -34,25 +34,25 @@ struct PitchingOtherShowsDismissReasonTests {
     // (a) Dan picks it himself. It is his own decision, not an Overture-only cut like `wentBy` or
     // `tooFar`, so it rides in the list both dismiss menus render from.
     @Test func isOfferedToDan() {
-        #expect(DismissReason.danCanChoose.contains(.pitchingOtherShows))
+        #expect(ShowOutcome.neverPitched.contains(.pitchingOtherShows))
         // The #864 rule the new case must not break.
-        #expect(!DismissReason.danCanChoose.contains(.wentBy))
-        #expect(!DismissReason.danCanChoose.contains(.tooFar))
+        #expect(!ShowOutcome.neverPitched.contains(.wentBy))
+        #expect(!ShowOutcome.neverPitched.contains(.tooFar))
     }
 
     // (b) A value of its own, distinct from every other reason and above all from the one it replaces.
     // The whole reporting argument rests on this raw value being separable from `date_conflict` forever.
     @Test func isItsOwnStoredValue() {
-        #expect(DismissReason.pitchingOtherShows != .dateConflict)
+        #expect(ShowOutcome.pitchingOtherShows != .dateConflict)
         #expect(ShowOutcome.pitchingOtherShows.rawValue == "pitching_other_shows")
-        let raws = DismissReason.allCases.map(\.rawValue)
+        let raws = ShowOutcome.allCases.map(\.rawValue)
         #expect(Set(raws).count == raws.count)
     }
 
     // (c) Its own wording, so the menu never shows two reasons reading the same.
     @Test func hasItsOwnLabel() {
-        #expect(DismissReason.pitchingOtherShows.label == "Pitching other shows that night")
-        let labels = DismissReason.allCases.map(\.label)
+        #expect(ShowOutcome.pitchingOtherShows.label == "Pitching other shows that night")
+        let labels = ShowOutcome.allCases.map(\.label)
         #expect(Set(labels).count == labels.count)
     }
 
@@ -75,7 +75,7 @@ struct PitchingOtherShowsDismissReasonTests {
                                   performanceDate: "2026-08-03", runEndDate: nil) == nil)
         // The reasons that DO capture a day off are unchanged by this addition.
         #expect(DayOffOffer.offer(reason: .dateConflict, performanceDate: "2026-08-03", runEndDate: nil) != nil)
-        #expect(DayOffOffer.offer(reason: .alreadyBooked, performanceDate: "2026-08-03", runEndDate: nil) != nil)
+        #expect(DayOffOffer.offer(reason: .hadPaidWork, performanceDate: "2026-08-03", runEndDate: nil) != nil)
     }
 
     // (f) Old rows are not rewritten. Nobody can say retrospectively which `date_conflict` rows were

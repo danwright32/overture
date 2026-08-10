@@ -82,7 +82,7 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     let status: ReviewStatus
     // #864: why it was dismissed, when it was. `wentBy` is Overture's own: the show's last night
     // passed while it sat untriaged. Archive needs it to keep a retirement apart from a cut Dan made.
-    var dismissReason: DismissReason? = nil
+    var showOutcome: ShowOutcome? = nil
 
     // Trigger 2: the drafted email, when present. Contact identity (name/role/email/confidence/
     // method/form URL) lives per-recipient on `contacts` now (#654); see `primaryContact`.
@@ -158,6 +158,11 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // #1797: whether this show has reached the half of the funnel a send belongs to. Snapshotted from the
     // prospect through the SAME rule the stage asks (SendHalf), because the two decide one thing between
     // them: who tells Dan about a contact a guard is holding.
+    // #2395: whether an email actually WENT OUT, which is what decides which half of the outcome
+    // vocabulary a row's menu offers. Deliberately NOT `hasEnteredSendHalf` above, and the two must not be
+    // folded: that one is true for a show merely drafted, and offering "Never heard back" on a show Dan has
+    // only drafted asks him how somebody replied to an email that never left.
+    var wasPitched: Bool = false
     var hasEnteredSendHalf: Bool = false
     var sendError: String? = nil
     var lostReason: String? = nil
@@ -1875,7 +1880,7 @@ enum QueueModel {
 
     static func selfBookingIsCommitment(_ i: QueueItem) -> Bool {
         if i.isBooked { return true }                         // a confirmed shoot (outcome/performanceStatus booked)
-        if i.dismissReason == .alreadyBooked { return true }  // dismissed BECAUSE booked elsewhere: still committed
+        if i.showOutcome == .hadPaidWork { return true }  // dismissed BECAUSE booked elsewhere: still committed
         if i.isLost { return false }                          // #1248: a pitch marked lost frees the date, even if it was sent
         if i.status == .dismissed { return false }            // any other dismissed show is dead; ignore it
         if i.sentAt != nil { return true }                    // a live pitch is already out
@@ -2169,7 +2174,6 @@ extension QueueItem {
             possibleMatchSource: p.possibleMatchSource,
             possibleMatchName: p.possibleMatchName,
             status: p.status,
-            dismissReason: p.dismissReason,
             draftSubject: p.draftSubject,
             draftBody: p.draftBody,
             draftEditedByDan: p.draftEditedByDan,
@@ -2246,6 +2250,10 @@ extension QueueItem {
         // Swift type-checker's limit for one expression (adding this as an argument tips it into
         // "unable to type-check in reasonable time"), and one more field is not worth restructuring it.
         self.runSourceURLs = p.runSourceURLs
+        // #2395: here for the same reason, and it is the same limit: adding it as an argument above tipped
+        // that call into "unable to type-check in reasonable time".
+        self.wasPitched = p.wasPitched
+        self.showOutcome = p.showOutcome
     }
 }
 

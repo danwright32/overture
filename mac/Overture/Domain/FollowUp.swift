@@ -27,7 +27,7 @@ enum StandDownCopy {
     static let stop = "Stop sending to this contact"
     // Names the SHOW, because that is the decision: not working this event any more. The two sit together
     // so the grain is a choice he makes in the moment rather than one the app picks for him.
-    static let stopShow = "Stop working this show"
+    static let stopShow = ShowOutcome.turnedThemDown.label
     // The closing-note row's own way out. Says what it does and what it does not do, because "done" and
     // "sent" are the two things it must not be confused between (Dan: "not sent but also done").
     static let closeOut = "Close this out without sending"

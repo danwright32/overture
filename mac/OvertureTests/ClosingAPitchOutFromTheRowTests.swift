@@ -96,7 +96,7 @@ struct ClosingAPitchOutFromTheRowTests {
         let waiting = contact(p)
         #expect(waiting.resolution == nil, "the premise: a sent, unanswered contact records nothing")
 
-        waiting.markOutcomeManually(resolution: ReachedOutClose.Outcome.neverHeardBack.resolution,
+        waiting.markOutcomeManually(resolution: ShowOutcome.neverHeardBack.asRecipientResolution,
                                     bounced: false)
 
         #expect(waiting.resolution == .neverHeardBack)
@@ -136,14 +136,13 @@ struct ClosingAPitchOutFromTheRowTests {
 
     // MARK: - the menu
 
-    // Deliberately not the Archive card's list. "In conversation" is where a live conversation stands
-    // (the state control beside this one sets it) and "Bounced" is a delivery fact Overture detects.
-    // What is left is the four ways a pitch actually ends.
-    @Test func themenuOffersTheFourWaysAPitchEnds() {
-        #expect(ReachedOutClose.Outcome.allCases.map(\.label)
-                == ["Booked", "Never heard back", "Closed (not now)", "Closed (not interested)"])
-        #expect(ReachedOutClose.Outcome.allCases.map(\.resolution)
-                == [.booked, .neverHeardBack, .declinedSoft, .declinedHard])
+    // #2395: the endings come from the one vocabulary now, so this asserts the five it offers and the
+    // contact-level record each still keeps in step with while the stage reads the contacts (#2396).
+    @Test func themenuOffersTheFiveWaysAPitchEnds() {
+        #expect(ShowOutcome.pitched.map(\.label)
+                == ["Booked", "Never heard back", "They said not now", "They said no", "I turned them down"])
+        #expect(ShowOutcome.pitched.map(\.asRecipientResolution)
+                == [.booked, .neverHeardBack, .declinedSoft, .declinedHard, .stoodDown])
     }
 
     // MARK: - recording it
@@ -155,8 +154,8 @@ struct ClosingAPitchOutFromTheRowTests {
         let now = sentAt.addingTimeInterval(10 * 86_400)
         #expect(ReachedOutQueue.nextReachOut(for: r, of: p, now: now) != nil)
 
-        let ok = ProspectMutations.closeOutFromRow(QueueItem(p), r.id, .booked, prospects: [p],
-                                                   context: ctx, feedback: ActionFeedback())
+        let ok = ProspectMutations.recordOutcome(QueueItem(p), .booked, prospects: [p],
+                                                 context: ctx, feedback: ActionFeedback())
         #expect(ok)
 
         #expect(ReachedOutQueue.nextReachOut(for: r, of: p, now: now) == nil)
@@ -171,13 +170,14 @@ struct ClosingAPitchOutFromTheRowTests {
         let r = contact(p)
         let now = sentAt.addingTimeInterval(10 * 86_400)
 
-        let ok = ProspectMutations.closeOutFromRow(QueueItem(p), r.id, .neverHeardBack, prospects: [p],
-                                                   context: ctx, feedback: ActionFeedback())
+        let ok = ProspectMutations.recordOutcome(QueueItem(p), .neverHeardBack, prospects: [p],
+                                                 context: ctx, feedback: ActionFeedback())
 
         #expect(ok)
         #expect(r.resolution == .neverHeardBack)
         #expect(ReachedOutQueue.nextReachOut(for: r, of: p, now: now) == nil)
-        #expect(p.outcome != .booked, "only a booking touches the show's own outcome")
+        #expect(p.showOutcome == .neverHeardBack, "the ending is recorded on the SHOW (#2394)")
+        #expect(p.outcome != .booked, "only a booking touches the legacy show-level outcome")
     }
 
     // A booking Dan recorded stays HIS. Without the show-level manual stamp the next Downbeat reconcile
@@ -188,8 +188,8 @@ struct ClosingAPitchOutFromTheRowTests {
         let p = show(ctx)
         p.downbeatClientId = "C1"
         let r = contact(p)
-        ProspectMutations.closeOutFromRow(QueueItem(p), r.id, .booked, prospects: [p],
-                                          context: ctx, feedback: ActionFeedback())
+        ProspectMutations.recordOutcome(QueueItem(p), .booked, prospects: [p],
+                                        context: ctx, feedback: ActionFeedback())
 
         let booking = OvertureBooking(id: "B1", clientId: "C1", clientDisplayName: "Every Voice Choirs",
                                       shootName: "Gala", startDate: "2026-10-25", endDate: "2026-10-25",
@@ -210,8 +210,8 @@ struct ClosingAPitchOutFromTheRowTests {
         let r = contact(p)
         let feedback = ActionFeedback()
 
-        ProspectMutations.closeOutFromRow(QueueItem(p), r.id, .neverHeardBack, prospects: [p],
-                                          context: ctx, feedback: feedback)
+        ProspectMutations.recordOutcome(QueueItem(p), .neverHeardBack, prospects: [p],
+                                        context: ctx, feedback: feedback)
 
         #expect(feedback.message == "Every Voice Choirs closed out: never heard back.")
     }
@@ -223,8 +223,8 @@ struct ClosingAPitchOutFromTheRowTests {
         let p = show(ctx)
         let r = contact(p)
 
-        let ok = ProspectMutations.closeOutFromRow(QueueItem(p), r.id, .booked, prospects: [],
-                                                   context: ctx, feedback: ActionFeedback())
+        let ok = ProspectMutations.recordOutcome(QueueItem(p), .booked, prospects: [],
+                                                 context: ctx, feedback: ActionFeedback())
 
         #expect(!ok)
         #expect(r.resolution == nil)
@@ -242,8 +242,8 @@ struct ReachedOutCloseWiringTests {
             "private func reachedOutRow(_ pair: (prospect: Prospect, recipient: Recipient, next: Date), now: Date) -> some View {",
             in: source))
         #expect(row.contains("ReachedOutClose.passedHint(hasOpened: p.hasOpened(today: today)"))
-        #expect(row.contains("CloseOutMenu {"))
-        #expect(row.contains("ProspectMutations.closeOutFromRow("))
+        #expect(row.contains("CloseOutMenu(outcomes: ShowOutcome.menu(wasPitched: p.wasPitched))"))
+        #expect(row.contains("ProspectMutations.recordOutcome("))
     }
 
     // #1139: the outcome control and the conversation-state control set genuinely different things and
