@@ -14,19 +14,24 @@ enum InquiryMutations {
     // not a hard refusal, and #16's outcome reporting keeps the two apart.
     enum MarkAction: Equatable {
         case booked
-        case lost(InquiryLostReason)
+        case lost(ShowOutcome)
 
+        // #2400: the legacy outcome, still written so every existing reader of `isOpen` and the year-end
+        // query keeps working. Their refusal is the hard case; Dan's own pass and a silence both leave the
+        // door open, which is what the soft case means.
         var outcome: Outcome {
             switch self {
             case .booked: return .booked
-            case .lost(let reason): return reason.outcome
+            case .lost(let ending): return ending == .theySaidNo ? .lostHard : .lostSoft
             }
         }
 
-        var lostReason: InquiryLostReason? {
+        // #2400: the ending itself, in the one vocabulary. A booking is an ending too, and the same stored
+        // value a booked show carries, so the report can add the two halves.
+        var ending: ShowOutcome {
             switch self {
-            case .booked: return nil
-            case .lost(let reason): return reason
+            case .booked: return .booked
+            case .lost(let ending): return ending
             }
         }
     }
@@ -39,7 +44,9 @@ enum InquiryMutations {
         inquiry.markOutcomeManually(action.outcome, now: now)
         // Always assigned, so marking a previously-lost inquiry booked clears the stale reason rather
         // than leaving one behind for #16 to double-count.
-        inquiry.lostReasonRaw = action.lostReason?.rawValue
+        // Always assigned, so marking a previously-lost inquiry booked replaces the stale ending rather than
+        // leaving one behind for #16 to count in two groups.
+        inquiry.showOutcome = action.ending
         return context.saveOrWarn(org: inquiry.inquirerName, feedback: feedback)
     }
 

@@ -20,24 +20,21 @@ enum InquirySource: String, CaseIterable, Sendable {
 // stored: only Dan knows whether the client said no or he passed on it. So it is captured at the one
 // moment anyone knows, when he closes the inquiry. A silence is included because closing one out is a
 // real, common ending and saying so beats leaving it blank.
-enum InquiryLostReason: String, CaseIterable, Sendable {
-    case theyDeclined = "they_declined"
-    case notAFit = "not_a_fit"
-    case neverHeardBack = "never_heard_back"
-
-    var label: String {
-        switch self {
-        case .theyDeclined: return "They declined"
-        case .notAFit: return "Not a fit for me"
-        case .neverHeardBack: return "Never heard back"
-        }
-    }
-
-    // Their refusal is the hard lost case. Dan's own pass and a silence both leave the door open for
-    // future work, which is what the soft case means.
-    var outcome: Outcome {
-        self == .theyDeclined ? .lostHard : .lostSoft
-    }
+// #2400: an inquiry ends in the SAME words a pitched show does. Its own three reasons (They declined, Not
+// a fit for me, Never heard back) were already three of the five under different spellings, and one of them
+// (`neverHeardBack`) had deliberately been given the shared stored value from the start precisely so the two
+// halves of the funnel could be added together. This finishes that job for the other two.
+//
+// A namespace rather than a second enum: there is one vocabulary (`ShowOutcome`) and this says which part of
+// it an inquiry can reach. Dan's decision, 2026-08-09, when asked directly.
+enum InquiryEnding {
+    // The four Dan picks from the row's "Mark lost" section. Booked is deliberately absent: it has its own
+    // control on the row, and putting it under a heading that says "lost" would be the one place the words
+    // and the act disagree.
+    //
+    // Derived from `ShowOutcome.pitched` rather than listed again, so a value added to the show side cannot
+    // silently leave the inquiry side behind.
+    static var danCanChoose: [ShowOutcome] { ShowOutcome.pitched.filter { $0 != .booked } }
 }
 
 // A direct hire inquiry: someone reaching out to hire Dan, tracked ALONGSIDE the scout/pitch queue
@@ -99,9 +96,13 @@ final class Inquiry {
     var outcomeRaw: String = Outcome.noResponse.rawValue
     var outcomeSourceRaw: String? = nil
     var outcomeAt: Date? = nil
-    // Why it ended, for #16. Optional and defaulted so it migrates additively; an inquiry closed before
-    // this shipped simply has none, and reporting falls back to what it can derive.
+    // LEGACY, read by ShowOutcomeBackfill.runForInquiries and written by nothing else since #2400. The
+    // ending an inquiry reached now lives in `showOutcomeRaw` below, in the same words and the same stored
+    // spellings a show uses, so a season report reads one column across both halves of the funnel.
     var lostReasonRaw: String? = nil
+    // #2400: how this inquiry ended, from the one vocabulary (`ShowOutcome`). Nil means it has not ended,
+    // and that is the only thing nil means: somebody is still waiting on a reply.
+    var showOutcomeRaw: String? = nil
 
     // Downbeat booking match: SUGGESTION-ONLY for an inquiry, never a silent auto-book (#1435), since
     // the org-name matcher it reuses isn't calibrated for private-individual name collisions.
@@ -127,10 +128,11 @@ final class Inquiry {
 
     var source: InquirySource { InquirySource(rawValue: sourceRaw) ?? .directEmail }
 
-    // nil when it was never lost, or when a later version wrote a reason this build doesn't know. A raw
-    // value it can't read must never be reported as one of today's reasons.
-    var lostReason: InquiryLostReason? {
-        lostReasonRaw.flatMap(InquiryLostReason.init(rawValue:))
+    // nil when it has not ended, or when a later version wrote an ending this build doesn't know. A raw
+    // value it can't read must never be reported as one of today's endings.
+    var showOutcome: ShowOutcome? {
+        get { showOutcomeRaw.flatMap(ShowOutcome.init(rawValue:)) }
+        set { showOutcomeRaw = newValue?.rawValue }
     }
 
     var outcome: Outcome {

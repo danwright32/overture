@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1219 sentences**, from 402 source files.
+Every sentence Overture can say to Dan: **1217 sentences**, from 402 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -141,7 +141,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
   - `Domain/ConversationReminder.swift`
   - `UI/ReminderSettingsView.swift`
 - "Never heard back"
-  - `Domain/Inquiry.swift`
   - `Domain/ShowOutcome.swift`
   - `UI/QueueView+Model.swift`
 - "Not a booking"
@@ -1000,7 +999,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Never contact \(groupName) again"
     `Domain/DraftReviewNotes.swift`
 "Never heard back"
-    `Domain/Inquiry.swift`
     `Domain/ShowOutcome.swift`
     `UI/QueueView+Model.swift`
 "Never show me shows in \(town)"
@@ -1089,8 +1087,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/DraftReviewView.swift`
 "Not a fit"
     `Domain/ShowOutcome.swift`
-"Not a fit for me"
-    `Domain/Inquiry.swift`
 "Not a real reply"
     `UI/DraftReviewView.swift`
 "Not actually covered"
@@ -1894,8 +1890,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceGrade.swift`
 "They all leave your queue, filed as \(reason.label)."
     `Domain/BulkDismiss.swift`
-"They declined"
-    `Domain/Inquiry.swift`
 "They include \(named.joined(separator: " and ")), and \(others) \(plural)."
     `Domain/SourceReadability.swift`
 "They replied"

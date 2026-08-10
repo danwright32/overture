@@ -15,7 +15,7 @@ struct InquiryRowView: View {
     var onReply: () -> Void
     var onEdit: () -> Void
     var onMarkBooked: () -> Void
-    var onMarkLost: (InquiryLostReason) -> Void
+    var onMarkLost: (ShowOutcome) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: OVSpacing.xs) {
@@ -90,8 +90,10 @@ struct InquiryRowView: View {
                 // "Never heard back" beside "Mark booked" reads as setting a status rather than closing
                 // the inquiry. The heading says what all three do, so each is still one click.
                 Section("Mark lost") {
-                    ForEach(InquiryLostReason.allCases, id: \.self) { reason in
-                        Button(reason.label) { onMarkLost(reason) }
+                    // #2400: the same four endings a pitched show offers, from the one vocabulary, so a
+                    // season report reads one column across both halves of the funnel.
+                    ForEach(InquiryEnding.danCanChoose, id: \.self) { ending in
+                        Button(ending.label) { onMarkLost(ending) }
                     }
                 }
             } label: {
