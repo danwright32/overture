@@ -292,10 +292,17 @@ enum ProspectMutations {
     static func removeRecipientManually(_ item: QueueItem, _ recipientId: String, _ name: String?,
                                         prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
-        if let email = model.recipients.first(where: { $0.id == recipientId })?.email, !email.isEmpty {
-            // Scoped to this SHOW: a contact this show researched is a fact about this show, and refusing
-            // it for the whole organisation would strike people it is not true of (L83).
-            ContactRefusal.refuse(email: email, scope: .show(model.naturalKey), in: context)
+        // #2438: recorded for a form-only contact too. It used to require an address, so striking one
+        // whose only handle is a form fell straight through to the hard delete below, and a deleted
+        // pending row is indistinguishable from one never found, so the next run put it back. Dan struck
+        // six of them by hand on 2026-08-10 and none was remembered (L92: a removal made durable against
+        // an identifier leaves behind everything that does not carry it).
+        //
+        // Scoped to this SHOW: a contact this show researched is a fact about this show, and refusing it
+        // for the whole organisation would strike people it is not true of (L83).
+        if let struck = model.recipients.first(where: { $0.id == recipientId }) {
+            ContactRefusal.refuse(email: struck.email, formURL: struck.contactFormURL,
+                                  scope: .show(model.naturalKey), in: context)
         }
         model.removeOrSuppressRecipient(id: recipientId)
         if context.saveOrWarn(org: model.groupName, feedback: feedback) {
