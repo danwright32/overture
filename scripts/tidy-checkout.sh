@@ -32,7 +32,11 @@ set -uo pipefail
 #                                                    # derived data; the next build is a slow one)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+# #2301: overridable so a fixture can run the REAL driver against a throwaway repository. The
+# decision (scripts/lib/checkout-tidy.sh) has 31 fixtures; nothing covered the part that turns a
+# verdict into `git branch -D`, which is the piece that was wrong twice while being written. Defaulted
+# to the script's own checkout, so every ordinary invocation is unchanged.
+REPO_ROOT="${TIDY_CHECKOUT_REPO_ROOT:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
 
 # shellcheck source=./lib/checkout-tidy.sh
 source "${SCRIPT_DIR}/lib/checkout-tidy.sh"
