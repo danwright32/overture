@@ -391,6 +391,20 @@ enum ActionAck {
         return "Removed \(who) from \(org)."
     }
 
+    // #2392: an address the card inherited from the organisation's own answer, struck. Names the
+    // ORGANISATION rather than the show, because that is the scope of what just happened: it will not be
+    // offered on this organisation's other shows either, and a sentence naming only this show would
+    // understate what Dan just did.
+    static func inheritedAddressRemoved(email: String, org: String) -> String {
+        "Removed \(email) from \(org). Overture won't offer it on their other shows."
+    }
+
+    // The same strike, refused, because nothing here names an organisation to record it against. Says
+    // plainly that nothing was written: a strike that appears to work and does not is worse than one
+    // that declines.
+    static let inheritedAddressHasNoOrganisation =
+        "This show names no organization, so there's nowhere to record that. Nothing was removed."
+
     // #845: stopping a source is fully reversible, and the button gave no sign of it. Says what was kept,
     // because that is the part that makes the click safe to make: nothing is destroyed, the row and its
     // feed history stay, and it can be watched again whenever Dan likes. The Undo beside this sentence is

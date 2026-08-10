@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1196 sentences**, from 399 source files.
+Every sentence Overture can say to Dan: **1200 sentences**, from 400 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1467,8 +1467,14 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ReminderSettingsView.swift`
 "Reminder timing…"
     `App/RootView.swift`
+"Remove \(email)"
+    `Domain/Reachability.swift`
+"Remove this address. Prep won't research it or write to it, and later checks won't put it back."
+    `Domain/Reachability.swift`
 "Remove this contact"
     `UI/DraftReviewView.swift`
+"Removed \(email) from \(org). Overture won't offer it on their other shows."
+    `App/ActionFeedback.swift`
 "Removed \(who) from \(org)."
     `App/ActionFeedback.swift`
 "Rename show"
@@ -1961,6 +1967,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SelfBookingConflict.swift`
 "This show has been and gone."
     `Domain/ReachedOutClose.swift`
+"This show names no organization, so there's nowhere to record that. Nothing was removed."
+    `App/ActionFeedback.swift`
 "This show opened before you triaged it, so it is no longer waiting on you"
     `UI/ProspectRowView.swift`
 "This show was checked over 90 days ago, so that earlier result may have changed. Run Check reachability again to refresh it before you decide."

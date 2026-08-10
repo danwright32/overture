@@ -12,12 +12,12 @@ before this was codified.
 ## Input / output (exact)
 
 - **Read:** `~/Library/Application Support/Overture/overture-prep-queue.json`
-  (`PrepQueue` version `11`: a run-level `houses[]` (see "The queue names the houses" in §1),
+  (`PrepQueue` version `12`: a run-level `houses[]` (see "The queue names the houses" in §1),
   plus `items[]` each with `naturalKey`, `groupName`, `venue`,
   `performanceDate`, `runEndDate`, `discipline`, `websiteURL`, `sourceListingURL`,
   `possibleMatchName`, `priorRelationship`, `production`, `reprepMode`,
   `openingNightPassed`, `experimentArmInstruction`, `alsoAnswersFor`, `showListing`, `onlyTheActIsNamed`,
-  `venueHistory`, `organisationNamedOnListing`). `production` is `self` / `agency` / `unknown`; a v1 item omits it
+  `venueHistory`, `organisationNamedOnListing`, `refusedEmails`). `production` is `self` / `agency` / `unknown`; a v1 item omits it
   (treat as `unknown`). `reprepMode` is `draft_only` / `contacts_only`; absent (the normal case
   for a fresh, never-drafted prospect) means do both, exactly as today. See "Re-prep mode" under
   "Per prospect" below for what each value means for that item. `runEndDate` is the run's closing
@@ -51,6 +51,16 @@ before this was codified.
   `onlyTheActIsNamed` is `true`. ABSENT means only that the app's narrow parse (a possessive credit before
   the title) found nothing; it is never a statement that the page names no company, and you still read the
   text yourself. See §1's route.
+  `refusedEmails` (v12, #2392) is a list of addresses DAN HAS ALREADY STRUCK on this show. Do not
+  research them, do not write to them, and do not report them back as contacts. He struck them from the
+  card BEFORE this run precisely so it would not spend on them: the case that produced the field was a
+  show whose contacts were three personal gmail accounts and the act's own domain, all of which he could
+  see were wrong at a glance. If your research turns one of these up, that is not a find; drop it and
+  carry on looking, and if it is the only thing you can find, report the show as having no contact rather
+  than reporting an address on this list. ABSENT (the normal case) means he has struck nothing here; it is
+  not an empty list you need to reason about. The app refuses these addresses again when it reads your
+  results, so ignoring this field costs Dan money rather than reaching anybody, which is exactly why it is
+  worth honouring.
   `venueHistory` (v10, #1887) is how well Dan already knows the ROOM this show plays in, as one of
   `shot_before` / `a_few` / `regularly`. It is a BAND and carries NO COUNT, deliberately: the app
   holds the number and never sends it, so there is nothing for you to state. ABSENT means say

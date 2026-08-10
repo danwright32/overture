@@ -41,6 +41,9 @@ struct QueueView: View {
     // calendar. @Query rather than a context read, on the same precedent as the corrections above: adding
     // or removing a source re-labels the affected cards immediately.
     @Query private var watchedSources: [WatchedSource]
+    // #2392: the addresses Dan has struck. @Query on the same precedent as the corrections above: a
+    // strike must take the address off the card in the same frame, not at the next rebuild.
+    @Query private var refusedAddresses: [RefusedContactAddress]
 
     // #1436: hire inquiries fold into the same queue. Un-replied ones show in the to-send stage,
     // replied ones in reached-out (StageNavigation.stage(for:)); closed ones leave.
@@ -182,7 +185,8 @@ struct QueueView: View {
         QueueModel.items(from: prospects, answers: orgAnswers, corpus: allProspects,
                          overrides: ProducerOverrides(promotedRows: promotedProducers,
                                                       demotedRows: demotedHouses),
-                         sources: watchedSources)
+                         sources: watchedSources,
+                         refusals: ContactRefusal.ledger(from: refusedAddresses))
     }
 
     private var today: String { QueueModel.easternToday() }
@@ -242,6 +246,7 @@ struct QueueView: View {
             inquiries: inquiries,
             orgAnswers: orgAnswers,
             sources: watchedSources,
+            refusals: ContactRefusal.ledger(from: refusedAddresses),
             overrides: ProducerOverrides(promotedRows: promotedProducers, demotedRows: demotedHouses),
             geo: geo,
             today: today,

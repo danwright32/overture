@@ -115,6 +115,21 @@ enum ProspectRowFactory {
                 ProspectMutations.removeRecipientManually(item, rid, name,
                                                           prospects: prospects, context: context, feedback: feedback)
             },
+            // #2392: an address struck at triage. A contact this show researched goes through the SAME
+            // path the draft-review panel's Remove uses, so the two are one implementation; an inherited
+            // one has no row here and is refused for the ORGANISATION instead (Dan's call, 2026-08-09).
+            onRemoveContactAddress: { address in
+                if let rid = address.recipientId {
+                    let name = item.contacts.first(where: { $0.id == rid })?.displayName
+                    ProspectMutations.removeRecipientManually(item, rid, name,
+                                                              prospects: prospects, context: context,
+                                                              feedback: feedback)
+                } else {
+                    ProspectMutations.removeInheritedAddress(item, email: address.email,
+                                                             prospects: prospects, context: context,
+                                                             feedback: feedback)
+                }
+            },
             onDismissContactReply: { rid in ProspectMutations.dismissContactReply(item, rid, prospects: prospects, context: context, feedback: feedback) },
             onDismissContactBounce: { rid in ProspectMutations.dismissContactBounce(item, rid, prospects: prospects, context: context, feedback: feedback) },
             onDismissVenueMatch: { rid in ProspectMutations.dismissVenueMatch(item, rid, prospects: prospects, context: context, feedback: feedback) },

@@ -112,6 +112,12 @@ enum ProspectMutations {
         }
 
         let trimmedName = name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        // #2392: typing an address back in is the reversal of striking it, and is deliberately the only
+        // one, matching Dan's no-undo rule for removal at review (#2155: "if they want to add it back
+        // they can"). Cleared BEFORE the contact is created, so a refusal can never be left standing
+        // behind a contact that is now on the card and quietly drop it at the next import.
+        ContactRefusal.allow(email: trimmedEmail, showKey: model.naturalKey,
+                             orgKey: model.presenter.flatMap { OrgKey.stored(for: $0) }, in: context)
         let result = applyManualRecipient(email: trimmedEmail, name: trimmedName, to: model)
 
         if case .blocked = result.action {
@@ -237,13 +243,45 @@ enum ProspectMutations {
 
     // Dan removes a recipient by hand (#399): Prospect.removeOrSuppressRecipient decides delete
     // versus stop-pursuing by that recipient's current send state.
+    //
+    // #2392: and the removal is RECORDED, not merely performed. The delete branch above leaves a still
+    // pending row indistinguishable from one never found, so the next prep run re-imports the same
+    // address and the removal silently undoes itself. This is the one path both surfaces take (the
+    // triage card and the draft-review panel), so a strike means the same thing wherever Dan makes it.
     static func removeRecipientManually(_ item: QueueItem, _ recipientId: String, _ name: String?,
                                         prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        if let email = model.recipients.first(where: { $0.id == recipientId })?.email, !email.isEmpty {
+            // Scoped to this SHOW: a contact this show researched is a fact about this show, and refusing
+            // it for the whole organisation would strike people it is not true of (L83).
+            ContactRefusal.refuse(email: email, scope: .show(model.naturalKey), in: context)
+        }
         model.removeOrSuppressRecipient(id: recipientId)
         if context.saveOrWarn(org: model.groupName, feedback: feedback) {
             feedback.acknowledge(ActionAck.recipientRemoved(name: name, org: model.groupName))
         }
+    }
+
+    // #2392: Dan strikes an address the card INHERITED from the organisation ledger (#1598 Phase 5).
+    //
+    // A separate entry point from the one above because there is genuinely nothing to remove: the show
+    // has no contacts of its own, so the address is printed from an answer owned elsewhere and there is
+    // no Recipient row on this card at all. His call, 2026-08-09: striking one means "not for this
+    // organisation", so it leaves every show that inherits it rather than only this one.
+    static func removeInheritedAddress(_ item: QueueItem, email: String,
+                                       prospects: [Prospect], context: ModelContext,
+                                       feedback: ActionFeedback) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        // No organisation to attach it to means the address cannot have been inherited in the first
+        // place, so there is nothing this could truthfully record. Refuse rather than guess at a nearby
+        // scope (L75): a strike written against the wrong key silently spares the address it names and
+        // strikes somebody else's.
+        guard let presenter = model.presenter, let orgKey = OrgKey.stored(for: presenter) else {
+            feedback.acknowledge(ActionAck.inheritedAddressHasNoOrganisation, tone: .warning)
+            return
+        }
+        ContactRefusal.refuse(email: email, scope: .organisation(orgKey), in: context)
+        feedback.acknowledge(ActionAck.inheritedAddressRemoved(email: email, org: presenter))
     }
 
     static func dismissContactReply(_ item: QueueItem, _ recipientId: String,

@@ -38,12 +38,28 @@ enum PrepQueueService {
                                    overrides: ProducerOverrideEditing.overrides(in: context))
     }
 
+    // #2392: the addresses struck on one show, at either level, as the run is told them. One
+    // implementation for both work-lists (the prep queue and the probe queue), because a rule spelled out
+    // twice is how one of them comes to be missing a scope.
+    //
+    // The organisation half matters as much as the show half: an address Dan struck on the ledger is one
+    // this show would inherit, and the run hunting the same organisation would find it again.
+    private static func struckAddresses(for p: Prospect,
+                                        refusals: ContactRefusal.Ledger) -> [String]? {
+        guard !refusals.isEmpty else { return nil }
+        let orgKey = p.presenter.flatMap { OrgKey.stored(for: $0) }
+        let struck = refusals.struckAddresses(showKey: p.naturalKey, orgKey: orgKey)
+        return struck.isEmpty ? nil : struck
+    }
+
     static func buildQueue(from context: ModelContext, generatedAt: String,
                            includedKeys: Set<String>? = nil,
                            today: String = EasternDate.today(),
                            venueHistory: VenueShootHistory? = nil) -> PrepQueue {
         // #1887: read once per build, never per item (it reads two files).
         let history = venueHistory ?? VenueShootHistory.current(today: today)
+        // #2392: the addresses Dan struck, read ONCE per build for the same reason.
+        let refusals = ContactRefusal.ledger(in: context)
         let items: [PrepQueueItem] = eligibleProspects(from: context, includedKeys: includedKeys)
             .map { p in
                 PrepQueueItem(
@@ -90,7 +106,11 @@ enum PrepQueueService {
                     // #1887: the BAND only, never the count, so the drafter has no number to state.
                     // Absent when Dan has never shot the room, when no history has been imported, and
                     // deliberately on a Carnegie show, where the tenure credential already says it.
-                    venueHistory: history.band(for: p.venue)?.rawValue
+                    venueHistory: history.band(for: p.venue)?.rawValue,
+                    // #2392: addresses Dan struck on this show, so the run does not pay to research or
+                    // draft to one he already refused. Absent, never an empty list, on the shows with
+                    // nothing struck. Sorted so the same store always writes byte-identical JSON.
+                    refusedEmails: struckAddresses(for: p, refusals: refusals)
                 )
             }
         return PrepQueueBuilder.build(from: items, generatedAt: generatedAt, houses: houses(from: context))
@@ -110,6 +130,7 @@ enum PrepQueueService {
         // #1719: Dan's own corrections, read from the same store the corpus came from. Without this the
         // gate ran on its automatic arms alone and a house he had already corrected by hand was still
         // amortised across its shows.
+        let refusals = ContactRefusal.ledger(in: context)
         let plan = ProbeBatch.plan(selecting: keys,
                                    among: all.map { ProbeBatch.Show(key: $0.naturalKey,
                                                                     presenter: $0.presenter,
@@ -142,7 +163,11 @@ enum PrepQueueService {
                     alsoAnswersFor: covered[p.naturalKey]?.sorted(),
                     // #1856: the run is told when this show names no producer at all, so it pursues the
                     // act itself instead of hunting an organisation that does not exist.
-                    onlyTheActIsNamed: OrganiserNaming.onlyTheActIsNamed(presenter: p.presenter))
+                    onlyTheActIsNamed: OrganiserNaming.onlyTheActIsNamed(presenter: p.presenter),
+                    // #2392: a probe hunts contacts too, so it needs the same list. Left off it, a check
+                    // would find and report the address Dan struck, the importer would refuse it, and he
+                    // would have paid for the lookup twice over.
+                    refusedEmails: struckAddresses(for: p, refusals: refusals))
             }
         return PrepQueueBuilder.build(from: items, generatedAt: generatedAt, houses: houses(from: context))
     }

@@ -330,10 +330,31 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // contacts; only a show with none falls back to the organisation's. Mixing the two would put an
     // address on the card that no check on this show ever produced. Decided here (testable, #863) rather
     // than in the view, which used to read `contacts` directly.
-    var displayedContactEmails: [String] {
-        let own = contacts.compactMap { $0.email?.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        return own.isEmpty ? (inheritedReachability?.emails ?? []) : own
+    var displayedContactEmails: [String] { displayedContactAddresses.map(\.email) }
+
+    // #2392: the same list, each address carrying whether there is a Recipient behind it. The card needs
+    // that to offer a strike, because the two are removed by different routes and it cannot tell them
+    // apart from a list of strings: a contact this show researched has a row to take out, while an
+    // inherited address is printed from the organisation ledger and has none.
+    //
+    // `displayedContactEmails` is derived FROM this rather than restating the own-versus-inherited rule,
+    // so the strings a card prints and the controls beside them can never disagree about which addresses
+    // are on the card.
+    struct DisplayedAddress: Identifiable, Equatable, Sendable {
+        let email: String
+        // nil means the address is inherited: there is no Recipient on this show to delete, and striking
+        // it is a fact about the ORGANISATION (Dan's call, 2026-08-09).
+        let recipientId: String?
+        var id: String { email }
+    }
+
+    var displayedContactAddresses: [DisplayedAddress] {
+        let own = contacts.compactMap { c -> DisplayedAddress? in
+            let email = (c.email ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            return email.isEmpty ? nil : DisplayedAddress(email: email, recipientId: c.id)
+        }
+        guard own.isEmpty else { return own }
+        return (inheritedReachability?.emails ?? []).map { DisplayedAddress(email: $0, recipientId: nil) }
     }
 
 
@@ -1970,10 +1991,13 @@ enum QueueModel {
                       answers: [OrgReachabilityAnswer] = [], corpus: [Prospect]? = nil,
                       overrides: ProducerOverrides = .none,
                       sources: [WatchedSource] = [],
+                      // #2392: the addresses Dan has struck, read once by the caller and handed in.
+                      // Defaulted empty so every call site that only wants rows is unaffected.
+                      refusals: ContactRefusal.Ledger = .none,
                       now: Date = Date()) -> [QueueItem] {
         let linked = EngagementLink.group(prospects.map(EngagementLink.Row.init))
         let inherited = inheritedAnswers(answers, corpus: corpus ?? prospects,
-                                         overrides: overrides, now: now)
+                                         overrides: overrides, refusals: refusals, now: now)
         // #1687: built ONCE here from the same whole-store corpus the gate above judges against, never per
         // row. Deciding whether a presenter is really its building's brand walks every presenter in the
         // store against every venue spelling in it (roughly 400 by 114 on Dan's), which is a cost a card
@@ -2033,6 +2057,7 @@ enum QueueModel {
     // its rules stay unit-testable.
     private static func inheritedAnswers(_ answers: [OrgReachabilityAnswer], corpus: [Prospect],
                                          overrides: ProducerOverrides,
+                                         refusals: ContactRefusal.Ledger,
                                          now: Date) -> [String: OrgAnswerLedger.Inherited] {
         guard !answers.isEmpty else { return [:] }
         let flat = answers.compactMap { row -> OrgAnswerLedger.Answer? in
@@ -2040,11 +2065,16 @@ enum QueueModel {
             return OrgAnswerLedger.Answer(orgKey: row.orgKey, result: result, probedAt: row.probedAt,
                                           presenterName: row.presenterName, emails: row.foundEmails)
         }
+        // #2392: struck addresses come out HERE, before the ledger decides anything, so the badge and the
+        // addresses under it are answering from one list. An organisation whose every address Dan struck
+        // is left with none, and `OrgAnswerLedger.inherited` already refuses to inherit a positive with
+        // nothing to show, so the card stops claiming a way in it cannot offer (L16).
+        let usable = refusals.allowedAnswers(flat)
         let shows = corpus.map {
             OrgAnswerLedger.Show(key: $0.naturalKey, presenter: $0.presenter, venue: $0.venue,
                                  hasOwnAnswer: $0.reachabilityProbedAt != nil)
         }
-        return OrgAnswerLedger.inherited(from: flat, shows: shows, now: now, overrides: overrides)
+        return OrgAnswerLedger.inherited(from: usable, shows: shows, now: now, overrides: overrides)
     }
 
     // #939: distinct from relatedRunNote above (same venue, a separate run): this production also plays
