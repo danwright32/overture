@@ -17,6 +17,24 @@ enum SourceGuardHelper {
         return (try? String(contentsOf: url, encoding: .utf8)) ?? ""
     }
 
+    // #2009: the STORED properties declared in a class body, for the guards that ask "is every field
+    // accounted for by this rule?". Shared rather than copied: two readings of Swift source would
+    // eventually disagree about what counts as stored, and the guard that disagreed quietly would be the
+    // one holding a delete path open (L26).
+    //
+    // A line carrying a brace is a computed property or an accessor, never storage. `@Attribute`-prefixed
+    // declarations count, since the macro decorates a stored property.
+    static func storedPropertyNames(inClassBody body: String) -> [String] {
+        body.components(separatedBy: "\n").compactMap { line in
+            let code = line.trimmingCharacters(in: .whitespaces)
+            guard !code.contains("{") else { return nil }
+            guard let varRange = code.range(of: "var ") else { return nil }
+            guard code.hasPrefix("var ") || code.hasPrefix("@Attribute") else { return nil }
+            let name = code[varRange.upperBound...].prefix { $0.isLetter || $0.isNumber || $0 == "_" }
+            return name.isEmpty ? nil : String(name)
+        }
+    }
+
     // #2106: the text between two markers, for scoping a guard to a region that is not brace-delimited.
     // The runners' heartbeat is `( while :; do … done ) &`, so its body runs from the loop header to the
     // loop's own terminator, and that is the region a guard about "what the heartbeat does each tick"
