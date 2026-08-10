@@ -123,6 +123,45 @@ else
   FAILURES=$((FAILURES + 1))
 fi
 
+# #2199: a check that concluded WITHOUT a runner ever being assigned. On 2026-08-06 GitHub Actions had
+# an outage, PR #2194's only check sat queued and came back red, and about thirty minutes went into
+# establishing the code was never involved. `gh pr checks` renders that identically to failing tests.
+EXIT_CODE=0
+RUNNER_NEVER_STARTED=0
+OUT="$(classify_check_run "typecheck-and-test" "completed" "failure" "1")"
+assert_contains "a check no runner picked up says so, not 'Failed'" "${OUT}" "Never started"
+assert_contains "and says whose problem it is" "${OUT}" "This is GitHub, not your code"
+# Called DIRECTLY, never inside a command substitution: a subshell discards the mutation and every
+# flag assertion below would pass vacuously (the convention this file already follows above).
+classify_check_run "typecheck-and-test" "completed" "failure" "1" >/dev/null
+assert_exit_code "a never-started check still blocks the merge" 1
+if [[ "${RUNNER_NEVER_STARTED}" == "1" ]]; then
+  echo "ok - it is reported as its own state, not folded into the ordinary red"
+else
+  echo "FAIL - RUNNER_NEVER_STARTED was not set"
+  FAILURES=$((FAILURES + 1))
+fi
+
+# The other direction, which is what stops this becoming an excuse for a genuine red: a failure that
+# DID run is still reported as a plain failure.
+EXIT_CODE=0
+RUNNER_NEVER_STARTED=0
+OUT="$(classify_check_run "typecheck-and-test" "completed" "failure" "")"
+assert_contains "a real failure is still a plain Failed" "${OUT}" "Failed"
+classify_check_run "typecheck-and-test" "completed" "failure" "" >/dev/null
+if [[ "${OUT}" == *"Never started"* ]]; then
+  echo "FAIL - a genuine failure was labelled as never started"
+  FAILURES=$((FAILURES + 1))
+else
+  echo "ok - a genuine failure is not excused as infrastructure"
+fi
+if [[ "${RUNNER_NEVER_STARTED}" == "0" ]]; then
+  echo "ok - and does not set the infrastructure flag"
+else
+  echo "FAIL - a genuine failure set RUNNER_NEVER_STARTED"
+  FAILURES=$((FAILURES + 1))
+fi
+
 echo
 if [[ ${FAILURES} -eq 0 ]]; then
   echo "All check-pr-ci.sh classification fixtures passed."
