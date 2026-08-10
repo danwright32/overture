@@ -216,6 +216,17 @@ assert_equals "a Mac-touching branch with a fresh pbxproj merges" \
 assert_equals "a Mac-touching branch with a STALE pbxproj is not merged" \
   "not-merged" "$(run_main_with_pbxproj "stale")"
 
+# #2199: a red that no runner ever picked up stops the poll IMMEDIATELY and as its own reason. Checked
+# before the coarser failure rule, since the never-started line is a red too and would be swallowed by
+# it, which is the whole way the two got confused for thirty minutes on 2026-08-06.
+NEVER_STARTED_OUTPUT="typecheck-and-test: Never started: no runner was ever assigned, so nothing ran. This is GitHub, not your code."
+assert_equals "a check no runner picked up stops as its own reason" \
+  "never-started" "$(classify_stop_reason "${NEVER_STARTED_OUTPUT}")"
+
+# The other direction, so this cannot become an excuse for a genuine red.
+assert_equals "a real failing test is still classified as failed" \
+  "failed" "$(classify_stop_reason "typecheck-and-test: Failed")"
+
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All merge-when-green.sh classification fixtures passed."
   exit 0

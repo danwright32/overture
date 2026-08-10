@@ -42,6 +42,19 @@ classify_stop_reason() {
     echo "conflict"
     return
   fi
+  # #2199: a check that went red without a runner ever picking it up. Stopped IMMEDIATELY rather than
+  # polled, which is the opposite of what it looks like it should do: GitHub will not re-run the job by
+  # itself, so waiting the full window achieves nothing and only delays the one thing that helps. The
+  # issue asked to re-run and keep waiting; re-running is a side effect this script should not take on
+  # its own, and the thirty minutes lost on 2026-08-06 went to DIAGNOSIS rather than to waiting, which
+  # naming the state fixes. check-pr-ci.sh prints the exact re-run command.
+  #
+  # Checked BEFORE the failure case below, because the never-started line is a red too and the coarser
+  # rule would swallow it.
+  if grep -q "Never started:" <<< "${output}"; then
+    echo "never-started"
+    return
+  fi
   if grep -qE ": Failed" <<< "${output}"; then
     echo "failed"
     return
@@ -182,6 +195,12 @@ main() {
       conflict)
         echo
         echo "Stopped: PR #${PR_NUMBER} has a merge conflict, so CI checks will never appear. Not merging. Resolve the conflict, then rerun this script." >&2
+        exit 1
+        ;;
+      never-started)
+        echo
+        echo "Stopped: a check went red without ever being picked up by a runner, so nothing ran and there is no failure to investigate. Not merging." >&2
+        echo "This is GitHub's infrastructure, not this branch. Re-run the job (the command is printed above), then rerun this script." >&2
         exit 1
         ;;
       failed)

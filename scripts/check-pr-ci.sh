@@ -16,6 +16,30 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/ci-config.sh"
 
+# #2199: the exit code that means "GitHub never ran this", as a named constant shared by this script
+# and merge-when-green.sh, so the two cannot disagree about what it means.
+RUNNER_NEVER_STARTED_EXIT=2
+
+# Did a machine ever pick this check up? An Actions job that was never assigned has an empty
+# `runner_name` AND an empty `steps` array; a job that ran and failed has both. Asked only on the
+# failure path, so the ordinary green run makes no extra API calls.
+#
+# Fails towards "it was assigned", so an API hiccup here can only ever report the ordinary red, never
+# invent an infrastructure excuse for a genuine test failure.
+runner_was_assigned() {
+  local check_name="$1" run_id jobs
+  run_id="$(gh_as_danwright32 run list -R "${REPO}" --commit "${SHA}" --limit 1 \
+    --json databaseId --jq '.[0].databaseId' 2>/dev/null)" || return 0
+  [[ -n "${run_id}" ]] || return 0
+  jobs="$(gh_as_danwright32 api "repos/${REPO}/actions/runs/${run_id}/jobs" \
+    --jq ".jobs[] | select(.name == \"${check_name}\") | [(.runner_name // \"\"), (.steps | length)] | @tsv" \
+    2>/dev/null)" || return 0
+  [[ -n "${jobs}" ]] || return 0
+  local runner steps
+  IFS=$'\t' read -r runner steps <<< "${jobs}"
+  [[ -n "${runner}" || "${steps:-0}" -gt 0 ]]
+}
+
 usage() {
   echo "Usage: $(basename "$0") <pr-number>" >&2
   exit 1
@@ -24,8 +48,11 @@ usage() {
 # Classifies one check-run row (the tab-separated fields produced by the check-runs
 # query in main) and prints its status line. Mutates the caller's EXIT_CODE, same as
 # when this was the inline body of the loop below.
+# #2199: `never_started` is "1" when this check concluded WITHOUT a runner ever being assigned,
+# which main works out from the Actions job behind it. Passed in rather than looked up here, so this
+# stays a pure classifier its fixtures can drive.
 classify_check_run() {
-  local name="$1" status="$2" conclusion="$3"
+  local name="$1" status="$2" conclusion="$3" never_started="${4:-}"
   local label
 
   if [[ "${status}" == "completed" ]]; then
@@ -34,8 +61,20 @@ classify_check_run() {
         label="Passed"
         ;;
       failure)
-        label="Failed"
-        EXIT_CODE=1
+        # #2199: a red that no machine ever picked up is not a failing test. On 2026-08-06 GitHub
+        # Actions had an outage, PR #2194's only check sat queued and came back red, and about thirty
+        # minutes went into establishing that the code was never involved. The signal is unambiguous
+        # once looked for (no runner name, no steps), and reading one as the other sends whoever sees
+        # it hunting a bug that does not exist. Same distinction as #1006's "the process died" versus
+        # "a test failed", one layer out.
+        if [[ "${never_started}" == "1" ]]; then
+          label="Never started: no runner was ever assigned, so nothing ran. This is GitHub, not your code."
+          RUNNER_NEVER_STARTED=1
+          EXIT_CODE=1
+        else
+          label="Failed"
+          EXIT_CODE=1
+        fi
         ;;
       skipped)
         # typecheck-and-test runs unconditionally (no path filter in ci.yml), so nothing is
@@ -109,14 +148,27 @@ main() {
   fi
 
   EXIT_CODE=0
+  RUNNER_NEVER_STARTED=0
 
   while IFS=$'\t' read -r name status conclusion; do
-    classify_check_run "${name}" "${status}" "${conclusion}"
+    local never_started=""
+    if [[ "${status}" == "completed" && "${conclusion}" == "failure" ]] \
+       && ! runner_was_assigned "${name}"; then
+      never_started=1
+    fi
+    classify_check_run "${name}" "${status}" "${conclusion}" "${never_started}"
   done <<< "${CHECK_RUNS}"
 
   echo
   if [[ ${EXIT_CODE} -eq 0 ]]; then
     echo "All checks have actually passed. Safe to merge on CI grounds."
+  elif [[ ${RUNNER_NEVER_STARTED} -eq 1 ]]; then
+    # #2199: its OWN exit code, so a caller can tell infrastructure from a real red without parsing
+    # the words. Still never zero: nothing has passed, so nothing may merge on it.
+    echo "A check went red without ever being picked up by a runner. Nothing ran, so there is no"
+    echo "failure to investigate: re-run it with"
+    echo "  gh run rerun --failed -R ${REPO} \$(gh run list -R ${REPO} --commit ${SHA} --limit 1 --json databaseId --jq '.[0].databaseId')"
+    exit "${RUNNER_NEVER_STARTED_EXIT}"
   else
     echo "Not every check has actually passed yet. Do not merge on the strength of pending or no failure yet alone."
   fi
