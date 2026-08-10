@@ -130,6 +130,19 @@ final class WatchedSource {
     var degradedStreak: Int
     var lastDegradedCount: Int
 
+    // #2211: the same treatment for the OTHER way an established source goes quiet. The silently-empty
+    // warning was computed per run against the baseline, so it carried no memory: a calendar dead for a
+    // month and one having a genuinely quiet week produced the identical sentence, every run, forever.
+    // Dan was being asked to judge exactly the thing the warning could not tell him, whether this was the
+    // first time or the fifth.
+    //
+    // Defaulted, so existing rows migrate cleanly and a source that has never been read since this
+    // shipped simply reads as a first occurrence, which is the honest answer for a row with no history.
+    var emptyStreak: Int = 0
+    // When this source last came back with anything at all. Nil on a row that has never returned a show
+    // since this began recording, which is deliberately not the same claim as "never returned one".
+    var lastNonEmptyAt: Date? = nil
+
     // #891: what the last run that READ this source managed to read, and what it could not (an event whose
     // own detail page was never reached comes back with no venue and is dropped).
     //
@@ -274,6 +287,15 @@ final class WatchedSource {
         return SourceAttention.neverReadLine(addedAt: addedAt, now: now)
     }
 
+    // #2211: what the row says when this source has come back empty on several consecutive runs. Nil
+    // until the streak passes the threshold, so one quiet day stays the note it already is in the scout
+    // summary rather than becoming an alarm. Read off the SAME rule that put the row in the attention
+    // section, so the sentence and the badge cannot disagree about which sources it means.
+    func goneQuietNote(now: Date = Date()) -> String? {
+        guard isActive, SourceAttention.hasGoneQuiet(self) else { return nil }
+        return SourceAttention.goneQuietLine(runs: emptyStreak, lastNonEmptyAt: lastNonEmptyAt, now: now)
+    }
+
     // #1544: what the row says about an unencrypted fetch, decided beside the data and never in the view
     // (#863). Nil is the overwhelmingly common case and costs the row nothing.
     var insecureFetchNote: String? {
@@ -322,6 +344,20 @@ final class WatchedSource {
 
         hadPlacedBeforeLastRun = hasEverPlaced
         lastPlacedCount = placed
+
+        // #2211: whether this run continued a run of empties, decided BEFORE the baseline below is
+        // rewritten, so the question is asked of the history this run arrived with rather than of the
+        // history it is about to leave behind.
+        //
+        // Only a source with a baseline can be "silently empty" at all: a brand-new source has nothing
+        // unusual about an empty first check, which is the same rule `Outcome.silentlyEmptySources`
+        // applies, asked here of the row rather than restated (L16).
+        if events == 0, baselineFeedCount > 0 {
+            emptyStreak += 1
+        } else {
+            if events > 0 { lastNonEmptyAt = now }
+            emptyStreak = 0
+        }
 
         let updated = FeedReconcile.updatedHealth(feedHealth, currentCount: events)
         baselineFeedCount = updated.baseline
