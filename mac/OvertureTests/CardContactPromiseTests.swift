@@ -202,13 +202,44 @@ struct ContactCountPromiseTests {
         #expect(QueueItem(p).contactCountLabel == "2 contacts")
     }
 
-    // A form is a way in only when the card would actually offer it, and it never offers one while an
-    // address is printed (#1626). Counting it anyway would promise two ways in on a card showing one.
-    @Test func aFormHiddenBehindAnAddressIsNotCountedAsAWayIn() throws {
+    // #2421 REVERSES what this used to assert, which was that a form is hidden, and therefore not
+    // counted, whenever any address is printed on the show (#1626/#1961). That was right while a
+    // form-only contact was a leftover to be tolerated. It is wrong now that a real form is a route Dan
+    // deliberately keeps (his call, 2026-08-10, measured: 15 shows have no other way in), because on a
+    // MIXED show it left those people reading "No email yet" with no way to act, which is the state he
+    // was looking at when he filed this. A decision is only true as of its date (L61).
+    //
+    // What is unchanged, and is the part with teeth: a form counts only where the card would offer it,
+    // so the number can still never promise a way in the card does not show.
+    @Test func aFormBesideAnAddressIsOfferedAndCounted() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx)
         p.setRecipients([performer("Sarah Matsushima", email: "sarah@example.com"),
                          performer("Jerrick Cavagnaro", form: "https://jerrickcavagnaro.com/appointments")])
+
+        let item = QueueItem(p)
+        #expect(item.displayedContactForms.map(\.absoluteString) == ["https://jerrickcavagnaro.com/appointments"])
+        #expect(item.contactCountLabel == "2 contacts", "two people, two ways in")
+    }
+
+    // The contact who HAS an address is never also offered a form: her address is the way in, and a form
+    // beside it would be a second control for the same person.
+    @Test func aContactWithAnAddressIsNotAlsoOfferedAForm() throws {
+        let ctx = ModelContext(try container())
+        let p = show(ctx)
+        p.setRecipients([performer("Sarah Matsushima", email: "sarah@example.com",
+                                   form: "https://sarahmatsushima.example/contact")])
+
+        #expect(QueueItem(p).displayedContactForms.isEmpty)
+    }
+
+    // And the promise the count makes is still the card's own: a social profile is not a way in, so a
+    // contact holding only one is not counted as reachable even though it is a contact.
+    @Test func aSocialFormIsStillNotAWayIn() throws {
+        let ctx = ModelContext(try container())
+        let p = show(ctx)
+        p.setRecipients([performer("Sarah Matsushima", email: "sarah@example.com"),
+                         performer("Jerrick Cavagnaro", form: "https://instagram.com/jerrick")])
 
         let item = QueueItem(p)
         #expect(item.displayedContactForms.isEmpty)
