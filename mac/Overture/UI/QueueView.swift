@@ -1150,6 +1150,14 @@ struct QueueView: View {
                                                              isStillOpen: r.resolution == nil) {
                         Text(hint).font(OVType.meta).foregroundStyle(OVColor.rust)
                             .fixedSize(horizontal: false, vertical: true)
+                    } else if SpentNudges.isSpent(show: p),
+                              let spent = SpentNudges.marker(eventDay: p.performanceDate, today: today) {
+                        // #2398: the emails are done and the show is still open, which is a state this slot
+                        // could not previously describe: it read exactly like a show nobody had got round
+                        // to. Ahead of the countdown deliberately, because there is nothing left to count
+                        // down TO, and a "in 6 days" here would be a promise Overture will not keep.
+                        Text(spent).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                            .fixedSize(horizontal: false, vertical: true)
                     } else {
                     // #2169: a dated form pitch names the NIGHT here ("tonight", "3 days ago") instead of
                     // counting down to a send that will never happen. eventDay/today are threaded in

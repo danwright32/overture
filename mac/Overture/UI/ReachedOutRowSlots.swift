@@ -11,7 +11,9 @@ import Foundation
 // maximum came down with it. Each remaining slot answers a different question, which is why three is not
 // stacking:
 //
-//   timing / answer / passedHint   when is this due, or who is waiting, or that the night has gone
+//   timing / answer / passedHint / spentMarker
+//                                  when is this due, or who is waiting, or that the night has gone, or
+//                                  that the emails are spent and nothing more will go until the show
 //   closeOut                       ending the pitch
 //   dueAction                      the one thing that is actually due
 //
@@ -36,6 +38,9 @@ enum ReachedOutRowSlots {
     enum Slot: CaseIterable, Equatable {
         // #2112: the show has been and gone.
         case passedHint
+        // #2398: the emails are done and the show is still open. A fourth spelling of the same question,
+        // because "when is this due" has no honest answer once there is nothing left to send.
+        case spentMarker
         case timing
         case answer
         // #2112/#2224: ending the pitch, from here rather than from the Archive card.
@@ -54,9 +59,13 @@ enum ReachedOutRowSlots {
     ///
     /// `closeOut` is unconditional, deliberately. A show can get its yes at any moment, and a control
     /// that appeared only once the date had passed would be missing on exactly the night it is wanted.
-    static func slots(replyOffered: Bool, showPassed: Bool = false,
+    /// #2398: `spentMarker` sits between the hint and the countdown. A show whose date has gone is spoken
+    /// for by `passedHint` first (that is the stronger fact), and a countdown is only honest while there is
+    /// still something to count down to.
+    static func slots(replyOffered: Bool, showPassed: Bool = false, nudgesSpent: Bool = false,
                       dueActionLabel: String?) -> [Slot] {
-        var slots: [Slot] = [replyOffered ? .answer : (showPassed ? .passedHint : .timing)]
+        let timingSlot: Slot = showPassed ? .passedHint : (nudgesSpent ? .spentMarker : .timing)
+        var slots: [Slot] = [replyOffered ? .answer : timingSlot]
         slots.append(.closeOut)
         if dueActionLabel != nil { slots.append(.dueAction) }
         return slots
