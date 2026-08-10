@@ -1029,10 +1029,22 @@ enum QueueModel {
         if item.priorRelationship == "contacted" {
             return "Cold-contacted before, no booking"
         }
-        if let name = item.possibleMatchName {
-            return "Possible match to \(possibleMatchOrigin(item.possibleMatchSource)): \(name)?"
-        }
+        // #1929: the possible-match QUESTION is not a flag, and it does not live here. It carries a
+        // show's own name, so it is a sentence of unbounded length, and it was rendered as a pill
+        // beside "Self-produced" and "Likely uncovered". See possibleMatchQuestion below.
         return nil
+    }
+
+    // The possible-match question, which is a QUESTION and not a label (#1929).
+    //
+    // Dan saw "Possible match to a show you dismissed in Overture: Thomas F. Hulbert Music
+    // International Piano Competition Winners Recital?" run off the right edge of the card. Every
+    // other history flag is a fixed phrase Overture chose; this one ends in a name Overture did not
+    // choose and cannot bound, which is what makes it a different kind of thing from the pills it was
+    // sitting among. It gets its own wrapping line, like the row's other explaining sentences.
+    static func possibleMatchQuestion(_ item: QueueItem) -> String? {
+        guard let name = item.possibleMatchName else { return nil }
+        return "Possible match to \(possibleMatchOrigin(item.possibleMatchSource)): \(name)?"
     }
 
     // #1695: WHICH list the record came from, in Dan's words.

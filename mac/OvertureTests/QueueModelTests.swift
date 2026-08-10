@@ -256,9 +256,17 @@ struct HistoryFlagTests {
         #expect(QueueModel.historyFlag(item(priorRelationship: "lost_hard")) == "Lost before, not interested")
     }
 
+    // #1929: the question is its own sentence on its own line, not one of the pills. It ends in a show
+    // name Overture did not choose, so it has no length a pill row could rely on.
     @Test func possibleMatchPhrasedAsQuestion() {
-        let flag = QueueModel.historyFlag(item(possibleMatchSource: "downbeat_client", possibleMatchName: "Alaria Ensemble"))
-        #expect(flag == "Possible match to a past client: Alaria Ensemble?")
+        let row = item(possibleMatchSource: "downbeat_client", possibleMatchName: "Alaria Ensemble")
+
+        #expect(QueueModel.possibleMatchQuestion(row) == "Possible match to a past client: Alaria Ensemble?")
+        #expect(QueueModel.historyFlag(row) == nil, "the question must not also be drawn as a pill")
+    }
+
+    @Test func noQuestionWithoutAPossibleMatch() {
+        #expect(QueueModel.possibleMatchQuestion(item(priorRelationship: "booked")) == nil)
     }
 
     @Test func nilWhenNoSignal() {
