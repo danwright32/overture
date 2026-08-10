@@ -81,6 +81,13 @@ enum LaunchMigrations {
         // (#601/#602) taken just before this is the net under it. Idempotent: a show with one row per
         // person has no group of two to reconcile.
         DuplicateContactMerge.run(in: context)
+        // #2421: and the dead ends already on those cards, by the same rule the importer now applies at
+        // ingest. Deliberately AFTER the duplicate merge above: a person found through both an Instagram
+        // and an address is one contact first, so the merge keeps the address and this pass then has
+        // nothing of theirs to remove. Run the other way round it would delete the Instagram row before
+        // the merge could carry across what only that row knew. It DELETES a recipient, and refuses any
+        // that was written to or that Dan added himself. Idempotent.
+        DeadEndContactSweep.run(in: context)
         // #1784: move each stored organisation answer onto the key today's shared fold computes, so an
         // answer written under the old spelling of a bracketed name is still found rather than paid for
         // again. Idempotent (a row already on its computed key is skipped). Can delete a row, but only a
