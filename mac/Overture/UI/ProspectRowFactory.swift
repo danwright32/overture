@@ -44,7 +44,7 @@ enum ProspectRowFactory {
             onKeep: { ProspectMutations.setStatus(item, .queued, nil, prospects: prospects, context: context, feedback: feedback, undo: undoStack, undoLabel: "Keep") },
             onDismiss: { reason in ProspectMutations.dismissForReason(item, reason, prospects: prospects, context: context, feedback: feedback, offer: dayOffOffer, undo: undoStack) },
             onUnapprove: { ProspectMutations.setStatus(item, .drafted, nil, prospects: prospects, context: context, feedback: feedback) },
-            onSkipDraft: { ProspectMutations.setStatus(item, .dismissed, .notInterested, prospects: prospects, context: context, feedback: feedback) },
+            onSkipDraft: { ProspectMutations.setStatus(item, .dismissed, .notAFit, prospects: prospects, context: context, feedback: feedback) },
             // #1824: the launch renders this show's listing page first, so it is awaited from a task rather
             // than blocking the click.
             onReprep: onReprep ?? { mode in
@@ -99,6 +99,15 @@ enum ProspectRowFactory {
             },
             onMarkContact: { rid, resolution, bounced in
                 ProspectMutations.markContact(item, rid, resolution, bounced, prospects: prospects, context: context, feedback: feedback)
+            },
+            // #2395: an ending goes to the SHOW, through the one write every menu shares.
+            onRecordOutcome: { outcome in
+                ProspectMutations.recordOutcome(item, outcome, prospects: prospects,
+                                                context: context, feedback: feedback)
+            },
+            onReopenOutcome: {
+                ProspectMutations.reopenOutcome(item, prospects: prospects,
+                                                context: context, feedback: feedback)
             },
             onSetRecipientConversationState: { rid, state in
                 ProspectMutations.setRecipientConversationState(item, rid, state, prospects: prospects, context: context, feedback: feedback)

@@ -53,7 +53,7 @@ struct WentByRetirementOnTheTickTests {
         // The calendar turns over with the app still running.
         #expect(scheduler.retireShowsThatOpened(now: after).count == 1)
         #expect(show.status == .dismissed)
-        #expect(show.dismissReason == .wentBy)
+        #expect(show.showOutcome == .wentBy)
     }
 
     // The tick judges against the clock it was handed, never Date() reached for inside. Without this the
@@ -98,7 +98,7 @@ struct WentByRetirementOnTheTickTests {
         #expect(result.saveFailed, "a failed save must surface, never read as a clean tick")
         #expect(ReconcileSummary(omniFocusChanged: 0, saveFailed: result.saveFailed).message
                     .contains("couldn't save"), "and reach Dan in words, not just as a flag")
-        #expect(show.dismissReason == .wentBy, "the in-memory cut stands; only its persistence failed")
+        #expect(show.showOutcome == .wentBy, "the in-memory cut stands; only its persistence failed")
     }
 
     // A guard and its wiring are two claims. The three above prove the pass works; this proves the tick
@@ -112,6 +112,6 @@ struct WentByRetirementOnTheTickTests {
         _ = await ReconcileScheduler(context: ctx).runSafeReconcilesOnce(now: after)
 
         #expect(show.status == .dismissed)
-        #expect(show.dismissReason == .wentBy)
+        #expect(show.showOutcome == .wentBy)
     }
 }

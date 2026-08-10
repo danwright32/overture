@@ -103,7 +103,7 @@ struct ProspectRowRestoreGuardTests {
             return
         }
         let body = String(prospectRow[actionsRange.lowerBound...].prefix(1600))
-        guard let wentBy = body.range(of: "item.dismissReason == .wentBy"),
+        guard let wentBy = body.range(of: "item.showOutcome == .wentBy"),
               let dismissed = body.range(of: "item.status == .dismissed") else {
             Issue.record("expected both the went-by branch and the dismissed branch in actions")
             return

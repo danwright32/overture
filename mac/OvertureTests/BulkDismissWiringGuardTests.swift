@@ -27,13 +27,15 @@ struct BulkDismissWiringGuardTests {
         #expect(queue.contains("if focusedStage == .scout"))
     }
 
-    // The menu offers the reasons Dan can choose, never allCases: `wentBy` and `tooFar` are Overture's own
-    // automatic cuts (#864/#1238), and applying either by hand to a whole night would teach the learning
-    // signal something Dan never said.
-    @Test func theMenuOffersOnlyTheReasonsDanCanChoose() {
+    // The menu offers only the half that is possible for a night of untriaged shows: the seven endings for
+    // a show nothing was sent to. Never allCases, which would put `wentBy` and `tooFar` (Overture's own
+    // automatic cuts, #864/#1238) and the five pitched endings in front of Dan, and applying any of them by
+    // hand to a whole night would record something he never said.
+    @Test func theMenuOffersOnlyTheEndingsANightOfUntriagedShowsCanReach() {
         let queue = source("Overture/UI/QueueView.swift")
-        #expect(queue.contains("ForEach(DismissReason.danCanChoose"))
-        #expect(!queue.contains("ForEach(DismissReason.allCases"))
+        #expect(queue.contains("ForEach(ShowOutcome.neverPitched"))
+        #expect(!queue.contains("ForEach(ShowOutcome.allCases"))
+        #expect(!queue.contains("ForEach(ShowOutcome.danCanChoose"))
     }
 
     // Picking a reason must RAISE the confirm, never dismiss on the spot. The confirm is where the count

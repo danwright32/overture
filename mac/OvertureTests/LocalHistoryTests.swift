@@ -17,7 +17,7 @@ struct LocalHistoryTests {
     private func make(_ ctx: ModelContext, group: String, status: ReviewStatus,
                       venue: String = "V",
                       sentAt: Date? = nil, outcome: Outcome = .noResponse,
-                      dismissReason: DismissReason? = nil) -> Prospect {
+                      dismissReason: ShowOutcome? = nil) -> Prospect {
         let p = Prospect(naturalKey: group, groupName: group, discipline: "choral", venue: venue,
                          performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
@@ -58,14 +58,14 @@ struct LocalHistoryTests {
         #expect(records.count == 1)
         #expect(records.first?.status == "passed")
         #expect(records.first?.venue == "Weill Recital Hall")
-        #expect(DismissReason.dontWantToShoot.label == "Don't want to shoot this")
+        #expect(ShowOutcome.dontWantToShoot.label == "Don't want to shoot this")
     }
 
     // "Not a fit" stays genuinely neutral: it is a judgement about the show, not a standing pass Dan
     // wants remembered, so it must still record nothing.
     @Test func aNotAFitDismissalStillRecordsNothing() throws {
         let ctx = ModelContext(try container())
-        make(ctx, group: "Wrong Fit Org", status: .dismissed, dismissReason: .notInterested)
+        make(ctx, group: "Wrong Fit Org", status: .dismissed, dismissReason: .notAFit)
         #expect(LocalHistory.records(from: try ctx.fetch(FetchDescriptor<Prospect>())).isEmpty)
     }
 
@@ -108,7 +108,7 @@ struct LocalHistoryTests {
 
     @Test func alreadyBookedDismissalBecomesDeclined() throws {
         let ctx = ModelContext(try container())
-        make(ctx, group: "Busy Day Opera", status: .dismissed, dismissReason: .alreadyBooked)
+        make(ctx, group: "Busy Day Opera", status: .dismissed, dismissReason: .hadPaidWork)
         let records = LocalHistory.records(from: try ctx.fetch(FetchDescriptor<Prospect>()))
         #expect(records.first?.status == "declined")
     }
@@ -116,7 +116,7 @@ struct LocalHistoryTests {
     @Test func notAFitDismissalIsNotDeclined() throws {
         // A "not a fit" dismissal is Dan's judgment, not a scheduling miss: it stays neutral.
         let ctx = ModelContext(try container())
-        make(ctx, group: "Wrong Fit Quartet", status: .dismissed, sentAt: Date(), dismissReason: .notInterested)
+        make(ctx, group: "Wrong Fit Quartet", status: .dismissed, sentAt: Date(), dismissReason: .notAFit)
         let records = LocalHistory.records(from: try ctx.fetch(FetchDescriptor<Prospect>()))
         #expect(records.first?.status == "contacted")
     }

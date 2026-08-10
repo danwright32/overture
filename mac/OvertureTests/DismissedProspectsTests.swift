@@ -14,7 +14,7 @@ struct DismissedProspectsTests {
     }
 
     private func make(_ ctx: ModelContext, group: String, status: ReviewStatus,
-                      reason: DismissReason? = nil, ingested: Date) {
+                      reason: ShowOutcome? = nil, ingested: Date) {
         let p = Prospect(naturalKey: group, groupName: group, discipline: "music", venue: "V",
                          performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
@@ -28,8 +28,8 @@ struct DismissedProspectsTests {
     @Test func listsOnlyDismissedMostRecentFirst() throws {
         let ctx = ModelContext(try container())
         make(ctx, group: "Kept", status: .queued, ingested: Date(timeIntervalSince1970: 1))
-        make(ctx, group: "OldCut", status: .dismissed, reason: .notInterested, ingested: Date(timeIntervalSince1970: 2))
-        make(ctx, group: "NewCut", status: .dismissed, reason: .alreadyBooked, ingested: Date(timeIntervalSince1970: 9))
+        make(ctx, group: "OldCut", status: .dismissed, reason: .notAFit, ingested: Date(timeIntervalSince1970: 2))
+        make(ctx, group: "NewCut", status: .dismissed, reason: .hadPaidWork, ingested: Date(timeIntervalSince1970: 9))
 
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
         let dismissed = DismissedProspects.list(from: all)
@@ -38,7 +38,7 @@ struct DismissedProspectsTests {
 
     @Test func restorePutsItBackAsUndecidedAndClearsReason() throws {
         let ctx = ModelContext(try container())
-        make(ctx, group: "Cut", status: .dismissed, reason: .notInterested, ingested: Date())
+        make(ctx, group: "Cut", status: .dismissed, reason: .notAFit, ingested: Date())
         let cut = try ctx.fetch(FetchDescriptor<Prospect>()).first { $0.status == .dismissed }!
 
         DismissedProspects.restore(cut)

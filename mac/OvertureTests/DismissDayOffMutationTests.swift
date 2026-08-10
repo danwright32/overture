@@ -72,7 +72,7 @@ struct DismissDayOffMutationTests {
         let feedback = ActionFeedback()
         let offer = DayOffOfferRequest()
 
-        ProspectMutations.dismissForReason(QueueItem(p), .notInterested,
+        ProspectMutations.dismissForReason(QueueItem(p), .notAFit,
                                            prospects: [p], context: ctx, feedback: feedback, offer: offer)
 
         #expect(p.status == .dismissed)

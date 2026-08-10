@@ -59,7 +59,7 @@ enum ExcludedTownRetirement {
     // name, matching how ExcludedTownEditing stores and removes it.
     static func restore(town: String, in context: ModelContext) {
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-        for p in all where p.status == .dismissed && p.dismissReason == .tooFar {
+        for p in all where p.status == .dismissed && p.showOutcome == .tooFar {
             guard let t = EventPlace.excludableTown(from: p.location)?.lowercased(), t == town else { continue }
             p.clearDismissal()
         }

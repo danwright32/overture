@@ -37,7 +37,7 @@ enum ArchiveStatus: String, CaseIterable, Sendable {
     static func of(_ item: QueueItem) -> ArchiveStatus {
         // Checked before .dismissed: a retired show IS stored as dismissed (that is how it leaves the
         // queue and stops being counted), and its reason is the only thing that distinguishes it.
-        if item.dismissReason == .wentBy { return .wentBy }
+        if item.showOutcome == .wentBy { return .wentBy }
         guard item.status != .dismissed else { return .dismissed }
         switch item.performanceStatus {
         case .new: return .new

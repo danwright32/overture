@@ -336,7 +336,7 @@ struct QueueView: View {
     // between the menu and the button cannot widen what he agreed to.
     private struct NightDismiss: Identifiable {
         let dateLabel: String
-        let reason: DismissReason
+        let reason: ShowOutcome
         let keys: [String]
         let runs: [String]
         // The narrower set: the shows that play only on this night. Empty when there is no choice to make.
@@ -716,7 +716,7 @@ struct QueueView: View {
         let plan = BulkDismiss.plan(for: group.items.map(BulkDismiss.Show.init), on: group.id)
         if !plan.isEmpty {
             Section(BulkDismiss.menuTitle(count: plan.count, dateLabel: group.monthDay)) {
-                ForEach(DismissReason.danCanChoose, id: \.self) { reason in
+                ForEach(ShowOutcome.neverPitched, id: \.self) { reason in
                     Button(reason.label) {
                         pendingNightDismiss = NightDismiss(dateLabel: group.monthDay, reason: reason,
                                                            keys: plan.keys, runs: plan.runsPastTheNight,
@@ -1202,10 +1202,12 @@ struct QueueView: View {
                 // Archive card he never opens. Unconditional: a show can get its yes at any moment, and a
                 // control that appeared only once the date had passed would be missing on exactly the
                 // night it is wanted. The hint above is the other trigger for the same act.
-                CloseOutMenu { outcome in
-                    ProspectMutations.closeOutFromRow(QueueItem(p), r.id, outcome,
-                                                      prospects: prospects, context: context,
-                                                      feedback: feedback)
+                // #2395: the endings come from the one vocabulary, and from the half that is possible for
+                // this show, so nobody is offered "Date conflict" on a pitch they already sent.
+                CloseOutMenu(outcomes: ShowOutcome.menu(wasPitched: p.wasPitched)) { outcome in
+                    ProspectMutations.recordOutcome(QueueItem(p), outcome,
+                                                    prospects: prospects, context: context,
+                                                    feedback: feedback)
                 }
                 // #2130: the control says what is actually due, because "due now" here is min of three
                 // clocks and meant six different things behind one wording. Nothing due, no button: an

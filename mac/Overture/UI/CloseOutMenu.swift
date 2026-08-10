@@ -11,12 +11,17 @@ import SwiftUI
 // #1139: deliberately NOT the conversation-state menu's twin. That one says where a live conversation
 // stands; this one says the pitch is over. Two identical-looking dropdowns setting genuinely different
 // things is the defect that rule exists for, so this carries the outcome icon and the outcome accent.
+// #2395: the list comes from `ShowOutcome.menu(wasPitched:)`, the one place that decision is made, rather
+// than from a vocabulary of this control's own. Passed in rather than looked up here, so the row's own send
+// record decides what Dan is offered and this view cannot quietly disagree with the write path about which
+// endings are possible.
 struct CloseOutMenu: View {
-    var onChoose: (ReachedOutClose.Outcome) -> Void
+    var outcomes: [ShowOutcome]
+    var onChoose: (ShowOutcome) -> Void
 
     var body: some View {
         Menu {
-            ForEach(ReachedOutClose.Outcome.allCases, id: \.self) { outcome in
+            ForEach(outcomes, id: \.self) { outcome in
                 Button(outcome.label) { onChoose(outcome) }
             }
         } label: {

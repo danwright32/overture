@@ -185,6 +185,6 @@ struct DismissReasonBridgeTests {
         for reason in DismissReason.allCases {
             #expect(!reason.label.lowercased().contains("booked"))
         }
-        #expect(DismissReason.alreadyBooked.label == "I had paid work")
+        #expect(ShowOutcome.hadPaidWork.label == "I had paid work")
     }
 }

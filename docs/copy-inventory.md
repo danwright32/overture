@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1203 sentences**, from 402 source files.
+Every sentence Overture can say to Dan: **1219 sentences**, from 402 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -86,7 +86,7 @@ What is not, and why:
 - `UI/DraftSignaturePreview.swift`: renders the outbound email's own HTML (body + Gmail signature), not Overture's voice (#1203)
 - `UI/DraftSignaturePreview.swift`: browser-side measuring script, not a sentence Overture says to Dan (#915)
 
-## The same sentence, said in more than one place (54)
+## The same sentence, said in more than one place (53)
 
 Two copies of a sentence will drift. #843 owns fixing these.
 
@@ -107,14 +107,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
 - "Closed (not interested)"
   - `Domain/ArchiveStatus.swift`
   - `Domain/PerformanceStatus.swift`
-  - `Domain/ReachedOutClose.swift`
-  - `UI/DraftReviewView.swift`
   - `UI/QueueView+Model.swift`
 - "Closed (not now)"
   - `Domain/ArchiveStatus.swift`
   - `Domain/PerformanceStatus.swift`
-  - `Domain/ReachedOutClose.swift`
-  - `UI/DraftReviewView.swift`
   - `UI/QueueView+Model.swift`
 - "Confirm booking"
   - `UI/ProspectRowView.swift`
@@ -141,15 +137,11 @@ Two copies of a sentence will drift. #843 owns fixing these.
 - "Gmail access expired or was revoked. Click Connect Gmail to reconnect."
   - `Integration/GmailAuthManager.swift`
   - `Integration/GmailSender.swift`
-- "In conversation"
-  - `UI/DraftReviewView.swift`
-  - `UI/QueueView+Model.swift`
 - "Interested, going quiet"
   - `Domain/ConversationReminder.swift`
   - `UI/ReminderSettingsView.swift`
 - "Never heard back"
   - `Domain/Inquiry.swift`
-  - `Domain/ReachedOutClose.swift`
   - `Domain/ShowOutcome.swift`
   - `UI/QueueView+Model.swift`
 - "Not a booking"
@@ -570,14 +562,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Closed (not interested)"
     `Domain/ArchiveStatus.swift`
     `Domain/PerformanceStatus.swift`
-    `Domain/ReachedOutClose.swift`
-    `UI/DraftReviewView.swift`
     `UI/QueueView+Model.swift`
 "Closed (not now)"
     `Domain/ArchiveStatus.swift`
     `Domain/PerformanceStatus.swift`
-    `Domain/ReachedOutClose.swift`
-    `UI/DraftReviewView.swift`
     `UI/QueueView+Model.swift`
 "Closing note sent to \(org)"
     `App/ActionFeedback.swift`
@@ -881,7 +869,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "In \(days) days, send ~3 weeks out"
     `UI/QueueView+Model.swift`
 "In conversation"
-    `UI/DraftReviewView.swift`
     `UI/QueueView+Model.swift`
 "Include this date in one reachability check"
     `UI/ProbeSelectionBar.swift`
@@ -1014,7 +1001,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DraftReviewNotes.swift`
 "Never heard back"
     `Domain/Inquiry.swift`
-    `Domain/ReachedOutClose.swift`
     `Domain/ShowOutcome.swift`
     `UI/QueueView+Model.swift`
 "Never show me shows in \(town)"
@@ -1140,6 +1126,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/InquiryIntakeSheet.swift`
 "Nothing blocked. Add a vacation and Overture will stop pitching you for those nights."
     `UI/DaysOffView.swift`
+"Nothing changed."
+    `Domain/ShowOutcome.swift`
 "Nothing found here was verified as belonging to this act. Only an address read off a page naming them counts; a generic inbox or an inferred address doesn't. It may still be right, so it's worth a look before you write."
     `Domain/Reachability.swift`
 "Nothing has recorded a merge on this Mac, so there is nothing to compare this copy against."
@@ -1192,6 +1180,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AgentRoster.swift`
 "Nothing was added and nothing will go out to them."
     `Domain/SuppressionReport.swift`
+"Nothing was ever sent for \(org), so \"\(outcome.label)\" doesn't apply to it. "
+    `Domain/ShowOutcome.swift`
 "Notifications allowed."
     `Domain/OnboardingState.swift`
 "Nudge sent to \(org)"
@@ -1488,6 +1478,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ProspectRowView.swift`
 "Renamed to \(name)"
     `App/ActionFeedback.swift`
+"Reopen this show"
+    `Domain/ShowOutcome.swift`
 "Replace what you've written here with the AI's draft"
     `Domain/ReplyPanel.swift`
 "Replaces the scout's name on this row. Your name stays put across future scouts."
@@ -1724,8 +1716,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ReplyConversationView.swift`
 "Stop watching"
     `UI/SourceFixConfirmActions.swift`
-"Stop working this show"
-    `Domain/FollowUp.swift`
 "Stopped at their request"
     `Domain/SourceGrade.swift`
 "Stopped watching \(org). Overture keeps what it found, and you can watch them again any time."
@@ -2192,6 +2182,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ShootHistory.swift`
 "Zankel Hall"
     `Domain/VenueParser.swift`
+"\"\(outcome.label)\" isn't yours to set: Overture writes that one itself. "
+    `Domain/ShowOutcome.swift`
 "\($0) (\(hall))"
     `Domain/VenueDisplay.swift`
 "\($0.orgName): \($0.state.failureMessage ?? "couldn't be checked")"
@@ -2377,12 +2369,28 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "\(org) can be drafted despite the clash"
     `App/ActionFeedback.swift`
-"\(org) closed out, not interested."
-    `Domain/ReachedOutClose.swift`
-"\(org) closed out, not now."
-    `Domain/ReachedOutClose.swift`
 "\(org) closed out: never heard back."
-    `Domain/ReachedOutClose.swift`
+    `Domain/ShowOutcome.swift`
+"\(org) closed out: they said no."
+    `Domain/ShowOutcome.swift`
+"\(org) closed out: they said not now."
+    `Domain/ShowOutcome.swift`
+"\(org) closed out: you turned them down."
+    `Domain/ShowOutcome.swift`
+"\(org) dismissed as a duplicate."
+    `Domain/ShowOutcome.swift`
+"\(org) dismissed: date conflict."
+    `Domain/ShowOutcome.swift`
+"\(org) dismissed: not a fit."
+    `Domain/ShowOutcome.swift`
+"\(org) dismissed: pitching other shows that night."
+    `Domain/ShowOutcome.swift`
+"\(org) dismissed: too soon to pitch it."
+    `Domain/ShowOutcome.swift`
+"\(org) dismissed: you don't want to shoot this."
+    `Domain/ShowOutcome.swift`
+"\(org) dismissed: you had paid work."
+    `Domain/ShowOutcome.swift`
 "\(org) has already been sent to, so there's nothing to redraft"
     `App/ActionFeedback.swift`
 "\(org) has already been sent to; re-prepping to find new contacts only"
@@ -2393,12 +2401,22 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "\(org) is drafted and ready for you to review"
     `App/ActionFeedback.swift`
+"\(org) is in a town you asked not to see."
+    `Domain/ShowOutcome.swift`
 "\(org) is on a night you're already booked, so it can't be pitched until you clear the clash"
     `App/ActionFeedback.swift`
 "\(org) is on a night you're already booked, so nothing will re-prep until you clear the clash"
     `App/ActionFeedback.swift`
+"\(org) is open again. \"\(outcome.label)\" is no longer recorded against it."
+    `Domain/ShowOutcome.swift`
+"\(org) is unchanged."
+    `Domain/ShowOutcome.swift`
 "\(org) recorded as booked."
-    `Domain/ReachedOutClose.swift`
+    `Domain/ShowOutcome.swift`
+"\(org) was already pitched, so \"\(outcome.label)\" doesn't apply to it. Nothing changed."
+    `Domain/ShowOutcome.swift`
+"\(org) went by before it was triaged."
+    `Domain/ShowOutcome.swift`
 "\(org.orgName) (\(Plural.count(org.showCount, "show")))"
     `Domain/SuppressionReport.swift`
 "\(orgName) asked not to be contacted, so Overture won't watch their calendar."

@@ -189,7 +189,7 @@ struct ProspectStageReachabilityGuardTests {
     func dismissedShowsLeave() throws {
         let ctx = try context()
         let p = show(ctx, status: .dismissed, drafted: false)
-        p.dismissReason = .notInterested
+        p.showOutcome = .notAFit
         let (stage, _) = try placement(ctx)
         #expect(stage == nil)
     }

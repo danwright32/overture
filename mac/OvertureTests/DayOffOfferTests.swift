@@ -8,7 +8,7 @@ import Foundation
 struct DayOffOfferTests {
 
     @Test func offersForEachCalendarReason() {
-        for reason in [DismissReason.dateConflict, .alreadyBooked] {
+        for reason in [ShowOutcome.dateConflict, .hadPaidWork] {
             let offer = DayOffOffer.offer(reason: reason, performanceDate: "2026-11-18", runEndDate: nil)
             #expect(offer != nil, "expected an offer for \(reason)")
         }
@@ -16,7 +16,7 @@ struct DayOffOfferTests {
 
     @Test func doesNotOfferForNonCalendarReasons() {
         // #1128: "Too soon" means Dan is FREE, there just wasn't time to reach out, so it captures no day off.
-        for reason in [DismissReason.notInterested, .dontWantToShoot, .duplicate, .wentBy, .tooSoon] {
+        for reason in [ShowOutcome.notAFit, .dontWantToShoot, .duplicate, .wentBy, .tooSoon] {
             #expect(DayOffOffer.offer(reason: reason, performanceDate: "2026-11-18", runEndDate: nil) == nil,
                     "did not expect an offer for \(reason)")
         }
@@ -46,7 +46,7 @@ struct DayOffOfferTests {
 
     // A run whose recorded end equals its start is still a single night, not a two-day run.
     @Test func aRunEndingOnItsOpeningNightIsSingle() {
-        let offer = DayOffOffer.offer(reason: .alreadyBooked, performanceDate: "2026-11-18", runEndDate: "2026-11-18")
+        let offer = DayOffOffer.offer(reason: .hadPaidWork, performanceDate: "2026-11-18", runEndDate: "2026-11-18")
         #expect(offer?.isMultiNight == false)
     }
 

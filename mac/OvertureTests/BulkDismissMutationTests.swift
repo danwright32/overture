@@ -99,7 +99,7 @@ struct BulkDismissMutationTests {
         let a = show(ctx, "a")
         let stack = QueueUndoStack()
 
-        ProspectMutations.dismissAll(["a", "gone"], reason: .notInterested, dateLabel: "Jul 24",
+        ProspectMutations.dismissAll(["a", "gone"], reason: .notAFit, dateLabel: "Jul 24",
                                      prospects: [a], context: ctx, feedback: ActionFeedback(), undo: stack)
 
         #expect(a.status == .dismissed)

@@ -148,7 +148,7 @@ enum ActionAck {
     // #1500: a whole night, dismissed in one action, for the one reason Dan picked. Names the count and
     // the reason, because a bulk dismiss is exactly where a wrong reason gets written to many rows at once
     // and this line is his only chance to notice it.
-    static func nightDismissed(count: Int, reason: DismissReason, dateLabel: String) -> String {
+    static func nightDismissed(count: Int, reason: ShowOutcome, dateLabel: String) -> String {
         count == 1
             ? "The show on \(dateLabel) is dismissed as \(reason.label)"
             : "\(Plural.count(count, "show")) on \(dateLabel) are dismissed as \(reason.label)"

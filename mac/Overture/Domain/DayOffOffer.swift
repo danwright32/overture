@@ -24,7 +24,7 @@ enum DayOffOffer {
     // that keep the org hot) and deliberately NOT here. It is the one place the two mean opposite things:
     // a date conflict says the night is spoken for, while pitching other shows that night says Dan is
     // working it. Blocking it as a day off would stop Overture pitching him for a night he actively wants.
-    private static let calendarReasons: Set<DismissReason> = [.dateConflict, .alreadyBooked]
+    private static let calendarReasons: Set<ShowOutcome> = [.dateConflict, .hadPaidWork]
 
     // `alreadyBlocked` is the show's own conflict state: when its date is already a day off or a booked
     // shoot, the show already reads "unavailable", so there is nothing to capture and the picker must not
@@ -40,7 +40,7 @@ enum DayOffOffer {
     // and date arithmetic per row, and six of the eight dismiss reasons throw the result away on the
     // second line. Taking it as something this function can decline to evaluate keeps the rule here,
     // where it is tested, rather than copying both conditions up to the caller (#1916's shape).
-    static func offer(reason: DismissReason, performanceDate: String?, runEndDate: String?,
+    static func offer(reason: ShowOutcome, performanceDate: String?, runEndDate: String?,
                       linkedDates: @autoclosure () -> [String] = [], alreadyBlocked: Bool = false) -> Offer? {
         guard !alreadyBlocked else { return nil }
         guard calendarReasons.contains(reason), let start = performanceDate else { return nil }

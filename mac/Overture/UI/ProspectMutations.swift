@@ -51,33 +51,80 @@ enum ProspectMutations {
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
-    // #2112/#2224: Dan closes a pitch out from the Reached out row itself, without opening Archive.
+    // #2395: the ONE way an ending reaches a show, whichever menu Dan picked it from: the dismiss menu at
+    // triage, the close-out menu on the reached-out row, the full card's "Mark…", or Follow-ups' "Not this
+    // one". Four controls, one write, so they cannot each record the same decision slightly differently,
+    // which is what left "Declined" and "Closed (not now)" as two names for one stored value (#2388).
     //
-    // Its own entry point rather than a second caller of `markContact`, because two things beyond the
-    // contact write have to happen and both are easy to forget at a call site: a booking has to reach the
-    // SHOW's outcome so the report counts it (#2226), and the acknowledgment has to name the outcome back
-    // because the row leaves the stage the instant it lands.
+    // It REFUSES an ending the show cannot possibly have reached, and that refusal is the same promise the
+    // menus make, kept one layer down. A menu offering only the possible half is a fact about a screen; a
+    // caller can still pass anything, and an impossible ending recorded once is indistinguishable
+    // afterwards from one Dan chose. It says so rather than failing quietly, because a control that does
+    // nothing visible reads as broken and gets pressed again.
     //
-    // The save is checked. A failure warns and leaves the row exactly as it was, so nothing ever looks
-    // closed out on the strength of a write that did not land (L12).
+    // The save is checked, so nothing ever reads as closed out on the strength of a write that did not
+    // land (L12).
     @discardableResult
-    static func closeOutFromRow(_ item: QueueItem, _ recipientId: String,
-                                _ outcome: ReachedOutClose.Outcome,
-                                prospects: [Prospect], context: ModelContext,
-                                feedback: ActionFeedback) -> Bool {
+    static func recordOutcome(_ item: QueueItem, _ outcome: ShowOutcome,
+                              prospects: [Prospect], context: ModelContext,
+                              feedback: ActionFeedback) -> Bool {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return false }
-        model.updateRecipient(id: recipientId) {
-            $0.markOutcomeManually(resolution: outcome.resolution, bounced: false)
+        guard ShowOutcome.menu(wasPitched: model.wasPitched).contains(outcome) else {
+            feedback.acknowledge(ShowOutcome.refusedLine(outcome, org: item.groupName,
+                                                         wasPitched: model.wasPitched),
+                                 tone: .warning)
+            return false
         }
-        // A booking Dan recorded is HIS call, and the show has to say so or detection will come along and
-        // claim it. The report reads `Prospect.isBooked`, which already folds in the contact, so this is
-        // not a second home for the fact (#2226): it is the manual SOURCE, which is the only thing that
-        // stops the next Downbeat reconcile auto-booking the same show and silently moving it from the
-        // manual half of the split to the automatic one.
-        if outcome == .booked { model.markOutcomeManually(.booked, now: Date()) }
-        model.resumePausedRecipients()
+
+        if ShowOutcome.neverPitched.contains(outcome) {
+            // The never-pitched half. A show that ended without being sent to LEAVES the queue, which is
+            // what dismissing means, and its exit is dated by the model's own pair so the drop-off can be
+            // placed in a year (#16).
+            model.markDismissed(reason: outcome)
+        } else {
+            // A pitch that ended is not a dismissal. It went out and it now carries an ending, which is
+            // what takes it off the reached-out stage; marking it dismissed would file a real pitch among
+            // the shows Dan never sent to.
+            model.showOutcome = outcome
+            // A booking Dan recorded is HIS call, and the show has to say so or the next Downbeat
+            // reconcile claims it and silently moves it from the manual half of the booking split to the
+            // automatic one (#2226).
+            if outcome == .booked { model.markOutcomeManually(.booked, now: Date()) }
+            // TRANSITIONAL, removed by #2396. The reached-out stage, the Archive buckets and the derived
+            // performance status all still read the CONTACTS, so writing only the show would leave the row
+            // on screen after Dan closed it, which reads as a control that did nothing. Applied only to
+            // contacts with nothing recorded, so an ending somebody already gave is never overwritten by a
+            // decision about the show.
+            if let resolution = outcome.asRecipientResolution {
+                for r in model.recipients where r.sendState == .sent && r.resolution == nil {
+                    r.markOutcomeManually(resolution: resolution, bounced: false)
+                }
+            }
+            model.resumePausedRecipients()
+        }
         guard context.saveOrWarn(org: item.groupName, feedback: feedback) else { return false }
-        feedback.acknowledge(ReachedOutClose.recordedLine(outcome, org: item.groupName))
+        feedback.acknowledge(ShowOutcome.recordedLine(outcome, org: item.groupName))
+        return true
+    }
+
+    // #2395: Dan takes an ending back. The replacement for the "In conversation" item the full card's
+    // "Mark…" menu used to carry, which was never an ending at all: what it actually did was clear one, and
+    // that capability has to survive the menu becoming a list of endings. Without it a mis-pressed
+    // close-out would be unreachable from the card Dan is looking at.
+    //
+    // Clears the contact-level record too, for the same reason `resumeStandDown` does: leaving the contacts
+    // closed would keep the show reading as closed on a decision he just reversed.
+    @discardableResult
+    static func reopenOutcome(_ item: QueueItem, prospects: [Prospect], context: ModelContext,
+                              feedback: ActionFeedback) -> Bool {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return false }
+        guard let had = model.showOutcome else { return false }
+        model.showOutcome = nil
+        for r in model.recipients where r.resolution != nil {
+            r.markOutcomeManually(resolution: nil, bounced: r.bounced)
+        }
+        guard context.saveOrWarn(org: item.groupName, feedback: feedback) else { return false }
+        feedback.acknowledge(ShowOutcome.reopenedLine(had, org: item.groupName))
         return true
     }
 
@@ -474,7 +521,7 @@ enum ProspectMutations {
     // caller, while only KEEP and DISMISS actually record. setStatus also drives approve, unapprove and
     // skip-draft; recording unconditionally here would quietly make those undoable too, well past the
     // scope Dan settled on ("I mostly just need this for keep/dismiss").
-    static func setStatus(_ item: QueueItem, _ status: ReviewStatus, _ reason: DismissReason?,
+    static func setStatus(_ item: QueueItem, _ status: ReviewStatus, _ reason: ShowOutcome?,
                           prospects: [Prospect], context: ModelContext, feedback: ActionFeedback,
                           undo: QueueUndoStack? = nil, undoLabel: String? = nil) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
@@ -487,7 +534,7 @@ enum ProspectMutations {
         // #16: routed through the model's own pair so the exit date is stamped on a cut and cleared on
         // any move back into the queue, rather than depending on every caller of this setter to remember.
         if status == .dismissed {
-            model.markDismissed(reason: reason?.asShowOutcome)
+            model.markDismissed(reason: reason)
         } else {
             model.clearDismissal(to: status)
         }
@@ -518,7 +565,7 @@ enum ProspectMutations {
     //
     // Deliberately does NOT offer to capture the date as a day off the way a single calendar-reason
     // dismiss does (#924). Dan's call, 2026-07-26: a bulk dismiss should stay quiet.
-    static func dismissAll(_ keys: [String], reason: DismissReason, dateLabel: String,
+    static func dismissAll(_ keys: [String], reason: ShowOutcome, dateLabel: String,
                            prospects: [Prospect], context: ModelContext, feedback: ActionFeedback,
                            undo: QueueUndoStack? = nil) {
         let byKey = Dictionary(prospects.map { ($0.naturalKey, $0) }, uniquingKeysWith: { first, _ in first })
@@ -527,7 +574,7 @@ enum ProspectMutations {
         // ("assume it runs twice"). An entry describing a dismissal that did not happen would spend the
         // next Cmd+Z doing nothing while looking exactly like a working undo.
         let targets = keys.compactMap { byKey[$0] }
-            .filter { !($0.status == .dismissed && $0.showOutcome == reason.asShowOutcome) }
+            .filter { !($0.status == .dismissed && $0.showOutcome == reason) }
         guard !targets.isEmpty else { return }
 
         let rows = targets.map { model -> QueueUndoEntry.Row in
@@ -540,7 +587,7 @@ enum ProspectMutations {
             let priorClearedConflict = model.conflictClearedKey
             // #16: the model's own setter, so the exit date is stamped here exactly as a per-card dismiss
             // stamps it, and a show dismissed twice keeps its FIRST exit date.
-            model.markDismissed(reason: reason.asShowOutcome)
+            model.markDismissed(reason: reason)
             return QueueUndoEntry.Row(recording: model, priorStatus: priorStatus,
                                       priorShowOutcomeRaw: priorReason, priorDismissedAt: priorExit,
                                       priorConflictClearedKey: priorClearedConflict)
@@ -565,7 +612,7 @@ enum ProspectMutations {
     // pre-filled with the show's date or run, not a missable banner: dismissing for a date reason almost
     // always means he'll block it, so a modal he acts on is right. It is still an offer, never automatic:
     // nothing is blocked until he confirms in the picker (or he closes it with Not now).
-    static func dismissForReason(_ item: QueueItem, _ reason: DismissReason,
+    static func dismissForReason(_ item: QueueItem, _ reason: ShowOutcome,
                                  prospects: [Prospect], context: ModelContext,
                                  feedback: ActionFeedback, offer: DayOffOfferRequest,
                                  undo: QueueUndoStack? = nil) {
@@ -640,6 +687,12 @@ enum ProspectMutations {
             recipient.resolution = .stoodDown
         case .show:
             prospect.standDownOutreach(now: now)
+            // #2395: the SHOW grain is an ENDING, in the one vocabulary's words: "I turned them down". Dan
+            // rejected the old framing outright ("I will never stop working something without closure"), so
+            // stopping work on an event is a refusal he made, and the report has to be able to count it.
+            // Recorded alongside the stand-down stamp rather than instead of it, because the two are
+            // genuinely different facts: the stamp is what stops the nudges, this is how the show ended.
+            prospect.showOutcome = .turnedThemDown
             // Every contact, because "I am not working this event" is a statement about all of them, and a
             // contact left open would keep the show reading as active and keep the clock asking.
             for r in prospect.recipients where r.resolution == nil { r.resolution = .stoodDown }
@@ -655,6 +708,9 @@ enum ProspectMutations {
             if recipient.resolution == .stoodDown { recipient.resolution = nil }
         case .show:
             prospect.resumeOutreach()
+            // #2395: the ending goes too. Leaving it would keep the show counted as one Dan turned down
+            // after he just took that decision back, and the report would be reading a refusal he undid.
+            if prospect.showOutcome == .turnedThemDown { prospect.showOutcome = nil }
             for r in prospect.recipients where r.resolution == .stoodDown { r.resolution = nil }
         }
     }

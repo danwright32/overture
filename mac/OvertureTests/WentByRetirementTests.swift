@@ -49,7 +49,7 @@ struct WentByRetirementTests {
 
         #expect(retired == 1)
         #expect(june.status == .dismissed)
-        #expect(june.dismissReason == .wentBy)
+        #expect(june.showOutcome == .wentBy)
     }
 
     @Test func aShowStillToComeIsLeftAlone() throws {
@@ -71,7 +71,7 @@ struct WentByRetirementTests {
 
         #expect(WentByRetirement.run(in: ctx, today: today) == 1)
         #expect(running.status == .dismissed)
-        #expect(running.dismissReason == .wentBy)
+        #expect(running.showOutcome == .wentBy)
     }
 
     // The other side of Dan's cut, and the reason it is `days < 0` and not `days < 1`: a run OPENING
@@ -115,11 +115,11 @@ struct WentByRetirementTests {
     @Test func runningItTwiceChangesNothingTheSecondTime() throws {
         let ctx = try context()
         let june = show(ctx, "june", date: "2026-06-27")
-        show(ctx, "cut-by-dan", date: "2026-06-27", status: .dismissed).dismissReason = .notInterested
+        show(ctx, "cut-by-dan", date: "2026-06-27", status: .dismissed).showOutcome = .notAFit
 
         #expect(WentByRetirement.run(in: ctx, today: today) == 1)
         #expect(WentByRetirement.run(in: ctx, today: today) == 0)
-        #expect(june.dismissReason == .wentBy)
+        #expect(june.showOutcome == .wentBy)
     }
 
     // MARK: - It must never read as a decision Dan made
@@ -131,7 +131,7 @@ struct WentByRetirementTests {
         let ctx = try context()
         let june = show(ctx, "june", date: "2026-06-27")
         let cut = show(ctx, "cut", date: "2026-09-19", status: .dismissed)
-        cut.dismissReason = .notInterested
+        cut.showOutcome = .notAFit
 
         WentByRetirement.run(in: ctx, today: today)
 

@@ -974,14 +974,14 @@ struct SelfBookingWiringTests {
     // A dead-dismissed show does NOT count (even if it still carries an old draft body) - the latent bug in
     // the first cut; but a show dismissed BECAUSE it was booked elsewhere still counts (red-team FLAW 2).
     @Test func dismissedIsExcludedUnlessBooked() {
-        var dead = item(status: .dismissed, key: "a"); dead.draftBody = "Hi"; dead.dismissReason = .notInterested
+        var dead = item(status: .dismissed, key: "a"); dead.draftBody = "Hi"; dead.showOutcome = .notAFit
         #expect(!QueueModel.selfBookingIsCommitment(dead))
-        var bookedElsewhere = item(status: .dismissed, key: "b"); bookedElsewhere.dismissReason = .alreadyBooked
+        var bookedElsewhere = item(status: .dismissed, key: "b"); bookedElsewhere.showOutcome = .hadPaidWork
         #expect(QueueModel.selfBookingIsCommitment(bookedElsewhere))
         // #1821: "Pitching other shows that night" is NOT a commitment, even though it sounds like one.
         // The show Dan actually picked carries its own commitment on its own row (kept, drafted or sent);
         // counting the ones he passed over as well would warn him of a clash with a show he never pitched.
-        var passedOver = item(status: .dismissed, key: "c"); passedOver.dismissReason = .pitchingOtherShows
+        var passedOver = item(status: .dismissed, key: "c"); passedOver.showOutcome = .pitchingOtherShows
         #expect(!QueueModel.selfBookingIsCommitment(passedOver))
     }
 
