@@ -153,6 +153,7 @@ enum WatchlistEditing {
             return .conflict(orgName: match.orgName)
         }
 
+        let previousURL = source.listingsURL
         source.listingsURL = url
         // #2229: the kind follows the address, exactly as it does on the ADD path above. It decides whether
         // this source is parsed natively and free on every run or handed to the paid extract run, and which
@@ -169,6 +170,27 @@ enum WatchlistEditing {
             source.kind = SourceKind.forListingURL(URL(string: url))
         }
         clearStateDerivedFromTheWatchedPage(source)
+        // #2233: and, only when the correction moves the source to a DIFFERENT HOST, the two answers
+        // that describe the building rather than the page.
+        //
+        // #2229 kept `venueName` and `venueLocation` through a correction on purpose: they are Dan's own
+        // assertions, not observations of a page, and discarding an answer he typed is its own defect
+        // (L5). That reasoning holds for what "Fix the address" is named for, a better page for the SAME
+        // venue, which is every live use of it so far. It does not hold for the other case: repointed at
+        // a genuinely different venue, the old room and street survive onto it, and for a single-venue
+        // ticketing feed both are threaded into every show the source produces, so the new venue's shows
+        // are attributed to the old room at the old address and the geography gate places them by it. A
+        // wrong room in a pitch names the wrong building to the person reading it.
+        //
+        // The host is the same signal the conflict check above already computes. Cleared rather than
+        // merely flagged, which is the simpler of the two shapes the issue weighed, and it costs Dan
+        // nothing he cannot see: #1529's control already renders its gold "which room?" prompt for a
+        // ticketing-feed source carrying no `venueName`, so the row asks again rather than asserting
+        // something that was true of a different building.
+        if !sameHost(previousURL, as: url) {
+            source.venueName = nil
+            source.venueLocation = nil
+        }
         source.hasUnreadChanges = true          // so the next scout reads the corrected page
         try? context.save()
         return .saved(sourceId: source.sourceId)
@@ -325,6 +347,29 @@ enum WatchlistEditing {
     // ticketing host where the path is the only thing that scopes the feed to a venue.
     private static func sameCalendar(_ urlString: String?, as other: String) -> Bool {
         CalendarIdentity.same(urlString, other)
+    }
+
+    // #2233: are these two addresses the same site? Deliberately the HOST rather than
+    // `CalendarIdentity.same`, which asks a narrower question (is this the same calendar) and would
+    // answer no for two pages on one venue's own site, which is the ordinary correction this must not
+    // disturb.
+    //
+    // `www.` is folded, because a correction that only adds or drops it is not a different building. An
+    // unreadable previous address answers NO, so a row whose old URL cannot be parsed has its venue
+    // answers cleared and is asked again, which is the safe direction: the alternative is asserting a
+    // room nobody can now check the provenance of.
+    static func sameHost(_ previous: String?, as next: String) -> Bool {
+        guard let previous, let previousHost = host(of: previous), let nextHost = host(of: next) else {
+            return false
+        }
+        return previousHost == nextHost
+    }
+
+    private static func host(of urlString: String) -> String? {
+        guard let host = URL(string: urlString.trimmingCharacters(in: .whitespacesAndNewlines))?.host,
+              !host.isEmpty else { return nil }
+        let lowered = host.lowercased()
+        return lowered.hasPrefix("www.") ? String(lowered.dropFirst(4)) : lowered
     }
 }
 
