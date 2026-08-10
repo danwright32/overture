@@ -92,14 +92,23 @@ struct ListingLinkLabelLiveStoreTests {
     // them, which is precisely how the old rule managed to look sensible while being wrong.
     @Test(.enabled(if: liveStoreExists, "no live store on this machine"))
     func theSourcesOwnCalendarSeparatesRowsInsteadOfMatchingThemAll() async throws {
+        // #2198: released INLINE on both paths, never from a Task. A `defer { Task { ... } }` hands the
+        // release to an unstructured task that runs after the test has returned, so the critical section
+        // is not exclusive at all, which is #2190: the process died partway and three consecutive runs
+        // each blamed a different innocent test while 600 to 1,500 tests silently never ran (#2195).
         await RealStoreTestLock.shared.acquire()
-        defer { Task { await RealStoreTestLock.shared.release() } }
-        let m = try await measure()
-        #expect(m.linked > 100, "the live store still holds a real queue to measure")
-        #expect(m.bySourceCalendar > 0,
+        do {
+            let m = try await measure()
+            #expect(m.linked > 100, "the live store still holds a real queue to measure")
+            #expect(m.bySourceCalendar > 0,
                 "no row falls back to its source's calendar, so the label can never say Venue calendar")
-        #expect(m.bySourceCalendar < m.linked / 2,
-                "the calendar fallback is the exception, not most of the queue: \(m.bySourceCalendar) of \(m.linked)")
+            #expect(m.bySourceCalendar < m.linked / 2,
+                    "the calendar fallback is the exception, not most of the queue: \(m.bySourceCalendar) of \(m.linked)")
+            await RealStoreTestLock.shared.release()
+        } catch {
+            await RealStoreTestLock.shared.release()
+            throw error
+        }
     }
 
     // LIVE-STORE-CLAIM verified=2026-08-01 measure="linked rows whose own listing URL appears in their own runSourceURLs"
@@ -108,13 +117,18 @@ struct ListingLinkLabelLiveStoreTests {
     // change points the label back at runSourceURLs, this is the test that says why it cannot work.
     @Test(.enabled(if: liveStoreExists, "no live store on this machine"))
     func aRowsOwnRunUrlsCannotTellItApartFromACalendarLink() async throws {
-        await RealStoreTestLock.shared.acquire()
-        defer { Task { await RealStoreTestLock.shared.release() } }
-        let m = try await measure()
-        #expect(m.linked > 100, "the live store still holds a real queue to measure")
-        #expect(m.byOldRule > m.linked * 9 / 10,
+        await RealStoreTestLock.shared.acquire()   // #2198: released inline on both paths, never from a Task
+        do {
+            let m = try await measure()
+            #expect(m.linked > 100, "the live store still holds a real queue to measure")
+            #expect(m.byOldRule > m.linked * 9 / 10,
                 "runSourceURLs is expected to match nearly every row: \(m.byOldRule) of \(m.linked)")
-        #expect(m.byOldRule > m.bySourceCalendar * 2,
-                "the two facts must stay visibly different, or this guard has stopped proving anything")
+            #expect(m.byOldRule > m.bySourceCalendar * 2,
+                    "the two facts must stay visibly different, or this guard has stopped proving anything")
+            await RealStoreTestLock.shared.release()
+        } catch {
+            await RealStoreTestLock.shared.release()
+            throw error
+        }
     }
 }

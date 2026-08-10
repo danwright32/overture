@@ -43,45 +43,55 @@ struct OneVenueIdentityLiveStoreTests {
     @Test(.enabled(if: liveStoreExists, "no live store on this machine"))
     func theSevenSymptomsAreMeasuredTogether() async throws {
         await RealStoreTestLock.shared.acquire()
-        defer { Task { await RealStoreTestLock.shared.release() } }
+        // #2198: released INLINE on both paths, never from a Task. A `defer { Task { ... } }` hands
+        // the release to an unstructured task that runs after the test has already returned, so the
+        // critical section is not exclusive at all. That is #2190: the process died partway and three
+        // consecutive runs each blamed a different innocent test while 600 to 1,500 tests silently
+        // never ran (#2195).
+        do {
 
-        let all = try liveProspects()
-        #expect(all.count > 100, "the live store still holds a real queue to measure")
-        let live = all.filter { $0.status != .dismissed }
+            let all = try liveProspects()
+            #expect(all.count > 100, "the live store still holds a real queue to measure")
+            let live = all.filter { $0.status != .dismissed }
 
-        // #1795: a room standing in as its own show's presenter. `RoomPresenterSweep` runs every launch and
-        // is idempotent by construction, so a row in this state can only be one written since the last
-        // launch, which is a claim about the boundary guard rather than about the sweep.
-        let roomAsPresenter = live.filter { p in
-            guard let named = p.presenter, !named.isEmpty else { return false }
-            let asRead = ExtractedEvent(title: p.groupName, presenter: named, venue: p.venue)
-            return ExtractedEventGuard.presenterThatIsNotTheRoom(asRead).presenter == nil
+            // #1795: a room standing in as its own show's presenter. `RoomPresenterSweep` runs every launch and
+            // is idempotent by construction, so a row in this state can only be one written since the last
+            // launch, which is a claim about the boundary guard rather than about the sweep.
+            let roomAsPresenter = live.filter { p in
+                guard let named = p.presenter, !named.isEmpty else { return false }
+                let asRead = ExtractedEvent(title: p.groupName, presenter: named, venue: p.venue)
+                return ExtractedEventGuard.presenterThatIsNotTheRoom(asRead).presenter == nil
+            }
+            #expect(roomAsPresenter.isEmpty,
+                    "#1795: \(roomAsPresenter.count) row(s) still name their own room as the presenter: \(roomAsPresenter.prefix(3).map(\.groupName))")
+
+            // #1762: a card saying the city is unknown for a room the app can place. The queue's own table is
+            // the authority, so a blank location on a row whose venue the table knows is the app failing to
+            // apply what it already holds.
+            let placeableButBlank = live.filter { p in
+                (p.location ?? "").isEmpty && VenuePlaces.location(for: p.venue) != nil
+            }
+            #expect(placeableButBlank.isEmpty,
+                    "#1762: \(placeableButBlank.count) row(s) have no city while the venue table holds one: \(placeableButBlank.prefix(3).map { "\($0.groupName) [\($0.venue ?? "-")]" })")
+
+            // #1761 / #1764: one room spelled two ways, minting a second card for the same night. Judged
+            // through the SHARED identity (`VenuePlaces.canonicalKey`), which is the whole point of the issue:
+            // two rows that are one show must collide on it.
+            var seen: [String: [Prospect]] = [:]
+            for p in live {
+                guard let date = p.performanceDate, !date.isEmpty else { continue }
+                let venueKey = VenuePlaces.canonicalKey(for: p.venue) ?? "unplaced"
+                let titleKey = TitleNormalization.normalizeForKey(p.groupName)
+                seen["\(titleKey)|\(date)|\(venueKey)", default: []].append(p)
+            }
+            let duplicates = seen.filter { $0.value.count > 1 }
+            #expect(duplicates.isEmpty,
+                    "#1761/#1764: \(duplicates.count) show(s) are stored more than once under one identity: \(duplicates.keys.sorted().prefix(3))")
+            await RealStoreTestLock.shared.release()
+        } catch {
+            await RealStoreTestLock.shared.release()
+            throw error
         }
-        #expect(roomAsPresenter.isEmpty,
-                "#1795: \(roomAsPresenter.count) row(s) still name their own room as the presenter: \(roomAsPresenter.prefix(3).map(\.groupName))")
-
-        // #1762: a card saying the city is unknown for a room the app can place. The queue's own table is
-        // the authority, so a blank location on a row whose venue the table knows is the app failing to
-        // apply what it already holds.
-        let placeableButBlank = live.filter { p in
-            (p.location ?? "").isEmpty && VenuePlaces.location(for: p.venue) != nil
-        }
-        #expect(placeableButBlank.isEmpty,
-                "#1762: \(placeableButBlank.count) row(s) have no city while the venue table holds one: \(placeableButBlank.prefix(3).map { "\($0.groupName) [\($0.venue ?? "-")]" })")
-
-        // #1761 / #1764: one room spelled two ways, minting a second card for the same night. Judged
-        // through the SHARED identity (`VenuePlaces.canonicalKey`), which is the whole point of the issue:
-        // two rows that are one show must collide on it.
-        var seen: [String: [Prospect]] = [:]
-        for p in live {
-            guard let date = p.performanceDate, !date.isEmpty else { continue }
-            let venueKey = VenuePlaces.canonicalKey(for: p.venue) ?? "unplaced"
-            let titleKey = TitleNormalization.normalizeForKey(p.groupName)
-            seen["\(titleKey)|\(date)|\(venueKey)", default: []].append(p)
-        }
-        let duplicates = seen.filter { $0.value.count > 1 }
-        #expect(duplicates.isEmpty,
-                "#1761/#1764: \(duplicates.count) show(s) are stored more than once under one identity: \(duplicates.keys.sorted().prefix(3))")
     }
 
     // The other half of #1802, and the one a count cannot show: that there is ONE fold. A second spelling

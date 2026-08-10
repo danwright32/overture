@@ -241,7 +241,13 @@ struct ProducerGateVenueIndexLiveStoreTests {
             #expect(disagreements.isEmpty, "the indexed scan disagreed on \(disagreements.prefix(5))")
             // The rule really is refusing names here, so the agreement above is not two empty answers.
             #expect(brands > 0)
+            await RealStoreTestLock.shared.release()
+        } catch {
+            // #2198: released on the THROWING path too. The `do` here had no catch, so a throw
+            // inside it skipped the release and left every later suite waiting on a lock nobody
+            // holds, which reads as a hung run with no failing test to point at.
+            await RealStoreTestLock.shared.release()
+            throw error
         }
-        await RealStoreTestLock.shared.release()
     }
 }
