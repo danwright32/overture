@@ -49,8 +49,9 @@ struct DismissDayOffMutationTests {
         #expect(DayOffEditing.rows(in: ctx).isEmpty)        // nothing blocked until he confirms in the picker
     }
 
-    // A multi-night run opens the same picker, pre-filled with the whole run, so Dan narrows it there.
-    @Test func aRunDismissOpensThePickerForTheWholeRun() throws {
+    // #2373: a multi-night run opens the same picker, pre-filled with the dismissed night alone. Widening
+    // to the run is Dan's to type; it is no longer what pressing the default button does.
+    @Test func aRunDismissOpensThePickerForTheDismissedNightOnly() throws {
         let ctx = try context()
         let p = show(ctx, on: "2026-11-18", runEnd: "2026-11-20")
         let feedback = ActionFeedback()
@@ -61,7 +62,7 @@ struct DismissDayOffMutationTests {
 
         let pending = try #require(offer.pending)
         #expect(pending.start == "2026-11-18")
-        #expect(pending.end == "2026-11-20")
+        #expect(pending.end == "2026-11-18")
         #expect(DayOffEditing.rows(in: ctx).isEmpty)        // the picker has not committed anything
     }
 
@@ -98,9 +99,11 @@ struct DismissDayOffMutationTests {
         #expect(offer.pending == nil)       // but no picker: the date is already blocked
     }
 
-    // #939: dismissing one venue's row for a calendar reason, when a same-production show at a DIFFERENT
-    // venue nearby is also in the queue, widens the picker to cover both dates in one action.
-    @Test func dismissingOneVenueOfATouringShowWidensThePickerToTheOtherVenuesDate() throws {
+    // #2373: dismissing one venue's row for a calendar reason, when a same-production show at a DIFFERENT
+    // venue nearby is also in the queue, proposes ONLY the dismissed night. #939 used to widen the picker
+    // over both dates; Dan's call of 2026-08-09 gave that up, because the sheet's default button blocks
+    // whatever it proposes and the other venue's night is one he never mentioned.
+    @Test func dismissingOneVenueOfATouringShowStillProposesOnlyThatVenuesNight() throws {
         let ctx = try context()
         let p1 = Prospect(naturalKey: "moca-25", groupName: "MOCA PERFORMS", discipline: "theater",
                           venue: "Museum of Chinese in America", performanceDate: "2026-07-25", sourceListingURL: nil,
@@ -122,7 +125,7 @@ struct DismissDayOffMutationTests {
                                            prospects: [p1, p2], context: ctx, feedback: feedback, offer: offer)
 
         let pending = try #require(offer.pending)
-        #expect(pending.start == "2026-07-24")
+        #expect(pending.start == "2026-07-25")
         #expect(pending.end == "2026-07-25")
     }
 

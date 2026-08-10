@@ -72,10 +72,10 @@ struct PitchingOtherShowsDismissReasonTests {
     // opposite of what happened and stop Overture pitching him for a night he actively works.
     @Test func neverOffersToBlockTheNightAsADayOff() {
         #expect(DayOffOffer.offer(reason: .pitchingOtherShows,
-                                  performanceDate: "2026-08-03", runEndDate: nil) == nil)
+                                  performanceDate: "2026-08-03") == nil)
         // The reasons that DO capture a day off are unchanged by this addition.
-        #expect(DayOffOffer.offer(reason: .dateConflict, performanceDate: "2026-08-03", runEndDate: nil) != nil)
-        #expect(DayOffOffer.offer(reason: .hadPaidWork, performanceDate: "2026-08-03", runEndDate: nil) != nil)
+        #expect(DayOffOffer.offer(reason: .dateConflict, performanceDate: "2026-08-03") != nil)
+        #expect(DayOffOffer.offer(reason: .hadPaidWork, performanceDate: "2026-08-03") != nil)
     }
 
     // (f) Old rows are not rewritten. Nobody can say retrospectively which `date_conflict` rows were

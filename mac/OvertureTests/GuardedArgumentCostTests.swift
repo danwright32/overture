@@ -14,55 +14,12 @@ import SwiftData
 @Suite("A guard that refuses must refuse the cost too (#1960)")
 struct GuardedArgumentCostTests {
 
-    // The instance the issue names. Dismissing a show builds the whole touring engagement (a sweep of
-    // every undismissed prospect, with name folding and date arithmetic per row) and hands it over, and
-    // six of the eight dismiss reasons are not calendar reasons at all.
-    @Test func aNonCalendarDismissNeverBuildsTheEngagement() {
-        var built = 0
-        let linked = { () -> [String] in
-            built += 1
-            return ["2026-09-12"]
-        }
-
-        let offer = DayOffOffer.offer(reason: .dontWantToShoot, performanceDate: "2026-09-11",
-                                      runEndDate: nil, linkedDates: linked())
-
-        #expect(offer == nil)
-        #expect(built == 0, "a reason that is not about the calendar must not pay for the engagement")
-    }
-
-    // The other refusal: the night is already blocked, so there is nothing to capture.
-    @Test func aDismissOnAnAlreadyBlockedNightNeverBuildsTheEngagement() {
-        var built = 0
-        let linked = { () -> [String] in
-            built += 1
-            return ["2026-09-12"]
-        }
-
-        let offer = DayOffOffer.offer(reason: .dateConflict, performanceDate: "2026-09-11",
-                                      runEndDate: nil, linkedDates: linked(), alreadyBlocked: true)
-
-        #expect(offer == nil)
-        #expect(built == 0)
-    }
-
-    // And when the offer IS made, the engagement is read exactly once and still widens the range, so the
-    // saving cannot have come from quietly dropping the feature (#939).
-    @Test func aCalendarDismissStillWidensTheOfferToTheWholeEngagement() {
-        var built = 0
-        let linked = { () -> [String] in
-            built += 1
-            return ["2026-09-14"]
-        }
-
-        let offer = DayOffOffer.offer(reason: .dateConflict, performanceDate: "2026-09-11",
-                                      runEndDate: nil, linkedDates: linked())
-
-        #expect(built == 1)
-        #expect(offer?.start == "2026-09-11")
-        #expect(offer?.end == "2026-09-14")
-    }
-
+    // The instance the issue named (a dismiss building the whole touring engagement to hand to a rule that
+    // threw it away on six of eight reasons) is GONE rather than fixed: #2373 dropped the widening itself,
+    // so `DayOffOffer.offer` no longer takes linked dates and there is no cost left to decline. Its three
+    // cases went with the parameter, because a test asserting a property of an argument that no longer
+    // exists asserts nothing.
+    //
     // Found by the sweep. The days-off mark reads and decodes the Downbeat export and fetches the stored
     // days off to build a calendar, and the first line of the rule that reads it returns as soon as Dan
     // has snoozed the mark.
