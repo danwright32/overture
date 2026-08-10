@@ -29,6 +29,10 @@ struct SourcesView: View {
     @State private var newOrgName = ""
     @State private var newURL = ""
     @State private var addMessage: String?
+    // #2308: whether Done has been pressed while something typed would have been lost. The MESSAGE is
+    // derived from the live editing state rather than stored, so saving the edit clears the refusal by
+    // itself instead of leaving a sentence on screen that stopped being true (L11/L14).
+    @State private var closeRefused = false
     // #1209: the Downbeat client list, loaded once when the sheet opens, to show whether a source matches a
     // known client (and so gets the returning-client year-ahead read). Read-only; only the manual tag on
     // the source is written.
@@ -417,9 +421,39 @@ struct SourcesView: View {
             Spacer()
             Button(WatchlistEditing.addButtonTitle(isOpen: showAdd)) { showAdd.toggle(); addMessage = nil }
                 .buttonStyle(.plain).font(.system(size: 12)).foregroundStyle(OVColor.forest)
-            Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+            Button("Done") { close() }.keyboardShortcut(.defaultAction)
         }
         .padding(OVSpacing.lg)
+        // #2308: why Done refused, right under Done. Done is the sheet's default action, so this is also
+        // what Return says now instead of dismissing the sheet over a part-typed edit.
+        .overlay(alignment: .bottomTrailing) {
+            if closeRefused, let unsaved = unsavedWork {
+                Text(SourcesSheetClose.message(for: unsaved))
+                    .font(.system(size: 11)).foregroundStyle(OVColor.rust)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.trailing, OVSpacing.lg)
+            }
+        }
+    }
+
+    // #2308: Done, and therefore Return, refuses while something typed would be lost, and says which
+    // thing it is. The rule is SourcesSheetClose's, so what counts as unfinished is testable rather than
+    // stated inside a button's closure.
+    private func close() {
+        guard unsavedWork == nil else {
+            closeRefused = true
+            return
+        }
+        dismiss()
+    }
+
+    private var unsavedWork: SourcesSheetClose.Unsaved? {
+        SourcesSheetClose.unsaved(
+            roomPlaceOpen: editingRoomKey != nil,
+            venueLocationOpen: editingLocationFor != nil,
+            venueNameOpen: editingVenueNameFor != nil,
+            newSourceTyped: !newOrgName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || !newURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
 
     // #1432: finding one source on a watchlist that passed 38 in #359's backfill and only grows. The
@@ -443,10 +477,15 @@ struct SourcesView: View {
 
     private var addForm: some View {
         VStack(alignment: .leading, spacing: OVSpacing.xs) {
+            // #2306/#2308: Return in either field means "Watch it", the thing the form is for. Without a
+            // submit handler it fell through to the sheet's default button and dismissed the sheet,
+            // taking both typed fields with it.
             TextField("Organization", text: $newOrgName)
                 .textFieldStyle(.roundedBorder).font(.system(size: 12))
+                .onSubmit { addSource() }
             TextField("Their events or season page", text: $newURL)
                 .textFieldStyle(.roundedBorder).font(.system(size: 12))
+                .onSubmit { addSource() }
             Text("Their calendar, not one show: a single show's page never changes again, so watching it would watch nothing.")
                 .font(.system(size: 11)).foregroundStyle(OVColor.inkFaint)
                 .fixedSize(horizontal: false, vertical: true)
