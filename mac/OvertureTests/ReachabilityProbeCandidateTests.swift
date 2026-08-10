@@ -160,9 +160,14 @@ struct ReachabilityProbeCandidateTests {
     @Test func everyLiveCallSitePassesDansRealRefusals() throws {
         let source = try String(contentsOf: RepoRoot.mac
             .appendingPathComponent("Overture/UI/QueueView.swift"), encoding: .utf8)
+        // #2371: the tick box asks `probeKeysForTickedDate`, which wraps the candidate rule so a finished
+        // date can still be ticked. Same claim, at whichever of the two the heading actually calls: a
+        // bare call is a call with the gate defaulted off.
         #expect(!source.contains("reachabilityProbeCandidateKeys(group.items)"),
                 "the per-date tick box must ask with the refusals applied")
-        #expect(source.contains("reachabilityProbeCandidateKeys(group.items, geo: geo)"))
+        #expect(!source.contains("probeKeysForTickedDate(group.items)"),
+                "the per-date tick box must ask with the refusals applied")
+        #expect(source.contains("probeKeysForTickedDate(group.items, geo: geo)"))
         #expect(source.contains("geo: geo,"), "the date control must be handed the refusals too")
     }
 }
