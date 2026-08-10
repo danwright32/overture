@@ -17,13 +17,34 @@ import Foundation
 // than no badge at all, because Dan would learn to trust it.
 enum SourceAttention {
 
-    // Two conditions, and consent outranks both. An org that asked Dan to stop, or a source he chose to
-    // stop watching, can never appear as work he owes anyone, whatever its scraper is doing: reading a
-    // refusal as "broken" invites him to go and fix it, and the natural end of fixing it is pitching them
-    // again (#800). That mistake cannot be taken back, so it is not left to a view to avoid.
-    static func needsALook(_ source: WatchedSource) -> Bool {
+    // #2231: a source that has never successfully read, once it is past its grace window. Both conditions
+    // below are judgments about a source that HAS read and did badly, so the one shape they cannot see is
+    // the source that never worked at all: it grades `.neverChecked`, contributes nothing, and sits under
+    // "Not checked yet" beside a source added five minutes ago, which carries no time dimension at all.
+    // Measured 2026-08-06 on The Players Theatre, which sat there with broken routing (#2229) and zero
+    // shows, and could only ever be repaired once somebody happened to notice.
+    //
+    // The grace is the whole design question, because this state is legitimate and expected for a source
+    // added minutes ago, and an alarm on that is exactly the cry-wolf failure #1428 and #1498 pulled back
+    // from. Three days: the scout runs daily, so a source that has had three scheduled runs and still
+    // never read one page is not waiting, it is broken. Judged from `addedAt`, which is on the row
+    // already, and it stays flagged after a repointing until a read actually SUCCEEDS, because repointing
+    // is a hope rather than evidence.
+    static let neverReadGrace: TimeInterval = 3 * 24 * 60 * 60
+
+    static func hasNeverRead(_ source: WatchedSource, now: Date) -> Bool {
+        guard source.successfulCheckCount == 0, source.lastSucceededAt == nil else { return false }
+        return now.timeIntervalSince(source.addedAt) > neverReadGrace
+    }
+
+    // Three conditions, and consent outranks all of them. An org that asked Dan to stop, or a source he
+    // chose to stop watching, can never appear as work he owes anyone, whatever its scraper is doing:
+    // reading a refusal as "broken" invites him to go and fix it, and the natural end of fixing it is
+    // pitching them again (#800). That mistake cannot be taken back, so it is not left to a view to avoid.
+    static func needsALook(_ source: WatchedSource, now: Date = Date()) -> Bool {
         guard source.isActive else { return false }
         if SourceGrade(source) == .failing { return true }
+        if hasNeverRead(source, now: now) { return true }
         // The silent half worth Dan's eyes: it ran and looks fine, but too many of its event pages came back
         // unreadable, so it has forfeited the right to say a show is gone and its scraper may be genuinely
         // broken. Asked of FeedReconcile, the one place that line is drawn, so this can never disagree with
@@ -38,8 +59,8 @@ enum SourceAttention {
                                                        unreadable: source.lastUnreadableCount)
     }
 
-    static func count(_ sources: [WatchedSource]) -> Int {
-        sources.filter(needsALook).count
+    static func count(_ sources: [WatchedSource], now: Date = Date()) -> Int {
+        sources.filter { needsALook($0, now: now) }.count
     }
 
     // #1541: the sheet's own ordering, decided here so the badge's number and the rows behind it are ONE
@@ -54,14 +75,29 @@ enum SourceAttention {
     // Rows that need a look are lifted out of `rest`, never copied, so nothing is listed twice: a failing
     // source is real attention AND grades as Failing, and would otherwise appear in both places.
     // Alphabetical inside the section, so the sheet cannot reshuffle between redraws.
-    static func split(_ sources: [WatchedSource]) -> (needsALook: [WatchedSource], rest: [WatchedSource]) {
-        let attention = sources.filter(needsALook).sorted { $0.orgName < $1.orgName }
+    static func split(_ sources: [WatchedSource], now: Date = Date())
+    -> (needsALook: [WatchedSource], rest: [WatchedSource]) {
+        let attention = sources.filter { needsALook($0, now: now) }.sorted { $0.orgName < $1.orgName }
         let ids = Set(attention.map(\.sourceId))
         return (attention, sources.filter { !ids.contains($0.sourceId) })
     }
 
     // The section's own words. Kept beside the rule rather than in the view (#863/#885), so the copy
     // inventory reads them and a test can pin them.
+    // #2231: the row's own sentence for a source that has never read. Every row in this section says why
+    // it is there, more specifically than the heading could (see the note below on why the heading itself
+    // carries no explanation), and the never-read state had no sentence anywhere: it rendered under "Not
+    // checked yet" exactly like a source added minutes ago.
+    //
+    // It names the AGE, because the age is the whole difference between this and the legitimate state it
+    // looks like, and it says what has not happened rather than guessing why, since nothing here knows
+    // whether the link is wrong, the site is down, or the page cannot be parsed.
+    static func neverReadLine(addedAt: Date, now: Date) -> String {
+        let days = max(1, Int(now.timeIntervalSince(addedAt) / 86_400))
+        let dayWord = days == 1 ? "day" : "days"
+        return "Watched for \(days) \(dayWord) and has never read its calendar once. Check the link."
+    }
+
     static let sectionLabel = "Needs a look"
     static let sectionSystemImage = "exclamationmark.circle"
 
@@ -89,6 +125,8 @@ enum SourceAttention {
             return "The calendars Overture re-checks on every scout, and how each one is doing"
         }
         let subject = count == 1 ? "1 source needs" : "\(count) sources need"
-        return "\(subject) a look: failing, or can't mark shows as gone until it reads its calendar properly again"
+        // #2231 added the middle reason. Three is as many as this line can carry, and each names a
+        // different state Dan would act on differently.
+        return "\(subject) a look: failing, never read at all, or can't mark shows as gone until it reads its calendar properly again"
     }
 }
