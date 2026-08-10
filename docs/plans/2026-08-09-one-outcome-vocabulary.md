@@ -54,10 +54,12 @@ and the show-level picker was deliberately removed. Contacts keep only routing f
 bounced, this person replied, use this one next time.
 
 **Q3. The Reached out row becomes one row per SHOW**, not one per contact. Measured: 4 of the 5
-pitched shows have exactly one sent contact, so today this changes almost nothing on screen. It
-starts to matter when #51 (one email to several contacts) lands, and one show in the store already
-carries 17 contacts. The row must still name WHO replied when someone does, and answering still
-goes back to that person.
+pitched shows have exactly one sent contact, so today this changes almost nothing on screen. The
+capability that makes it bite has ALREADY shipped: sending one pitch to several contacts at once
+is #2031, merged, along with #2033 and #2034. So this is not a change waiting on future work; it is
+waiting only on the next joint send Dan makes, and one show in the store already carries 17
+contacts. The row must still name WHO replied when someone does, and answering still goes back to
+that person.
 
 **Q6/Q7. There is ONE list, not two controls.** Dan: "we shouldn't have both state and close out.
 It feels like it's supposed to be the same thing? state is mostly just trying to capture the
@@ -102,7 +104,7 @@ stands" chase, the AI's guess at the state, and the Confirm button beside it. Wh
   identical to one nobody got to.
 - The silent-follow-up track (`FollowUp`) is unaffected and survives as-is.
 
-## The last two decisions, settled the same evening
+## The last decisions, settled the same day
 
 **Inbound inquiries adopt the SAME five endings.** Their three (They declined, Not a fit for me,
 Never heard back) already ARE three of the five under different spellings, and `neverHeardBack` was
@@ -118,10 +120,12 @@ contact never replied, and sending it records **Never heard back**. Today `closi
 path resolves the lead to `declinedSoft` in every case, which claims somebody turned Dan down when
 nobody ever wrote back (`mac/Overture/Integration/SendService.swift:282`).
 
-Claude's inference from that rule, NOT Dan's decision, recorded here so it can be accepted or
-dropped when phase 4 is built: a show whose date passes after they DID reply, with no ending
-recorded, presumably wants a different prompt (close this out, because Dan already knows what
-happened) rather than the closing note.
+**A show whose date passes after they DID reply, with no ending recorded, prompts Dan to close it
+out.** Not the closing note, which asserts nobody wrote back and would be false; and not silence.
+This case was recorded here on the 9th as Claude's inference rather than a decision, and Dan settled
+it the same day when asked directly: he already knows what happened, so it only needs recording, and
+without a prompt the show sits in Reached out unrecorded and absent from the reporting the whole
+funnel exists to produce. Phase 4 builds the prompt.
 
 ## Phases
 
@@ -135,15 +139,20 @@ happened) rather than the closing note.
    group rather than folded into lost.
 7. Inquiries adopt the same five endings.
 
-Phase 4 also carries the closing note change: offered only when they never replied, and recording
-Never heard back rather than a soft no.
+Phase 4 also carries the two post-event changes: the closing note is offered only when they never
+replied and records Never heard back rather than a soft no, and a passed show they DID reply to,
+with no ending recorded, prompts Dan to close it out instead.
 
 ## Related issues
 
-- #2388, the duplicate that started this. Subsumed by phases 1 and 2.
+- #2388, the duplicate that started this. Subsumed by phases 1 and 2, and moved into this milestone so
+  it closes with them rather than staying filed as an open bug after its cause is gone.
+- #2401, the silent defect measured above: nothing writes a show-level lost value, so the funnel
+  counts zero. Fixed by phase 6, and moved into this milestone for the same reason.
 - #2249, "Look at the Reached out row now that it can show four controls at once". Same row, same
   moment, and its proposed fix (make close-out conditional) is overtaken by phase 3.
 - #2123, a conversation state set on one contact does not reach the others. Dissolves with phase 4.
 - #1741, combine the Reached out and Follow-ups pills. Touches the same surfaces as phase 3.
-- #51, one email to several contacts. The reason phase 3 matters.
+- #2031, one email to several contacts, already merged. The reason phase 3 matters, and the reason it
+  matters now rather than later.
 - #16, the reporting this whole vocabulary exists to produce.
