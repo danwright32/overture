@@ -25,7 +25,9 @@ set -uo pipefail
 #
 # Usage: scripts/check-runner-posix.sh [file ...]
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# REPO_ROOT_OVERRIDE is a test seam (#1710): it lets a fixture point this check at a tree with no
+# runners in it, which is the only way to watch the empty-subject refusal below actually fire.
+REPO_ROOT="${REPO_ROOT_OVERRIDE:-"$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"}"
 
 # Echo one line per file that `file` sources, resolved the way the shell will resolve it at run time.
 #
@@ -116,6 +118,15 @@ main() {
   else
     while IFS= read -r -d '' f; do files+=("$f"); done \
       < <(find "${REPO_ROOT}/mac/scripts" -name '*.sh' ! -name '*.test.sh' -print0 | sort -z)
+  fi
+
+  # #1710: no scripts found is a broken path, not a clean tree. Without this, a reorganisation that
+  # moves mac/scripts leaves this printing "every #!/bin/sh script parses under sh" about no scripts
+  # at all, and that sentence is indistinguishable from the one it prints when it really checked them.
+  if [[ ${#files[@]} -eq 0 ]]; then
+    echo "check-runner-posix: BLOCK: found no runner scripts to check under ${REPO_ROOT}/mac/scripts." >&2
+    echo "  Nothing was verified. That is not the same as nothing being wrong." >&2
+    exit 1
   fi
 
   local violations
