@@ -20,6 +20,7 @@ describe("prep-runbook judgment rules are present (#591)", () => {
   it("guards the concrete rules this harness cares about", () => {
     expect(RUNBOOK_RULES.map((r) => r.name).sort()).toEqual([
       "act-pursued-when-no-organiser-named",
+      "agency-inbox-never-satisfies-step-two",
       "ask-presupposes-photography-plans",
       "carnegie-citywide-press-example",
       "cold-pitch-carries-no-price",
@@ -35,6 +36,7 @@ describe("prep-runbook judgment rules are present (#591)", () => {
       "named-performer-never-dropped",
       "never-categorize-the-recipient",
       "never-host-venue-target",
+      "never-hunt-the-agent",
       "never-the-room-as-presenter",
       "no-description-is-a-complete-answer",
       "no-headcount-ceiling-without-an-organiser",
@@ -48,6 +50,7 @@ describe("prep-runbook judgment rules are present (#591)", () => {
       "portfolio-is-mine-not-the",
       "press-media-disqualified",
       "pursue-each-named-performer",
+      "representative-only-when-the-target-names-a-person",
       "returning-client-register",
       "search-the-bare-name-first",
       "sentence-one-introduces-dan",

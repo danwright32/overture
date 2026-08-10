@@ -1,0 +1,121 @@
+{
+  "name": "agency-inbox-is-not-the-performers-contact",
+  "rule": "A representative's shared inbox is never the target's contact (#2382). An agency, management company or publicist that REPRESENTS a performer is a third party: its info@ is disqualified like a venue's or a press desk's, whatever the relationship, and a representation claim read from a search summary or a social bio tag is not established at all. The performer with nothing of her own falls to her own DM at low confidence rather than to her agency; the performer who publishes an address on his own site is unaffected.",
+  "input": {
+    "naturalKey": "classic-rock-songbook-vol-2|2026-08-12|the-basement-room",
+    "groupName": "Classic Rock Songbook Vol. 2",
+    "venue": "The Basement Room",
+    "performanceDate": "2026-08-12",
+    "discipline": "music",
+    "production": "unknown",
+    "priorRelationship": "none",
+    "onlyTheActIsNamed": true,
+    "sourceListingURL": "https://tickets.example/showdetails/hJk901/lMn234",
+    "showListing": {
+      "status": "read",
+      "url": "https://tickets.example/showdetails/hJk901/lMn234",
+      "text": "Events About Contact Sign in Classic Rock Songbook Vol. 2 About the Show A concert of classic rock songs reworked for two voices and a small band, part of an ongoing series at the room. Featuring: Erin Example Grant Jamie Example Burke Genre Cabaret Duration 75 minutes 570 Example Avenue New York, NY 10036 Powered by an example ticketing host"
+    }
+  },
+  "sources": [
+    {
+      "label": "Web search: Erin Example Grant singer contact",
+      "url": "search://erin-example-grant-contact",
+      "content": "Results: 1. Erin Example Grant on IMDbPro (subscription required). 2. Erin Example Grant on Instagram. 3. Ashley Example Grant | The Handbook celebrity profile. Summary: Erin Example Grant is represented by Crest Talent, where her agents are listed as Mitchell Example and Erin Example."
+    },
+    {
+      "label": "Instagram profile (fetched, 200)",
+      "url": "https://www.instagram.example/erinexamplegrant/",
+      "content": "Erin Example Grant. Singer. Classic Rock Songbook Vol. 2, August 12th! @thebasementroom @cresttalent. Log in to see photos and videos from friends. Sign up. Log in."
+    },
+    {
+      "label": "The canonical guess for her own site (fetched directly, does not resolve)",
+      "url": "https://erinexamplegrant.example/",
+      "content": "This site can't be reached. erinexamplegrant.example's server IP address could not be found."
+    },
+    {
+      "label": "Crest Talent contact page (a talent agency)",
+      "url": "https://cresttalent.example/contact/",
+      "content": "Crest Talent. Los Angeles and New York. For general inquiries about our talent, both offices: info@cresttalent.example. Submissions are not accepted by email."
+    },
+    {
+      "label": "Crest Talent roster page for Erin Example Grant",
+      "url": "https://cresttalent.example/talent/erin-example-grant/",
+      "content": "Erin Example Grant. NY Models / Print. Represented by Crest Talent. To book this talent, contact the office: info@cresttalent.example."
+    },
+    {
+      "label": "Jamie Example Burke own site",
+      "url": "https://jamieexampleburke.example/contact-me",
+      "content": "Jamie Example Burke, singer and music director. Upcoming: Classic Rock Songbook Vol. 2 at The Basement Room, August 12. For anything at all, write to me: jamie@jamieexampleburke.example."
+    },
+    {
+      "label": "The Basement Room contact page",
+      "url": "https://thebasementroom.example/contact",
+      "content": "The Basement Room is a rental cabaret room. Ticketing: tickets@thebasementroom.example. Press: press@thebasementroom.example."
+    }
+  ],
+  "expected": {
+    "description": "Traced from the 2026-08-09 prep run (#2382), with the names and domains replaced. Both performers are named, so both are pursued. Jamie publishes an address on his own site and is a plain high-confidence read. Erin publishes nothing: search returns no address, her canonical domain does not resolve, and the only route the run found last time was a talent agency reached through an Instagram tag plus a search summary whose top result was a different person with a similar surname. That agency's shared inbox, serving two offices and existing so casting people can hire its roster, is a WRONG result rather than a weak one, so she falls to her own DM at low confidence. The room's inboxes are refused as they would be anywhere.",
+    "requiredPerformers": [
+      "Erin Example Grant",
+      "Jamie Example Burke"
+    ],
+    "lowConfidencePerformers": [
+      "Erin Example Grant"
+    ],
+    "requiredEmails": [
+      "jamie@jamieexampleburke.example"
+    ],
+    "performerOverrideBodyRequired": true,
+    "requireSomeContact": true,
+    "forbidPresenterProvenance": true,
+    "forbiddenEmails": [
+      "info@cresttalent.example",
+      "tickets@thebasementroom.example",
+      "press@thebasementroom.example"
+    ],
+    "forbiddenDomains": [
+      "cresttalent.example",
+      "thebasementroom.example",
+      "instagram.example"
+    ],
+    "requiredShowSummaryTerms": [
+      "rock"
+    ],
+    "requirePortfolioLink": true
+  },
+  "sampleCompliantOutput": {
+    "version": 8,
+    "generatedAt": "2026-08-09T00:00:00.000Z",
+    "results": [
+      {
+        "naturalKey": "classic-rock-songbook-vol-2|2026-08-12|the-basement-room",
+        "showSummary": "A 75 minute cabaret concert of classic rock songs reworked for two voices and a small band.",
+        "contacts": [
+          {
+            "provenance": "performer",
+            "name": "Jamie Example Burke",
+            "email": "jamie@jamieexampleburke.example",
+            "method": "direct_email",
+            "confidence": "high",
+            "sourceUrl": "https://jamieexampleburke.example/contact-me",
+            "overrideBody": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to your August 12 show at The Basement Room. I shoot unobtrusive, no-flash documentary coverage, so the audience doesn't notice me and the performance isn't disturbed. I've been photographing at Carnegie Hall for nearly ten years, with work at Lincoln Center and Radio City Music Hall as well, and you can see my portfolio at danwrightphotography.com. I'd be glad to talk about your photography plans for the night, if you don't have someone on it already. I look forward to hearing from you."
+          },
+          {
+            "provenance": "performer",
+            "name": "Erin Example Grant",
+            "method": "form_or_dm",
+            "confidence": "low",
+            "formUrl": "https://www.instagram.example/erinexamplegrant/",
+            "overrideBody": "I'm Dan Wright, a documentary photographer here in New York City. I'm writing in regard to your August 12 show at The Basement Room. My coverage is unobtrusive and shot without flash, so the audience stays with the performance rather than noticing a photographer working. Nearly ten years of that has been at Carnegie Hall, along with Lincoln Center and Radio City Music Hall, and you can see my portfolio at danwrightphotography.com. I'd be glad to talk through your photography plans for the show, if you don't have someone on it already. I look forward to hearing from you."
+          }
+        ],
+        "draft": {
+          "subject": "Photographing Classic Rock Songbook Vol. 2 at The Basement Room",
+          "variant": "reason-first",
+          "body": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to the August 12 performance of Classic Rock Songbook Vol. 2 at The Basement Room. I shoot unobtrusive, no-flash documentary coverage, so the audience doesn't notice me and the performance isn't disturbed. I've been photographing at Carnegie Hall for nearly ten years, with work at Lincoln Center and Radio City Music Hall as well, and you can see my portfolio at danwrightphotography.com. I'd be glad to talk about the photography plans for this one, if you don't have someone on it already. I look forward to hearing from you."
+        }
+      }
+    ]
+  }
+}

@@ -352,6 +352,30 @@ venue rule above), the act's, or the presenter's. Never offer a press/media/PR a
 as a contact at any confidence level; fall through to the next waterfall step
 (contact form/DM) instead, or omit the contact entirely if nothing else is found.
 
+**Hard third-party-representative rule (#2382), unchanged regardless of target.** An address
+belonging to somebody who REPRESENTS the target (a talent agency, a management company, a
+publicist, a booking agency) is not the target's address, and is DISQUALIFIED for the same reason
+the venue's and the press desk's are: it is a wrong result, not a weak one. Four parts, and they
+are what a run has to ask itself, in this order:
+
+1. **A third party's generic inbox NEVER satisfies step 2.** Step 2 below means an inbox the TARGET
+   ITSELF publishes as its own. An agency's `info@` belongs to the agency, whatever the relationship,
+   and a shared inbox serving a national agency's offices exists so casting people can hire its
+   roster. It will not reach a performer about one night of a cabaret series.
+2. **A representative's address is usable in exactly one case:** the target's OWN page publishes a
+   NAMED person there as its contact route (e.g. a bio page reading "Representation: Jane Example,
+   jane@examplemanagement.example"). That is an address read off the target's own page, so it is
+   emitted like any other, with `sourceUrl` set to that page.
+3. **Where the target's own page names an agency but publishes no person there, do NOT go looking
+   for the agent.** Fall straight to step 3 below (the target's own form or DM), or omit the target.
+   Dan's call, 2026-08-09, choosing this over chasing the named agent: the extra lookups are not
+   worth what they find.
+4. **A representation claim read from a search summary, a social bio tag, or an aggregator is not
+   established at all**, so it cannot even reach part 2. Same STRICT verification bar as everywhere
+   else: only what a fetch actually returned counts (#2269). On 2026-08-09 a run reached an agency's
+   shared inbox for a performer on the strength of an Instagram tag plus a search snippet whose top
+   result was a different person with a similar name.
+
 **`websiteURL` may point to the venue, not the act.** If it resolves to the host venue's
 site, do NOT harvest a contact from it; find the act's (or the named performer's) OWN
 site. Landing on the venue's staff page is exactly the bug this rule prevents.
@@ -378,7 +402,8 @@ in order, stop at the first that works:
    their own published email, read off their own site/bio/contact page.
 2. **The target's generic inbox** (info@, the ensemble's published address; a solo
    performer rarely has one of these), never a press/media/PR inbox, see the hard
-   press/media-disqualify rule above. A real email for the target, even a generic one,
+   press/media-disqualify rule above, and never a third party's, see the hard
+   third-party-representative rule above. A real email for the target, even a generic one,
    is PREFERRED over a contact form.
 
    **A named contact behind a generic inbox (#610).** While reading the target's own site for
@@ -444,7 +469,9 @@ absent, ALSO set `emptyReason` on that same entry to exactly one of:
   usable address anywhere you could reach. Only honest once you have actually fetched every
   organisation named for this show that is not on `houses`, AND you had someone to look for in
   the first place; until then the lookup is unfinished and this token would claim more than you
-  measured.
+  measured. A REPRESENTATIVE is not one of those organisations (#2382): the rule above forbids
+  pursuing an agency or management company, so never having fetched one cannot make this token
+  dishonest, and its shared inbox is not an address the target publishes.
 - `no_one_identified` (#1817): you could not work out WHO to write to. No producing organisation
   was named, and no performer could be named either, so no search for an address ever really
   ran. This is NOT `nothing_published`: that one says the people were found and publish nothing,

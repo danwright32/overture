@@ -67,6 +67,9 @@ person, org, venue, or email address. `.example` domains and made-up names throu
   writes the follow-on clause as familiarity ("so I'm familiar with the room") rather than as a risk
   avoided ("so I'm not learning it on the night"), which Dan flagged himself (#1887/#1905).
 - `season-calendar-describes-no-show`: the same listing text, read, that describes no show at all. The honest answer is `no_description_published`, never a description assembled from the neighbouring listings (#1824).
+- `agency-inbox-is-not-the-performers-contact`: a performer whose only apparent route is a talent agency's
+  shared inbox falls to her own DM at low confidence instead, because a representative's address is not the
+  target's, and the representation itself was never established by anything a fetch returned (#2382).
 
 ### Where the #1824 pair's shape comes from (L48)
 

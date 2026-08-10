@@ -562,6 +562,7 @@ describe("prep-eval fixtures", () => {
   it("has a representative fixture set covering the concrete runbook rules", () => {
     const names = fixtures.map((f) => f.name).sort();
     expect(names).toEqual([
+      "agency-inbox-is-not-the-performers-contact",
       "already-covered-photographer",
       "carnegie-citywide-press-inbox",
       "five-named-performers-none-dropped",
@@ -646,6 +647,28 @@ describe("prep-eval fixtures", () => {
     const r = evaluateFixture(fixture!, produced);
     expect(r.pass).toBe(false);
     expect(r.failures.join(" ")).toMatch(/harbourarts\.example/);
+  });
+
+  // #2382: the regression is not an invented answer either. It is exactly what the 2026-08-09 run
+  // produced for this shape: the performer with nothing of her own reported at `generic_inbox` /
+  // `medium` on her agency's shared address. Every count-based check passes on that output (both
+  // performers are surfaced, nothing is called a presenter, no venue inbox appears), which is why the
+  // fixture has to pin the agency's domain: without it the wrong answer scores clean.
+  it("agency-inbox-is-not-the-performers-contact: flags a run that settles for the agency's inbox", () => {
+    const fixture = fixtures.find((f) => f.name === "agency-inbox-is-not-the-performers-contact");
+    expect(fixture).toBeTruthy();
+    const produced = JSON.parse(JSON.stringify(fixture!.sampleCompliantOutput)) as {
+      results: Array<{ contacts: Array<Record<string, unknown>> }>;
+    };
+    const erin = produced.results[0].contacts.find((c) => c.name === "Erin Example Grant")!;
+    erin.email = "info@cresttalent.example";
+    erin.method = "generic_inbox";
+    erin.confidence = "medium";
+    erin.sourceUrl = "https://cresttalent.example/contact/";
+    delete erin.formUrl;
+    const r = evaluateFixture(fixture!, produced);
+    expect(r.pass).toBe(false);
+    expect(r.failures.join(" ")).toMatch(/cresttalent\.example/);
   });
 
   // #2259: the same discipline for the company a listing credits. The regression is not an invented
