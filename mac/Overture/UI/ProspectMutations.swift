@@ -481,13 +481,13 @@ enum ProspectMutations {
         // Read BEFORE the mutation, so the entry records where the row actually came from rather than
         // an inverse guessed at undo time.
         let priorStatus = model.status
-        let priorReason = model.dismissReasonRaw
+        let priorReason = model.showOutcomeRaw
         let priorExit = model.dismissedAt
         let priorClearedConflict = model.conflictClearedKey
         // #16: routed through the model's own pair so the exit date is stamped on a cut and cleared on
         // any move back into the queue, rather than depending on every caller of this setter to remember.
         if status == .dismissed {
-            model.markDismissed(reason: reason)
+            model.markDismissed(reason: reason?.asShowOutcome)
         } else {
             model.clearDismissal(to: status)
         }
@@ -503,7 +503,7 @@ enum ProspectMutations {
         if status == .queued { model.clearConflict() }
         if let undo, let undoLabel {
             undo.record(QueueUndoEntry(recording: undoLabel, on: model, priorStatus: priorStatus,
-                                       priorDismissReasonRaw: priorReason, priorDismissedAt: priorExit,
+                                       priorShowOutcomeRaw: priorReason, priorDismissedAt: priorExit,
                                        priorConflictClearedKey: priorClearedConflict))
         }
         context.saveOrWarn(org: item.groupName, feedback: feedback)
@@ -527,12 +527,12 @@ enum ProspectMutations {
         // ("assume it runs twice"). An entry describing a dismissal that did not happen would spend the
         // next Cmd+Z doing nothing while looking exactly like a working undo.
         let targets = keys.compactMap { byKey[$0] }
-            .filter { !($0.status == .dismissed && $0.dismissReasonRaw == reason.rawValue) }
+            .filter { !($0.status == .dismissed && $0.showOutcome == reason.asShowOutcome) }
         guard !targets.isEmpty else { return }
 
         let rows = targets.map { model -> QueueUndoEntry.Row in
             let priorStatus = model.status
-            let priorReason = model.dismissReasonRaw
+            let priorReason = model.showOutcomeRaw
             let priorExit = model.dismissedAt
             // #1583: a dismiss never touches the accepted clash, so this records the value it is leaving
             // alone. Passing nil instead would make undoing a bulk dismiss silently re-block every show on
@@ -540,9 +540,9 @@ enum ProspectMutations {
             let priorClearedConflict = model.conflictClearedKey
             // #16: the model's own setter, so the exit date is stamped here exactly as a per-card dismiss
             // stamps it, and a show dismissed twice keeps its FIRST exit date.
-            model.markDismissed(reason: reason)
+            model.markDismissed(reason: reason.asShowOutcome)
             return QueueUndoEntry.Row(recording: model, priorStatus: priorStatus,
-                                      priorDismissReasonRaw: priorReason, priorDismissedAt: priorExit,
+                                      priorShowOutcomeRaw: priorReason, priorDismissedAt: priorExit,
                                       priorConflictClearedKey: priorClearedConflict)
         }
         // #1417: nothing is claimed and nothing is made undoable until the write is confirmed. An undo

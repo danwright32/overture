@@ -50,7 +50,7 @@ struct DriftedRunMergeTests {
         p.missedScoutCount = missed
         if dismissed {
             p.statusRaw = ReviewStatus.dismissed.rawValue
-            p.dismissReasonRaw = "too_soon"
+            p.showOutcomeRaw = "too_soon"
         }
         context.insert(p)
         return p
@@ -137,10 +137,10 @@ struct DriftedRunMergeTests {
         let context = try ctx()
         let first = row(context, night: "2026-07-23", title: "The Passion of Mr. Cardboard",
                         series: "1281174", ingestedDaysAgo: 3, dismissed: true)
-        first.dismissReasonRaw = "too_soon"
+        first.showOutcomeRaw = "too_soon"
         let second = row(context, night: "2026-07-24", title: "The Passion of Mr. Cardboard",
                          series: "1281174", ingestedDaysAgo: 2, dismissed: true)
-        second.dismissReasonRaw = "not_interested"
+        second.showOutcomeRaw = "not_a_fit"
 
         let summary = DriftedRunMerge.run(in: context)
 

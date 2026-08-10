@@ -83,7 +83,7 @@ enum NaturalKeyVenueMigration {
                 // #1689: a NOTE. The migration is working exactly as designed, refusing to merge rows
                 // that carry outreach history, and it says the same thing about the same rows on every
                 // launch until Dan reconciles them (#1639). None of that is a problem to raise.
-                AgentLog.note("#1064/#1780 NaturalKeyVenueMigration: \(withHistory.count) prospects carrying history, \(Set(members.compactMap(\.dismissReasonRaw)).count) distinct dismissal reasons, fold to one key; leaving them untouched for Dan to reconcile.")
+                AgentLog.note("#1064/#1780 NaturalKeyVenueMigration: \(withHistory.count) prospects carrying history, \(Set(members.compactMap(\.showOutcomeRaw)).count) distinct dismissal reasons, fold to one key; leaving them untouched for Dan to reconcile.")
                 // copy-inventory:ignore-end
                 summary.conflictsDeferred += 1
                 continue
@@ -173,7 +173,7 @@ enum NaturalKeyVenueMigration {
         let neverContacted = members.allSatisfy {
             !hasRecordBeyondADismissal($0, countingFoundAddresses: false)
         }
-        let reasons = Set(members.compactMap(\.dismissReasonRaw))
+        let reasons = Set(members.compactMap(\.showOutcomeRaw))
         return !(neverContacted && reasons.count <= 1)
     }
 
@@ -193,7 +193,7 @@ enum NaturalKeyVenueMigration {
     // paid check wrote onto it. Named because the survivor ladders in the merge passes need exactly this
     // rung, and spelling it inline in each of them is how the three drift apart.
     static func carriesDansDecision(_ p: Prospect) -> Bool {
-        p.status != .new || p.dismissReasonRaw != nil
+        p.status != .new || p.showOutcomeRaw != nil
     }
 
     // #2001: which rows of a group may survive it, once a copy Dan has refused meets one he has not.
@@ -220,7 +220,7 @@ enum NaturalKeyVenueMigration {
     // history and must never be deleted, and forces a colliding pair into the deferred branch above.
     static func hasOutreachHistory(_ p: Prospect) -> Bool {
         if p.status != .new { return true }
-        if p.dismissReasonRaw != nil { return true }
+        if p.showOutcomeRaw != nil { return true }
         return hasRecordBeyondADismissal(p)
     }
 

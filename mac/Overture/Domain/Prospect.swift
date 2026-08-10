@@ -64,7 +64,24 @@ final class Prospect {
     var possibleMatchName: String?
 
     var statusRaw: String
+    // LEGACY, read by ShowOutcomeBackfill and written by nothing else since #2394. The ending a show
+    // reached now lives in `showOutcomeRaw` below, which holds both halves of the vocabulary instead of
+    // only the never-pitched seven. Kept on the model purely so the backfill has something to read on a
+    // store that predates it; the column goes away with the rest of `DismissReason` (#2395).
     var dismissReasonRaw: String?
+    // #2394: the ONE show-level field for how this show ended, holding the twelve values Dan can pick
+    // plus the two Overture writes for itself. See ShowOutcome.
+    //
+    // At the SHOW, not on a contact, and that is the whole point. The endings used to be recorded on the
+    // contact (`closeOutFromRow` touched the show only for a booking) while the reporting read show-level
+    // values nothing ever wrote, so the funnel's lost count was structurally zero and the scout could
+    // never learn which orgs turned Dan down (#2401, L83). Dan's own reason is simpler: "I really don't
+    // care about contact level outcomes. All I care about is the event level."
+    //
+    // Nil means the show has not ended, and that is the only thing nil means. There is deliberately no
+    // "open" value, because giving open a spelling of its own is how "still waiting to hear" and "they
+    // never answered" became one record.
+    var showOutcomeRaw: String? = nil
     // "Last read", NOT "first found": ScoutService.apply rewrites this on every run, including on shows
     // already pitched, so it walks forward for as long as a show stays on a watched calendar.
     var ingestedAt: Date
@@ -645,10 +662,36 @@ final class Prospect {
                          hasSentRecipient: recipients.contains { $0.sendState == .sent })
     }
 
+    // #2394: the typed ending, the one field every reader shares.
+    var showOutcome: ShowOutcome? {
+        get { showOutcomeRaw.flatMap(ShowOutcome.init(rawValue:)) }
+        set { showOutcomeRaw = newValue?.rawValue }
+    }
+
+    // #2394: whether an email actually WENT OUT for this show, which is the fact that decides which half
+    // of the vocabulary Dan is offered (ShowOutcome.menu(wasPitched:)). Whether a show was pitched is
+    // never encoded in the words themselves.
+    //
+    // Deliberately NOT `hasEnteredSendHalf` above, and the two must not be folded together: that one is
+    // true for a show merely drafted or approved, which is the right answer to "who speaks for a held
+    // contact" and the wrong answer here. Offering "Never heard back" on a show Dan has only drafted
+    // would ask him how somebody replied to an email that never left.
+    //
+    // Both halves of the send record count, because either can be the one that carries the fact: the lead
+    // rollup stamp, and any single contact having been sent to. Reading only the rollup would offer the
+    // never-pitched menu on a show whose contact went out before the rollup was stamped.
+    var wasPitched: Bool {
+        sentAt != nil || recipients.contains { $0.sendState == .sent }
+    }
+
     // #864: the typed reason, so callers stop hand-rolling `DismissReason(rawValue: dismissReasonRaw ?? "")`.
+    //
+    // #2394: now a VIEW over `showOutcome` rather than its own storage, so the never-pitched half has one
+    // home while the surfaces that still speak in dismiss reasons keep working. Nil for a pitched ending,
+    // which is correct: a show that was closed out was never dismissed. Goes away with the menus (#2395).
     var dismissReason: DismissReason? {
-        get { dismissReasonRaw.flatMap(DismissReason.init(rawValue:)) }
-        set { dismissReasonRaw = newValue?.rawValue }
+        get { showOutcome?.asDismissReason }
+        set { showOutcome = newValue?.asShowOutcome }
     }
 
     // #861/#864/#1540: "is this show past the point where Dan would ever work it?", asked in one place.
@@ -752,7 +795,9 @@ final class Prospect {
         self.possibleMatchSource = possibleMatchSource
         self.possibleMatchName = possibleMatchName
         self.statusRaw = status.rawValue
-        self.dismissReasonRaw = dismissReason?.rawValue
+        // #2394: a new row's ending goes to the one field, never to the legacy column, so nothing inserted
+        // after this shipped ever needs backfilling.
+        self.showOutcomeRaw = dismissReason?.asShowOutcome.rawValue
         self.ingestedAt = ingestedAt
         // #16: the row exists as of this moment, so its first sighting IS its first ingest. The only
         // place this is ever written for a new row; the scout's refresh path deliberately skips it.
@@ -899,16 +944,22 @@ final class Prospect {
     //
     // The date is kept if one is already set: re-labelling WHY a dismissed show was cut is not a second
     // exit, and re-stamping would date the drop-off to whenever Dan last tidied up the reason.
-    func markDismissed(reason: DismissReason?, at now: Date = Date()) {
+    // #2394: takes a ShowOutcome, so the ending a dismissal records comes from the one vocabulary rather
+    // than a list of its own.
+    func markDismissed(reason: ShowOutcome?, at now: Date = Date()) {
         status = .dismissed
-        dismissReasonRaw = reason?.rawValue
+        showOutcome = reason
         dismissedAt = dismissedAt ?? now
     }
 
     // The exact reverse, for Archive's restore (#28) and the blocked-town Undo (#1238). A show back in
     // the queue has no exit date; leaving one behind would count a live show as a drop-off.
+    // #2394: clears the LEGACY column too, not only the live one. Without that, a show Dan restores would
+    // be handed back its old ending by the next launch's backfill, which reads that column, and the
+    // restore would silently undo itself overnight.
     func clearDismissal(to newStatus: ReviewStatus = .new) {
         status = newStatus
+        showOutcomeRaw = nil
         dismissReasonRaw = nil
         dismissedAt = nil
     }

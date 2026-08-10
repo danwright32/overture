@@ -41,7 +41,7 @@ struct BulkDismissMutationTests {
         #expect([a, b, c].allSatisfy { $0.status == .dismissed })
         // #1128: "Too soon" is a missed opportunity, never a bad-fit signal, so the raw value written must
         // be its own, not notInterested's.
-        #expect([a, b, c].allSatisfy { $0.dismissReasonRaw == "too_soon" })
+        #expect([a, b, c].allSatisfy { $0.showOutcomeRaw == "too_soon" })
         #expect([a, b, c].allSatisfy { $0.dismissedAt != nil })   // #16: the exit date every dismiss stamps
     }
 
@@ -127,15 +127,15 @@ struct BulkDismissMutationTests {
     @Test func areLabelledShowKeepsItsOldReasonInTheEntry() throws {
         let ctx = try context()
         let a = show(ctx, "a")
-        a.markDismissed(reason: .notInterested)
+        a.markDismissed(reason: .notAFit)
         try ctx.save()
         let stack = QueueUndoStack()
 
         ProspectMutations.dismissAll(["a"], reason: .tooSoon, dateLabel: "Jul 24",
                                      prospects: [a], context: ctx, feedback: ActionFeedback(), undo: stack)
 
-        #expect(a.dismissReasonRaw == "too_soon")
-        #expect(stack.entries.first?.rows.first?.priorDismissReasonRaw == "not_interested")
+        #expect(a.showOutcomeRaw == "too_soon")
+        #expect(stack.entries.first?.rows.first?.priorShowOutcomeRaw == "not_a_fit")
     }
 
     // Nothing to do means nothing said and nothing recorded, rather than a banner claiming an action.

@@ -40,7 +40,7 @@ struct QueueUndoEntry: Equatable, Sendable {
         // the Review stage and a keep from the queue land the row in different places, and guessing at an
         // inverse is exactly the mistake #752's snapshot exists to avoid.
         let priorStatus: ReviewStatus
-        let priorDismissReasonRaw: String?
+        let priorShowOutcomeRaw: String?
         // `Prospect.markDismissed` stamps `dismissedAt` only when it is nil, so a show dismissed twice keeps
         // its FIRST exit date. Undoing the second dismissal has to put that original date back rather than
         // clear it, or the row loses the record of when it first left the queue (#16 counts on that date).
@@ -58,7 +58,7 @@ struct QueueUndoEntry: Equatable, Sendable {
 
         // Where the action LEFT the row. Not restored; this is the precondition.
         let resultingStatus: ReviewStatus
-        let resultingDismissReasonRaw: String?
+        let resultingShowOutcomeRaw: String?
 
         // Is the row still exactly how this action left it? If anything moved it since (a background
         // writer, a later action of Dan's, a scout import), undoing would clobber something newer, so this
@@ -67,8 +67,8 @@ struct QueueUndoEntry: Equatable, Sendable {
         // Checks the dismiss REASON as well as the status, and that is the case a status-only check misses:
         // re-labelling why a dismissed show was cut leaves it dismissed, so undo would restore the row and
         // silently discard the newer reason.
-        func stillApplies(status: ReviewStatus, dismissReasonRaw: String?) -> Bool {
-            status == resultingStatus && dismissReasonRaw == resultingDismissReasonRaw
+        func stillApplies(status: ReviewStatus, showOutcomeRaw: String?) -> Bool {
+            status == resultingStatus && showOutcomeRaw == resultingShowOutcomeRaw
         }
     }
 
@@ -91,10 +91,10 @@ struct QueueUndoEntry: Equatable, Sendable {
     var naturalKey: String { primaryRow.naturalKey }
     var groupName: String { primaryRow.groupName }
     var priorStatus: ReviewStatus { primaryRow.priorStatus }
-    var priorDismissReasonRaw: String? { primaryRow.priorDismissReasonRaw }
+    var priorShowOutcomeRaw: String? { primaryRow.priorShowOutcomeRaw }
     var priorDismissedAt: Date? { primaryRow.priorDismissedAt }
     var resultingStatus: ReviewStatus { primaryRow.resultingStatus }
-    var resultingDismissReasonRaw: String? { primaryRow.resultingDismissReasonRaw }
+    var resultingShowOutcomeRaw: String? { primaryRow.resultingShowOutcomeRaw }
 
     // #1473: a stretch of days Dan blocked BECAUSE of this dismiss, so one press takes both back.
     //
@@ -131,22 +131,22 @@ struct QueueUndoEntry: Equatable, Sendable {
         return "Undo \(actionLabel): \(subject)"
     }
 
-    func stillApplies(status: ReviewStatus, dismissReasonRaw: String?) -> Bool {
-        primaryRow.stillApplies(status: status, dismissReasonRaw: dismissReasonRaw)
+    func stillApplies(status: ReviewStatus, showOutcomeRaw: String?) -> Bool {
+        primaryRow.stillApplies(status: status, showOutcomeRaw: showOutcomeRaw)
     }
 
     // The one-show action: the shape every caller but #1500's night uses.
     init(naturalKey: String, groupName: String, actionLabel: String,
-         priorStatus: ReviewStatus, priorDismissReasonRaw: String?, priorDismissedAt: Date?,
+         priorStatus: ReviewStatus, priorShowOutcomeRaw: String?, priorDismissedAt: Date?,
          priorConflictClearedKey: String?,
-         resultingStatus: ReviewStatus, resultingDismissReasonRaw: String?) {
+         resultingStatus: ReviewStatus, resultingShowOutcomeRaw: String?) {
         self.init(actionLabel: actionLabel, batchLabel: nil,
                   primaryRow: Row(naturalKey: naturalKey, groupName: groupName,
-                                  priorStatus: priorStatus, priorDismissReasonRaw: priorDismissReasonRaw,
+                                  priorStatus: priorStatus, priorShowOutcomeRaw: priorShowOutcomeRaw,
                                   priorDismissedAt: priorDismissedAt,
                                   priorConflictClearedKey: priorConflictClearedKey,
                                   resultingStatus: resultingStatus,
-                                  resultingDismissReasonRaw: resultingDismissReasonRaw),
+                                  resultingShowOutcomeRaw: resultingShowOutcomeRaw),
                   otherRows: [])
     }
 
@@ -175,33 +175,33 @@ extension QueueUndoEntry.Row {
     // #1500: the single place that rule lives, now that two actions record one (one show, or a night).
     @MainActor
     init(recording prospect: Prospect,
-         priorStatus: ReviewStatus, priorDismissReasonRaw: String?, priorDismissedAt: Date?,
+         priorStatus: ReviewStatus, priorShowOutcomeRaw: String?, priorDismissedAt: Date?,
          priorConflictClearedKey: String?) {
         self.init(naturalKey: prospect.naturalKey,
                   groupName: prospect.groupName,
                   priorStatus: priorStatus,
-                  priorDismissReasonRaw: priorDismissReasonRaw,
+                  priorShowOutcomeRaw: priorShowOutcomeRaw,
                   priorDismissedAt: priorDismissedAt,
                   priorConflictClearedKey: priorConflictClearedKey,
                   resultingStatus: prospect.status,
-                  resultingDismissReasonRaw: prospect.dismissReasonRaw)
+                  resultingShowOutcomeRaw: prospect.showOutcomeRaw)
     }
 }
 
 extension QueueUndoEntry {
     @MainActor
     init(recording actionLabel: String, on prospect: Prospect,
-         priorStatus: ReviewStatus, priorDismissReasonRaw: String?, priorDismissedAt: Date?,
+         priorStatus: ReviewStatus, priorShowOutcomeRaw: String?, priorDismissedAt: Date?,
          priorConflictClearedKey: String?) {
         let row = Row(recording: prospect, priorStatus: priorStatus,
-                      priorDismissReasonRaw: priorDismissReasonRaw, priorDismissedAt: priorDismissedAt,
+                      priorShowOutcomeRaw: priorShowOutcomeRaw, priorDismissedAt: priorDismissedAt,
                       priorConflictClearedKey: priorConflictClearedKey)
         self.init(naturalKey: row.naturalKey, groupName: row.groupName, actionLabel: actionLabel,
-                  priorStatus: row.priorStatus, priorDismissReasonRaw: row.priorDismissReasonRaw,
+                  priorStatus: row.priorStatus, priorShowOutcomeRaw: row.priorShowOutcomeRaw,
                   priorDismissedAt: row.priorDismissedAt,
                   priorConflictClearedKey: row.priorConflictClearedKey,
                   resultingStatus: row.resultingStatus,
-                  resultingDismissReasonRaw: row.resultingDismissReasonRaw)
+                  resultingShowOutcomeRaw: row.resultingShowOutcomeRaw)
     }
 }
 
@@ -244,7 +244,7 @@ enum QueueUndo {
         let applicable = entry.rows.compactMap { row -> (Prospect, QueueUndoEntry.Row)? in
             guard let prospect = lookup(row.naturalKey),
                   row.stillApplies(status: prospect.status,
-                                   dismissReasonRaw: prospect.dismissReasonRaw) else { return nil }
+                                   showOutcomeRaw: prospect.showOutcomeRaw) else { return nil }
             return (prospect, row)
         }
         guard !applicable.isEmpty else { return Outcome(restored: 0, total: entry.rows.count) }
@@ -262,7 +262,7 @@ enum QueueUndo {
         }
         for (prospect, row) in applicable {
             prospect.status = row.priorStatus
-            prospect.dismissReasonRaw = row.priorDismissReasonRaw
+            prospect.showOutcomeRaw = row.priorShowOutcomeRaw
             prospect.dismissedAt = row.priorDismissedAt
             // #1583: Keep accepts a date clash, so undoing a Keep has to put the clash back. Applied
             // unconditionally rather than only when the action changed it: the entry holds what was there,

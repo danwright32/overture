@@ -47,6 +47,11 @@ enum LaunchMigrations {
         // #940: 'Day doesn't work' folded into 'Date conflict'. Idempotent: guarded by "still carries the
         // old day_doesnt_work raw value", so it rewrites each once and no-ops thereafter.
         DismissReasonMigration.run(in: context)
+        // #2394: carry every ending already recorded onto the one show-level field. Deliberately AFTER
+        // DismissReasonMigration above, which folds the retired `day_doesnt_work` spelling: running it
+        // first would count that value as unrecognised and leave those rows with no outcome at all.
+        // Idempotent, guarded by "this row has no outcome yet", so it fills each once and no-ops after.
+        ShowOutcomeBackfill.run(in: context)
         // #1626: a show already checked before "contact form only" existed reads as a dead end while
         // holding a usable form link. Upgrades that one verdict and nothing else. Idempotent.
         ContactFormResultMigration.run(in: context)

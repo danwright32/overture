@@ -130,7 +130,7 @@ struct PassedShowPenaltyTests {
         let first = try ctx.fetch(FetchDescriptor<Prospect>()).first!
         let originalScore = first.fitScore
         first.status = .dismissed
-        first.dismissReasonRaw = DismissReason.dontWantToShoot.rawValue
+        first.showOutcomeRaw = ShowOutcome.dontWantToShoot.rawValue
         try ctx.save()
 
         // Season two: the identical show returns. Its natural key differs (a new date), so it is a
@@ -167,7 +167,7 @@ struct PassedShowPenaltyTests {
         _ = ScoutService.apply(events: [auroraAtWeill], clients: [], history: [], blocked: .empty, today: ScoutTestClock.beforeAllFixtures, into: ctx)
         let first = try ctx.fetch(FetchDescriptor<Prospect>()).first!
         first.status = .dismissed
-        first.dismissReasonRaw = DismissReason.dontWantToShoot.rawValue
+        first.showOutcomeRaw = ShowOutcome.dontWantToShoot.rawValue
         try ctx.save()
 
         let history = LocalHistory.records(from: try ctx.fetch(FetchDescriptor<Prospect>()))

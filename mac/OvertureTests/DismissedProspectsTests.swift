@@ -43,6 +43,6 @@ struct DismissedProspectsTests {
 
         DismissedProspects.restore(cut)
         #expect(cut.status == .new)
-        #expect(cut.dismissReasonRaw == nil)
+        #expect(cut.showOutcomeRaw == nil)
     }
 }

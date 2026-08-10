@@ -128,19 +128,12 @@ enum DismissReason: String, CaseIterable, Sendable {
     // thing about the org, since Overture watches out-of-town orgs for their occasional NYC dates (#970).
     case tooFar = "too_far"
 
-    var label: String {
-        switch self {
-        case .dateConflict: return "Date conflict"
-        case .notInterested: return "Not a fit"
-        case .dontWantToShoot: return "Don't want to shoot this"
-        case .alreadyBooked: return "Already booked"
-        case .duplicate: return "Duplicate"
-        case .tooSoon: return "Too soon"
-        case .pitchingOtherShows: return "Pitching other shows that night"
-        case .wentBy: return "Went by"
-        case .tooFar: return "Too far"
-        }
-    }
+    // #2394: the words come from `ShowOutcome`, the one vocabulary, rather than being restated here.
+    // Restating them is the duplicate-copy trap from the worse direction (#843): not the same thing said
+    // twice, but the same thing said DIFFERENTLY, which reads as two different reasons. It also lands the
+    // rename this phase exists for, since "Already booked" meant Dan was busy and read as the client
+    // having hired him: this reason now says "I had paid work" everywhere it appears.
+    var label: String { asShowOutcome.label }
 
     // The reasons Dan can pick himself. `wentBy` and `tooFar` are Overture's own, never offered as a
     // choice: he cannot decide that a date has passed, and blocking a town is a separate action, not a
