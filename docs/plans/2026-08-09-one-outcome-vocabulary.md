@@ -102,16 +102,26 @@ stands" chase, the AI's guess at the state, and the Confirm button beside it. Wh
   identical to one nobody got to.
 - The silent-follow-up track (`FollowUp`) is unaffected and survives as-is.
 
-## Open decisions, deliberately not settled
+## The last two decisions, settled the same evening
 
-1. **Do inbound inquiries adopt the same five endings?** Recommended yes: their three
-   (They declined, Not a fit for me, Never heard back) already ARE three of the five under
-   different spellings, and `neverHeardBack` was deliberately given one shared stored value across
-   both halves of the funnel so they could be added together. This would finish that job. Asked as
-   Q11 and not answered.
-2. **Does the post-event gracious closing note survive?** It is the one thing that still fires
-   after a show's date passes, and it sends a real email to a real client, so it must not ride in
-   on an assumption. Raised but never explicitly ruled on.
+**Inbound inquiries adopt the SAME five endings.** Their three (They declined, Not a fit for me,
+Never heard back) already ARE three of the five under different spellings, and `neverHeardBack` was
+deliberately given one shared stored value across both halves of the funnel so they could be added
+together. This finishes that job for the other two, and a season report can read both halves in one
+pass.
+
+**The post-event closing note survives, and what it records changes.** Its trigger is the show's
+DATE, not anything Dan sets, so it outlives the reminder track being retired in phase 4. Dan's rule
+for it: "If I'm sending that, it basically HAS to mean never heard back. If I heard back and they
+said not now or something I would have already set that state." So it is offered ONLY when the
+contact never replied, and sending it records **Never heard back**. Today `closingNudgeBody`'s send
+path resolves the lead to `declinedSoft` in every case, which claims somebody turned Dan down when
+nobody ever wrote back (`mac/Overture/Integration/SendService.swift:282`).
+
+Claude's inference from that rule, NOT Dan's decision, recorded here so it can be accepted or
+dropped when phase 4 is built: a show whose date passes after they DID reply, with no ending
+recorded, presumably wants a different prompt (close this out, because Dan already knows what
+happened) rather than the closing note.
 
 ## Phases
 
@@ -123,7 +133,10 @@ stands" chase, the AI's guess at the state, and the Confirm button beside it. Wh
 5. Cap the emails at two and show the spent marker on the row.
 6. Point `OutcomeStats` and `LocalHistory` at the one field, with never-pitched counted as its own
    group rather than folded into lost.
-7. Inquiries adopt the same five endings (pending open decision 1).
+7. Inquiries adopt the same five endings.
+
+Phase 4 also carries the closing note change: offered only when they never replied, and recording
+Never heard back rather than a soft no.
 
 ## Related issues
 
