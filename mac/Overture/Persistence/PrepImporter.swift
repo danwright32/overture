@@ -285,6 +285,16 @@ enum PrepImporter {
             // from one never found and this very run would put the address straight back. That is the
             // whole thing striking it before the run exists to prevent.
             if refusals.isRefused(email: c.email, showKey: p.naturalKey, orgKey: orgKey) { continue }
+            // #2421: a contact with no address whose only handle is a social profile is not a contact,
+            // so it is never created rather than created for every surface downstream to explain. Dan's
+            // call, 2026-08-10, on a card listing seven people he could reach one of. The app had already
+            // decided these were dead ends (#1626 refuses to offer the link); this applies the same rule
+            // one step earlier. A real form on the act's own site is kept: 15 shows have no other route.
+            //
+            // Placed AFTER the refusal check so a struck address is still refused rather than merely
+            // dropped, and BEFORE every branch below so this can never update an existing row into a
+            // dead end either.
+            if DeadEndContact.hasNoUsableRoute(email: c.email, formURL: c.formUrl) { continue }
             let provenance = RecipientProvenance(rawValue: c.provenance ?? "") ?? .act
             let email = (c.email?.isEmpty == false) ? c.email : nil
             let provenanceIsUnambiguous = (provenanceCounts[c.provenance ?? ""] ?? 0) <= 1
