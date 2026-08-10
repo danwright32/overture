@@ -162,7 +162,7 @@ struct AddLeadSheet: View {
                 Spacer()
                 Button("Close") { dismiss() }.buttonStyle(.plain).foregroundStyle(OVColor.inkSoft)
                 Button("Try another link") { model.reset(); urlFocused = true }
-                    .buttonStyle(.plain).foregroundStyle(OVColor.forest)
+                    .buttonStyle(.plain).foregroundStyle(OVColor.forestText)
             }
         }
     }
@@ -190,7 +190,7 @@ struct AddLeadSheet: View {
             HStack {
                 Spacer()
                 Button("Add another") { model.finishWatching(into: context); model.reset(); urlFocused = true }
-                    .buttonStyle(.plain).foregroundStyle(OVColor.forest)
+                    .buttonStyle(.plain).foregroundStyle(OVColor.forestText)
                 Button {
                     model.finishWatching(into: context)
                     dismiss()

@@ -537,7 +537,7 @@ struct QueueView: View {
                                                   prepRunning: prepRunning) {
                         Button(PrepQueueButton.label(count: rows.count)) { onStartPrep() }
                             .buttonStyle(.borderedProminent)
-                            .tint(OVColor.forest)
+                            .tint(OVColor.forestText)
                     }
                 }
                 .padding(.bottom, OVSpacing.xxs)
@@ -859,7 +859,7 @@ struct QueueView: View {
         let pendingBookings = QueueModel.pendingBookingCount(items)
         return VStack(alignment: .leading, spacing: OVSpacing.sm) {
             HStack(spacing: OVSpacing.xs) {
-                Text("Overture").font(OVType.wordmark).foregroundStyle(OVColor.forest)
+                Text("Overture").font(OVType.wordmark).foregroundStyle(OVColor.forestText)
                 #if DEBUG
                 // #377: a live app and a Debug build can be open side by side showing different
                 // data, so the masthead must make it unmistakable which window this is.
@@ -889,7 +889,7 @@ struct QueueView: View {
                 Text("high-fit").foregroundStyle(OVColor.inkFaint)
                 if pendingBookings > 0 {
                     Text("/").foregroundStyle(OVColor.lineStrong)
-                    Text("\(pendingBookings)").fontWeight(.semibold).foregroundStyle(OVColor.forest)
+                    Text("\(pendingBookings)").fontWeight(.semibold).foregroundStyle(OVColor.forestText)
                     Text("to confirm").foregroundStyle(OVColor.inkFaint)
                 }
             }
@@ -998,7 +998,7 @@ struct QueueView: View {
     private func agentColor(_ state: AgentState) -> Color {
         switch state {
         case .idle: return OVColor.inkFaint
-        case .working: return OVColor.forest
+        case .working: return OVColor.forestText
         case .needsAttention: return OVColor.gold
         case .error: return OVColor.rust
         }
@@ -1189,7 +1189,7 @@ struct QueueView: View {
                 // always-present control that refuses on press is the defect this replaces.
                 if let label = ReachedOutAction.of(r, in: p, now: now, today: today).label {
                     Button(label) { startRowAction(r, of: p, now: now) }
-                        .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forest)
+                        .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forestText)
                 }
             }
         }

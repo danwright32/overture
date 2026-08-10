@@ -10,7 +10,9 @@ struct OVPillTests {
     @Test func eachToneCarriesItsSemanticColour() {
         #expect(OVPillTone.warning.tint == OVColor.rust)
         #expect(OVPillTone.pending.tint == OVColor.gold)
-        #expect(OVPillTone.confirmed.tint == OVColor.forest)
+        // #2264: the readable token. The pill draws its tint as TEXT as well as a 12% fill, so it takes
+        // the text-safe green rather than the fill one, which measures 2.53 to 1 in the dark theme.
+        #expect(OVPillTone.confirmed.tint == OVColor.forestText)
         #expect(OVPillTone.neutral.tint == OVColor.inkFaint)
     }
 

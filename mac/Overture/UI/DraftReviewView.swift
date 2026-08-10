@@ -161,7 +161,7 @@ struct DraftReviewView: View {
                 Text(email).foregroundStyle(OVColor.ink)
             case let .form(url):
                 Link(destination: url) { Label("Contact form", systemImage: "link") }
-                    .foregroundStyle(OVColor.forest)
+                    .foregroundStyle(OVColor.forestText)
             case .none:
                 Text("No contact found").foregroundStyle(OVColor.inkFaint)
             }
@@ -476,7 +476,7 @@ struct DraftReviewView: View {
             // gets its own click (#394).
             if item.isSent && !item.hasPendingRecipient {
                 Label("Sent", systemImage: "paperplane.fill")
-                    .font(OVType.meta).foregroundStyle(OVColor.forest)
+                    .font(OVType.meta).foregroundStyle(OVColor.forestText)
 
                 // #792: "Sent" was the whole of it, and a contact held back by a review guard is not
                 // sendable, so the show read as fully done while that person never received anything.
@@ -698,7 +698,7 @@ struct DraftReviewView: View {
     private var addContactButton: some View {
         Button { showAddContact = true } label: {
             Label("Add contact", systemImage: "plus.circle")
-                .font(OVType.meta).foregroundStyle(OVColor.forest)
+                .font(OVType.meta).foregroundStyle(OVColor.forestText)
         }
         .buttonStyle(.plain)
         .popover(isPresented: $showAddContact, arrowEdge: .bottom) {
@@ -893,7 +893,7 @@ struct DraftReviewView: View {
     }
 
     private func contactStatusColor(_ c: RecipientSnapshot) -> Color {
-        if c.resolution == .booked { return OVColor.forest }
+        if c.resolution == .booked { return OVColor.forestText }
         if c.bounced || c.resolution == .declinedHard { return OVColor.rust }
         if c.replied { return OVColor.gold }
         return OVColor.inkSoft
@@ -950,7 +950,7 @@ struct DraftReviewView: View {
 
     private var derivedStatusColor: Color {
         switch item.performanceStatus {
-        case .booked: return OVColor.forest
+        case .booked: return OVColor.forestText
         case .active: return OVColor.gold
         case .lostDoorOpen: return OVColor.inkSoft
         // #1840: quiet, like the door-open close. It is a decision Dan made, not a setback to flag at him.
@@ -989,7 +989,7 @@ struct DraftReviewView: View {
 extension ReminderAccent {
     var color: Color {
         switch self {
-        case .onTrack: return OVColor.forest
+        case .onTrack: return OVColor.forestText
         case .attention: return OVColor.rust
         case .warm: return OVColor.gold
         case .neutral: return OVColor.inkSoft
@@ -1007,7 +1007,7 @@ private struct ConfidencePip: View {
         let label = confidence.label
         let color: Color = {
             switch confidence {
-            case .high: return OVColor.forest
+            case .high: return OVColor.forestText
             case .medium: return OVColor.gold
             case .low: return OVColor.rust
             }

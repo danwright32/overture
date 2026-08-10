@@ -20,7 +20,7 @@ struct ProbeDateCheckbox: View {
         } label: {
             Image(systemName: selection.contains(groupID) ? "checkmark.square.fill" : "square")
                 .font(.system(size: 12))
-                .foregroundStyle(selection.contains(groupID) ? OVColor.forest : OVColor.inkSoft)
+                .foregroundStyle(selection.contains(groupID) ? OVColor.forestText : OVColor.inkSoft)
         }
         .buttonStyle(.plain)
         .help("Include this date in one reachability check")

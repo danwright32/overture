@@ -5,7 +5,7 @@ import SwiftUI
 // ONE implementation rather than each keeping its own copy of the same styling.
 struct OVCapsuleButton: View {
     let label: String
-    var tint: Color = OVColor.forest
+    var tint: Color = OVColor.forestText
     let action: () -> Void
 
     var body: some View {

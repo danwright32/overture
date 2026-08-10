@@ -250,7 +250,7 @@ struct RunProgressView: View {
                     Button("Cancel", action: onCancel).buttonStyle(.plain).foregroundStyle(OVColor.rust)
                 }
                 if case .stalled = state, let onRetry {
-                    Button("Retry", action: onRetry).buttonStyle(.plain).foregroundStyle(OVColor.forest)
+                    Button("Retry", action: onRetry).buttonStyle(.plain).foregroundStyle(OVColor.forestText)
                 }
                 if let onHide {
                     Button("Hide") { onHide() }

@@ -293,11 +293,11 @@ struct ProspectRowView: View {
         VStack(spacing: 3) {
             Image(systemName: "checkmark.seal.fill")
                 .font(.system(size: 22))
-                .foregroundStyle(OVColor.forest)
+                .foregroundStyle(OVColor.forestText)
             Text("BOOKED")
                 .font(.system(size: 9, weight: .semibold))
                 .tracking(1.2)
-                .foregroundStyle(OVColor.forest)
+                .foregroundStyle(OVColor.forestText)
         }
         .frame(width: 64)
         .padding(.top, 2)
@@ -443,7 +443,7 @@ struct ProspectRowView: View {
                         // #1122: an underway run reads with the act-now colour too, not the faint
                         // "plenty of time" grey, since its remaining window is by definition short.
                         .foregroundStyle(timing.urgency == .imminent || timing.urgency == .underway ? OVColor.rust
-                                         : timing.urgency == .booked ? OVColor.forest : OVColor.inkFaint)
+                                         : timing.urgency == .booked ? OVColor.forestText : OVColor.inkFaint)
                 }
             }
             .font(OVType.meta.weight(.regular))
@@ -706,7 +706,7 @@ struct ProspectRowView: View {
                         .underline()
                 }
                 .font(OVType.meta)
-                .foregroundStyle(OVColor.forest)
+                .foregroundStyle(OVColor.forestText)
                 .multilineTextAlignment(.trailing)
             }
         }
@@ -847,22 +847,22 @@ struct ProspectRowView: View {
         let refs = QueueModel.rowReferenceLinks(item)
         if QueueModel.rowHasReferenceLinks(item) {
             HStack(spacing: OVSpacing.md) {
-                // #358: .tint(OVColor.forest) below does not recolor a Link's own text on macOS (tint
+                // #358: .tint(OVColor.forestText) below does not recolor a Link's own text on macOS (tint
                 // affects control accents, not text color), so the default bright system blue clashed
                 // with the forest/gold palette and made these secondary reference links read as more
                 // important than they are. Each link needs its own explicit override.
                 if let listing = refs.listing {
                     // #1680: the label says whether this goes to the show or only to the venue's calendar.
                     Link(QueueModel.listingLinkLabel(item), destination: listing)
-                        .foregroundStyle(OVColor.forest)
+                        .foregroundStyle(OVColor.forestText)
                 }
                 if let website = refs.website {
                     Link("Group website", destination: website)
-                        .foregroundStyle(OVColor.forest)
+                        .foregroundStyle(OVColor.forestText)
                 }
             }
             .font(.system(size: 12))
-            .tint(OVColor.forest)
+            .tint(OVColor.forestText)
             .padding(.top, 2)
         }
     }
@@ -943,7 +943,7 @@ struct ProspectRowView: View {
             // press with "something is already running" (#1323). A probe and a Prep share that slot.
             Button(ReachabilityCopy.checkAgain) { onRequestRecheck() }
                 .buttonStyle(.plain).font(OVType.meta)
-                .foregroundStyle(prepRunning ? OVColor.inkFaint : OVColor.forest)
+                .foregroundStyle(prepRunning ? OVColor.inkFaint : OVColor.forestText)
                 .disabled(prepRunning)
                 .help(prepRunning ? ReachabilityCopy.checkAgainBusyHelp : ReachabilityCopy.checkAgainHelp)
                 .padding(.top, 2)
@@ -967,7 +967,7 @@ struct ProspectRowView: View {
                     .fixedSize(horizontal: false, vertical: true)
                 Button(ReachabilityCopy.checkAgainRetry) { onRequestRecheck() }
                     .buttonStyle(.plain).font(OVType.meta)
-                    .foregroundStyle(prepRunning ? OVColor.inkFaint : OVColor.forest)
+                    .foregroundStyle(prepRunning ? OVColor.inkFaint : OVColor.forestText)
                     .disabled(prepRunning)
             }
             .padding(.top, 2)
@@ -1206,7 +1206,7 @@ private struct FlowTags: View {
 
     private func color(_ t: TagTone) -> Color {
         switch t {
-        case .good: return OVColor.forest
+        case .good: return OVColor.forestText
         case .warn: return OVColor.inkSoft
         case .history: return OVColor.gold
         case .info: return OVColor.inkSoft
@@ -1214,7 +1214,7 @@ private struct FlowTags: View {
     }
     private func fill(_ t: TagTone) -> Color {
         switch t {
-        case .good: return OVColor.forest.opacity(0.08)
+        case .good: return OVColor.forestText.opacity(0.08)
         case .warn: return OVColor.surfaceSunk
         case .history: return OVColor.gold.opacity(0.12)
         case .info: return OVColor.surfaceSunk
@@ -1222,7 +1222,7 @@ private struct FlowTags: View {
     }
     private func border(_ t: TagTone) -> Color {
         switch t {
-        case .good: return OVColor.forest.opacity(0.2)
+        case .good: return OVColor.forestText.opacity(0.2)
         case .warn: return OVColor.lineStrong
         case .history: return OVColor.gold.opacity(0.4)
         case .info: return OVColor.lineStrong

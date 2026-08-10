@@ -31,7 +31,7 @@ enum OVPillTone {
         case .warning: return OVColor.rust
         case .pending: return OVColor.gold
         case .tentative: return OVColor.goldDim
-        case .confirmed: return OVColor.forest
+        case .confirmed: return OVColor.forestText
         case .neutral: return OVColor.inkFaint
         }
     }

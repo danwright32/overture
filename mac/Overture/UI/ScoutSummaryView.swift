@@ -61,7 +61,7 @@ struct ScoutSummaryView: View {
             Spacer(minLength: OVSpacing.sm)
             Button(prompt.buttonLabel) { onRunAgain() }
                 .buttonStyle(.borderedProminent)
-                .tint(OVColor.forest)
+                .tint(OVColor.forestText)
         }
         .padding(OVSpacing.lg)
     }
@@ -201,7 +201,7 @@ struct ScoutSummaryView: View {
             if let urlString = ScoutSummaryRow.displayURL(result: result, source: source) {
                 if let url = URL(string: urlString) {
                     Link(urlString, destination: url)
-                        .font(.system(size: 11)).foregroundStyle(OVColor.forest).lineLimit(1)
+                        .font(.system(size: 11)).foregroundStyle(OVColor.forestText).lineLimit(1)
                 } else {
                     Text(urlString).font(.system(size: 11)).foregroundStyle(OVColor.inkFaint).lineLimit(1)
                 }
@@ -258,7 +258,7 @@ struct ScoutSummaryView: View {
             if let urlString = ScoutSummaryRow.displayURL(result: result, source: source) {
                 if let url = URL(string: urlString) {
                     Link(urlString, destination: url)
-                        .font(.system(size: 11)).foregroundStyle(OVColor.forest).lineLimit(1)
+                        .font(.system(size: 11)).foregroundStyle(OVColor.forestText).lineLimit(1)
                 } else {
                     Text(urlString).font(.system(size: 11)).foregroundStyle(OVColor.inkFaint).lineLimit(1)
                 }

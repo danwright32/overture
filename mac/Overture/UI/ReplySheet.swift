@@ -136,7 +136,7 @@ struct ReplySheet: View {
                 .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
                 .fixedSize(horizontal: false, vertical: true)
             Button(ReplyPanelCopy.saveWriter) { composition.audienceControls?.saveWriter() }
-                .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forest)
+                .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forestText)
                 .help(ReplyPanelCopy.saveWriterHelp)
             Spacer()
         }
@@ -147,7 +147,7 @@ struct ReplySheet: View {
         HStack(spacing: OVSpacing.xs) {
             Text(entry.address).font(OVType.meta).foregroundStyle(OVColor.ink)
             if entry.wrote {
-                Text(ReplyPanelCopy.wroteThis).font(OVType.meta).foregroundStyle(OVColor.forest)
+                Text(ReplyPanelCopy.wroteThis).font(OVType.meta).foregroundStyle(OVColor.forestText)
             }
             // Removable only where removing means something: taking an address off a show's reply also
             // stops that show emailing the contact. An inquiry is one person and has no such list.
@@ -217,7 +217,7 @@ struct ReplySheet: View {
                     .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
                     .fixedSize(horizontal: false, vertical: true)
                 Button(ReplyPanelCopy.useTheDraft) { apply(ReplyPanel.taking(composeState)) }
-                .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forest)
+                .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forestText)
                 .help(ReplyPanelCopy.useTheDraftHelp)
                 Spacer()
             }
@@ -298,7 +298,7 @@ struct ReplySheet: View {
             // to. Scoped to THIS reply, so it spends on the one conversation he asked about.
             } else if phase.runningLabel == nil {
                 Button(ReplyPanelCopy.draftWithAI) { draft.request() }
-                    .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forest)
+                    .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forestText)
                     .help(ReplyPanelCopy.draftWithAIHelp)
             }
         }

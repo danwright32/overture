@@ -104,7 +104,7 @@ struct OutcomePatternsView: View {
                         Text(OutcomePatterns.autoDetectedLine(tally)).underline()
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(OVColor.forest)
+                    .foregroundStyle(OVColor.forestText)
                     .help("Show which bookings were auto-detected")
                     if tally.bookedManual > 0 {
                         Text("·").foregroundStyle(OVColor.inkFaint)

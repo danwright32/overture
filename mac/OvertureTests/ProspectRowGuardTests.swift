@@ -193,7 +193,8 @@ struct ReferenceLinkColorGuardTests {
         #expect(linksBody?.contains("Link(\"Group website\"") == true)
         // Two links, each with its own override: a shared .tint() further down the modifier
         // chain doesn't reach either Link's own text color.
-        let overrideCount = (linksBody?.components(separatedBy: ".foregroundStyle(OVColor.forest)").count ?? 1) - 1
+        // #2264: the text-safe green, which is what a Link's own label needs.
+        let overrideCount = (linksBody?.components(separatedBy: ".foregroundStyle(OVColor.forestText)").count ?? 1) - 1
         #expect(overrideCount == 2)
     }
 }
