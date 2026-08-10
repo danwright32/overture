@@ -284,7 +284,8 @@ enum PrepImporter {
             // to a pending recipient or create one, so without this a deleted row is indistinguishable
             // from one never found and this very run would put the address straight back. That is the
             // whole thing striking it before the run exists to prevent.
-            if refusals.isRefused(email: c.email, showKey: p.naturalKey, orgKey: orgKey) { continue }
+            if refusals.isRefused(email: c.email, formURL: c.formUrl,
+                                  showKey: p.naturalKey, orgKey: orgKey) { continue }   // #2392/#2438
             // #2421: a contact with no address whose only handle is a social profile is not a contact,
             // so it is never created rather than created for every surface downstream to explain. Dan's
             // call, 2026-08-10, on a card listing seven people he could reach one of. The app had already

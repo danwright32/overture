@@ -26,14 +26,24 @@ final class RefusedContactAddress {
 
     var scopeRaw: String        // "show" | "organisation"
     var scopeId: String         // the prospect's naturalKey, or the OrgKey.stored key
-    var emailKey: String        // the canonical address, through ReplyDetection.email
+    // #2438: the CONTACT's handle, which is `Recipient.makeId`: the canonical address when there is one,
+    // else `form:<url>`. It held addresses only until now, and a form-only contact therefore had no shape
+    // to be refused in at all: striking one hard-deleted a pending row, which the next run could not tell
+    // from one never found, so it came straight back (L92).
+    //
+    // Renamed rather than joined by a second field, so there is one answer to "is this contact struck".
+    // The rename is purely nominal and needs no value migration: `makeId` canonicalizes an address
+    // through the very same `ReplyDetection.email` this column already stored, so every row already
+    // holds a valid handle. `RefusedHandleMigrationLiveStoreTests` rehearses it on a copy of the real
+    // store rather than trusting that.
+    @Attribute(originalName: "emailKey") var handleKey: String
     var refusedAt: Date
 
-    init(id: String, scopeRaw: String, scopeId: String, emailKey: String, refusedAt: Date) {
+    init(id: String, scopeRaw: String, scopeId: String, handleKey: String, refusedAt: Date) {
         self.id = id
         self.scopeRaw = scopeRaw
         self.scopeId = scopeId
-        self.emailKey = emailKey
+        self.handleKey = handleKey
         self.refusedAt = refusedAt
     }
 }
@@ -74,31 +84,34 @@ enum ContactRefusal {
     // which address they name, whatever case or display-name wrapping a run reports it in.
     // `nonisolated` so the Ledger value below (a Sendable struct read off the main actor's store but
     // usable anywhere) can canonicalize through the very same function rather than a second copy of it.
-    nonisolated static func key(for email: String?) -> String? {
-        guard let email else { return nil }
-        let canonical = ReplyDetection.email(from: email)
-        return canonical.isEmpty ? nil : canonical
+    // #2438: takes the form as well, so a contact whose only handle is one can be refused at all. Built
+    // through `Recipient.makeId`, the same function the recipient's own id comes from, so a refusal and
+    // the contact it refuses can never disagree about what names it.
+    nonisolated static func key(for email: String?, formURL: String? = nil) -> String? {
+        guard let handle = Recipient.makeId(email: email, formURL: formURL) else { return nil }
+        return handle.isEmpty ? nil : handle
     }
 
     // The one spelling of a refusal's identity. Both the writer and the reader below go through it, so
     // a strike and the check for it cannot drift into building the same key two different ways.
-    nonisolated static func rowId(scopeRaw: String, scopeId: String, emailKey: String) -> String {
-        "\(scopeRaw)|\(scopeId)|\(emailKey)"
+    nonisolated static func rowId(scopeRaw: String, scopeId: String, handleKey: String) -> String {
+        "\(scopeRaw)|\(scopeId)|\(handleKey)"
     }
 
-    private static func rowId(scope: Scope, emailKey: String) -> String {
-        rowId(scopeRaw: scope.raw, scopeId: scope.id, emailKey: emailKey)
+    private static func rowId(scope: Scope, handleKey: String) -> String {
+        rowId(scopeRaw: scope.raw, scopeId: scope.id, handleKey: handleKey)
     }
 
     // Dan struck this address. Idempotent: the unique id means a repeat is the same refusal rather than
     // a second row that one `allow` would leave standing.
-    static func refuse(email: String, scope: Scope, in context: ModelContext, now: Date = Date()) {
-        guard let emailKey = key(for: email) else { return }
-        let id = rowId(scope: scope, emailKey: emailKey)
+    static func refuse(email: String?, formURL: String? = nil, scope: Scope,
+                       in context: ModelContext, now: Date = Date()) {
+        guard let handleKey = key(for: email, formURL: formURL) else { return }
+        let id = rowId(scope: scope, handleKey: handleKey)
         let existing = ((try? context.fetch(FetchDescriptor<RefusedContactAddress>())) ?? [])
         guard !existing.contains(where: { $0.id == id }) else { return }
         context.insert(RefusedContactAddress(id: id, scopeRaw: scope.raw, scopeId: scope.id,
-                                             emailKey: emailKey, refusedAt: now))
+                                             handleKey: handleKey, refusedAt: now))
         try? context.save()
     }
 
@@ -106,11 +119,12 @@ enum ContactRefusal {
     // "if they want to add it back they can"). Adding an address back is an explicit statement that it is
     // fine, so it clears the refusal at BOTH levels rather than leaving an organisation-level strike
     // standing behind a contact now sitting on the card.
-    static func allow(email: String, showKey: String?, orgKey: String?, in context: ModelContext) {
-        guard let emailKey = key(for: email) else { return }
+    static func allow(email: String?, formURL: String? = nil, showKey: String?, orgKey: String?,
+                      in context: ModelContext) {
+        guard let handleKey = key(for: email, formURL: formURL) else { return }
         var ids = Set<String>()
-        if let showKey { ids.insert(rowId(scope: .show(showKey), emailKey: emailKey)) }
-        if let orgKey { ids.insert(rowId(scope: .organisation(orgKey), emailKey: emailKey)) }
+        if let showKey { ids.insert(rowId(scope: .show(showKey), handleKey: handleKey)) }
+        if let orgKey { ids.insert(rowId(scope: .organisation(orgKey), handleKey: handleKey)) }
         guard !ids.isEmpty else { return }
 
         let rows = ((try? context.fetch(FetchDescriptor<RefusedContactAddress>())) ?? [])
@@ -130,7 +144,7 @@ enum ContactRefusal {
     // than at each of the three surfaces that need it, so the store-to-value mapping cannot drift.
     static func ledger(from rows: [RefusedContactAddress]) -> Ledger {
         Ledger(rows: rows.map { Ledger.Row(scopeRaw: $0.scopeRaw, scopeId: $0.scopeId,
-                                           emailKey: $0.emailKey) })
+                                           handleKey: $0.handleKey) })
     }
 
     // The reader, as a value, so every rule that consults it is testable without a store and there is
@@ -139,7 +153,7 @@ enum ContactRefusal {
         struct Row: Equatable, Hashable, Sendable {
             let scopeRaw: String
             let scopeId: String
-            let emailKey: String
+            let handleKey: String
         }
 
         private let rows: [Row]
@@ -150,7 +164,7 @@ enum ContactRefusal {
         init(rows: [Row]) {
             self.rows = rows
             ids = Set(rows.map {
-                ContactRefusal.rowId(scopeRaw: $0.scopeRaw, scopeId: $0.scopeId, emailKey: $0.emailKey)
+                ContactRefusal.rowId(scopeRaw: $0.scopeRaw, scopeId: $0.scopeId, handleKey: $0.handleKey)
             })
         }
 
@@ -158,14 +172,16 @@ enum ContactRefusal {
 
         // Struck for THIS show, or for the organisation it belongs to. Either is enough; neither implies
         // the other, which is the whole reason the scope is stored rather than inferred.
-        func isRefused(email: String?, showKey: String?, orgKey: String?) -> Bool {
-            guard !ids.isEmpty, let emailKey = ContactRefusal.key(for: email) else { return false }
+        func isRefused(email: String?, formURL: String? = nil,
+                       showKey: String?, orgKey: String?) -> Bool {
+            guard !ids.isEmpty,
+                  let handleKey = ContactRefusal.key(for: email, formURL: formURL) else { return false }
             if let showKey, ids.contains(ContactRefusal.rowId(scopeRaw: Scope.showRaw,
-                                                             scopeId: showKey, emailKey: emailKey)) {
+                                                             scopeId: showKey, handleKey: handleKey)) {
                 return true
             }
             if let orgKey, ids.contains(ContactRefusal.rowId(scopeRaw: Scope.organisationRaw,
-                                                            scopeId: orgKey, emailKey: emailKey)) {
+                                                            scopeId: orgKey, handleKey: handleKey)) {
                 return true
             }
             return false
@@ -174,19 +190,32 @@ enum ContactRefusal {
         // Every address struck for this show or its organisation, sorted, for the work-list the prep run
         // reads. Sorted so the same store always writes byte-identical JSON: a set's iteration order is
         // not stable, and an unstable queue file makes two identical runs look different in the diff.
+        // #2438: ADDRESSES only, not every handle. This fills `refusedEmails` in the queue file, which
+        // `docs/prep-runbook.md` reads as a list of email addresses, so putting `form:<url>` in it would
+        // be a value the run cannot interpret and a contract quietly saying something it does not mean.
+        //
+        // The consequence is named rather than hidden: a struck FORM contact is refused on the way back
+        // in (the importer never re-creates it) but the run is not told about it in advance, so it can
+        // still spend a lookup rediscovering one. Carrying it down needs its own field and a queue
+        // version bump, which is the remaining half of this issue.
         func struckAddresses(showKey: String?, orgKey: String?) -> [String] {
             guard !ids.isEmpty else { return [] }
             var out = Set<String>()
-            for row in rows {
+            for row in rows where !row.handleKey.hasPrefix(Self.formHandlePrefix) {
                 if let showKey, row.scopeRaw == Scope.showRaw, row.scopeId == showKey {
-                    out.insert(row.emailKey)
+                    out.insert(row.handleKey)
                 }
                 if let orgKey, row.scopeRaw == Scope.organisationRaw, row.scopeId == orgKey {
-                    out.insert(row.emailKey)
+                    out.insert(row.handleKey)
                 }
             }
             return out.sorted()
         }
+
+        // The spelling `Recipient.makeId` gives a form-only contact, as a named constant rather than a
+        // literal repeated at each comparison.
+        static let formHandlePrefix = "form:"
+
 
         func allowed(_ emails: [String], showKey: String?, orgKey: String?) -> [String] {
             guard !ids.isEmpty else { return emails }
