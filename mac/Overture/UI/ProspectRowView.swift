@@ -660,13 +660,21 @@ struct ProspectRowView: View {
                         // Visible at rest, not on hover: an interactive element styled like static text
                         // ships as an invisible feature (L49), and this one exists precisely because he
                         // was looking straight at the addresses with nothing to do about them.
-                        Button { onRemoveContactAddress(address) } label: {
-                            Image(systemName: "xmark.circle")
-                                .foregroundStyle(OVColor.inkFaint)
+                        // Withheld once this address has been written to, or once the show is resolved:
+                        // the same rule the review panel's own leading X follows, decided in
+                        // ContactRowControls so the two surfaces cannot drift into offering one action
+                        // at two different levels of exposure.
+                        if ContactRowControls.strikeIsOffered(
+                            sendState: address.sendState,
+                            showIsResolved: item.sentAt != nil || item.isBooked) {
+                            Button { onRemoveContactAddress(address) } label: {
+                                Image(systemName: "xmark.circle")
+                                    .foregroundStyle(OVColor.inkFaint)
+                            }
+                            .buttonStyle(.plain)
+                            .help(ReachabilityCopy.removeAddressHelp)
+                            .accessibilityLabel(ReachabilityCopy.removeAddressLabel(address.email))
                         }
-                        .buttonStyle(.plain)
-                        .help(ReachabilityCopy.removeAddressHelp)
-                        .accessibilityLabel(ReachabilityCopy.removeAddressLabel(address.email))
                         Text(address.email)
                             .font(OVType.meta)
                             .foregroundStyle(OVColor.inkSoft)

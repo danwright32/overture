@@ -345,16 +345,21 @@ struct QueueItem: Identifiable, Equatable, Sendable {
         // nil means the address is inherited: there is no Recipient on this show to delete, and striking
         // it is a fact about the ORGANISATION (Dan's call, 2026-08-09).
         let recipientId: String?
+        // nil for the same reason, and for the same address: an inherited one has no contact here to have
+        // a send state. It is what decides whether the strike is offered (ContactRowControls).
+        let sendState: SendState?
         var id: String { email }
     }
 
     var displayedContactAddresses: [DisplayedAddress] {
         let own = contacts.compactMap { c -> DisplayedAddress? in
             let email = (c.email ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            return email.isEmpty ? nil : DisplayedAddress(email: email, recipientId: c.id)
+            return email.isEmpty ? nil : DisplayedAddress(email: email, recipientId: c.id,
+                                                          sendState: c.sendState)
         }
         guard own.isEmpty else { return own }
-        return (inheritedReachability?.emails ?? []).map { DisplayedAddress(email: $0, recipientId: nil) }
+        return (inheritedReachability?.emails ?? [])
+            .map { DisplayedAddress(email: $0, recipientId: nil, sendState: nil) }
     }
 
 
