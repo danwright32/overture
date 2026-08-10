@@ -40,7 +40,7 @@ struct AppNoticeLines: View {
                 Button(action.title) { perform(action) }
                     .buttonStyle(.plain)
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(OVColor.forest)
+                    .foregroundStyle(OVColor.forestText)
             }
             Spacer(minLength: 0)
         }

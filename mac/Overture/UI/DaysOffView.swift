@@ -105,7 +105,7 @@ struct DaysOffView: View {
                 if !showAdd { addBaseline = currentDraft }   // #928: snapshot the form as it opens
                 showAdd.toggle(); addMessage = nil
             }
-                .buttonStyle(.plain).font(.system(size: 12)).foregroundStyle(OVColor.forest)
+                .buttonStyle(.plain).font(.system(size: 12)).foregroundStyle(OVColor.forestText)
             Button("Done") { done() }.keyboardShortcut(.defaultAction)
         }
         .padding(OVSpacing.lg)
@@ -178,7 +178,7 @@ struct DaysOffView: View {
                 // and then forgotten. Offered only while the mark is actually up.
                 if DaysOffAttention.needsALook(calendar) {
                     Button(DaysOffAttention.snoozeButtonTitle) { snooze() }
-                        .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(OVColor.forest)
+                        .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(OVColor.forestText)
                         .padding(.top, 2)
                 }
             } else {
@@ -191,7 +191,7 @@ struct DaysOffView: View {
                         .fixedSize(horizontal: false, vertical: true)
                     if DaysOffAttention.needsALook(calendar, feedStalled: true) {
                         Button(DaysOffAttention.snoozeButtonTitle) { snooze() }
-                            .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(OVColor.forest)
+                            .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(OVColor.forestText)
                             .padding(.top, 2)
                     }
                 }
@@ -229,7 +229,7 @@ struct DaysOffView: View {
                         }
                         Spacer()
                         Button("Remove") { remove(row) }
-                            .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(OVColor.forest)
+                            .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(OVColor.forestText)
                     }
                     .padding(.vertical, 3)
                 }

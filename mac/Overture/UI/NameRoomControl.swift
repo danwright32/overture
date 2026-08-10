@@ -26,7 +26,7 @@ struct NameRoomControl: View {
                     .font(OVType.meta.weight(.regular))
                     .frame(maxWidth: 180)
                     .onSubmit { commit() }
-                OVCapsuleButton(label: UnplacedRoomCopy.save, tint: OVColor.forest) { commit() }
+                OVCapsuleButton(label: UnplacedRoomCopy.save, tint: OVColor.forestText) { commit() }
                 OVCapsuleButton(label: UnplacedRoomCopy.cancel, tint: OVColor.inkSoft) {
                     editing = false
                 }
@@ -40,7 +40,7 @@ struct NameRoomControl: View {
             }
             .buttonStyle(.plain)
             .font(OVType.meta.weight(.regular))
-            .foregroundStyle(OVColor.forest)
+            .foregroundStyle(OVColor.forestText)
             .underline()
             .accessibilityLabel(UnplacedRoomCopy.askOnCardAccessible(room: room))
         }

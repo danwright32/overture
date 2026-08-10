@@ -51,7 +51,7 @@ struct ReplyConversationView: View {
                 drafting
             } else {
                 Button("Draft a reply") { onDraftReply(contact.id) }
-                    .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forest)
+                    .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forestText)
                     .padding(.horizontal, OVSpacing.sm).padding(.vertical, 4)
                     .background(Capsule().strokeBorder(OVColor.forest.opacity(0.4), lineWidth: 1))
             }
@@ -123,9 +123,9 @@ struct ReplyConversationView: View {
             .buttonStyle(.plain).disabled(!gmailConnected)
             .help(GmailCopy.sendHelp(connected: gmailConnected, whenConnected: "Send this reply on the contact's thread"))
             Button("Edit") { editText = contact.replyDraftBody ?? ""; isEditing = true }
-                .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forest)
+                .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forestText)
             Button("Copy") { onCopyReply(contact.id) }
-                .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forest)
+                .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forestText)
                 .help("Copy the draft and mark it replied (paste it into Gmail yourself)")
         }
     }

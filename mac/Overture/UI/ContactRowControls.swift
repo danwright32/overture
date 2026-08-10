@@ -38,7 +38,7 @@ enum ContactRowControls {
         case conversationState
         var color: Color {
             switch self {
-            case .outcome: return OVColor.forest
+            case .outcome: return OVColor.forestText
             case .conversationState: return OVColor.gold
             }
         }

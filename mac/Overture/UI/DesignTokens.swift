@@ -35,9 +35,29 @@ enum OVColor {
         dark: NSColor(srgbRed: 0.522, green: 0.553, blue: 0.510, alpha: 1)
     )
 
+    // The brand green as a FILL, with `onForest` drawn on top of it. Never as text: see `forestText`.
     static let forest = dynamic(
         light: NSColor(srgbRed: 0.180, green: 0.322, blue: 0.224, alpha: 1),
         dark: NSColor(srgbRed: 0.220, green: 0.388, blue: 0.275, alpha: 1)
+    )
+
+    // #2264: forest as TEXT, which is a different question from forest as a fill and, like `goldText`
+    // before it, had never been asked. Dan, looking at a source row in the dark theme on 2026-08-07: the
+    // two controls the row exists to get an answer from ("Name the venue", "Add address") were the two
+    // that looked least available, and read at a glance as switched off.
+    //
+    // Measured rather than judged, which is what settled it. Plain `forest` as text on the dark canvas is
+    // 2.53 to 1, below even the 3 to 1 a large heading needs, while the neutral controls beside it
+    // ("Read this one now", "Stop watching") use `inkSoft` and measure 8.64. So the row's POSITIVE actions
+    // really were its dimmest, and dimming is the recognised convention for "you cannot press this": the
+    // reading was not "I did not notice it" but "I am not allowed to" (L49, one step worse).
+    //
+    // Lightened in the DARK theme only, which is the half that failed: light measures 7.26 on the sunk
+    // surface and lifting it there would only wash it out. `ForestTextColourTests` measures both themes
+    // against all three backgrounds, so this cannot regress by eye the way the original was chosen.
+    static let forestText = dynamic(
+        light: NSColor(srgbRed: 0.180, green: 0.322, blue: 0.224, alpha: 1),
+        dark: NSColor(srgbRed: 0.341, green: 0.601, blue: 0.426, alpha: 1)
     )
 
     // Warm gold accent (the single signal colour)

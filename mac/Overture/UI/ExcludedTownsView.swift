@@ -82,7 +82,7 @@ struct ExcludedTownsView: View {
                             .font(.system(size: 12, weight: .medium)).foregroundStyle(OVColor.ink)
                         Spacer()
                         Button("Remove") { remove(row.town) }
-                            .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(OVColor.forest)
+                            .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(OVColor.forestText)
                     }
                     .padding(.vertical, 3)
                 }
@@ -106,7 +106,7 @@ struct ExcludedTownsView: View {
                         .font(.system(size: 12, weight: .medium)).foregroundStyle(OVColor.ink)
                     Spacer()
                     Button("Allow") { allow(town) }
-                        .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(OVColor.forest)
+                        .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(OVColor.forestText)
                 }
                 .padding(.vertical, 3)
             }
@@ -128,7 +128,7 @@ struct ExcludedTownsView: View {
                             .font(.system(size: 12, weight: .medium)).foregroundStyle(OVColor.ink)
                         Spacer()
                         Button("Skip again") { reskip(town) }
-                            .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(OVColor.forest)
+                            .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(OVColor.forestText)
                     }
                     .padding(.vertical, 3)
                 }

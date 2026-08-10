@@ -321,7 +321,7 @@ struct SourcesView: View {
                 }
                 Spacer()
                 if editingRoomKey != room.key {
-                    OVCapsuleButton(label: UnplacedRoomCopy.add, tint: OVColor.forest) {
+                    OVCapsuleButton(label: UnplacedRoomCopy.add, tint: OVColor.forestText) {
                         roomDraft = ""
                         editingRoomKey = room.key
                     }
@@ -336,7 +336,7 @@ struct SourcesView: View {
                     OVCapsuleButton(label: UnplacedRoomCopy.cancel, tint: OVColor.inkSoft) {
                         editingRoomKey = nil
                     }
-                    OVCapsuleButton(label: UnplacedRoomCopy.save, tint: OVColor.forest) {
+                    OVCapsuleButton(label: UnplacedRoomCopy.save, tint: OVColor.forestText) {
                         saveRoomPlace(room)
                     }
                 }
@@ -390,7 +390,7 @@ struct SourcesView: View {
                         Text(client.displayName).font(.system(size: 11)).foregroundStyle(OVColor.inkSoft)
                         Spacer()
                         Button(CoverageCopy.restoreLabel) { restoreCoverageClient(client.id) }
-                            .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(OVColor.forest)
+                            .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(OVColor.forestText)
                     }
                     .padding(.vertical, OVSpacing.xxs)
                 }
@@ -420,7 +420,7 @@ struct SourcesView: View {
             }
             Spacer()
             Button(WatchlistEditing.addButtonTitle(isOpen: showAdd)) { showAdd.toggle(); addMessage = nil }
-                .buttonStyle(.plain).font(.system(size: 12)).foregroundStyle(OVColor.forest)
+                .buttonStyle(.plain).font(.system(size: 12)).foregroundStyle(OVColor.forestText)
             Button("Done") { close() }.keyboardShortcut(.defaultAction)
         }
         .padding(OVSpacing.lg)
@@ -615,7 +615,7 @@ struct SourcesView: View {
                     OVCapsuleButton(label: VenueLocationCopy.cancel, tint: OVColor.inkSoft) {
                         editingLocationFor = nil
                     }
-                    OVCapsuleButton(label: VenueLocationCopy.save, tint: OVColor.forest) {
+                    OVCapsuleButton(label: VenueLocationCopy.save, tint: OVColor.forestText) {
                         saveLocation(source)
                     }
                 }
@@ -635,7 +635,7 @@ struct SourcesView: View {
                     .font(.system(size: 11)).foregroundStyle(OVColor.gold)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer()
-                OVCapsuleButton(label: VenueLocationCopy.add, tint: OVColor.forest) {
+                OVCapsuleButton(label: VenueLocationCopy.add, tint: OVColor.forestText) {
                     beginEditingLocation(source)
                 }
             }
@@ -669,7 +669,7 @@ struct SourcesView: View {
                     OVCapsuleButton(label: VenueNameCopy.cancel, tint: OVColor.inkSoft) {
                         editingVenueNameFor = nil
                     }
-                    OVCapsuleButton(label: VenueNameCopy.save, tint: OVColor.forest) {
+                    OVCapsuleButton(label: VenueNameCopy.save, tint: OVColor.forestText) {
                         saveVenueName(source)
                     }
                 }
@@ -694,7 +694,7 @@ struct SourcesView: View {
                     .foregroundStyle(unnamed.isCostingShows ? OVColor.gold : OVColor.inkSoft)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer()
-                OVCapsuleButton(label: VenueNameCopy.add, tint: OVColor.forest) {
+                OVCapsuleButton(label: VenueNameCopy.add, tint: OVColor.forestText) {
                     beginEditingVenueName(source)
                 }
             }
@@ -1044,7 +1044,7 @@ struct SourcesView: View {
             if SourceGrade(source) == .removed {
                 HStack {
                     Spacer()
-                    OVCapsuleButton(label: "Watch again", tint: OVColor.forest) {
+                    OVCapsuleButton(label: "Watch again", tint: OVColor.forestText) {
                         resumeWatching(source)
                     }
                 }

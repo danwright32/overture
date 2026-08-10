@@ -131,7 +131,7 @@ struct SourceFixConfirmActions: View {
                         .help(SourceFixConfirmCopy.stopWatchingHelp)
                 }
                 if offersConfirm, !editing {
-                    capsule(SourceFixConfirmCopy.confirmTitle, tint: OVColor.forest, action: confirm)
+                    capsule(SourceFixConfirmCopy.confirmTitle, tint: OVColor.forestText, action: confirm)
                         .help(SourceFixConfirmCopy.confirmHelp)
                 }
                 if offersFix {
@@ -139,7 +139,7 @@ struct SourceFixConfirmActions: View {
                         capsule(SourceFixConfirmCopy.cancelTitle, tint: OVColor.inkSoft) {
                             editing = false; message = nil
                         }
-                        capsule(SourceFixConfirmCopy.saveTitle, tint: OVColor.forest, action: saveURL)
+                        capsule(SourceFixConfirmCopy.saveTitle, tint: OVColor.forestText, action: saveURL)
                     } else {
                         capsule(SourceFixConfirmCopy.fixTitle, tint: OVColor.inkSoft) {
                             draftURL = source.listingsURL ?? ""
