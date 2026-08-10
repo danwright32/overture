@@ -326,12 +326,23 @@ extension CopyInventory.Inventory {
     // see (which sentences did this PR add, remove or reword) would be buried in noise. Sorted by the
     // words themselves, a new sentence is one added line, and near-identical wordings land next to each
     // other, which is how a duplicate gets noticed.
+    // #2349: the header states the SENTENCE count and no longer the file count.
+    //
+    // A scanned-file count moves whenever any Swift file is added anywhere in the app, including one
+    // carrying no copy at all, so two branches open at once each recorded their own and the second went
+    // red on main purely because the number had drifted underneath it. Measured three times in one
+    // session on 2026-08-10 (402 to 404 to 406 to 407), each costing a full suite rerun, and each red
+    // reading as a copy change when no sentence had moved.
+    //
+    // Dropping it from the FILE loses nothing: `filesScanned` still exists on this value and is still
+    // asserted (CopyInventoryTests, ProducerCorrectionControlTests), so the guard against a scan that
+    // walked nothing is the test, never the printed number. What remains in the header is the sentence
+    // count, which moves exactly when the copy does, so a red here is always a real copy change.
     func render() -> String {
         var out = """
         # Copy inventory
 
-        Every sentence Overture can say to Dan: **\(occurrences.count) sentences**, from \
-        \(filesScanned) source files.
+        Every sentence Overture can say to Dan: **\(occurrences.count) sentences**.
 
         Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
         and fails if it is stale, so a PR that changes what the app says shows the change here, in the
