@@ -396,9 +396,17 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // Prospect.usableContactFormURLs uses. The card and the stored verdict have to agree here: if only
     // one of them learned the rule, the row would read "No email found" while still offering the room's
     // form as a link right underneath it.
+    // #2421: per CONTACT, not per show. It used to return nothing at all whenever ANY address was on the
+    // show, which was right while a form-only contact was something to be tolerated and is wrong now that
+    // a real form is a route Dan deliberately keeps (his call, 2026-08-10): on a mixed show it left the
+    // form-only people reading "No email yet" with no way to act, which is the state he was looking at.
+    //
+    // A contact that HAS an address is still never offered a form: its address is the way in, and the
+    // form beside it would be a second control for the same person.
     var displayedContactForms: [URL] {
-        guard displayedContactEmails.isEmpty else { return [] }
-        return contacts.compactMap(usableContactFormURL)
+        contacts
+            .filter { ($0.email ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .compactMap(usableContactFormURL)
     }
 
     // #1961: the one predicate behind both the links the card offers and the count printed above them,
@@ -421,12 +429,16 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // a form counts only when the card would offer it, which it does only where there is no address at
     // all (#1626). Counted over the show's own contacts and never the organisation's inherited
     // addresses, so the number can never come out larger than the number of people found.
+    // #2421: a contact counts as reachable when IT has a route, whether that is an address or a form the
+    // card will offer. It used to count addresses and fall back to forms only on a show with no address
+    // at all, so a kept form contact beside an emailable one read as a missing address: "7 found, 1
+    // reachable" on a card where six of the seven were people, not gaps. Now that a real form is a route
+    // Dan keeps deliberately, the number and the list under it say the same thing.
     var reachableContactCount: Int {
-        let withAddress = contacts.filter {
-            !($0.email ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }
-        guard withAddress.isEmpty else { return withAddress.count }
-        return contacts.compactMap(usableContactFormURL).count
+        contacts.filter { c in
+            let address = (c.email ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            return !address.isEmpty || usableContactFormURL(c) != nil
+        }.count
     }
 
     // #1628: which of the printed contacts the check was NOT sure about. The badge above says what KIND
