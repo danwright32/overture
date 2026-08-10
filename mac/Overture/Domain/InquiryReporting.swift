@@ -37,9 +37,13 @@ enum InquiryReporting {
     // closed before that was captured (or by a later version this build can't read) falls back to what
     // the timestamps can honestly support, so it still lands in the lost column rather than vanishing
     // from the year-end total.
-    static func lostReason(for inquiry: Inquiry) -> InquiryLostReason? {
+    static func ending(for inquiry: Inquiry) -> ShowOutcome? {
+        if inquiry.outcome == .booked { return .booked }
         guard stage(for: inquiry) == .lost else { return nil }
-        if let stated = inquiry.lostReason { return stated }
+        if let stated = inquiry.showOutcome { return stated }
+        // #2400: a silence is the honest fallback. An inquiry closed before the answer was captured cannot
+        // support a claim that anybody refused anything, and this at least keeps it in the year-end total
+        // rather than letting it vanish from the column it belongs in.
         return .neverHeardBack
     }
 

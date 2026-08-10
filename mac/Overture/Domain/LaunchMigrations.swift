@@ -52,6 +52,7 @@ enum LaunchMigrations {
         // first would count that value as unrecognised and leave those rows with no outcome at all.
         // Idempotent, guarded by "this row has no outcome yet", so it fills each once and no-ops after.
         ShowOutcomeBackfill.run(in: context)
+        ShowOutcomeBackfill.runForInquiries(in: context)
         // #1626: a show already checked before "contact form only" existed reads as a dead end while
         // holding a usable form link. Upgrades that one verdict and nothing else. Idempotent.
         ContactFormResultMigration.run(in: context)

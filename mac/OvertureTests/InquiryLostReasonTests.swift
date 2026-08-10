@@ -9,7 +9,7 @@ import SwiftData
 // the client said no or Dan turned it down. Captured at the moment Dan closes the inquiry, which is the
 // only moment anyone knows.
 @MainActor
-@Suite("Why an inquiry was lost")
+@Suite("Why an inquiry ended")
 struct InquiryLostReasonTests {
     private func container() throws -> ModelContainer {
         try ModelContainer(for: Schema([Inquiry.self]),
@@ -28,13 +28,13 @@ struct InquiryLostReasonTests {
     func eachReasonClosesAndRecords() throws {
         let ctx = ModelContext(try container())
 
-        for reason in InquiryLostReason.allCases {
+        for reason in InquiryEnding.danCanChoose {
             let inq = make(ctx)
             InquiryMutations.mark(inq, as: .lost(reason), context: ctx,
                                   feedback: ActionFeedback(), now: Date())
 
             #expect(!inq.isOpen, "\(reason) left the inquiry open")
-            #expect(inq.lostReason == reason)
+            #expect(inq.showOutcome == reason)
             #expect(inq.outcomeSourceRaw == OutcomeSource.manual.rawValue)
         }
     }
@@ -44,14 +44,14 @@ struct InquiryLostReasonTests {
     @Test("a client's refusal is the hard lost case, Dan's own pass and a silence are not")
     func refusalIsHardTheOthersAreSoft() throws {
         let ctx = ModelContext(try container())
-        let declined = make(ctx), notAFit = make(ctx), quiet = make(ctx)
+        let declined = make(ctx), ownPass = make(ctx), quiet = make(ctx)
 
-        InquiryMutations.mark(declined, as: .lost(.theyDeclined), context: ctx, feedback: ActionFeedback(), now: Date())
-        InquiryMutations.mark(notAFit, as: .lost(.notAFit), context: ctx, feedback: ActionFeedback(), now: Date())
+        InquiryMutations.mark(declined, as: .lost(.theySaidNo), context: ctx, feedback: ActionFeedback(), now: Date())
+        InquiryMutations.mark(ownPass, as: .lost(.turnedThemDown), context: ctx, feedback: ActionFeedback(), now: Date())
         InquiryMutations.mark(quiet, as: .lost(.neverHeardBack), context: ctx, feedback: ActionFeedback(), now: Date())
 
         #expect(declined.outcome == .lostHard)
-        #expect(notAFit.outcome == .lostSoft)
+        #expect(ownPass.outcome == .lostSoft)
         #expect(quiet.outcome == .lostSoft)
     }
 
@@ -63,8 +63,10 @@ struct InquiryLostReasonTests {
 
         InquiryMutations.mark(inq, as: .booked, context: ctx, feedback: ActionFeedback(), now: Date())
 
-        #expect(inq.lostReason == nil)
-        #expect(InquiryReporting.lostReason(for: inq) == nil)
+        // #2400: a booking IS an ending, and the same stored value a booked show carries, so the report can
+        // add the two halves of the funnel. What must not survive is a stale LOST ending underneath it.
+        #expect(inq.showOutcome == .booked)
+        #expect(InquiryReporting.ending(for: inq) == .booked)
     }
 
     // An inquiry closed before this shipped has no stored reason. Reporting must not silently drop it
@@ -78,10 +80,10 @@ struct InquiryLostReasonTests {
         inq.outcome = .lostSoft
         inq.outcomeSourceRaw = OutcomeSource.manual.rawValue
 
-        #expect(inq.lostReason == nil)
+        #expect(inq.showOutcome == nil)
         #expect(InquiryReporting.stage(for: inq) == .lost)
         // Dan replied and they never answered, so the honest reading is the silence, not a refusal.
-        #expect(InquiryReporting.lostReason(for: inq) == .neverHeardBack)
+        #expect(InquiryReporting.ending(for: inq) == .neverHeardBack)
     }
 
     // A stored reason always wins over the derived guess: Dan saying "they declined" must not be
@@ -92,10 +94,10 @@ struct InquiryLostReasonTests {
         let inq = make(ctx)
         inq.sentAt = Date()   // no reply, so the derived guess would be neverHeardBack
 
-        InquiryMutations.mark(inq, as: .lost(.theyDeclined), context: ctx,
+        InquiryMutations.mark(inq, as: .lost(.theySaidNo), context: ctx,
                               feedback: ActionFeedback(), now: Date())
 
-        #expect(InquiryReporting.lostReason(for: inq) == .theyDeclined)
+        #expect(InquiryReporting.ending(for: inq) == .theySaidNo)
     }
 
     // A raw value written by a later version must not read back as one of today's reasons.
@@ -103,8 +105,8 @@ struct InquiryLostReasonTests {
     func unknownRawValueIsNotMisread() throws {
         let ctx = ModelContext(try container())
         let inq = make(ctx)
-        inq.lostReasonRaw = "a_reason_a_later_version_added"
+        inq.showOutcomeRaw = "an_ending_a_later_version_added"
 
-        #expect(inq.lostReason == nil)
+        #expect(inq.showOutcome == nil)
     }
 }

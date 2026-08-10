@@ -82,14 +82,69 @@ enum ShowOutcomeBackfill {
             }
         }
 
+        report(unrecognisedValues, count: result.unrecognised, half: "prospect")
+        return result
+    }
+
+    // #2400: the same job for the other half of the funnel. Its own pass rather than a branch inside the one
+    // above, because an inquiry keeps none of a prospect's machinery: no contacts, no send record, no
+    // derived performance status. What it shares is the vocabulary, which is the whole point.
+    //
+    // The three retired reasons map on meaning, not on spelling. "Not a fit for me" was DAN'S pass, so it
+    // becomes "I turned them down": reading it as their refusal would record a no nobody said.
+    @discardableResult
+    static func runForInquiries(in context: ModelContext) -> Result {
+        let inquiries = (try? context.fetch(FetchDescriptor<Inquiry>())) ?? []
+        var result = Result()
+        var unrecognisedValues: Set<String> = []
+
+        for i in inquiries where i.showOutcomeRaw == nil {
+            if i.outcome == .booked {
+                i.showOutcome = .booked
+                result.filled += 1
+                continue
+            }
+            // Still open: somebody is waiting on a reply, and closing it here would take it off the queue
+            // that exists to stop that being forgotten.
+            guard !i.isOpen else {
+                result.leftOpen += 1
+                continue
+            }
+            if let legacy = i.lostReasonRaw, !legacy.isEmpty {
+                guard let ending = retiredInquiryReasons[legacy] else {
+                    result.unrecognised += 1
+                    unrecognisedValues.insert(legacy)
+                    continue
+                }
+                i.showOutcome = ending
+                result.filled += 1
+                continue
+            }
+            // Closed with no reason recorded, by a build that never captured one. A silence is the only
+            // thing the stored data can honestly support, and it is the same fallback the reporting already
+            // used, so this keeps the inquiry in the year-end total rather than letting it vanish.
+            i.showOutcome = .neverHeardBack
+            result.filled += 1
+        }
+
+        report(unrecognisedValues, count: result.unrecognised, half: "inquiry")
+        return result
+    }
+
+    private static let retiredInquiryReasons: [String: ShowOutcome] = [
+        "they_declined": .theySaidNo,
+        "not_a_fit": .turnedThemDown,
+        "never_heard_back": .neverHeardBack,
+    ]
+
+    private static func report(_ unrecognisedValues: Set<String>, count: Int, half: String) {
         if !unrecognisedValues.isEmpty {
             // copy-inventory:ignore-start  agent log, not a sentence Overture says to Dan (#915)
-            AgentLog.problem("#2394 ShowOutcomeBackfill: \(result.unrecognised) prospect(s) carry a stored "
-                + "ending that decodes to nothing and were left with no outcome, so they are absent from "
-                + "the reporting until somebody closes them by hand. Values: "
+            AgentLog.problem("#2394 ShowOutcomeBackfill: \(count) \(half)(s) carry a stored ending that "
+                + "decodes to nothing and were left with no outcome, so they are absent from the reporting "
+                + "until somebody closes them by hand. Values: "
                 + unrecognisedValues.sorted().joined(separator: ", "))
             // copy-inventory:ignore-end
         }
-        return result
     }
 }
