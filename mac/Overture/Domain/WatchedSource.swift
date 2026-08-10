@@ -410,16 +410,19 @@ final class WatchedSource {
     // second; it must not be able to mark anything gone before it has a baseline to judge against.
     static let warmupRuns = 3
 
-    // The id for a newly watched calendar. Derived from its host, so it is stable, readable in a queue
-    // file and a pinned page's filename, and cannot collide with the two reserved ids above.
+    // The id for a newly watched calendar. Derived from CalendarIdentity, so it is stable, readable in a
+    // queue file and a pinned page's filename, and cannot collide with the two reserved ids above.
     //
     // Never derived from the full URL: an org that publishes /events and /calendar would otherwise get
-    // two ids for one organization. The host is what identifies them, which is the same rule the
-    // already-watching check uses.
+    // two ids for one organization. It is the same rule the already-watching check uses, through the
+    // same type, which is the point: #2377 had them written separately and the id kept only the host, so
+    // unblocking the add alone would have inserted La MaMa carrying SoHo Playhouse's identity. An id is
+    // stamped on every prospect a source ever surfaces and names its pinned page, so that is a data
+    // defect and it would have been invisible at the moment it happened.
+    //
+    // Called only at INSERT and never recomputed, so nothing already stored moves when the rule changes.
     static func newSourceId(for listingsURL: String) -> String {
-        let host = URL(string: listingsURL)?.host?.lowercased()
-            .replacingOccurrences(of: "www.", with: "") ?? "source"
-        return ScoutPagePin.safeName(host)
+        CalendarIdentity.slug(for: listingsURL)
     }
 
     var kind: SourceKind {

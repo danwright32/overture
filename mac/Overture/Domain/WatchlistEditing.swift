@@ -56,9 +56,10 @@ enum WatchlistEditing {
 
         let existing = (try? context.fetch(FetchDescriptor<WatchedSource>())) ?? []
 
-        // Matched on host, so an org that publishes /events, /calendar and /concerts cannot end up on the
-        // list three times, fetching, hashing and reading the same calendar three times every run.
-        if let match = existing.first(where: { sameHost($0.listingsURL, as: url) }) {
+        // Matched on CalendarIdentity, so an org that publishes /events, /calendar and /concerts cannot end
+        // up on the list three times, fetching, hashing and reading the same calendar three times every
+        // run, while two venues sharing a ticketing host stay two calendars (#2377).
+        if let match = existing.first(where: { sameCalendar($0.listingsURL, as: url) }) {
             if !match.isActive, match.inactiveReason == .orgRefusal {
                 return .refused(orgName: match.orgName)
             }
@@ -131,8 +132,8 @@ enum WatchlistEditing {
     enum EditResult: Equatable, Sendable {
         case saved(sourceId: String)
         case invalidURL
-        case conflict(orgName: String)     // a DIFFERENT active source already watches this host
-        case refused(orgName: String)      // the new host belongs to an org that asked to stop
+        case conflict(orgName: String)     // a DIFFERENT source already watches this calendar
+        case refused(orgName: String)      // the new address belongs to an org that asked to stop
     }
 
     @discardableResult
@@ -142,10 +143,10 @@ enum WatchlistEditing {
               URL(string: url)?.scheme?.hasPrefix("http") == true else { return .invalidURL }
 
         let existing = (try? context.fetch(FetchDescriptor<WatchedSource>())) ?? []
-        // Another source already on this host. A refusal is named as a refusal (the one mistake that
+        // Another source already on this calendar. A refusal is named as a refusal (the one mistake that
         // cannot be taken back); anything else is a plain collision, because the same calendar must never
         // be fetched, hashed and read twice every run.
-        if let match = existing.first(where: { $0.sourceId != source.sourceId && sameHost($0.listingsURL, as: url) }) {
+        if let match = existing.first(where: { $0.sourceId != source.sourceId && sameCalendar($0.listingsURL, as: url) }) {
             if !match.isActive, match.inactiveReason == .orgRefusal {
                 return .refused(orgName: match.orgName)
             }
@@ -314,13 +315,11 @@ enum WatchlistEditing {
         return .confirmed
     }
 
-    private static func sameHost(_ urlString: String?, as other: String) -> Bool {
-        func host(_ s: String?) -> String? {
-            guard let s, let h = URL(string: s)?.host?.lowercased() else { return nil }
-            return h.replacingOccurrences(of: "www.", with: "")
-        }
-        guard let a = host(urlString), let b = host(other) else { return false }
-        return a == b
+    // #2377: one shared answer to "is this the same calendar", not a third spelling of it. The rule is
+    // still host-based for an organisation publishing its own site, and tenant-aware on a multi tenant
+    // ticketing host where the path is the only thing that scopes the feed to a venue.
+    private static func sameCalendar(_ urlString: String?, as other: String) -> Bool {
+        CalendarIdentity.same(urlString, other)
     }
 }
 
