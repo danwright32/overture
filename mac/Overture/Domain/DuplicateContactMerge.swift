@@ -49,6 +49,20 @@ enum DuplicateContactMerge {
             // while a sent row sits beside them would leave the card still showing one person twice, and
             // this pass is not the place to decide what a sent duplicate means.
             guard rows.allSatisfy({ $0.provenance != .manual && $0.sendState == .pending }) else { continue }
+            // Two rows holding DIFFERENT addresses are not one person found twice. They are either two
+            // people who share a name or two real routes to one, and either way the loser's address is
+            // destroyed by this pass: `carryAcross` only ever FILLS a gap, so a winner that already has
+            // an address simply drops the other one.
+            //
+            // The importer refuses the matching case for the same reason (a batch carrying one name twice
+            // is not evidence), and this pass had no equivalent because there is no batch here to look at.
+            // Measured on the live store 2026-08-10: 0 groups match, so this costs nothing today and is
+            // what stops the day it does from costing an address silently.
+            let addresses = Set(rows.compactMap { r -> String? in
+                let address = (r.email ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                return address.isEmpty ? nil : address
+            })
+            guard addresses.count <= 1 else { continue }
             guard let winner = preferredRow(rows) else { continue }
 
             for loser in rows where loser !== winner {

@@ -173,18 +173,46 @@ struct DuplicateContactMergeTests {
                 "of her two forms the one on her own site survived")
     }
 
-    // Two rows that are equally good resolve the same way every run, rather than by fetch order, or the
-    // pass would produce a different store each launch.
-    @Test func atieBreaksTheSameWayEveryTime() throws {
+    // Two rows holding DIFFERENT addresses are never merged. They are two people who share a name, or two
+    // real routes to one, and this pass only ever FILLS a gap, so merging would drop the loser's address
+    // with nothing said. Found on review after the pass had already shipped; 0 groups on the live store
+    // matched, so it was safe by luck rather than by rule.
+    @Test func twoDifferentAddressesUnderOneNameAreNeverMerged() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx)
         add(p, name: "Alex Kim", email: "b@example.test")
         add(p, name: "Alex Kim", email: "a@example.test")
         try ctx.save()
 
-        DuplicateContactMerge.reconcile(p, in: ctx)
+        #expect(DuplicateContactMerge.reconcile(p, in: ctx) == 0)
+        #expect(Set(p.recipients.compactMap(\.email)) == ["a@example.test", "b@example.test"])
+    }
 
-        #expect(p.recipients.first?.email == "a@example.test")
+    // The SAME address written two ways is still one person, so the refusal above cannot be used to
+    // smuggle a duplicate through: it is about two addresses, not about two rows.
+    @Test func oneAddressWrittenTwoWaysIsStillMerged() throws {
+        let ctx = ModelContext(try container())
+        let p = show(ctx)
+        add(p, name: "Alex Kim", email: "Alex@Example.test")
+        add(p, name: "Alex Kim", formURL: "https://www.instagram.com/alexkim/")
+        try ctx.save()
+
+        #expect(DuplicateContactMerge.reconcile(p, in: ctx) == 1)
+        #expect(p.recipients.count == 1)
+        #expect(p.recipients.first?.email == "Alex@Example.test")
+    }
+
+    // Two rows with no address at all still merge on their handles, which is the shape the pass exists
+    // for and the one the refusal must not catch.
+    @Test func twoFormOnlyRowsStillMerge() throws {
+        let ctx = ModelContext(try container())
+        let p = show(ctx)
+        add(p, name: "Maggie Stephens", formURL: "https://www.instagram.com/maggieestephens/")
+        add(p, name: "Maggie Stephens", formURL: "https://www.maggiestephens.example/contact")
+        try ctx.save()
+
+        #expect(DuplicateContactMerge.reconcile(p, in: ctx) == 1)
+        #expect(p.recipients.first?.contactFormURL == "https://www.maggiestephens.example/contact")
     }
 
     // The whole-store entry point reports what it did, so a launch that reconciled something can say so
