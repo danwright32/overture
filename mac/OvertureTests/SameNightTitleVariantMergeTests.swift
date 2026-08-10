@@ -263,7 +263,7 @@ struct SameNightTitleVariantMergeTests {
         let ctx = try context()
         insert(ctx, "FRIGID Nightcap", date: "2026-07-31", venue: "Under St Marks", ingestedAt: 1_000) {
             $0.status = .dismissed
-            $0.dismissReasonRaw = "too_soon"
+            $0.showOutcomeRaw = "too_soon"
         }
         insert(ctx, "FRIGID Nightcap: FUTURE TENSE", date: "2026-07-31", venue: "Under St Marks",
                ingestedAt: 2_000)
@@ -274,7 +274,7 @@ struct SameNightTitleVariantMergeTests {
         let remaining = all(ctx)
         #expect(remaining.count == 1)
         #expect(remaining.first?.status == .new, "the show must come back for another look")
-        #expect(remaining.first?.dismissReasonRaw == nil)
+        #expect(remaining.first?.showOutcomeRaw == nil)
     }
 
     // The line that does NOT move. A refusal is Dan's judgment and can be revisited; a sent email is a

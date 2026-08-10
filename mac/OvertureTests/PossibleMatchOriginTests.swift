@@ -86,7 +86,7 @@ struct PossibleMatchOriginTests {
                          profile: "strong", coverage: "likely_uncovered", fitScore: 5, tier: "mid",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
                          possibleMatchName: nil, status: .dismissed)
-        p.dismissReasonRaw = DismissReason.dateConflict.rawValue
+        p.showOutcomeRaw = ShowOutcome.dateConflict.rawValue
         ctx.insert(p)
 
         let records = LocalHistory.records(from: [p])

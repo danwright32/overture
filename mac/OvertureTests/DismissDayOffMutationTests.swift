@@ -41,7 +41,7 @@ struct DismissDayOffMutationTests {
                                            prospects: [p], context: ctx, feedback: feedback, offer: offer)
 
         #expect(p.status == .dismissed)
-        #expect(p.dismissReasonRaw == "date_conflict")
+        #expect(p.showOutcomeRaw == "date_conflict")
         let pending = try #require(offer.pending)           // the centered picker is raised, not a banner
         #expect(pending.start == "2026-11-18")
         #expect(pending.end == "2026-11-18")

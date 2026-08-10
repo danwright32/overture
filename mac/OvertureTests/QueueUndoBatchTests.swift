@@ -27,7 +27,7 @@ struct QueueUndoBatchTests {
                          coverage: "likely_uncovered", fitScore: 9, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                          status: .dismissed)
-        p.dismissReasonRaw = reason
+        p.showOutcomeRaw = reason
         p.dismissedAt = Date(timeIntervalSince1970: 1_780_000_000)
         ctx.insert(p)
         try? ctx.save()
@@ -37,8 +37,8 @@ struct QueueUndoBatchTests {
     private func row(_ key: String, from priorStatus: ReviewStatus = .new,
                      reason: String = "too_soon") -> QueueUndoEntry.Row {
         QueueUndoEntry.Row(naturalKey: key, groupName: "Org \(key)",
-                           priorStatus: priorStatus, priorDismissReasonRaw: nil, priorDismissedAt: nil, priorConflictClearedKey: nil,
-                           resultingStatus: .dismissed, resultingDismissReasonRaw: reason)
+                           priorStatus: priorStatus, priorShowOutcomeRaw: nil, priorDismissedAt: nil, priorConflictClearedKey: nil,
+                           resultingStatus: .dismissed, resultingShowOutcomeRaw: reason)
     }
 
     // MARK: - The entry
@@ -82,7 +82,7 @@ struct QueueUndoBatchTests {
         #expect(outcome.total == 2)
         #expect(a.status == .new)
         #expect(b.status == .new)
-        #expect(a.dismissReasonRaw == nil)
+        #expect(a.showOutcomeRaw == nil)
         #expect(a.dismissedAt == nil)      // a show back in the queue has no exit date (#16)
     }
 
@@ -142,8 +142,8 @@ struct QueueUndoBatchTests {
         let ctx = try context()
         let a = dismissedShow(ctx, "a")
         let entry = QueueUndoEntry(naturalKey: "a", groupName: "Org a", actionLabel: "Dismiss",
-                                   priorStatus: .queued, priorDismissReasonRaw: nil, priorDismissedAt: nil, priorConflictClearedKey: nil,
-                                   resultingStatus: .dismissed, resultingDismissReasonRaw: "too_soon")
+                                   priorStatus: .queued, priorShowOutcomeRaw: nil, priorDismissedAt: nil, priorConflictClearedKey: nil,
+                                   resultingStatus: .dismissed, resultingShowOutcomeRaw: "too_soon")
 
         #expect(QueueUndo.apply(entry, to: a, in: ctx))
         #expect(a.status == .queued)

@@ -42,7 +42,7 @@ struct ProspectMutationsTests {
         ProspectMutations.setStatus(QueueItem(p), .dismissed, .notInterested,
                                     prospects: [p], context: ctx, feedback: feedback)
         #expect(p.status == .dismissed)
-        #expect(p.dismissReasonRaw == DismissReason.notInterested.rawValue)
+        #expect(p.showOutcomeRaw == ShowOutcome.notAFit.rawValue)
     }
 
     // #1274: Dan renames a scout-generated name. The display name changes and the override is set so

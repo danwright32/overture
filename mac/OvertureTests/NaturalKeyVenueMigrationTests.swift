@@ -155,7 +155,7 @@ struct NaturalKeyVenueMigrationTests {
         let b = insert(ctx, key: "legacy-key-b", group: group, date: date,
                        venue: "The Cutting Room, 44 East 32nd Street, New York, NY") { p in
             p.status = .dismissed
-            p.dismissReasonRaw = DismissReason.notInterested.rawValue
+            p.showOutcomeRaw = ShowOutcome.notAFit.rawValue
         }
 
         let summary = NaturalKeyVenueMigration.run(in: ctx)
@@ -321,11 +321,11 @@ struct NaturalKeyVenueMigrationTests {
 
         insert(ctx, key: "legacy-colon-key", group: group, date: date, venue: "The Players Theatre",
                ingestedAt: Date(timeIntervalSince1970: 1_000)) {
-            $0.status = .dismissed; $0.dismissReasonRaw = "too_soon"
+            $0.status = .dismissed; $0.showOutcomeRaw = "too_soon"
         }
         insert(ctx, key: "legacy-bracket-key", group: "Bone Wars (A New Musical)", date: date,
                venue: "The Players Theatre", ingestedAt: Date(timeIntervalSince1970: 2_000)) {
-            $0.status = .dismissed; $0.dismissReasonRaw = "too_soon"
+            $0.status = .dismissed; $0.showOutcomeRaw = "too_soon"
         }
 
         let summary = NaturalKeyVenueMigration.run(in: ctx)
@@ -337,7 +337,7 @@ struct NaturalKeyVenueMigrationTests {
         // Dan's refusal survives the merge. Losing it would put a show he has already refused back in
         // front of him, which is the opposite of the defect being fixed.
         #expect(rows.first?.status == .dismissed)
-        #expect(rows.first?.dismissReasonRaw == "too_soon")
+        #expect(rows.first?.showOutcomeRaw == "too_soon")
     }
 
     // And where the two refusals DISAGREE the merge still defers, because picking one silently rewrites
@@ -349,11 +349,11 @@ struct NaturalKeyVenueMigrationTests {
 
         insert(ctx, key: "legacy-tight-key", group: group, date: date, venue: "Jalopy Theatre",
                ingestedAt: Date(timeIntervalSince1970: 1_000)) {
-            $0.status = .dismissed; $0.dismissReasonRaw = "too_soon"
+            $0.status = .dismissed; $0.showOutcomeRaw = "too_soon"
         }
         insert(ctx, key: "legacy-spaced-key", group: "macMcCarty + KiddTwist", date: date,
                venue: "Jalopy Theatre", ingestedAt: Date(timeIntervalSince1970: 2_000)) {
-            $0.status = .dismissed; $0.dismissReasonRaw = "went_by"
+            $0.status = .dismissed; $0.showOutcomeRaw = "went_by"
         }
 
         let summary = NaturalKeyVenueMigration.run(in: ctx)
@@ -372,7 +372,7 @@ struct NaturalKeyVenueMigrationTests {
 
         insert(ctx, key: "legacy-a", group: group, date: date, venue: "The Cutting Room",
                ingestedAt: Date(timeIntervalSince1970: 1_000)) {
-            $0.status = .dismissed; $0.dismissReasonRaw = "too_soon"
+            $0.status = .dismissed; $0.showOutcomeRaw = "too_soon"
         }
         insert(ctx, key: "legacy-b", group: group, date: date,
                venue: "The Cutting Room, 44 East 32nd Street, New York, NY",
@@ -399,7 +399,7 @@ struct NaturalKeyVenueMigrationTests {
 
         insert(ctx, key: "legacy-refused", group: group, date: date, venue: "The Cutting Room",
                ingestedAt: Date(timeIntervalSince1970: 1_000)) {
-            $0.status = .dismissed; $0.dismissReasonRaw = "too_soon"
+            $0.status = .dismissed; $0.showOutcomeRaw = "too_soon"
         }
         // The later re-scout, untouched, under a spelling that folds to the same key.
         insert(ctx, key: "legacy-rescout", group: group, date: date,
@@ -410,6 +410,6 @@ struct NaturalKeyVenueMigrationTests {
         let rows = allProspects(ctx)
         #expect(rows.count == 1)
         #expect(rows.first?.status == .new, "the show must come back for another look")
-        #expect(rows.first?.dismissReasonRaw == nil)
+        #expect(rows.first?.showOutcomeRaw == nil)
     }
 }

@@ -44,7 +44,7 @@ struct PitchingOtherShowsDismissReasonTests {
     // The whole reporting argument rests on this raw value being separable from `date_conflict` forever.
     @Test func isItsOwnStoredValue() {
         #expect(DismissReason.pitchingOtherShows != .dateConflict)
-        #expect(DismissReason.pitchingOtherShows.rawValue == "pitching_other_shows")
+        #expect(ShowOutcome.pitchingOtherShows.rawValue == "pitching_other_shows")
         let raws = DismissReason.allCases.map(\.rawValue)
         #expect(Set(raws).count == raws.count)
     }
@@ -86,7 +86,7 @@ struct PitchingOtherShowsDismissReasonTests {
         dismissed(ctx, group: "Booked Elsewhere Ensemble", reason: .dateConflict)
         DismissReasonMigration.run(in: ctx)
         let after = try ctx.fetch(FetchDescriptor<Prospect>())
-        #expect(after.first?.dismissReasonRaw == "date_conflict")
+        #expect(after.first?.showOutcomeRaw == "date_conflict")
     }
 
     // (g) The two assembled sentences Dan reads, rendered whole. A label only reads well in a menu until

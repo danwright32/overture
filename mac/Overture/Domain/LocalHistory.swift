@@ -12,8 +12,10 @@ enum LocalHistory {
     // #1821: `pitchingOtherShows` belongs here for exactly the same reason. Dan wanted the show and lost
     // it to the night's capacity, not to anything about the org, so it stays a hot future lead and scores
     // identically to a date conflict ("declined", which Ranker.priorPoints weights 0 by #1362's decision).
-    private static let schedulingDismissals: Set<DismissReason> = [.dateConflict, .alreadyBooked,
-                                                                   .pitchingOtherShows]
+    // #2394: `hadPaidWork` is the rename of `alreadyBooked`, the same fact under the word that does not
+    // collide with a client having hired Dan.
+    private static let schedulingDismissals: Set<ShowOutcome> = [.dateConflict, .hadPaidWork,
+                                                                 .pitchingOtherShows]
 
     static func records(from prospects: [Prospect]) -> [HistoryRecord] {
         prospects.compactMap { p in
@@ -34,7 +36,7 @@ enum LocalHistory {
                 return HistoryRecord(groupName: p.groupName, status: "lost_soft", origin: .overtureActivity)
             }
             if p.status == .dismissed,
-               let reason = DismissReason(rawValue: p.dismissReasonRaw ?? ""),
+               let reason = p.showOutcome,
                schedulingDismissals.contains(reason) {
                 return HistoryRecord(groupName: p.groupName, status: "declined", origin: .overtureActivity)
             }
@@ -47,8 +49,7 @@ enum LocalHistory {
             // so the identical recurring show doesn't come back next season scoring just as high.
             // "Not a fit" (.notInterested) is still recorded as nothing at all: that is a judgement
             // about the show, not a standing pass Dan wants us to act on.
-            if p.status == .dismissed,
-               DismissReason(rawValue: p.dismissReasonRaw ?? "") == .dontWantToShoot {
+            if p.status == .dismissed, p.showOutcome == .dontWantToShoot {
                 return HistoryRecord(groupName: p.groupName, status: "passed",
                                      origin: .overtureActivity, email: nil, venue: p.venue)
             }

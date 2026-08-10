@@ -81,7 +81,7 @@ struct RunIdentitySurvivesDriftTests {
                                blocked: .empty, today: "2026-07-23", into: context)
         let kept = try #require(try prospects(context).first)
         kept.statusRaw = ReviewStatus.dismissed.rawValue
-        kept.dismissReasonRaw = "too_soon"
+        kept.showOutcomeRaw = "too_soon"
         try context.save()
 
         for (today, opening) in [("2026-07-24", "2026-07-24"), ("2026-07-25", "2026-07-25"),
@@ -93,7 +93,7 @@ struct RunIdentitySurvivesDriftTests {
         let all = try prospects(context)
         #expect(all.count == 1)
         #expect(all.first?.statusRaw == ReviewStatus.dismissed.rawValue)
-        #expect(all.first?.dismissReasonRaw == "too_soon")
+        #expect(all.first?.showOutcomeRaw == "too_soon")
     }
 
     // The drift is not only forward. Jena Friedman in the live store went the OTHER way: the row ingested

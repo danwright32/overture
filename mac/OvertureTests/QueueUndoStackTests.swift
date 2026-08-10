@@ -25,8 +25,8 @@ struct QueueUndoStackTests {
     private func dismissal(key: String = "k1", org: String = "The Music Shop",
                            from priorStatus: ReviewStatus = .new) -> QueueUndoEntry {
         QueueUndoEntry(naturalKey: key, groupName: org, actionLabel: "Dismiss",
-                       priorStatus: priorStatus, priorDismissReasonRaw: nil, priorDismissedAt: nil, priorConflictClearedKey: nil,
-                       resultingStatus: .dismissed, resultingDismissReasonRaw: "not_a_fit")
+                       priorStatus: priorStatus, priorShowOutcomeRaw: nil, priorDismissedAt: nil, priorConflictClearedKey: nil,
+                       resultingStatus: .dismissed, resultingShowOutcomeRaw: "not_a_fit")
     }
 
     // MARK: - The stack
@@ -116,7 +116,7 @@ struct QueueUndoStackTests {
     @Test func anUntouchedRowCanStillBeUndone() {
         let entry = dismissal()
 
-        #expect(entry.stillApplies(status: .dismissed, dismissReasonRaw: "not_a_fit"))
+        #expect(entry.stillApplies(status: .dismissed, showOutcomeRaw: "not_a_fit"))
     }
 
     // A background writer moved it (a scout import, a retirement sweep, the reconcile tick). Those are
@@ -125,7 +125,7 @@ struct QueueUndoStackTests {
     @Test func aRowAnotherWriterMovedIsNoLongerUndoable() {
         let entry = dismissal()
 
-        #expect(entry.stillApplies(status: .queued, dismissReasonRaw: nil) == false)
+        #expect(entry.stillApplies(status: .queued, showOutcomeRaw: nil) == false)
     }
 
     // The subtle one. Re-labelling WHY a dismissed show was cut leaves it dismissed, so a check on
@@ -134,7 +134,7 @@ struct QueueUndoStackTests {
     @Test func aRowWhoseDismissReasonWasRelabelledIsNoLongerUndoable() {
         let entry = dismissal()
 
-        #expect(entry.stillApplies(status: .dismissed, dismissReasonRaw: "too_far") == false)
+        #expect(entry.stillApplies(status: .dismissed, showOutcomeRaw: "too_far") == false)
     }
 
     // MARK: - What an undo has to put back
@@ -146,7 +146,7 @@ struct QueueUndoStackTests {
         let entry = dismissal(from: .approved)
 
         #expect(entry.priorStatus == .approved)
-        #expect(entry.priorDismissReasonRaw == nil)
+        #expect(entry.priorShowOutcomeRaw == nil)
         #expect(entry.priorDismissedAt == nil)
     }
 
@@ -156,9 +156,9 @@ struct QueueUndoStackTests {
     @Test func anEntryCarriesTheExitDateItFound() {
         let firstExit = Date(timeIntervalSince1970: 1_780_000_000)
         let entry = QueueUndoEntry(naturalKey: "k", groupName: "Org", actionLabel: "Dismiss",
-                                   priorStatus: .dismissed, priorDismissReasonRaw: "too_far",
+                                   priorStatus: .dismissed, priorShowOutcomeRaw: "too_far",
                                    priorDismissedAt: firstExit, priorConflictClearedKey: nil,
-                                   resultingStatus: .dismissed, resultingDismissReasonRaw: "not_a_fit")
+                                   resultingStatus: .dismissed, resultingShowOutcomeRaw: "not_a_fit")
 
         #expect(entry.priorDismissedAt == firstExit)
     }
