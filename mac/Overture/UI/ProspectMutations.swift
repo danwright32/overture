@@ -603,7 +603,7 @@ enum ProspectMutations {
     // #924: dismiss for a reason, then, when that reason is about the calendar, OFFER to capture the date
     // as a day off. Dan telling Overture "not this day" is the most natural moment to block it, instead of
     // making him say it twice. The offer is a CENTERED picker (via the injected request RootView presents),
-    // pre-filled with the show's date or run, not a missable banner: dismissing for a date reason almost
+    // pre-filled with that night alone (#2373), not a missable banner: dismissing for a date reason almost
     // always means he'll block it, so a modal he acts on is right. It is still an offer, never automatic:
     // nothing is blocked until he confirms in the picker (or he closes it with Not now).
     static func dismissForReason(_ item: QueueItem, _ reason: ShowOutcome,
@@ -612,11 +612,9 @@ enum ProspectMutations {
                                  undo: QueueUndoStack? = nil) {
         setStatus(item, .dismissed, reason, prospects: prospects, context: context, feedback: feedback,
                   undo: undo, undoLabel: "Dismiss")
-        // #939: a same-production show at a different venue nearby widens the offer to the whole
-        // engagement, so blocking in one action captures every date, not just this row's own.
-        let linked = EngagementLink.group(prospects.map(EngagementLink.Row.init))[item.id]?.map(\.date) ?? []
+        // #2373: the offer covers the dismissed night and nothing else. The engagement sweep that used to
+        // stand here (#939) fed a widening the rule no longer performs, so it is gone with it.
         guard let o = DayOffOffer.offer(reason: reason, performanceDate: item.performanceDate,
-                                        runEndDate: item.runEndDate, linkedDates: linked,
                                         alreadyBlocked: item.hasUnclearedConflict) else { return }
         offer.request(key: item.id, org: item.groupName, start: o.start, end: o.end)
     }

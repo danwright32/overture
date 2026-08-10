@@ -1,11 +1,12 @@
 import SwiftUI
 import SwiftData
 
-// #924: the date picker a calendar-reason dismissal opens, pre-filled with the show's date or its whole
-// run, so Dan blocks the days he actually can't work rather than the app assuming the whole run or only
-// opening night (his call, 2026-07-14). Every calendar-reason dismissal opens this sheet, single-night or
-// multi-night alike (revised after Dan walked the first build, 2026-07-15): there is no separate one-tap
-// banner path.
+// #924: the date picker a calendar-reason dismissal opens. Every calendar-reason dismissal opens this
+// sheet, single-night or multi-night alike (revised after Dan walked the first build, 2026-07-15): there
+// is no separate one-tap banner path.
+//
+// #2373: both pickers open on the night that was dismissed and nothing wider, because the default button
+// blocks whatever they propose. Widening is Dan's to type.
 //
 // It writes through ProspectMutations.blockDaysOff, the same writer the one-tap path uses, so both go
 // through DayOffEditing.add and its conflict sweep. A refused range keeps the sheet open with the reason

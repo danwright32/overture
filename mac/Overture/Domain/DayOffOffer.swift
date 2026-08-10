@@ -6,14 +6,19 @@ import Foundation
 // is the most natural moment there is to capture a day off, instead of making him say it twice: once by
 // dismissing the show and again by typing the date into the Days off sheet.
 //
-// The rule lives here, not in a view, so it is testable and shared by both paths (the #863 lesson): a
-// single-night show blocks that one day in a tap; a multi-night run opens a date picker pre-filled with
-// the whole run so Dan narrows it himself (his call, 2026-07-14). It is always an OFFER, never automatic.
+// The rule lives here, not in a view, so it is testable and shared by both paths (the #863 lesson). It is
+// always an OFFER, never automatic.
+//
+// #2373 (Dan's call, 2026-08-09): the offer is ALWAYS the single night that was dismissed, and both of the
+// pickers it fills open on that date. This supersedes #924's prefill of the whole run and #939's widening
+// to every linked date of a touring engagement, both of which proposed days Dan never mentioned while the
+// sheet's DEFAULT button blocked them. A screening series showed the cost: dismissing one night of NT Live:
+// Inter Alia (Encore) proposed 8/15 through 9/29, 46 days, one press away. Blocking a longer stretch is
+// still available by typing it into the two pickers, which is what they are for.
 enum DayOffOffer {
     struct Offer: Equatable, Sendable {
-        let start: String   // yyyy-MM-dd, the show's opening night
-        let end: String     // yyyy-MM-dd, its closing night (== start for a single-night show)
-        var isMultiNight: Bool { end != start }
+        let start: String   // yyyy-MM-dd, the night that was dismissed
+        let end: String     // yyyy-MM-dd, the same night: the offer never proposes a night Dan did not name
     }
 
     // The reasons that mean "I can't shoot on this date", mirroring the three DismissReason cases the
@@ -31,24 +36,15 @@ enum DayOffOffer {
     // pop. This is what stops a second dismissal on a date Dan just blocked from asking him to block it
     // again (2026-07-15).
     //
-    // #939: `linkedDates` are this show's dates at OTHER venues in the same touring engagement (from
-    // EngagementLink), widening the offer to the whole engagement's span so blocking in one action
-    // captures every date Dan can't shoot, not just the row he happened to dismiss.
-    // #1960: `linkedDates` is an @autoclosure because both guards below refuse most calls, and an
-    // argument is evaluated BEFORE the call, so the guards could not protect against the cost of building
-    // it. The real call site sweeps every undismissed prospect through EngagementLink, with name folding
-    // and date arithmetic per row, and six of the eight dismiss reasons throw the result away on the
-    // second line. Taking it as something this function can decline to evaluate keeps the rule here,
-    // where it is tested, rather than copying both conditions up to the caller (#1916's shape).
-    static func offer(reason: ShowOutcome, performanceDate: String?, runEndDate: String?,
-                      linkedDates: @autoclosure () -> [String] = [], alreadyBlocked: Bool = false) -> Offer? {
+    // #2373: the only date this takes is the dismissed row's own. It used to take the run's end and the
+    // engagement's linked dates as well (the latter as an #1960 @autoclosure, so the two guards below
+    // could decline to pay for the sweep that built it); with the widening gone there is no wider range
+    // to compute and no cost left to guard.
+    static func offer(reason: ShowOutcome, performanceDate: String?,
+                      alreadyBlocked: Bool = false) -> Offer? {
         guard !alreadyBlocked else { return nil }
-        guard calendarReasons.contains(reason), let start = performanceDate else { return nil }
-        // The closing night, judged the same way the conflict calculator and the feed reconcile judge it,
-        // so one definition of "the last night of this run" serves all three.
-        let ownEnd = EasternDate.runLastNight(runEndDate: runEndDate, performanceDate: start) ?? start
-        let allDates = [start, ownEnd] + linkedDates()
-        return Offer(start: allDates.min()!, end: allDates.max()!)
+        guard calendarReasons.contains(reason), let date = performanceDate else { return nil }
+        return Offer(start: date, end: date)
     }
 
     // The picker sheet's subtitle. Here rather than in the view so it is testable and the org it names
