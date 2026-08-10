@@ -28,7 +28,8 @@ struct ReachedOutRowSlotsTests {
         for replyOffered in [true, false] {
             for action in [nil, "Send a follow-up"] {
                 let slots = ReachedOutRowSlots.slots(replyOffered: replyOffered, dueActionLabel: action)
-                let timing = slots.filter { $0 == .timing || $0 == .answer }
+                let timing = slots.filter { $0 == .timing || $0 == .answer || $0 == .passedHint
+                                            || $0 == .spentMarker }
                 #expect(timing.count == 1,
                         "replyOffered=\(replyOffered) produced \(timing.count) timing slots")
             }
@@ -181,6 +182,8 @@ struct ReachedOutRowSlotsTests {
         "Button(label)": .dueAction,
         // #2112/#2224
         "Text(hint)": .passedHint,
+        // #2398
+        "Text(spent)": .spentMarker,
         "CloseOutMenu(": .closeOut
     ]
 }
