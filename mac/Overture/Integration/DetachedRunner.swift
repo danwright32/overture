@@ -28,11 +28,10 @@ enum DetachedRunner {
         // callers happen to build a new URL each time. That is luck, not a design, and the sweep in
         // clearDeadRun reads this immediately after deleting the file, which is exactly where the luck
         // runs out. Fixed here, once, so all three run services get it (L30).
-        var url = markerURL
-        url.removeAllCachedResourceValues()
-        let touched = try? url.resourceValues(forKeys: [.contentModificationDateKey])
-            .contentModificationDate
-        return RunHeartbeat.of(markerTouchedAt: touched ?? nil, now: now, staleAfter: staleAfter)
+        // #2105: the fix #1613 made here is now the shared `FileTimestamp.modifiedAt`, so the other five
+        // readers get it too rather than each needing to know.
+        let touched = FileTimestamp.modifiedAt(markerURL)
+        return RunHeartbeat.of(markerTouchedAt: touched, now: now, staleAfter: staleAfter)
     }
 
     // #1613/#2104: sweep a run that DIED rather than finished, and report whether there was one.

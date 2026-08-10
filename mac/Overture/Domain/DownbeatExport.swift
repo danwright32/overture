@@ -143,7 +143,10 @@ enum DownbeatBridge {
         guard let data = try? Data(contentsOf: url) else {
             return ([], [], [], .missing)
         }
-        let modifiedAt = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+        // #2105: the shared read, and the one site here that was genuinely exposed rather than safe by
+        // luck: `url` is a PARAMETER, so a caller holding one in a `let` and reading it twice would have
+        // been told the first answer both times, including after the export was replaced.
+        let modifiedAt = FileTimestamp.modifiedAt(url)
         guard let export = try? decode(data) else {
             return ([], [], [], health(fileExists: true, decodeFailed: true, modifiedAt: modifiedAt ?? nil, now: now, staleAfter: staleAfter))
         }
