@@ -125,15 +125,15 @@ struct PossibleMatchOriginTests {
         let sentences = [
             "downbeat_client", "booking_import", "overture_dismissed",
             "overture_contacted", "overture_replied", "overture_booked", "overture_other",
-        ].map { QueueModel.historyFlag(item(source: $0, name: "Aurora Strings Summer Series")) }
+        ].map { QueueModel.possibleMatchQuestion(item(source: $0, name: "Aurora Strings Summer Series")) }
 
         #expect(sentences.allSatisfy { $0 != nil })
         #expect(Set(sentences).count == sentences.count, "two origins share a sentence: \(sentences)")
     }
 
     @Test func theShowDanSwipedAwayNeverClaimsToBeBusiness() {
-        let flag = QueueModel.historyFlag(item(source: "overture_dismissed",
-                                               name: "Carnegie Hall Citywide: Ivalas Quartet"))
+        let flag = QueueModel.possibleMatchQuestion(item(source: "overture_dismissed",
+                                                        name: "Carnegie Hall Citywide: Ivalas Quartet"))
 
         #expect(flag == "Possible match to a show you dismissed in Overture: "
                 + "Carnegie Hall Citywide: Ivalas Quartet?")
@@ -144,7 +144,7 @@ struct PossibleMatchOriginTests {
     // the next launch. Until then it must read as something true rather than as a blank or as the
     // booking log it might not be.
     @Test func aRowStoredBeforeThisShippedStillReadsHonestly() {
-        let flag = QueueModel.historyFlag(item(source: "history", name: "Aurora Strings Summer Series"))
+        let flag = QueueModel.possibleMatchQuestion(item(source: "history", name: "Aurora Strings Summer Series"))
 
         #expect(flag == "Possible match to something Overture has seen before: "
                 + "Aurora Strings Summer Series?")

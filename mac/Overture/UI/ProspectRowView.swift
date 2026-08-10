@@ -144,6 +144,7 @@ struct ProspectRowView: View {
                             .padding(.top, 2)   // #340: let the caveat breathe instead of crowding the metadata
                     }
                     tags
+                    possibleMatchQuestion
                     relatedRunNote
                     linkedEngagementNote
                     orgDoNotContactFlag
@@ -512,6 +513,20 @@ struct ProspectRowView: View {
             Text(note)
                 .font(OVType.tag)
                 .foregroundStyle(OVColor.inkSoft)
+                .padding(.top, 2)
+        }
+    }
+
+    // #1929: the possible-match question, on its own line rather than in the pill row. It ends in a
+    // show's name, so it is as long as that name is, and a pill cannot wrap inside itself. Gold,
+    // because it is still the "you may know these people" signal the pills carry, and it is a question
+    // Dan can answer.
+    @ViewBuilder private var possibleMatchQuestion: some View {
+        if let question = QueueModel.possibleMatchQuestion(item) {
+            Text(question)
+                .font(OVType.tag)
+                .foregroundStyle(OVColor.gold)
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 2)
         }
     }
