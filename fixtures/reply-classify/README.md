@@ -5,7 +5,7 @@ These two files are the single source of truth for the reply-classification hand
 
 - `queue.json` is what the app WRITES (`overture-reply-classify-queue.json`, via
   `ReplyClassifyQueueBuilder`): the kept replies for the classify workflow to read.
-- `results.json` is what the **Claude Code classify workflow** WRITES back
+- `results-v1.json` is what the **Claude Code classify workflow** WRITES back
   (`overture-reply-classify-results.json`); the app READS it via `ReplyClassifyResultsDecoder`.
 
 The workflow is the counterpart side with no automated test, so these committed fixtures (plus the
@@ -17,7 +17,9 @@ echo back verbatim, never rebuild (the silent-mismatch trap). `intent` is a `Rep
 value decodes rather than throwing. The queue fixture exercises both an item with a venue and one
 with it omitted.
 
-`queue.json` / `results.json` are the v1 shape (kept byte-identical as the backward-decode proof).
+`queue-v1.json` / `results-v1.json` are the v1 shape (kept byte-identical as the backward-decode proof).
+They carry their version in the name like every other fixture: an unversioned name is refused rather than
+read as version 1 (#2340).
 `queue-v2.json` / `results-v2.json` are version 2 (#392): each item and result gains an optional
 `recipientId`, the opaque per-recipient token the workflow echoes back so a reply attaches to the
 right recipient on a multi-recipient show. It is additive, so the tolerant gate (1 through 2) decodes

@@ -416,10 +416,24 @@ export function assertVoiceFeedbackShape(data: unknown, file: string, expectedVe
   });
 }
 
-// Extracts the version a fixture filename encodes: "v2.json" or "queue-v2.json" -> 2; a bare
-// name with no version suffix ("queue.json", "uncertain.json") -> 1, the first/only version any
-// of these contracts shipped with.
+// Extracts the version a fixture filename encodes: "v2.json" or "queue-v2.json" -> 2.
+//
+// #2340: a name carrying no version is REFUSED, not read as version 1. It used to default, so a
+// fixture named without one was silently validated against the OLDEST version's rules rather than
+// reported as unclassifiable, and a file whose contents happened to satisfy version 1 would have
+// passed while being checked against rules that did not apply to it. That is the same class as a
+// guard measuring nothing (#2311). It was hit for real on 2026-08-08: #1678's two run-metadata
+// fixtures, named without a version, were checked as version 1, and only their own `version` field
+// disagreeing loudly gave it away.
+//
+// Every fixture therefore carries its version in its name, including the v1 ones (the two
+// reply-classify files were renamed for this).
 export function versionFromFilename(filename: string): number {
   const match = filename.match(/v(\d+)\.json$/);
-  return match ? Number(match[1]) : 1;
+  if (!match) {
+    throw new Error(
+      `${filename}: fixture filename carries no version (expected a "-vN.json" suffix), ` +
+      "so there is no way to know which version's rules to check it against");
+  }
+  return Number(match[1]);
 }

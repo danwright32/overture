@@ -28,6 +28,41 @@ function jsonFilenames(dir: string): string[] {
   return readdirSync(fixtureDir(dir)).filter((f) => f.endsWith(".json"));
 }
 
+// #2340: which version's rules a fixture is checked against comes from its NAME, so a name that
+// carries no version has no answer, and the old default of 1 turned that into a confident wrong one.
+// Hit for real on 2026-08-08 (#1678's run-metadata fixtures, checked as version 1 while their own
+// `version` field said 8) and caught only because the file argued back.
+describe("the version a fixture filename encodes (#2340)", () => {
+  it("reads the version off the suffix", () => {
+    expect(versionFromFilename("v1.json")).toBe(1);
+    expect(versionFromFilename("v12.json")).toBe(12);
+    expect(versionFromFilename("queue-v3.json")).toBe(3);
+    expect(versionFromFilename("run-metadata-complete-v8.json")).toBe(8);
+  });
+
+  it("refuses a name with no version instead of calling it version 1", () => {
+    expect(() => versionFromFilename("run-metadata-complete.json"))
+      .toThrow(/carries no version/);
+    expect(() => versionFromFilename("queue.json")).toThrow(/carries no version/);
+  });
+
+  // The refusal has to name the file, because it fires from a loop over a whole directory and a
+  // message that does not say which one leaves the reader to find it by hand.
+  it("names the file it refused", () => {
+    expect(() => versionFromFilename("uncertain.json")).toThrow(/uncertain\.json/);
+  });
+
+  // And the reason the refusal is safe to ship: every fixture the suite actually reads carries one.
+  it("every fixture in every checked directory carries a version in its name", () => {
+    for (const dir of ["prep-queue", "prep-results", "prep-progress", "reply-classify",
+                       "reply-classify-progress", "voice-feedback"]) {
+      for (const file of jsonFilenames(dir)) {
+        expect(() => versionFromFilename(file), `${dir}/${file}`).not.toThrow();
+      }
+    }
+  });
+});
+
 describe("prep-queue fixture shapes", () => {
   const files = jsonFilenames("prep-queue");
 
@@ -295,12 +330,12 @@ describe("reply-classify fixture shapes", () => {
 
   it("covers exactly the known reply-classify files", () => {
     expect(files.sort()).toEqual([
+      "queue-v1.json",
       "queue-v2.json",
       "queue-v3.json",
-      "queue.json",
+      "results-v1.json",
       "results-v2.json",
       "results-v3.json",
-      "results.json",
     ]);
   });
 
@@ -319,9 +354,9 @@ describe("reply-classify fixture shapes", () => {
   }
 
   it("rejects a results file whose intent is not one of the documented ReplyIntent values", () => {
-    const mutated = readJson("reply-classify", "results.json") as { results: Array<Record<string, unknown>> };
+    const mutated = readJson("reply-classify", "results-v1.json") as { results: Array<Record<string, unknown>> };
     mutated.results[0].intent = "maybe_interested";
-    expect(() => assertReplyClassifyResultsShape(mutated, "results.json", 1)).toThrow(/intent must be one of/);
+    expect(() => assertReplyClassifyResultsShape(mutated, "results-v1.json", 1)).toThrow(/intent must be one of/);
   });
 });
 
