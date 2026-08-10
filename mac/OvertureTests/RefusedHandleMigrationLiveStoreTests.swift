@@ -37,8 +37,13 @@ struct RefusedHandleMigrationLiveStoreTests {
             try fm.createDirectory(at: dir, withIntermediateDirectories: true)
             defer { try? fm.removeItem(at: dir) }
 
+            // A nil clone here is a FAILURE, not an absence. This test is already gated on the live store
+            // existing, so reaching this line means the COPY failed, and returning quietly would report
+            // green having rehearsed nothing at all, which is exactly the reassurance a migration test
+            // must never give (L10/L11: an error state and an empty state are different things).
             guard let clone = try LiveStoreClone.makeClone(in: dir) else {
                 await RealStoreTestLock.shared.release()
+                Issue.record("the live store exists but could not be cloned, so the rename was never rehearsed")
                 return
             }
 
