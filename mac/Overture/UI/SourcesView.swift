@@ -960,6 +960,16 @@ struct SourcesView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            // #2211: this source has come back empty on several runs in a row, which is a different thing
+            // from the single quiet run the scout summary reports on the day. GOLD, for the same reason
+            // the never-read line beside it is: the link is the thing to check, and until somebody does,
+            // a calendar Dan is counting on is contributing nothing.
+            if let goneQuiet = source.goneQuietNote() {
+                Text(goneQuiet).font(.system(size: 11))
+                    .foregroundStyle(OVColor.gold)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             // #1544: this source's page came back unencrypted, because its https handshake is broken and
             // Overture fell back to the cleartext address Dan stored. Worth saying: those bytes could have
             // been altered in flight and they feed the reconcile that cancels shows.

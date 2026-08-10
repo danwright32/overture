@@ -263,6 +263,11 @@ struct AddressCorrectionTests {
         "isActive": "consent, never a health signal (#800)",
         "inactiveReasonRaw": "consent, never a health signal (#800)",
         "addedAt": "when Dan started watching this org, unchanged by repointing it",
+        // #2211: the STREAK is cleared by the correction (a run of empties is about the old page), but the
+        // date survives. It answers "when did this org last list a show", which stays true whatever
+        // address Overture reads them at, and zeroing it would make a corrected source claim it had never
+        // listed anything, which is a stronger and falser statement than the one the correction fixed.
+        "lastNonEmptyAt": "when this ORG last listed a show, still true at a new address",
         "venueLocation": "Dan's own answer (#1175), not a fact about the page",
         "venueName": "Dan's own answer (#1529), not a fact about the page",
         "clientTagOverride": "Dan's answer about the ORG (#1209)",

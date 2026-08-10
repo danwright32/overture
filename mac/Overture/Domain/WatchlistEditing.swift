@@ -197,6 +197,11 @@ enum WatchlistEditing {
         source.successfulCheckCount = 0
         source.degradedStreak = 0
         source.lastDegradedCount = 0
+        // #2211: and the OTHER streak, for the same reason. "Came back empty five runs in a row" is a
+        // claim about the page that was being watched, and the new address has not been read once. Left
+        // standing it would put that sentence, and the attention badge behind it, on a source nobody has
+        // given a chance yet, which is precisely the correction being punished for the fault it fixed.
+        source.emptyStreak = 0
 
         // What the last run managed to read, and what it dropped. All of it was about the old page, and
         // `readabilityNote` is built from these, so a survivor here becomes a sentence Dan reads.

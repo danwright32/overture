@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1214 sentences**, from 402 source files.
+Every sentence Overture can say to Dan: **1216 sentences**, from 402 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -507,6 +507,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ExcludedTownsView.swift`
 "Calendar page"
     `UI/AddLeadSheet.swift`
+"Came back empty \(runs) \(runWord) in a row, and hasn't listed a show for \(days) \(dayWord). Check the link."
+    `Domain/SourceAttention.swift`
+"Came back empty \(runs) \(runWord) in a row. Check the link."
+    `Domain/SourceAttention.swift`
 "Cancel prep"
     `App/RootView.swift`
 "Carnegie Hall"
@@ -2480,7 +2484,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView.swift`
 "\(structuralGaps) of \(total) listings named no venue, so Overture left \(left) out of the queue."
     `Domain/SourceReadability.swift`
-"\(subject) a look: failing, never read at all, or can't mark shows as gone until it reads its calendar properly again"
+"\(subject) a look: failing, never read at all, empty run after run, or can't mark shows as gone until it reads its calendar properly again"
     `Domain/SourceAttention.swift`
 "\(subject) you to stop still \(verb) on calendars you watch: \(who). "
     `Domain/SuppressionReport.swift`

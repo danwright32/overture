@@ -32,6 +32,19 @@ enum SourceAttention {
     // is a hope rather than evidence.
     static let neverReadGrace: TimeInterval = 3 * 24 * 60 * 60
 
+    // #2211: a source that has come back empty on this many CONSECUTIVE runs is not having a quiet week.
+    // Three, matching the scout's daily cadence and `FeedReconcile.selfHealThreshold`'s own "three stable
+    // reads" for the mirror-image judgment, so the two halves of feed health escalate on the same clock.
+    //
+    // Once, deliberately, is not work: the scout summary already says so on the day it happens, and an
+    // established calendar genuinely does have quiet days. What Dan could not see was the difference
+    // between the first and the fifth, which is exactly the judgment the warning was asking him for.
+    static let emptyStreakThreshold = 3
+
+    static func hasGoneQuiet(_ source: WatchedSource) -> Bool {
+        source.emptyStreak >= emptyStreakThreshold
+    }
+
     static func hasNeverRead(_ source: WatchedSource, now: Date) -> Bool {
         guard source.successfulCheckCount == 0, source.lastSucceededAt == nil else { return false }
         return now.timeIntervalSince(source.addedAt) > neverReadGrace
@@ -45,6 +58,7 @@ enum SourceAttention {
         guard source.isActive else { return false }
         if SourceGrade(source) == .failing { return true }
         if hasNeverRead(source, now: now) { return true }
+        if hasGoneQuiet(source) { return true }
         // The silent half worth Dan's eyes: it ran and looks fine, but too many of its event pages came back
         // unreadable, so it has forfeited the right to say a show is gone and its scraper may be genuinely
         // broken. Asked of FeedReconcile, the one place that line is drawn, so this can never disagree with
@@ -98,6 +112,22 @@ enum SourceAttention {
         return "Watched for \(days) \(dayWord) and has never read its calendar once. Check the link."
     }
 
+    // #2211: the row's own sentence for a source that has come back empty on several runs in a row. It
+    // names WHICH run this is and WHEN it last listed anything, which is the whole of what the per-run
+    // warning could not say: without them, run five reads exactly like run one, every run, forever.
+    //
+    // A row with no recorded last-non-empty date says so by leaving the clause out rather than inventing
+    // one: this began recording after the fact, so an old row genuinely does not know.
+    static func goneQuietLine(runs: Int, lastNonEmptyAt: Date?, now: Date) -> String {
+        let runWord = runs == 1 ? "run" : "runs"
+        guard let lastNonEmptyAt else {
+            return "Came back empty \(runs) \(runWord) in a row. Check the link."
+        }
+        let days = max(1, Int(now.timeIntervalSince(lastNonEmptyAt) / 86_400))
+        let dayWord = days == 1 ? "day" : "days"
+        return "Came back empty \(runs) \(runWord) in a row, and hasn't listed a show for \(days) \(dayWord). Check the link."
+    }
+
     static let sectionLabel = "Needs a look"
     static let sectionSystemImage = "exclamationmark.circle"
 
@@ -127,6 +157,6 @@ enum SourceAttention {
         let subject = count == 1 ? "1 source needs" : "\(count) sources need"
         // #2231 added the middle reason. Three is as many as this line can carry, and each names a
         // different state Dan would act on differently.
-        return "\(subject) a look: failing, never read at all, or can't mark shows as gone until it reads its calendar properly again"
+        return "\(subject) a look: failing, never read at all, empty run after run, or can't mark shows as gone until it reads its calendar properly again"
     }
 }
