@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1209 sentences**, from 402 source files.
+Every sentence Overture can say to Dan: **1213 sentences**, from 402 source files.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -86,7 +86,7 @@ What is not, and why:
 - `UI/DraftSignaturePreview.swift`: renders the outbound email's own HTML (body + Gmail signature), not Overture's voice (#1203)
 - `UI/DraftSignaturePreview.swift`: browser-side measuring script, not a sentence Overture says to Dan (#915)
 
-## The same sentence, said in more than one place (48)
+## The same sentence, said in more than one place (49)
 
 Two copies of a sentence will drift. #843 owns fixing these.
 
@@ -137,6 +137,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
 - "Gmail access expired or was revoked. Click Connect Gmail to reconnect."
   - `Integration/GmailAuthManager.swift`
   - `Integration/GmailSender.swift`
+- "I turned them down"
+  - `Domain/ShowOutcome.swift`
+  - `Domain/ShowOutcome.swift`
 - "Never heard back"
   - `Domain/ShowOutcome.swift`
   - `UI/QueueView+Model.swift`
@@ -2204,6 +2207,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "\(count) \(count == 1 ? "contact" : "contacts") held for a check"
     `Domain/DraftReviewNotes.swift`
+"\(count) \(outcome.countedPhrase)"
+    `Domain/OutcomePatterns.swift`
 "\(count) \(prospectWord) already pending or re-prepped recently; nothing new queued"
     `App/ActionFeedback.swift`
 "\(count) clients set aside"
@@ -2612,6 +2617,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReviewStatus.swift`
 "moves between them in a way I can't follow yet, so I only read the month it "
     `UI/LeadIntakeModel.swift`
+"never heard back"
+    `Domain/ShowOutcome.swift`
 "no Downbeat client export was found"
     `Persistence/PrepImporter.swift`
 "no code in redirect"
@@ -2679,6 +2686,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReachabilityRunSummary.swift`
 "the venue"
     `UI/QueueView+Model.swift`
+"they said no"
+    `Domain/ShowOutcome.swift`
+"they said not now"
+    `Domain/ShowOutcome.swift`
 "to confirm"
     `UI/QueueView.swift`
 "too few to tell"
