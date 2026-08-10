@@ -12,7 +12,7 @@ stripped. **What it deliberately does not claim:** which container a given sente
 That is not knowable from one file, since a sentence declared in one view routinely surfaces
 through another, and a wrong label would be worse than none.
 
-Scanned 404 source files; 17 of them render at least one container.
+Scanned 406 source files; 17 of them render at least one container.
 
 ## Surfaces where a message can go astray
 

@@ -93,7 +93,11 @@ struct PrepIngestReachabilityTests {
         let p = try fetch(ctx, key)
         #expect(p?.reachabilityResult == nil)
         #expect(p?.reachabilityProbedAt == nil)
-        #expect(p?.recipients.count == 2)   // the contacts still land
+        // #2421: ONE of the two lands now. Sarah Matsushima's only handle is an Instagram, which is no
+        // longer a contact at all (Dan's call, 2026-08-10), so what this asserts is unchanged in point:
+        // a run that mints no verdict still stores the contacts it found a route to.
+        #expect(p?.recipients.count == 1)
+        #expect(p?.recipients.first?.name == "Jerrick Cavagnaro")
     }
 
     // The failure path: the run answered this show with nothing. There is no new evidence, so the
