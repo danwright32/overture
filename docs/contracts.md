@@ -454,7 +454,7 @@ the workflow phase).
 Version 2 (#392) adds an optional `recipientId` to each queue item and each result, so a reply is
 tied to the specific recipient on the show it came from (a presenter reply and an act reply are then
 classified independently instead of collapsing to the first replier). It is additive: the tolerant
-gate (1 through 2) still accepts the v1 files (`queue.json` / `results.json`), where `recipientId`
+gate (1 through 2) still accepts the v1 files (`queue-v1.json` / `results-v1.json`), where `recipientId`
 decodes to nil; `queue-v2.json` / `results-v2.json` are the discriminator spec.
 
 Version 3 (#420) folds the AI reply-DRAFTER into the same run: each result adds optional `draftSubject`

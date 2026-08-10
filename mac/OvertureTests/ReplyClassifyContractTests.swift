@@ -58,7 +58,7 @@ struct ReplyClassifyContractTests {
     )
 
     @Test func theQueueFixtureMatchesWhatTheBuilderEncodes() throws {
-        let decoded = try JSONDecoder().decode(ReplyClassifyQueue.self, from: try fixture("queue.json"))
+        let decoded = try JSONDecoder().decode(ReplyClassifyQueue.self, from: try fixture("queue-v1.json"))
         #expect(decoded == expectedQueue)
     }
 
@@ -68,7 +68,7 @@ struct ReplyClassifyContractTests {
     }
 
     @Test func theResultsFixtureDecodesToTheAgreedShape() throws {
-        let results = try ReplyClassifyResultsDecoder.decode(try fixture("results.json"))
+        let results = try ReplyClassifyResultsDecoder.decode(try fixture("results-v1.json"))
         #expect(results.version == 1)
         #expect(results.results.count == 2)
         #expect(results.results[0].naturalKey == "aurora-strings|2026-03-10|carnegie-hall")
@@ -138,7 +138,7 @@ struct ReplyClassifyContractTests {
 
     // The tolerant gate still accepts v1/v2 after the v3 bump (no draft fields decode to nil).
     @Test func olderResultsStillDecodeUnderTheV3Gate() throws {
-        let v1 = try ReplyClassifyResultsDecoder.decode(try fixture("results.json"))
+        let v1 = try ReplyClassifyResultsDecoder.decode(try fixture("results-v1.json"))
         #expect(v1.version == 1)
         #expect(v1.results[0].draftSubject == nil)
         let v2 = try ReplyClassifyResultsDecoder.decode(try fixture("results-v2.json"))
