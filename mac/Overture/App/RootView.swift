@@ -1240,8 +1240,10 @@ struct RootView: View {
         // anything). Swept and reported instead; the normal settle below is for a run that finished.
         if sweptADeadPrepRun() { return }
         let started = PrepQueueService.lastRunStartedAt
-        let resultsMod = try? PrepImporter.defaultURL
-            .resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+        // #2105: through the shared read, which drops Foundation's per-URL cache. Safe here only by
+        // accident before (the default URL is a computed property), and this decides whether a finished
+        // run produced results at all.
+        let resultsMod = FileTimestamp.modifiedAt(PrepImporter.defaultURL)
         // #1308 Layer 2: a probe and a real Prep share this one runner and results file, so route by the
         // probe-run marker first. settleReachabilityProbe returns a report only when the finished run was a
         // probe (marking every probed show, ingesting probe-safely, clearing the marker); a probe that
@@ -1421,8 +1423,7 @@ struct RootView: View {
             return .died(RunProgressCopy.diedLine(phase: .reading))
         }
         let started = ScoutExtractService.lastRunStartedAt
-        let resultsMod = try? ScoutExtractResultsDecoder.defaultURL
-            .resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+        let resultsMod = FileTimestamp.modifiedAt(ScoutExtractResultsDecoder.defaultURL)   // #2105
         switch DetachedRunOutcome.phase(runStartedAt: started, resultsModifiedAt: resultsMod ?? nil) {
         case .producedResults:
             // #1054: a read Dan cancelled is not imported here. The decision (ask, and with what count) is
@@ -1482,8 +1483,7 @@ struct RootView: View {
     // run that was never followed would re-apply a finished run's results.
     private func ingestFinishedReplyClassifyRun() {
         let started = ReplyClassifyService.lastRunStartedAt
-        let resultsMod = try? ReplyClassifyImporter.defaultURL
-            .resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+        let resultsMod = FileTimestamp.modifiedAt(ReplyClassifyImporter.defaultURL)   // #2105
         switch DetachedRunOutcome.phase(runStartedAt: started, resultsModifiedAt: resultsMod ?? nil) {
         case .producedResults:
             ingestReplyClassifications()

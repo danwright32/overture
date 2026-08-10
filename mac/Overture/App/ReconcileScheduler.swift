@@ -281,7 +281,8 @@ final class ReconcileScheduler {
     // Last-modified time of the Downbeat export, to gate the live re-reconcile (#197) so a spurious
     // filesystem event on an unchanged file doesn't trigger redundant work.
     static func exportModifiedAt() -> Date? {
-        (try? DownbeatBridge.defaultURL
-            .resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? nil
+        // #2105: the shared read. This gates the live re-reconcile, so a cached reading would mean an
+        // export that HAS changed reads as unchanged and the reconcile silently does not run.
+        FileTimestamp.modifiedAt(DownbeatBridge.defaultURL)
     }
 }
