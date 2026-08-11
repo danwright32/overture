@@ -38,7 +38,7 @@ struct UnplacedRoomsTests {
     }
 
     private func rooms(_ ctx: ModelContext) throws -> [UnplacedRooms.Room] {
-        UnplacedRooms.from(try ctx.fetch(FetchDescriptor<Prospect>()), today: "2026-08-07")
+        UnplacedRooms.from(try ctx.fetch(FetchDescriptor<Prospect>()), context: .at("2026-08-07"))
     }
 
     // MARK: - The list
@@ -242,7 +242,7 @@ struct UnplacedRoomsSignatureTests {
         let ctx = ModelContext(try container())
         show(ctx, key: "k1", venue: "54 Below")
 
-        #expect(UnplacedRooms.signature(try all(ctx), today: "2026-08-07") == UnplacedRooms.signature(try all(ctx), today: "2026-08-07"))
+        #expect(UnplacedRooms.signature(try all(ctx), context: .at("2026-08-07")) == UnplacedRooms.signature(try all(ctx), context: .at("2026-08-07")))
     }
 
     // The change that MUST move it: a room getting an answer fills its shows' locations, and a stale list
@@ -250,19 +250,19 @@ struct UnplacedRoomsSignatureTests {
     @Test func placingAShowMovesTheSignature() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx, key: "k1", venue: "54 Below")
-        let before = UnplacedRooms.signature(try all(ctx), today: "2026-08-07")
+        let before = UnplacedRooms.signature(try all(ctx), context: .at("2026-08-07"))
 
         p.location = "New York, NY"
-        #expect(UnplacedRooms.signature(try all(ctx), today: "2026-08-07") != before)
+        #expect(UnplacedRooms.signature(try all(ctx), context: .at("2026-08-07")) != before)
     }
 
     @Test func aNewUnplacedShowMovesTheSignature() throws {
         let ctx = ModelContext(try container())
         show(ctx, key: "k1", venue: "54 Below")
-        let before = UnplacedRooms.signature(try all(ctx), today: "2026-08-07")
+        let before = UnplacedRooms.signature(try all(ctx), context: .at("2026-08-07"))
 
         show(ctx, key: "k2", venue: "Cherry Lane Theatre")
-        #expect(UnplacedRooms.signature(try all(ctx), today: "2026-08-07") != before)
+        #expect(UnplacedRooms.signature(try all(ctx), context: .at("2026-08-07")) != before)
     }
 
     // A show that already knows where it is cannot change this list, so it must not invalidate the cache
@@ -271,10 +271,10 @@ struct UnplacedRoomsSignatureTests {
         let ctx = ModelContext(try container())
         show(ctx, key: "k1", venue: "54 Below")
         let placed = show(ctx, key: "k2", venue: "Merkin Hall", location: "New York, NY")
-        let before = UnplacedRooms.signature(try all(ctx), today: "2026-08-07")
+        let before = UnplacedRooms.signature(try all(ctx), context: .at("2026-08-07"))
 
         placed.venue = "Somewhere Else Entirely"
-        #expect(UnplacedRooms.signature(try all(ctx), today: "2026-08-07") == before)
+        #expect(UnplacedRooms.signature(try all(ctx), context: .at("2026-08-07")) == before)
     }
 }
 
@@ -313,7 +313,7 @@ struct UnplacedRoomsStillAheadTests {
     }
 
     private func rooms(_ ctx: ModelContext) throws -> [UnplacedRooms.Room] {
-        UnplacedRooms.from(try ctx.fetch(FetchDescriptor<Prospect>()), today: today)
+        UnplacedRooms.from(try ctx.fetch(FetchDescriptor<Prospect>()), context: .at(today))
     }
 
     // The live shape from the Debug store: a room whose only shows have already happened.
@@ -373,9 +373,9 @@ struct UnplacedRoomsStillAheadTests {
     @Test func theSignatureMovesWhenTheLastShowInARoomPasses() throws {
         let ctx = ModelContext(try container())
         show(ctx, key: "k1", venue: "54 Below", date: "2026-09-01")
-        let onTheDay = UnplacedRooms.signature(try ctx.fetch(FetchDescriptor<Prospect>()), today: today)
+        let onTheDay = UnplacedRooms.signature(try ctx.fetch(FetchDescriptor<Prospect>()), context: .at(today))
         let afterwards = UnplacedRooms.signature(try ctx.fetch(FetchDescriptor<Prospect>()),
-                                                 today: "2026-09-02")
+                                                 context: .at("2026-09-02"))
         #expect(onTheDay != afterwards)
     }
 }
@@ -417,7 +417,7 @@ struct UnplacedRoomsFollowTheQueueTests {
     }
 
     private func rooms(_ ctx: ModelContext) throws -> [UnplacedRooms.Room] {
-        UnplacedRooms.from(try ctx.fetch(FetchDescriptor<Prospect>()), today: today, now: now)
+        UnplacedRooms.from(try ctx.fetch(FetchDescriptor<Prospect>()), context: .at(today, now: now))
     }
 
     // A show Dan has cut sits in no stage, so nothing on it is waiting on an answer. The date rule kept
@@ -469,7 +469,7 @@ struct UnplacedRoomsFollowTheQueueTests {
         show(ctx, key: "placed", date: "2026-09-03").location = "New York, NY"
 
         let stored = try ctx.fetch(FetchDescriptor<Prospect>())
-        let inQueue = StageNavigation.queueKeys(in: stored, reachedOutKeys: [], today: today, now: now)
+        let inQueue = StageNavigation.queueKeys(in: stored, reachedOutKeys: [], context: .at(today, now: now))
         let waiting = stored.filter { ($0.location ?? "").isEmpty && inQueue.contains($0.naturalKey) }
 
         #expect(waiting.count == 2, "the fixture must hold shows the queue shows, or this proves nothing")
@@ -483,10 +483,10 @@ struct UnplacedRoomsFollowTheQueueTests {
         let ctx = ModelContext(try container())
         let p = show(ctx, key: "k1")
         let before = UnplacedRooms.signature(try ctx.fetch(FetchDescriptor<Prospect>()),
-                                             today: today, now: now)
+                                             context: .at(today, now: now))
 
         p.status = .dismissed
         #expect(UnplacedRooms.signature(try ctx.fetch(FetchDescriptor<Prospect>()),
-                                        today: today, now: now) != before)
+                                        context: .at(today, now: now)) != before)
     }
 }

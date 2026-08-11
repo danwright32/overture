@@ -64,10 +64,9 @@ enum UnplacedRooms {
     // reason moves it. It used to combine a hand-picked pair (the show count, and the room each unplaced
     // show names), which caught a fill and an arrival and nothing else: a show Dan cut, or one he pitched,
     // left the list without moving the signature, and the panel went on asking about it (L40).
-    static func signature(_ prospects: [Prospect], today: String,
-                          now: Date = Date(), geo: GeoRefusals = .none) -> Int {
+    static func signature(_ prospects: [Prospect], context: StageContext) -> Int {
         var acc = prospects.count
-        for p in waitingShows(prospects, today: today, now: now, geo: geo) {
+        for p in waitingShows(prospects, context: context) {
             var h = Hasher()
             h.combine(p.venue ?? "")
             acc = acc &+ h.finalize()
@@ -111,22 +110,22 @@ enum UnplacedRooms {
     // than an assumption made here: it refuses only a show it can positively place out of range, and
     // every show below has no place at all. Routed through the shared rule, the panel follows that gate
     // wherever it goes next instead of having to be told.
-    static func waitingShows(_ prospects: [Prospect], today: String, now: Date, geo: GeoRefusals) -> [Prospect] {
+    static func waitingShows(_ prospects: [Prospect], context: StageContext) -> [Prospect] {
         let candidates = prospects.filter(needsARoomAnswer)
         guard !candidates.isEmpty else { return [] }
-        let reachedOut = Set(ReachedOutQueue.active(from: candidates, now: now).map(\.prospect.naturalKey))
+        let reachedOut = Set(ReachedOutQueue.active(from: candidates,
+                                                   now: context.now).map(\.prospect.naturalKey))
         let inQueue = StageNavigation.queueKeys(in: candidates, reachedOutKeys: reachedOut,
-                                                today: today, now: now, geo: geo)
+                                                context: context)
         return candidates.filter { inQueue.contains($0.naturalKey) }
     }
 
     // Every distinct room holding at least one show still waiting on an answer, most shows first. Ties
     // break on the name so the list is stable from one render to the next rather than dependent on fetch
     // order.
-    static func from(_ prospects: [Prospect], today: String,
-                     now: Date = Date(), geo: GeoRefusals = .none) -> [Room] {
+    static func from(_ prospects: [Prospect], context: StageContext) -> [Room] {
         var byKey: [String: (name: String, count: Int)] = [:]
-        for p in waitingShows(prospects, today: today, now: now, geo: geo) {
+        for p in waitingShows(prospects, context: context) {
             guard let venue = p.venue?.trimmingCharacters(in: .whitespacesAndNewlines),
                   let key = VenuePlaces.canonicalKey(for: venue) else { continue }
             // The SHORTEST spelling wins as the display name: sources append addresses and suite numbers

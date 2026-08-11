@@ -105,10 +105,10 @@ struct QueueRenderDataGuardTests {
     // focus. Paired with StageNavigationCountsTests, which proves that single pass agrees with the
     // per-focus navigation it replaced.
     @Test func agentInputsCountsInOnePass() {
-        // #1570 added a `geo:` argument, so the anchor is the last line of the signature, not the
-        // whole of it.
+        // #1570 added a `geo:` argument and #2365 folded it, the day and the instant into one
+        // `context:`, so the anchor is the last line of the signature, not the whole of it.
         guard let body = SourceGuardHelper.propertyBody(
-            "geo: GeoRefusals = .none) -> AgentInputs {",
+            "prepRunning: Bool, replyRunAlive: Bool) -> AgentInputs {",
             in: agentRoster) else {
             Issue.record("expected to find AgentInputs.from's body")
             return

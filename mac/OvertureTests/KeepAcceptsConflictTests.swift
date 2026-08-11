@@ -147,7 +147,7 @@ struct KeepAcceptsConflictTests {
         p.setScoutConflict(wedding)   // a booking lands after the keep, so it blocks again
 
         let stage = StageNavigation.stage(containing: p.naturalKey, in: [p], reachedOutKeys: [],
-                                          today: "2026-08-01")
+                                          context: .at("2026-08-01"))
 
         #expect(stage != nil, "#1691: a kept show that matches no stage is rendered nowhere in the queue")
         #expect(stage == .prepBlocked)
@@ -164,12 +164,12 @@ struct KeepAcceptsConflictTests {
         let ready = show(ctx, status: .queued)
         ready.naturalKey = "ready"
 
-        let counts = StageNavigation.counts(in: [blocked, ready], today: "2026-08-01")
+        let counts = StageNavigation.counts(in: [blocked, ready], context: .at("2026-08-01"))
 
         #expect(counts[.prep] == 1)
         #expect(counts[.prepBlocked] == 1)
         #expect(StageNavigation.naturalKeys(for: .prepBlocked, in: [blocked, ready],
-                                            today: "2026-08-01") == [blocked.naturalKey])
+                                            context: .at("2026-08-01")) == [blocked.naturalKey])
     }
 
     // The Prep RUN's work list is deliberately unchanged: no contacts are researched and no email written

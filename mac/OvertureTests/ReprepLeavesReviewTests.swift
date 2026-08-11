@@ -36,7 +36,7 @@ struct ReprepLeavesReviewTests {
 
     private func focuses(_ p: Prospect) -> Set<StageFocus> {
         Set(StageNavigation.countedFocuses.filter {
-            StageNavigation.naturalKeys(for: $0, in: [p]).count == 1
+            StageNavigation.naturalKeys(for: $0, in: [p], context: StageContext(geo: .none)).count == 1
         })
     }
 
@@ -129,15 +129,15 @@ struct ReprepLeavesReviewTests {
         try ctx.save()
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
 
-        let counts = StageNavigation.counts(in: all)
+        let counts = StageNavigation.counts(in: all, context: StageContext(geo: .none))
         for focus in StageNavigation.countedFocuses {
-            let rows = StageNavigation.naturalKeys(for: focus, in: all)
+            let rows = StageNavigation.naturalKeys(for: focus, in: all, context: StageContext(geo: .none))
             #expect(counts[focus, default: 0] == rows.count, "\(focus): \(counts[focus] ?? 0) vs \(rows)")
         }
-        #expect(Set(StageNavigation.naturalKeys(for: .review, in: all))
+        #expect(Set(StageNavigation.naturalKeys(for: .review, in: all, context: StageContext(geo: .none)))
                 == Set(["plain-drafted", "plain-approved"]))
-        #expect(Set(StageNavigation.naturalKeys(for: .prep, in: all)) == Set(["kept", "reprep"]))
-        #expect(StageNavigation.naturalKeys(for: .prepBlocked, in: all) == ["reprep-clash"])
+        #expect(Set(StageNavigation.naturalKeys(for: .prep, in: all, context: StageContext(geo: .none))) == Set(["kept", "reprep"]))
+        #expect(StageNavigation.naturalKeys(for: .prepBlocked, in: all, context: StageContext(geo: .none)) == ["reprep-clash"])
     }
 
     // The stage a deep link or a search pick lands on is the same predicate, so a re-prepped show opens on
@@ -149,6 +149,6 @@ struct ReprepLeavesReviewTests {
         try ctx.save()
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
 
-        #expect(StageNavigation.stage(containing: "reprep", in: all, reachedOutKeys: []) == .prep)
+        #expect(StageNavigation.stage(containing: "reprep", in: all, reachedOutKeys: [], context: StageContext(geo: .none)) == .prep)
     }
 }

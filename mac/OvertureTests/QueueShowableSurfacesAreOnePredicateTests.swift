@@ -269,8 +269,8 @@ struct QueueShowableSurfacesAreOnePredicateTests {
         // #2288: the Sources sheet's room list, whose count beside each room promises what answering it
         // reaches. It answered the still-ahead half itself until then.
         .init(path: "Overture/Domain/VenuePlaceAnswer.swift",
-              marker: "static func waitingShows(_ prospects: [Prospect], today: String, "
-                    + "now: Date, geo: GeoRefusals) -> [Prospect] {",
+              marker: "static func waitingShows(_ prospects: [Prospect], context: StageContext) "
+                    + "-> [Prospect] {",
               answers: "how many shows are waiting on each room Overture cannot place",
               mustCall: ["queueKeys"])
     ]
@@ -434,7 +434,7 @@ struct QueueShowableSurfacesAreOnePredicateTests {
                 private func routeDeepLink(toKey key: String) {
                     let live = prospects.filter { $0.status == .new && !$0.hasOpened(today: today) }
                     if live.contains(where: { $0.naturalKey == key }),
-                       StageNavigation.opensInQueue(key: key, in: live, reachedOutKeys: []) {
+                       StageNavigation.opensInQueue(key: key, in: live, reachedOutKeys: [], context: StageContext(geo: .none)) {
                         deepLinkedKey = key
                     }
                 }
@@ -456,7 +456,7 @@ struct QueueShowableSurfacesAreOnePredicateTests {
             read: { _ in """
                 private func routeDeepLink(toKey key: String) {
                     // #1567: isReachableForDeepLink used to decide this behind a date window of its own.
-                    if StageNavigation.opensInQueue(key: key, in: prospects, reachedOutKeys: []) {
+                    if StageNavigation.opensInQueue(key: key, in: prospects, reachedOutKeys: [], context: StageContext(geo: .none)) {
                         deepLinkedKey = key
                     }
                 }
@@ -546,15 +546,15 @@ struct QueueShowableSurfacesAreOnePredicateTests {
 
         let ps = try ctx.fetch(FetchDescriptor<Prospect>())
         let reachedOut: Set<String> = ["pitched"]
-        let staged = StageNavigation.stagedKeys(in: ps, reachedOutKeys: reachedOut, today: today, now: now)
-        let counted = StageNavigation.queueKeys(in: ps, reachedOutKeys: reachedOut, today: today, now: now)
+        let staged = StageNavigation.stagedKeys(in: ps, reachedOutKeys: reachedOut, context: .at(today, now: now))
+        let counted = StageNavigation.queueKeys(in: ps, reachedOutKeys: reachedOut, context: .at(today, now: now))
 
         var rendered: Set<String> = []
         for focus in StageNavigation.countedFocuses {
-            for key in StageNavigation.naturalKeys(for: focus, in: ps, today: today, now: now) {
+            for key in StageNavigation.naturalKeys(for: focus, in: ps, context: .at(today, now: now)) {
                 rendered.insert(key)
                 #expect(StageNavigation.opensInQueue(key: key, in: ps, reachedOutKeys: reachedOut,
-                                                     today: today, now: now),
+                                                     context: .at(today, now: now)),
                         "\(focus) renders \(key) but searching for it opens Archive")
                 #expect(staged.contains(key), "\(focus) renders \(key) but the search bar cannot find it")
             }

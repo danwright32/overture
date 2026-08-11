@@ -220,10 +220,9 @@ struct SourcesView: View {
         // #2288: and the same inputs go to both calls, because the signature is built from the list's own
         // rule, so a signature computed against a different clock or gate would cache a list nobody asked
         // for.
-        .onChange(of: UnplacedRooms.signature(prospects, today: QueueModel.easternToday(),
-                                              now: Date(), geo: geo), initial: true) {
-            unplacedRooms = UnplacedRooms.from(prospects, today: QueueModel.easternToday(),
-                                               now: Date(), geo: geo)
+        .onChange(of: UnplacedRooms.signature(prospects, context: StageContext(geo: geo)),
+                  initial: true) {
+            unplacedRooms = UnplacedRooms.from(prospects, context: StageContext(geo: geo))
         }
         // Recompute the cached coverage result AND the per-source returning-client flags ONLY when their
         // real inputs change. The signature is cheap to evaluate every redraw; the O(clients x sources)

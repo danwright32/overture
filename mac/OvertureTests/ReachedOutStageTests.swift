@@ -53,7 +53,7 @@ struct ReachedOutStageTests {
         reachedOutContact(ctx, on: p, id: "a@org.example")
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
 
-        #expect(StageNavigation.naturalKeys(for: .reachedOut, in: all, today: today, now: now).isEmpty)
+        #expect(StageNavigation.naturalKeys(for: .reachedOut, in: all, context: .at(today, now: now)).isEmpty)
     }
 
     // Like .followUps, .reachedOut is excluded from the single-pass counted focuses, so it never adds a
@@ -77,7 +77,7 @@ struct ReachedOutStageTests {
         reachedOutContact(ctx, on: b, id: "c@org.example")   // two contacts on show "two"
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
 
-        let inputs = AgentInputs.from(prospects: all, now: now, today: today,
+        let inputs = AgentInputs.from(prospects: all, context: .at(today, now: now),
                                       gmailConnected: true, prepRunning: false, replyRunAlive: false)
 
         #expect(ReachedOutQueue.activeWithDates(from: all, now: now).count == 2)   // two rows, one per show
@@ -93,7 +93,7 @@ struct ReachedOutStageTests {
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
 
         #expect(StageNavigation.stage(containing: "pitched", in: all,
-                                      reachedOutKeys: ["pitched"], today: today, now: now) == .reachedOut)
+                                      reachedOutKeys: ["pitched"], context: .at(today, now: now)) == .reachedOut)
     }
 
     // A lead still awaiting a decision focuses the Scout stage; a drafted one focuses Review.
@@ -104,8 +104,8 @@ struct ReachedOutStageTests {
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
 
         #expect(StageNavigation.stage(containing: "fresh", in: all,
-                                      reachedOutKeys: [], today: today, now: now) == .scout)
+                                      reachedOutKeys: [], context: .at(today, now: now)) == .scout)
         #expect(StageNavigation.stage(containing: "drafted", in: all,
-                                      reachedOutKeys: [], today: today, now: now) == .review)
+                                      reachedOutKeys: [], context: .at(today, now: now)) == .review)
     }
 }

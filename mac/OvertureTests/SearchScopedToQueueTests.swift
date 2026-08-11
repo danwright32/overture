@@ -40,7 +40,7 @@ struct SearchScopedToQueueTests {
 
     private func staged(_ ps: [Prospect], reachedOut: Set<String> = [],
                         geo: GeoRefusals = .none) -> Set<String> {
-        StageNavigation.stagedKeys(in: ps, reachedOutKeys: reachedOut, today: today, now: now, geo: geo)
+        StageNavigation.stagedKeys(in: ps, reachedOutKeys: reachedOut, context: .at(today, now: now, geo: geo))
     }
 
     // The whole point of routing search through one predicate: what the bar can FIND and what a pick
@@ -63,7 +63,7 @@ struct SearchScopedToQueueTests {
 
         for p in ps {
             let opens = StageNavigation.opensInQueue(key: p.naturalKey, in: ps, reachedOutKeys: reachedOut,
-                                                     today: today, now: now, geo: geo)
+                                                     context: .at(today, now: now, geo: geo))
             #expect(scope.contains(p.naturalKey) == opens,
                     "\(p.naturalKey): searchable=\(scope.contains(p.naturalKey)) but opensInQueue=\(opens)")
         }
@@ -111,7 +111,7 @@ struct SearchScopedToQueueTests {
         let reachedOut: Set<String> = ["pitched"]
 
         let scope = staged(ps, reachedOut: reachedOut)
-        for key in StageNavigation.queueKeys(in: ps, reachedOutKeys: reachedOut, today: today, now: now) {
+        for key in StageNavigation.queueKeys(in: ps, reachedOutKeys: reachedOut, context: .at(today, now: now)) {
             #expect(scope.contains(key), "the masthead counts \(key) but the search bar cannot find it")
         }
     }

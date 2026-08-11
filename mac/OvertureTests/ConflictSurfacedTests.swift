@@ -214,7 +214,7 @@ struct ConflictSurfacedTests {
         // conflicted show is NOT pulled out of that order to the bottom.
         let items = stored(ctx).map(QueueItem.init)
             .sorted { ($0.performanceDate ?? "") < ($1.performanceDate ?? "") }
-        let showable = StageNavigation.queueKeys(in: stored(ctx), reachedOutKeys: [], today: "2099-08-01")
+        let showable = StageNavigation.queueKeys(in: stored(ctx), reachedOutKeys: [], context: .at("2099-08-01"))
         let ordered = items.filter { showable.contains($0.id) }
 
         #expect(ordered.count == 2)                                     // both present

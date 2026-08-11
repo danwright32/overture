@@ -56,7 +56,7 @@ struct StagePillCountMatchesNavigationTests {
 
     private func inputs(_ ctx: ModelContext) throws -> AgentInputs {
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
-        return AgentInputs.from(prospects: all, now: now, today: today,
+        return AgentInputs.from(prospects: all, context: .at(today, now: now),
                                 gmailConnected: true, prepRunning: false, replyRunAlive: false)
     }
 
@@ -67,7 +67,7 @@ struct StagePillCountMatchesNavigationTests {
 
     private func targets(_ ctx: ModelContext, _ status: AgentStatus) throws -> [String] {
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
-        return StageNavigation.naturalKeys(for: status.focus, in: all, today: today, now: now)
+        return StageNavigation.naturalKeys(for: status.focus, in: all, context: .at(today, now: now))
     }
 
     // MARK: - The invariant itself
@@ -216,7 +216,7 @@ struct StagePillCountMatchesNavigationTests {
         let statuses = AgentRoster.statuses(try inputs(ctx))
         #expect(statuses.contains { $0.name == "Send issues" } == false)
         // The navigation itself still resolves the approved unsent shows (used by the disconnected pill).
-        #expect(Set(StageNavigation.naturalKeys(for: .sendApproved, in: all, today: today, now: now))
+        #expect(Set(StageNavigation.naturalKeys(for: .sendApproved, in: all, context: .at(today, now: now)))
                 == Set(["approved-1", "approved-2"]))
     }
 }

@@ -86,7 +86,7 @@ struct FormOutreachTests {
 
         let reachedOutKeys = Set(ReachedOutQueue.activeWithDates(from: [p], now: now).map { $0.prospect.naturalKey })
         let stage = StageNavigation.stage(containing: p.naturalKey, in: [p],
-                                          reachedOutKeys: reachedOutKeys, today: "2026-07-28", now: now)
+                                          reachedOutKeys: reachedOutKeys, context: .at("2026-07-28", now: now))
 
         #expect(stage == .reachedOut)
     }

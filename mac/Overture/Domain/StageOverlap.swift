@@ -67,12 +67,11 @@ enum StageOverlap {
 
     // Every way the strip is double counting right now, over real prospects. One implementation, so the
     // synthetic tests and the live-store claim are asking the same question rather than two similar ones.
-    static func violations(in prospects: [Prospect], today: String = QueueModel.easternToday(),
-                           now: Date = Date(), geo: GeoRefusals = .none) -> [Violation] {
+    static func violations(in prospects: [Prospect], context: StageContext) -> [Violation] {
         var found: [Violation] = []
         for p in prospects {
             let matched = StageNavigation.countedFocuses.filter {
-                StageNavigation.naturalKeys(for: $0, in: [p], today: today, now: now, geo: geo).count == 1
+                StageNavigation.naturalKeys(for: $0, in: [p], context: context).count == 1
             }
             let lifecycle = matched.filter { mutuallyExclusiveLifecycle.contains($0) }
             if lifecycle.count > 1 {

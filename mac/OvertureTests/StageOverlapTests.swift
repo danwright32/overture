@@ -55,7 +55,7 @@ struct StageOverlapTests {
 
     private func focuses(_ p: Prospect) -> [StageFocus] {
         StageNavigation.countedFocuses.filter {
-            StageNavigation.naturalKeys(for: $0, in: [p], today: today).count == 1
+            StageNavigation.naturalKeys(for: $0, in: [p], context: .at(today)).count == 1
         }
     }
 
@@ -138,7 +138,7 @@ struct StageOverlapTests {
         sentContact(contacted, id: "other@example.com")
 
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
-        let violations = StageOverlap.violations(in: all)
+        let violations = StageOverlap.violations(in: all, context: StageContext(geo: .none))
 
         #expect(violations.isEmpty, "\(violations.map { "\($0.key): \($0.rule.rawValue) \($0.focuses)" })")
     }
@@ -158,7 +158,7 @@ struct StageOverlapTests {
         p.reprepContactsRequested = true
 
         #expect(Set(focuses(p)) == Set([.prep]))
-        #expect(StageOverlap.violations(in: [p]).isEmpty)
+        #expect(StageOverlap.violations(in: [p], context: StageContext(geo: .none)).isEmpty)
     }
 
     // The rules have teeth: a show that genuinely breaks one is reported, naming the rule. Without this
@@ -168,7 +168,7 @@ struct StageOverlapTests {
         let p = show(ctx, key: "never-sent", status: .new)
         p.sendError = "550 mailbox unavailable"   // a failure on a show nothing was sent from
 
-        let violations = StageOverlap.violations(in: [p])
+        let violations = StageOverlap.violations(in: [p], context: StageContext(geo: .none))
 
         #expect(violations.map(\.rule) == [.sendProblemNeedsSendHalf])
         #expect(violations.first?.focuses == [.sendErrors])
@@ -199,7 +199,7 @@ struct StageOverlapTests {
         let item = try #require(QueueModel.items(from: [p]).first)
 
         #expect(item.heldContactAtTriage == nil)
-        #expect(StageNavigation.naturalKeys(for: .sendBlocked, in: [p], today: today) == ["drafted-held"])
+        #expect(StageNavigation.naturalKeys(for: .sendBlocked, in: [p], context: .at(today)) == ["drafted-held"])
     }
 
     // The property that matters more than either half: every held contact is spoken for by exactly one
@@ -218,7 +218,7 @@ struct StageOverlapTests {
         for p in all {
             let item = try #require(QueueModel.items(from: [p]).first)
             let card = item.heldContactAtTriage != nil
-            let stage = StageNavigation.naturalKeys(for: .sendBlocked, in: [p], today: today).count == 1
+            let stage = StageNavigation.naturalKeys(for: .sendBlocked, in: [p], context: .at(today)).count == 1
             #expect(card != stage, "\(p.naturalKey): card=\(card) stage=\(stage)")
         }
     }
