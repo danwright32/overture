@@ -367,6 +367,39 @@ read. The script clears it on exit (`lib/scout-cancel.sh`'s
 `clear_cancel`), and the app clears any stale one before starting a fresh run, so a sentinel left over
 from a cancelled run can never stop the next one. See `docs/contracts.md` for the cross-language contract.
 
+## When a run stops making progress (#2506)
+
+A fresh marker proves the HEARTBEAT is alive and nothing else. On 2026-08-11 a paid run of 27 sources
+across 4 chunks finished its actual work at 10:47 and was still reporting "26 of 27, running" at 11:43.
+One chunk's worker had died having written nothing at all (a zero byte chunk log), so the `wait` on it
+could never return, while the heartbeat went on touching the marker every few seconds. The app's 10 minute
+`RunTimeouts.scoutExtract` staleness window could never fire, because the marker was never stale, and the
+results file was rewritten with identical bytes on the same cadence. Dan saw it was stuck from the screen
+and was talked out of it twice on the strength of that heartbeat.
+
+So the heartbeat now answers a second, separate question every marker tick: has anything NEW landed?
+`lib/run-stall-guard.sh` signs the results file's CONTENT (never its timestamp, which is exactly what was
+lying), accumulates how long the signature has stood still, and returns a stop verdict once that passes
+`SCOUT_EXTRACT_STALL_LIMIT_SECONDS` (default 1200, twenty minutes). The heartbeat then exits, which stops
+the chunk processes through the same `heartbeat_guard_exit` path a cancel uses, `wait` returns, and the
+run finishes normally: `lib/results-guard.sh` speaks for every source that never came back, exactly as it
+does for any other lost run, and the run status goes non-zero. The same guard is wired into `prep-run.sh` and
+`reply-classify-run.sh`, whose heartbeats had the identical shape.
+
+Two smaller silences from the same incident are closed alongside it, both in `lib/scout-parallel.sh`:
+
+- `report_short_chunks` names every chunk that came back with fewer results than its own queue held, and
+  the sources it never reported. The whole-queue backstop already covered those sources, but it cannot say
+  WHERE the loss happened, and the chunk is the thing whose log you then want to read.
+- `report_chunk_log` says explicitly when a chunk wrote NO log at all. `tail` of a zero byte file is empty,
+  which reads exactly like a chunk that had a quiet finish.
+
+Sizing note: twenty minutes is well past anything this run has ever done (the wholly sequential path took
+16 minutes for 18 sources, and four chunks work at once). Stopping a healthy but slow run would lose the
+work in flight, not the work already landed, and it is reported rather than silent. An unset or mistyped
+limit disables the ceiling rather than shortening it. Every stalled tick is logged before the stop, so the
+evidence for retuning the number is in `scout-extract-run.log`.
+
 ## Files
 
 | file | who writes it |
@@ -374,6 +407,7 @@ from a cancelled run can never stop the next one. See `docs/contracts.md` for th
 | `overture-scout-extract-queue.json` | the app |
 | `scout-extract-cancel` | the app, to ask a running read to stop (#1037); the script reads its presence on each heartbeat and clears it on exit |
 | `scout-extract-chunk-pids` | the script, so its heartbeat knows which chunk processes to stop on a cancel (#1037); wiped every run |
+| `scout-extract-stall-state` | the script, so its heartbeat can tell a run that is working from one that has stood still (#2506); wiped every run and on exit |
 | `overture-scout-extract-results.json` | the script, merged from the per-chunk results every heartbeat and once at the end (#1028); each chunk's claude rewrites its own chunk file after every item, not only at the end (#1015) |
 | `overture-scout-extract-progress.json` | the script only, seeded and then continuously derived from the results file above; this run never writes it (#1015) |
 | `scout-extract-chunks/chunk-queue-<n>.json`, `chunk-results-<n>.json` | the script's scratch dir (#1028): the split queue each chunk reads and the results each chunk writes, wiped and rebuilt every run; the app never reads these |
