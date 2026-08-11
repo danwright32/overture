@@ -267,8 +267,8 @@ enum OvationTixCalendar {
 
     // The events mapped straight to ExtractedEvent for the native extractor. Every show is attributed to the
     // venue by NAME (threaded from the source, since the feed carries no venue name) and carries Dan's
-    // supplied location. The marketing super/sub titles are not org or place data, so they are deliberately
-    // dropped rather than allowed to pollute the pitchable identity. Only a production spanning MORE THAN ONE
+    // supplied location. The marketing SUBtitle is not org or place data, so it is deliberately dropped
+    // rather than allowed to pollute the pitchable identity. Only a production spanning MORE THAN ONE
     // day here keeps a seriesId, so those dates collapse into one run downstream; a single-day show keeps a
     // nil id so it still merges by the gap-and-title walk if a sibling appears.
     //
@@ -294,7 +294,19 @@ enum OvationTixCalendar {
         let multiNight = Set(seriesTags(events).keys)
         return events.map { e in
             ExtractedEvent(title: e.title,
-                           presenter: presenter,
+                           // #2452: the company this production credits above its own title, when it
+                           // credits one, rather than the room every show here shares. This field used to
+                           // reach the native path and be discarded, while the VenueTix adapter read the
+                           // identical field as a producer: one concept, two readings, each file correct
+                           // on its own (L89). Both OvationTix rooms on the watchlist produce rows with
+                           // nobody to pitch (SoHo Playhouse 21 live shows, The Players Theatre 15,
+                           // measured on the live store 2026-08-10), because a presenter that is only the
+                           // room's own name is drained downstream and leaves no organisation at all.
+                           //
+                           // Through the shared rule, so a marketing supertitle ("For One Night Only")
+                           // still falls through to the room here exactly as it does there.
+                           presenter: ProducerShapedName.presenter(creditedAbove: e.superTitle,
+                                                                   orElse: presenter),
                            venue: venue,
                            performanceDate: FeedDates.day(from: e.date, zone: zone),
                            // Dan's call (2026-07-28): fall back to the venue's own calendar, never nothing.

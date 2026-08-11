@@ -235,6 +235,29 @@ else
  committed: $(strip_at "${FIXTURES}/running.json")"
 fi
 
+# 10. #1711: an update run whose environment carries no HOME. update-overture.sh declares
+#     `set -euo pipefail`, so the bare ${HOME} that used to sit inside overture_update_result_path
+#     killed the whole update the first time the record was written, with the shell's own
+#     "HOME: unbound variable" and nothing else. Recording the outcome is bookkeeping for the app; it
+#     must never be what stops the update, and its absence must say so rather than pass as written.
+out="$(env -u HOME -u OVERTURE_DATA_DIR bash -c '
+  set -euo pipefail
+  . "'"${SCRIPT_DIR}"'/lib/update-result.sh"
+  overture_update_record_running
+  echo survived' 2>&1)"
+case "${out}" in
+  *"unbound variable"*) fail "no HOME: the outcome record refuses in its own words, not the shell's" "got: ${out}" ;;
+  *) pass "no HOME: the outcome record refuses in its own words, not the shell's" ;;
+esac
+case "${out}" in
+  *"neither OVERTURE_DATA_DIR nor HOME is set"*) pass "no HOME: says why the outcome could not be recorded" ;;
+  *) fail "no HOME: says why the outcome could not be recorded" "got: ${out}" ;;
+esac
+case "${out}" in
+  *survived*) pass "no HOME: the update itself carries on rather than dying on its bookkeeping" ;;
+  *) fail "no HOME: the update itself carries on rather than dying on its bookkeeping" "got: ${out}" ;;
+esac
+
 if [ "${FAILURES}" -gt 0 ]; then
   echo "${FAILURES} check(s) failed"
   exit 1

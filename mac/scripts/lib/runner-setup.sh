@@ -23,7 +23,26 @@ export CLAUDE_DETACHED_RUN=1
 
 # The app passes its build-specific handoff dir (Debug builds use an isolated Overture-Debug
 # subfolder). Fall back to the live path for a hand-run from a terminal.
-SUPPORT="${OVERTURE_SUPPORT_DIR:-$HOME/Library/Application Support/Overture}"
+#
+# #1711: HOME is read through a guard rather than directly. Every runner declares `set -eu`, so a bare
+# "$HOME" here aborted the whole script with "runner-setup.sh: line 26: HOME: unbound variable", which
+# is precisely the traceless early death #485 exists to prevent: the app sends this invocation's stdout
+# and stderr to /dev/null, so the shell's own error reaches nobody and the run is indistinguishable
+# from one that ran and found nothing.
+#
+# There is no honest fallback to take here. With neither variable set, the only path left would be
+# "/Library/Application Support/Overture", a system folder nobody meant, so the run refuses instead.
+# This is also the ONE guard in this file whose message cannot reach the run log, because the run log's
+# own folder is what could not be resolved; everything below it logs.
+if [ -n "${OVERTURE_SUPPORT_DIR:-}" ]; then
+  SUPPORT="$OVERTURE_SUPPORT_DIR"
+elif [ -n "${HOME:-}" ]; then
+  SUPPORT="$HOME/Library/Application Support/Overture"
+else
+  echo "cannot tell where Overture's handoff folder is: neither OVERTURE_SUPPORT_DIR nor HOME is set in this run's environment." >&2
+  echo "  Set HOME to the account's home folder, or set OVERTURE_SUPPORT_DIR to the handoff folder, then start the run again." >&2
+  exit 1
+fi
 
 # open_run_log <log-filename>: open the log before any guard below can exit. The launching
 # Process() redirects this whole invocation's stdout/stderr to /dev/null, so until #485 an
@@ -44,8 +63,20 @@ require_queue() {
 # scripts with a minimal PATH, so look in the usual install spots rather than relying on PATH.
 resolve_claude() {
   CLAUDE=""
-  for c in "$HOME/.local/bin/claude" "/usr/local/bin/claude" "/opt/homebrew/bin/claude" "$(command -v claude 2>/dev/null || true)"; do
+  # #1711: the home install path is built only when there is a HOME to build it from. Under `set -u` a
+  # bare "$HOME" in the list below killed the run with "HOME: unbound variable" instead of the message
+  # further down, and the message is the whole point of this guard. An empty entry is skipped by the
+  # -n test in the loop, which is how the list already handles a `command -v` that found nothing.
+  HOME_CLAUDE=""
+  if [ -n "${HOME:-}" ]; then HOME_CLAUDE="$HOME/.local/bin/claude"; fi
+  for c in "$HOME_CLAUDE" "/usr/local/bin/claude" "/opt/homebrew/bin/claude" "$(command -v claude 2>/dev/null || true)"; do
     if [ -n "$c" ] && [ -x "$c" ]; then CLAUDE="$c"; break; fi
   done
-  [ -n "$CLAUDE" ] || { echo "claude CLI not found" >&2; exit 1; }
+  [ -n "$CLAUDE" ] || {
+    echo "claude CLI not found" >&2
+    # A search that was narrower than intended is a different failure from a binary that is genuinely
+    # absent, and this line is the only thing that can tell the two apart afterwards (L11).
+    [ -n "${HOME:-}" ] || echo "  HOME is not set in this run's environment, so the usual ~/.local/bin install was not searched. Set HOME to the account's home folder, then start the run again." >&2
+    exit 1
+  }
 }

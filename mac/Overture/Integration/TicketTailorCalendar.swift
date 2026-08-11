@@ -118,7 +118,18 @@ enum TicketTailorCalendar {
         let multiDate = Set(seriesTags(events).keys)
         return events.map { e in
             ExtractedEvent(title: e.name,
-                           presenter: venueName,
+                           // #2452: through the one producer-name rule, like every other feed adapter,
+                           // and handed NOTHING, because the widget publishes no credit line at all: a
+                           // series carries series_id, name, venue and event_page_url and nothing else
+                           // (measured against the captured widget bytes, 2026-07-21). So the room's own
+                           // name still stands, which is the answer this line has always given.
+                           //
+                           // Routing it anyway is the point. Deciding here that this feed names no
+                           // producer is what made three adapters read one concept three ways; with the
+                           // decision in one place, the day the widget grows a billing line it is read
+                           // the way VenueTix and OvationTix read theirs rather than by a fourth rule
+                           // invented beside this one (L89).
+                           presenter: ProducerShapedName.presenter(creditedAbove: nil, orElse: venueName),
                            venue: (e.venue?.isEmpty == false) ? e.venue! : venueName,
                            performanceDate: FeedDates.day(from: e.date, zone: zone),
                            sourceUrl: e.eventURL.flatMap(absoluteEventURL),

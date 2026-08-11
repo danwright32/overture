@@ -17,7 +17,19 @@
 # this Mac a stable code-signing identity, not any external credential. All three are overridable so
 # the fixture can point them at a throwaway.
 : "${OVERTURE_SIGNING_IDENTITY:=Overture Local Signing}"
-: "${OVERTURE_SIGNING_KEYCHAIN:=${HOME}/Library/Keychains/overture-signing.keychain-db}"
+# #1711: HOME through a guard rather than directly. build-install.sh declares `set -euo pipefail` and is
+# reached from the app's own Update button, so a bare ${HOME} here aborted the install with the shell's
+# "HOME: unbound variable" and nothing about signing at all. A keychain has no sensible location without
+# HOME, so this refuses rather than guessing one, in the same spirit as the identity check below: never
+# carry on toward an ad-hoc signature, which is the silent-drop trap #1425 is about.
+if [ -z "${OVERTURE_SIGNING_KEYCHAIN:-}" ]; then
+  if [ -z "${HOME:-}" ]; then
+    echo "Cannot tell where the Overture signing keychain lives: HOME is not set in this environment." >&2
+    echo "  Set HOME to the account's home folder, or set OVERTURE_SIGNING_KEYCHAIN to the keychain file, then run this again." >&2
+    exit 1
+  fi
+  OVERTURE_SIGNING_KEYCHAIN="${HOME}/Library/Keychains/overture-signing.keychain-db"
+fi
 : "${OVERTURE_SIGNING_KEYCHAIN_PASSWORD:=overture-local-signing}"
 
 # Prints the SHA-1 of the valid (trusted) "${OVERTURE_SIGNING_IDENTITY}" code-signing identity, or
