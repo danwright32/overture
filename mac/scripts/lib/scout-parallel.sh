@@ -121,21 +121,23 @@ split_queue_into_chunks() {
 # all (a node-free machine falls back to one process) has no chunk to be short, and must not read as a
 # failure.
 report_short_chunks() {
-  local out_dir="$1"
+  local out_dir="$1" report status
   command -v node >/dev/null 2>&1 || return 0
   [ -d "${out_dir}" ] || return 0
 
-  node -e '
+  report="$(node -e '
     const fs = require("fs"), path = require("path");
     const [outDir] = process.argv.slice(1);
 
     const read = (p) => { try { return fs.readFileSync(p, "utf8"); } catch { return null; } };
     const parse = (s) => { try { return JSON.parse(s); } catch { return null; } };
 
-    let files = [];
+    // Cannot even list the chunks: that is UNKNOWN, never "every chunk reported in full". An empty
+    // success here would be the one thing this check must never say without having measured it (L11).
+    let files;
     try {
       files = fs.readdirSync(outDir).filter((f) => /^chunk-queue-\d+\.json$/.test(f)).sort();
-    } catch { files = []; }
+    } catch { process.exit(4); }
 
     let short = 0;
     for (const f of files) {
@@ -159,8 +161,23 @@ report_short_chunks() {
         `scout-extract: chunk ${n} reported ${queued.length - missing.length} of ${queued.length} ` +
         `sources${nothing}. Never reported: ${missing.join(", ")}`);
     }
-    process.exit(short ? 1 : 0);
-  ' "${out_dir}" 2>/dev/null
+    // 3, not 1: an uncaught throw in this program also exits 1, and "a chunk came back short" and "this
+    // check fell over" are different answers that must not share one status (L53).
+    process.exit(short ? 3 : 0);
+  ' "${out_dir}" 2>/dev/null)"
+  status=$?
+  [ -n "${report}" ] && printf '%s\n' "${report}"
+
+  case "${status}" in
+    0) return 0 ;;   # measured: every chunk reported in full
+    3) return 1 ;;   # measured: at least one chunk came back short, and it is named above
+  esac
+
+  # Anything else means the check itself did not run to a verdict. Saying nothing would read exactly like
+  # a clean run, so say what is actually known: nothing. 2 is neither of the measured answers, so a caller
+  # that ever starts branching on this cannot mistake it for one.
+  echo "scout-extract: could not check whether any chunk came back short (the check exited ${status}). Whether a chunk lost sources is UNKNOWN here; the full-queue guard still speaks for every source."
+  return 2
 }
 
 # report_chunk_log <chunk_log> <chunk_number>

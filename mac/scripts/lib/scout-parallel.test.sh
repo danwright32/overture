@@ -384,6 +384,32 @@ assert_contains "every source in a chunk that wrote nothing is named (second)" "
 report_short_chunks "${SHORTTMP}/does-not-exist" >/dev/null
 assert_equals "a run with no chunks at all is not a failure" "0" "$?"
 
+# A chunk dir that EXISTS but cannot be listed is neither of the two measured answers. Saying nothing
+# there would read exactly like a clean run, which is the one thing this check must never claim without
+# having measured it (L11), so the unknown gets its own status and its own sentence.
+UNREADABLE="${SHORTTMP}/unreadable"
+mkdir -p "${UNREADABLE}"
+printf '{"version":1,"items":[{"sourceId":"x"}]}' > "${UNREADABLE}/chunk-queue-1.json"
+chmod 000 "${UNREADABLE}"
+UNKNOWN_OUT="$(report_short_chunks "${UNREADABLE}")"
+UNKNOWN_STATUS=$?
+chmod 700 "${UNREADABLE}"
+assert_equals "a chunk dir that cannot be read is neither complete nor short" "2" "${UNKNOWN_STATUS}"
+assert_contains "and it says the answer is unknown rather than staying silent" \
+  "${UNKNOWN_OUT}" "UNKNOWN"
+
+# An uncaught throw inside the node program also exits 1, so "a chunk came back short" cannot be spelled
+# 1 as well: the two are different answers and must not share one status (L53). Proved by standing in for
+# node with a program that exits 1 saying nothing, which is exactly what a crash looks like from here.
+FAKEBIN="${SHORTTMP}/fakebin"
+mkdir -p "${FAKEBIN}"
+printf '#!/bin/sh\nexit 1\n' > "${FAKEBIN}/node"
+chmod +x "${FAKEBIN}/node"
+CRASH_OUT="$(PATH="${FAKEBIN}:${PATH}" report_short_chunks "${SHORTTMP}/chunks")"
+CRASH_STATUS=$?
+assert_equals "a check that crashed is not reported as a chunk coming back short" "2" "${CRASH_STATUS}"
+assert_contains "a crashed check says so" "${CRASH_OUT}" "UNKNOWN"
+
 # ---------------------------------------------------------------------------
 # And the log side of the same death. A zero byte chunk log is the signature of a worker that produced
 # nothing whatsoever, and `tail` of an empty file is empty, which is indistinguishable from a chunk that
