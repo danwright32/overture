@@ -204,7 +204,7 @@ final class ReconcileScheduler {
         // verdict: "nothing new for four weeks" and "everything gone at once" are different questions and
         // must not share an answer (L53).
         DownbeatBookingFeedStore.record(clientCount: loaded.clients.count, bookings: loaded.bookings,
-                                        today: QueueModel.easternToday(), into: defaults)
+                                        today: QueueModel.easternToday(), now: now, into: defaults)
     }
 
     // ReconcileSummary instead of failing silently. #617: `from` mirrors DownbeatBridge.loadWithHealth's

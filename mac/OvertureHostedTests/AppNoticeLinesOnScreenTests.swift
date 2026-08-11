@@ -54,7 +54,8 @@ struct AppNoticeLinesOnScreenTests {
     // fault nothing told him about, so "the notice exists" is not the claim worth proving; "the sentence
     // and the button are drawn" is.
     @Test func abrokenBookingExportIsOnScreenWithItsControl() {
-        let vanished = DownbeatBookingFeed.Vanished(bookingCount: 15, lastEndDate: "2027-06-13")
+        let vanished = DownbeatBookingFeed.Vanished(
+            bookingCount: 15, evidence: .theExportCarriedThemUntil("2027-06-13"))
         let notices = AppNotices.current(omniFocusFailing: false, bookingsVanished: vanished,
                                          status: StatusLine())
         #expect(lines(notices) == [AppNotices.downbeatShootsVanished(vanished).text,

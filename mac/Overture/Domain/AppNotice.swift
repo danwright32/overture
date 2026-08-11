@@ -130,17 +130,40 @@ enum AppNotices {
     // own diary or at a broken export. The tooltip carries the part that explains rather than instructs:
     // why all of them going at once is read as a break, dated by the furthest night, and the half of the
     // remedy Overture cannot perform.
+    // The half both wordings end on, written once so the two can never drift apart (#843): what Dan
+    // loses while this is true is the same either way.
+    static let downbeatShootsVanishedStake =
+        "so Overture can't keep clear of your booked nights or spot a booking."
+
     static func downbeatShootsVanished(_ vanished: DownbeatBookingFeed.Vanished) -> AppNotice {
-        let furthest = EasternDate.date(from: vanished.lastEndDate)
-            .map { EasternDate.dayLabelWithYear($0) } ?? vanished.lastEndDate
-        return AppNotice(
-            text: "Every one of the \(Plural.count(vanished.bookingCount, "shoot")) Downbeat was exporting "
-                + "has gone at once, so Overture can't keep clear of your booked nights or spot a booking.",
-            tone: .warning,
-            help: "Shoots leave the export one at a time, as their dates pass, and the furthest of these "
-                + "was not until \(furthest), so all of them going together reads as a broken export "
-                + "rather than an empty diary. Re-export it from Downbeat, then re-read it here.",
-            action: .recheckDownbeatExport)
+        switch vanished.evidence {
+        case .theExportCarriedThemUntil(let lastEndDate):
+            let furthest = EasternDate.date(from: lastEndDate)
+                .map { EasternDate.dayLabelWithYear($0) } ?? lastEndDate
+            return AppNotice(
+                text: "Every one of the \(Plural.count(vanished.bookingCount, "shoot")) Downbeat was "
+                    + "exporting has gone at once, " + downbeatShootsVanishedStake,
+                tone: .warning,
+                help: "Shoots leave the export one at a time, as their dates pass, and the furthest of "
+                    + "these was not until \(furthest), so all of them going together reads as a broken "
+                    + "export rather than an empty diary. Re-export it from Downbeat, then re-read it "
+                    + "here.",
+                action: .recheckDownbeatExport)
+        case .seenBeforeTheirDatesWereKept(let lastNewAt):
+            // A weaker claim, in weaker words, because the evidence is weaker (L11). These ids arrived
+            // one at a time over months and carry no dates, so this must never say they were being
+            // carried together, and must never date them.
+            let arrived = EasternDate.dayLabelWithYear(Date(timeIntervalSince1970: lastNewAt))
+            return AppNotice(
+                text: "Downbeat's export carries no shoots at all, though \(vanished.bookingCount) have "
+                    + "come through it before, " + downbeatShootsVanishedStake,
+                tone: .warning,
+                help: "Overture recorded those before it kept their dates, so it can't say which have "
+                    + "already happened. What it can say is that a new shoot came through as recently as "
+                    + "\(arrived), and the export now holds none at all. Re-export it from Downbeat, "
+                    + "then re-read it here.",
+                action: .recheckDownbeatExport)
+        }
     }
 
     static func current(omniFocusFailing isFailing: Bool,

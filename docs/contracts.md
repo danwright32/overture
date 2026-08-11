@@ -209,6 +209,15 @@ from `DownbeatBridge.health` (is the file there, decodable, recent) and `Downbea
 anything new arrived lately). The producing side of the 2026-08-10 outage is filed in Downbeat as
 danwright32/downbeat#147 and #148.
 
+Those evidence keys are new, so a Mac whose export had ALREADY stopped carrying bookings would have
+had nothing to compare against. `DownbeatBookingFeedStore.bootstrapFromSeenIds` migrates #1456's
+seen-booking-id set into them once, and only into a store with no history of its own: the first
+export that actually carries shoots overwrites all three keys, so dated evidence always wins over
+the migrated record. The migrated record carries no end date (those ids never had one), and is
+therefore leaned on for four weeks after the last new shoot arrived rather than until a date passes.
+The same cold-start hole in the sibling checks is #2496; an export whose CLIENT list empties this
+way is #2495.
+
 ### `overture-history.json`
 
 Past booking history (`{ groupName, status }`), so repeat-client matching and do-not-contact

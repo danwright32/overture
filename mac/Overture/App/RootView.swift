@@ -174,13 +174,16 @@ struct RootView: View {
     @AppStorage(DownbeatBookingFeedStore.upcomingBookingCountKey) private var feedUpcomingBookings = 0
     @AppStorage(DownbeatBookingFeedStore.lastCarriedCountKey) private var feedLastCarriedCount = 0
     @AppStorage(DownbeatBookingFeedStore.lastCarriedEndDateKey) private var feedLastCarriedEndDate = ""
+    @AppStorage(DownbeatBookingFeedStore.lastCarriedAtKey) private var feedLastCarriedAt: Double = 0
 
     private var bookingsVanished: DownbeatBookingFeed.Vanished? {
-        DownbeatBookingFeed.vanished(clientCount: feedClientCount,
-                                     upcomingBookingCount: feedUpcomingBookings,
-                                     lastCarriedCount: feedLastCarriedCount,
-                                     lastCarriedEndDate: feedLastCarriedEndDate,
-                                     today: QueueModel.easternToday())
+        let now = Date()
+        return DownbeatBookingFeed.vanished(clientCount: feedClientCount,
+                                            upcomingBookingCount: feedUpcomingBookings,
+                                            lastCarriedCount: feedLastCarriedCount,
+                                            lastCarriedEndDate: feedLastCarriedEndDate,
+                                            lastCarriedAt: feedLastCarriedAt,
+                                            today: QueueModel.easternToday(now), now: now)
     }
 
     private var daysOffReason: DaysOffAttention.Reason {

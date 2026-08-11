@@ -4,7 +4,7 @@ import Foundation
 //
 // On 2026-08-10 Downbeat refreshed this file carrying 30 clients, 4 venues, and no bookings at all, while
 // Dan had fifteen shoots on the books (its exporter had started omitting every booking that was not in the
-// committed state, danwright/downbeat#147, and both of its error paths swallowed the failure, #148).
+// committed state, danwright32/downbeat#147, and both of its error paths swallowed the failure, #148).
 // Overture read it as a true picture of the world, because every signal it checked said healthy: current
 // timestamp, supported version, populated client list. Three features then silently did nothing at all:
 // booking detection had nothing to match a pitched show against, the blocked calendar got no dates to keep
@@ -32,43 +32,71 @@ enum DownbeatBookingFeed {
     // The smallest list whose total loss is a signature rather than an ordinary cancellation.
     static let vanishedFloor = 2
 
+    // How long evidence that carries NO dates can still be leaned on. See `Evidence` below.
+    static let undatedEvidenceLastsFor: TimeInterval = DownbeatFeedFreshness.stalledAfter
+
     // What went, and how far ahead it ran. Carried so the message can state the evidence it measured
     // rather than asserting a conclusion Dan has to take on trust.
     struct Vanished: Equatable, Sendable {
         var bookingCount: Int
-        var lastEndDate: String     // yyyy-MM-dd, the furthest night any of them ran to
+        var evidence: Evidence
+
+        // Two kinds of evidence, kept apart in the TYPE rather than by a convention, because they support
+        // different claims and the message must not make the stronger one from the weaker (L11).
+        enum Evidence: Equatable, Sendable {
+            // The export itself carried these shoots, all at once, and this is the furthest night any of
+            // them ran to. Dated, so it retires itself when that night passes.
+            case theExportCarriedThemUntil(String)
+            // Booking ids Overture had already seen before it began keeping their dates: how many came
+            // through this feed, and when the last new one appeared. It cannot say which have already
+            // happened, so it can only be leaned on for a bounded time after that last arrival.
+            case seenBeforeTheirDatesWereKept(lastNewAt: Double)
+        }
     }
 
     // The verdict, from the facts one observation records. Every argument is a plain stored value, so the
     // masthead can read them straight out of @AppStorage and re-derive this on every render: the verdict
-    // is never itself stored, which is what lets it retire itself the day `lastCarriedEndDate` passes.
+    // is never itself stored, which is what lets it retire itself the day its evidence stops holding.
     static func vanished(clientCount: Int, upcomingBookingCount: Int,
-                         lastCarriedCount: Int, lastCarriedEndDate: String,
-                         today: String) -> Vanished? {
+                         lastCarriedCount: Int, lastCarriedEndDate: String, lastCarriedAt: Double,
+                         today: String, now: Date) -> Vanished? {
         // A file that is missing, unreadable or empty reaches here with no clients either, and that has
         // its own message from DownbeatBridge.health. Reporting it again in different words would be one
         // fault arriving as two.
         guard clientCount > 0 else { return nil }
         guard upcomingBookingCount == 0 else { return nil }
         guard lastCarriedCount >= vanishedFloor else { return nil }
+
+        // Each kind of evidence retires itself in the only currency it has.
+        if lastCarriedEndDate.isEmpty {
+            // Dateless: booking ids Overture had already seen before it began keeping their dates
+            // (#1456's set, migrated once by DownbeatBookingFeedStore.bootstrapFromSeenIds). Nothing in
+            // it can say which of those shoots have happened, so the dated guard below cannot be
+            // evaluated at all and must not be faked. What the record DOES fix is an instant: a new
+            // upcoming shoot arrived then, so as of then this feed was carrying at least one shoot that
+            // had not happened yet. That is worth leaning on for a bounded time and no longer, which is
+            // what keeps this from becoming a claim that can never expire.
+            guard lastCarriedAt > 0 else { return nil }
+            guard now.timeIntervalSince1970 - lastCarriedAt <= undatedEvidenceLastsFor else { return nil }
+            return Vanished(bookingCount: lastCarriedCount,
+                            evidence: .seenBeforeTheirDatesWereKept(lastNewAt: lastCarriedAt))
+        }
         // The half that makes this age out by itself: a night still to come cannot have left the export
         // by happening.
         guard lastCarriedEndDate >= today else { return nil }
-        return Vanished(bookingCount: lastCarriedCount, lastEndDate: lastCarriedEndDate)
+        return Vanished(bookingCount: lastCarriedCount,
+                        evidence: .theExportCarriedThemUntil(lastCarriedEndDate))
     }
 
-    // The evidence to keep after seeing this export. Written ONLY from an export that carried shoots, so a
-    // broken one cannot erase the record that convicts it (L5): overwriting on every observation would
-    // mean the first empty file destroyed the only thing that could tell it apart from a quiet week.
+    // What this export is worth as evidence: how many shoots it carried that have not happened yet, and
+    // the furthest night among them. Nil when it carries none, which means KEEP whatever is already on
+    // file rather than overwrite it, so a broken export cannot erase the record that convicts it (L5).
     //
-    // Shoots already past are not evidence: a file left carrying nothing but last year's work would
-    // otherwise keep this armed on dates that cannot come back.
-    static func carried(lastCarriedCount: Int, lastCarriedEndDate: String,
-                        bookings: [OvertureBooking], today: String) -> (count: Int, endDate: String) {
+    // Shoots already past are not evidence either: a file left carrying nothing but last year's work
+    // would otherwise keep this armed on dates that cannot come back.
+    static func carried(bookings: [OvertureBooking], today: String) -> (count: Int, endDate: String)? {
         let upcoming = bookings.filter { $0.endDate >= today }
-        guard let furthest = upcoming.map(\.endDate).max() else {
-            return (lastCarriedCount, lastCarriedEndDate)
-        }
+        guard let furthest = upcoming.map(\.endDate).max() else { return nil }
         return (upcoming.count, furthest)
     }
 }
@@ -81,19 +109,53 @@ enum DownbeatBookingFeedStore {
     static let upcomingBookingCountKey = "downbeatFeedUpcomingBookingCount"
     static let lastCarriedCountKey = "downbeatFeedLastCarriedCount"
     static let lastCarriedEndDateKey = "downbeatFeedLastCarriedEndDate"
+    static let lastCarriedAtKey = "downbeatFeedLastCarriedAt"
+
+    // Arm the check from what the app already remembers, ONCE.
+    //
+    // These keys are new, so on the one Mac this check was written for they read empty, and the export
+    // there had already stopped carrying bookings: the check would have stayed silent until a good export
+    // arrived, which is precisely when nobody needs it. What Overture does already hold is #1456's
+    // seen-booking-id set (17 ids on Dan's live release domain) and the instant a new upcoming booking
+    // last appeared in it.
+    //
+    // A ONE-WAY migration, not a second source of truth (L83). It writes only into a store with no
+    // history of its own, and the first export that actually carries shoots overwrites all three keys
+    // with dated evidence, so the two can never sit side by side disagreeing: the export always wins.
+    //
+    // The end date is written EMPTY on purpose. It is the one honest value: those ids carry no dates, and
+    // an invented one would let the dated wording claim something no evidence supports (L48, L11).
+    static func bootstrapFromSeenIds(into defaults: UserDefaults = .standard) {
+        // Real history wins, so this can only ever fill a vacuum.
+        guard defaults.integer(forKey: lastCarriedCountKey) == 0 else { return }
+        // Somebody else's value at that key is not evidence. Read defensively and treat it as absent.
+        guard let ids = defaults.array(forKey: DownbeatFeedFreshnessStore.seenIdsKey) as? [String]
+        else { return }
+        let distinct = Set(ids).count
+        // Below the floor for the same reason one vanished shoot is: it cannot be told apart from a
+        // single cancellation, so nothing is migrated rather than migrating what the verdict would refuse.
+        guard distinct >= DownbeatBookingFeed.vanishedFloor else { return }
+        // Without the instant there is no bound on the claim, and an unbounded claim from dateless
+        // evidence is exactly what this must not become.
+        let lastNewAt = defaults.double(forKey: DownbeatFeedFreshnessStore.lastNewAtKey)
+        guard lastNewAt > 0 else { return }
+
+        defaults.set(distinct, forKey: lastCarriedCountKey)
+        defaults.set("", forKey: lastCarriedEndDateKey)
+        defaults.set(lastNewAt, forKey: lastCarriedAtKey)
+    }
 
     // Record one observation. The tick passes what it has already loaded; `observe` below reads the file
     // for a caller that has not. Both land here, so the two can never judge the same export differently.
-    static func record(clientCount: Int, bookings: [OvertureBooking], today: String,
+    static func record(clientCount: Int, bookings: [OvertureBooking], today: String, now: Date,
                        into defaults: UserDefaults = .standard) {
-        let carried = DownbeatBookingFeed.carried(
-            lastCarriedCount: defaults.integer(forKey: lastCarriedCountKey),
-            lastCarriedEndDate: defaults.string(forKey: lastCarriedEndDateKey) ?? "",
-            bookings: bookings, today: today)
+        bootstrapFromSeenIds(into: defaults)
         defaults.set(clientCount, forKey: clientCountKey)
         defaults.set(bookings.filter { $0.endDate >= today }.count, forKey: upcomingBookingCountKey)
+        guard let carried = DownbeatBookingFeed.carried(bookings: bookings, today: today) else { return }
         defaults.set(carried.count, forKey: lastCarriedCountKey)
         defaults.set(carried.endDate, forKey: lastCarriedEndDateKey)
+        defaults.set(now.timeIntervalSince1970, forKey: lastCarriedAtKey)
     }
 
     // Read the export and record what it carried. A missing or unreadable file yields no clients, which
@@ -102,14 +164,16 @@ enum DownbeatBookingFeedStore {
                         into defaults: UserDefaults = .standard) {
         let loaded = DownbeatBridge.loadWithHealth(from: url, now: now)
         record(clientCount: loaded.clients.count, bookings: loaded.bookings,
-               today: EasternDate.today(now), into: defaults)
+               today: EasternDate.today(now), now: now, into: defaults)
     }
 
-    static func vanished(today: String, defaults: UserDefaults = .standard) -> DownbeatBookingFeed.Vanished? {
+    static func vanished(today: String, now: Date,
+                         defaults: UserDefaults = .standard) -> DownbeatBookingFeed.Vanished? {
         DownbeatBookingFeed.vanished(clientCount: defaults.integer(forKey: clientCountKey),
                                      upcomingBookingCount: defaults.integer(forKey: upcomingBookingCountKey),
                                      lastCarriedCount: defaults.integer(forKey: lastCarriedCountKey),
                                      lastCarriedEndDate: defaults.string(forKey: lastCarriedEndDateKey) ?? "",
-                                     today: today)
+                                     lastCarriedAt: defaults.double(forKey: lastCarriedAtKey),
+                                     today: today, now: now)
     }
 }
