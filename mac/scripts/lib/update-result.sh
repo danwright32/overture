@@ -17,8 +17,19 @@
 
 # Where the record goes. Overridable so the tests write into a directory they own rather than Dan's
 # Application Support folder (L2), the same seam `OVERTURE_REPO_ROOT` gives the rest of the update path.
+#
+# #1711: HOME through a guard rather than directly. update-overture.sh declares `set -euo pipefail`, so
+# the bare ${HOME} that used to sit here killed the entire update the first time the record was written,
+# with the shell's "HOME: unbound variable" and nothing about updating at all. Returns 1 when there is no
+# folder to name, which is a different answer from naming a wrong one: "/Library/Application Support" is
+# a system folder nobody meant, and a record written there is one the app will never read.
 overture_update_result_path() {
-  printf '%s\n' "${OVERTURE_DATA_DIR:-${HOME}/Library/Application Support/Overture}/update-result.json"
+  local dir="${OVERTURE_DATA_DIR:-}"
+  if [[ -z "${dir}" ]]; then
+    [[ -n "${HOME:-}" ]] || return 1
+    dir="${HOME}/Library/Application Support/Overture"
+  fi
+  printf '%s\n' "${dir}/update-result.json"
 }
 
 # Minimal JSON string escaping. The reasons are plain sentences today, and this is here so that a reason
@@ -32,7 +43,13 @@ overture_update_json_escape() {
 # renamed over the target, so a reader can never catch a half written file and decide from it.
 overture_update_write_result() {
   local outcome="${1:-}" reason="${2:-}" path tmp dir
-  path="$(overture_update_result_path)"
+  # #1711: recording how the update went is bookkeeping for the app, so it must never be the thing that
+  # stops the update. It says why it recorded nothing rather than passing as written (L12), and hands
+  # the run back so the install itself carries on.
+  path="$(overture_update_result_path)" || {
+    echo "Cannot record how this update went: neither OVERTURE_DATA_DIR nor HOME is set, so there is nowhere Overture reads. The update itself carries on, but Overture will not be told the outcome." >&2
+    return 0
+  }
   dir="$(dirname "${path}")"
   mkdir -p "${dir}" 2>/dev/null || return 0
   tmp="$(mktemp "${dir}/.update-result.XXXXXX" 2>/dev/null)" || return 0

@@ -84,4 +84,55 @@ struct RunnerScriptLoggingTests {
     @Test func replyClassifyRunnerResolvesNodeOntoPathBeforeExiting() throws {
         try runScriptResolvingNode(named: "reply-classify-run.sh", logName: "reply-classify-run.log")
     }
+
+    // #1711: a runner launched with no HOME in its environment. Every runner declares `set -eu`, so
+    // reading $HOME directly aborted the script with "runner-setup.sh: line 26: HOME: unbound
+    // variable" before it had opened its run log, which is the traceless early death #485 exists to
+    // prevent: the app sends the invocation's stdout and stderr to /dev/null, so the shell's own
+    // error reaches nobody and a dead run is indistinguishable from one that found nothing.
+    //
+    // This is the ONE guard whose message cannot reach the run log, because the run log's own folder
+    // is what could not be resolved, so stderr is what it has and stderr is what this reads. The app
+    // never launches a run this way; what is being pinned is that the failure explains itself at all.
+    //
+    // Deliberately runs with no OVERTURE_SUPPORT_DIR either, which is also what makes it safe: with
+    // neither variable set there is no path by which this can reach Dan's live handoff folder (L2).
+    private func runScriptWithoutHome(named scriptName: String) throws -> (stderr: String, status: Int32) {
+        let scriptPath = Self.repoRoot.appendingPathComponent("mac/scripts/\(scriptName)").path
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = [scriptPath]
+        process.environment = ["PATH": "/usr/bin:/bin"]
+        let errors = Pipe()
+        process.standardError = errors
+        process.standardOutput = Pipe()
+        try process.run()
+        let data = errors.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return (String(data: data, encoding: .utf8) ?? "", process.terminationStatus)
+    }
+
+    private func expectOwnMessageWithoutHome(scriptName: String) throws {
+        let (stderr, status) = try runScriptWithoutHome(named: scriptName)
+        #expect(stderr.contains("neither OVERTURE_SUPPORT_DIR nor HOME is set"),
+                "expected \(scriptName) to name what is missing, found: \(stderr)")
+        #expect(stderr.contains("Set HOME to the account's home folder"),
+                "expected \(scriptName) to say what to do about it, found: \(stderr)")
+        #expect(!stderr.contains("unbound variable"),
+                "expected \(scriptName) to refuse in its own words, not the shell's, found: \(stderr)")
+        #expect(status == 1, "expected \(scriptName) to exit 1, got \(status)")
+    }
+
+    @Test func prepRunnerRefusesInItsOwnWordsWithNoHome() throws {
+        try expectOwnMessageWithoutHome(scriptName: "prep-run.sh")
+    }
+
+    @Test func replyClassifyRunnerRefusesInItsOwnWordsWithNoHome() throws {
+        try expectOwnMessageWithoutHome(scriptName: "reply-classify-run.sh")
+    }
+
+    @Test func scoutExtractRunnerRefusesInItsOwnWordsWithNoHome() throws {
+        try expectOwnMessageWithoutHome(scriptName: "scout-extract-run.sh")
+    }
 }

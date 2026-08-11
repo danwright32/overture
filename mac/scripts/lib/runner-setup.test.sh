@@ -102,6 +102,57 @@ else
 fi
 assert_equals "open_run_log's own stdout is not leaked to the caller's stdout" "" "${out}"
 
+# --- #1711: a run whose environment carries no HOME ---
+#
+# Every runner declares `set -eu`, so a bare $HOME inside this file killed the whole script with
+# "runner-setup.sh: line 26: HOME: unbound variable" before it had opened its run log. That is the
+# traceless early death #485 exists to prevent: the app sends the invocation's stdout and stderr to
+# /dev/null, so the shell's own error reaches nobody and the run is indistinguishable from one that
+# ran and found nothing. What follows pins the runner's own message in place of the shell's.
+
+assert_lacks() {
+  local desc="$1" haystack="$2" needle="$3"
+  if [[ "${haystack}" != *"${needle}"* ]]; then
+    echo "ok - ${desc}"
+  else
+    echo "FAIL - ${desc}"
+    echo "  expected NOT to contain: ${needle}"
+    echo "  actual: ${haystack}"
+    FAILURES=$((FAILURES + 1))
+  fi
+}
+
+out="$(env -u HOME -u OVERTURE_SUPPORT_DIR bash -c 'set -eu; . "'"${SCRIPT_DIR}"'/runner-setup.sh"; echo survived' 2>&1)"
+assert_contains "no HOME and no OVERTURE_SUPPORT_DIR: names both things that are missing" \
+  "${out}" "neither OVERTURE_SUPPORT_DIR nor HOME is set"
+assert_contains "no HOME and no OVERTURE_SUPPORT_DIR: says what to do about it" \
+  "${out}" "Set HOME to the account's home folder"
+assert_lacks "no HOME and no OVERTURE_SUPPORT_DIR: the refusal is the runner's own, not the shell's" \
+  "${out}" "unbound variable"
+assert_lacks "no HOME and no OVERTURE_SUPPORT_DIR: the run stops rather than carrying on" \
+  "${out}" "survived"
+
+# The app always passes OVERTURE_SUPPORT_DIR, so an absent HOME must not stop a run that was told
+# where its handoff folder is. HOME is only needed for the fallback.
+actual="$(env -u HOME OVERTURE_SUPPORT_DIR="${TMP_ROOT}/handoff" bash -c \
+  'set -eu; . "'"${SCRIPT_DIR}"'/runner-setup.sh"; echo "$SUPPORT"' 2>&1)"
+assert_equals "no HOME but OVERTURE_SUPPORT_DIR given: SUPPORT resolves and the run continues" \
+  "${TMP_ROOT}/handoff" "${actual}"
+
+actual="$(env -u HOME PATH="${TMP_ROOT}/fake-bin:/usr/bin:/bin" OVERTURE_SUPPORT_DIR="${TMP_ROOT}/handoff" bash -c \
+  'set -eu; . "'"${SCRIPT_DIR}"'/runner-setup.sh"; resolve_claude; echo "$CLAUDE"' 2>&1)"
+assert_equals "no HOME: resolve_claude still finds claude through PATH" \
+  "${TMP_ROOT}/fake-bin/claude" "${actual}"
+
+out="$(env -u HOME PATH="/usr/bin:/bin" OVERTURE_SUPPORT_DIR="${TMP_ROOT}/handoff" bash -c \
+  'set -eu; . "'"${SCRIPT_DIR}"'/runner-setup.sh"; resolve_claude; echo survived' 2>&1)"
+assert_contains "no HOME and no claude anywhere: still reports the missing binary" \
+  "${out}" "claude CLI not found"
+assert_contains "no HOME and no claude anywhere: says the home install path went unsearched" \
+  "${out}" "HOME is not set in this run's environment"
+assert_lacks "no HOME and no claude anywhere: no raw shell error" "${out}" "unbound variable"
+assert_lacks "no HOME and no claude anywhere: the run stops rather than carrying on" "${out}" "survived"
+
 echo "---"
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "all runner-setup.sh assertions passed"
