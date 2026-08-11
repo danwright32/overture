@@ -68,11 +68,22 @@ enum WatchlistEditing {
             // Stopped by Dan, and he has changed his mind. Revive the EXISTING row rather than inserting
             // a second one: it carries the feed history it earned, and its id is stamped on every
             // prospect it ever surfaced.
-            match.isActive = true
-            match.inactiveReason = nil
-            match.listingsURL = url
-            try? context.save()
-            return .resumed
+            //
+            // #1673: through `resumeWatching`, not by setting the two consent fields here, so this route
+            // and the "Watch again" button cannot disagree about what a revived row may still claim. This
+            // is the OLDER of the two routes and reaches exactly the same stale row.
+            let result = resumeWatching(match, in: context)
+
+            // A different address on the same calendar is a CORRECTION as well as a resume, and the add
+            // form has always written it straight onto the row. Handed to `editURL` so it gets everything a
+            // correction owes: the kind follows the address (#2229), and the old page's baseline and warmup
+            // go, because a corrected URL is a brand-new source for reconcile (#1027) and keeping the
+            // baseline under a new address is the silent-cancellation hole #887/#897 closed. Resuming
+            // WITHOUT a new address is deliberately not this: see `resumeWatching`.
+            if match.listingsURL != url {
+                editURL(match, to: url, in: context)
+            }
+            return result
         }
 
         // #1237: a URL on one of the two host-routed feed adapters (OPERA, VenueTix) is watched natively
@@ -118,8 +129,45 @@ enum WatchlistEditing {
 
         source.isActive = true
         source.inactiveReason = nil
+        clearTheVerdictFromBeforeTheStop(source)
         try? context.save()
         return .resumed
+    }
+
+    // #1673: nothing checked this page for the whole time it sat stopped, so nothing it CONCLUDED about
+    // that page may present itself as this source's current state the moment it comes back.
+    //
+    // Measured on the live store: the only stopped row, New York Neo-Futurists, carried health `failing`,
+    // `verdict_unreadable` and `hasUnreadChanges = 1`. One press of "Watch again" put it straight into the
+    // Failing section quoting a months-old verdict, and turned the unread flag back into a live instruction
+    // ("New listings, not read yet. Run a scout to read them.") about listings nobody had looked at since.
+    // #1549 makes that worse rather than less real: it HIDES the unread line while a source is stopped, so
+    // the stale flag is invisible for as long as the row sits removed and reappears on restore.
+    //
+    // All three are PRESENT-TENSE claims with no time dimension in them, which is the line drawn here. A
+    // dated record of a read that really did happen at this address is not cleared: `lastSucceededAt`,
+    // `lastReadableCount` and the run note say when they are from, and `emptyStreak`'s own sentence carries
+    // the age of the last non-empty read ("hasn't listed a show for N days") and self-corrects on the first
+    // non-empty read. Nor is the feed history: see the note below.
+    //
+    // Cheap to be wrong in this direction, and it cannot stick: `SourceCheck.decide` writes health,
+    // lastFailure and hasUnreadChanges on EVERY check, success or failure, so the free daily run restores
+    // whatever is actually true within a day, from a fetch rather than from memory.
+    //
+    // What is deliberately NOT cleared, and the decision #1673 asks for: the feed baseline and warmup
+    // (`baselineFeedCount`, `successfulCheckCount`, `degradedStreak`, `lastDegradedCount`). A pause is not a
+    // repointing. The address is unchanged, so the baseline is still a measurement of this very calendar,
+    // and `editURL`'s reason for wiping it (a corrected URL is a brand-new source) does not hold. Wiping it
+    // would make the source LESS able to notice a listing has gone, not more: warmup back at zero means
+    // `absenceIsEvidence` is false for `warmupRuns` successful reads, and a source that sat out a season is
+    // exactly the one whose stored shows are most likely to have really gone. The stale-size worry is
+    // already covered without a wipe, by the rule that handles every other size change: a grown feed
+    // re-baselines at once, and a feed that came back smaller is not a credible baseline, so it cannot be
+    // evidence of absence at all until the smaller size holds for `selfHealThreshold` reads.
+    private static func clearTheVerdictFromBeforeTheStop(_ source: WatchedSource) {
+        source.health = .neverChecked   // not "healthy" and not "broken": nothing has checked it since
+        source.lastFailure = nil
+        source.hasUnreadChanges = false
     }
 
     // #1027: correcting a source's URL in place.
