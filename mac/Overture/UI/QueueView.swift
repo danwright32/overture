@@ -10,6 +10,10 @@ struct QueueView: View {
     // is absent, which would turn a missed injection into a crash of the whole app (and does crash any
     // test that builds this view directly). Nil simply means this surface records nothing.
     @Environment(QueueUndoStack.self) private var undoStack: QueueUndoStack?
+    // #2365: which watched calendars are a past client's, so Scout offers a returning client's season a
+    // year ahead. Optional for the same reason undoStack is, and `.none` when absent, which holds every
+    // show to the ordinary window rather than crashing.
+    @Environment(ClientRoster.self) private var clientRoster: ClientRoster?
     @Environment(ActionFeedback.self) private var feedback   // #285: shared acknowledgment surface
     @Environment(DayOffOfferRequest.self) private var dayOffOffer   // #924: dismiss-to-day-off picker request
 
@@ -73,6 +77,11 @@ struct QueueView: View {
     // lists, the pill counts and the masthead all apply them. They used to reach only the masthead.
     private var geo: GeoRefusals {
         GeoRefusals(userExcludedTowns: userExcludedTowns, allowedSeedTowns: allowedSeedTowns)
+    }
+    // #2365: the client verdict for every watched source, decided once per read of this property rather
+    // than per show (#1429 measured the per-row shape freezing a sheet).
+    private var clientWindow: ClientWindow {
+        clientRoster?.window(for: watchedSources) ?? .none
     }
 
     @State private var pendingConfirm: PendingSend?
@@ -248,7 +257,7 @@ struct QueueView: View {
             sources: watchedSources,
             refusals: ContactRefusal.ledger(from: refusedAddresses),
             overrides: ProducerOverrides(promotedRows: promotedProducers, demotedRows: demotedHouses),
-            context: StageContext(now: now, geo: geo),
+            context: StageContext(now: now, geo: geo, clients: clientWindow),
             focusedStage: focusedStage,
             focusedKeys: focusedKeys,
             // #1770: read once for the whole pass, from the cache rather than from the token file.
@@ -349,7 +358,7 @@ struct QueueView: View {
     // so a ticked date means exactly the shows under that heading and nothing else.
     private func scoutRows(_ data: RenderData) -> [QueueItem] {
         let wanted = Set(StageNavigation.focusedKeys(stage: .scout, leadKeys: [],
-                                                     in: prospects, context: StageContext(geo: geo)))
+                                                     in: prospects, context: StageContext(geo: geo, clients: clientWindow)))
         return data.items.filter { wanted.contains($0.id) }
     }
 
@@ -723,7 +732,7 @@ struct QueueView: View {
     private func stageEmptyState(for stage: StageFocus, data: RenderData) -> some View {
         // #1962: the pass's resolved geography, not a fresh unresolved one, so an empty stage does
         // not re-resolve every show's place to count the others.
-        let counts = StageNavigation.counts(in: prospects, context: StageContext(geo: data.geo))
+        let counts = StageNavigation.counts(in: prospects, context: StageContext(geo: data.geo, clients: clientWindow))
         // #1194: the reached-out pointer counts SHOWS (StageEmptyState labels it "N shows you've pitched"),
         // so it matches the pill; data.reachedOut is per-recipient, so collapse to distinct shows here.
         let reachedOutShows = Set(data.reachedOut.map(\.prospect.naturalKey)).count
@@ -792,7 +801,7 @@ struct QueueView: View {
         focusedStage = status.focus
         focusedHeading = "\(status.name): \(status.detail)"
         focusedKeys = StageNavigation.naturalKeys(for: status.focus, in: prospects,
-                                                  context: StageContext(geo: geo))
+                                                  context: StageContext(geo: geo, clients: clientWindow))
     }
 
     // #236/#1134: land on a deep-linked lead by focusing the STAGE that holds it (the pipeline picker is
@@ -806,7 +815,7 @@ struct QueueView: View {
         // lead is in no stage (RootView routes truly unreachable leads to Archive, so this is a safety net).
         focusedStage = StageNavigation.stage(containing: key, in: prospects,
                                              reachedOutKeys: reachedOutKeys,
-                                             context: StageContext(geo: geo)) ?? StageNavigation.openingStage
+                                             context: StageContext(geo: geo, clients: clientWindow)) ?? StageNavigation.openingStage
         focusedKeys = nil   // #1140: stage mode re-derives its own membership; no frozen key set
         focusedHeading = nil
         sendState.highlight(key)

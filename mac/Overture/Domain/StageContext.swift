@@ -32,15 +32,21 @@ struct StageContext: Equatable, Sendable {
     let now: Date
     // Dan's standing geography refusals. Not optional and not defaulted: see above.
     let geo: GeoRefusals
+    // #2365: which of Dan's watched calendars are a past client's, so the stage predicate can offer a
+    // returning client's season a year ahead while holding everyone else to 90 days. Required for the
+    // same reason `geo` is: a surface that built one without it would quietly answer "nobody is a
+    // client", and its Scout list would be short by exactly the shows Dan most wants to see.
+    let clients: ClientWindow
 
     // `today` is deliberately the LAST parameter and deliberately optional, so the ordinary spelling at
     // a call site is `StageContext(now:geo:)` and the derivation is what happens unless somebody goes
     // out of their way. `StageContextTests.noProductionCallSitePinsTheDay` fails if a shipping file ever
     // does go out of its way, which is what keeps the one-clock property true of the APP rather than
     // only of this type.
-    init(now: Date = Date(), geo: GeoRefusals, today: String? = nil) {
+    init(now: Date = Date(), geo: GeoRefusals, clients: ClientWindow, today: String? = nil) {
         self.now = now
         self.geo = geo
+        self.clients = clients
         self.today = today ?? EasternDate.today(now)
     }
 
@@ -57,6 +63,6 @@ struct StageContext: Equatable, Sendable {
     // The day is carried across explicitly and NOT re-derived: re-deriving would silently discard a day a
     // caller had pinned, which is the one thing a memoisation step must not do.
     func resolvingPlaces(of prospects: [Prospect]) -> StageContext {
-        StageContext(now: now, geo: geo.resolving(prospects), today: today)
+        StageContext(now: now, geo: geo.resolving(prospects), clients: clients, today: today)
     }
 }

@@ -24,7 +24,7 @@ struct StageContextTests {
 
     @Test("today is derived from now, so the two cannot disagree")
     func todayIsDerivedFromNow() {
-        let context = StageContext(now: Self.afternoon, geo: .none)
+        let context = StageContext(now: Self.afternoon, geo: .none, clients: .none)
         #expect(context.today == EasternDate.today(Self.afternoon))
         #expect(context.now == Self.afternoon)
     }
@@ -36,7 +36,7 @@ struct StageContextTests {
     @Test("the derived day is Overture's Eastern day, not the host's")
     func theDerivedDayIsEastern() {
         let lateUTC = Date(timeIntervalSince1970: 1_786_500_000)   // 2026-08-12 02:00 UTC
-        let context = StageContext(now: lateUTC, geo: .none)
+        let context = StageContext(now: lateUTC, geo: .none, clients: .none)
         #expect(context.today == "2026-08-11")
     }
 
@@ -45,7 +45,7 @@ struct StageContextTests {
     // holds that true rather than a comment saying so.
     @Test("a test may pin the day explicitly")
     func aTestMayPinTheDay() {
-        let context = StageContext(now: Self.afternoon, geo: .none, today: "2027-01-15")
+        let context = StageContext(now: Self.afternoon, geo: .none, clients: .none, today: "2027-01-15")
         #expect(context.today == "2027-01-15")
         #expect(context.now == Self.afternoon)
     }
@@ -56,18 +56,24 @@ struct StageContextTests {
     @Test("two contexts carrying the same refusals are equal even when one has done the work")
     func equalityIgnoresTheResolvedMemo() {
         let refusals = GeoRefusals(userExcludedTowns: ["philadelphia"])
-        let fresh = StageContext(now: Self.afternoon, geo: refusals)
-        let worked = StageContext(now: Self.afternoon, geo: refusals.resolving([]))
+        let fresh = StageContext(now: Self.afternoon, geo: refusals, clients: .none)
+        let worked = StageContext(now: Self.afternoon, geo: refusals.resolving([]), clients: .none)
         #expect(fresh == worked)
     }
 
     @Test("contexts differing in any of their facts are not equal")
     func inequalityHoldsOnEveryFact() {
-        let base = StageContext(now: Self.afternoon, geo: .none)
-        #expect(base != StageContext(now: Self.afternoon.addingTimeInterval(86_400 * 3), geo: .none))
-        #expect(base != StageContext(now: Self.afternoon, geo: .none, today: "2027-01-15"))
+        let base = StageContext(now: Self.afternoon, geo: .none, clients: .none)
+        #expect(base != StageContext(now: Self.afternoon.addingTimeInterval(86_400 * 3), geo: .none, clients: .none))
+        #expect(base != StageContext(now: Self.afternoon, geo: .none, clients: .none, today: "2027-01-15"))
         #expect(base != StageContext(now: Self.afternoon,
-                                     geo: GeoRefusals(userExcludedTowns: ["philadelphia"])))
+                                     geo: GeoRefusals(userExcludedTowns: ["philadelphia"]),
+                                     clients: .none))
+        // #2365: the client window is part of what a context IS, so two contexts that would judge the
+        // same show by different lead times must never compare equal. Without this a roster reload would
+        // be invisible to anything reading a context as a render fingerprint.
+        #expect(base != StageContext(now: Self.afternoon, geo: .none,
+                                     clients: ClientWindow(clientSourceIds: ["src-dciny"])))
     }
 
     // The memo step must not quietly undo the pin. Re-deriving the day there would look harmless (it
@@ -75,7 +81,7 @@ struct StageContextTests {
     // its way to set, which is the one thing a caching step may never do.
     @Test("resolving places keeps the day and the instant the context was built with")
     func resolvingPlacesKeepsTheClock() {
-        let pinned = StageContext(now: Self.afternoon, geo: .none, today: "2027-01-15")
+        let pinned = StageContext(now: Self.afternoon, geo: .none, clients: .none, today: "2027-01-15")
         let resolved = pinned.resolvingPlaces(of: [])
         #expect(resolved.today == "2027-01-15")
         #expect(resolved.now == Self.afternoon)

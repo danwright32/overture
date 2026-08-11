@@ -30,11 +30,11 @@ struct ReprepReleaseTests {
     }
 
     private func inReview(_ p: Prospect) -> Bool {
-        StageNavigation.naturalKeys(for: .review, in: [p], context: StageContext(geo: .none)).count == 1
+        StageNavigation.naturalKeys(for: .review, in: [p], context: StageContext(geo: .none, clients: .none)).count == 1
     }
 
     private func inPrep(_ p: Prospect) -> Bool {
-        StageNavigation.naturalKeys(for: .prep, in: [p], context: StageContext(geo: .none)).count == 1
+        StageNavigation.naturalKeys(for: .prep, in: [p], context: StageContext(geo: .none, clients: .none)).count == 1
     }
 
     // The issue's own case: the run came home with nothing, so the draft Dan already had is worth reading

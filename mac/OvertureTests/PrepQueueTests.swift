@@ -267,21 +267,17 @@ struct PrepQueueTests {
 
     // MARK: - #953: per-run subset selection, defaulted by how far out the show is
 
-    // The default a Prep run opens with: a kept show inside the calendar horizon (today through
-    // today + defaultHorizon months) is CHECKED; one beyond it is HELD (unchecked), so a long
-    // lead-time show is not drafted before it is worth reaching out. July + 3 months is inside the
-    // four-month window; July + 5 months is past it.
-    @Test func nearShowsDefaultIncludedAndFarOnesHeld() {
-        let now = EasternDate.date(from: "2026-07-01")!
-        #expect(PrepQueueBuilder.defaultsIncludedInPrepRun(performanceDate: "2026-10-01", now: now) == true)
-        #expect(PrepQueueBuilder.defaultsIncludedInPrepRun(performanceDate: "2026-12-01", now: now) == false)
-    }
+    // #2365: the sheet opens with EVERY eligible show checked, whatever its date. Dan's rule is that
+    // Scout alone decides how far out is too far, so a show reaching this list is one he kept and the run
+    // does not second-guess him.
+    @Test func everyEligibleShowDefaultsIn() throws {
+        let ctx = ModelContext(try container())
+        let near = insert(ctx, group: "Near Show", status: .queued, performanceDate: "2026-10-01")
+        let far = insert(ctx, group: "Far Show", status: .queued, performanceDate: "2027-06-13")
 
-    // An undated kept prospect has no date to hold it by, so it defaults IN, preserving the
-    // pre-#953 behaviour of prepping everything eligible.
-    @Test func anUndatedProspectDefaultsIncluded() {
-        let now = EasternDate.date(from: "2026-07-01")!
-        #expect(PrepQueueBuilder.defaultsIncludedInPrepRun(performanceDate: nil, now: now) == true)
+        let selected = PrepQueueBuilder.prepDefaultSelection(prospects: [near, far])
+
+        #expect(selected == Set([near.naturalKey, far.naturalKey]))
     }
 
     // The subset threads all the way through: only the chosen keys reach the built work-list, even

@@ -27,7 +27,8 @@ extension StageContext {
     // about. `geo` keeps its default here, deliberately and in the opposite direction to the app's rule:
     // a test that is not about Dan's geography refusals should not have to name them, and a test that IS
     // about them says so in the one place it matters.
-    static func at(_ today: String, now: Date = Date(), geo: GeoRefusals = .none) -> StageContext {
-        StageContext(now: now, geo: geo, today: today)
+    static func at(_ today: String, now: Date = Date(), geo: GeoRefusals = .none,
+                   clients: ClientWindow = .none) -> StageContext {
+        StageContext(now: now, geo: geo, clients: clients, today: today)
     }
 }

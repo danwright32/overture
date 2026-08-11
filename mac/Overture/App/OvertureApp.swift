@@ -31,6 +31,9 @@ struct OvertureApp: App {
     // quitting: the stack survives a close and dies only on quit, which is what Dan asked for. In
     // RootView it would have silently emptied every time he closed the window.
     @State private var undoStack = QueueUndoStack()
+    // #2365: Dan's Downbeat client list, loaded once for the whole app rather than by each surface that
+    // needs it. See ClientRoster for why it is not read on the render path and not stored on a source.
+    @State private var clientRoster = ClientRoster()
     // #1414: the App's menu raises a request; RootView performs it, because the reversal needs the
     // ModelContext, the live rows and the ActionFeedback, none of which a Scene-level .commands block
     // can reach (and the App must never capture the feedback object, see the stack above).
@@ -180,7 +183,7 @@ struct OvertureApp: App {
     var body: some Scene {
         Window("Overture", id: "main") {
             if let modelContainer {
-                RootView().modelContainer(modelContainer).environment(addLead).environment(undoStack).environment(undoRequest)
+                RootView().modelContainer(modelContainer).environment(addLead).environment(undoStack).environment(undoRequest).environment(clientRoster)
                     .storeShrinkNotice(shrinkWarning,
                                        backupsPath: StoreShrinkCheck.backupsPath(
                                            dataDirectory: StoreLocation.dataDirectory))

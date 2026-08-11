@@ -220,7 +220,7 @@ struct QueueGeoWiringGuardTests {
         // build theirs from Dan's real refusals rather than from an empty set. Counted rather than
         // matched against one spelling, because the two calls are wrapped differently and a guard tied
         // to one line's exact shape fails on the next reformat while protecting nothing (L103).
-        #expect(rootView.components(separatedBy: "StageContext(geo: geo)").count - 1 >= 2,
+        #expect(rootView.components(separatedBy: "StageContext(geo: geo, clients:").count - 1 >= 2,
                 "routing a pick to the Queue or Archive must apply the same gate the Queue's lists do.")
         for call in ["stagedKeys", "opensInQueue"] {
             #expect(rootView.contains(call), "\(call) is no longer called; re-point this guard.")

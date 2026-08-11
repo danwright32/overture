@@ -50,16 +50,27 @@ enum ClientHorizon {
         isClient(source, clients: clients) ? clientMonths : CalendarMonthIndex.defaultHorizon
     }
 
-    // The Prep-run default window for a prospect: the client year if it came from a client's source (auto
-    // or tagged) OR it itself matched a client (a booked relationship), else the ordinary four months. The
-    // second arm catches a client's show that surfaced from a NON-client source (a shared venue's own
-    // calendar that Dan has not tagged): the show still resolved to the client by name, so it is still one
-    // worth defaulting in a year out.
-    static func prepMonths(for prospect: Prospect, sources: [WatchedSource], clients: [DownbeatClient]) -> Int {
-        let fromClientSource = sources.contains { s in
-            prospect.sourceIds.contains(s.sourceId) && isClient(s, clients: clients)
-        }
-        let matchedAClient = prospect.priorRelationship == "booked" || prospect.matchedClientName != nil
-        return (fromClientSource || matchedAClient) ? clientMonths : CalendarMonthIndex.defaultHorizon
+    // The `sourceId` of every source that is a known client's, decided once instead of per row. #1429
+    // measured the per-row shape (a whole-roster fuzzy match on every redraw) freezing the Sources sheet,
+    // and the stage predicate asks this question once per show on every render.
+    static func clientSourceIds(sources: [WatchedSource], clients: [DownbeatClient]) -> Set<String> {
+        Set(sources.filter { isClient($0, clients: clients) }.map(\.sourceId))
+    }
+
+    // #2365: is this SHOW a past client's? Dan's rule is either route, and the two catch different shows
+    // (the numbers that settled it are in `ClientWindow`).
+    //
+    // The second arm catches a client's show that surfaced from a NON-client source (a room's own
+    // calendar): the show still resolved to the client by name, so it is still one worth offering a year
+    // out. The first arm catches the reverse, a night on a client's own calendar billed under some other
+    // act's name, which nothing on the show itself would recognise.
+    //
+    // Asked here rather than in `ClientWindow` because this file is the declared authority on "is this a
+    // known client", and a second home for that question is how the source side and the show side would
+    // drift into two answers.
+    static func isPastClientShow(_ p: Prospect, clientSourceIds: Set<String>) -> Bool {
+        if p.priorRelationship == "booked" { return true }
+        if let matched = p.matchedClientName, !matched.isEmpty { return true }
+        return p.sourceIds.contains { clientSourceIds.contains($0) }
     }
 }

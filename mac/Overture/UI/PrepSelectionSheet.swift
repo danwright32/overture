@@ -2,11 +2,11 @@ import SwiftUI
 import SwiftData
 
 // #953: the per-run picker "Prep kept" opens. Dan chooses which kept, undrafted shows a single Prep run
-// covers, so a long lead-time show is not drafted before it is worth reaching out. Each row defaults by
-// how far out its performance is (PrepQueueBuilder.defaultsIncludedInPrepRun): inside the four-month
-// calendar horizon it opens checked, beyond it held. The selection is PER-RUN and transient: nothing
-// persists, so reopening the sheet re-defaults by date, and there is no stored "hold" flag. All of the
-// sheet's wording lives in PrepSelectionCopy so it stays testable (#885).
+// covers. #2365: every eligible row opens CHECKED, whatever its date, because Scout is the only surface
+// that applies a lead time window and a show can only have reached this list by Dan keeping it. The
+// selection is PER-RUN and transient: nothing persists, so reopening the sheet starts from every row
+// again, and there is no stored "hold" flag. All of the sheet's wording lives in PrepSelectionCopy so it
+// stays testable (#885).
 struct PrepSelectionSheet: View {
     @Environment(\.dismiss) private var dismiss
 
@@ -29,8 +29,7 @@ struct PrepSelectionSheet: View {
     @State private var pendingClashConfirm = false
     @State private var clashMessage = ""
 
-    init(prospects: [Prospect], sources: [WatchedSource] = [], clients: [DownbeatClient] = [],
-         allItems: [QueueItem] = [], now: Date = Date(),
+    init(prospects: [Prospect], allItems: [QueueItem] = [],
          onRun: @escaping (Set<String>) -> Void) {
         self.onRun = onRun
         self.allItems = allItems
@@ -38,10 +37,8 @@ struct PrepSelectionSheet: View {
             Row(id: p.naturalKey, groupName: p.groupName,
                 detail: PrepSelectionCopy.rowDetail(venue: p.venue, performanceDate: p.performanceDate))
         }
-        // #1209: a known client's far-future show defaults IN under the twelve-month client window; every
-        // other row keeps the four-month default. Decided in PrepQueueBuilder so this view holds no rule.
-        _selected = State(initialValue: PrepQueueBuilder.prepDefaultSelection(
-            prospects: prospects, sources: sources, clients: clients, now: now))
+        // #2365: every eligible show, decided in PrepQueueBuilder so this view holds no rule.
+        _selected = State(initialValue: PrepQueueBuilder.prepDefaultSelection(prospects: prospects))
     }
 
     var body: some View {

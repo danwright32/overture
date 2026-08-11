@@ -24,6 +24,10 @@ struct RootView: View {
     @State private var dayOffOffer = DayOffOfferRequest()   // #924: dismiss-to-day-off picker request
     // #1414: owned by the App (a .commands block cannot read view state) and injected down to here.
     @Environment(QueueUndoStack.self) private var undoStack
+    // #2365: which watched calendars are a past client's, so a far-out client show routes to the Queue
+    // rather than the Archive. Optional for the same reason undoStack is: a missing injection must not
+    // fatal-error the whole app or every test that builds this view.
+    @Environment(ClientRoster.self) private var clientRoster: ClientRoster?
     @Environment(QueueUndoRequest.self) private var undoRequest
     // #1770: the one cached answer, observed rather than snapshotted. As @State it was read from disk
     // once at init and then only ever set to true on a successful connect, so a revoked credential left
@@ -102,6 +106,12 @@ struct RootView: View {
     private var geo: GeoRefusals {
         GeoRefusals(userExcludedTowns: Set(excludedTownRows.map(\.town)),
                     allowedSeedTowns: Set(allowedSeedTownRows.map(\.town)))
+    }
+    // #2365: an absent roster answers "no client information", which holds every show to the ordinary 90
+    // days. That is the wrong answer rather than a safe one, so it can only arise from a missing
+    // injection, never from a call site forgetting to pass it: `StageContext` requires the argument.
+    private var clientWindow: ClientWindow {
+        clientRoster?.window(for: watchedSources) ?? .none
     }
     @State private var showArchive = false
     @State private var archiveJumpKey: String?
@@ -225,7 +235,7 @@ struct RootView: View {
     // can only ever land on a row he can see.
     private var searchableItems: [QueueItem] {
         let scope = StageNavigation.stagedKeys(in: nonDismissedProspects, reachedOutKeys: reachedOutKeys,
-                                               context: StageContext(geo: geo))
+                                               context: StageContext(geo: geo, clients: clientWindow))
         return allItems.filter { scope.contains($0.id) }
     }
 
@@ -242,7 +252,8 @@ struct RootView: View {
     // branch, but the Archive branch stays for the follow-up taps, which can name a closed show.
     private func routeDeepLink(toKey key: String) {
         if StageNavigation.opensInQueue(key: key, in: nonDismissedProspects,
-                                        reachedOutKeys: reachedOutKeys, context: StageContext(geo: geo)) {
+                                        reachedOutKeys: reachedOutKeys,
+                                        context: StageContext(geo: geo, clients: clientWindow)) {
             deepLinkedKey = key
         } else {
             openArchive(key: key)
@@ -899,8 +910,9 @@ struct RootView: View {
             // #953: pick which kept shows this Prep run covers. Defaults by performance date; the run
             // fires with exactly the rows Dan leaves checked.
             .sheet(isPresented: $showPrepSelection) {
-                PrepSelectionSheet(prospects: toPrep, sources: watchedSources,
-                                   clients: DownbeatBridge.loadWithHealth(now: Date()).clients,
+                // #2365: no sources and no client list any more. The sheet applies no date rule, so it
+                // needs neither, and this call no longer reads the export off disk to present a sheet.
+                PrepSelectionSheet(prospects: toPrep,
                                    allItems: allProspects.map(QueueItem.init)) { includedKeys in startPrep(includedKeys: includedKeys) }
             }
             // #1130: the Prep run's takeover, mirroring the scout's (#1034). A detached Prep run takes

@@ -416,6 +416,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/MenuBarStatus.swift`
 "All caught up"
     `Domain/PrepStatus.swift`
+"All of these are included. Uncheck any you would rather not prep in this run."
+    `Domain/PrepSelectionCopy.swift`
 "All set"
     `UI/OnboardingView.swift`
 "Allow OmniFocus control"
@@ -1647,8 +1649,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "Shows land here once Overture has tracked at least one."
     `Domain/EmptyState.swift`
-"Shows too far out to pitch yet start unchecked. Include any you want prepped now."
-    `Domain/PrepSelectionCopy.swift`
 "Shows you've pitched and are waiting to hear back on."
     `Domain/AgentRoster.swift`
 "Silent follow-ups"

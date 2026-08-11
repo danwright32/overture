@@ -2,16 +2,21 @@ import Foundation
 
 // #953: what the Prep-selection sheet says to Dan, kept out of the view so the wording is testable
 // (#885: a sentence computed in a SwiftUI body is a sentence no test can reach). The sheet lets Dan
-// choose which kept shows a single Prep run covers, defaulted by how far out each show is
-// (PrepQueueBuilder.defaultsIncludedInPrepRun). The selection is per-run and transient; nothing here
-// persists a choice.
+// choose which kept shows a single Prep run covers. #2365: every eligible show starts checked, because
+// Scout is the only surface that applies a lead time window, so anything reaching this sheet is a show
+// Dan deliberately kept. The selection is per-run and transient; nothing here persists a choice.
 enum PrepSelectionCopy {
     // The heading: the one question the sheet asks.
     static let title = "Which kept shows to prep?"
 
-    // Why some rows open unchecked, and what Dan can do about it. Without this the pre-unchecked far-out
-    // rows read as a bug rather than a deliberate default.
-    static let subtitle = "Shows too far out to pitch yet start unchecked. Include any you want prepped now."
+    // #2365: every row opens checked, so this says what the sheet is FOR rather than explaining an
+    // exception that no longer exists. Without a second line the sheet is a bare list of ticked rows and
+    // a Prep button, and nothing tells Dan he may narrow the run.
+    //
+    // "All of these" rather than "every kept show", read cold in both branches: the title already says
+    // "kept shows", so naming them again is the #843 echo, and "every kept show" reads oddly over a list
+    // holding one. "These" points at the rows under it and is true at any count.
+    static let subtitle = "All of these are included. Uncheck any you would rather not prep in this run."
 
     // The Cancel button keeps its own bare, static "Cancel" literal at the call site, matching every
     // other cancel/dismiss control in the app; a one-word label carries no rule worth centralizing here.

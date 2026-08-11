@@ -178,6 +178,14 @@ enum StageNavigation {
     // measured such a show as far out, so dropping it would lose a real lead on a fact nobody
     // established. That is the same call #861 made at the past edge.
     private static func isWithinLeadTime(_ p: Prospect, context: StageContext) -> Bool {
+        // #2365: a past client's show gets the longer window, because a returning client books a season a
+        // year ahead and the scout already READS their calendar that far. Without this arm Overture
+        // fetched a client's next-season date, stored it, and then declined to offer it for triage for
+        // nine months. Measured on the live store that day: 36 of the 124 shows past the ordinary edge.
+        if context.clients.isPastClientShow(p) {
+            return QueueModel.isWithin(months: QueueModel.clientLeadTimeWindowMonths,
+                                       performanceDate: p.performanceDate, today: context.today)
+        }
         guard let days = QueueModel.daysUntil(performanceDate: p.performanceDate, today: context.today)
         else { return true }
         return days <= QueueModel.leadTimeWindowDays
