@@ -60,18 +60,17 @@ enum WatchlistEditing {
         // up on the list three times, fetching, hashing and reading the same calendar three times every
         // run, while two venues sharing a ticketing host stay two calendars (#2377).
         if let match = existing.first(where: { sameCalendar($0.listingsURL, as: url) }) {
-            if !match.isActive, match.inactiveReason == .orgRefusal {
-                return .refused(orgName: match.orgName)
-            }
-            if match.isActive { return .alreadyWatching(orgName: match.orgName) }
-
             // Stopped by Dan, and he has changed his mind. Revive the EXISTING row rather than inserting
             // a second one: it carries the feed history it earned, and its id is stamped on every
             // prospect it ever surfaced.
             //
-            // #1673: through `resumeWatching`, not by setting the two consent fields here, so this route
-            // and the "Watch again" button cannot disagree about what a revived row may still claim. This
-            // is the OLDER of the two routes and reaches exactly the same stale row.
+            // #1673: asked of `resumeWatching`, which is now the ONE place that decides whether a matched
+            // row may be revived at all. This route and the "Watch again" button used to answer the
+            // refusal and the already-watching questions separately, in the same words, and this is the
+            // older of the two: it reaches exactly the same row, so a difference between them would be a
+            // difference nobody could see. It returns `.refused` and `.alreadyWatching` for the same two
+            // cases this branch used to test for itself, in the same order, so what a caller is told is
+            // unchanged.
             let result = resumeWatching(match, in: context)
 
             // A different address on the same calendar is a CORRECTION as well as a resume, and the add
@@ -80,7 +79,18 @@ enum WatchlistEditing {
             // go, because a corrected URL is a brand-new source for reconcile (#1027) and keeping the
             // baseline under a new address is the silent-cancellation hole #887/#897 closed. Resuming
             // WITHOUT a new address is deliberately not this: see `resumeWatching`.
-            if match.listingsURL != url {
+            //
+            // Gated on the resume having actually HAPPENED, at the call site rather than on the two guards
+            // above having run first. A row Dan may not revive is a row he may not edit either, and the two
+            // that reach here are the two where writing the typed address would do real damage. A REFUSAL
+            // would have the record of what it was recorded against rewritten to whatever he just typed,
+            // its page-derived state wiped, and `hasUnreadChanges` set on a row that must never be read
+            // again, all while it stays correctly inactive so nothing visibly happens (and #1549 hides the
+            // unread line on a stopped row, so it would surface only on some later revival). An
+            // ALREADY-WATCHED source would be repointed with no visible cause, losing the feed history it
+            // earned. Neither is reachable today, because `resumeWatching` refuses both before this line;
+            // that is the point of asking it rather than assuming it.
+            if result == .resumed, match.listingsURL != url {
                 editURL(match, to: url, in: context)
             }
             return result

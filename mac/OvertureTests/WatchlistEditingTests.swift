@@ -57,14 +57,53 @@ struct WatchlistEditingTests {
         #expect(try sources(ctx).count == 1)
     }
 
+    // #1673: and a LIVE source is not repointed by the add form either, even when the address Dan types is
+    // a different path on the same calendar.
+    //
+    // Deliberate, not an oversight. Repointing is `editURL`'s job, reached from the row itself, where Dan
+    // can see which source he is changing and what it points at now. A correction also wipes the baseline
+    // and warmup by design (#1027), so letting the add form do it silently would cost a source that has
+    // been reading fine for months its whole feed history because he typed a path variant while trying to
+    // add what he took to be a new calendar: a destructive edit with no visible cause (L5). The honest
+    // answer to "watch this calendar" for a calendar already watched is the sentence it already gives.
+    @Test func aLiveSourceIsNeverRepointedByTheAddForm() throws {
+        let ctx = try context()
+        _ = WatchlistEditing.add(orgName: "Bargemusic", listingsURL: "https://bargemusic.org/events",
+                                 into: ctx)
+        let s = try #require(try sources(ctx).first)
+        s.baselineFeedCount = 12
+        s.successfulCheckCount = 7
+
+        let again = WatchlistEditing.add(orgName: "Bargemusic",
+                                         listingsURL: "https://bargemusic.org/calendar", into: ctx)
+
+        #expect(again == .alreadyWatching(orgName: "Bargemusic"))
+        #expect(try sources(ctx).count == 1)
+        #expect(s.listingsURL == "https://bargemusic.org/events")   // NOT the address he typed
+        #expect(s.baselineFeedCount == 12)
+        #expect(s.successfulCheckCount == 7)
+        #expect(!s.hasUnreadChanges)
+    }
+
     // THE one that matters. An org that asked Dan to stop cannot be typed back onto the list by hand
     // any more than it can be pasted back in as a lead. The guarantee lives here, not in a sheet.
+    //
+    // #1673: and a refusal is not merely NOT REVIVED, it is not TOUCHED. The address Dan types differs from
+    // the one stored (that is the interesting case, and it is the one this test has always used), so any
+    // route that treats a differing address as a correction would rewrite the refusal record to whatever he
+    // just typed, wipe what the row knew, and set `hasUnreadChanges` on a row that must never be read
+    // again. The row would still be inactive, so nothing gets scouted or emailed, but the record of what
+    // the refusal was recorded AGAINST is gone and the stale unread flag this issue exists to remove is
+    // back, invisible for as long as the source sits stopped (#1549).
     @Test func anOrgThatRefusedCannotBeAddedByHandEither() throws {
         let ctx = try context()
         let refused = WatchedSource(sourceId: "bargemusic", orgName: "Bargemusic",
                                     listingsURL: "https://bargemusic.org/calendar", kind: .html)
         refused.isActive = false
         refused.inactiveReason = .orgRefusal
+        refused.baselineFeedCount = 12
+        refused.successfulCheckCount = 7
+        refused.notes = "What the calendar looked like when they asked Dan to stop."
         ctx.insert(refused)
 
         let result = WatchlistEditing.add(orgName: "Bargemusic",
@@ -73,6 +112,12 @@ struct WatchlistEditingTests {
         #expect(result == .refused(orgName: "Bargemusic"))
         #expect(try sources(ctx).count == 1)
         #expect(try sources(ctx).first?.isActive == false)   // still left alone
+        #expect(refused.inactiveReason == .orgRefusal)
+        #expect(refused.listingsURL == "https://bargemusic.org/calendar")   // NOT the address he typed
+        #expect(!refused.hasUnreadChanges)
+        #expect(refused.baselineFeedCount == 12)
+        #expect(refused.successfulCheckCount == 7)
+        #expect(refused.notes == "What the calendar looked like when they asked Dan to stop.")
     }
 
     // A source Dan removed as dead is not a refusal, and he may decide it is worth another try. Adding
