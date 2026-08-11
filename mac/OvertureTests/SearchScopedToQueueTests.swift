@@ -166,7 +166,7 @@ struct ArchiveOpeningTests {
     @Test func openingWithoutAQueryKeepsTheUsualTwo() {
         #expect(ArchiveOpening.statuses(forQuery: "") == ArchiveOpening.defaultStatuses)
         #expect(ArchiveOpening.statuses(forQuery: "   ") == ArchiveOpening.defaultStatuses)
-        #expect(ArchiveOpening.defaultStatuses == [.new, .active])
+        #expect(ArchiveOpening.defaultStatuses == [.show(.new), .show(.active)])
     }
 }
 

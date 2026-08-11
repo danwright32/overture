@@ -105,11 +105,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
   - `Integration/ScoutService.swift`
   - `UI/FollowUpsView.swift`
 - "Closed (not interested)"
-  - `Domain/ArchiveStatus.swift`
   - `Domain/PerformanceStatus.swift`
   - `UI/QueueView+Model.swift`
 - "Closed (not now)"
-  - `Domain/ArchiveStatus.swift`
   - `Domain/PerformanceStatus.swift`
   - `UI/QueueView+Model.swift`
 - "Confirm booking"
@@ -552,11 +550,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Close this out without sending"
     `Domain/FollowUp.swift`
 "Closed (not interested)"
-    `Domain/ArchiveStatus.swift`
     `Domain/PerformanceStatus.swift`
     `UI/QueueView+Model.swift`
 "Closed (not now)"
-    `Domain/ArchiveStatus.swift`
     `Domain/PerformanceStatus.swift`
     `UI/QueueView+Model.swift`
 "Closing note sent to \(org)"
