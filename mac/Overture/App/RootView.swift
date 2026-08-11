@@ -812,6 +812,19 @@ struct RootView: View {
                 }
                 autoScoutIfDue()   // run a scheduled scout on launch if one is due (#33)
             }
+            // #2365: load Dan's client list at launch, and again whenever the reconcile tick observes the
+            // Downbeat export changing. WITHOUT THIS the roster is empty until the Sources sheet is
+            // opened, and an empty roster is not a neutral state: it answers "nobody is a client", which
+            // holds every one of his clients' far-out shows to the ordinary 90 day window. So the feature
+            // would have done nothing on any launch where he never opened that sheet, while every test
+            // passed, because a test hands the client list in directly (L3: built is not wired).
+            //
+            // `feedClientCount` is written by the app-owned ReconcileScheduler each time it reads the
+            // export, so watching it re-reads the roster on the same signal rather than on a timer of its
+            // own. It is a count, so a client RENAMED without the total moving does not move it; the
+            // launch load is what covers that, and the gap between them is a session.
+            .task { clientRoster?.reload() }
+            .onChange(of: feedClientCount) { clientRoster?.reload() }
             .task {
                 guard AppEnvironment.shouldStartBackgroundServices else { return }
                 // Follow every reply-classify run to completion so a finished draft clears the spinner
