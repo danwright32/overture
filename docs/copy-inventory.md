@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1236 sentences**.
+Every sentence Overture can say to Dan: **1229 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -312,8 +312,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ProbeSelection.swift`
 "1 source needs"
     `Domain/SourceAttention.swift`
-"1 upcoming show has"
-    `Domain/OutreachFunnel.swift`
 "1 venue is still waiting to be checked."
     `UI/ScoutSummaryView.swift`
 "1 web lookup"
@@ -2213,12 +2211,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/RunProgress.swift`
 "\(base) looks stuck (\(elapsed))"
     `Domain/RunProgress.swift`
-"\(c.expiredWithAContact) shows"
-    `Domain/OutreachFunnel.swift`
-"\(c.scouted) scouted, \(c.contactFound) with a contact, \(c.drafted) drafted, \(c.sent) sent."
-    `Domain/OutreachFunnel.swift`
-"\(c.waitingWithAContact) upcoming shows have"
-    `Domain/OutreachFunnel.swift`
 "\(city), \(state)"
     `Domain/EventLocationFill.swift`
 "\(clauses[cityIndex]), \(code)"
@@ -2486,12 +2478,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SelfBookingConflict.swift`
 "\(showCount) shows"
     `UI/SourcesView.swift`
-"\(shows) a contact and no draft."
-    `Domain/OutreachFunnel.swift`
-"\(shows) ran out of time holding a contact, \(c.expiredAfterAPaidCheck) of them after a paid check."
-    `Domain/OutreachFunnel.swift`
-"\(shows) ran out of time holding a contact."
-    `Domain/OutreachFunnel.swift`
 "\(shows) waiting on this"
     `UI/SourcesView.swift`
 "\(source.droppedRowCount) shows"

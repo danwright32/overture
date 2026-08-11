@@ -4,9 +4,13 @@ import Foundation
 // #2035: 108 contacts had produced 3 sends, and nothing in the app could say why.
 //
 // The one report Dan can read counts CONTACTED shows only, so it describes the tail and is silent about
-// everything before the send. Measured on the live store 2026-08-11 while building this: 877 scouted, 81
-// holding a contact, 13 drafted, 6 sent, and of those 81, 49 still upcoming with a contact and no draft
-// while 16 had passed their date that way, 11 of them after a PAID check.
+// everything before the send. Measured BY THIS CODE against the live store 2026-08-11: 873 scouted, 66
+// holding a contact, 13 drafted, 6 sent, and of those 66, 38 still upcoming with a contact and no draft
+// while 15 had passed their date that way, 10 of them after a PAID check. (An earlier hand-written set,
+// 81 / 49 / 16 / 11, counted a form-or-DM contact as a contact and was wrong by a fifth.)
+//
+// Nothing renders these yet: the text block they were written for was removed the same day, because what
+// Dan wants is #16's year-end Sankey rather than three sentences. See OutreachFunnel.swift.
 @Suite("Where shows go between being scouted and being written to (#2035)")
 struct OutreachFunnelTests {
 
@@ -117,50 +121,5 @@ struct OutreachFunnelTests {
                                       today: today)
         #expect(c.drafted == 0)
         #expect(c.waitingWithAContact == 1)
-    }
-
-    // MARK: - The sentences
-
-    @Test func theStageLineNamesEveryStage() {
-        var c = OutreachFunnel.Counts()
-        c.scouted = 877; c.contactFound = 81; c.drafted = 13; c.sent = 6
-        #expect(OutreachFunnel.stageLine(c) == "877 scouted, 81 with a contact, 13 drafted, 6 sent.")
-    }
-
-    // A zero says nothing rather than announcing itself: an absent line here means nothing is waiting,
-    // which is what "nothing to report" should look like.
-    @Test func nothingWaitingSaysNothing() {
-        #expect(OutreachFunnel.waitingLine(OutreachFunnel.Counts()) == nil)
-        #expect(OutreachFunnel.expiredLine(OutreachFunnel.Counts()) == nil)
-    }
-
-    @Test func theWaitingLineAgreesWithItselfAboutOne() {
-        var one = OutreachFunnel.Counts(); one.waitingWithAContact = 1
-        #expect(OutreachFunnel.waitingLine(one) == "1 upcoming show has a contact and no draft.")
-        var many = OutreachFunnel.Counts(); many.waitingWithAContact = 49
-        #expect(OutreachFunnel.waitingLine(many) == "49 upcoming shows have a contact and no draft.")
-    }
-
-    // The paid half is named only when there IS one, so the sentence never reports a cost of zero as
-    // though it were a finding.
-    @Test func theExpiredLineNamesThePaidOnesOnlyWhenThereAreSome() {
-        var free = OutreachFunnel.Counts(); free.expiredWithAContact = 4
-        #expect(OutreachFunnel.expiredLine(free) == "4 shows ran out of time holding a contact.")
-        var paid = OutreachFunnel.Counts()
-        paid.expiredWithAContact = 16; paid.expiredAfterAPaidCheck = 11
-        #expect(OutreachFunnel.expiredLine(paid)
-                == "16 shows ran out of time holding a contact, 11 of them after a paid check.")
-    }
-
-    // MARK: - And it reaches the screen
-
-    // Built is not wired (L3). A funnel nothing renders is a field with no reader (L46), which is exactly
-    // what this issue was about: the counts existed in the rows the whole time and nowhere to read them.
-    @Test func theReportRendersIt() {
-        let source = SourceGuardHelper.source("Overture/UI/OutcomePatternsView.swift")
-        #expect(source.contains("OutreachFunnel.counts("))
-        #expect(source.contains("OutreachFunnel.stageLine("))
-        #expect(source.contains("OutreachFunnel.waitingLine("))
-        #expect(source.contains("OutreachFunnel.expiredLine("))
     }
 }
