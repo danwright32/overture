@@ -165,6 +165,24 @@ struct RootView: View {
     // as the reconcile tick advances it.
     @AppStorage(DownbeatFeedFreshnessStore.lastNewAtKey) private var feedLastNewAt: Double = 0
 
+    // #2478: the four facts the reconcile tick records about Downbeat's export, read reactively so the
+    // masthead's verdict changes the moment a tick (or the notice's own Check again) rewrites them. The
+    // FACTS are stored and the verdict is derived here on every read, rather than the verdict being
+    // stored: that way the line retires itself the day the last vanished shoot's date passes, without
+    // anything having to run to clear it.
+    @AppStorage(DownbeatBookingFeedStore.clientCountKey) private var feedClientCount = 0
+    @AppStorage(DownbeatBookingFeedStore.upcomingBookingCountKey) private var feedUpcomingBookings = 0
+    @AppStorage(DownbeatBookingFeedStore.lastCarriedCountKey) private var feedLastCarriedCount = 0
+    @AppStorage(DownbeatBookingFeedStore.lastCarriedEndDateKey) private var feedLastCarriedEndDate = ""
+
+    private var bookingsVanished: DownbeatBookingFeed.Vanished? {
+        DownbeatBookingFeed.vanished(clientCount: feedClientCount,
+                                     upcomingBookingCount: feedUpcomingBookings,
+                                     lastCarriedCount: feedLastCarriedCount,
+                                     lastCarriedEndDate: feedLastCarriedEndDate,
+                                     today: QueueModel.easternToday())
+    }
+
     private var daysOffReason: DaysOffAttention.Reason {
         DaysOffAttention.reason(
             ScoutService.blockedCalendar(export: DownbeatBridge.loadedExport(), context: context),
@@ -378,7 +396,10 @@ struct RootView: View {
         QueueView(deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys, onConnectGmail: connectGmail,
                   // #2204: out of the toolbar's status slot, which macOS hides in the overflow chevron at
                   // Dan's ordinary window width, and onto the masthead he reads.
-                  notices: AppNotices.current(omniFocusFailing: omniFocusFailedAt > 0, status: status),
+                  // #2478: and the Downbeat export that has lost every shoot it was carrying, which is
+                  // upstream of everything else this screen shows.
+                  notices: AppNotices.current(omniFocusFailing: omniFocusFailedAt > 0,
+                                              bookingsVanished: bookingsVanished, status: status),
                   // #2250: the remedy a notice names, run from here where the sync lives.
                   onNoticeAction: { action in
                       switch action {
@@ -390,6 +411,11 @@ struct RootView: View {
                       // mean the queue passed it up rather than serving it, so do nothing rather than
                       // start a run over a set this view cannot compute.
                       case .finishShowsACheckMissed: break
+                      // #2478: read the export again, through the same one recorder the reconcile tick
+                      // uses, so pressing this and waiting for a tick can never reach different verdicts.
+                      // A fixed export clears the line on the spot; a still-broken one leaves it standing,
+                      // which is the honest answer to "has Overture noticed yet".
+                      case .recheckDownbeatExport: DownbeatBookingFeedStore.observe(now: Date())
                       }
                   },
                   onShowFollowUps: { showFollowUps = true },

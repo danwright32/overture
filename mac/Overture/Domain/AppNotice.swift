@@ -48,12 +48,22 @@ enum AppNoticeAction: Equatable, Sendable {
     // is the offer to finish exactly those, rather than leaving Dan to work out which dates they sit on
     // and re-select them by hand while the app holds the list.
     case finishShowsACheckMissed
+    // #2478: re-read Downbeat's export now, so the line reporting a broken one clears the moment a good
+    // one lands rather than waiting for the next reconcile tick.
+    case recheckDownbeatExport
 
     // What the control says. Short, because it sits at the end of a sentence that has just said what is
     // wrong, and repeating that would be the same thing twice (#843).
     var title: String {
         switch self {
         case .retryOmniFocusSync: return "Sync now"
+        // Deliberately not "Re-export": Overture cannot make Downbeat export anything, it can only read
+        // the file again. The remedy that IS Dan's is in the sentence's tooltip, where it belongs.
+        // And deliberately not "Check again", which is already a control in this app: the one on an
+        // answered show's card, which spends a lookup researching its contacts (ReachabilityCopy). Two
+        // buttons reading the same and doing different things, one of them paid, is worse than a longer
+        // label (#843).
+        case .recheckDownbeatExport: return "Re-read the export"
         // Deliberately not "Retry". A Prep run's shortfall genuinely re-queues itself, and this does not:
         // it starts a new paid run over a set of shows, through the same confirmation as any other check.
         case .finishShowsACheckMissed: return "Check the rest"
@@ -111,8 +121,33 @@ enum AppNotices {
     // Everything the app has to say, in the order it should be read: the standing fault first, then
     // whatever the last run had to report. Never a placeholder and never an empty line, so a quiet app
     // adds no rows to the masthead at all.
-    static func current(omniFocusFailing isFailing: Bool, status: StatusLine) -> [AppNotice] {
+    // #2478: Downbeat's export has lost every shoot it was carrying. A warning, and a standing one: it
+    // stays until an export arrives with shoots in it again, because for as long as it is true, three
+    // features are doing nothing and saying nothing about it.
+    //
+    // The line states the EVIDENCE (how many went, and that they went together), not just that something
+    // is wrong, because that is the one thing that tells Dan in a single read whether he is looking at his
+    // own diary or at a broken export. The tooltip carries the part that explains rather than instructs:
+    // why all of them going at once is read as a break, dated by the furthest night, and the half of the
+    // remedy Overture cannot perform.
+    static func downbeatShootsVanished(_ vanished: DownbeatBookingFeed.Vanished) -> AppNotice {
+        let furthest = EasternDate.date(from: vanished.lastEndDate)
+            .map { EasternDate.dayLabelWithYear($0) } ?? vanished.lastEndDate
+        return AppNotice(
+            text: "Every one of the \(Plural.count(vanished.bookingCount, "shoot")) Downbeat was exporting "
+                + "has gone at once, so Overture can't keep clear of your booked nights or spot a booking.",
+            tone: .warning,
+            help: "Shoots leave the export one at a time, as their dates pass, and the furthest of these "
+                + "was not until \(furthest), so all of them going together reads as a broken export "
+                + "rather than an empty diary. Re-export it from Downbeat, then re-read it here.",
+            action: .recheckDownbeatExport)
+    }
+
+    static func current(omniFocusFailing isFailing: Bool,
+                        bookingsVanished: DownbeatBookingFeed.Vanished? = nil,
+                        status: StatusLine) -> [AppNotice] {
         var notices: [AppNotice] = []
+        if let bookingsVanished { notices.append(downbeatShootsVanished(bookingsVanished)) }
         if isFailing { notices.append(omniFocusFailing) }
         if let text = status.text {
             notices.append(AppNotice(text: text,

@@ -199,6 +199,12 @@ final class ReconcileScheduler {
         let loaded = DownbeatBridge.loadWithHealth(from: url, now: now)
         DownbeatFeedFreshnessStore.record(bookings: loaded.bookings,
                                           today: QueueModel.easternToday(), now: now, into: defaults)
+        // #2478: and what this export CARRIED, which is the only way anything can later notice it stop
+        // carrying. Recorded on the same read as the stall clock above, but into its own keys with its own
+        // verdict: "nothing new for four weeks" and "everything gone at once" are different questions and
+        // must not share an answer (L53).
+        DownbeatBookingFeedStore.record(clientCount: loaded.clients.count, bookings: loaded.bookings,
+                                        today: QueueModel.easternToday(), into: defaults)
     }
 
     // ReconcileSummary instead of failing silently. #617: `from` mirrors DownbeatBridge.loadWithHealth's

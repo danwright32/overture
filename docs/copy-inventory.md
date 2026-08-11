@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1216 sentences**.
+Every sentence Overture can say to Dan: **1222 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -710,6 +710,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/PostEventPrompt.swift`
 "Every one is a one-off hunt, so none of them share an answer."
     `Domain/ProbeSelection.swift`
+"Every one of the \(Plural.count(vanished.bookingCount, "shoot")) Downbeat was exporting "
+    `Domain/AppNotice.swift`
 "Every returning client is covered by a watched source, or set aside below."
     `Domain/ClientCoverage.swift`
 "Every scout re-checks it, so their next show turns up on its own. Untick it for a touring act: an itinerary is mostly not in New York, and re-reading it buys nothing."
@@ -1364,6 +1366,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "Re-prepping \(org) to redraft and find new contacts"
     `App/ActionFeedback.swift`
+"Re-read the export"
+    `Domain/AppNotice.swift`
 "Re: your inquiry"
     `Domain/InquiryCopy.swift`
 "Reach out now"
@@ -1613,6 +1617,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/OnboardingView.swift`
 "Set up Overture…"
     `App/MenuBarContent.swift`
+"Shoots leave the export one at a time, as their dates pass, and the furthest of these "
+    `Domain/AppNotice.swift`
 "Show in Finder"
     `App/StoreUnavailableView.swift`
 "Show me the backups"
@@ -2603,6 +2609,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreSchemaGuard.swift`
 "get seats"
     `Domain/TicketLink.swift`
+"has gone at once, so Overture can't keep clear of your booked nights or spot a booking."
+    `Domain/AppNotice.swift`
 "have written to \(path). Nothing has been opened or changed. Check that "
     `App/StoreSchemaGuard.swift`
 "high confidence"
@@ -2638,6 +2646,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "opened or changed. The file may be in use by another program, or its permissions may have "
     `App/StoreSchemaGuard.swift`
 "permission. A successful sync clears it."
+    `Domain/AppNotice.swift`
+"rather than an empty diary. Re-export it from Downbeat, then re-read it here."
     `Domain/AppNotice.swift`
 "read it."
     `UI/LeadIntakeModel.swift`
@@ -2708,6 +2718,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ProbeSelection.swift`
 "voice guidance leaked a name, quarantined"
     `Domain/PrepRunSummary.swift`
+"was not until \(furthest), so all of them going together reads as a broken export "
+    `Domain/AppNotice.swift`
 "which usually means the match is wrong."
     `Domain/PossibleMatchFanOut.swift`
 "wrote this"

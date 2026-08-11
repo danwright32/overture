@@ -50,6 +50,17 @@ struct AppNoticeLinesOnScreenTests {
         #expect(lines(notices) == ["Prep finished"])
     }
 
+    // #2478: the broken-export warning, and its control, on the screen Dan reads. The whole issue is a
+    // fault nothing told him about, so "the notice exists" is not the claim worth proving; "the sentence
+    // and the button are drawn" is.
+    @Test func abrokenBookingExportIsOnScreenWithItsControl() {
+        let vanished = DownbeatBookingFeed.Vanished(bookingCount: 15, lastEndDate: "2027-06-13")
+        let notices = AppNotices.current(omniFocusFailing: false, bookingsVanished: vanished,
+                                         status: StatusLine())
+        #expect(lines(notices) == [AppNotices.downbeatShootsVanished(vanished).text,
+                                   AppNoticeAction.recheckDownbeatExport.title])
+    }
+
     // A warning is rust, the colour the possible-match and watch-gap lines beside it use for "this is not
     // a status, something is wrong". A receipt is the faint ink the freshness line uses. Read off the
     // rendered view rather than trusted, since the tone is the only thing telling the two apart at a
