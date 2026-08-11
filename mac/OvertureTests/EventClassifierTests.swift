@@ -130,12 +130,17 @@ struct ClassifierMiscTests {
         #expect(c.production == .selfProduced)
     }
 
-    // #1533: a presenter the page never named leaves the production UNKNOWN, and that is the end of it.
-    // It used to raise a badge asking Dan to settle it by hand, on 431 of the 556 undecided rows. The
-    // classifier still says honestly that it does not know, and `.unknown` scores a neutral 0, so an
-    // unanswered production neither promotes nor buries the show.
-    @Test func aNamelessPresenterLeavesProductionUnknownAndScoresItNeutral() {
-        let c = EventClassifier.classify(ev(title: "Gala Concert", presenter: nil))
+    // #1533: a production the classifier cannot answer stays UNKNOWN, and that is the end of it. It used
+    // to raise a badge asking Dan to settle it by hand, on 431 of the 556 undecided rows. Nothing prompts
+    // him now, and `.unknown` scores a neutral 0, so an unanswered production neither promotes nor
+    // buries the show.
+    //
+    // #2504 narrowed which rows land here. A page naming NOBODY is no longer one of them: with no
+    // organisation billed, the act is the only party there is and the show is read as self-produced. The
+    // rows that still reach `.unknown` are the ones with a presenter that names neither an agency nor an
+    // organisation, which is a genuine "we cannot tell" rather than a structural blank.
+    @Test func anUnreadablePresenterLeavesProductionUnknownAndScoresItNeutral() {
+        let c = EventClassifier.classify(ev(title: "Gala Concert", presenter: "Marlowe & Finch"))
         #expect(c.production == .unknown)
         #expect(Ranker.productionPoints(c.production) == 0)
     }
@@ -191,15 +196,32 @@ struct ClassifierActIsThePartyTests {
         #expect(c.coverage == .likelyUncovered)
     }
 
-    // The room is the one organisation on the page that is certainly NOT the producer (#1787, #2259).
-    // Several live rows repeat the room's own name inside the act line ("LOL! The Players Theatre Short
-    // Play Festival"), and reading "Theatre" there as an organisation would promote the venue by the back
-    // door, on a row whose whole problem is that nobody else was named.
-    @Test func theRoomsOwnNameInsideTheActLineIsNotAnOrganisation() {
+    // An act line that names the ROOM is the building's own event, and the building is never a party Dan
+    // may pitch (#1787, #2259, and the hard venue-disqualify rule). An act with nobody behind it and an
+    // organisation Overture refuses to write to look identical once the presenter field is empty, and
+    // lifting the second would undo #1845, which exists to stop a room outranking shows that really are
+    // self-produced.
+    @Test func aRoomsOwnEventIsNotTheActsOwnShow() {
         let c = EventClassifier.classify(ev(title: "LOL! The Players Theatre Short Play Festival 2026",
                                             presenter: nil, venue: "The Players Theatre"))
-        #expect(c.production == .selfProduced)   // still the act's own show
-        #expect(c.profile == .neutral)           // but the room does not make it a strong organisation
+        #expect(c.production == .unknown)
+        #expect(c.profile == .neutral)
+    }
+
+    // And the #1845 row itself, which is what that sweep leaves behind: the room drained out of the
+    // presenter field, its name still in the title. It must not come back through this door.
+    @Test func aRoomDrainedFromThePresenterDoesNotReturnThroughTheTitle() {
+        let c = EventClassifier.classify(ev(title: "Chain Theatre Fall One Act Festival",
+                                            presenter: nil, venue: "Chain Theatre"))
+        #expect(c.production == .unknown)
+    }
+
+    // The line that must not move with it. A soloist at a room that rents itself out is the commonest
+    // live shape by far, and her name says nothing about the building.
+    @Test func aSoloistAtARentalRoomIsStillTheParty() {
+        let c = EventClassifier.classify(ev(title: "Katherine Lynn-Rose", presenter: nil,
+                                            venue: "The Green Room 42"))
+        #expect(c.production == .selfProduced)
     }
 
     // An agency-routed rental is still the dead zone, whoever is billed. This is the one direction that

@@ -87,17 +87,18 @@ enum EventClassifier {
     private static let strongProfile =
         #"choir|chorus|chorale|choral|school|academy|conservatory|youth|community|children|ensemble|opera|ballet|dance|theatre|theater|cultural|university|college|church|temple"#
 
-    // #2504: the act line with the room's own name taken out of it, so a venue quoted inside an act
-    // billing cannot be read as the organisation behind the show.
+    // #2504: does this act line name the room it plays in? Then the show is the building's own, and the
+    // building is never a party Dan may pitch.
     //
-    // Removes the venue string as a whole and nothing cleverer. A room whose name is echoed only in part
-    // ("in the theatre or the tavern", on a Jalopy Theatre row) still slips through, which is a smaller
-    // and rarer miss than a word list would create in the other direction: several real acts ARE named
-    // for a place, and stripping every venue word would silently unname them.
-    private static func withoutTheRoomsOwnName(_ title: String, venue: String) -> String {
+    // Whole-venue-string containment and nothing cleverer. A room named only in part ("in the theatre or
+    // the tavern", on a Jalopy Theatre row) is not caught, which is a smaller and rarer miss than a word
+    // list would create in the other direction: plenty of real acts are named for a place, and treating
+    // every venue word as the room would silently disqualify them.
+    private static func titleNamesTheRoom(_ title: String, venue: String) -> Bool {
         let room = venue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard room.count >= 4 else { return title }   // too short to be a name; never worth removing
-        return title.replacingOccurrences(of: room, with: " ", options: [.caseInsensitive])
+        // Too short to be a name of its own: a three-character venue would match inside ordinary words.
+        guard room.count >= 4 else { return false }
+        return title.range(of: room, options: [.caseInsensitive]) != nil
     }
 
     private static func detectDiscipline(_ text: String) -> Discipline {
@@ -163,13 +164,27 @@ enum EventClassifier {
         //
         // Dan's call, 2026-08-11: judge the act, because the act is the party he would write to. His
         // position on these leads, from #2464: "do not filter. often solo performers are great leads."
+        // Except when the act line is the ROOM'S OWN name. "Chain Theatre Fall One Act Festival" at Chain
+        // Theatre is the building's own event, and the building is the one organisation on the page that
+        // is certainly not a party Dan may pitch (#1787, #2259, and the hard venue-disqualify rule). An
+        // act with nobody behind it and an organisation Overture refuses to write to are opposite
+        // situations that look identical once the presenter field is empty, and lifting the second would
+        // undo #1845, which exists to stop a room outranking shows that really are self-produced.
+        //
+        // LIVE-STORE-CLAIM verified=2026-08-11 measure="act-named rows whose title contains their own venue name"
+        // The discriminator is the TITLE, not `presenterWasTheRoom`. Measured on the live store
+        // 2026-08-11: 322 of the 439 act-named rows carry that flag, because rooms that rent themselves
+        // out bill themselves as the presenter and the boundary drains it, and those rows are exactly the
+        // soloists this change is for. Only 7 name the room in the title, and they are the genuine
+        // article ("54 Does 54: The 54 Below Staff Show", "LOL! The Players Theatre Short Play Festival").
+        //
+        // What it gets wrong, named (L93): a real act playing AT a room it does not own reads as the
+        // room's own event when the title says so ("NY Phil Ensembles at Merkin Hall", 1 live row). That
+        // row keeps today's `unknown`, so the cost is a lift it does not receive, never a promotion it
+        // should not have.
         let actIsTheParty = OrganiserNaming.onlyTheActIsNamed(presenter: event.presenter)
-        // The room is the one organisation on the page that is certainly NOT the producer (#1787, #2259),
-        // and several live rows repeat the room's own name inside the act line ("LOL! The Players Theatre
-        // Short Play Festival", four rows). Reading "Theatre" there as an organisation would promote the
-        // venue by the back door, on a row whose whole problem is that nobody else was named. Only ever
-        // removed from the ACT text: a presenter is a name somebody billed, not an echo of the room.
-        let party = actIsTheParty ? withoutTheRoomsOwnName(event.title, venue: venue) : presenter
+            && !titleNamesTheRoom(event.title, venue: venue)
+        let party = actIsTheParty ? event.title : presenter
 
         let isAgency = matches(haystack, agencySignal)
         let namesAnOrganisation = matches(party, producerSignal) && !isAgency

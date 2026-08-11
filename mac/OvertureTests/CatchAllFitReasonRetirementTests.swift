@@ -19,10 +19,14 @@ struct CatchAllFitReasonRetirementTests {
     // A show that is neither agency-routed nor self-produced falls to the end of the chain and now
     // carries no reason at all. The row already guards on an empty reason, so the line simply collapses:
     // removed, not replaced by a different sentence.
+    //
+    // #2504 changed the FIXTURE, not the claim. This used to name no presenter at all, and a show naming
+    // nobody but its act is now read as self-produced (the act is the only party there is), which took
+    // this row into an informative branch and out of the one under test. The catch-all branch is still
+    // reached the way it always was, by a presenter that names neither an agency nor an organisation.
     @Test func aShowWithNoInformativeReasonNowCarriesNone() {
-        // A bare title at a room, which is what three quarters of the queue looks like.
         let classification = EventClassifier.classify(
-            ExtractedEvent(title: "An Evening of Song", presenter: nil, venue: "A Hall",
+            ExtractedEvent(title: "An Evening of Song", presenter: "Marlowe & Finch", venue: "A Hall",
                            performanceDate: "2026-09-12", sourceUrl: nil))
         guard classification.production != .selfProduced, classification.production != .agency else {
             Issue.record("expected this fixture to fall through to the catch-all branch")
