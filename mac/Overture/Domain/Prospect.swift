@@ -20,7 +20,16 @@ final class Prospect {
     // over the store: recomputing from `groupName` alone does not reproduce the classifier, it
     // approximates it, and writes answers a real scout would not give. #980 hit exactly this and had to
     // ship forward-only.
+    // #2453: WRITE IT THROUGH `setPresenter(_:from:)`, never by assigning this field, so the row always
+    // records who decided the value. An ordinary scout re-read empties this field whenever the listing
+    // bills its own room, so a presenter written by anything else (a sweep, the batched AI pass, Dan)
+    // needs the stamp beside it or it lives until the next run of that source and no longer.
     var presenter: String?
+    // #2453: which writer that presenter came from, as a `PresenterSource` raw value. Optional, and nil is
+    // load-bearing rather than a default: it means the row predates the field, which is measurably the
+    // scout, because the scout was the only writer the presenter had ever had. `PresenterProvenance`
+    // states the rule and is the reader; `ScoutService.apply` is where it decides something.
+    var presenterSource: String? = nil
     // #1788: this row's blank presenter is a name Overture DISCARDED (the run reported the room), not a
     // page that named nobody. Stored rather than derived: once the name is drained the two are identical
     // in the data, and only the boundary that dropped it knows which happened. Optional so every row
@@ -1325,6 +1334,26 @@ final class Prospect {
     // the absence of any. What it is NOT is equally strong, which is why `permitsAutoBook` below reads
     // the Gmail half on its own.
     var wasProvablyContacted: Bool { gmailMessageId != nil || hasRecordedFormOutreach }
+
+    // #2453: the ONE way this row's presenter is written, so a writer cannot leave the field saying
+    // something the row cannot account for. Every write states its source, and the stamp travels with the
+    // value: clearing the name clears the stamp too, because a provenance standing over an empty field is
+    // a claim that an answer exists.
+    func setPresenter(_ name: String?, from source: PresenterSource) {
+        let trimmed = (name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            presenter = nil
+            presenterSource = nil
+        } else {
+            presenter = name
+            presenterSource = source.rawValue
+        }
+    }
+
+    // What `ScoutService.apply` asks before it lets an ordinary re-read empty this field.
+    var presenterSurvivesAnOrdinaryReRead: Bool {
+        PresenterProvenance.survivesAnOrdinaryReRead(presenter: presenter, storedSource: presenterSource)
+    }
 
     // #1630: any contact on this show that Dan pitched through its form and confirmed himself.
     var hasRecordedFormOutreach: Bool { recipients.contains { $0.formOutreachRecordedAt != nil } }

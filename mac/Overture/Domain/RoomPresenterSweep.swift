@@ -44,7 +44,10 @@ enum RoomPresenterSweep {
             let cleaned = ExtractedEventGuard.presenterThatIsNotTheRoom(asRead)
             guard cleaned.presenter == nil else { continue }
 
-            p.presenter = nil
+            // #2453: through the one write seam, so the provenance goes with the name. A room's name is
+            // wrong in this field whoever wrote it, so this pass still clears a deliberate answer, but it
+            // may not leave a stamp standing over an empty field claiming an answer is there.
+            p.setPresenter(nil, from: .sweep)
             p.presenterWasTheRoom = true
 
             // Re-read from the row as the boundary now leaves it. Every axis the presenter fed has to

@@ -1344,7 +1344,7 @@ enum ScoutService {
             possibleMatchName: p.possibleMatchName,
             runEndDate: p.runEndDate, partOfRelatedRun: p.partOfRelatedRun, runSourceURLs: p.runSourceURLs,
             runNights: p.runNights)
-        prospect.presenter = p.presenter
+        prospect.setPresenter(p.presenter, from: .scout)       // #2453
         prospect.presenterWasTheRoom = p.presenterWasTheRoom   // #1788
         prospect.performanceStartTimes = p.startTimes          // #1699
         prospect.startTimesVary = p.startTimesVary             // #1699
@@ -1417,8 +1417,29 @@ enum ScoutService {
         if !existing.groupNameOverriddenByDan {
             existing.groupName = p.groupName
         }
-        existing.presenter = p.presenter
-        existing.presenterWasTheRoom = p.presenterWasTheRoom   // #1788
+        // #2453: a BLANK may not beat real data. Both ingest doors drain a presenter that is only the
+        // room's own name (`ExtractedEventGuard.presenterThatIsNotTheRoom`, applied at :546 here and at
+        // ScoutExtractResults.swift:50), and a rental room bills itself that way on every listing it
+        // publishes, so this line used to empty the field on every ordinary re-read of those pages. That
+        // is fine while the scout is the only writer, because the same page can put its own answer back.
+        // It is data loss the moment anything else writes the field: an answer from the stored-row sweep
+        // (#2454), from the batched AI pass (#2456) or from Dan would live until the next run of that
+        // source and leave no trace it had ever been answered, so the next batch would pay for it again.
+        //
+        // Narrow on purpose: this refuses an ERASURE, not an update. A re-read that actually NAMES a
+        // producer still wins, because the page is what this field is about, and the stamp moves with the
+        // value so the row never claims an answer came from somewhere it did not.
+        if existing.presenterSurvivesAnOrdinaryReRead,
+           OrganiserNaming.onlyTheActIsNamed(presenter: p.presenter) {
+            // The name stands, and so must the explanation beside it: `presenterWasTheRoom` says this
+            // row's BLANK presenter is a name Overture discarded, and this row's presenter is not blank.
+            // Copying this listing's flag onto it would have the card assert an empty field while naming
+            // an organisation (L55).
+            existing.presenterWasTheRoom = false
+        } else {
+            existing.setPresenter(p.presenter, from: .scout)
+            existing.presenterWasTheRoom = p.presenterWasTheRoom   // #1788
+        }
         existing.location = p.location
         // #1886: track the listing's own spelling of the room always, the way scoutGroupName tracks the
         // scout's own name above, so the key stays anchored to what this source keeps sending even after

@@ -314,7 +314,9 @@ enum DebugStaging {
         let c = makeShow(keyTag: "c", group: "Vespers (debug)", venue: "Church of the Ascension")
         let d = makeShow(keyTag: "d", group: "Compline (debug)", venue: "House of the Redeemer")
         for show in [c, d] {
-            show.presenter = orgName
+            // #2453: staged as the SCOUT's own answer, which is what these rows stand in for, so a walk of
+            // the Debug build meets the ordinary case rather than a protected one.
+            show.setPresenter(orgName, from: .scout)
             // Never checked itself: the whole point is that the answer arrives from the organisation.
             show.reachabilityProbedAt = nil
             show.reachabilityResult = nil
