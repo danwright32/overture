@@ -239,12 +239,12 @@ struct RefusalRealignmentNeverDeletesTests {
         for pass in answers.sorted() {
             let code = Self.code(of: pass)
             #expect(!code.isEmpty, "no source found for the answer-shaped pass \(pass)")
-            #expect(code.contains("duplicatesDeleted"),
+            #expect(code.contains("duplicatesDeleted"), Comment(rawValue:
                     "\(pass) is declared answer-shaped but counts no merge, so the classification says "
-                    + "nothing about how it behaves")
-            #expect(code.contains(".delete("),
+                    + "nothing about how it behaves"))
+            #expect(code.contains(".delete("), Comment(rawValue:
                     "\(pass) is declared answer-shaped but never merges, which is the protective "
-                    + "behaviour wearing the wrong label")
+                    + "behaviour wearing the wrong label"))
         }
     }
 
