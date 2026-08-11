@@ -269,6 +269,7 @@
 		28B47DB7BADD1B8A63F01A29 /* PresenterLineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5440B824ED54858222A28E76 /* PresenterLineTests.swift */; };
 		28F26151F3518E34C0E51D77 /* DatedFolderRotation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E86D720BB6E60CD6CDD1B1F /* DatedFolderRotation.swift */; };
 		290A347454B036DCF9F14813 /* SendGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CA149E1EF787330DE7174AB /* SendGroup.swift */; };
+		291A609618420AD5C2EA98D5 /* DownbeatBookingFeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA3804735F297F3E7D3263 /* DownbeatBookingFeed.swift */; };
 		29245907898F8127FD749062 /* Experiment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E7D15D7E6680218D019FE0A /* Experiment.swift */; };
 		293295A0EF114EB2D167A40C /* OutreachEventPhrasingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C34BF6FFEC79EE1375261E5 /* OutreachEventPhrasingTests.swift */; };
 		294622ED6F2A7C45793370C5 /* RecipientBackfillLiveStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C200298C3D0968B8EA55122 /* RecipientBackfillLiveStoreTests.swift */; };
@@ -425,6 +426,7 @@
 		3FE299F95CB2F2BB587C3B77 /* OVCapsuleButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA18BC286E92761C5A33E6F8 /* OVCapsuleButton.swift */; };
 		3FFCD4BE4A2103C4E602E6E4 /* AppSchema.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD278D4718520A331913DFA6 /* AppSchema.swift */; };
 		3FFD201B6B74E75A52CABD44 /* ScoutService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 637CE6DCB47850272BCB073A /* ScoutService.swift */; };
+		3FFF54CF42364B7C6A37D98C /* DownbeatBookingFeedTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20066C571558664BD618F991 /* DownbeatBookingFeedTests.swift */; };
 		407F830738DE1F47AE0D28F2 /* ReachedOutRowChromeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB6EBC8F772371EC3CBDD5B0 /* ReachedOutRowChromeTests.swift */; };
 		409ACCB3150734E0DFBDC6FE /* ContactScoreAdjustment.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC5BE05DF1C3A6C7254C6425 /* ContactScoreAdjustment.swift */; };
 		40A96CD51CE66953CF2B318C /* ExperimentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB88FA6B6E1D309D4C669CB5 /* ExperimentTests.swift */; };
@@ -965,6 +967,7 @@
 		9D510F35F3804E51570BF6B6 /* InquiryCopyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4649F8362E44789B4A7278C3 /* InquiryCopyTests.swift */; };
 		9D69C2D58FDC07016450D648 /* BuildFreshnessPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A49C73435C770A5D184591F /* BuildFreshnessPanel.swift */; };
 		9D7CB31250C87458275579A9 /* RecentOpeners.swift in Sources */ = {isa = PBXBuildFile; fileRef = C448AE5287C23B5B098A31E7 /* RecentOpeners.swift */; };
+		9D856064900803BA25E2E39A /* DownbeatBookingFeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA3804735F297F3E7D3263 /* DownbeatBookingFeed.swift */; };
 		9D8B6AA59A1E8A2A2A1134B6 /* OmniFocusSyncStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2624284F3BAF85D48AF1DC5 /* OmniFocusSyncStatus.swift */; };
 		9D9DF4403DB326F234B543F7 /* ScoutExtractCurrentSourceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B5C81F668BEA208FE327FC2 /* ScoutExtractCurrentSourceTests.swift */; };
 		9DE6094289FD3887CC896FAE /* AddLeadSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16EE360DB327B84791A4BF49 /* AddLeadSheet.swift */; };
@@ -1712,6 +1715,7 @@
 		1F6F42DC97CB498D756826E5 /* ScoutControlStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutControlStateTests.swift; sourceTree = "<group>"; };
 		1F7856DEFD3CE2B708A9273A /* ManualPrepSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualPrepSheet.swift; sourceTree = "<group>"; };
 		1FE257817B5A196269A6B693 /* EmptyRunStreakTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyRunStreakTests.swift; sourceTree = "<group>"; };
+		20066C571558664BD618F991 /* DownbeatBookingFeedTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownbeatBookingFeedTests.swift; sourceTree = "<group>"; };
 		20098B429BD893CC6491DA1C /* CalendarMonthIndexTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarMonthIndexTests.swift; sourceTree = "<group>"; };
 		2036F525F19E0746DA4F082B /* NeverReadSourceNeedsALookTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NeverReadSourceNeedsALookTests.swift; sourceTree = "<group>"; };
 		203E7EFE8858ADA4E9B22FBD /* Salutation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Salutation.swift; sourceTree = "<group>"; };
@@ -2620,6 +2624,7 @@
 		E135F9F368E79F72FAE4B6ED /* PrepStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrepStatus.swift; sourceTree = "<group>"; };
 		E18DB720889580E2246ADDB5 /* MastheadGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MastheadGuardTests.swift; sourceTree = "<group>"; };
 		E1D04F30321C4980D98D6325 /* StoreRelocation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreRelocation.swift; sourceTree = "<group>"; };
+		E1FA3804735F297F3E7D3263 /* DownbeatBookingFeed.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownbeatBookingFeed.swift; sourceTree = "<group>"; };
 		E244333506277713633CEA82 /* VenueNameAskTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueNameAskTests.swift; sourceTree = "<group>"; };
 		E2C8DDC547B7913960DA8D53 /* ScoutReadBudget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutReadBudget.swift; sourceTree = "<group>"; };
 		E328B4BDD4A7A9554F3DF9C5 /* StageEmptyState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StageEmptyState.swift; sourceTree = "<group>"; };
@@ -2978,6 +2983,7 @@
 				2F6556AF12C03406F0E47CD6 /* DismissReasonMigrationTests.swift */,
 				85DC307C6A1089DBB326D663 /* DockPresenceTests.swift */,
 				7442C3140BCA0474F9930704 /* DormantFetchBudgetTests.swift */,
+				20066C571558664BD618F991 /* DownbeatBookingFeedTests.swift */,
 				E72D937054FBE261722613B6 /* DownbeatBookingTests.swift */,
 				E51B0E4D5977CCD140484D76 /* DownbeatExportContractTests.swift */,
 				B479AD3011405F9BF9A2DA23 /* DownbeatExportHealthTests.swift */,
@@ -3708,6 +3714,7 @@
 				65B129F207D7325A80D5360D /* DismissedProspects.swift */,
 				AD5A3010271F14CCBA326516 /* DismissReasonMigration.swift */,
 				BF13A18B3F23144C2AEAF3BD /* DownbeatBooking.swift */,
+				E1FA3804735F297F3E7D3263 /* DownbeatBookingFeed.swift */,
 				829EE2F8C8D00FB6BD62E196 /* DownbeatExport.swift */,
 				620DF06AF9EDFC253359DFD4 /* DownbeatFeedFreshness.swift */,
 				D3E1EB8F1FD834F2944330EC /* DraftCheck.swift */,
@@ -4221,6 +4228,7 @@
 				7AB8E71A600DA6C16E3208AB /* DismissedProspects.swift in Sources */,
 				CC43F65D7FC056467CFDC206 /* DockPresence.swift in Sources */,
 				6FC0ABF1EB00A87FCB142AA2 /* DownbeatBooking.swift in Sources */,
+				291A609618420AD5C2EA98D5 /* DownbeatBookingFeed.swift in Sources */,
 				18700AD6424BB82913D7E382 /* DownbeatExport.swift in Sources */,
 				EEE094F2F6A96DF7F981E8C5 /* DownbeatExportWatcher.swift in Sources */,
 				26772762E14CAAA2B0A2C528 /* DownbeatFeedFreshness.swift in Sources */,
@@ -4787,6 +4795,8 @@
 				01879588F050F2127D52E7D9 /* DockPresenceTests.swift in Sources */,
 				0EFF84615B06043CDC442593 /* DormantFetchBudgetTests.swift in Sources */,
 				53DE617098EA2D2AA1FFD25D /* DownbeatBooking.swift in Sources */,
+				9D856064900803BA25E2E39A /* DownbeatBookingFeed.swift in Sources */,
+				3FFF54CF42364B7C6A37D98C /* DownbeatBookingFeedTests.swift in Sources */,
 				1BF4811736AD0C8A914EFCF1 /* DownbeatBookingTests.swift in Sources */,
 				C02C7AAF1D196A11BC522252 /* DownbeatExport.swift in Sources */,
 				7B4E721B2BC1ECCAFD669A5F /* DownbeatExportContractTests.swift in Sources */,

@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1216 sentences**.
+Every sentence Overture can say to Dan: **1229 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -676,6 +676,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ShowOutcome.swift`
 "Downbeat clients no watched source treats as a returning client, so their next season would not surface a year ahead. Add a source for them, or tag an existing one below."
     `Domain/ClientCoverage.swift`
+"Downbeat's export carries no shoots at all, though \(vanished.bookingCount) have "
+    `Domain/AppNotice.swift`
 "Draft a reply"
     `UI/ReplyConversationView.swift`
 "Draft with AI"
@@ -710,6 +712,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/PostEventPrompt.swift`
 "Every one is a one-off hunt, so none of them share an answer."
     `Domain/ProbeSelection.swift`
+"Every one of the \(Plural.count(vanished.bookingCount, "shoot")) Downbeat was "
+    `Domain/AppNotice.swift`
 "Every returning client is covered by a watched source, or set aside below."
     `Domain/ClientCoverage.swift`
 "Every scout re-checks it, so their next show turns up on its own. Untick it for a touring act: an itinerary is mostly not in New York, and re-reading it buys nothing."
@@ -1274,6 +1278,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/OmniFocusUserNotifier.swift`
 "Overture opened with \(live) \(live == 1 ? "show" : "shows"). Its most recent backup holds "
     `App/StoreShrinkCheck.swift`
+"Overture recorded those before it kept their dates, so it can't say which have "
+    `Domain/AppNotice.swift`
 "Overture was not checking for replies or bookings for \(PrepStatus.duration(seconds: seconds)), "
     `Domain/WatchGap.swift`
 "Overture was not running for \(PrepStatus.duration(seconds: seconds)), "
@@ -1364,6 +1370,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "Re-prepping \(org) to redraft and find new contacts"
     `App/ActionFeedback.swift`
+"Re-read the export"
+    `Domain/AppNotice.swift`
 "Re: your inquiry"
     `Domain/InquiryCopy.swift`
 "Reach out now"
@@ -1613,6 +1621,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/OnboardingView.swift`
 "Set up Overture…"
     `App/MenuBarContent.swift`
+"Shoots leave the export one at a time, as their dates pass, and the furthest of "
+    `Domain/AppNotice.swift`
 "Show in Finder"
     `App/StoreUnavailableView.swift`
 "Show me the backups"
@@ -2195,6 +2205,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ExperimentReport.swift`
 "\(arm.tally.replied + arm.tally.booked) replied of \(arm.tally.contacted)"
     `Domain/ExperimentReport.swift`
+"\(arrived), and the export now holds none at all. Re-export it from Downbeat, "
+    `Domain/AppNotice.swift`
 "\(base) \($0)"
     `Domain/RunProgress.swift`
 "\(base) looks stuck (\(elapsed))"
@@ -2563,6 +2575,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OrganisationListing.swift`
 "all the same title"
     `Domain/OrganisationListing.swift`
+"already happened. What it can say is that a new shoot came through as recently as "
+    `Domain/AppNotice.swift`
 "and resumed \(PrepStatus.relative(from: endedAt, to: now))"
     `Domain/WatchGap.swift`
 "and started again \(PrepStatus.relative(from: endedAt, to: now))"
@@ -2583,6 +2597,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ScoutStartGate.swift`
 "changed. Check that file before reopening Overture."
     `App/StoreSchemaGuard.swift`
+"come through it before, "
+    `Domain/AppNotice.swift`
 "couldn't save the producer answers, so other shows by them won't reuse this one"
     `Domain/ReachabilityRunSummary.swift`
 "couldn't save what this check found, so it isn't finished and those shows may be checked again"
@@ -2599,6 +2615,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DraftReviewNotes.swift`
 "elsewhere on \(dateLabel)"
     `UI/QueueView+Model.swift`
+"export rather than an empty diary. Re-export it from Downbeat, then re-read it "
+    `Domain/AppNotice.swift`
+"exporting has gone at once, "
+    `Domain/AppNotice.swift`
 "file before reopening Overture."
     `App/StoreSchemaGuard.swift`
 "get seats"
@@ -2657,6 +2677,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ProbeSelection.swift`
 "shows were"
     `Domain/ProbeSelection.swift`
+"so Overture can't keep clear of your booked nights or spot a booking."
+    `Domain/AppNotice.swift`
 "so Overture won't mark anything from this source as gone until the smaller calendar holds."
     `Domain/SourceReadability.swift`
 "so Overture won't send it. Answer this one in Gmail."
@@ -2692,6 +2714,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReachabilityRunSummary.swift`
 "the venue"
     `UI/QueueView+Model.swift`
+"then re-read it here."
+    `Domain/AppNotice.swift`
+"these was not until \(furthest), so all of them going together reads as a broken "
+    `Domain/AppNotice.swift`
 "they said no"
     `Domain/ShowOutcome.swift`
 "they said not now"

@@ -98,7 +98,11 @@ struct AppNoticePlacementGuardTests {
         #expect(masthead.contains("notices"))
 
         let root = SourceGuardHelper.source("Overture/App/RootView.swift")
-        #expect(root.contains("notices: AppNotices.current(omniFocusFailing: omniFocusFailedAt > 0, status: status)"),
+        // #2478 added the booking-feed verdict to the same call, so this pins the two arguments that
+        // decide what the masthead is given rather than one exact line.
+        #expect(root.contains("notices: AppNotices.current(omniFocusFailing: omniFocusFailedAt > 0,"),
+                "the masthead has to be given them, or it draws an empty list forever")
+        #expect(root.contains("bookingsVanished: bookingsVanished, status: status)"),
                 "the masthead has to be given them, or it draws an empty list forever")
     }
 
