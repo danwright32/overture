@@ -124,6 +124,10 @@ verify_and_merge() {
   PR_NUMBER=""
   PR_BRANCH=""
   PR_MERGEABLE=""
+  # Bound here with the rest, never left to resolve_pr: this script runs under `set -u`, so an unset
+  # PR_BODY kills it on the guard line below with no output at all, which is the same traceless death
+  # #1711 fixed in the runners. A test that stubs resolve_pr is exactly how that would first appear.
+  PR_BODY=""
   WORKTREE_DIR=""
   resolve_pr "${identifier}"
 
