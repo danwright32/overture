@@ -53,6 +53,21 @@ enum ProducerShapedName {
         return nil
     }
 
+    // #2452: the ONE entry point every feed adapter uses to decide who presents a row.
+    //
+    // Four call sites answered "does this credit line name a producing company?" independently, and gave
+    // it three different readings: VenueTix read its supertitle through the rule above, OvationTix folded
+    // the same field into the show's document and left the room as the presenter, and TicketTailor named
+    // the room unconditionally. Each file reads as correct alone, which is why nothing caught it; two
+    // readers writing one field are one vocabulary and have to be reconciled against each other (L89).
+    //
+    // `credit` is whatever the feed prints ABOVE the show's title, and is nil both when the row credits
+    // nobody and when the feed publishes no such field at all. `fallback` is whoever's calendar this is,
+    // which is what the row has always been attributed to and what it keeps when no company is named.
+    static func presenter(creditedAbove credit: String?, orElse fallback: String) -> String {
+        from(credit) ?? fallback
+    }
+
     // The trailing possessive belongs to the show title that followed it, never to the company, so it is
     // removed from what gets stored. Left on, every later search for this organisation would carry a stray
     // apostrophe, which is exactly the over-qualified query that buried ICB Productions under a Norwegian

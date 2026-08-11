@@ -4,7 +4,7 @@ import SwiftData
 
 // #2259, the BACKFILL, which is a separate claim from the parse.
 //
-// `VenueTixCalendar.producerName(inSuperTitle:)` recovers a producing company the ingest used to throw
+// `ProducerShapedName`, read by the VenueTix adapter, recovers a producing company the ingest used to throw
 // away, and that fixes the NEXT show. It says nothing about the 438 organiser-less prospects already in
 // Dan's store: 150 of them at The Green Room 42, whose feed carries the producer for roughly one in seven.
 // Shipping the parse and leaving those exactly as they are would have been the whole issue's cost paid and
