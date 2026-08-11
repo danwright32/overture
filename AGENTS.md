@@ -33,6 +33,29 @@ already drifting from the Swift version it mirrored.
 
 ## Working here
 
+- **Before opening any PR, enumerate these four in the PR body. Not "checked": the actual list.**
+  This exists because on 2026-08-10 two defects shipped from this repo and were filed as new issues
+  within hours of the change that introduced them, both catchable in that same change. The rules were
+  already written down; what was missing was being made to list the answers before the PR opened.
+  1. **Every new value has a writer.** List every enum case, stored field, status, flag and category
+     the change adds or extends, and name the code path that WRITES each one. Anything nothing writes
+     is deleted or carries the number of the issue that activates it. All of them, not most: #2453
+     named an activating issue for two of its three unwritten cases and the third became #2490. A
+     category whose only input is a value nothing produces reads as zero, and zero is indistinguishable
+     from a real measurement (L90, L65).
+  2. **Every new value has a reader**, and where two sources could answer one question, which wins.
+     A field written and never read looks alive to any is-this-used check while the purpose it was
+     added for silently never happens (L46, L83).
+  3. **The class, not the instance.** Enumerate the SIBLINGS of whatever was fixed: the other fields,
+     tables, adapters or entities where the identical defect can occur. Cover each, or state why not
+     with a filed issue number. #2478 scoped one out and it became #2495 the same evening. Derive the
+     list from the code where that is possible, because a hand-written one only ever checks what
+     somebody remembered (L30, L96).
+  4. **Every guard was seen to fail.** Per guard: the exact mutation made, the exact failure text seen,
+     and confirmation it was reverted (L1).
+
+  A gap named in the PR body is fine. An unnamed one is the defect.
+
 - Before pushing anything that touches a cross-language contract (`fixtures/`,
   `docs/contracts.md`), or really before pushing anything at all, run `scripts/test-all.sh`
   from the repo root. It runs `pnpm typecheck`, `pnpm test`, and the Swift suite in one
