@@ -36,11 +36,15 @@ struct SourcesView: View {
     // #1209: the Downbeat client list, loaded once when the sheet opens, to show whether a source matches a
     // known client (and so gets the returning-client year-ahead read). Read-only; only the manual tag on
     // the source is written.
-    @State private var clients: [DownbeatClient] = []
-    // #1356: the export's health, kept alongside the clients it loaded. An empty client list from a
+    // #2365: the roster is the app's, loaded once, not this sheet's own copy. Two surfaces loading the
+    // same file separately are two answers to "who is a client" the moment their refreshes fall out of
+    // step, which is what #1570 already cost this app on the geography gate.
+    @Environment(ClientRoster.self) private var clientRoster: ClientRoster?
+    private var clients: [DownbeatClient] { clientRoster?.clients ?? [] }
+    private var clientsHealth: DownbeatBridge.Health { clientRoster?.health ?? .ok }
+    // #1356: the export's health, read from the roster alongside the clients it loaded. An empty client list from a
     // MISSING or unreadable export would make the coverage diagnostic below render nothing, which reads
     // exactly like "every client is covered". Holding the health lets that case fail loud instead.
-    @State private var clientsHealth: DownbeatBridge.Health = .ok
     // #1356: clients Dan has marked "not one I scout", so the coverage gap list converges to real gaps.
     @Query private var dismissedCoverage: [DismissedCoverageClient]
     @State private var showIgnoredClients = false
@@ -95,6 +99,12 @@ struct SourcesView: View {
     private var geo: GeoRefusals {
         GeoRefusals(userExcludedTowns: Set(excludedTownRows.map(\.town)),
                     allowedSeedTowns: Set(allowedSeedTownRows.map(\.town)))
+    }
+    // #2365: one context for both calls below, so the signature that decides whether to recompute and
+    // the recompute itself are asked against the same day, instant and gate. #2288 records why they must
+    // agree: a signature computed against a different clock caches a list nobody asked for.
+    private var roomContext: StageContext {
+        StageContext(geo: geo, clients: ClientWindow(sources: sources, clients: clients))
     }
     // #2216: the sources the live extract run has been asked for and not yet come back with, read once
     // per sheet build rather than per row (a per-row file read would put two file reads on every one of
@@ -201,12 +211,10 @@ struct SourcesView: View {
             // safe direction: the unread flag clears on ingest and the line disappears on its own.
             sourcesBeingReadNow = ScoutReadInFlight.loadSourceIdsStillToRead(
                 isRunning: ScoutExtractService.isRunning(now: Date()))
-            let loaded = DownbeatBridge.loadWithHealth(now: Date())
-            // #1429: sort the roster ONCE here, so the "Always" override submenu can iterate it in order
-            // without re-sorting every time a row's menu is built. Order is irrelevant to every other reader
-            // of `clients` (the coverage match and the client-flag match are order-independent).
-            clients = DownbeatClient.sortedByName(loaded.clients)
-            clientsHealth = loaded.health
+            // #2365: ask the app's roster to refresh rather than reading the export here. It sorts the
+            // list once on load, which is what the "Always" override submenu below relies on so it does
+            // not re-sort every time a row's menu is built (#1429).
+            clientRoster?.reload()
         }
         // #1429: recompute the cached tallies ONLY when a prospect a tally counts actually changes. The
         // signature is O(prospects) to evaluate each redraw (cheap next to the old O(rows x prospects) per
@@ -220,9 +228,8 @@ struct SourcesView: View {
         // #2288: and the same inputs go to both calls, because the signature is built from the list's own
         // rule, so a signature computed against a different clock or gate would cache a list nobody asked
         // for.
-        .onChange(of: UnplacedRooms.signature(prospects, context: StageContext(geo: geo)),
-                  initial: true) {
-            unplacedRooms = UnplacedRooms.from(prospects, context: StageContext(geo: geo))
+        .onChange(of: UnplacedRooms.signature(prospects, context: roomContext), initial: true) {
+            unplacedRooms = UnplacedRooms.from(prospects, context: roomContext)
         }
         // Recompute the cached coverage result AND the per-source returning-client flags ONLY when their
         // real inputs change. The signature is cheap to evaluate every redraw; the O(clients x sources)

@@ -54,7 +54,7 @@ struct StageOverlapLiveStoreTests {
                 configurations: [ModelConfiguration(schema: schema, url: url, cloudKitDatabase: .none)]))
 
             let live = try context.fetch(FetchDescriptor<Prospect>()).filter { $0.status != .dismissed }
-            let violations = StageOverlap.violations(in: live, context: StageContext(geo: .none))
+            let violations = StageOverlap.violations(in: live, context: StageContext(geo: .none, clients: .none))
 
             let named = violations.prefix(5)
                 .map { "\($0.key) [\($0.rule.rawValue)] \($0.focuses)" }

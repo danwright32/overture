@@ -434,7 +434,7 @@ struct QueueShowableSurfacesAreOnePredicateTests {
                 private func routeDeepLink(toKey key: String) {
                     let live = prospects.filter { $0.status == .new && !$0.hasOpened(today: today) }
                     if live.contains(where: { $0.naturalKey == key }),
-                       StageNavigation.opensInQueue(key: key, in: live, reachedOutKeys: [], context: StageContext(geo: .none)) {
+                       StageNavigation.opensInQueue(key: key, in: live, reachedOutKeys: [], context: StageContext(geo: .none, clients: .none)) {
                         deepLinkedKey = key
                     }
                 }
@@ -456,7 +456,7 @@ struct QueueShowableSurfacesAreOnePredicateTests {
             read: { _ in """
                 private func routeDeepLink(toKey key: String) {
                     // #1567: isReachableForDeepLink used to decide this behind a date window of its own.
-                    if StageNavigation.opensInQueue(key: key, in: prospects, reachedOutKeys: [], context: StageContext(geo: .none)) {
+                    if StageNavigation.opensInQueue(key: key, in: prospects, reachedOutKeys: [], context: StageContext(geo: .none, clients: .none)) {
                         deepLinkedKey = key
                     }
                 }

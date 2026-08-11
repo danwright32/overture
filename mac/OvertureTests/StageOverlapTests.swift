@@ -138,7 +138,7 @@ struct StageOverlapTests {
         sentContact(contacted, id: "other@example.com")
 
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
-        let violations = StageOverlap.violations(in: all, context: StageContext(geo: .none))
+        let violations = StageOverlap.violations(in: all, context: StageContext(geo: .none, clients: .none))
 
         #expect(violations.isEmpty, "\(violations.map { "\($0.key): \($0.rule.rawValue) \($0.focuses)" })")
     }
@@ -158,7 +158,7 @@ struct StageOverlapTests {
         p.reprepContactsRequested = true
 
         #expect(Set(focuses(p)) == Set([.prep]))
-        #expect(StageOverlap.violations(in: [p], context: StageContext(geo: .none)).isEmpty)
+        #expect(StageOverlap.violations(in: [p], context: StageContext(geo: .none, clients: .none)).isEmpty)
     }
 
     // The rules have teeth: a show that genuinely breaks one is reported, naming the rule. Without this
@@ -168,7 +168,7 @@ struct StageOverlapTests {
         let p = show(ctx, key: "never-sent", status: .new)
         p.sendError = "550 mailbox unavailable"   // a failure on a show nothing was sent from
 
-        let violations = StageOverlap.violations(in: [p], context: StageContext(geo: .none))
+        let violations = StageOverlap.violations(in: [p], context: StageContext(geo: .none, clients: .none))
 
         #expect(violations.map(\.rule) == [.sendProblemNeedsSendHalf])
         #expect(violations.first?.focuses == [.sendErrors])

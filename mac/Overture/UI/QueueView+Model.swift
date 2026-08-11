@@ -1154,6 +1154,44 @@ enum QueueModel {
     // for that gap this comment described a window that did not run. Measured on the live store on
     // 2026-08-09, 119 of the 585 untriaged shows ahead of Dan were past this edge, out to June 2027.
     static let leadTimeWindowDays = 90
+
+    // #2365: the same window for a PAST CLIENT'S show, and the whole of Dan's rule is these two numbers.
+    // His words, 2026-08-11: "90 days for anything that isn't a past client. and then the extended check
+    // for past clients. we should show everything in scout from those two groups, don't hide anything."
+    //
+    // ELEVEN, not twelve, and the difference is load-bearing rather than cautious. The supply side reads a
+    // client's calendar for the current month plus eleven ([[ClientHorizon.clientMonths]] is 12 counting
+    // the current one), so it reaches the END of the twelfth month. A demand window of "today plus twelve
+    // months" lands eleven days INTO a thirteenth month that is never fetched, which is the supply/demand
+    // inversion the paragraph above exists to prevent, pointing the other way. Eleven months from any day
+    // is inside the twelfth month, so demand can never outrun supply.
+    //
+    // In MONTHS rather than days because the supply it must stay inside is in months, and a day count
+    // standing in for it holds only until the month lengths move (L81). Eleven months is 334 days asked on
+    // 31 January and 365 asked on 31 July, and a fixed day count would have to be the smallest of those to
+    // be safe, throwing away a month of a client's season for eleven months of the year.
+    //
+    // Measured 2026-08-11 on a clone of the live store: 124 untriaged shows sit beyond 90 days, ALL of
+    // them within 11 months, the furthest being 2027-06-13. So this window reaches every far-out show
+    // Overture currently holds, and `QueueWindowAndScoutHorizonTests` measures it against the fetch
+    // horizons rather than restating either number.
+    static let clientLeadTimeWindowMonths = 11
+
+    // Whether a performance falls within `months` whole calendar months of `today`, in Overture's one
+    // zone. An undated show is IN, on the same rule as `isWithinLeadTime`'s day arm and for the same
+    // reason: nothing has measured it as far out, so dropping it would lose a real lead on a fact nobody
+    // established (#861 made that call at the past edge).
+    //
+    // Lifted out of `PrepQueueBuilder.defaultsIncludedInPrepRun`, which #2365 deleted along with every
+    // other date rule on the Prep side. The arithmetic is unchanged; it simply now serves the one surface
+    // Dan said may apply a window.
+    static func isWithin(months: Int, performanceDate: String?, today: String) -> Bool {
+        guard let performanceDate, let showDay = EasternDate.date(from: performanceDate) else { return true }
+        guard let todayStart = EasternDate.date(from: today),
+              let boundary = EasternDate.calendar.date(byAdding: .month, value: months, to: todayStart)
+        else { return true }
+        return showDay <= boundary
+    }
     // Within this many days a booking is unrealistic to land, so the event still shows but
     // sinks below everything bookable rather than sitting up top with the nearest dates.
     //

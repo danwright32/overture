@@ -308,37 +308,22 @@ enum PrepQueueBuilder {
                  hasUnclearedConflict: false)
     }
 
-    // #953: whether a kept prospect defaults to INCLUDED when Dan opens a Prep run, decided purely by
-    // how far out its performance is. A show inside the calendar horizon (today through today +
-    // `monthsAhead` months) defaults checked; one beyond it defaults held (unchecked), so a long
-    // lead-time show is not drafted before it is worth reaching out. This is only the DEFAULT: Dan can
-    // toggle any row before running, and the selection is per-run and transient, never a stored flag.
+    // #2365: which kept prospects a Prep run defaults to covering, which is now ALL of them.
     //
-    // An undated prospect defaults IN: there is no date to hold it by, and this preserves the pre-#953
-    // behaviour of prepping everything eligible. The horizon reuses CalendarMonthIndex.defaultHorizon
-    // (the same four-month cap the scout reads its calendars to, Dan's call) so this window and that one
-    // can never drift into two different answers.
-    static func defaultsIncludedInPrepRun(performanceDate: String?, now: Date,
-                                          monthsAhead: Int = CalendarMonthIndex.defaultHorizon) -> Bool {
-        guard let performanceDate, let showDay = EasternDate.date(from: performanceDate) else { return true }
-        let todayStart = EasternDate.date(from: EasternDate.today(now)) ?? now
-        guard let boundary = EasternDate.calendar.date(byAdding: .month, value: monthsAhead, to: todayStart)
-        else { return true }
-        return showDay <= boundary
-    }
-
-    // #1209: which kept prospects a Prep run defaults to covering, held out of the SwiftUI view init so the
-    // rule is testable (#863). Each prospect is measured against its OWN window: a known client's show (its
-    // source is a client's, or it itself matched a client) gets the twelve-month client window, everyone
-    // else the ordinary four, so a returning client's far-future date is not silently defaulted out of the
-    // run the same way it is now surfaced a year ahead by the scout. Returns the naturalKeys to pre-check.
-    static func prepDefaultSelection(prospects: [Prospect], sources: [WatchedSource],
-                                     clients: [DownbeatClient], now: Date) -> Set<String> {
-        Set(prospects.filter { p in
-            defaultsIncludedInPrepRun(
-                performanceDate: p.performanceDate, now: now,
-                monthsAhead: ClientHorizon.prepMonths(for: p, sources: sources, clients: clients))
-        }.map(\.naturalKey))
+    // Dan's rule, 2026-08-11: "I don't think prep needs to worry about filtering out. Scout should be
+    // solely responsible for filtering out based on how far away it is. If it gets to prep I want to be
+    // able to prep it."
+    //
+    // The argument for that is his design rather than a simplification: Scout is the one surface that
+    // applies a lead time window, so a show can only have REACHED this list by Dan deliberately keeping
+    // it, and a second date rule here would second-guess a decision he already made. It also ends a real
+    // disagreement, since triage cut at 90 days while this defaulted at four whole months, so a show 100
+    // days out was refused for triage and would have defaulted into a run.
+    //
+    // Kept as a named function returning the keys rather than inlined in the sheet, so the rule (even now
+    // that it is "every one") has a seam a test can reach and the view holds no rule of its own (#863).
+    static func prepDefaultSelection(prospects: [Prospect]) -> Set<String> {
+        Set(prospects.map(\.naturalKey))
     }
 
     // The #Predicate mirror of needsPrep above, for the one call site (RootView's toPrep @Query)

@@ -111,36 +111,50 @@ struct ClientHorizonTests {
         return Calendar(identifier: .gregorian).date(from: c)!
     }
 
-    @Test func prepMonthsFollowsTheSourceAndTheClientMatch() {
+    // #2365 replaced the Prep-side month window with a SHOW-level question asked by Scout alone, so what
+    // this file pins now is who counts as a past client, not how far ahead Prep reads.
+    @Test func aPastClientIsRecognisedByEitherRoute() {
         let clientSource = source("Anytown Venue", tag: true)   // tagged a client's
         let plainSource = source("Some Org")
-        // From a client source: the year window.
-        #expect(ClientHorizon.prepMonths(for: prospect("a", date: "2027-05-01", sourceIds: ["Anytown Venue"]),
-                                         sources: [clientSource], clients: []) == ClientHorizon.clientMonths)
-        // A booked prospect from an untagged source: still the year window, because it matched a client.
-        #expect(ClientHorizon.prepMonths(for: prospect("b", date: "2027-05-01", sourceIds: ["Some Org"], relationship: "booked"),
-                                         sources: [plainSource], clients: []) == ClientHorizon.clientMonths)
-        // An ordinary prospect from an ordinary source: the four-month default.
-        #expect(ClientHorizon.prepMonths(for: prospect("c", date: "2027-05-01", sourceIds: ["Some Org"]),
-                                         sources: [plainSource], clients: []) == CalendarMonthIndex.defaultHorizon)
+        let clientIds = ClientHorizon.clientSourceIds(sources: [clientSource, plainSource], clients: [])
+
+        // From a client's own calendar, naming nobody Overture knows.
+        #expect(ClientHorizon.isPastClientShow(prospect("a", date: "2027-05-01", sourceIds: ["Anytown Venue"]),
+                                               clientSourceIds: clientIds))
+        // Booked before, arriving from an ordinary room's calendar.
+        #expect(ClientHorizon.isPastClientShow(prospect("b", date: "2027-05-01", sourceIds: ["Some Org"],
+                                                        relationship: "booked"),
+                                               clientSourceIds: clientIds))
+        // Matched a client by name, arriving from an ordinary room's calendar.
+        #expect(ClientHorizon.isPastClientShow(prospect("c", date: "2027-05-01", sourceIds: ["Some Org"],
+                                                        matched: "The Dessoff Choirs"),
+                                               clientSourceIds: clientIds))
+        // Neither route: an ordinary show from an ordinary calendar.
+        #expect(!ClientHorizon.isPastClientShow(prospect("d", date: "2027-05-01", sourceIds: ["Some Org"]),
+                                                clientSourceIds: clientIds))
     }
 
-    // The point of Phase B: a client's far-future show DEFAULTS IN, where an identical non-client show is
-    // held out, and a near-term ordinary show is still in.
-    @Test func prepDefaultSelectionKeepsAClientsFarFutureShowButHoldsANonClientsAtTheSameDate() {
-        let clientSource = source("Anytown Venue", tag: true)
-        let plainSource = source("Some Org")
-        let farClient = prospect("far-client", date: "2027-05-01", sourceIds: ["Anytown Venue"])   // ~10 months out
-        let farPlain = prospect("far-plain", date: "2027-05-01", sourceIds: ["Some Org"])          // ~10 months out
-        let nearPlain = prospect("near-plain", date: "2026-09-01", sourceIds: ["Some Org"])        // ~2 months out
+    // An empty client set is a real answer, not a safe one: it says nobody is a client, which holds every
+    // show to the ordinary window. Pinned so a surface that loses its roster fails visibly in a test
+    // rather than quietly shortening Dan's Scout list.
+    @Test func withNoClientsNothingIsAPastClientExceptTheShowsOwnEvidence() {
+        #expect(!ClientHorizon.isPastClientShow(prospect("a", date: "2027-05-01", sourceIds: ["Anytown Venue"]),
+                                                clientSourceIds: []))
+        #expect(ClientHorizon.isPastClientShow(prospect("b", date: "2027-05-01", relationship: "booked"),
+                                               clientSourceIds: []))
+    }
 
-        let selected = PrepQueueBuilder.prepDefaultSelection(
-            prospects: [farClient, farPlain, nearPlain],
-            sources: [clientSource, plainSource], clients: [], now: fixedNow())
+    // #2365, Dan's own words: "If it gets to prep I want to be able to prep it." Every eligible show
+    // defaults into a run whatever its date and whoever it belongs to, because Scout is the only surface
+    // that applies a window and a show can only have reached this list by being kept.
+    @Test func everyKeptShowDefaultsIntoAPrepRun() {
+        let farClient = prospect("far-client", date: "2027-05-01", sourceIds: ["Anytown Venue"])
+        let farPlain = prospect("far-plain", date: "2027-05-01", sourceIds: ["Some Org"])
+        let nearPlain = prospect("near-plain", date: "2026-09-01", sourceIds: ["Some Org"])
 
-        #expect(selected.contains("far-client"))       // client show a year out defaults IN
-        #expect(!selected.contains("far-plain"))        // identical non-client show is held out
-        #expect(selected.contains("near-plain"))        // ordinary near-term show still defaults in
+        let selected = PrepQueueBuilder.prepDefaultSelection(prospects: [farClient, farPlain, nearPlain])
+
+        #expect(selected == Set(["far-client", "far-plain", "near-plain"]))
     }
 
     // MARK: The Sources-sheet wording

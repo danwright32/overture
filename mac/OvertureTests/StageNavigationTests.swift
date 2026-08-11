@@ -36,7 +36,7 @@ struct StageNavigationTests {
         _ = prospect(ctx, key: "drafted", status: .drafted)
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
 
-        let keys = StageNavigation.naturalKeys(for: .prep, in: all, context: StageContext(geo: .none))
+        let keys = StageNavigation.naturalKeys(for: .prep, in: all, context: StageContext(geo: .none, clients: .none))
         #expect(keys == ["kept-no-draft"])
     }
 
@@ -53,7 +53,7 @@ struct StageNavigationTests {
         _ = prospect(ctx, key: "unflagged-drafted", status: .drafted, hasDraft: true)
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
 
-        let keys = Set(StageNavigation.naturalKeys(for: .prep, in: all, context: StageContext(geo: .none)))
+        let keys = Set(StageNavigation.naturalKeys(for: .prep, in: all, context: StageContext(geo: .none, clients: .none)))
         #expect(keys == Set(["kept-no-draft", "flagged-drafted", "flagged-approved"]))
     }
 
@@ -83,7 +83,7 @@ struct StageNavigationTests {
         _ = prospect(ctx, key: "queued", status: .queued, hasDraft: false)
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
 
-        let keys = Set(StageNavigation.naturalKeys(for: .review, in: all, context: StageContext(geo: .none)))
+        let keys = Set(StageNavigation.naturalKeys(for: .review, in: all, context: StageContext(geo: .none, clients: .none)))
         #expect(keys == Set(["drafted-1", "drafted-2"]))
     }
 
@@ -95,7 +95,7 @@ struct StageNavigationTests {
         _ = prospect(ctx, key: "drafted", status: .drafted)
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
 
-        let keys = StageNavigation.naturalKeys(for: .sendApproved, in: all, context: StageContext(geo: .none))
+        let keys = StageNavigation.naturalKeys(for: .sendApproved, in: all, context: StageContext(geo: .none, clients: .none))
         #expect(keys == ["waiting-to-send"])
     }
 
@@ -108,7 +108,7 @@ struct StageNavigationTests {
         _ = prospect(ctx, key: "x", status: .queued, hasDraft: false)
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
 
-        #expect(StageNavigation.naturalKeys(for: .followUps, in: all, context: StageContext(geo: .none)).isEmpty)
+        #expect(StageNavigation.naturalKeys(for: .followUps, in: all, context: StageContext(geo: .none, clients: .none)).isEmpty)
     }
 
 }
