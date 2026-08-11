@@ -1,5 +1,21 @@
 # Prospector for new organisations and venues
 
+> **Priority, as of 2026-08-11: the WHOLE milestone is `priority-p4`.** Dan deprioritised every open
+> issue in it on that date, and the per issue labels below were rewritten to match, so this document and
+> the issues cannot disagree about how urgent anything is (L32).
+>
+> **What did NOT change is the ORDER.** The ship order and the phase gating in this plan still hold, and
+> a uniform label deliberately says nothing about sequence. In particular **P6.5 remains a hard
+> prerequisite of every Phase 8 open web issue**: it is the one that scopes the runner's tools, pins its
+> model, names its clock and decides that a fetched page is data rather than instruction, and it was
+> `priority-p0` for that reason before the bump. A later reader picking work off this document by label
+> alone would find nothing to tell them so, which is why it is written here.
+>
+> For the record, the priorities this plan originally assigned ran from `priority-p0` on P6.5, through
+> `priority-p1` on Phases 0, 1, 2, 3 and 6, `priority-p2` on Phases 1, 4, 5 and 7 and `priority-p3` on
+> Phase 8, to `priority-p4` on P9.1. The four issues already CLOSED (#2450 to #2453) keep the labels they
+> shipped under, since those record how urgent the work was when it was done.
+
 Planned with `/plan-council` on 2026-08-10. 24 agents, 89 minutes. Planning record only: no application code was written or changed.
 
 ## Verification status, read this first
@@ -145,7 +161,7 @@ Six of these decide the architecture, and five overturn what an earlier draft as
 
 **Milestone description states, in Dan's own frame:** venues are not neglected. **Phase 7 (booked venues, #311) IS the venue channel**, and #9's venue half is satisfied by it plus the seed layer P8.3 plugs into.
 
-Every issue carries that milestone, a `priority-p*` I chose (stated per issue, since I found these rather than Dan reporting them), and at least one category label: `discovery`, `enhancement`, `tech-debt`, `data-integrity`, `cost`, `security`, `accessibility`.
+Every issue carries that milestone, a `priority-p*` I chose (stated per issue, since I found these rather than Dan reporting them, and all of them since flattened to `priority-p4` by the note at the top of this document), and at least one category label: `discovery`, `enhancement`, `tech-debt`, `data-integrity`, `cost`, `security`, `accessibility`.
 
 Phase gating is real: **no issue in a later phase may be started before its predecessor's guard has been seen to fail and then pass** (L1).
 
@@ -159,7 +175,7 @@ Nothing ships to Dan. This phase exists because rival plans disagreed about the 
 
 **Cost: zero runs, zero AI, zero fetches.** One local test invocation, seconds. There is no paid version.
 
-### P0.1: Measure the seed table and the candidate pool through `LiveStoreClone`, not a parallel tool. `priority-p1`, `discovery`, `data-integrity`.
+### P0.1: Measure the seed table and the candidate pool through `LiveStoreClone`, not a parallel tool. `priority-p4`, `discovery`, `data-integrity`.
 
 An earlier draft proposed a bespoke one-shot tool with its own hand-written refusal to open the Release store. **That duplicates a shipped mechanism, which is the exact defect this plan cites `OrgDoNotContact` against.** `mac/OvertureTests/LiveStoreClone.swift` is "the ONE way a test may read Dan's real store": it takes a WAL-consistent SQLite ONLINE BACKUP (answering the torn-copy objection in its own words) and "refuses outright if the clone it is about to hand over is the live path" (answering the L2 objection). **17 `*LiveStoreTests.swift` suites use it, across 27 files.** So:
 
@@ -181,7 +197,7 @@ An earlier draft proposed a bespoke one-shot tool with its own hand-written refu
 2. **The candidate-pool figures have drifted with the store, while the FOLD numbers have not.** 874 prospects (was 866), 275 distinct presenters (was 254), and the `GroupNameMatch.isConfident` pool is **246, not 225**. `ProducerGate.isVenueBrand` still drops exactly the four named in (d), which is now **4 of 246**.
 3. **The bare-personal-name filter's drop rate is material and it is wrong on real organisations.** A candidate rule (2 or 3 capitalised words, no digits, no organisation vocabulary, no connector, no leading article) drops **75 of 242**, roughly 31 percent, and its drops include `Live Nation`, `Selected Shorts`, `Young Euro Classic`, `Fundacion Sinfonia`, `Harmony Sweepstakes`, `Monday Night Magic`, `Classical Nomads` and `Treble Harmony Brigade`. The condition P4.2 attached to this ("if the drop rate is material, the drops go to a visible list Dan can overrule") is therefore MET, not hypothetical, and P4.2 may not ship this filter as a silent discard. Two arms were added after seeing the first measurement, and both were measured rather than guessed: without a leading-article arm it also dropped five bands out of five (`The Klezmatics` and four more), and without `university` and `college` in the vocabulary it dropped `Concordia University Irvine`.
 
-### P0.2: Fix the fold failures that are real, and ship a realignment pass with them. `priority-p1`, `data-integrity`.
+### P0.2: Fix the fold failures that are real, and ship a realignment pass with them. `priority-p4`, `data-integrity`.
 
 The Carnegie four-way claim is **withdrawn**. The genuine failures, all measured:
 
@@ -214,7 +230,7 @@ A proposal surface fed by a store where 52% of rows name a room instead of an or
 
 **Cost: P1.1, P1.2, P1.3 are FREE** (source changes, a store sweep, re-reads of pages the scout already fetches). **P1.4 is one AI run, once.** The free version of P1.4 is "ship P1.1 to P1.3 and accept that the 278 pairs stay unnamed until a page is re-read"; that is a real option and the issue says so.
 
-### P1.1: Route all four call sites through `ProducerShapedName`. `priority-p1`, `tech-debt`, `data-integrity`. **Free: zero runs.**
+### P1.1: Route all four call sites through `ProducerShapedName`. `priority-p4`, `tech-debt`, `data-integrity`. **Free: zero runs.**
 
 Measured in this checkout:
 - `mac/Overture/Integration/VenueTixCalendar.swift:217/231`, already routes through it. Correct.
@@ -224,7 +240,7 @@ Measured in this checkout:
 
 Fix both by asking the same shared rule. **Guard:** a source-text check in `OvertureTests` using `mac/TestSupport/SourceGuardHelper.swift` + `SwiftSource.swift` (the convention `TicketTailorTests` and `DeadEndContactTests` already use) asserting no adapter's `extractedEvents` assigns a presenter without folding through `ProducerShapedName`, **plus a private-copy check** that no file outside `ProducerShapedName.swift` re-declares the connector list or the length caps. Seen red first by reverting one call site (L1).
 
-### P1.2: The honest store sweep: it is worth THREE rows, and it must not mangle the one real name. `priority-p2`, `data-integrity`. **Free: zero runs, one launch-time pass.**
+### P1.2: The honest store sweep: it is worth THREE rows, and it must not mangle the one real name. `priority-p4`, `data-integrity`. **Free: zero runs, one launch-time pass.**
 
 A sweep over the 454 presenter-less rows can only read fields the store holds, and the producing supertitle **is not stored on `Prospect` at all**. Running the shipped `ProducerShapedName.from` over all **427** distinct group names on those rows returns **3 hits**: `In Pleasant Company`, `On Stage Collective`, `Orchestra of St. Luke's`. **The issue says 3.** Any larger figure was computed with a second, broader rule, which P1.1 exists to forbid; and an optimistic number here is worse than none, because it is exactly what someone checks a suspicious later run against (L32). **The direct consequence is that P1.2 barely justifies itself alone and its real value is the provenance guard below, which P1.4 cannot ship without.**
 
@@ -243,7 +259,7 @@ So **P1.2 ships the provenance guard in the same change that adds the second wri
 - **`RoomPresenterSweep.run` keeps clearing a room-named presenter (that data really is wrong) but may no longer do it silently:** when the presenter it clears is not `scout`-sourced, it records an explicit *cleared-because-it-named-the-room* fact against that (group, venue) pair. That record is L46-named in this same issue: **its readers are P1.4's batch selector (which must not re-pay for a pair already answered and then cleared) and the failed-attempt list on the proposal surface (P8/L46 below).** A test asserts a sweep-cleared pair is excluded from a second P1.4 batch, seen red first.
 - Both guards get their own test, each seen red by reverting it.
 
-### P1.3: Two separate one-shot forced re-reads, each with its own justification. `priority-p2`, `data-integrity`. **Free: zero AI runs; re-fetches pages the scout already fetches, one scout press each, minutes.**
+### P1.3: Two separate one-shot forced re-reads, each with its own justification. `priority-p4`, `data-integrity`. **Free: zero AI runs; re-fetches pages the scout already fetches, one scout press each, minutes.**
 
 - **(a) `ovation_tix_feed`-scoped re-read.** Selectable by `kind`. Reaches SoHo Playhouse (**35** presenter-less rows) and The Players Theatre (**27**). Justification: the adapter changed in P1.1 and a rule only reaches rows written after it (L55).
 - **(b) `venue_tix_feed`-scoped re-read for Green Room 42's 164 rows.** Justification is **not** "the adapter changed", that adapter was already correct. It is **"#2259's boundary rule shipped after these rows were written"**, the same lesson from the other direction.
@@ -251,7 +267,7 @@ So **P1.2 ships the provenance guard in the same change that adds the second wri
 
 Shared requirements: one-shot, not a mode; clears `lastContentHash` for exactly the selected `WatchedSource` rows, records that it did, idempotent by a stored marker; must **not** clear `hasUnreadChanges` or `lastManualReadAt` (`WatchedSource.swift:51`, `:68`), which is #1189's fairness clock; must **not** fire automatically on launch; failure is loud (a re-read leaving any targeted source unread names those sources).
 
-### P1.4: One batched AI pass over the 278 distinct (group, venue) pairs. `priority-p2`, `discovery`, `cost`.
+### P1.4: One batched AI pass over the 278 distinct (group, venue) pairs. `priority-p4`, `discovery`, `cost`.
 
 **Cost: exactly ONE run, once. Expected wall clock a few minutes.** Not repeatable per scout and must not become so. **Free version:** skip it; the 278 pairs stay unnamed until a page re-read happens to fill them, and Phase 4 ships on the 412 rows that already carry a presenter. With P1.2 now worth only 3 rows, this is the pass that actually names organisations, and the issue must say that plainly rather than leaning on a deterministic sweep that does almost nothing.
 
@@ -272,7 +288,7 @@ Built before any surface, because a refusal ledger retrofitted onto live proposa
 
 **Cost: zero runs, zero AI, zero fetches. Entirely free.**
 
-### P2.1: `OrgClaim`: a proposal's identity is a set, and it must reuse an existing fold. `priority-p1`, `data-integrity`.
+### P2.1: `OrgClaim`: a proposal's identity is a set, and it must reuse an existing fold. `priority-p4`, `data-integrity`.
 
 A proposal carries any of: a **name** claim, a **site host** claim, a **listings URL** claim (folded through the existing `CalendarIdentity`, never a new host comparison, #2377 already merged two spellings of that), and later an **Instagram handle** claim. Each claim is `(kind, value)` with one declared fold per kind, and every fold is a named existing function.
 
@@ -287,7 +303,7 @@ A proposal carries any of: a **name** claim, a **site host** claim, a **listings
 
 **The refusal-matching fixture comes from records each side created independently (L58):** the first real refusal Dan makes on a live run, or a claim pair whose name came from `ZPRESENTER` and whose URL came from a `WatchedSource` neither minted from the other. Until one exists, the refusal-match test is explicitly **awaiting live calibration**, and per L65 **the issue that activates it is filed in the same change**.
 
-### P2.2: `RefusedOrgClaim`: a deliberate second model, reconciled against `SourceInactiveReason`, reading the shipped ledger, failing closed. `priority-p1`, `data-integrity`.
+### P2.2: `RefusedOrgClaim`: a deliberate second model, reconciled against `SourceInactiveReason`, reading the shipped ledger, failing closed. `priority-p4`, `data-integrity`.
 
 **(a) Why a second model is correct here, when `OrgDoNotContact`'s own header says it was wrong there.** A **discovery refusal** ("never propose this group to me again") is a different fact from `orgDoNotContact` ("they asked me to stop"). The first is Dan's taste and reversible; the second is theirs and is not. Collapsing them would either make a taste decision permanent or make an unrecoverable one reversible. `OrgDoNotContact` refused a parallel mechanism for the *same* fact; this is a different fact, and the issue argues it explicitly rather than asserting it.
 
@@ -311,7 +327,7 @@ A proposal carries any of: a **name** claim, a **site host** claim, a **listings
 - **L92, as a build rule:** every item the run can propose must carry at least one claim, or it is **refused rather than proposed**. An item with no claim is not a weak proposal, it is an unrecordable refusal.
 - **L75:** when identity resolution fails, refuse the action. Never fall back to a nearby candidate.
 
-### P2.3: Refuse and "Propose again" ship in the same change. `priority-p1`, `discovery`. **Free.**
+### P2.3: Refuse and "Propose again" ship in the same change. `priority-p4`, `discovery`. **Free.**
 
 Striking a card removes the only handle Dan has to reverse it (L97, paid for in #2392/#2408). The refusal list is a visible surface with the way back attached to each row, reachable without Dan having to remember the name he struck. Same PR, not a follow-up. `orgRefusal`-kind claims never appear on it (P2.2b).
 
@@ -321,7 +337,7 @@ Striking a card removes the only handle Dan has to reverse it (L97, paid for in 
 
 **Cost: zero runs, zero AI. Free.**
 
-### P3.1: `DiscoveredOrgProposal` @Model and the proposal list, with its evidence stamped at write time. `priority-p1`, `discovery`, `accessibility`.
+### P3.1: `DiscoveredOrgProposal` @Model and the proposal list, with its evidence stamped at write time. `priority-p4`, `discovery`, `accessibility`.
 
 - A discovered candidate lands **here**, never on the watchlist and never in the queue (constraint 6).
 - Each card shows: the claims, the seed it came from, the evidence (which page, which listing, how many shows), and the reason it was proposed. **Evidence on this card is a VALIDATED field, not a display field, see P8's L28 rule, which is what makes the words on it true.**
@@ -330,7 +346,7 @@ Striking a card removes the only handle Dan has to reverse it (L97, paid for in 
 - **L49:** Accept and Refuse look like controls at rest, not on hover. **L76:** the list shows at rest that content continues past the edge (`CappedScrollView` / `ScrollOverflow` exist for this). **L69:** the card is read on both light and dark backgrounds. **L20:** labels on icon-only controls, real buttons, AA contrast, focus management, as part of building the control.
 - **#843 / L21 cold read:** `docs/copy-inventory.md` and `docs/copy-surfaces.md` diffs read cold, in the order a person meets the lines on screen, **in every branch**: empty list, one card, many cards, all-refused, and the branch carrying the explaining sentence *not taken* (#1547 is exactly that defect).
 
-### P3.2: The accept path, its promotion, its cost disclosure, and its UNDO, all in one change. `priority-p1`, `discovery`.
+### P3.2: The accept path, its promotion, its cost disclosure, and its UNDO, all in one change. `priority-p4`, `discovery`.
 
 Arithmetic, not taste: **235 of 254 presenters play exactly one venue**, and `ProducerGate.qualifies` requires `distinctVenueCount >= 2` (`ProducerGate.swift:76`). Without writing a `PromotedProducer` (keyed on `ProducerGate.key`) when Dan accepts an organisation, nearly every accepted org fails the venue-count arm forever. `ZPROMOTEDPRODUCER` holds **0 rows**, so this path has never been exercised live: L46 applies and the issue names the reader of the row it writes.
 
@@ -344,7 +360,7 @@ Arithmetic, not taste: **235 of 254 presenters play exactly one venue**, and `Pr
 
 **L9 / L38 / L97, Accept ships with an undo in the same change**, reachable from a **visible accepted list**, not from Dan remembering a name. The issue **enumerates every derived resource the undo must reverse**: the `WatchedSource`, the `PromotedProducer`, the proposal's state, and any seed stamp. A test asserts none is left behind (the N-minus-1 shape L38 names).
 
-### P3.3: Watchlist growth and the `ScoutReadBudget.askAbove` consequence. `priority-p1`, `cost`. **Filed before the first accept path ships.**
+### P3.3: Watchlist growth and the `ScoutReadBudget.askAbove` consequence. `priority-p4`, `cost`. **Filed before the first accept path ships.**
 
 **This is the feature's genuine recurring cost, and it is not AI.** Every accepted org becomes a `WatchedSource` fetched forever. 73 today; `askAbove` is 20 (`ScoutReadBudget.swift:25`). Accepting twenty organisations makes the "N calendars have new listings to read" prompt fire on nearly every scout Dan presses, and each press costs him time. The issue carries the decision for Dan (escalatedDecisions) and must not resolve it unilaterally. **Free version: none; this cost is inherent to accepting, which is why the decision is Dan's, and why P3.2 puts the count in front of him at the press.**
 
@@ -356,14 +372,14 @@ Promoted ahead of #311 because the corrected numbers still demand it: this chann
 
 **Cost: ZERO runs, ZERO fetches, ZERO AI.** A query over rows Dan already owns, drawn from stamped values. There is no paid version and no separate free version to name, because it is already the free one. That is the strongest thing this plan can say about a discovery channel.
 
-### P4.1: `AlreadyKnownOrg`, reading every home, adding no new fold. `priority-p2`, `discovery`.
+### P4.1: `AlreadyKnownOrg`, reading every home, adding no new fold. `priority-p4`, `discovery`.
 
 The predicate unions: watched sources active and inactive; `RefusedOrgClaim` rows; **`Prospect.orgDoNotContact`**; **`LocalHistory`'s `"dnc"` records**; **`WatchedSource.inactiveReason == .orgRefusal`**; promoted and demoted overrides; presenters already in the store; past clients.
 
 - It **must not become a fourth org fold** (P2.1). It reads P2.1's claim set and nothing else.
 - **It fails closed** (P2.2d): if any input cannot be loaded, the channel proposes nothing and names the read that failed.
 
-### P4.2: Propose the unwatched organisations Overture already holds, sized through a NAMED fold. `priority-p2`, `discovery`.
+### P4.2: Propose the unwatched organisations Overture already holds, sized through a NAMED fold. `priority-p4`, `discovery`.
 
 **The corrected pool, and which fold produced it.** A plain string comparison is not good enough and must not be the sizing method: raw case-sensitive gives **232**, case-insensitive with a leading article stripped gives **228**, and neither is the number to build on, because real near-misses survive both (`"Ballets with a Twist"` at 4 rows against the watched source `"Ballet With A Twist"`; `"Tenet Vocal Artists & Alkemie"` against `"TENET Vocal Artists"`). **The pool is sized through `GroupNameMatch.isConfident`, the shipped fold, and it is 225 of 254.** Measured: that fold DOES collapse `Tenet Vocal Artists & Alkemie` and `The New York Neo-Futurists`, and does NOT collapse `Ballets with a Twist` (a plural difference), which is a real residual the issue names rather than hides.
 
@@ -388,7 +404,7 @@ The predicate unions: watched sources active and inactive; `RefusedOrgClaim` row
 
 **Cost: zero runs, zero AI. Free.**
 
-### P5.1: Emails sent per week, against `ZSENTAT`. `priority-p2`, `discovery`.
+### P5.1: Emails sent per week, against `ZSENTAT`. `priority-p4`, `discovery`.
 
 - The metric is **emails sent**, never proposals produced. Proposals produced is a number every rival design can move without moving anything Dan cares about.
 - Wired against `ZSENTAT`, which currently reads **6 ever**. **L90:** assert that every value the readout branches on is actually produced somewhere, so it cannot report a confident zero from a field nothing writes. #2401 is that exact defect here, and it is worse than a blank because it fails as a number.
@@ -404,14 +420,14 @@ Needed by Phases 7, 8 and 9. Its justification is two shipped files. `mac/Overtu
 
 **Cost: zero runs to build; store, contract and UI work. Free.** What it protects is constraint 10, which has no free alternative.
 
-### P6.1: `DiscoverySeedManifest`, written by the app before launch. `priority-p1`, `discovery`.
+### P6.1: `DiscoverySeedManifest`, written by the app before launch. `priority-p4`, `discovery`.
 - A fixed-shape JSON handoff beside the others, with a **`docs/contracts.md` entry and a `fixtures/` guard**.
 - Each seed carries an **opaque `seedId` the run must echo back verbatim, never rebuild** (the `ScoutExtractQueue` rule, learned the hard way by `PrepQueue`).
 - Each seed carries its own `lastCoveredAt`, and the plan is ordered **oldest-first**, on the `WatchedSource.lastManualReadAt` precedent (`WatchedSource.swift:51`). #1189 records what a shared clock costs.
 - The run may work **only** seeds present in the manifest. A result naming a seed never queued is a different failure (`unmatchedKeys`) and must not cancel out one that went missing.
 - **L98, "the manifest held zero seeds" is its own non-success outcome**, distinct from a complete run and from a truncated one, and it is said on the surface. `HandoffShortfall.missingKeys` over an empty manifest reports nothing missing, which is byte-identical to a run that covered everything, and it arrives exactly when the result is most likely to be believed. Phase 7's seed list is derived from a floor Dan sets, a fold P0.2 changes and a junk exclusion list, so a near-empty manifest is a realistic outcome of an ordinary mistake. **Test: build an empty manifest and require the end state to be neither complete nor silent.** Seen red first.
 
-### P6.2: Within-seed coverage, in the seed's own unit, never a boolean. `priority-p1`, `discovery`. **Ships before any directory or search-query seed is built.**
+### P6.2: Within-seed coverage, in the seed's own unit, never a boolean. `priority-p4`, `discovery`. **Ships before any directory or search-query seed is built.**
 
 A single `lastCoveredAt` boolean recreates `SweepCoverage`'s problem one level down: a run that reads page 1 of a 6-page directory and hits its clock marks the seed covered, indistinguishably from one that read all 6.
 - Every seed declares its **unit** (pages, result ranks, months, listing rows) and its **expected volume up front** (L24), before the loop is written.
@@ -419,10 +435,10 @@ A single `lastCoveredAt` boolean recreates `SweepCoverage`'s problem one level d
 - **A seed that reported no coverage at all is INCOMPLETE, not complete.**
 - **L63:** the guard asserts the quantity it protects (ranks or pages actually read), never a proxy like "the run finished".
 
-### P6.3: One seed is not one cost unit. `priority-p1`, `cost`.
+### P6.3: One seed is not one cost unit. `priority-p4`, `cost`.
 A boutique room and a major hall's resident roster are not the same job, and a directory can consume the entire clock. The cap is expressed in the unit the limit really is (wall clock, plus per-seed unit volume), each seed states its expected volume, and the run stops on the cap rather than on a seed boundary (L81, L24).
 
-### P6.4: End states in `RunProgress`, and a notice on a surface Dan will actually see. `priority-p1`, `discovery`.
+### P6.4: End states in `RunProgress`, and a notice on a surface Dan will actually see. `priority-p4`, `discovery`.
 - `mac/Overture/Domain/RunProgress.swift:153-170` defines `RunLiveness` with `idle`, `running`, `finishing`, `stopping`, `waitingOnYou`, `stalled`. **There is no state meaning "the clock ran out and I did not reach everything."** Reusing `finishing` ships the exact defect Dan named. Add the case; do not overload an existing one (`stopping` and `waitingOnYou` were each added for precisely this reason, `waitingOnYou` by #2201).
 - **Three distinct non-complete end states, never collapsed:** `truncated` (the clock), `cancelled` (Dan asked it to stop, P6.6), and `emptyManifest` (P6.1). Each names the seeds it did not reach.
 - **L77, a rejection RATE is its own outcome, not an ordinary expected result.** Every rejection in this design (geography, `ProducerShapedName`, the refusal read, evidence confirmation) is classified as benign, and nothing counts them, so a run that rejects one hundred percent of what it found produces the same end state, the same empty list and the same wording as a run where the web genuinely held nothing new. A fold change, a `ProducerShapedName` regression, or a geography predicate that started answering false would make the prospector permanently useless while reporting complete runs, and the detector goes back to being Dan noticing nothing has appeared for weeks. So: **report per run "found N candidates, proposed M, rejected N minus M", broken down by which check rejected them, and make a run whose rejection rate is at or near one hundred percent a NON-SUCCESS outcome with a named cause.** Tested with a fixture run whose every candidate fails one check, asserting the surface does not say nothing was found.
@@ -430,7 +446,7 @@ A boutique room and a major hall's resident roster are not the same job, and a d
 - **Do not put it in `StatusLine`.** `StatusLine.set` refuses only a strictly lower-priority write (`if text != nil && newPriority < priority { return false }`, `StatusLine.swift:46`), so an equal-or-higher second warning silently replaces the first. A truncation notice in that one slot is erasable.
 - **L79:** the notice must be *seen* at the window width Dan actually uses before the issue is closed. The toolbar tops out at ten items and macOS condenses it.
 
-### P6.5: The discovery runner: tool scope, model pin, clock, and hostile-input posture. `priority-p0`, `security`.
+### P6.5: The discovery runner: tool scope, model pin, clock, and hostile-input posture. `priority-p4`, `security`. **Was `priority-p0`; still a hard prerequisite of every Phase 8 issue, see the priority note at the top.**
 - `scripts/check-detached-runner-scope.sh` scans every `mac/scripts/*.sh` calling `"$CLAUDE" -p` and fails any that hardcodes `--allowedTools` or does not fold through a `*_claude_scope` function in `mac/scripts/lib/claude-run-scope.sh`. It rides inside `scripts/test-all.sh`. The new runner **must** define its own `*_claude_scope` function. Not a style rule: #1026 measured a run making 13 Bash and 14 Edit calls with zero denials under the inherited auto mode, on a run whose own comment claimed "No Bash".
 - **WebSearch is not new to this repo.** `mac/scripts/lib/claude-run-scope.sh:167` already reads `PREP_ALLOWED_TOOLS="Read,Write,WebSearch,WebFetch,Bash,Skill"`. **The decision to state is why a discovery run gets prep's breadth**: who may launch it, what it may read, what it may write, and that `--permission-mode manual` plus the #1682 plugin lockout still apply. State whether it needs Bash at all (it should not) and deny `Edit`.
 - **L25 / L28, the model is pinned per task**, as `OVERTURE_MODEL_DISCOVERY` in `mac/scripts/lib/models.sh`, recorded via `record_model` (`models.sh:73`). The run may not ask questions, and leaves an honest failure record when it dies rather than an absent file.
@@ -441,7 +457,7 @@ A boutique room and a major hall's resident roster are not the same job, and a d
 - **L71:** the run's watchdog must not share the abort-on-error behaviour of the work it watches. An incidental failure that kills the watchdog leaves the work running unobserved, which looks exactly like a healthy system.
 - **L2:** the runner takes an injected seam for the store path (**`mac/Overture/App/StoreLocation.swift`**, not under Domain), the handoff directory, the clock and the `claude` binary, and refuses **inside the service itself** to run against the Release store or spend a real run under test. Recorded hazard: Swift tests already write into the live Debug handoff directory.
 
-### P6.6: Stopping a discovery run, on the shipped cooperative-cancel mechanism. `priority-p1`, `discovery`, `accessibility`.
+### P6.6: Stopping a discovery run, on the shipped cooperative-cancel mechanism. `priority-p4`, `discovery`, `accessibility`.
 
 The prospector is the longest run this plan proposes (a wall-clock cap, entirely on Dan's clock, on demand) and the only one with no described way to stop it. Every other detached runner sources `mac/scripts/lib/scout-cancel.sh` and honours a cooperative cancel on its heartbeat tick (*"a cooperative stop between ticks can never interrupt a source mid-write and corrupt the shared results file, the way a kill -9 could"*), and `RunLiveness.stopping` exists with L44 and #1684 named in its own source comment. Under L44 a control that keeps offering itself after being pressed reads as broken, so the person presses it again, and here the work meanwhile is still consuming the run and still stamping seeds covered. So:
 - **Source `lib/scout-cancel.sh` in the discovery runner and clear the sentinel before each start**, exactly as the other three do.
@@ -457,21 +473,21 @@ Second, not first. Its seed list is enumerable up front and it carries the warme
 
 **Cost: one run per press, capped by wall clock (P6.3). Expected run count: single digits, because the seed list is a low double-digit number above any floor Dan would plausibly set.** **Free version: the seed list itself is free to produce and can be handed to Dan as a list of rooms to look at by hand, with no run at all. The issue must offer that**, at ~14 seeds it is a serious option, though a weaker one than the ~9 an earlier draft assumed (escalatedDecisions).
 
-### P7.1: Reframe and re-scope #311 in its own body. `priority-p2`, `discovery`.
+### P7.1: Reframe and re-scope #311 in its own body. `priority-p4`, `discovery`.
 #311 as written says "seed new sources from Downbeat booking venue names not already watched". Measured: `downbeat-export.json` holds **0 bookings** and 4 venues; `overture-history.json` holds 46 entries with **no venue field at all**. The literal issue is unbuildable. The real input is `overture-shoot-history.json` (322 shoots, 175 spellings), and the reframe is **find the GROUPS who play there**, not merely watch the room's calendar.
 
 Write the corrected numbers into the issue: **133 fold keys, 35 at floor 2, 15 at floor 3; 16 already carry prospect rows and 4 more match a watched-source name, leaving 113 unseeded, of which 24 clear floor 2 and 7 clear floor 3**; after the declared junk and P0.2's fold fixes, **roughly 14 real rooms at floor 2**. **Carnegie Hall alone is 122 of 322 shoots (38%) and is already watched (its source kind is `algolia`, not html).** Earlier estimates of "40 to 50", "150/37/14", "151/33" and **"9 at floor 2 / 3 at floor 3"** are all superseded and named as superseded, so nobody sizes against them later (L61).
 
 **The declared junk exclusion list, measured at floor 2:** `stage` (5), `google meet` (3), `337 e 6th st #4` (2), `398 broome street` (2), `75 river terrace` (2), `brasserie 8 1 / 2 and rosie o'grady` (2), `holy apostles soup kitchen 296 9th ave on` (2). **`field` is a single shoot and is not at floor 2**, so it belongs to the sub-floor junk, not the head.
 
-### P7.2: Booked-venue seeds, idempotent on the folded venue, with an exclusion that can actually run. `priority-p2`, `discovery`.
+### P7.2: Booked-venue seeds, idempotent on the folded venue, with an exclusion that can actually run. `priority-p4`, `discovery`.
 - Keyed on the **folded venue**, not a booking id: the shoot history is regenerated wholesale and a re-export can re-mint ids. `VenueShootHistory` reached the same conclusion independently, keying its union on (venue, date).
 - Seeds above Dan's chosen floor only, junk list excluded.
 - **The already-watched exclusion, corrected.** An earlier draft said watched rooms are excluded "through `CalendarIdentity` / the name comparison `WatchedSourceProposal.verdict` uses". **That mechanism cannot run here.** `WatchedSourceProposal.swift:63` uses `CalendarIdentity.same($0.listingsURL, pageURL)`, a **URL** comparison and nothing else; there is no name comparison in that file. A shoot-history venue is a bare string with **no URL**. Worse, **`ZVENUENAME` is NULL on all 73 `WatchedSource` rows** (the field exists at `WatchedSource.swift:214` and nothing has ever filled it), so there is no name field to compare against either. The runnable exclusion is: **compare the folded shoot venue key against `VenuePlaces.canonicalKey` of each `WatchedSource`'s `orgName` AND its `venueName`**, and **backfilling `venueName` is a prerequisite of this phase, filed as its own sub-issue**, not an assumption buried inside it. Measured today, `orgName` alone matches only 4 further keys beyond the 16 that already carry prospect rows, which is exactly why the missing `venueName` matters.
 - Truncation reported through **`HandoffShortfall`** over the app-authored manifest, naming the venues it never reached. This is the free half of constraint 10, available here and only here because the queue is finite.
 - **L83:** declare ONE home for the fact "this venue was seeded". A fact written at the venue level and read at the org level goes missing in exactly one direction and each file looks correct alone (#2225 and #2226 are both that shape). Any key this mints is caught by P0.2's DERIVED guard, not by a hand-written list.
 
-### P7.3: The honest coverage statement for #311. `priority-p2`, `discovery`.
+### P7.3: The honest coverage statement for #311. `priority-p4`, `discovery`.
 Measured exactly through the shipped fold: **only 16 of the 133 canonical shoot keys (12%) match any venue Overture has ever scouted.** For **88%** of Dan's real venue history there is no group-level fact to fold. An earlier draft's "49 of 167 (~29%)" is withdrawn: 167 matches neither the 175 raw spellings nor the 133 canonical keys, and any generous two-way substring figure must state its denominator or it is not a number. The issue **states 16 of 133** rather than letting a surface imply coverage it is structurally unable to deliver (L83). Whether the remaining 88% gets a venue-to-calendar resolver is escalated, not assumed.
 
 ---
@@ -482,9 +498,9 @@ Every one of these is unbounded by nature, which is why the manifest, the per-se
 
 **Cost, stated before either is filed.** Each issue carries: **a hard per-run wall-clock cap (proposal: 10 minutes, measured on the clock P6.5 proves), an expected run count (proposal: one run per press, at most one press a night), and the expected unit volume per seed.** **Free version for both:** Dan reads the same directory or runs the same search himself and pastes a link into the existing lead intake, which already produces a `WatchedSourceProposal`. The issues say so, because for a handful of seeds that is genuinely competitive.
 
-**P8.1, Directory seeds.** `priority-p3`, `discovery`. Named directories only, each declaring its unit (pages) and expected volume. Cannot start before P6.2 ships.
-**P8.2, Search-query seeds.** `priority-p3`, `discovery`. Specific enumerated queries, each declaring its unit (result ranks) and expected volume. Cannot start before P6.2 ships.
-**P8.3, Venue and calendar seeds (#9's second half), plugging in at the seed layer only.** `priority-p3`, `discovery`. Reuses P3's surface and P2's ledger. The milestone description already records that Phase 7 IS the venue channel, so this is additional venue reach, not the only place venues appear.
+**P8.1, Directory seeds.** `priority-p4`, `discovery`. Named directories only, each declaring its unit (pages) and expected volume. Cannot start before P6.2 ships.
+**P8.2, Search-query seeds.** `priority-p4`, `discovery`. Specific enumerated queries, each declaring its unit (result ranks) and expected volume. Cannot start before P6.2 ships.
+**P8.3, Venue and calendar seeds (#9's second half), plugging in at the seed layer only.** `priority-p4`, `discovery`. Reuses P3's surface and P2's ledger. The milestone description already records that Phase 7 IS the venue channel, so this is additional venue reach, not the only place venues appear.
 
 ### The validation rule every open-web issue inherits, and why the earlier version of it was not enough
 
