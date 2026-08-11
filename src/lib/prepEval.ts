@@ -208,6 +208,46 @@ const STATE_NOT_CITY = /\b(?:here in|in|around|across|throughout|based in)\s+new
 // The retired close. Inviting questions makes the reader invent one, after the email has already given
 // them the rate, the turnaround and the ask.
 const INVITES_QUESTIONS = /(?:happy to answer|let me know if you have|feel free to (?:reach out|ask)|if you have)\s+(?:any\s+)?questions?/i;
+// #1889, the sixth rule from the same 2026-07-31 review and the only one that had no check behind it.
+// The other five are each a phrase no body may CONTAIN, which is why they became checks that day; this one
+// is the opposite shape, a clause every body must contain, so it stayed prose in docs/prep-runbook.md and
+// in the brand-voice skill. Two real drafts that day described the whole offer, the rate and the
+// turnaround, and then asked for nothing at all, leaving the next step entirely with a stranger.
+//
+// The runbook (§2, "CTA") specifies the ask as a request about THEIR PHOTOGRAPHY PLANS FOR THIS SHOW, and
+// says why in the same breath: the plans wording presupposes that plans exist, so someone who has not
+// thought about photography now assumes they should have. That presupposition is the rule, not a
+// preference, and it is carried by naming their plans. Reworded into a yes/no offer ("would you like
+// coverage?", "let me know if you're interested") it invites the no, which is the second check below.
+//
+// Calibrated on the 30 drafted bodies in fixtures/prep-eval, which word this nine different ways ("talk
+// about your photography plans for the night", "talk through your photography plans for the show", "hear
+// what your photography plans are for the night", "the photography plans for this one", "tell me where
+// your photography plans stand"). The accept side matters more than the catch side here: a rule pinned to
+// one spelling would fail a good draft for following the runbook's own instruction to reword the sentence
+// every time, i.e. it would attack exactly the drafts it exists to protect.
+const PHOTOGRAPHY_PLANS =
+  /\b(?:photography|photo|picture)\s+plans\b|\bplan(?:s|ned|ning)\s+for\s+(?:photography|photos|pictures|coverage)\b|\bphotograph(?:y|s)\s+(?:is\s+|already\s+)?(?:sorted|arranged|planned|booked)\b/i;
+// The request half. A body may name their plans without asking anything about them, so the plans clause
+// has to sit in a sentence that opens a conversation about it. Every recorded phrasing does.
+const ASK_CUE = /\b(?:talk|speak|discuss|hear|ask|asking|tell me|chat|learn|know)\b/i;
+// The rewrite that throws the presupposition away. Each shape is one the runbook names, or its immediate
+// neighbour; none appears in any recorded compliant body.
+const YES_NO_OFFER =
+  /\bwould you like\b|\bare you interested\b|\bif you(?:'re| are)\s+interested\b|\bif (?:photography|photos|coverage) (?:is|are) something you(?:'re| are)\b|\bdo you (?:want|need)\b|\bwhether you(?:'d| would)\s+(?:like|want)\b/i;
+
+/**
+ * #1889: does the body actually REQUEST something, and does that request presuppose they have photography
+ * plans for this show? Sentence-scoped like claimsPastWorkAt above, so the plans clause and the request
+ * have to occur together rather than anywhere in the email.
+ */
+export function asksAboutPhotographyPlans(body: string): boolean {
+  for (const sentence of body.split(/[.!?\n]/)) {
+    if (PHOTOGRAPHY_PLANS.test(sentence) && ASK_CUE.test(sentence)) return true;
+  }
+  return false;
+}
+
 // Sentence one always introduces Dan, by name AND by trade, in a COLD pitch. Checked only where the
 // fixture does not set forbidColdSelfIntro, since a booked or warm reader must NOT be reintroduced
 // (#1215): the two rules are exact opposites and the fixture says which register this draft is in.
@@ -361,6 +401,16 @@ function checkUniversal(entries: ResultEntry[], failures: string[], coldRegister
     }
     if (wordingRules && INVITES_QUESTIONS.test(body)) {
       failures.push(`${label}: invites the reader to ask questions; the close expects a reply instead`);
+    }
+    // #1889. A wording rule, deliberately: how the ask is phrased is exactly the sentence Dan retunes by
+    // reading a real draft, and scoring stored samples against it would put back the #1909 cost (one
+    // retune invalidating every sample at once). Register-independent, unlike the self-introduction: a
+    // booked or warm draft asks for the same thing a cold one does.
+    if (wordingRules && !asksAboutPhotographyPlans(body)) {
+      failures.push(`${label}: asks for nothing; the draft must request their photography plans for this show (#1889)`);
+    }
+    if (wordingRules && YES_NO_OFFER.test(body)) {
+      failures.push(`${label}: collapses the ask into a yes/no offer, which invites the no; ask about their photography plans, never whether they want photography at all (#1889)`);
     }
     if (wordingRules && coldRegister) {
       const opener = firstSentence(body);
