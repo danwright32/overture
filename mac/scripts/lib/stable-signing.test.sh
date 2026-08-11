@@ -91,6 +91,29 @@ else
   fi
 fi
 
+# --- #1711: sourced into a shell whose environment carries no HOME -----------------------------------
+# build-install.sh declares `set -euo pipefail` and is reached from the app's own Update button, so the
+# bare ${HOME} in the keychain default aborted the install with the shell's "HOME: unbound variable" and
+# nothing about signing at all. The keychain has no sensible location without HOME, so refusing is
+# right; refusing in words that name what is missing is what this pins.
+out="$(env -u HOME -u OVERTURE_SIGNING_KEYCHAIN bash -c \
+  'set -euo pipefail; . "'"${SCRIPT_DIR}"'/stable-signing.sh"; echo survived' 2>&1)"
+if [[ "${out}" == *"unbound variable"* ]]; then
+  fail "no HOME: refuses in its own words, not the shell's" "got: ${out}"
+else
+  pass "no HOME: refuses in its own words, not the shell's"
+fi
+if [[ "${out}" == *"HOME is not set"* ]]; then
+  pass "no HOME: names what is missing"
+else
+  fail "no HOME: names what is missing" "got: ${out}"
+fi
+if [[ "${out}" == *survived* ]]; then
+  fail "no HOME: stops rather than signing against an unresolvable keychain path" "got: ${out}"
+else
+  pass "no HOME: stops rather than signing against an unresolvable keychain path"
+fi
+
 echo
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "stable-signing.test.sh: all checks passed"
