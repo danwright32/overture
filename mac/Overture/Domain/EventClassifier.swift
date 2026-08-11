@@ -87,6 +87,20 @@ enum EventClassifier {
     private static let strongProfile =
         #"choir|chorus|chorale|choral|school|academy|conservatory|youth|community|children|ensemble|opera|ballet|dance|theatre|theater|cultural|university|college|church|temple"#
 
+    // #2504: does this act line name the room it plays in? Then the show is the building's own, and the
+    // building is never a party Dan may pitch.
+    //
+    // Whole-venue-string containment and nothing cleverer. A room named only in part ("in the theatre or
+    // the tavern", on a Jalopy Theatre row) is not caught, which is a smaller and rarer miss than a word
+    // list would create in the other direction: plenty of real acts are named for a place, and treating
+    // every venue word as the room would silently disqualify them.
+    private static func titleNamesTheRoom(_ title: String, venue: String) -> Bool {
+        let room = venue.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Too short to be a name of its own: a three-character venue would match inside ordinary words.
+        guard room.count >= 4 else { return false }
+        return title.range(of: room, options: [.caseInsensitive]) != nil
+    }
+
     private static func detectDiscipline(_ text: String) -> Discipline {
         if matches(text, #"\b(dance|ballet|balletto|tap|choreograph|nutcracker)\b"#) { return .dance }
         if matches(text, #"\b(opera|operetta)\b"#) { return .opera }
@@ -136,14 +150,63 @@ enum EventClassifier {
         let fromTitle = detectDiscipline(event.title)
         let discipline = fromTitle == .other ? detectDiscipline(haystack) : fromTitle
 
+        // #2504: WHO this show would be pitched to. The presenting organisation when one is named, and
+        // the ACT itself when none is.
+        //
+        // LIVE-STORE-CLAIM verified=2026-08-11 measure="rows naming no presenting organisation, and their mean fit score against the rest"
+        // Measured on the live store 2026-08-11: 439 of 877 rows name no presenting organisation, and
+        // they average a fit score of 0.4 against 3.2 for the rest. That gap was structural rather than a
+        // judgement about the shows. `isProducer` was gated on the presenter string being non-empty, and
+        // production, profile and coverage are all drawn from it, so on those 439 rows production could
+        // never be anything but `unknown`, profile could never be `strong`, and coverage could never be
+        // `likelyUncovered`. Every one of those is the "we know nothing" value and every one scores 0, so
+        // the score read on the queue as "poor fit" while it actually meant "we could not look".
+        //
+        // Dan's call, 2026-08-11: judge the act, because the act is the party he would write to. His
+        // position on these leads, from #2464: "do not filter. often solo performers are great leads."
+        // Except when the act line is the ROOM'S OWN name. "Chain Theatre Fall One Act Festival" at Chain
+        // Theatre is the building's own event, and the building is the one organisation on the page that
+        // is certainly not a party Dan may pitch (#1787, #2259, and the hard venue-disqualify rule). An
+        // act with nobody behind it and an organisation Overture refuses to write to are opposite
+        // situations that look identical once the presenter field is empty, and lifting the second would
+        // undo #1845, which exists to stop a room outranking shows that really are self-produced.
+        //
+        // LIVE-STORE-CLAIM verified=2026-08-11 measure="act-named rows whose title contains their own venue name"
+        // The discriminator is the TITLE, not `presenterWasTheRoom`. Measured on the live store
+        // 2026-08-11: 322 of the 439 act-named rows carry that flag, because rooms that rent themselves
+        // out bill themselves as the presenter and the boundary drains it, and those rows are exactly the
+        // soloists this change is for. Only 7 name the room in the title, and they are the genuine
+        // article ("54 Does 54: The 54 Below Staff Show", "LOL! The Players Theatre Short Play Festival").
+        //
+        // What it gets wrong, named (L93): a real act playing AT a room it does not own reads as the
+        // room's own event when the title says so ("NY Phil Ensembles at Merkin Hall", 1 live row). That
+        // row keeps today's `unknown`, so the cost is a lift it does not receive, never a promotion it
+        // should not have.
+        let actIsTheParty = OrganiserNaming.onlyTheActIsNamed(presenter: event.presenter)
+            && !titleNamesTheRoom(event.title, venue: venue)
+        let party = actIsTheParty ? event.title : presenter
+
         let isAgency = matches(haystack, agencySignal)
-        let isProducer = !presenter.isEmpty && matches(presenter, producerSignal) && !isAgency
+        let namesAnOrganisation = matches(party, producerSignal) && !isAgency
 
-        let production: Production = isAgency ? .agency : (isProducer ? .selfProduced : .unknown)
+        // Self-produced two ways, and they mean the same thing about who is putting the show on: the
+        // party named IS an organisation billing its own show, or NOBODY but the act is named, which
+        // leaves the act as the only party there is. The second is a fact about the row, not a guess
+        // about the name, so it holds for a soloist billed under her own name and for a small show
+        // billed under its own title alike. Agency still wins over both: an agency-routed rental is the
+        // dead zone whoever is billed, and that is the one direction this must not lift.
+        let production: Production
+        if isAgency { production = .agency }
+        else if namesAnOrganisation || actIsTheParty { production = .selfProduced }
+        else { production = .unknown }
 
+        // Profile is NOT lifted the same way, deliberately. `strong` is a claim that this is a
+        // substantial organisation, and a soloist's own name says nothing either way. Answering it from
+        // the act line would be the classifier claiming more than it measured (L11), so a soloist stays
+        // neutral and only an act that names an organisation can reach strong.
         let profile: Profile
         if isAgency { profile = .weak }
-        else if isProducer && matches(haystack, strongProfile) { profile = .strong }
+        else if namesAnOrganisation && matches(haystack, strongProfile) { profile = .strong }
         else { profile = .neutral }
 
         let derivedPair = derived(discipline: discipline, production: production, profile: profile, venue: venue)

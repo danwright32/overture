@@ -186,6 +186,8 @@ struct ProducerCreditIsOneRuleGuardTests {
               why: "the feed names the licensee in a field of its own (`licenseename`)"),
         .init(path: "Overture/Domain/RoomPresenterSweep.swift",
               why: "re-reads a presenter already STORED on a row, never a feed's credit line"),
+        .init(path: "Overture/Domain/ActIsThePartyRealignment.swift",
+              why: "re-reads a presenter already STORED on a row, never a feed's credit line (#2504)"),
         .init(path: "Overture/Domain/ScoutExtractResults.swift",
               why: "the paid AI-read boundary: the run reports the presenter it read off the page")
     ]
