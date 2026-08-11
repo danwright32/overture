@@ -17,6 +17,9 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 source "${SCRIPT_DIR}/ci-config.sh"
 # The "does this branch touch the Mac project?" predicate, shared with the post-merge hook (#1251 Phase 3).
 source "${SCRIPT_DIR}/lib/mac-project-paths.sh"
+# The same completeness enumeration verify-and-merge-branch.sh enforces, from the one shared file,
+# so a PR cannot be waved through by choosing the other merge script.
+source "${SCRIPT_DIR}/lib/pr-completeness-guard.sh"
 # delete_merged_local_branch, shared with verify-and-merge-branch.sh and tidy-checkout.sh (#2234).
 source "${SCRIPT_DIR}/lib/checkout-tidy.sh"
 
@@ -176,6 +179,8 @@ main() {
       echo
       echo "CI genuinely passed. Merging PR #${PR_NUMBER}..."
       MERGED_BRANCH="$(gh_as_danwright32 pr view "${PR_NUMBER}" -R "${REPO}" --json headRefName --jq .headRefName 2>/dev/null || echo "")"
+      require_pr_completeness "${PR_NUMBER}" \
+        "$(gh_as_danwright32 pr view "${PR_NUMBER}" -R "${REPO}" --json body --jq .body 2>/dev/null || echo "")"
       gh_as_danwright32 pr merge "${PR_NUMBER}" -R "${REPO}" --squash --delete-branch
       # #2234: --delete-branch deletes the branch on GitHub only, so the local ref stays forever.
       # That is where 496 local branches came from. Never fatal, for the same reason as the two
