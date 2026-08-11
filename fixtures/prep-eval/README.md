@@ -106,6 +106,21 @@ untouched because it names a different room.
 past-tense shooting claim with a number, and a second implementation of that matcher in another language is
 the twin-drift L26 warns about. This harness covers the half nothing else judges: the wording.
 
+### Why the ask check is calibrated on the recorded bodies, not on one phrasing (#1889)
+
+The runbook's CTA rule is the one drafting rule shaped as a clause every body must CONTAIN, rather than a
+phrase no body may contain, and that reverses where the danger sits. A forbidden phrase can only ever
+misfire on a draft that contains it; a required clause matched too narrowly fails every good draft that
+worded it differently, which is precisely what the runbook instructs the drafter to do ("reword the
+sentence every time, keep the presupposition every time"). So the accept side is the calibrated half:
+`asksAboutPhotographyPlans` was built against every drafted body in these fixtures, shared bodies and
+per-performer overrides alike, which between them word the ask nine ways, and a test asserts each of them
+still reads as an ask. Narrow the matcher to one spelling and six fixtures go red rather than none.
+
+The check is a WORDING rule (#1909), so it scores produced output and never a stored sample: how the ask is
+phrased is exactly the sentence Dan retunes after reading a real draft, and scoring the samples against it
+would put back the cost of one retune invalidating all seventeen at once.
+
 ## What this harness CANNOT test, and why no fixture should pretend otherwise (#1723)
 
 The house rule (#1720) has two halves. Only one of them is testable here.

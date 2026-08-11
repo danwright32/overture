@@ -734,6 +734,65 @@ describe("prep-eval fixtures", () => {
     expect(r.failures.join(" ")).toMatch(/says the show is something the listing does not/i);
   });
 
+  // #1889: the sixth rule from the 2026-07-31 review, and the only one that had no check behind it. The
+  // regression is not an invented draft either: it is what two real drafts did that day, described the
+  // whole offer and then asked for nothing, leaving the next step entirely with a stranger. Built by
+  // DELETING the ask sentence from a recorded sample, so what is scored is a real draft minus the one
+  // clause the rule is about, never a body shaped to make the rule fire.
+  // Only the drafted body is touched: the contact, the note and the summary reason are the recorded ones,
+  // so the produced output differs from a passing answer by the ask clause and nothing else.
+  function withDraftBody(fixture: PrepEvalFixture, rewrite: (body: string) => string): unknown {
+    const produced = clone(fixture);
+    const draft = produced.results[0].draft as { body: string };
+    const rewritten = rewrite(draft.body);
+    expect(rewritten, "the rewrite must actually have matched something").not.toEqual(draft.body);
+    draft.body = rewritten;
+    return produced;
+  }
+
+  it("already-covered-photographer: flags a draft that states the offer and then asks for nothing", () => {
+    const fixture = fixtures.find((f) => f.name === "already-covered-photographer")!;
+    const produced = withDraftBody(fixture, (body) => body.replace(
+      "If you don't have someone on it already, I'd be glad to talk about your photography plans for the performance. ",
+      ""));
+    const r = evaluateFixture(fixture, produced);
+    expect(r.pass).toBe(false);
+    expect(r.failures.join(" ")).toMatch(/asks for nothing/i);
+  });
+
+  // The other half of the same rule: an ask REWRITTEN into a yes/no offer is not an ask, because it
+  // invites the no. Same recorded body, with only the ask clause reworded.
+  it("already-covered-photographer: flags an ask reworded into a yes/no offer", () => {
+    const fixture = fixtures.find((f) => f.name === "already-covered-photographer")!;
+    const produced = withDraftBody(fixture, (body) => body.replace(
+      "If you don't have someone on it already, I'd be glad to talk about your photography plans for the performance.",
+      "Would you like coverage of the concert?"));
+    const r = evaluateFixture(fixture, produced);
+    expect(r.pass).toBe(false);
+    expect(r.failures.join(" ")).toMatch(/yes\/no offer/i);
+  });
+
+  // The direction that decides whether the rule is usable at all: every draft the fixtures actually hold,
+  // shared bodies and per-performer overrides alike, must still read as an ask. The accept-set is derived
+  // from the recorded output rather than hand-listed here, so a phrasing that exists is covered whether or
+  // not anyone remembered it (30 bodies at the time of writing, and they word the ask nine different ways).
+  for (const fixture of fixtures) {
+    it(`${fixture.name}: every recorded draft still reads as an ask (#1889)`, () => {
+      const out = fixture.sampleCompliantOutput as {
+        results?: Array<{ draft?: { body?: string }; contacts?: Array<{ overrideBody?: string }> }>;
+      };
+      const bodies = (out.results ?? []).flatMap((r) => [
+        r.draft?.body,
+        ...(r.contacts ?? []).map((c) => c.overrideBody),
+      ]).filter((b): b is string => typeof b === "string" && b.length > 0);
+      expect(bodies.length).toBeGreaterThan(0);
+      for (const body of bodies) {
+        const r = evaluatePrepResult(results([NAMED_ACT], {}, body), { description: fixture.name });
+        expect(r.failures.join(" "), body).not.toMatch(/asks for nothing|yes\/no offer/i);
+      }
+    });
+  }
+
   // The other direction, and the one a naive "always summarise the listing" rule gets wrong: the page is
   // a season calendar, so a summary of it is an invention about this show.
   it("season-calendar-describes-no-show: flags a summary invented from the neighbouring listings", () => {
@@ -826,6 +885,68 @@ describe("the 2026-07-31 drafting rules are enforced on the produced body", () =
     const r = evaluatePrepResult(out, cold);
     expect(r.pass).toBe(false);
     expect(r.failures.join(" ")).toMatch(/not one of the live opener shapes/i);
+  });
+});
+
+// #1889: the sixth rule from Dan's 2026-07-31 review. Five of the six became checks that day because each
+// was a phrase no body may CONTAIN; this one is the opposite shape, a clause every body must contain, and
+// it stayed prose in docs/prep-runbook.md and the brand-voice skill for that reason alone. The runbook
+// states it in three parts: the draft must actually REQUEST something; the request asks about their
+// photography plans for this show, which presupposes plans exist; and rewording it into a yes/no offer
+// ("would you like coverage?") throws the presupposition away and invites the no.
+//
+// The over-match risk runs the other way from the five negative rules: this one can fail a GOOD draft that
+// words the ask unusually, which would make the check attack exactly the drafts it exists to protect. So
+// the accept side is calibrated on every recorded body in fixtures/prep-eval (the loop in the fixture
+// describe above) and on the rewordings below, none of which appear in the recorded set.
+describe("evaluatePrepResult - the draft has to ask for something (#1889)", () => {
+  const cold = { description: "a cold pitch" };
+
+  function withAsk(ask: string): unknown {
+    return results([NAMED_ACT], {},
+      CANONICAL_BODY.replace("I'd be glad to talk about your photography plans for the night.", ask));
+  }
+
+  it("flags a draft that offers everything and requests nothing", () => {
+    const r = evaluatePrepResult(withAsk("I'd be glad to cover it."), cold);
+    expect(r.pass).toBe(false);
+    expect(r.failures.join(" ")).toMatch(/asks for nothing/i);
+  });
+
+  it("flags the ask rewritten as a yes/no offer, which invites the no", () => {
+    const r = evaluatePrepResult(withAsk("Would you like coverage of the concert?"), cold);
+    expect(r.pass).toBe(false);
+    expect(r.failures.join(" ")).toMatch(/yes\/no offer/i);
+  });
+
+  it("flags the door-left-open close, which is not a request either", () => {
+    const r = evaluatePrepResult(withAsk("Let me know if you're interested."), cold);
+    expect(r.pass).toBe(false);
+    expect(r.failures.join(" ")).toMatch(/yes\/no offer|asks for nothing/i);
+  });
+
+  // Rewordings that keep the presupposition, none of them the sentence the fixtures use. The runbook asks
+  // for the sentence to be reworded every draft, so a rule pinned to one spelling of it would fail on
+  // instruction being followed.
+  for (const ask of [
+    "I'd be glad to talk through your photography plans for the evening, if you don't have someone on it already.",
+    "I'd be glad to hear what you have planned for photography that night.",
+    "Tell me where your photography plans for the concert stand and I'll hold the date.",
+    "I'm writing to ask what your plans for photography are for the night.",
+  ]) {
+    it(`accepts a reworded ask: ${ask.slice(0, 40)}`, () => {
+      const r = evaluatePrepResult(withAsk(ask), cold);
+      expect(r.failures.join(" "), ask).not.toMatch(/asks for nothing|yes\/no offer/i);
+    });
+  }
+
+  // A stored sample is a hand-written reference answer frozen at the wording rules of its day (#1909), and
+  // how the ask is phrased is exactly the kind of sentence Dan retunes by reading a real draft. So this is
+  // a wording rule: scored against produced output, never against a sample, or one future retune would
+  // invalidate all seventeen at once.
+  it("is not scored against a stored sample (#1909)", () => {
+    const r = evaluatePrepResult(withAsk("I'd be glad to cover it."), cold, { scope: "durable" });
+    expect(r.failures.join(" ")).not.toMatch(/asks for nothing/i);
   });
 });
 
