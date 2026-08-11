@@ -64,6 +64,55 @@ struct OrgIdentityAgreementTests {
         #expect(OrgKey.of(raw) == OrgKey.of(bare))
     }
 
+    // MARK: - #2451: the leading article, the second thing the three folds disagreed about
+
+    // The gate has dropped a leading "the" since #1593 and the venue fold since #1802, and the ledger
+    // did not. So the gate deciding whether a paid answer may be REUSED said one organisation, while the
+    // ledger deciding who RECEIVES the email held two, and the second spelling paid for its own lookup.
+    // Every string below is a live one: a presenter on Dan's store or a source in his watchlist.
+    @Test("a leading article does not make a second organisation", arguments: [
+        "The Green Room 42", "The Players Theatre", "The Cutting Room", "The Joyce Theater",
+        "The Tank", "The Klezmatics",
+    ])
+    func aLeadingArticleIsNotPartOfTheIdentity(_ withArticle: String) {
+        let bare = String(withArticle.dropFirst("The ".count))
+        #expect(OrgKey.of(withArticle) == OrgKey.of(bare))
+        #expect(OrgKey.of(withArticle) == ProducerGate.key(withArticle),
+                "the ledger and the gate still disagree about \(withArticle)")
+    }
+
+    // The third fold, asserted the way it actually behaves rather than by inspection: `GroupNameMatch`
+    // has no article rule, it folds the two spellings together by token containment. That is the fold
+    // the Prospector's candidate pool is sized through, so it is the one that decides whether a name
+    // Dan already watches can turn up as a proposal.
+    @Test("the match fold already treats the two spellings as one organisation")
+    func theMatchFoldAgreesToo() {
+        #expect(GroupNameMatch.isConfident("The Green Room 42", "Green Room 42"))
+    }
+
+    // The fold is only sound if it is idempotent, because the realignment passes over tables that keep
+    // no raw name re-fold the STORED key. A key that moved every time it was folded would walk a refusal
+    // one article further away on every launch.
+    @Test("re-folding a key that is already a key changes nothing", arguments: [
+        "The Green Room 42", "Christ Church Cathedral, Oxford", "(Le) Poisson Rouge",
+        "The Cutting Room, 44 East 32nd Street, New York, NY",
+    ])
+    func theFoldIsIdempotent(_ raw: String) throws {
+        let once = try #require(OrgKey.of(raw))
+        #expect(OrgKey.of(once) == once)
+        let stored = try #require(OrgKey.stored(for: raw))
+        #expect(OrgKey.realigned(storedKey: stored) == stored)
+    }
+
+    // A key outside this key space is refused rather than re-folded, which is what stops a re-key pass
+    // touching a refusal scoped to a SHOW: `RefusedContactAddress.scopeId` holds a prospect's natural
+    // key on those rows, and folding one would move the refusal onto a key naming nothing.
+    @Test("a key outside the presenter namespace is refused")
+    func anUnnamespacedKeyIsRefused() {
+        #expect(OrgKey.realigned(storedKey: "some group|2026-09-12|somewhere") == nil)
+        #expect(OrgKey.realigned(storedKey: "presenter:") == nil)
+    }
+
     // MARK: - The difference that REMAINS, stated rather than implied
 
     // The ledger is deliberately stricter than the gate on comma clauses, and this is the only place that
