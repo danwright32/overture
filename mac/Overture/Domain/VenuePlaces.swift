@@ -126,19 +126,67 @@ enum VenuePlaces {
     //      at Lincoln Center Shanghai") matches before anything tries to split it;
     //   2. each comma clause, so "Gilder Lehrman Hall, The Morgan Library & Museum" is found by either
     //      half, and a trailing city or address clause simply misses;
-    //   3. each side of an " at ", room before building, so "Merkin Hall at Kaufman Music Center" is
-    //      found by the room and "Playhouse Stage at Abrons Arts Center" by the building.
+    //   3. each side of an " at " or an " @ ", room before building, so "Merkin Hall at Kaufman Music
+    //      Center" is found by the room and "Playhouse Stage at Abrons Arts Center" by the building;
+    //   4. LAST, the name standing in front of a street address that no comma ever separated, so
+    //      "Merkin Concert Hall 129 W. 67th St." is found by the room.
+    //
+    // Order is load-bearing. Every arm only ever ADDS a spelling to try, and the first hit wins, so an
+    // arm appended later can never take a match away from one above it. Arm 4 is last for that reason:
+    // it is the loosest, and it may only speak when nothing more specific matched.
     private static func candidates(_ raw: String) -> [String] {
         var out: [String] = [raw]
         let clauses = raw.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
         if clauses.count > 1 { out.append(contentsOf: clauses) }
-        for piece in out where piece.range(of: " at ", options: .caseInsensitive) != nil {
-            let halves = piece.components(separatedBy: " at ")
-            guard halves.count == 2 else { continue }
-            out.append(halves[0].trimmingCharacters(in: .whitespaces))
-            out.append(halves[1].trimmingCharacters(in: .whitespaces))
+        for piece in out { out.append(contentsOf: roomAndBuilding(in: piece)) }
+        for piece in out {
+            if let name = nameBeforeAStreetAddress(piece) { out.append(name) }
         }
         return out.filter { !$0.isEmpty }
+    }
+
+    // #2451: the separators a source puts between a room and the building it sits in. `@` was the
+    // missing one, and its absence split one room three ways: the Shoots calendar writes Merkin Hall as
+    // "Merkin Hall at Kaufman Music Center" on two dates and "Merkin Hall @ Kaufman Music Center" on a
+    // third, and only the first was ever reduced to the room.
+    private static let roomSeparators = [" at ", " @ "]
+
+    private static func roomAndBuilding(in piece: String) -> [String] {
+        for separator in roomSeparators {
+            guard piece.range(of: separator, options: .caseInsensitive) != nil else { continue }
+            let halves = piece.components(separatedBy: separator)
+            guard halves.count == 2 else { continue }
+            return halves.map { $0.trimmingCharacters(in: .whitespaces) }
+        }
+        return []
+    }
+
+    // #2451: the venue's own name, when a source ran the street address straight on with no comma and no
+    // newline to separate it ("Merkin Concert Hall 129 W. 67th St."). Every clause-splitting rule above
+    // needs a comma, and `sourceCleaned` only rewrites a NEWLINE into one, so this spelling reached the
+    // fallback whole and became a room of its own carrying an address in its name.
+    //
+    // The tell is deliberately the same narrow one #2450 measured for junk, rather than "a leading
+    // digit", which is wrong on real rooms: 54 Below, 48 Lounge and Theatre 71 all carry a number. A
+    // street address begins with a token that is ONLY digits and is followed, later in the same string,
+    // by a street-type word. The first token is never that token, so a room whose own name opens with a
+    // number keeps its name.
+    private static let streetWords: Set<String> = [
+        "st", "st.", "street", "ave", "ave.", "avenue", "av", "rd", "rd.", "road", "dr", "dr.", "drive",
+        "blvd", "blvd.", "boulevard", "pl", "pl.", "place", "lane", "ln", "terrace", "broadway",
+        "plaza", "plz", "parkway", "pkwy", "court",
+    ]
+
+    private static func nameBeforeAStreetAddress(_ piece: String) -> String? {
+        let words = piece.split(separator: " ").map(String.init)
+        guard words.count > 1 else { return nil }
+        for index in words.indices where index > 0 {
+            guard words[index].allSatisfy({ $0.isNumber }) else { continue }
+            guard words[(index + 1)...].contains(where: { streetWords.contains($0.lowercased()) })
+            else { continue }
+            return words[..<index].joined(separator: " ")
+        }
+        return nil
     }
 
     // Keys are pre-normalized (lowercased, single-spaced) and looked up through VenueNormalization.fold,
@@ -178,6 +226,16 @@ enum VenuePlaces {
     // #1850: Jalopy's own classroom, a separate room at 319 Columbia St run by the theatre at 315.
     // A real pairing, unlike the festival that merely PLAYS several rooms in one night.
     private static let jalopy = Entry(parent: "Jalopy Theatre", location: "Brooklyn, NY")
+    // #2451: Merkin Hall is the concert hall inside Kaufman Music Center, and a watched source is
+    // literally named "Kaufman Music Center (Merkin Hall)". Naming the building as the parent is what
+    // makes the two ONE room here, which is what the CAUTION above is about: this parent is chosen for
+    // identity, not for the card, and the merge it performs is the point rather than a side effect.
+    private static let kaufman = Entry(parent: "Kaufman Music Center", location: "New York, NY")
+    // #2451: the same mechanism used on a plain misspelling. The Shoots calendar carries "David Geffin
+    // Hall" twice beside "David Geffen Hall" six times, and only a parent can fold a spelling onto
+    // another spelling, since a parentless entry keys as itself. The card reads "David Geffen Hall
+    // (David Geffin Hall)", which is the correction on its face.
+    private static let geffen = Entry(parent: "David Geffen Hall", location: "New York, NY")
 
     // LIVE-STORE-CLAIM verified=2026-07-29 measure="the 78 distinct venue strings on untriaged prospects with a blank `location`"
     // Seeded from the venues those 342 rows actually name, plus the ten this table already held. Every
@@ -196,6 +254,10 @@ enum VenuePlaces {
         "weill recital hall": carnegie,
         "zankel hall": carnegie,
         "stern auditorium / perelman stage": carnegie,
+        // #2451: the bare clause, which is how the calendar spells it seven times out of eight
+        // ("Stern Auditorium, 161 West 56th Street"). The full name above never matched it, so seven
+        // Carnegie shoots sat under a room of their own with no parent at all.
+        "stern auditorium": carnegie,
         "resnick education wing": carnegie,
         "carnegie hall": manhattan,
 
@@ -207,13 +269,25 @@ enum VenuePlaces {
         "museum of chinese in america": manhattan,
         "the cutting room": manhattan,
         "under st marks": manhattan,
-        "merkin hall": manhattan,
+        // #2451: Merkin split three ways in the shoot history, with its own building sitting beside it as
+        // a fourth key. All four fold onto Kaufman Music Center now.
+        "merkin hall": kaufman,
+        "merkin concert hall": kaufman,
+        "kaufman music center": manhattan,
         "asylum nyc": manhattan,
         "the players theatre": manhattan,
         "soho playhouse": manhattan,
         "abrons arts center": manhattan,
         "church of the ascension": manhattan,
-        "wu tsai theater": Entry(parent: "David Geffen Hall", location: "New York, NY"),
+        "wu tsai theater": geffen,
+        // #2451: the building itself, which was only ever a parent NAME and never a key, plus the
+        // spelling the calendar actually carries twice.
+        "david geffen hall": manhattan,
+        "david geffin hall": geffen,
+        // #2451: Milbank Chapel at Teachers College, Columbia. Two keys before this, both unseeded: the
+        // " at " split already worked and neither half was a table key, so the whole string fell to the
+        // fallback. A split that works and still fails.
+        "milbank chapel": manhattan,
         "linda gross theater": manhattan,
         "atlantic stage 2": manhattan,
         "five angels theater": manhattan,

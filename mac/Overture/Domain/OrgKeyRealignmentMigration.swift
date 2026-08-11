@@ -28,6 +28,13 @@ import SwiftData
 //     is counted. Two different answers about one organisation are a question, not a duplicate, and a
 //     launch pass may not answer it by picking a side (L5).
 enum OrgKeyRealignmentMigration {
+    // #2451: the column this pass owns, so the coverage guard can check the app's stored fold keys
+    // against what is actually realigned rather than against a list somebody maintains by hand.
+    static let realigns: [KeyRealignment.Field] = [
+        KeyRealignment.Field(model: "OrgReachabilityAnswer", property: "orgKey",
+                             pass: "OrgKeyRealignmentMigration", tableClass: .answer)
+    ]
+
     struct Summary: Equatable {
         var rekeyed = 0            // rows moved onto the key the shared fold now computes
         var duplicatesDeleted = 0  // redundant rows removed by a merge both sides agreed on

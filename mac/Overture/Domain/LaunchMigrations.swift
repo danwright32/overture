@@ -100,6 +100,19 @@ enum LaunchMigrations {
         // asking the same question. Idempotent (a row already on its computed key is skipped); it can
         // delete a row, but only one provably redundant, and two answers that DISAGREE are left alone.
         VenueKeyRealignmentMigration.run(in: context)
+        // #2451: Dan's own producer/house corrections, onto the key the gate's fold computes today.
+        // Those rows keep no raw name, so this one re-folds the stored key itself. Idempotent (a row
+        // already on its computed key is skipped). It can delete a row, but only a correction written
+        // twice; a promotion and a demotion landing on ONE key is a contradiction and both are left
+        // alone.
+        ProducerOverrideKeyRealignment.run(in: context)
+        // #2451: and the REFUSALS, which get the other behaviour deliberately. `OrgKey.of` now drops a
+        // leading article, so an organisation-scoped strike filed under the old spelling would be looked
+        // up by a key nothing computes any more: the address quietly back on the card, and the next prep
+        // run paying to rediscover it. This pass NEVER deletes. On a key collision it keeps both rows
+        // under both keys and counts it, because two refusals can only ever mean refuse and a refusal
+        // ledger one row shorter is indistinguishable from no refusal at all (#2392, #2421).
+        RefusedOrgKeyRealignment.run(in: context)
         // #1559: collapse the duplicate rows a drifting opening night left behind before #1528 stopped
         // them appearing. Idempotent (a collapsed group is a singleton, which it skips). Deletes rows, so
         // like the migration above it leans on the launch backup taken just before this, and it refuses

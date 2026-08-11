@@ -25,6 +25,13 @@ import SwiftData
 //     Two different answers about one room are a question, not a duplicate, and a launch pass may not
 //     answer it by picking a side (L5).
 enum VenueKeyRealignmentMigration {
+    // #2451: the column this pass owns. See `KeyRealignment` for why the list is assembled from the
+    // passes rather than written out in one place.
+    static let realigns: [KeyRealignment.Field] = [
+        KeyRealignment.Field(model: "VenuePlaceAnswer", property: "venueKey",
+                             pass: "VenueKeyRealignmentMigration", tableClass: .answer)
+    ]
+
     struct Summary: Equatable {
         var rekeyed = 0            // rows moved onto the key the shared fold now computes
         var duplicatesDeleted = 0  // redundant rows removed by a merge both sides agreed on
