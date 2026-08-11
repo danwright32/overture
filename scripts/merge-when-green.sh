@@ -129,6 +129,12 @@ main() {
   # #1006: explicit, positional, and never a default. The ONLY way past a red base.
   ALLOW_RED_BASE="${3:-}"
 
+  # BEFORE the polling loop, deliberately. Placed after it, this waited out however long CI took and
+  # only then refused, so the slowest possible feedback was attached to the cheapest possible fix.
+  # verify-and-merge-branch.sh refuses before its worktree for the same reason.
+  require_pr_completeness "${PR_NUMBER}" \
+    "$(gh_as_danwright32 pr view "${PR_NUMBER}" -R "${REPO}" --json body --jq .body 2>/dev/null || echo "")"
+
   START="$(date -u +%s)"
 
   while true; do
@@ -179,8 +185,6 @@ main() {
       echo
       echo "CI genuinely passed. Merging PR #${PR_NUMBER}..."
       MERGED_BRANCH="$(gh_as_danwright32 pr view "${PR_NUMBER}" -R "${REPO}" --json headRefName --jq .headRefName 2>/dev/null || echo "")"
-      require_pr_completeness "${PR_NUMBER}" \
-        "$(gh_as_danwright32 pr view "${PR_NUMBER}" -R "${REPO}" --json body --jq .body 2>/dev/null || echo "")"
       gh_as_danwright32 pr merge "${PR_NUMBER}" -R "${REPO}" --squash --delete-branch
       # #2234: --delete-branch deletes the branch on GitHub only, so the local ref stays forever.
       # That is where 496 local branches came from. Never fatal, for the same reason as the two
