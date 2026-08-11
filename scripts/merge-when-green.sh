@@ -17,6 +17,9 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 source "${SCRIPT_DIR}/ci-config.sh"
 # The "does this branch touch the Mac project?" predicate, shared with the post-merge hook (#1251 Phase 3).
 source "${SCRIPT_DIR}/lib/mac-project-paths.sh"
+# The same completeness enumeration verify-and-merge-branch.sh enforces, from the one shared file,
+# so a PR cannot be waved through by choosing the other merge script.
+source "${SCRIPT_DIR}/lib/pr-completeness-guard.sh"
 # delete_merged_local_branch, shared with verify-and-merge-branch.sh and tidy-checkout.sh (#2234).
 source "${SCRIPT_DIR}/lib/checkout-tidy.sh"
 
@@ -125,6 +128,12 @@ main() {
   MAX_WAIT_SECONDS="${2:-${DEFAULT_MAX_WAIT_SECONDS}}"
   # #1006: explicit, positional, and never a default. The ONLY way past a red base.
   ALLOW_RED_BASE="${3:-}"
+
+  # BEFORE the polling loop, deliberately. Placed after it, this waited out however long CI took and
+  # only then refused, so the slowest possible feedback was attached to the cheapest possible fix.
+  # verify-and-merge-branch.sh refuses before its worktree for the same reason.
+  require_pr_completeness "${PR_NUMBER}" \
+    "$(gh_as_danwright32 pr view "${PR_NUMBER}" -R "${REPO}" --json body --jq .body 2>/dev/null || echo "")"
 
   START="$(date -u +%s)"
 

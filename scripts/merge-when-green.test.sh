@@ -119,6 +119,10 @@ STUB
     SCRIPT_DIR="${tmp}"
     gh_as_danwright32() {
       case "$*" in
+        # The completeness enumeration the merge now refuses to skip. Matched BEFORE the general
+        # "pr view" arm, which answers everything with "main" and would otherwise be read as a
+        # body that answers nothing, refusing every merge these fixtures exist to assert.
+        *"--json body"*) echo "Writers: none. Readers: none. Siblings: swept. Guards seen to fail: yes." ;;
         *"pr view"*)   echo "main" ;;
         *"run list"*)  echo "${base_conclusion}" ;;
         *"pr merge"*)  touch "${tmp}/MERGED" ;;
@@ -197,6 +201,10 @@ STUB
     SCRIPT_DIR="${tmp}"
     gh_as_danwright32() {
       case "$*" in
+        # The completeness enumeration the merge now refuses to skip. Matched BEFORE the general
+        # "pr view" arm, which answers everything with "main" and would otherwise be read as a
+        # body that answers nothing, refusing every merge these fixtures exist to assert.
+        *"--json body"*) echo "Writers: none. Readers: none. Siblings: swept. Guards seen to fail: yes." ;;
         *"--json files"*) echo "mac/Overture/UI/NewView.swift" ;;
         *"pr view"*)      echo "main" ;;
         *"run list"*)     echo "success" ;;
@@ -226,6 +234,45 @@ assert_equals "a check no runner picked up stops as its own reason" \
 # The other direction, so this cannot become an excuse for a genuine red.
 assert_equals "a real failing test is still classified as failed" \
   "failed" "$(classify_stop_reason "typecheck-and-test: Failed")"
+
+# --- the completeness enumeration: this merge path refuses a thin PR body too ---
+# Every stub above answers with a COMPLETE body, so the guard would be entirely untested here and
+# deleting it from this script would leave all of them green. The two merge paths have to be covered
+# alike, or the uncovered one becomes the way round the check (L30).
+#
+# The subshell reports by EXIT STATUS, not by touching FAILURES. A subshell gets its own copy of the
+# variable, so incrementing it in there prints FAIL while the summary counts zero and the script
+# exits 0: a test that says it failed and reports success. Found by breaking the guard and watching
+# exactly that happen.
+completeness_refusal_check() (
+  tmp="$(mktemp -d)"
+  trap 'rm -rf "${tmp}"' EXIT
+  SCRIPT_DIR="${tmp}"
+  gh_as_danwright32() {
+    case "$*" in
+      *"--json body"*) echo "Fixes the thing. Tests pass." ;;
+      *"pr view"*)     echo "main" ;;
+      *"run list"*)    echo "success" ;;
+      *"pr merge"*)    touch "${tmp}/MERGED" ;;
+    esac
+  }
+  # A 2 second ceiling, not 900: with the guard gone this does not refuse, it falls through to the CI
+  # polling loop, and an unbounded wait turns a failing test into a hung one that reports nothing.
+  out="$( ( main 1 2 ) 2>&1 )"
+  [[ "${out}" == *"REFUSING to merge"* ]] || exit 1
+  [[ -e "${tmp}/MERGED" ]] && exit 2
+  exit 0
+)
+
+completeness_refusal_check
+case $? in
+  0) echo "ok - merge-when-green refuses a PR body that skips the enumeration"
+     echo "ok - a refused PR is not merged" ;;
+  1) echo "FAIL - merge-when-green did not refuse a PR body that skips the enumeration"
+     FAILURES=$((FAILURES + 1)) ;;
+  2) echo "FAIL - a refused PR was merged anyway"
+     FAILURES=$((FAILURES + 1)) ;;
+esac
 
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All merge-when-green.sh classification fixtures passed."

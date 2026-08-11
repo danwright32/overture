@@ -18,6 +18,9 @@ source "${SCRIPT_DIR}/ci-config.sh"
 source "${SCRIPT_DIR}/check-pr-ci.sh"
 # delete_merged_local_branch, shared with merge-when-green.sh and tidy-checkout.sh (#2234).
 source "${SCRIPT_DIR}/lib/checkout-tidy.sh"
+# The completeness enumeration AGENTS.md demands. Shared with merge-when-green.sh so the two merge
+# paths cannot disagree about what a mergeable PR looks like.
+source "${SCRIPT_DIR}/lib/pr-completeness-guard.sh"
 
 usage() {
   echo "Usage: $(basename "$0") <pr-number-or-branch-name>" >&2
@@ -32,6 +35,8 @@ resolve_pr() {
   local info
   info="$(gh_as_danwright32 pr view "${identifier}" -R "${REPO}" --json number,headRefName,mergeable --jq '[.number, .headRefName, .mergeable] | @tsv')"
   IFS=$'\t' read -r PR_NUMBER PR_BRANCH PR_MERGEABLE <<< "${info}"
+  # Fetched separately because a body is multi-line and would break the tab-separated read above.
+  PR_BODY="$(gh_as_danwright32 pr view "${identifier}" -R "${REPO}" --json body --jq .body 2>/dev/null || echo "")"
 }
 
 # Fetches the branch and adds a detached, throwaway worktree for it, setting WORKTREE_DIR. Named
@@ -119,6 +124,10 @@ verify_and_merge() {
   PR_NUMBER=""
   PR_BRANCH=""
   PR_MERGEABLE=""
+  # Bound here with the rest, never left to resolve_pr: this script runs under `set -u`, so an unset
+  # PR_BODY kills it on the guard line below with no output at all, which is the same traceless death
+  # #1711 fixed in the runners. A test that stubs resolve_pr is exactly how that would first appear.
+  PR_BODY=""
   WORKTREE_DIR=""
   resolve_pr "${identifier}"
 
@@ -128,6 +137,9 @@ verify_and_merge() {
   fi
 
   check_mergeable "${PR_MERGEABLE}" || return 1
+  # BEFORE the suite, deliberately: a body missing the enumeration is refused in seconds rather
+  # than after two minutes of exclusive test lock, and the fix does not need a re-run of anything.
+  require_pr_completeness "${PR_NUMBER}" "${PR_BODY}"
 
   echo "Verifying PR #${PR_NUMBER} (${PR_BRANCH}) in an isolated worktree..."
   setup_worktree "${PR_BRANCH}"
