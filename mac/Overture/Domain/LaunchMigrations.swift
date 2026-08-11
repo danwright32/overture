@@ -138,6 +138,19 @@ enum LaunchMigrations {
         // construction: it clears the field its own condition tests. Re-derives the axes the presenter
         // fed, so a swept row is scored on what is left rather than keeping the 8 points the name earned.
         RoomPresenterSweep.run(in: context)
+        // LIVE-STORE-CLAIM verified=2026-08-11 measure="rows naming no presenting organisation, and their mean fit score against the rest"
+        // #2504: put the producer axes of an already-stored act-named row in step with what they now
+        // mean. 439 of 877 live rows name no presenting organisation and average a fit score of 0.4
+        // against 3.2 for the rest, because production, profile and coverage were all drawn from the
+        // presenter string and so were structurally stuck at their "we know nothing" value, which scores
+        // zero. The classifier now reads the ACT as the party (Dan's call, 2026-08-11), and this reaches
+        // the rows already stored, which a hash-gated scout would otherwise leave for weeks.
+        //
+        // Deliberately AFTER RoomPresenterSweep: that pass can itself make a row act-named by clearing a
+        // room standing in as the presenter, and running first would leave every row it creates for
+        // another launch. Only ever lifts (an agency row keeps its penalty), never touches the genre or
+        // the fit reason, and is idempotent by construction.
+        ActIsThePartyRealignment.run(in: context)
         // LIVE-STORE-CLAIM verified=2026-07-28 measure="prospect rows carrying a possible-match flag, and how many of those name one record"
         // #1693: re-run the possible-match verdict over the rows that already carry one (21 on the live
         // store, 18 of them naming the same wrong record). The flag is STORED and only rewritten when the

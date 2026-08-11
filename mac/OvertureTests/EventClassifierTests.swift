@@ -140,3 +140,86 @@ struct ClassifierMiscTests {
         #expect(Ranker.productionPoints(c.production) == 0)
     }
 }
+
+// #2504: WHO this show would be pitched to, when nobody but the act is named.
+//
+// Measured on the live store 2026-08-11: 439 of 877 rows name no presenting organisation, and they
+// average a fit score of 0.4 against 3.2 for the rest. The cause was structural, not a judgement. Three
+// of the six scoring axes were computed from the presenter string alone, and `isProducer` was gated on
+// that string being non-empty, so on those 439 rows `production` could never be anything but `unknown`,
+// `profile` could never be `strong`, and `coverage` could never be `likelyUncovered`. Each of those is
+// the "we know nothing" value and each scores 0, so the score read on the queue as "poor fit" while
+// actually meaning "we could not look".
+//
+// Dan's call, 2026-08-11, asked which way to take it: judge the ACT itself, because the act is the party
+// he would write to. His position on these leads, from #2464: "do not filter. often solo performers are
+// great leads."
+//
+// So the classifier now has a notion of the PARTY: the presenting organisation when one is named, and
+// the act when none is. A show with no organisation billed is one the act is putting on itself, which is
+// what `selfProduced` means, and that is a fact about the row rather than a guess about the name.
+@Suite("Event classifier - the act is the party when nobody else is named (#2504)")
+struct ClassifierActIsThePartyTests {
+
+    // The commonest live shape by far: a soloist at a room that rents itself out, night after night.
+    @Test func aSoloistBilledUnderHerOwnNameIsSelfProducing() {
+        let c = EventClassifier.classify(ev(title: "Amanda Duarte", presenter: nil,
+                                            venue: "The Green Room 42"))
+        #expect(c.production == .selfProduced)
+        // Deliberately NOT strong. Nothing here says whether she is well known, and inventing that would
+        // be the classifier claiming more than it measured.
+        #expect(c.profile == .neutral)
+    }
+
+    // A blank presenter and a whitespace-only presenter are the same row. The extraction boundary writes
+    // an empty string rather than nil when it drains a room's own name, which is the commonest way a row
+    // reaches this state at all.
+    @Test func aDrainedPresenterCountsAsNobodyNamed() {
+        let c = EventClassifier.classify(ev(title: "Christopher Zelno", presenter: "   ",
+                                            venue: "The Green Room 42"))
+        #expect(c.production == .selfProduced)
+    }
+
+    // When the act names an organisation, that organisation is judged as the party, so the profile axis
+    // becomes reachable for the first time on these rows.
+    @Test func anEnsembleBilledAsTheActIsJudgedAsTheOrganisationItIs() {
+        let c = EventClassifier.classify(ev(
+            title: "China Now Chamber Orchestra and the Bard East/West Ensemble",
+            presenter: nil, venue: "Zankel Hall"))
+        #expect(c.production == .selfProduced)
+        #expect(c.profile == .strong)
+        #expect(c.coverage == .likelyUncovered)
+    }
+
+    // The room is the one organisation on the page that is certainly NOT the producer (#1787, #2259).
+    // Several live rows repeat the room's own name inside the act line ("LOL! The Players Theatre Short
+    // Play Festival"), and reading "Theatre" there as an organisation would promote the venue by the back
+    // door, on a row whose whole problem is that nobody else was named.
+    @Test func theRoomsOwnNameInsideTheActLineIsNotAnOrganisation() {
+        let c = EventClassifier.classify(ev(title: "LOL! The Players Theatre Short Play Festival 2026",
+                                            presenter: nil, venue: "The Players Theatre"))
+        #expect(c.production == .selfProduced)   // still the act's own show
+        #expect(c.profile == .neutral)           // but the room does not make it a strong organisation
+    }
+
+    // An agency-routed rental is still the dead zone, whoever is billed. This is the one direction that
+    // must NOT be lifted: the whole point of the agency signal is that these rarely convert.
+    @Test func anAgencyRentalIsStillTheDeadZoneWithNoPresenterNamed() {
+        let c = EventClassifier.classify(ev(
+            title: "New York International Music Competition Winners' Recital",
+            presenter: nil, venue: "Weill Recital Hall"))
+        #expect(c.production == .agency)
+        #expect(c.profile == .weak)
+    }
+
+    // A show that DOES name a presenting organisation is untouched by any of this. The party is the
+    // presenter there, exactly as before, and a title full of organisation words cannot make an ordinary
+    // agency rental look self-produced.
+    @Test func aNamedPresenterStillDecidesTheRow() {
+        let c = EventClassifier.classify(ev(title: "Gala of Rising Stars",
+                                            presenter: "Distinguished Concerts International",
+                                            venue: "Stern Auditorium / Perelman Stage"))
+        #expect(c.production == .agency)
+        #expect(c.profile == .weak)
+    }
+}
