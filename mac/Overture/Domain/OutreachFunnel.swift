@@ -10,11 +10,17 @@ import Foundation
 // about everything before the send, which is exactly where the shows were going.
 //
 // LIVE-STORE-CLAIM verified=2026-08-11 measure="shows at each outreach stage, and those holding a contact that were never written to"
-// Measured on the live store 2026-08-11 while building this: 877 scouted, 81 holding a contact, 13
-// drafted, 6 sent. Of the 81, 49 were still upcoming with a contact already found and no draft, and 16
-// had passed their date with a contact and no send, 11 of those after a PAID reachability check. So the
+// Measured by this code against the live store 2026-08-11: 873 scouted, 66 holding a contact, 13
+// drafted, 6 sent. Of the 66, 38 were still upcoming with a contact already found and no draft, and 15
+// had passed their date with a contact and no send, 10 of those after a PAID reachability check. So the
 // answer was the second explanation, not a broken send path, and the cost of it is measurable: paid
 // lookups spent on shows that then expired unpitched.
+//
+// These figures replace a hand-written set (81 / 49 / 16 / 11) that was in this comment when #2035
+// merged. That set came from SQL written beside this code rather than from this code, and it counted a
+// show as having a contact when the contact was a web form or a DM, which cannot be written to. The
+// looser count and the shipped rule disagreed by a fifth. A measurement taken by anything other than the
+// rule it describes can only ever agree with itself (L70), so these come from `counts` below.
 //
 // These are STANDING counts, not a flow over a window. The flow version needs a stamp per stage
 // transition and most stages do not carry one; the standing shape is what Dan can act on tonight, and the
@@ -23,6 +29,13 @@ import Foundation
 // Every number here is COUNTED from the rows, never written down: a hand-written count in a doc or a
 // comment is stale the day after it is measured (L32), and this report exists precisely because the
 // numbers move.
+// NOTHING RENDERS THIS YET, deliberately, and #16 is the issue that will. The text block these counts
+// were first written for was removed on Dan's call the same day: what he wants is #16's year-end Sankey
+// of the whole funnel, not three sentences at the top of the conversion sheet, and leaving the sentences
+// in place would have meant shipping something to be thrown away. The COUNTS survive because they are
+// the part #16 needs and they are proved by their own tests; the sentences did not, because a sentence
+// nothing shows is dead code (L29). An unread value is normally a defect (L46), so this is the exception
+// that names its activating issue rather than the rule (L65).
 enum OutreachFunnel {
 
     struct Counts: Equatable, Sendable {
@@ -79,31 +92,4 @@ enum OutreachFunnel {
         return c
     }
 
-    // The sentences live here rather than in the view, matching `OutcomePatterns` (#885): what is left in
-    // the view is layout, and every sentence Overture can say lands in `docs/copy-inventory.md` where a
-    // wording change shows up in the words Dan will read.
-
-    /// The shape of the funnel. Always shown when there is anything at all to report.
-    static func stageLine(_ c: Counts) -> String {
-        "\(c.scouted) scouted, \(c.contactFound) with a contact, \(c.drafted) drafted, \(c.sent) sent."
-    }
-
-    /// The chances still open. Nil when there are none, so the section says nothing rather than
-    /// announcing a zero: an absent line here reads as "nothing waiting", which is what it means.
-    static func waitingLine(_ c: Counts) -> String? {
-        guard c.waitingWithAContact > 0 else { return nil }
-        let shows = c.waitingWithAContact == 1 ? "1 upcoming show has" : "\(c.waitingWithAContact) upcoming shows have"
-        return "\(shows) a contact and no draft."
-    }
-
-    /// The chances that ran out, with the paid ones named apart, because that is the number with a cost
-    /// attached and Dan can only weigh the spend if he can see it.
-    static func expiredLine(_ c: Counts) -> String? {
-        guard c.expiredWithAContact > 0 else { return nil }
-        let shows = c.expiredWithAContact == 1 ? "1 show" : "\(c.expiredWithAContact) shows"
-        guard c.expiredAfterAPaidCheck > 0 else {
-            return "\(shows) ran out of time holding a contact."
-        }
-        return "\(shows) ran out of time holding a contact, \(c.expiredAfterAPaidCheck) of them after a paid check."
-    }
 }
