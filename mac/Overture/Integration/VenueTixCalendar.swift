@@ -203,20 +203,6 @@ enum VenueTixCalendar {
         return "https://\(host)/showdetails/\(seriesId)/\(eventId)"
     }
 
-    // #2259: the producing company, when the feed's marketing supertitle is actually naming one.
-    //
-    // The old rule dropped every supertitle as marketing. Half right: most of them are ("For One Night
-    // Only", "Eating Everything!"), and keeping them all would pollute the pitchable identity exactly as
-    // that comment feared. But a real producer is named there too, and discarding it meant no later search
-    // could recover what the ingest destroyed: ICB Productions' "Summer Lovin'" reached Dan as
-    // "No email found" while the company sat in the feed's own record for that show.
-    //
-    // The rule itself lives in `ProducerShapedName`, because the listing PAGE credits the same companies
-    // in front of the same show titles and has to answer this identically (`ListingOrganiser`).
-    static func producerName(inSuperTitle raw: String?) -> String? {
-        ProducerShapedName.from(raw)
-    }
-
     static func extractedEvents(from events: [VTEvent], presenter: String, venue: String?,
                                 location: String?, sourceURL: URL? = nil,
                                 zone: TimeZone = FeedDates.defaultZone) -> [ExtractedEvent] {
@@ -228,7 +214,20 @@ enum VenueTixCalendar {
                            // organiser-less in the first place (it gets drained as the presenter that is
                            // only the venue's own name), so a real producer here is the difference between
                            // a pitchable organisation and a show with nobody to write to.
-                           presenter: producerName(inSuperTitle: e.superTitle) ?? presenter,
+                           //
+                           // The old rule dropped every supertitle as marketing. Half right: most of them
+                           // are ("For One Night Only", "Eating Everything!"), and keeping them all would
+                           // pollute the pitchable identity exactly as that comment feared. But a real
+                           // producer is named there too, and discarding it meant no later search could
+                           // recover what the ingest destroyed: ICB Productions' "Summer Lovin'" reached
+                           // Dan as "No email found" while the company sat in the feed's own record for it.
+                           //
+                           // #2452: through `ProducerShapedName`, the one rule, rather than an adapter's
+                           // own wrapper around it. Every feed that publishes a credit line asks the same
+                           // question of it here, and the listing PAGE credits the same companies in front
+                           // of the same titles and answers through it too (`ListingOrganiser`).
+                           presenter: ProducerShapedName.presenter(creditedAbove: e.superTitle,
+                                                                   orElse: presenter),
                            venue: venue,
                            performanceDate: FeedDates.day(from: e.date, zone: zone),
                            // Dan's call (2026-07-28): a row with no per-event link falls back to the

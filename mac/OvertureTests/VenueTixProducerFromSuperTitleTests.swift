@@ -16,7 +16,11 @@ import Foundation
 // "A Jennings Vocal Studio NYC Cabaret", "Musical Theatre Sung by NYC Teens", "Nova Theatre Series #1"
 // and a twelve-word marketing line. Tightened to the rule below it matches 25, and every one of those 25
 // reads as a real producer. The strings in this suite are the real ones.
-@Suite("The producer named in a VenueTix supertitle (#2259)")
+//
+// #2452: these assert `ProducerShapedName` itself rather than a VenueTix-shaped wrapper around it. The
+// wrapper was the adapter's own spelling of a question three other call sites also answer, and a second
+// name for one concept is how the readings drift apart; every feed now reaches the rule by this one name.
+@Suite("The producer named in a supertitle (#2259)")
 struct VenueTixProducerFromSuperTitleTests {
 
     // Real producers from the live feed, with what should be stored for each. The trailing possessive is
@@ -38,7 +42,7 @@ struct VenueTixProducerFromSuperTitleTests {
             ("Maggie Wisniewski's", "Maggie Wisniewski"),
         ]
         for (raw, expected) in cases {
-            #expect(VenueTixCalendar.producerName(inSuperTitle: raw) == expected,
+            #expect(ProducerShapedName.from(raw) == expected,
                     "expected \(raw) to yield \(expected)")
         }
     }
@@ -46,7 +50,7 @@ struct VenueTixProducerFromSuperTitleTests {
     // A leading connector names the producer after it. Kept because the company really is stated; the
     // connector is not part of its name.
     @Test func aConnectorPrefixIsDroppedAndTheCompanyKept() {
-        #expect(VenueTixCalendar.producerName(inSuperTitle: "Hosted by Vivace Arts Collective")
+        #expect(ProducerShapedName.from("Hosted by Vivace Arts Collective")
                 == "Vivace Arts Collective")
     }
 
@@ -69,14 +73,14 @@ struct VenueTixProducerFromSuperTitleTests {
             "A Rock Retelling of Macbeth",
         ]
         for line in marketing {
-            #expect(VenueTixCalendar.producerName(inSuperTitle: line) == nil,
+            #expect(ProducerShapedName.from(line) == nil,
                     "expected \(line) to be read as marketing, not a producer")
         }
     }
 
     @Test func nothingAtAllIsNotAProducer() {
-        #expect(VenueTixCalendar.producerName(inSuperTitle: nil) == nil)
-        #expect(VenueTixCalendar.producerName(inSuperTitle: "   ") == nil)
+        #expect(ProducerShapedName.from(nil) == nil)
+        #expect(ProducerShapedName.from("   ") == nil)
     }
 }
 
