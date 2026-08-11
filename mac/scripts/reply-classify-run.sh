@@ -32,6 +32,10 @@ PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)/.."   # the Overture repo root
 . "$(dirname "$0")/lib/scout-cancel.sh"
 # #2106: the heartbeat touch, and stopping the run when it can no longer report itself alive.
 . "$(dirname "$0")/lib/run-heartbeat.sh"
+# #2506: the other half of that question. A fresh marker proves the watchdog is alive, never that the
+# work is progressing, so the heartbeat also asks whether anything new has landed lately and stops a run
+# that has stood still too long. See lib/run-stall-guard.sh.
+. "$(dirname "$0")/lib/run-stall-guard.sh"
 # #1097: the fail-closed tool scope for this detached run, shared with scout-extract and prep.
 # --allowedTools alone only PRE-approves; the --permission-mode manual this carries is what actually
 # denies Bash, Edit, web access and everything else the inherited "auto" default would grant a headless run.
@@ -62,6 +66,18 @@ CLAUDE_PID_FILE="$SUPPORT/reply-classify-claude-pid"
 # Overture clears the sentinel too, before launching; this is defence in depth (assume-it-runs-twice).
 clear_cancel "$CANCEL"
 rm -f "$CLAUDE_PID_FILE" 2>/dev/null || true
+
+# #2506: where the stall guard keeps how long this run has stood still, and how long standing still is
+# allowed to last. Removed here as well as in the trap, so a previous run's accrued stall time can never
+# be inherited and stop this one early (assume-it-runs-twice).
+#
+# 20 minutes is sized well past anything this run has ever done. This is the heaviest of the three (it
+# reads a thread, classifies it, then drafts), which is why its marker-stale window is the longest at 10
+# minutes; standing still for twice that with nothing new landing is not a slow reply, it is a stopped
+# one. Dan-tunable, and an unset or mistyped value disables the ceiling rather than shortening it.
+STALL_STATE="$SUPPORT/reply-classify-stall-state"
+STALL_LIMIT="${REPLY_CLASSIFY_STALL_LIMIT_SECONDS:-1200}"
+rm -f "$STALL_STATE" 2>/dev/null || true
 
 require_queue "$QUEUE" "reply-classify"
 
@@ -123,6 +139,15 @@ MARKER_INTERVAL=60
       # #2109: non-fatal. A run whose progress count failed to update is still ALIVE and
       # must keep beating; killing a paid run over a counting hiccup is the wrong trade.
       update_progress_from_results "$QUEUE" "$RESULTS" "$PROGRESS" || true
+      # #2506: and the question the touch above cannot answer. Deliberately NOT guarded with `|| true`
+      # like the bookkeeping call above: its non-zero return IS the verdict, and swallowing it would leave
+      # the run doing exactly what scout-extract did on 2026-08-11.
+      if ! stall_tick "$RESULTS" "$STALL_STATE" "$MARKER_INTERVAL" "$STALL_LIMIT"; then
+        echo "reply-classify: STOPPING. Nothing new has landed for $(stall_stalled_seconds "$STALL_STATE")s (limit ${STALL_LIMIT}s), so this run is not progressing however fresh its marker is. Everything it never reported is written down as unreported below."
+        exit
+      fi
+      STALLED_FOR="$(stall_stalled_seconds "$STALL_STATE")" || STALLED_FOR=0
+      [ "$STALLED_FOR" = "0" ] || echo "reply-classify: nothing new has landed for ${STALLED_FOR}s (stopping at ${STALL_LIMIT}s)"
     fi
   done ) &
 HEARTBEAT_PID=$!
@@ -134,7 +159,7 @@ SLEEP_GUARD_PID="$(arm_sleep_guard)"
 # #1038: clear the cancel sentinel and the pid file on exit too, so a stopped run never leaves a sentinel
 # that would instantly kill the next run.
 # #1009: stop_sleep_guard releases the power assertion on every exit path (finish, cancel, crash-via-set-e).
-trap 'kill "$HEARTBEAT_PID" 2>/dev/null; [ -n "$CLAUDE_PID" ] && kill "$CLAUDE_PID" 2>/dev/null; stop_sleep_guard "$SLEEP_GUARD_PID"; rm -f "$MARKER"; clear_cancel "$CANCEL"; rm -f "$CLAUDE_PID_FILE"' EXIT
+trap 'kill "$HEARTBEAT_PID" 2>/dev/null; [ -n "$CLAUDE_PID" ] && kill "$CLAUDE_PID" 2>/dev/null; stop_sleep_guard "$SLEEP_GUARD_PID"; rm -f "$MARKER"; clear_cancel "$CANCEL"; rm -f "$CLAUDE_PID_FILE"; rm -f "$STALL_STATE"' EXIT
 
 # #1013: the last run's results are spent, and leaving them here lets them masquerade as this run's.
 # scout-extract-run.sh learned this in #1011 (a run that wrote nothing inherited the previous run's

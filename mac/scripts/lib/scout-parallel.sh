@@ -104,6 +104,81 @@ split_queue_into_chunks() {
 # #1597: the id field and results version are parameters, so the reachability check reuses this exact
 # merge instead of carrying a near-identical copy that would drift. Defaults are scout-extract's, so
 # every existing call site is unchanged.
+# report_short_chunks <chunk_dir>
+#
+# #2506: says out loud which chunks came back with fewer results than their own queue held, and which
+# sources those chunks never reported. Prints one line per short chunk and returns 1 when any chunk was
+# short; prints nothing and returns 0 when every chunk reported in full.
+#
+# Why this is separate from the whole-queue backstop in results-guard.sh: that one runs against the FULL
+# queue after everything has exited and writes a `not_read` for any source with no result, which is the
+# right net but says nothing about WHERE the loss happened. On 2026-08-11 chunk 2 was given 7 sources and
+# wrote 6, and the merge accepted the short chunk without comment, so the only visible fact was a run
+# sitting at 26 of 27 forever. Attributing the loss to a chunk turns that into a reportable outcome, and
+# it is the fact that names the log worth reading (that chunk log was zero bytes: see report_chunk_log).
+#
+# Degrades to reporting nothing and returning 0 with no node, or no chunk dir: a run with no chunks at
+# all (a node-free machine falls back to one process) has no chunk to be short, and must not read as a
+# failure.
+report_short_chunks() {
+  local out_dir="$1"
+  command -v node >/dev/null 2>&1 || return 0
+  [ -d "${out_dir}" ] || return 0
+
+  node -e '
+    const fs = require("fs"), path = require("path");
+    const [outDir] = process.argv.slice(1);
+
+    const read = (p) => { try { return fs.readFileSync(p, "utf8"); } catch { return null; } };
+    const parse = (s) => { try { return JSON.parse(s); } catch { return null; } };
+
+    let files = [];
+    try {
+      files = fs.readdirSync(outDir).filter((f) => /^chunk-queue-\d+\.json$/.test(f)).sort();
+    } catch { files = []; }
+
+    let short = 0;
+    for (const f of files) {
+      const n = f.match(/(\d+)/)[1];
+      const queued = (parse(read(path.join(outDir, f)) ?? "")?.items ?? [])
+        .map((i) => i?.sourceId).filter(Boolean);
+      if (!queued.length) continue;
+
+      const resultsRaw = read(path.join(outDir, `chunk-results-${n}.json`));
+      const parsed = parse(resultsRaw ?? "");
+      const wrote = Array.isArray(parsed?.results) ? parsed.results : null;
+      const reported = new Set((wrote ?? []).map((r) => r?.sourceId).filter(Boolean));
+      const missing = queued.filter((id) => !reported.has(id));
+      if (!missing.length) continue;
+
+      short += 1;
+      // NO APOSTROPHES in these strings or this comment: the whole program is one single-quoted shell
+      // string, and a raw quote ends it early (#853).
+      const nothing = wrote === null ? " (it wrote no results file at all)" : "";
+      console.log(
+        `scout-extract: chunk ${n} reported ${queued.length - missing.length} of ${queued.length} ` +
+        `sources${nothing}. Never reported: ${missing.join(", ")}`);
+    }
+    process.exit(short ? 1 : 0);
+  ' "${out_dir}" 2>/dev/null
+}
+
+# report_chunk_log <chunk_log> <chunk_number>
+#
+# #2506: folds a chunk log tail into the run log, and says so explicitly when there is no tail because the
+# chunk wrote NOTHING. A zero byte log is the signature of a worker that died without recording a thing,
+# and `tail` of an empty file is empty, which reads exactly like a chunk that simply had a quiet finish.
+# Returns 1 for a chunk that logged nothing, so the caller can treat it as an outcome rather than silence.
+report_chunk_log() {
+  if [ -s "$1" ]; then
+    echo "--- chunk $2 log tail ---"
+    tail -n 4 "$1" 2>/dev/null || true
+    return 0
+  fi
+  echo "--- chunk $2: NO LOG AT ALL. Its worker died without recording anything, so there is no reason available for whatever it failed to report."
+  return 1
+}
+
 merge_chunk_results() {
   local queue="$1" out_dir="$2" results="$3" id_field="${4:-sourceId}" out_version="${5:-1}"
   command -v node >/dev/null 2>&1 || return 0

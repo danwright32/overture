@@ -34,6 +34,10 @@ PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)/.."   # the Overture repo root
 . "$(dirname "$0")/lib/scout-cancel.sh"
 # #2106: the heartbeat touch, and stopping the run when it can no longer report itself alive.
 . "$(dirname "$0")/lib/run-heartbeat.sh"
+# #2506: the other half of that question. A fresh marker proves the watchdog is alive, never that the
+# work is progressing, so the heartbeat also asks whether anything new has landed lately and stops a run
+# that has stood still too long. See lib/run-stall-guard.sh.
+. "$(dirname "$0")/lib/run-stall-guard.sh"
 # #1026: the tool scope for this DETACHED run, in one place. The run reads untrusted web content and
 # writes Dan's outreach data, so it is restricted to exactly Read, Write and WebFetch. The restriction is
 # real (fail-closed), not the mere pre-approval that --allowedTools used to give: see lib/scout-tools.sh.
@@ -67,6 +71,19 @@ CHUNK_PIDS_FILE="$SUPPORT/scout-extract-chunk-pids"
 # clears it too, before launching; this is defence in depth (assume-it-runs-twice).
 clear_cancel "$CANCEL"
 rm -f "$CHUNK_PIDS_FILE" 2>/dev/null || true
+
+# #2506: where the stall guard keeps how long this run has stood still, and how long standing still is
+# allowed to last. Removed here as well as in the trap, so a previous run's accrued stall time can never
+# be inherited and stop this one early (assume-it-runs-twice).
+#
+# 20 minutes is sized well past anything this run has ever done. The sequential path took 16 minutes for
+# 18 sources (about 53s per source), and four chunks work at once, so on a healthy run something lands
+# every minute or so; even one pathological source with dozens of detail pages to follow is minutes, not
+# tens of minutes. The incident stood still for 56 minutes and was heading for longer. Dan-tunable, and
+# an unset or mistyped value disables the ceiling rather than shortening it.
+STALL_STATE="$SUPPORT/scout-extract-stall-state"
+STALL_LIMIT="${SCOUT_EXTRACT_STALL_LIMIT_SECONDS:-1200}"
+rm -f "$STALL_STATE" 2>/dev/null || true
 
 # How many claude processes read the queue at once. Bounded and Dan-tunable: the total token work is
 # unchanged (the same pages, the same detail fetches), it is just done concurrently, so this trades a
@@ -137,6 +154,15 @@ MARKER_INTERVAL=60
       # must keep beating; killing a paid run over a counting hiccup is the wrong trade.
       merge_chunk_results "$QUEUE" "$CHUNKDIR" "$RESULTS" || true
       update_progress_from_results "$QUEUE" "$RESULTS" "$PROGRESS" || true
+      # #2506: and the question the touch above cannot answer. Deliberately NOT guarded with `|| true`
+      # like the two bookkeeping calls: its non-zero return IS the verdict, and swallowing it would leave
+      # the run doing exactly what it did on 2026-08-11.
+      if ! stall_tick "$RESULTS" "$STALL_STATE" "$MARKER_INTERVAL" "$STALL_LIMIT"; then
+        echo "scout-extract: STOPPING. Nothing new has landed for $(stall_stalled_seconds "$STALL_STATE")s (limit ${STALL_LIMIT}s), so this run is not progressing however fresh its marker is. Every source it never reported is written down as not read below."
+        exit
+      fi
+      STALLED_FOR="$(stall_stalled_seconds "$STALL_STATE")" || STALLED_FOR=0
+      [ "$STALLED_FOR" = "0" ] || echo "scout-extract: nothing new has landed for ${STALLED_FOR}s (stopping at ${STALL_LIMIT}s)"
     fi
   done ) &
 HEARTBEAT_PID=$!
@@ -148,7 +174,7 @@ SLEEP_GUARD_PID="$(arm_sleep_guard)"
 # #1037: clear the cancel sentinel and the pids file on exit too, so a stopped run never leaves a
 # sentinel that would instantly kill the next run.
 # #1009: stop_sleep_guard releases the power assertion on every exit path (finish, cancel, crash-via-set-e).
-trap 'kill "$HEARTBEAT_PID" 2>/dev/null; [ -n "$CHUNK_PIDS" ] && kill $CHUNK_PIDS 2>/dev/null; stop_sleep_guard "$SLEEP_GUARD_PID"; rm -f "$MARKER"; clear_cancel "$CANCEL"; rm -f "$CHUNK_PIDS_FILE"' EXIT
+trap 'kill "$HEARTBEAT_PID" 2>/dev/null; [ -n "$CHUNK_PIDS" ] && kill $CHUNK_PIDS 2>/dev/null; stop_sleep_guard "$SLEEP_GUARD_PID"; rm -f "$MARKER"; clear_cancel "$CANCEL"; rm -f "$CHUNK_PIDS_FILE"; rm -f "$STALL_STATE"' EXIT
 
 # #1011: the last run's results are spent, and leaving them here lets them masquerade as this run's.
 # Before this, a run that wrote nothing inherited the previous run's file wholesale, generatedAt and
@@ -301,17 +327,27 @@ if [ "${CHUNK_COUNT:-0}" -ge 1 ]; then
 
   # Fold each chunk's log tail into the main log, so the reason a chunk failed travels with the run
   # (the results guard reads the main log's tail into the not_read note).
+  # #2506: report_chunk_log also says so explicitly when a chunk wrote NO log at all, which is the
+  # signature of a worker that died without recording anything. `tail` of a zero byte file is empty, and
+  # an empty tail reads exactly like a chunk that had a quiet finish.
   k=1
   while [ "$k" -le "$CHUNK_COUNT" ]; do
     CHUNK_LOG="$SUPPORT/scout-extract-run.chunk-$k.log"
-    echo "--- chunk $k log tail ---"
-    tail -n 4 "$CHUNK_LOG" 2>/dev/null || true
+    report_chunk_log "$CHUNK_LOG" "$k" || true
     k=$((k + 1))
   done
 
   # The final merge, now that every chunk has exited, so $RESULTS reflects the last writes each chunk
   # made between the previous heartbeat tick and finishing.
   merge_chunk_results "$QUEUE" "$CHUNKDIR" "$RESULTS"
+
+  # #2506: and now that the merge is final, name every chunk that came back with fewer results than its
+  # own queue held. The whole-queue backstop below still writes a not_read for each of those sources, but
+  # it cannot say WHERE the loss happened, and on 2026-08-11 that was the whole difficulty: a chunk given
+  # 7 sources wrote 6, and the only visible fact anywhere was a run stuck at 26 of 27. Non-fatal here
+  # (`|| true`) because RUN_STATUS is decided below by RESULTS_MISSING_SOURCES, which covers exactly the
+  # same sources against the full queue; this is the attribution, not the verdict.
+  report_short_chunks "$CHUNKDIR" || true
 else
   # Fallback for a node-free machine (split printed 0): run a single claude against the full queue,
   # writing $RESULTS directly, exactly as the sequential path always did.

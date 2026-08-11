@@ -319,6 +319,103 @@ assert_equals "with every chunk gone the last good results are left alone, not e
 
 rm -rf "${PREPTMP}"
 
+# ---------------------------------------------------------------------------
+# #2506: a chunk that came back SHORT, and a chunk that wrote nothing at all.
+#
+# On 2026-08-11 chunk 2 was given 7 sources and wrote results for 6, dropping spitnvigor-com, and its
+# log was zero bytes: that worker died without recording anything. Nothing noticed either fact. The merge
+# accepts a short chunk without comment (it can only union what is there), the derived progress count can
+# only count what arrived, and the run went on reporting itself healthy at 26 of 27 for the best part of
+# an hour. Finding nothing is not success (L98), so both have to be REPORTABLE outcomes attributed to the
+# chunk, not silences the whole-queue backstop later smooths over into an anonymous not_read.
+# ---------------------------------------------------------------------------
+SHORTTMP="$(mktemp -d)"
+mkdir -p "${SHORTTMP}/chunks"
+
+write_chunk_queue() {   # <n> <id>...
+  local n="$1"; shift
+  local items=""
+  for id in "$@"; do
+    [[ -n "${items}" ]] && items+=","
+    items+="{\"sourceId\":\"${id}\"}"
+  done
+  printf '{"version":1,"items":[%s]}' "${items}" > "${SHORTTMP}/chunks/chunk-queue-${n}.json"
+}
+write_chunk_results() {  # <n> <id>...
+  local n="$1"; shift
+  local rows=""
+  for id in "$@"; do
+    [[ -n "${rows}" ]] && rows+=","
+    rows+="{\"sourceId\":\"${id}\"}"
+  done
+  printf '{"version":1,"results":[%s]}' "${rows}" > "${SHORTTMP}/chunks/chunk-results-${n}.json"
+}
+
+# The healthy case first, so a report that fires on everything cannot pass this file.
+write_chunk_queue 1 alpha beta
+write_chunk_results 1 alpha beta
+SHORT_OUT="$(report_short_chunks "${SHORTTMP}/chunks")"
+SHORT_STATUS=$?
+assert_equals "a chunk that reported every source it was given is not called short" "0" "${SHORT_STATUS}"
+assert_equals "a complete run reports nothing" "" "${SHORT_OUT}"
+
+# The incident's own shape: given 7, reported 6.
+write_chunk_queue 2 s1 s2 s3 s4 s5 s6 spitnvigor-com
+write_chunk_results 2 s1 s2 s3 s4 s5 s6
+SHORT_OUT="$(report_short_chunks "${SHORTTMP}/chunks")"
+SHORT_STATUS=$?
+assert_equals "a chunk that came back short is a failure, not a silence" "1" "${SHORT_STATUS}"
+assert_contains "the short chunk is named" "${SHORT_OUT}" "chunk 2"
+assert_contains "the source that never came back is named" "${SHORT_OUT}" "spitnvigor-com"
+assert_contains "the sources that DID come back are not named as missing" \
+  "${SHORT_OUT}" "6 of 7"
+
+# A worker that died before writing its results file at all. Its whole queue is missing, and the report
+# must say so rather than skipping a chunk it cannot read.
+write_chunk_queue 3 ghost-a ghost-b
+rm -f "${SHORTTMP}/chunks/chunk-results-3.json"
+SHORT_OUT="$(report_short_chunks "${SHORTTMP}/chunks")"
+assert_contains "a chunk that wrote no results file at all is reported" "${SHORT_OUT}" "chunk 3"
+assert_contains "every source in a chunk that wrote nothing is named" "${SHORT_OUT}" "ghost-a"
+assert_contains "every source in a chunk that wrote nothing is named (second)" "${SHORT_OUT}" "ghost-b"
+
+# An unchunked run (a node-free machine falls back to one process and there is no chunk dir) has no
+# chunks to be short, and must not be reported as a failure.
+report_short_chunks "${SHORTTMP}/does-not-exist" >/dev/null
+assert_equals "a run with no chunks at all is not a failure" "0" "$?"
+
+# ---------------------------------------------------------------------------
+# And the log side of the same death. A zero byte chunk log is the signature of a worker that produced
+# nothing whatsoever, and `tail` of an empty file is empty, which is indistinguishable from a chunk that
+# simply had a quiet finish.
+# ---------------------------------------------------------------------------
+GOODLOG="${SHORTTMP}/chunk-1.log"
+printf 'read alpha\nread beta\ndone\n' > "${GOODLOG}"
+LOG_OUT="$(report_chunk_log "${GOODLOG}" 1)"
+LOG_STATUS=$?
+assert_equals "a chunk that logged is not reported as silent" "0" "${LOG_STATUS}"
+assert_contains "the chunk log tail is folded into the run log" "${LOG_OUT}" "done"
+
+EMPTYLOG="${SHORTTMP}/chunk-2.log"
+: > "${EMPTYLOG}"
+LOG_OUT="$(report_chunk_log "${EMPTYLOG}" 2)"
+LOG_STATUS=$?
+assert_equals "a chunk that wrote a zero byte log is a reportable failure" "1" "${LOG_STATUS}"
+assert_contains "the silent chunk is named" "${LOG_OUT}" "chunk 2"
+assert_contains "the silent chunk says what happened, not nothing" "${LOG_OUT}" "NO LOG AT ALL"
+
+LOG_OUT="$(report_chunk_log "${SHORTTMP}/never-created.log" 4)"
+LOG_STATUS=$?
+assert_equals "a chunk whose log is missing entirely is reported the same way" "1" "${LOG_STATUS}"
+assert_contains "the missing log names its chunk" "${LOG_OUT}" "chunk 4"
+
+rm -rf "${SHORTTMP}"
+
+# The runner must actually call both. A report nothing invokes is indistinguishable from no report (L3).
+RUNNER="$(cd "${SCRIPT_DIR}/.." && pwd)/scout-extract-run.sh"
+assert_contains "the runner reports short chunks" "$(cat "${RUNNER}")" "report_short_chunks"
+assert_contains "the runner reports a silent chunk log" "$(cat "${RUNNER}")" "report_chunk_log"
+
 echo
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "scout-parallel.test.sh: all assertions passed"
