@@ -79,7 +79,7 @@ struct QueueRenderPassCostTests {
             prospects: QueueRenderPass.Corpus(rows, tally: tally),
             allProspects: QueueRenderPass.Corpus(rows, tally: tally),
             inquiries: [], orgAnswers: [],
-            today: "2026-08-02", now: Date(timeIntervalSince1970: 1_785_000_000),
+            context: .at("2026-08-02", now: Date(timeIntervalSince1970: 1_785_000_000)),
             focusedStage: .scout, focusedKeys: nil)
     }
 

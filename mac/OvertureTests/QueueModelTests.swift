@@ -507,7 +507,7 @@ struct MultiDateRunQueueTests {
     }
 
     private func triaged(_ prospects: [Prospect], today: String) -> [String] {
-        StageNavigation.naturalKeys(for: .scout, in: prospects, today: today)
+        StageNavigation.naturalKeys(for: .scout, in: prospects, context: .at(today))
     }
 
     // #1540: the run opened three days ago and plays for another five. It is gone from triage.

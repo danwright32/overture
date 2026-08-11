@@ -79,12 +79,12 @@ struct StageNavigationCountsTests {
         oneOfEverything(ctx)
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
 
-        let counts = StageNavigation.counts(in: all, today: today, now: now)
+        let counts = StageNavigation.counts(in: all, context: .at(today, now: now))
         let focuses: [StageFocus] = [.scout, .prep, .review, .sendApproved, .sendBlocked,
                                      .sendErrors, .sendStuck, .sendDegraded]
 
         for focus in focuses {
-            let navCount = StageNavigation.naturalKeys(for: focus, in: all, today: today, now: now).count
+            let navCount = StageNavigation.naturalKeys(for: focus, in: all, context: .at(today, now: now)).count
             #expect(counts[focus] ?? 0 == navCount,
                     "counts[\(focus)] = \(counts[focus] ?? 0) but naturalKeys(\(focus)).count = \(navCount)")
         }
@@ -96,7 +96,7 @@ struct StageNavigationCountsTests {
         let ctx = try context()
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
 
-        let counts = StageNavigation.counts(in: all, today: today, now: now)
+        let counts = StageNavigation.counts(in: all, context: .at(today, now: now))
         let focuses: [StageFocus] = [.scout, .prep, .review, .sendApproved, .sendBlocked,
                                      .sendErrors, .sendStuck, .sendDegraded]
         for focus in focuses {
@@ -112,9 +112,9 @@ struct StageNavigationCountsTests {
         oneOfEverything(ctx)
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
 
-        let inputs = AgentInputs.from(prospects: all, now: now, today: today,
+        let inputs = AgentInputs.from(prospects: all, context: .at(today, now: now),
                                       gmailConnected: true, prepRunning: false, replyRunAlive: false)
-        func nav(_ f: StageFocus) -> Int { StageNavigation.naturalKeys(for: f, in: all, today: today, now: now).count }
+        func nav(_ f: StageFocus) -> Int { StageNavigation.naturalKeys(for: f, in: all, context: .at(today, now: now)).count }
 
         #expect(inputs.toTriage == nav(.scout))
         #expect(inputs.keptToPrep == nav(.prep))

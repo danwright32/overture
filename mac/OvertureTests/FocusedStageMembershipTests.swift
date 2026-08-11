@@ -41,7 +41,7 @@ struct FocusedStageMembershipTests {
         show(ctx, "already-sent", status: .contacted)
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
 
-        let keys = StageNavigation.focusedKeys(stage: .review, leadKeys: [], in: all, today: today, now: now)
+        let keys = StageNavigation.focusedKeys(stage: .review, leadKeys: [], in: all, context: .at(today, now: now))
         #expect(Set(keys) == Set(["drafted-1", "drafted-2"]))
     }
 
@@ -54,14 +54,14 @@ struct FocusedStageMembershipTests {
 
         var keys = StageNavigation.focusedKeys(stage: .review, leadKeys: [],
                                                in: try ctx.fetch(FetchDescriptor<Prospect>()),
-                                               today: today, now: now)
+                                               context: .at(today, now: now))
         #expect(Set(keys) == Set(["mark-morris", "still-drafted"]))
 
         // Dan approves and sends it: status moves off .drafted.
         sending.status = .contacted
         keys = StageNavigation.focusedKeys(stage: .review, leadKeys: [],
                                            in: try ctx.fetch(FetchDescriptor<Prospect>()),
-                                           today: today, now: now)
+                                           context: .at(today, now: now))
         #expect(keys == ["still-drafted"])
     }
 
@@ -74,7 +74,7 @@ struct FocusedStageMembershipTests {
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
 
         let keys = StageNavigation.focusedKeys(stage: nil, leadKeys: ["lead-a", "lead-gone"],
-                                               in: all, today: today, now: now)
+                                               in: all, context: .at(today, now: now))
         #expect(keys == ["lead-a", "lead-gone"])
     }
 }

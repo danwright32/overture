@@ -66,7 +66,7 @@ struct InquiryQueueTests {
         let past = prospect("ppast", date: "2026-01-01")
         let ahead = prospect("pahead", date: "2026-07-19")
 
-        #expect(StageNavigation.naturalKeys(for: .scout, in: [past, ahead], today: today) == ["pahead"])
+        #expect(StageNavigation.naturalKeys(for: .scout, in: [past, ahead], context: .at(today)) == ["pahead"])
     }
 
     // The rows group by date, which is what puts an inquiry under the night it is about. Grouping keeps

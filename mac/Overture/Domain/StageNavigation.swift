@@ -42,9 +42,8 @@ enum StageNavigation {
     static let openingStage: StageFocus = .scout
 
     static func naturalKeys(for focus: StageFocus, in prospects: [Prospect],
-                            today: String = QueueModel.easternToday(),
-                            now: Date = Date(), geo: GeoRefusals = .none) -> [String] {
-        prospects.filter { matches(focus, $0, today: today, now: now, geo: geo) }.map(\.naturalKey)
+                            context: StageContext) -> [String] {
+        prospects.filter { matches(focus, $0, context: context) }.map(\.naturalKey)
     }
 
     // #1134: which stage a deep-linked lead belongs to, so a tapped OmniFocus follow-up or a search pick
@@ -53,11 +52,10 @@ enum StageNavigation {
     // other lead is placed by the same `matches` predicate the pills count with. nil for a lead in no
     // stage at all (RootView routes those to Archive instead).
     static func stage(containing key: String, in prospects: [Prospect], reachedOutKeys: Set<String>,
-                      today: String = QueueModel.easternToday(), now: Date = Date(),
-                      geo: GeoRefusals = .none) -> StageFocus? {
+                      context: StageContext) -> StageFocus? {
         if reachedOutKeys.contains(key) { return .reachedOut }
         guard let p = prospects.first(where: { $0.naturalKey == key }) else { return nil }
-        return countedFocuses.first { matches($0, p, today: today, now: now, geo: geo) }
+        return countedFocuses.first { matches($0, p, context: context) }
     }
 
     // #1140: which rows the focused list shows. A stage pill (`stage` non-nil) re-derives its membership
@@ -68,10 +66,9 @@ enum StageNavigation {
     // whichever of them still exist). This lives here, not in the SwiftUI view, so it can be tested at all
     // (the #863 lesson: a rule computed inside a view has no seam a test can reach).
     static func focusedKeys(stage: StageFocus?, leadKeys: [String], in prospects: [Prospect],
-                            today: String = QueueModel.easternToday(), now: Date = Date(),
-                            geo: GeoRefusals = .none) -> [String] {
+                            context: StageContext) -> [String] {
         guard let stage else { return leadKeys }
-        return naturalKeys(for: stage, in: prospects, today: today, now: now, geo: geo)
+        return naturalKeys(for: stage, in: prospects, context: context)
     }
 
     // #1567: whether the Queue will show Dan this lead at all, which is what a global search pick and an
@@ -88,10 +85,9 @@ enum StageNavigation {
     // old date filter and then no stage rendered it, so the Queue opened on nothing (#792's failure mode).
     // A dismissed show, or a key no show answers to, is in no stage, so both still route to Archive.
     static func opensInQueue(key: String, in prospects: [Prospect], reachedOutKeys: Set<String>,
-                             today: String = QueueModel.easternToday(), now: Date = Date(),
-                             geo: GeoRefusals = .none) -> Bool {
+                             context: StageContext) -> Bool {
         stage(containing: key, in: prospects, reachedOutKeys: reachedOutKeys,
-              today: today, now: now, geo: geo) != nil
+              context: context) != nil
     }
 
     // #1567: the shows behind the masthead's "N in the queue", which is every show a stage will render
@@ -103,11 +99,10 @@ enum StageNavigation {
     // read lower than the pills it sits above (452 against 589 on the live store). One pass over the
     // prospects, in the style of `counts` above, so a prospect's recipients fault at most once (#1121).
     static func queueKeys(in prospects: [Prospect], reachedOutKeys: Set<String>,
-                          today: String = QueueModel.easternToday(),
-                          now: Date = Date(), geo: GeoRefusals = .none) -> Set<String> {
+                          context: StageContext) -> Set<String> {
         var result = Set<String>()
         for p in prospects where !reachedOutKeys.contains(p.naturalKey) {
-            if countedFocuses.contains(where: { matches($0, p, today: today, now: now, geo: geo) }) {
+            if countedFocuses.contains(where: { matches($0, p, context: context) }) {
                 result.insert(p.naturalKey)
             }
         }
@@ -122,9 +117,8 @@ enum StageNavigation {
     // Written as the union rather than as a second sweep so it cannot drift from `opensInQueue`, which
     // is the same question asked of one key. `SearchScopedToQueueTests` holds the two to each other.
     static func stagedKeys(in prospects: [Prospect], reachedOutKeys: Set<String>,
-                           today: String = QueueModel.easternToday(),
-                           now: Date = Date(), geo: GeoRefusals = .none) -> Set<String> {
-        var result = queueKeys(in: prospects, reachedOutKeys: reachedOutKeys, today: today, now: now, geo: geo)
+                           context: StageContext) -> Set<String> {
+        var result = queueKeys(in: prospects, reachedOutKeys: reachedOutKeys, context: context)
         for p in prospects where reachedOutKeys.contains(p.naturalKey) { result.insert(p.naturalKey) }
         return result
     }
@@ -156,11 +150,10 @@ enum StageNavigation {
     }
 
     static func counts(in prospects: [Prospect],
-                       today: String = QueueModel.easternToday(),
-                       now: Date = Date(), geo: GeoRefusals = .none) -> [StageFocus: Int] {
+                       context: StageContext) -> [StageFocus: Int] {
         var result: [StageFocus: Int] = [:]
         for p in prospects {
-            for focus in countedFocuses where matches(focus, p, today: today, now: now, geo: geo) {
+            for focus in countedFocuses where matches(focus, p, context: context) {
                 result[focus, default: 0] += 1
             }
         }
@@ -184,19 +177,18 @@ enum StageNavigation {
     // An undated show stays. "Date to be confirmed" is ordinary on a season page, and nothing has
     // measured such a show as far out, so dropping it would lose a real lead on a fact nobody
     // established. That is the same call #861 made at the past edge.
-    private static func isWithinLeadTime(_ p: Prospect, today: String) -> Bool {
-        guard let days = QueueModel.daysUntil(performanceDate: p.performanceDate, today: today)
+    private static func isWithinLeadTime(_ p: Prospect, context: StageContext) -> Bool {
+        guard let days = QueueModel.daysUntil(performanceDate: p.performanceDate, today: context.today)
         else { return true }
         return days <= QueueModel.leadTimeWindowDays
     }
 
-    private static func matches(_ focus: StageFocus, _ p: Prospect, today: String, now: Date,
-                                geo: GeoRefusals) -> Bool {
+    private static func matches(_ focus: StageFocus, _ p: Prospect, context: StageContext) -> Bool {
         // #1570: the geography gate, asked HERE so every surface inherits it, rather than on the
         // masthead's own path alone. It used to sit only in QueueModel.filter, which the stage list Dan
         // triages never called, so the number and the list beneath it counted different shows. The gate
         // spares committed outreach and anything Overture cannot place; GeoRefusals owns both rules.
-        if geo.hidesFromQueue(p) { return false }
+        if context.geo.hidesFromQueue(p) { return false }
         switch focus {
         case .scout:
             // #861: "waiting to be triaged" is a question about TIME, not just status. The pill counted
@@ -212,7 +204,7 @@ enum StageNavigation {
             // on 2026-08-09, 119 of them past 90 days and out to June 2027. Dan's call that day was to
             // enforce the window the repo had been describing since #1571, and the shows past it come
             // back on their own as their dates roll in.
-            return p.status == .new && !p.hasOpened(today: today) && isWithinLeadTime(p, today: today)
+            return p.status == .new && !p.hasOpened(today: context.today) && isWithinLeadTime(p, context: context)
 
         case .prep:
             // #901: through needsPrepEligible, not needsPrep with the fields spelled out again. Spelled
@@ -270,7 +262,7 @@ enum StageNavigation {
 
         case .sendStuck:
             // #475/#476: claimed .sending and never resolved, so the outcome is genuinely unknown.
-            return p.recipients.contains { $0.isSendStuck(now: now) }
+            return p.recipients.contains { $0.isSendStuck(now: context.now) }
 
         case .sendDegraded:
             // #483: the send went out fine, just with no usable threadId to watch for a reply. These

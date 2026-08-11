@@ -63,16 +63,17 @@ struct AgentInputs: Sendable {
 // can reach. Everything the roster needs that is NOT a prospect (is Gmail connected, is a run alive)
 // is passed in, so this stays pure and testable.
 extension AgentInputs {
-    static func from(prospects: [Prospect], inquiries: [Inquiry] = [], now: Date, today: String,
-                     gmailConnected: Bool, prepRunning: Bool, replyRunAlive: Bool,
-                     // #1570: Dan's geography refusals, so a pill cannot count a show its own stage
-                     // list will not render. Defaulted, so a test that is not about geography is unchanged.
-                     geo: GeoRefusals = .none) -> AgentInputs {
+    // #2365: the day, the instant and Dan's geography refusals arrive as ONE required value. `geo` used
+    // to be defaulted here with a comment saying a test not about geography was unchanged by it, which is
+    // exactly how a SHIPPING caller forgets a gate invisibly: a pill built without it counts shows its own
+    // stage list will not render, which is #1570 over again.
+    static func from(prospects: [Prospect], inquiries: [Inquiry] = [], context: StageContext,
+                     gmailConnected: Bool, prepRunning: Bool, replyRunAlive: Bool) -> AgentInputs {
         // Counted THROUGH StageNavigation, never alongside it, so a pill's number and the rows its tap
         // lands on come from one predicate and cannot answer the same question differently.
         // #1121: one traversal for every focus (StageNavigation.counts), not one traversal per focus, so
         // the send-related counts fault each prospect's `recipients` at most once instead of once each.
-        let focusCounts = StageNavigation.counts(in: prospects, today: today, now: now, geo: geo)
+        let focusCounts = StageNavigation.counts(in: prospects, context: context)
         func count(_ focus: StageFocus) -> Int { focusCounts[focus] ?? 0 }
         // #1436: inquiries share two of these stages, so a logged inquiry is counted where it renders.
         func inquiryCount(_ focus: StageFocus) -> Int {
@@ -87,16 +88,16 @@ extension AgentInputs {
             readyToSend: count(.sendApproved),
             gmailConnected: gmailConnected,
             sendErrors: count(.sendErrors),
-            followUpsDue: FollowUp.dueRecipients(from: prospects, now: now).count,
+            followUpsDue: FollowUp.dueRecipients(from: prospects, now: context.now).count,
             stalledReplyDrafts: prospects.reduce(0) { sum, p in
-                sum + p.recipients.filter { $0.isReplyDraftStalled(now: now, runAlive: replyRunAlive) }.count
+                sum + p.recipients.filter { $0.isReplyDraftStalled(now: context.now, runAlive: replyRunAlive) }.count
             },
             stuckSends: count(.sendStuck),
             degradedReplyTracking: count(.sendDegraded),
             blockedContacts: count(.sendBlocked),
             // #1134: the SAME function the reached-out view lists its rows from, so the pill's count and
             // that list agree by construction (one per contacted recipient still in play).
-            reachedOut: ReachedOutQueue.showCount(from: prospects, now: now)   // #1194: shows, not recipients
+            reachedOut: ReachedOutQueue.showCount(from: prospects, now: context.now)   // #1194: shows, not recipients
                 + inquiryCount(.reachedOut),   // #1436: replied inquiries awaiting a response
             // #2114: how many of those rows are actually due. Counted from the SAME rows the reached-out
             // view lists, through ReachedOutQueue's own isDueNow, so the pill's gold and the list Dan
@@ -105,8 +106,8 @@ extension AgentInputs {
             // An inquiry that has replied is due by definition: somebody is waiting on an answer, which is
             // the whole reason an inquiry rides this queue at all (AGENTS.md). It carries no reach-out
             // schedule of its own to consult.
-            reachedOutDue: ReachedOutQueue.activeWithDates(from: prospects, now: now)
-                .filter { ReachedOutQueue.isDueNow(next: $0.next, now: now) }.count
+            reachedOutDue: ReachedOutQueue.activeWithDates(from: prospects, now: context.now)
+                .filter { ReachedOutQueue.isDueNow(next: $0.next, now: context.now) }.count
                 + inquiries.filter { StageNavigation.stage(for: $0) == .reachedOut && $0.replied }.count
         )
     }

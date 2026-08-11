@@ -136,7 +136,9 @@ struct GeoRefusalsRenderPassWiringTests {
             Issue.record("expected to find the render pass")
             return
         }
-        #expect(body.contains("let geo = i.geo.resolving(i.prospects.all)"))
+        // #2365: the resolve happens through the CONTEXT, so the pass carries one value through its
+        // sweeps rather than unpacking the gate and passing the pieces separately.
+        #expect(body.contains("let context = i.context.resolvingPlaces(of: i.prospects.all)"))
     }
 
     // And carries it, so the surfaces built from the same pass answer from the same table rather than

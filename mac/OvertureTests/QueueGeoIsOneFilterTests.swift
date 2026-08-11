@@ -50,11 +50,11 @@ struct QueueGeoIsOneFilterTests {
     private func surfaces(_ ps: [Prospect], _ key: String,
                           geo: GeoRefusals) -> (stageList: Bool, pillCount: Bool, masthead: Bool, opens: Bool) {
         let rows = StageNavigation.focusedKeys(stage: .scout, leadKeys: [], in: ps,
-                                               today: today, now: now, geo: geo)
-        let counts = StageNavigation.counts(in: ps, today: today, now: now, geo: geo)
-        let queue = StageNavigation.queueKeys(in: ps, reachedOutKeys: [], today: today, now: now, geo: geo)
+                                               context: .at(today, now: now, geo: geo))
+        let counts = StageNavigation.counts(in: ps, context: .at(today, now: now, geo: geo))
+        let queue = StageNavigation.queueKeys(in: ps, reachedOutKeys: [], context: .at(today, now: now, geo: geo))
         let opens = StageNavigation.opensInQueue(key: key, in: ps, reachedOutKeys: [],
-                                                 today: today, now: now, geo: geo)
+                                                 context: .at(today, now: now, geo: geo))
         // The pill's number is a promise about rows (#863), so it is read as "does this show account for
         // one of the shows the Scout pill is counting" against the list it lands on.
         return (rows.contains(key), (counts[.scout] ?? 0) == rows.count && rows.contains(key),
@@ -90,9 +90,9 @@ struct QueueGeoIsOneFilterTests {
         let ps = try all(ctx)
 
         let rows = StageNavigation.focusedKeys(stage: .scout, leadKeys: [], in: ps,
-                                               today: today, now: now, geo: .none)
-        let counts = StageNavigation.counts(in: ps, today: today, now: now, geo: .none)
-        let queue = StageNavigation.queueKeys(in: ps, reachedOutKeys: [], today: today, now: now, geo: .none)
+                                               context: .at(today, now: now))
+        let counts = StageNavigation.counts(in: ps, context: .at(today, now: now))
+        let queue = StageNavigation.queueKeys(in: ps, reachedOutKeys: [], context: .at(today, now: now))
         #expect(rows.count == 2)
         #expect(counts[.scout] == 2, "this is the live discrepancy: 4 shows counted out and still rendered.")
         #expect(queue.count == 2)
@@ -151,11 +151,11 @@ struct QueueGeoIsOneFilterTests {
         show(ctx, "errored-far", location: "San Rafael, CA", status: .contacted).sendError = "bounced"
         let ps = try all(ctx)
 
-        let counts = StageNavigation.counts(in: ps, today: today, now: now, geo: .none)
+        let counts = StageNavigation.counts(in: ps, context: .at(today, now: now))
         #expect(counts[.sendApproved] == 1, "an approved show out of range is committed outreach, not a scouting suggestion.")
         #expect(counts[.sendErrors] == 1, "a send error must never be hidden by a geography rule.")
         #expect(StageNavigation.opensInQueue(key: "errored-far", in: ps, reachedOutKeys: [],
-                                             today: today, now: now, geo: .none))
+                                             context: .at(today, now: now)))
     }
 
     // The Prep and Review stages carry no committed outreach yet, so the gate holds there too: a show
@@ -166,7 +166,7 @@ struct QueueGeoIsOneFilterTests {
         show(ctx, "drafted-far", location: "Harrogate, UK", status: .drafted)
         let ps = try all(ctx)
 
-        let counts = StageNavigation.counts(in: ps, today: today, now: now, geo: .none)
+        let counts = StageNavigation.counts(in: ps, context: .at(today, now: now))
         #expect((counts[.prep] ?? 0) == 0)
         #expect((counts[.review] ?? 0) == 0)
     }
@@ -216,7 +216,14 @@ struct QueueGeoWiringGuardTests {
 
     @Test func theSearchAndFollowUpRoutingPassesThemToo() {
         #expect(!rootView.isEmpty)
-        #expect(rootView.contains("reachedOutKeys: reachedOutKeys, geo: geo)"),
+        // #2365: the gate now rides inside the context, so what this asserts is that BOTH routing calls
+        // build theirs from Dan's real refusals rather than from an empty set. Counted rather than
+        // matched against one spelling, because the two calls are wrapped differently and a guard tied
+        // to one line's exact shape fails on the next reformat while protecting nothing (L103).
+        #expect(rootView.components(separatedBy: "StageContext(geo: geo)").count - 1 >= 2,
                 "routing a pick to the Queue or Archive must apply the same gate the Queue's lists do.")
+        for call in ["stagedKeys", "opensInQueue"] {
+            #expect(rootView.contains(call), "\(call) is no longer called; re-point this guard.")
+        }
     }
 }

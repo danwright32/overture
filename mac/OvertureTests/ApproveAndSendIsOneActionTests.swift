@@ -67,7 +67,7 @@ struct ApproveAndSendIsOneActionTests {
         let reachedOutKeys = Set(ReachedOutQueue.activeWithDates(from: all, now: now)
             .map(\.prospect.naturalKey))
         return StageNavigation.stage(containing: "k", in: all, reachedOutKeys: reachedOutKeys,
-                                     today: today, now: now)
+                                     context: .at(today, now: now))
     }
 
     // MARK: - The confirmation Dan reads before anything is committed

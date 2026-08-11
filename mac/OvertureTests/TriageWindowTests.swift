@@ -58,7 +58,7 @@ struct TriageWindowTests {
 
     private func scoutKeys(_ ctx: ModelContext) throws -> [String] {
         StageNavigation.naturalKeys(for: .scout, in: try ctx.fetch(FetchDescriptor<Prospect>()),
-                                    today: today, now: now)
+                                    context: .at(today, now: now))
     }
 
     // MARK: - The window itself
@@ -167,7 +167,7 @@ struct TriageWindowTests {
 
         for focus in StageNavigation.countedFocuses {
             guard let key = fixtures[focus] else { continue }
-            let keys = StageNavigation.naturalKeys(for: focus, in: all, today: today, now: now)
+            let keys = StageNavigation.naturalKeys(for: focus, in: all, context: .at(today, now: now))
             if focus == .scout {
                 #expect(!keys.contains(key), "triage still offers a show \(400) days out")
             } else {
@@ -184,14 +184,14 @@ struct TriageWindowTests {
         let ctx = try context()
         let fixtures = farOutFixtures(ctx)
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
-        let queue = StageNavigation.queueKeys(in: all, reachedOutKeys: [], today: today, now: now)
+        let queue = StageNavigation.queueKeys(in: all, reachedOutKeys: [], context: .at(today, now: now))
 
         #expect(!queue.contains(fixtures[.scout]!))
         #expect(queue.contains(fixtures[.prep]!))
         #expect(!StageNavigation.opensInQueue(key: fixtures[.scout]!, in: all, reachedOutKeys: [],
-                                              today: today, now: now))
+                                              context: .at(today, now: now)))
         #expect(StageNavigation.opensInQueue(key: fixtures[.review]!, in: all, reachedOutKeys: [],
-                                             today: today, now: now))
+                                             context: .at(today, now: now)))
     }
 
     // MARK: - Inquiries ignore the window
@@ -225,7 +225,7 @@ struct TriageWindowTests {
                               eventName: "Gala")
         inquiry.performanceDate = day(700)
 
-        let inputs = AgentInputs.from(prospects: [], inquiries: [inquiry], now: now, today: today,
+        let inputs = AgentInputs.from(prospects: [], inquiries: [inquiry], context: .at(today, now: now),
                                       gmailConnected: true, prepRunning: false, replyRunAlive: false)
         #expect(inputs.toReview == 1)
     }

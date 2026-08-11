@@ -143,8 +143,8 @@ struct ProspectStageReachabilityGuardTests {
         let reachedOutKeys = Set(ReachedOutQueue.activeWithDates(from: all, now: now)
             .map(\.prospect.naturalKey))
         let stage = StageNavigation.stage(containing: "show-1", in: all, reachedOutKeys: reachedOutKeys,
-                                          today: today, now: now)
-        let inputs = AgentInputs.from(prospects: all, now: now, today: today, gmailConnected: true,
+                                          context: .at(today, now: now))
+        let inputs = AgentInputs.from(prospects: all, context: .at(today, now: now), gmailConnected: true,
                                       prepRunning: false, replyRunAlive: false)
         return (stage, AgentRoster.statuses(inputs))
     }

@@ -46,17 +46,17 @@ struct QueueShowableIsOneFilterTests {
 
     // The rows the Scout stage actually puts on screen.
     private func scoutRows(_ ps: [Prospect]) -> [String] {
-        StageNavigation.focusedKeys(stage: .scout, leadKeys: [], in: ps, today: today, now: now)
+        StageNavigation.focusedKeys(stage: .scout, leadKeys: [], in: ps, context: .at(today, now: now))
     }
 
     private func opens(_ ps: [Prospect], _ key: String, reachedOut: Set<String> = []) -> Bool {
         StageNavigation.opensInQueue(key: key, in: ps, reachedOutKeys: reachedOut,
-                                     today: today, now: now)
+                                     context: .at(today, now: now))
     }
 
     private func inAStage(_ ps: [Prospect], _ key: String, reachedOut: Set<String> = []) -> Bool {
         StageNavigation.stage(containing: key, in: ps, reachedOutKeys: reachedOut,
-                              today: today, now: now) != nil
+                              context: .at(today, now: now)) != nil
     }
 
     // MARK: - The invariant
@@ -206,7 +206,7 @@ struct QueueShowableIsOneFilterTests {
         show(ctx, "cut", status: .dismissed)
 
         let keys = StageNavigation.queueKeys(in: try all(ctx), reachedOutKeys: [],
-                                             today: today, now: now)
+                                             context: .at(today, now: now))
 
         #expect(keys == ["near", "far-drafted", "to-review"])
     }
@@ -219,7 +219,7 @@ struct QueueShowableIsOneFilterTests {
         show(ctx, "pitched", status: .contacted)
 
         let keys = StageNavigation.queueKeys(in: try all(ctx), reachedOutKeys: ["pitched"],
-                                             today: today, now: now)
+                                             context: .at(today, now: now))
 
         #expect(keys == ["near"])
     }
@@ -236,7 +236,7 @@ struct QueueShowableIsOneFilterTests {
         show(ctx, "cut", status: .dismissed)
 
         let ps = try all(ctx)
-        for key in StageNavigation.queueKeys(in: ps, reachedOutKeys: [], today: today, now: now) {
+        for key in StageNavigation.queueKeys(in: ps, reachedOutKeys: [], context: .at(today, now: now)) {
             #expect(opens(ps, key), "the masthead counts \(key) but searching it opens Archive")
         }
     }

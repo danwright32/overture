@@ -248,9 +248,7 @@ struct QueueView: View {
             sources: watchedSources,
             refusals: ContactRefusal.ledger(from: refusedAddresses),
             overrides: ProducerOverrides(promotedRows: promotedProducers, demotedRows: demotedHouses),
-            geo: geo,
-            today: today,
-            now: now,
+            context: StageContext(now: now, geo: geo),
             focusedStage: focusedStage,
             focusedKeys: focusedKeys,
             // #1770: read once for the whole pass, from the cache rather than from the token file.
@@ -351,7 +349,7 @@ struct QueueView: View {
     // so a ticked date means exactly the shows under that heading and nothing else.
     private func scoutRows(_ data: RenderData) -> [QueueItem] {
         let wanted = Set(StageNavigation.focusedKeys(stage: .scout, leadKeys: [],
-                                                     in: prospects, today: today, now: Date(), geo: geo))
+                                                     in: prospects, context: StageContext(geo: geo)))
         return data.items.filter { wanted.contains($0.id) }
     }
 
@@ -725,7 +723,7 @@ struct QueueView: View {
     private func stageEmptyState(for stage: StageFocus, data: RenderData) -> some View {
         // #1962: the pass's resolved geography, not a fresh unresolved one, so an empty stage does
         // not re-resolve every show's place to count the others.
-        let counts = StageNavigation.counts(in: prospects, today: today, now: Date(), geo: data.geo)
+        let counts = StageNavigation.counts(in: prospects, context: StageContext(geo: data.geo))
         // #1194: the reached-out pointer counts SHOWS (StageEmptyState labels it "N shows you've pitched"),
         // so it matches the pill; data.reachedOut is per-recipient, so collapse to distinct shows here.
         let reachedOutShows = Set(data.reachedOut.map(\.prospect.naturalKey)).count
@@ -793,8 +791,8 @@ struct QueueView: View {
         // set here are the initial/fallback values; focusedSection recomputes both live while in stage mode.
         focusedStage = status.focus
         focusedHeading = "\(status.name): \(status.detail)"
-        focusedKeys = StageNavigation.naturalKeys(for: status.focus, in: prospects, today: today,
-                                                  now: Date(), geo: geo)
+        focusedKeys = StageNavigation.naturalKeys(for: status.focus, in: prospects,
+                                                  context: StageContext(geo: geo))
     }
 
     // #236/#1134: land on a deep-linked lead by focusing the STAGE that holds it (the pipeline picker is
@@ -808,7 +806,7 @@ struct QueueView: View {
         // lead is in no stage (RootView routes truly unreachable leads to Archive, so this is a safety net).
         focusedStage = StageNavigation.stage(containing: key, in: prospects,
                                              reachedOutKeys: reachedOutKeys,
-                                             geo: geo) ?? StageNavigation.openingStage
+                                             context: StageContext(geo: geo)) ?? StageNavigation.openingStage
         focusedKeys = nil   // #1140: stage mode re-derives its own membership; no frozen key set
         focusedHeading = nil
         sendState.highlight(key)

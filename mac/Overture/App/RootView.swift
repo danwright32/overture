@@ -224,7 +224,8 @@ struct RootView: View {
     // Scoped by StageNavigation.stagedKeys, the same predicate the stage lists render from, so a pick
     // can only ever land on a row he can see.
     private var searchableItems: [QueueItem] {
-        let scope = StageNavigation.stagedKeys(in: nonDismissedProspects, reachedOutKeys: reachedOutKeys, geo: geo)
+        let scope = StageNavigation.stagedKeys(in: nonDismissedProspects, reachedOutKeys: reachedOutKeys,
+                                               context: StageContext(geo: geo))
         return allItems.filter { scope.contains($0.id) }
     }
 
@@ -241,7 +242,7 @@ struct RootView: View {
     // branch, but the Archive branch stays for the follow-up taps, which can name a closed show.
     private func routeDeepLink(toKey key: String) {
         if StageNavigation.opensInQueue(key: key, in: nonDismissedProspects,
-                                        reachedOutKeys: reachedOutKeys, geo: geo) {
+                                        reachedOutKeys: reachedOutKeys, context: StageContext(geo: geo)) {
             deepLinkedKey = key
         } else {
             openArchive(key: key)

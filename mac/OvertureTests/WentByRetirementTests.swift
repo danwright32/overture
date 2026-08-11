@@ -170,7 +170,7 @@ struct WentByRetirementTests {
         show(ctx, "undated", date: nil)
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
 
-        let waiting = Set(StageNavigation.naturalKeys(for: .scout, in: all, today: today))
+        let waiting = Set(StageNavigation.naturalKeys(for: .scout, in: all, context: .at(today)))
         let opened = Set(all.filter { $0.hasOpened(today: today) }.map(\.naturalKey))
 
         #expect(opened == Set(["past", "still-running"]))
@@ -188,6 +188,6 @@ struct WentByRetirementTests {
         let running = show(ctx, "run", date: "2026-07-09", runEnd: "2026-07-20")
 
         #expect(running.hasOpened(today: today))
-        #expect(StageNavigation.naturalKeys(for: .scout, in: [running], today: today).isEmpty)
+        #expect(StageNavigation.naturalKeys(for: .scout, in: [running], context: .at(today)).isEmpty)
     }
 }

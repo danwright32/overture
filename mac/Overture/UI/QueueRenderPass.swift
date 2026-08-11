@@ -63,9 +63,10 @@ enum QueueRenderPass {
         // same rule as everything else here: this pass may not reach the store or the filesystem itself.
         var refusals: ContactRefusal.Ledger = .none
         var overrides: ProducerOverrides = .none
-        var geo: GeoRefusals = .none
-        var today: String
-        var now: Date = Date()
+        // #2365: the day, the instant and Dan's geography refusals as ONE value. They were three
+        // independent fields, so an Inputs could carry a `today` that was not the Eastern day of its own
+        // `now`, and every sweep below reasoned in one while dating in the other. See StageContext.
+        var context: StageContext
         var focusedStage: StageFocus?
         var focusedKeys: [String]?
         var gmailConnected: Bool = false
@@ -82,34 +83,33 @@ enum QueueRenderPass {
     @MainActor
     static func make(_ i: Inputs) -> QueueView.RenderData {
         // #1962: every show's place worked out once for this pass and shared by the three sweeps below.
-        let geo = i.geo.resolving(i.prospects.all)
+        let context = i.context.resolvingPlaces(of: i.prospects.all)
+        let geo = context.geo
         // #1121/#1774: the whole-store derivation, paid ONCE here and threaded down, rather than by each
         // computed property that wants a row.
         let items = QueueModel.items(from: i.prospects.all, answers: i.orgAnswers,
                                      corpus: i.allProspects.all, overrides: i.overrides,
-                                     sources: i.sources, refusals: i.refusals, now: i.now)
+                                     sources: i.sources, refusals: i.refusals, now: context.now)
         #if DEBUG
         QueueRenderCounter.recordDerivation(inputs: i.trace, rows: items)
         #endif
-        let reachedOut = ReachedOutQueue.activeWithDates(from: i.prospects.all, now: i.now)
+        let reachedOut = ReachedOutQueue.activeWithDates(from: i.prospects.all, now: context.now)
         let reachedOutKeys = Set(reachedOut.map(\.prospect.naturalKey))
         // #1567: counted through StageNavigation, the same predicate as the pills beneath it, so the
         // masthead can no longer state a smaller backlog than the pills it sits above.
         let inAStage = StageNavigation.queueKeys(in: i.prospects.all, reachedOutKeys: reachedOutKeys,
-                                                 today: i.today, now: i.now, geo: geo)
+                                                 context: context)
         let visible = items.filter { inAStage.contains($0.id) }
         // #1774/#1140: in stage mode membership is re-derived live (a sent draft drops out); in leads mode
         // the frozen key set stands. The dispatch lives in StageNavigation so it is tested.
         let wanted = Set(StageNavigation.focusedKeys(stage: i.focusedStage, leadKeys: i.focusedKeys ?? [],
-                                                     in: i.prospects.all, today: i.today, now: i.now,
-                                                     geo: geo))
+                                                     in: i.prospects.all, context: context))
         let focusedRows = items.filter { wanted.contains($0.id) }
         return QueueView.RenderData(
             items: items, visible: visible,
-            agentInputs: AgentInputs.from(prospects: i.prospects.all, inquiries: i.inquiries, now: i.now,
-                                          today: i.today, gmailConnected: i.gmailConnected,
-                                          prepRunning: i.prepRunning, replyRunAlive: i.replyRunAlive,
-                                          geo: geo),
+            agentInputs: AgentInputs.from(prospects: i.prospects.all, inquiries: i.inquiries,
+                                          context: context, gmailConnected: i.gmailConnected,
+                                          prepRunning: i.prepRunning, replyRunAlive: i.replyRunAlive),
             gmailConnected: i.gmailConnected,
             probeRunning: i.probeRunning,
             reachedOut: reachedOut,
@@ -118,7 +118,7 @@ enum QueueRenderPass {
             fanOutLine: fanOutWarning(i.prospects.all),
             focusedRows: focusedRows,
             dateGroups: QueueModel.groupByDate(focusedRows),
-            inquiryRows: inquiryRows(i.inquiries, stage: i.focusedStage, now: i.now),
+            inquiryRows: inquiryRows(i.inquiries, stage: i.focusedStage, now: context.now),
             geo: geo)
     }
 
