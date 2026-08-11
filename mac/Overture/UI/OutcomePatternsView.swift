@@ -29,6 +29,12 @@ struct OutcomePatternsView: View {
             }
             .padding(OVSpacing.lg)
 
+            // #2035: what happened BEFORE the sends the rest of this sheet is about. Placed above the
+            // picker so the sheet reads in the order the shows travel, and because the leak it reports
+            // (a chance already paid for and never written to) is the part Dan can still act on.
+            funnelSection
+            Divider()
+
             Picker("Group by", selection: $dimension) {
                 ForEach(OutcomePatterns.Dimension.allCases, id: \.self) { Text($0.label).tag($0) }
             }
@@ -62,6 +68,31 @@ struct OutcomePatternsView: View {
             autoBookedList(for: target.value)
         }
         .sheet(isPresented: $showExperiments) { ExperimentReportView() }
+    }
+
+    private var funnel: OutreachFunnel.Counts {
+        OutreachFunnel.counts(from: prospects, today: EasternDate.today())
+    }
+
+    // #2035: the stages before the send. Hidden entirely on an empty store, where the sheet's own empty
+    // state below already says there is nothing yet and a row of zeroes would only repeat it.
+    @ViewBuilder private var funnelSection: some View {
+        let counts = funnel
+        if counts.scouted > 0 {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(OutreachFunnel.stageLine(counts))
+                    .font(OVType.meta).foregroundStyle(OVColor.ink)
+                if let waiting = OutreachFunnel.waitingLine(counts) {
+                    Text(waiting).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                }
+                if let expired = OutreachFunnel.expiredLine(counts) {
+                    Text(expired).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, OVSpacing.lg)
+            .padding(.bottom, OVSpacing.sm)
+        }
     }
 
     private func patternRow(name: String, tally: OutcomeTally) -> some View {

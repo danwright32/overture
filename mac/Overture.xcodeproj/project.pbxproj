@@ -272,6 +272,7 @@
 		28F26151F3518E34C0E51D77 /* DatedFolderRotation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E86D720BB6E60CD6CDD1B1F /* DatedFolderRotation.swift */; };
 		290A347454B036DCF9F14813 /* SendGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CA149E1EF787330DE7174AB /* SendGroup.swift */; };
 		291A609618420AD5C2EA98D5 /* DownbeatBookingFeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1FA3804735F297F3E7D3263 /* DownbeatBookingFeed.swift */; };
+		291BF147385AFC9F40B21FF5 /* OutreachFunnel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47F92A7A9F20F890A2695365 /* OutreachFunnel.swift */; };
 		29245907898F8127FD749062 /* Experiment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E7D15D7E6680218D019FE0A /* Experiment.swift */; };
 		293295A0EF114EB2D167A40C /* OutreachEventPhrasingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C34BF6FFEC79EE1375261E5 /* OutreachEventPhrasingTests.swift */; };
 		294622ED6F2A7C45793370C5 /* RecipientBackfillLiveStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C200298C3D0968B8EA55122 /* RecipientBackfillLiveStoreTests.swift */; };
@@ -398,6 +399,7 @@
 		3AEDB71282E1915793341D90 /* SourceYield.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A2220FC365AE8020E30A7A1 /* SourceYield.swift */; };
 		3B3BC134316174A709C526C4 /* ReachedOutAction.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43A1A3F3211BD026CAF1145C /* ReachedOutAction.swift */; };
 		3BA3D6E6BA99D391E8ACEE86 /* UpdateCommandFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AFD84D7B8C5E3F48789B6EC /* UpdateCommandFile.swift */; };
+		3BAAD9A282F36722D80FF248 /* OutreachFunnel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47F92A7A9F20F890A2695365 /* OutreachFunnel.swift */; };
 		3BB30FA715BB20466ED09B89 /* ManualRecipientCheck.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DE73AB810B6377C6FC963A5 /* ManualRecipientCheck.swift */; };
 		3C421A21BEC0F92E93B1F1BB /* ProspectRowViewLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AC295EEB93919BAE4F3339D /* ProspectRowViewLayoutTests.swift */; };
 		3C4283ACCC0E8C096D4A1D5E /* ReconcileSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4592F13E7DFB6258CFEAF69E /* ReconcileSummary.swift */; };
@@ -468,6 +470,7 @@
 		45DB2B649FE7E8E92EDE0862 /* StoreRelocation.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1D04F30321C4980D98D6325 /* StoreRelocation.swift */; };
 		462F62FA50917F91180CB032 /* Inquiry+Watchable.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD3A1B350198E62CF804B333 /* Inquiry+Watchable.swift */; };
 		46547F0746C4A035670849CF /* VoiceGuidanceStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31A5557CED5338E486C41325 /* VoiceGuidanceStoreTests.swift */; };
+		465D0E2D58598CF1A7E96E88 /* OutreachFunnelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 482581107424763B4F0031A8 /* OutreachFunnelTests.swift */; };
 		4675E607650CB8346BCC5625 /* AnsweredReply.swift in Sources */ = {isa = PBXBuildFile; fileRef = E12578D9D92A2070A1079B76 /* AnsweredReply.swift */; };
 		4691B0C4ECC00E9A2FBB24A7 /* SourceFetcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77EB99B0DABB30BA99AE149F /* SourceFetcher.swift */; };
 		46BB3A176C0764D1D4559594 /* LeadMonthsReadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0ACE884CD7428E918C0764DC /* LeadMonthsReadTests.swift */; };
@@ -1912,8 +1915,10 @@
 		47DB12405A6B9085B8C20464 /* HandoffPathGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandoffPathGuardTests.swift; sourceTree = "<group>"; };
 		47E3BEB909F7601330800414 /* LaunchMigrationsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchMigrationsTests.swift; sourceTree = "<group>"; };
 		47E6C95AEA3C47DC69892A97 /* VenueKeyRealignmentMigration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueKeyRealignmentMigration.swift; sourceTree = "<group>"; };
+		47F92A7A9F20F890A2695365 /* OutreachFunnel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutreachFunnel.swift; sourceTree = "<group>"; };
 		480591F87B3AF4719ED5ACD4 /* ScoutExtractService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutExtractService.swift; sourceTree = "<group>"; };
 		48075061F7E6A75F693232B5 /* InquiryQueueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InquiryQueueTests.swift; sourceTree = "<group>"; };
+		482581107424763B4F0031A8 /* OutreachFunnelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutreachFunnelTests.swift; sourceTree = "<group>"; };
 		483ACB043AC4675CDD9C29AB /* OutcomePatternsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutcomePatternsTests.swift; sourceTree = "<group>"; };
 		486C8D1CE294F25E43537873 /* ManualPrepPrefillTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualPrepPrefillTests.swift; sourceTree = "<group>"; };
 		48833E92062362801EA65D62 /* OvertureTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = OvertureTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -3200,6 +3205,7 @@
 				AA9397FDF7E49A3E34623AD3 /* OutcomeStatsTests.swift */,
 				5C34BF6FFEC79EE1375261E5 /* OutreachEventPhrasingTests.swift */,
 				9F268C4A89563EFC6D069A8D /* OutreachFieldClassificationTests.swift */,
+				482581107424763B4F0031A8 /* OutreachFunnelTests.swift */,
 				973A2EC8D67BB0AF24543FC4 /* OvationTixCalendarTests.swift */,
 				5935B68EAA469B53F220382C /* OVCapsuleActionGuardTests.swift */,
 				651C66AF621BAACD0184D491 /* OVColorResolutionTests.swift */,
@@ -3820,6 +3826,7 @@
 				946729B6E11E8A1EDB184CF4 /* OutcomeStats.swift */,
 				8CE6BA3981BE2F033FEC3FC2 /* OutgoingPitch.swift */,
 				C85FC218BCBE32C6D3DB1556 /* OutreachEventPhrasing.swift */,
+				47F92A7A9F20F890A2695365 /* OutreachFunnel.swift */,
 				49F5F8AA3F96586760B26AC8 /* OvertureDeepLink.swift */,
 				FEC6CEBFA28D94E2267F6F15 /* PerformanceStatus.swift */,
 				26F85F446011AAC616D8FFED /* Plural.swift */,
@@ -4388,6 +4395,7 @@
 				917A4DA074AC19F9B7821AF1 /* OutcomeStats.swift in Sources */,
 				1FEEDDF1CB5A79A073268D78 /* OutgoingPitch.swift in Sources */,
 				5F90A68D97096B6D6C17790A /* OutreachEventPhrasing.swift in Sources */,
+				291BF147385AFC9F40B21FF5 /* OutreachFunnel.swift in Sources */,
 				52E76A17AD9CE63A23EB2054 /* OvationTixCalendar.swift in Sources */,
 				A4B68CDC97718352386E3C4E /* OvationTixExtractor.swift in Sources */,
 				5745D44FC39BED4239569B2F /* OvertureApp.swift in Sources */,
@@ -5156,6 +5164,8 @@
 				4DEFBD2B2BDBAC6D89944CD5 /* OutreachEventPhrasing.swift in Sources */,
 				293295A0EF114EB2D167A40C /* OutreachEventPhrasingTests.swift in Sources */,
 				BC7A059003332F43C46294A8 /* OutreachFieldClassificationTests.swift in Sources */,
+				3BAAD9A282F36722D80FF248 /* OutreachFunnel.swift in Sources */,
+				465D0E2D58598CF1A7E96E88 /* OutreachFunnelTests.swift in Sources */,
 				8B9F434A1F4E7A472827C431 /* OvationTixCalendar.swift in Sources */,
 				1CAB9FDD06E9B8C2E67563C6 /* OvationTixCalendarTests.swift in Sources */,
 				47A534E9A18EF7A1718E578A /* OvationTixExtractor.swift in Sources */,
