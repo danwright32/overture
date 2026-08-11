@@ -971,6 +971,19 @@ enum QueueModel {
         (url(item.sourceListingURL), url(item.websiteURL))
     }
 
+    // #1643: where a click on the card's OWN area goes, which is the page its listing link goes to.
+    // Dan, 2026-07-28: "I should be able to click anywhere on the row, not just on the text." The only
+    // thing a click on a card could reach was that link, so the row now reaches the same page.
+    //
+    // Read from `rowReferenceLinks` rather than from the stored field, so the row and the visible link
+    // are one answer and cannot come to promise different pages. Deliberately NOT the group website: that
+    // is the act's own site rather than this performance, a different promise, and a card whose empty
+    // space quietly went somewhere Dan never clicked toward would be worse than one that does nothing.
+    // A card with no listing therefore has no destination, and carries no row target at all.
+    static func cardOpenDestination(_ item: QueueItem) -> URL? {
+        rowReferenceLinks(item).listing
+    }
+
     // #1680: what to call the listing link. A per-event link says "Source listing" as it always has; a link
     // that is merely the source's own calendar says so, because the two are different promises and Dan
     // decides whether to click on the strength of the label. Derived rather than stored: the fallback link IS
@@ -2317,6 +2330,18 @@ extension BulkDismiss.Show {
 // #1742: the genre control's own words and glyph, named here rather than inline so the sentence a
 // person HEARS appears in the copy inventory beside the ones they read, and so the label cannot quietly
 // become a raw stored value ("other" is a database word, "Performance" is Dan's).
+// #1643: the whole card is a click target, and this is how it says so to anyone not using a mouse. The
+// enlarged target is a convenience laid over a control the card already draws (the listing link), so it
+// adds an ACTION on the card rather than a second focus stop per row: a queue is hundreds of cards, and a
+// second tab stop on each of them would cost a keyboard user a great deal for a page they can already
+// reach. The action names the same page the link names (#1680 keeps those two apart), so what a screen
+// reader announces and what the click opens can never be different destinations.
+enum CardOpenCopy {
+    static func accessibilityLabel(show: String, linkLabel: String) -> String {
+        "Open the \(linkLabel.lowercased()) for \(show)"
+    }
+}
+
 enum GenreControlCopy {
     // Sits after the genre at rest, never on hover alone: Dan met this row in a screenshot, and a cue
     // that needs a mouse does not exist in one. A chevron rather than the title's pencil because what

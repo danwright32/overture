@@ -15,6 +15,10 @@ struct ProspectRowView: View {
     let today: String
     let onKeep: () -> Void
     let onDismiss: (ShowOutcome) -> Void
+    // #1643: how the card opens the page a click on its own area asks for. Injected the way every other
+    // opener in this app is (AgentLogLocation, UpdateCommandFile, GmailAuthManager), so a test can watch
+    // where a click went instead of launching a browser.
+    var openCardLink: (URL) -> Void = { NSWorkspace.shared.open($0) }
     var onUnapprove: () -> Void = {}
     var onSkipDraft: () -> Void = {}
     // #367
@@ -135,34 +139,7 @@ struct ProspectRowView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: OVSpacing.sm) {
-            HStack(alignment: .top, spacing: OVSpacing.md) {
-                if item.isBooked { bookedSeal } else { fitSeal }
-                VStack(alignment: .leading, spacing: OVSpacing.xs) {
-                    header
-                    showSummaryNote
-                    tooFarReasonNote
-                    feedStatusFlag
-                    if !item.fitReason.isEmpty && !item.classificationOverriddenByDan {
-                        Text(item.fitReason)
-                            .font(OVType.reason)
-                            .foregroundStyle(OVColor.inkSoft)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .padding(.top, 2)   // #340: let the caveat breathe instead of crowding the metadata
-                    }
-                    tags
-                    possibleMatchQuestion
-                    relatedRunNote
-                    linkedEngagementNote
-                    orgDoNotContactFlag
-                    bookingSuggestionFlag
-                    alreadyCoveredFlag
-                    performerMatchFlag
-                    autoBookedTag
-                    links
-                }
-                Spacer(minLength: OVSpacing.sm)
-                actions
-            }
+            triageRow
             if item.hasDraft {
                 DraftReviewView(
                     item: item,
@@ -228,6 +205,76 @@ struct ProspectRowView: View {
         .sheet(isPresented: $showingManualPrep) {
             ManualPrepSheet(groupName: item.groupName, prefill: manualPrepPrefill(),
                             onSave: onPrepManually)
+        }
+    }
+
+    // #1643: the card's own row, carrying the whole-row click target. Dan, 2026-07-28: "I should be able
+    // to click anywhere on the row, not just on the text." Everything he named (the space beside the
+    // title, the padding around the fit score, the blank right-hand column) is inside this row, and all of
+    // it now opens the same page the listing link opens.
+    //
+    // A GESTURE on the row, never a Button wrapped around it: a control around the card's contents takes
+    // every click inside it, so Keep, Dismiss, the pills, the rename pencil and the links would all stop
+    // being their own targets the moment the row became one. A gesture on an ancestor is the opposite:
+    // the innermost control wins, and the row only answers for the space nothing else claims.
+    //
+    // The row target ends here rather than covering the card, so the draft-review panel below it keeps
+    // every click. That panel is where Dan reads and edits an email before it goes; a stray click in its
+    // margins pulling a browser in front of him would be a worse defect than the one this fixes.
+    //
+    // Offered only where there is a page to open. A row-wide click that silently did nothing is the state
+    // this issue exists to end, so it must not come back as the behaviour of the cards with no listing.
+    @ViewBuilder private var triageRow: some View {
+        if let destination = QueueModel.cardOpenDestination(item) {
+            triageRowContent
+                .contentShape(Rectangle())
+                .onTapGesture { openCardLink(destination) }
+                // Reachable without a mouse, and it says what it opens. An ACTION on the card rather than
+                // another focusable control: the listing link inside the row is already a real, labelled,
+                // keyboard-reachable way to the same page, and a second stop on each of hundreds of cards
+                // would cost a keyboard user far more than it gave. Nothing is drawn for this, so the card
+                // gains no colour to check in either theme; the affordance Dan reads at rest is the link
+                // itself, which the row now simply agrees with.
+                .accessibilityElement(children: .contain)
+                .accessibilityAction(named: Text(cardOpenLabel)) { openCardLink(destination) }
+        } else {
+            triageRowContent
+        }
+    }
+
+    private var cardOpenLabel: String {
+        CardOpenCopy.accessibilityLabel(show: item.groupName,
+                                        linkLabel: QueueModel.listingLinkLabel(item))
+    }
+
+    private var triageRowContent: some View {
+        HStack(alignment: .top, spacing: OVSpacing.md) {
+            if item.isBooked { bookedSeal } else { fitSeal }
+            VStack(alignment: .leading, spacing: OVSpacing.xs) {
+                header
+                showSummaryNote
+                tooFarReasonNote
+                feedStatusFlag
+                if !item.fitReason.isEmpty && !item.classificationOverriddenByDan {
+                    Text(item.fitReason)
+                        .font(OVType.reason)
+                        .foregroundStyle(OVColor.inkSoft)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 2)   // #340: let the caveat breathe instead of crowding the metadata
+                }
+                tags
+                possibleMatchQuestion
+                relatedRunNote
+                linkedEngagementNote
+                orgDoNotContactFlag
+                bookingSuggestionFlag
+                alreadyCoveredFlag
+                performerMatchFlag
+                autoBookedTag
+                links
+            }
+            Spacer(minLength: OVSpacing.sm)
+            actions
         }
     }
 
@@ -681,6 +728,12 @@ struct ProspectRowView: View {
                             .font(OVType.meta)
                             .foregroundStyle(OVColor.inkSoft)
                             .textSelection(.enabled)
+                            // #1643: the address takes its OWN click, so reaching for it never opens the
+                            // show's page instead. The row-wide target is a gesture on an ancestor, and
+                            // the innermost gesture wins, so this empty one is what says "this text is
+                            // not the row": without it a click aimed at an address Dan is about to copy
+                            // would pull a browser in front of him.
+                            .onTapGesture { }
                             // Wrap rather than truncate: an address Dan cannot read in full is no better
                             // than no address, and this column is narrow.
                             .fixedSize(horizontal: false, vertical: true)

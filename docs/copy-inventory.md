@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1216 sentences**.
+Every sentence Overture can say to Dan: **1217 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1220,6 +1220,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OmniFocusSync.swift`
 "Open logs folder (nothing logged yet)"
     `App/MenuBarStatus.swift`
+"Open the \(linkLabel.lowercased()) for \(show)"
+    `UI/QueueView+Model.swift`
 "Opening Google sign-in…"
     `UI/OnboardingView.swift`
 "Organisations Overture may have read wrongly. Everything else it decided is on the show itself."
