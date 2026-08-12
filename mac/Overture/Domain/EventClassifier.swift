@@ -80,12 +80,57 @@ enum EventClassifier {
         text.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
     }
 
+    // #2508: ANCHORED, and every term that can be pluralised carries an optional trailing s.
+    //
+    // These were bare alternations, so they fired inside longer words: `Operation Mincemeat: Mission
+    // Recast` matched "opera" and read as an organisation, `Sam Gelband` matched "band", and
+    // `Let's Get Schooled!` matched "school" and was carried into strongProfile with it.
+    //
+    // The anchor cannot go on alone. Measured over every distinct presenter and title in the live store,
+    // anchoring by itself stopped matching `NY Phil Ensembles at Merkin Hall`, because "ensemble" no
+    // longer matched its own plural, and `Debuts on Debuts Niche Media Productions`, which is a debut
+    // showcase. So the plural sweep is part of the same change, not a follow-up.
+    //
+    // Matched against `wordSeparated(_:)` below rather than the raw string, which is the other half the
+    // measurement turned up. See its own note.
     private static let agencySignal =
-        #"competition|winners|rising stars|invitational|young artists?|debut|showcase|celebrations international|concerts international|distinguished concerts|mid.?america|national concerts|jam generation|tour|gala of"#
+        #"\b(competition|winners|rising stars|invitational|young artists?|debuts?|showcase|celebrations international|concerts international|distinguished concerts|mid.?america|national concerts|jam generation|tours?|gala of)\b"#
     private static let producerSignal =
-        #"choir|chorus|chorale|choral|orchestra|philharmonic|ensemble|consort|school|academy|conservatory|university|college|institute|theatre|theater|company|opera|ballet|dance|society|center|centre|foundation|church|temple|youth|community|collective|quartet|quintet|band"#
+        #"\b(choirs?|chorus|choruses|chorale|chorales|choral|orchestras?|philharmonics?|ensembles?|consorts?|schools?|academy|academies|conservatory|conservatories|universit(y|ies)|colleges?|institutes?|theatres?|theaters?|company|companies|operas?|ballets?|dance|societ(y|ies)|centers?|centres?|foundations?|churches?|church|temples?|youth|communit(y|ies)|collectives?|quartets?|quintets?|bands?)\b"#
     private static let strongProfile =
-        #"choir|chorus|chorale|choral|school|academy|conservatory|youth|community|children|ensemble|opera|ballet|dance|theatre|theater|cultural|university|college|church|temple"#
+        #"\b(choirs?|chorus|choruses|chorale|chorales|choral|schools?|academy|academies|conservatory|conservatories|youth|communit(y|ies)|children|ensembles?|operas?|ballets?|dance|theatres?|theaters?|cultural|universit(y|ies)|colleges?|churches?|church|temples?)\b"#
+
+    // A word glued to a prefix in camel case is still that word, and a plain word boundary refuses it.
+    // Found by measuring the anchored lists over the live store rather than by reading them: it would
+    // have silently stopped recognising `PUBLIQuartet` (a string quartet) and `iSchool of Music & Art`
+    // (a school) as organisations, and each loss would have looked exactly like the fix working.
+    //
+    // The lowercase-to-uppercase transition is precisely what tells those apart from the shapes that
+    // must STAY refused: "Gelband" and "Schooled" have no transition, so they are left glued and go on
+    // matching nothing. The second pattern is the acronym case, splitting `PUBLIQuartet` before its last
+    // capital rather than after the run.
+    static func wordSeparated(_ text: String) -> String {
+        var out = text.replacingOccurrences(of: #"([a-z0-9])([A-Z])"#, with: "$1 $2",
+                                            options: .regularExpression)
+        out = out.replacingOccurrences(of: #"([A-Z]+)([A-Z][a-z])"#, with: "$1 $2",
+                                       options: .regularExpression)
+        return out
+    }
+
+    // #2508: exposed so the rules can be tested as rules, and so a test names the QUESTION ("does this
+    // string name an organisation") rather than restating the regex, which would be a second copy of the
+    // thing under test (L103).
+    static func namesAnOrganisation(_ party: String) -> Bool {
+        matches(wordSeparated(party), producerSignal)
+    }
+
+    static func hasStrongProfileSignal(_ text: String) -> Bool {
+        matches(wordSeparated(text), strongProfile)
+    }
+
+    static func hasAgencySignal(_ text: String) -> Bool {
+        matches(wordSeparated(text), agencySignal)
+    }
 
     // #2504: does this act line name the room it plays in? Then the show is the building's own, and the
     // building is never a party Dan may pitch.
@@ -186,8 +231,8 @@ enum EventClassifier {
             && !titleNamesTheRoom(event.title, venue: venue)
         let party = actIsTheParty ? event.title : presenter
 
-        let isAgency = matches(haystack, agencySignal)
-        let namesAnOrganisation = matches(party, producerSignal) && !isAgency
+        let isAgency = hasAgencySignal(haystack)
+        let namesAnOrganisation = Self.namesAnOrganisation(party) && !isAgency
 
         // Self-produced two ways, and they mean the same thing about who is putting the show on: the
         // party named IS an organisation billing its own show, or NOBODY but the act is named, which
@@ -206,7 +251,7 @@ enum EventClassifier {
         // neutral and only an act that names an organisation can reach strong.
         let profile: Profile
         if isAgency { profile = .weak }
-        else if namesAnOrganisation && matches(haystack, strongProfile) { profile = .strong }
+        else if namesAnOrganisation && hasStrongProfileSignal(haystack) { profile = .strong }
         else { profile = .neutral }
 
         let derivedPair = derived(discipline: discipline, production: production, profile: profile, venue: venue)
