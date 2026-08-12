@@ -189,7 +189,7 @@ struct RefusedSourceIsImmutableTests {
     // appear in `routes()` above. Derived by reading the file, because a hand-written list only ever checks
     // what somebody remembered and the route added next is the one missing from it (L96).
     @Test func everyRouteIsCovered() throws {
-        let source = try repoFile("mac/Overture/Domain/WatchlistEditing.swift")
+        let source = try macFile("Overture/Domain/WatchlistEditing.swift")
         let covered = Set(routes().map(\.name)).union(queries().map(\.name))
 
         var missing: [String] = []
@@ -212,8 +212,8 @@ struct RefusedSourceIsImmutableTests {
     // a route changes there. The mirror of the check above: that one covers the routes in, this one covers
     // what they can reach.
     @Test func everyStoredFieldIsInTheSnapshot() throws {
-        let model = try repoFile("mac/Overture/Domain/WatchedSource.swift")
-        let snapshotSourceText = try repoFile("mac/OvertureTests/RefusedSourceIsImmutableTests.swift")
+        let model = try macFile("Overture/Domain/WatchedSource.swift")
+        let snapshotSourceText = try macFile("OvertureTests/RefusedSourceIsImmutableTests.swift")
 
         var missing: [String] = []
         for (_, line) in SwiftSource.scannableLines(in: model) {
@@ -234,8 +234,10 @@ struct RefusedSourceIsImmutableTests {
     }
 
     // Read through the shared search, which halts loudly if the repo is not there: a file this could not
-    // find would make every assertion above vacuously true, which is #1967's exact failure.
-    private func repoFile(_ path: String) throws -> String {
-        try String(contentsOf: RepoRoot.url.appendingPathComponent(path), encoding: .utf8)
+    // find would make every assertion above vacuously true, which is #1967's exact failure. Paths are
+    // relative to the mac folder, which is the convention SourceGuardCoverageGuardTests resolves every
+    // path literal in a test file against, so a file that moves is caught there too.
+    private func macFile(_ path: String) throws -> String {
+        try String(contentsOf: RepoRoot.mac.appendingPathComponent(path), encoding: .utf8)
     }
 }
