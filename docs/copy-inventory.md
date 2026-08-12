@@ -31,7 +31,9 @@ What is not, and why:
 - `Domain/DraftCheck.swift`: draft lint needles: phrases the linter HUNTS FOR, never words it says (#915)
 - `Domain/DraftCheck.swift`: Words MATCHED in a draft, never shown to Dan (#1887)
 - `Domain/DriftedRunMerge.swift`: developer diagnostic log, not the app's own voice (#915)
+- `Domain/EventLocationFill.swift`: A location VALUE written into a data field, never a sentence Dan reads (#2378)
 - `Domain/EventPlace.swift`: Place names the resolver MATCHES against, never says: Dan reads a verdict, not this data (#970)
+- `Domain/EventPlace.swift`: A location VALUE written into a data field, never a sentence Dan reads (#2378)
 - `Domain/FeedMovementLog.swift`: a machine-parsed diagnostic log line for #913, never shown to Dan
 - `Domain/FollowUp.swift`: outbound email: a recipient reads this, not Dan (#915)
 - `Domain/LaunchMigrations.swift`: developer diagnostic log, not the app's own voice (#915)

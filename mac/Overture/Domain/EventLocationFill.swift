@@ -93,12 +93,36 @@ enum EventLocationFill {
             if let state = EventPlace.stateInClause(clauses[i]) {
                 guard i > 0 else { return nil }
                 let city = clauses[i - 1]
-                guard !city.isEmpty, city.first?.isNumber != true else { return nil }
+                guard !city.isEmpty else { return nil }
+                // #2378: the clause before the state is a STREET, so the town it might still name is
+                // written at its end with no comma before it. `Peter Jay Sharp Theatre, 2537 Broadway at
+                // 95th St. New York, NY 10025-6990` is the live case: one missing comma was the whole
+                // difference between placing that room and reading it as unplaceable, with four shows
+                // waiting on it and the words "New York, NY" sitting in the string.
+                //
+                // Refusing outright is what the old guard did, and its intent was right: a street must
+                // never become a town. `StreetClause.trailingPlace` keeps that intent and answers nil for
+                // everything it is not sure of, so a street with no town still places nothing.
+                // copy-inventory:ignore-start  A location VALUE written into a data field, never a sentence Dan reads (#2378)
+                if StreetClause.isAddress(city) {
+                    guard let town = StreetClause.trailingPlace(city) else { return nil }
+                    return "\(town), \(state)"
+                }
+                // copy-inventory:ignore-end
                 return "\(city), \(state)"
             }
             // "Chatham NJ": city and state in one clause with no comma between them, a variance
             // VenueNormalization already folds for the natural key (#1064).
             if let both = cityAndStateInOneClause(clauses[i]) { return both }
+            // #2378: NYC's own shorthand, which names no state at all. `54 Below, 254 W 54th St. Cellar,
+            // NYC 10019` is the highest-volume unplaced room in the store (56 of the 78 blank rows on
+            // 2026-08-07 were 54 Below), and it fails a step earlier than the case above: "NYC 10019"
+            // names no state, so the scan finds nothing to anchor on and never looks further.
+            //
+            // Answered as a WHOLE clause rather than by teaching `stateInClause` that NYC is a state,
+            // which it is not. That also keeps this string away from the street-tail rule above: its own
+            // previous clause ends "Cellar", and reaching it would place a show in a town called Cellar.
+            if let shorthand = EventPlace.cityShorthandInClause(clauses[i]) { return shorthand }
         }
         return nil
     }

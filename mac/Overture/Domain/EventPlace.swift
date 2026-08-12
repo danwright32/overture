@@ -247,6 +247,39 @@ enum EventPlace {
         boroughs.contains(token) || boroughs.contains(where: { containsWord(token, $0) })
     }
 
+    // #2378: a clause written in NYC's own shorthand, which names no US state and so anchors nothing.
+    // Returns it as a "City, ST" pair fit to write into a location field, or nil.
+    //
+    // Two shapes, both live in the store: "NYC 10019" (54 Below's own listing, and 54 Below is the room
+    // that motivated the room-answer feature in the first place), and a bare borough clause such as the
+    // "Manhattan" ending `House of the Redeemer, Fabbri Mansion, 7 East 95th Street, Manhattan`.
+    //
+    // A borough is read as New York the SAME way `state(in:)` already reads one when a location string
+    // names no state, so this adds no second opinion about what a borough means. The error it can make is
+    // placing a Manhattan, Kansas show in New York, which errs toward SHOWING a show rather than hiding
+    // one, and hiding is the failure this area guards against.
+    // copy-inventory:ignore-start  A location VALUE written into a data field, never a sentence Dan reads (#2378)
+    static func cityShorthandInClause(_ clause: String) -> String? {
+        let trimmed = clause.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return nil }
+        // The leading token, so a ZIP after it is ignored, matching stateInClause's own reading.
+        let head = trimmed.split(separator: " ").first.map(String.init) ?? trimmed
+        if head.lowercased() == "nyc" { return "New York, NY" }
+        // A borough standing as the WHOLE clause. Not a word match: "Brooklyn Academy of Music" is a
+        // venue, not a statement about where anything is.
+        if boroughs.contains(trimmed.lowercased()) { return "\(trimmed), NY" }
+        return nil
+    }
+    // copy-inventory:ignore-end
+
+    // #2378: the same predicate, for a caller outside this type. `StreetClause` asks it before it will
+    // accept a ONE word tail as a town, so a single word is trusted only when it names a place this
+    // codebase already knows. Exposed rather than copied, because a second list of the five boroughs is
+    // exactly the drift `namesABorough` was consolidated to stop.
+    static func namesAKnownBorough(_ text: String) -> Bool {
+        namesABorough(text.trimmingCharacters(in: .whitespaces).lowercased())
+    }
+
     // #1744: the state a single comma clause names, as text fit to write back into a location ("NY" from
     // "NY 11217", "Alabama" from "Alabama"), or nil. Exposed so EventLocationFill reads state names
     // through THIS vocabulary rather than starting a second list of the United States, which would drift
