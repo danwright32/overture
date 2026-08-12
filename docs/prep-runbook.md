@@ -45,12 +45,15 @@ before this was codified.
   named the producer twice while this flag was `true` (#2259). Absent is not `false`: it means the app said
   nothing about it (a file predating the field, or a show that names a producer), and you behave exactly as
   you always did. See §1's route for what to do with it.
-  `organisationNamedOnListing` (v11, #2259) is the producing company the show's OWN listing page credits in
-  front of its title, read by the app off `showListing.text`. When it is present, that organisation is a
+  `organisationNamedOnListing` (v11, #2259) is the producing company the show's OWN listing page credits,
+  read by the app off `showListing.text`. When it is present, that organisation is a
   real research target and a legitimate `provenance: "presenter"`, even on an item whose
   `onlyTheActIsNamed` is `true`. ABSENT means only that the app's narrow parse (a possessive credit before
-  the title) found nothing; it is never a statement that the page names no company, and you still read the
-  text yourself. See §1's route.
+  the title, or an adjacent "produced by" / "presented by" naming a company after it, #2262) found
+  nothing; it is never a statement that the page names no company, and you still read the
+  text yourself. On a rental room this is the common case: measured across 54 Below's 61 listings on
+  2026-08-11, 17 bill a producer and 16 of those name an individual, whom the app's rule does not accept
+  as a company and leaves for you. See §1's route.
   `refusedEmails` (v12, #2392) is a list of addresses DAN HAS ALREADY STRUCK on this show. Do not
   research them, do not write to them, and do not report them back as contacts. He struck them from the
   card BEFORE this run precisely so it would not spend on them: the case that produced the field was a
