@@ -51,6 +51,13 @@ FAILURES_FILE="${OVERTURE_EVAL_FAILURES_FILE:-${REPO_ROOT}/.overture-eval-failur
 # Gitignored, and overridable so the test can point it at a throwaway path.
 RUNS_DIR="${OVERTURE_EVAL_RUNS_DIR:-${REPO_ROOT}/.overture-eval-runs}"
 RUNS_KEPT=10
+# #1867: the record of the last run that GENUINELY COMPLETED, read at push time by
+# scripts/check-prep-eval-freshness.sh to warn when the runbook has changed since. The record's
+# shape, its path and the fingerprint all live in one file shared with that reader, so a change to
+# what is written cannot leave the reader looking for something else.
+# shellcheck source=./lib/prep-eval-record.sh
+. "${SCRIPT_DIR}/lib/prep-eval-record.sh"
+LAST_RUN_FILE="$(prep_eval_last_run_file "${REPO_ROOT}")"
 
 cost_warning() {
   cat >&2 <<'WARN'
@@ -264,10 +271,34 @@ update_failures_file() {
   { printf '%s%s' "${kept}" "${_eval_failed_names}" | grep -v '^$' || true; } | sort -u > "${FAILURES_FILE}"
 }
 
+# Record that a run FINISHED, for scripts/check-prep-eval-freshness.sh to read at push time (#1867).
+#
+# Called ONLY after the last fixture in the plan has been scored. Nothing else in this script can serve
+# as that record: the run directory above is created before the first claude call, so a run killed at
+# that call leaves one indistinguishable from a finished run's, and the failures file is rewritten on a
+# schedule of its own. A record a dead run can write is worse than none, because the warning it silences
+# is the one worth reading.
+#
+# $1 is the fingerprint of the runbook this run STARTED against. An empty one means the text could not be
+# read, so nothing is written and the previous record stands: this script may not claim a runbook it
+# cannot name was evaluated.
+record_completed_run() {
+  local fingerprint="$1"
+  if [ -z "${fingerprint}" ]; then
+    echo "note: no freshness record written for this run (the runbook could not be fingerprinted)." >&2
+    echo "scripts/check-prep-eval-freshness.sh will keep reporting whatever it reported before." >&2
+    return 0
+  fi
+  prep_eval_write_last_run "${LAST_RUN_FILE}" "${fingerprint}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    "${_eval_total}" "$(list_fixtures | wc -l | tr -d ' ')" "$(( _eval_total - _eval_failures ))" \
+    "${_eval_tmp}"
+  echo "recorded this completed run in ${LAST_RUN_FILE}"
+}
+
 # $1 (optional): a single fixture name to eval instead of all of them (a cheap targeted recheck), or the
 # literal "--failed" to recheck only the fixtures the previous real run left failing (#1400).
 real_run() {
-  local only="${1:-}" plan
+  local only="${1:-}" plan runbook_fingerprint
   # Resolve the run set FIRST. A no-op selection (unknown name, or --failed with nothing left to recheck)
   # bails here as a free usage error BEFORE the SPENDS-TOKENS warning and any dependency setup, so the
   # warning only ever appears when a real run is actually about to spend (#1400 follow-up).
@@ -305,6 +336,12 @@ real_run() {
   mkdir -p "${_eval_tmp}"
   echo "keeping this run's outputs in ${_eval_tmp}"
 
+  # #1867: the runbook text this run is about to score, captured BEFORE the first fixture and written
+  # out only after the last one. Captured at the start on purpose: a runbook edited mid-run leaves the
+  # record naming the text the run began with, so afterwards the check reads STALE, which is true, since
+  # the later fixtures were scored against wording the earlier ones never saw.
+  runbook_fingerprint="$(prep_eval_runbook_fingerprint "${RUNBOOK}" || true)"
+
   _eval_failures=0
   _eval_total=0
   _eval_ran_names=""
@@ -313,6 +350,8 @@ real_run() {
 
   # Record which fixtures this run left failing so a later `--yes --failed` can recheck just those.
   update_failures_file
+
+  record_completed_run "${runbook_fingerprint}"
 
   prune_kept_runs
 
