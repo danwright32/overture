@@ -7,8 +7,23 @@ import Foundation
 // Downbeat and any one-time legacy import, so every action Dan takes feeds the next
 // scout's prior-relationship signal automatically.
 enum LocalHistory {
-    // Reasons Dan skips a prospect because HE couldn't take it (a scheduling miss), not because
-    // they're a bad fit; these stay hot future leads (1.2 / #70).
+    // Reasons Dan skips a prospect because HE couldn't take it (a scheduling miss), not because they
+    // are a bad fit. What that BUYS the org is that the miss is never mistaken for a fit judgement: it
+    // is recorded as "declined", which `Ranker.priorPoints` weights 0, exactly like a cold lead.
+    //
+    // #1820: this used to claim the opposite, that a scheduling miss kept an org hot and earned it a
+    // multiplier. That stopped being true at #1362 and was wrong for a year, and the multiplier it named
+    // existed in no line of code anywhere in the domain. (The old wording is deliberately not quoted
+    // here: the guard on this file matches TEXT, and cannot tell a line that makes the claim from one
+    // explaining the claim was retired, L103.) #1362's decision is explicit at
+    // `Ranker.priorPoints`: a past decline is usually just an old date conflict, irrelevant to a
+    // future pitch, so it neither floats a declined show to the top nor auto-corrects a warm lead.
+    //
+    // It mattered more than an ordinary stale comment because of WHERE it sits: this is the line a
+    // reader meets while deciding what a dismiss reason MEANS before choosing one, and on 2026-07-30
+    // it produced a wrong answer to Dan about which reason to pick when clearing the other shows on a
+    // night he had committed (#1819). He was told "Date conflict" would keep those orgs hot with a
+    // boost; it leaves them exactly where "Not a fit" leaves them.
     // #1821: `pitchingOtherShows` belongs here for exactly the same reason. Dan wanted the show and lost
     // it to the night's capacity, not to anything about the org, so it stays a hot future lead and scores
     // identically to a date conflict ("declined", which Ranker.priorPoints weights 0 by #1362's decision).
