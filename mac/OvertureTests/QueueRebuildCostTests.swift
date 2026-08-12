@@ -38,7 +38,7 @@ import SwiftData
 @Suite("Queue rebuild cost")
 struct QueueRebuildCostTests {
 
-    // LIVE-STORE-CLAIM(2026-08-12): every number in this struct was read from a copy of Dan's store.
+    // LIVE-STORE-CLAIM verified=2026-08-12 measure="prospects, distinct presenters, distinct venues, distinct group names, watched sources, stored organisation answers, and recipients per prospect, all read with sqlite3 from a copy of the live store"
     private enum LiveShape {
         static let prospects = 888
         static let presenters = 280
