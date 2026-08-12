@@ -61,3 +61,50 @@ struct AgentsDocSuiteCountsTests {
         #expect(doc.contains("Suite shape:"))
     }
 }
+
+// The four words the merge gate matches are named in AGENTS.md, derived from the gate itself.
+//
+// `scripts/lib/pr-completeness-guard.sh` refuses a PR whose body does not contain each of four short
+// tokens. It matches the WORD, never the answer, so a body that answers all four questions in other
+// words is refused: PR #2526 answered the first one under the heading "the code path that WRITES it"
+// and was turned away for not saying "writer". Dan's call, 2026-08-11: the gate stays exactly as
+// strict as it is, and AGENTS.md tells authors which words it matches, since the alternative
+// (accepting stems) would let an incidental mention anywhere in the body count as an answer.
+//
+// Derived from the script rather than listed here, because a hand-kept copy of another file's list
+// only ever checks what somebody remembered (L41, L96). A fifth item added to the gate without a
+// word in AGENTS.md is exactly the drift this catches, and it is the case that cannot be noticed by
+// reading either file alone.
+@Suite("AGENTS.md names the words the merge gate matches (#2526)")
+struct AgentsDocNamesGateWordsTests {
+
+    private func gateTokens() throws -> [String] {
+        let url = RepoRoot.url.appendingPathComponent("scripts/lib/pr-completeness-guard.sh")
+        let script = try String(contentsOf: url, encoding: .utf8)
+        guard let open = script.range(of: "PR_COMPLETENESS_ITEMS=("),
+              let close = script.range(of: ")", range: open.upperBound..<script.endIndex) else {
+            Issue.record("could not find PR_COMPLETENESS_ITEMS in the guard script")
+            return []
+        }
+        return script[open.upperBound..<close.lowerBound]
+            .split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: " \t\"")) }
+            .filter { !$0.isEmpty && !$0.hasPrefix("#") }
+    }
+
+    @Test func everyWordTheGateMatchesIsNamedInTheDoc() throws {
+        let tokens = try gateTokens()
+        #expect(tokens.count >= 4, "parsed \(tokens.count) tokens from the guard, expected its full list")
+
+        let doc = try String(contentsOf: RepoRoot.url.appendingPathComponent("AGENTS.md"), encoding: .utf8)
+            .lowercased()
+        let missing = tokens.filter { !doc.contains($0.lowercased()) }
+
+        #expect(missing.isEmpty, """
+            The merge gate refuses a PR body that does not contain \(missing), and AGENTS.md never \
+            says so. The gate matches the WORD and not the answer, so an author who answers the \
+            question in other words is turned away with no way to know which word was wanted. Name \
+            it in the PR body enumeration in AGENTS.md, or take it out of the gate.
+            """)
+    }
+}

@@ -56,6 +56,13 @@ already drifting from the Swift version it mirrored.
 
   A gap named in the PR body is fine. An unnamed one is the defect.
 
+  The check that enforces this matches four WORDS literally, `writer`, `reader`, `sibling` and `seen`,
+  so write the enumeration using them. It cannot read an answer, only find a word: PR #2526 answered
+  the first question in full under the heading "the code path that WRITES it" and was refused for
+  never saying "writer". Kept strict on purpose rather than accepting stems, because a looser match
+  would let an incidental mention anywhere in the body count as an answer.
+
+
 - Before pushing anything that touches a cross-language contract (`fixtures/`,
   `docs/contracts.md`), or really before pushing anything at all, run `scripts/test-all.sh`
   from the repo root. It runs `pnpm typecheck`, `pnpm test`, and the Swift suite in one
