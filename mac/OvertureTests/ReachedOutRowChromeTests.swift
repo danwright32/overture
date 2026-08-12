@@ -70,4 +70,65 @@ struct ReachedOutRowChromeTests {
             #expect(ReachedOutRowChrome.answerFill(dueNow: dueNow) != OVColor.goldBright)
         }
     }
+
+    // MARK: the show's own date (#2551)
+
+    // Dan, reading a live row on 2026-08-11: "it doesn't give me any indication of when the show is, just
+    // when to reach out. Both are needed I think". The date HEADINGS on this stage are reach-out dates
+    // (#1233's caption says so), so the show's own date was nowhere on the screen at all, and on the row he
+    // was reading the two happened to be the same day with no way to tell.
+    @Test func theRowNamesTheNightTheShowIsOn() {
+        #expect(ReachedOutRowChrome.showDateLine(performanceDate: "2026-08-11", runEndDate: nil)
+                == "Performs Aug 11")
+    }
+
+    // A run reads as the window it occupies, through the same helper the queue card uses, so the two
+    // surfaces cannot describe one run in two different words (#843).
+    @Test func aRunReadsAsItsWindow() {
+        #expect(ReachedOutRowChrome.showDateLine(performanceDate: "2026-08-11", runEndDate: "2026-08-14")
+                == "Performs Aug 11 to 14")
+        #expect(ReachedOutRowChrome.showDateLine(performanceDate: "2026-06-28", runEndDate: "2026-07-02")
+                == "Performs Jun 28 to Jul 2")
+        // A closing night equal to the opening one is a single night, not a window.
+        #expect(ReachedOutRowChrome.showDateLine(performanceDate: "2026-08-11", runEndDate: "2026-08-11")
+                == "Performs Aug 11")
+    }
+
+    // "Date to be confirmed" is a normal state on a season page, so the row says so rather than inventing a
+    // night or going silent (L11). It names the SHOW's date, because the headings above it are reach-out
+    // dates and a bare "date to be confirmed" here would read as the wrong one being unknown.
+    @Test func anUndatedShowSaysSoRatherThanInventingANight() {
+        #expect(ReachedOutRowChrome.showDateLine(performanceDate: nil, runEndDate: nil)
+                == "Show date to be confirmed")
+        #expect(ReachedOutRowChrome.showDateLine(performanceDate: "", runEndDate: nil)
+                == "Show date to be confirmed")
+        #expect(ReachedOutRowChrome.showDateLine(performanceDate: "not a date", runEndDate: nil)
+                == "Show date to be confirmed")
+    }
+
+    // The line has to be able to sit beside the timing slot without the two collapsing into one sentence
+    // (#843, and the cold read AGENTS.md demands before the PR). The date line is ABSOLUTE and the timing
+    // slot is RELATIVE, and neither may start saying the other's half.
+    @Test func theDateLineNeverRepeatsTheTimingSlot() {
+        let timingWords = ["Reach out now", "in 1 day", "in 5 days", "tonight", "yesterday",
+                           ReachedOutQueue.heldOpenLabel]
+        for date in [("2026-08-11", nil as String?), ("2026-08-11", "2026-08-14"), (nil as String?, nil)]
+            .map({ ReachedOutRowChrome.showDateLine(performanceDate: $0.0, runEndDate: $0.1) }) {
+            for word in timingWords {
+                #expect(date != word, "the date line and the timing slot rendered the same sentence")
+            }
+        }
+    }
+
+    // Built is not wired (L3). The row's LEADING column has to actually draw it, or the helper above is a
+    // sentence the app never says.
+    @Test func theRowActuallyDrawsIt() throws {
+        let source = SourceGuardHelper.source("Overture/UI/QueueView.swift")
+        let body = try String(SourceGuard.functionBody(named: "reachedOutRow", in: source))
+        let leading = try #require(
+            SourceGuardHelper.between("VStack(alignment: .leading, spacing: 3) {",
+                                      and: "Spacer(minLength: OVSpacing.sm)", in: body))
+        #expect(leading.contains("ReachedOutRowChrome.showDateLine"),
+                "the reached-out row's leading column does not draw the show's date")
+    }
 }

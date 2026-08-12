@@ -37,4 +37,38 @@ enum ReachedOutRowChrome {
     ///
     /// Nil rather than a quiet colour, because nil is what the control already means by "no accent".
     static func stateControlAccent(isDue: Bool) -> Color? { isDue ? OVColor.rust : nil }
+
+    /// #2551: the night the show is actually on, which this row never said.
+    ///
+    /// The date HEADINGS on this stage are reach-out dates, and #1233 added the caption "Grouped by when
+    /// to reach out next" precisely because the two were being confused. The caption did its job and the
+    /// effect was that the stage named one date clearly and the other not at all. Dan, 2026-08-11: "it
+    /// doesn't give me any indication of when the show is, just when to reach out. Both are needed I
+    /// think." On the row he was reading, the two dates happened to be the same day.
+    ///
+    /// It matters for triage: a show that has gone quiet three months out is fine, one that is tonight is
+    /// a different decision, and that is the decision he is standing in front of on this stage.
+    ///
+    /// ABSOLUTE, where the timing slot beside it is RELATIVE ("in 5 days", "tonight"). That is what stops
+    /// the two collapsing into one sentence (#843), and it is why this says the date rather than a
+    /// countdown even though a countdown would be shorter.
+    ///
+    /// Dated through `QueueModel.runDateLabel`, the same helper the queue card uses, so one run cannot be
+    /// described in two different words on two screens. #2551 proposed naming only the OPENING night on
+    /// the grounds that #1540 dates a run at its opening; that rule governs how a run SORTS and when it
+    /// counts as opened, and it is untouched here. What the row has to answer is how far out the show is,
+    /// and for a run the honest answer is the window, which is what the card already prints.
+    ///
+    /// An undated show says so. "Date to be confirmed" is a normal state on a season page, so a
+    /// fabricated night would send Dan looking for a show nobody published (L11), and silence would leave
+    /// the row exactly as mute as the one he complained about. It names the SHOW's date, because the
+    /// headings above it are reach-out dates and a bare "date to be confirmed" would read as those.
+    static func showDateLine(performanceDate: String?, runEndDate: String?) -> String {
+        // The same parse `runDateLabel` makes (`QueueModel.day` IS `EasternDate.date(from:)`), so this
+        // cannot decide the show is dated and then be handed "Date to be confirmed" to prefix.
+        guard let performanceDate, EasternDate.date(from: performanceDate) != nil else {
+            return "Show date to be confirmed"
+        }
+        return "Performs \(QueueModel.runDateLabel(start: performanceDate, end: runEndDate))"
+    }
 }
