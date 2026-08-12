@@ -44,7 +44,11 @@ enum Reachability {
     // ran over it and came home with nothing for it, so the row is still unchecked and Dan is about to be
     // offered it again at full price. Its own case rather than silence, which is what a never-checked show
     // shows, and rather than a shade of `noEmailFound`, which is a real finding this row does not have.
-    enum Badge: Equatable {
+    // #2528: CaseIterable so the guard that keeps this vocabulary in step with ProbeResult can
+    // ENUMERATE it rather than restate it. A hand-written list of badges inside a test would be a
+    // fourth copy of the same vocabulary, and it would only ever check the cases somebody remembered
+    // to add to it (L96), which is the exact defect the guard exists to catch.
+    enum Badge: Equatable, CaseIterable {
         case none, hardToReach, noEmailFound, weakContactOnly, contactFormOnly,
              staleProbe, checkMissedIt, emailFound
     }

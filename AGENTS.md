@@ -94,6 +94,24 @@ already drifting from the Swift version it mirrored.
   `extensions.worktreeConfig` here), so every future worktree inherits it without running the installer.
   What remains uncovered is only a FRESH CLONE elsewhere whose owner skips `scripts/install-git-hooks.sh`
   and then pushes straight to main. Revisit if this ever becomes a repo more than one machine clones.
+  Since #2557 that same installer also registers a MERGE DRIVER, for the same per-clone reason
+  (`merge.<name>.driver` lives in the git config, which is not tracked, and which every worktree shares).
+  `.gitattributes` sends this repo's two GENERATED files, `docs/copy-inventory.md` and
+  `mac/Overture.xcodeproj/project.pbxproj`, to `scripts/lib/merge-generated.sh`. Any two branches that
+  touch the app's wording or its file list conflict on those by construction, and the conflict carries no
+  decision: neither side's text is anybody's to write. Measured 2026-08-11, two branches in a row cost a
+  manual resolve plus two full suite runs each, roughly twelve minutes apiece, for nothing.
+  The driver keeps one side and DOES NOT regenerate, which is the part to understand before changing it.
+  Git runs a merge driver per file while the merge is still in progress, so the worktree it would read is
+  not the merged tree, and a generator run at that moment produces output derived from a state that never
+  existed while looking exactly as authoritative as a correct one. The freshness gates settle the content
+  afterwards, on the complete tree, and they are unchanged: `scripts/check-pbxproj-fresh.sh` blocks on a
+  stale project file (measured: it blocks on the auto-resolved commit, naming the file), and
+  `CopyInventoryTests` fails the Swift suite on a stale inventory. Both ride along in
+  `scripts/test-all.sh`. The driver REFUSES any path outside those two rather than resolving what it is
+  handed, so a mistyped `.gitattributes` line leaves a conflict to read instead of silently dropping
+  somebody's work. A clone that never runs the installer just gets git's ordinary text merge, which is
+  what this repo had before, so skipping it is no worse than the old behaviour.
 - Keeping the checkout tidy: `scripts/tidy-checkout.sh` (#2234) removes local branches and agent
   worktrees whose work has provably shipped. It is a DRY RUN by default and needs `--apply` to
   delete anything. Note WHY it exists rather than the one-line idiom: this repo squash-merges, so a
@@ -224,9 +242,18 @@ already drifting from the Swift version it mirrored.
   reminders) across reinstalls instead of dropping them, which an ad-hoc signature silently did because
   its cdhash changes every rebuild (#1425). Run `mac/scripts/setup-signing-identity.sh` ONCE per Mac
   first (it creates and trusts a dedicated "Overture Local Signing" certificate, the one manual step is
-  a trust-settings password dialog); after that every build signs automatically. `build-install.sh`
-  fails loud if that identity is missing rather than falling back to ad-hoc. The one-time switch to this
-  identity re-prompts for permissions on the first install after it, then they persist.
+  a trust-settings password dialog); after that every build signs automatically. Since #2537 that setup
+  proves its own work the same way `build-install.sh` does, by trial signing a throwaway bundle, rather
+  than asking the cheaper question of whether an identity is LISTED. It was the script that answered that
+  question wrongly first: on 2026-07-26 it printed `Done. Created and trusted ...` for a certificate
+  codesign refused outright, and only `build-install.sh` found out, after a full Release build and after
+  `/Applications/Overture.app` had already been replaced. Its early exit asks the same question, so an
+  identity that is present and refused is recreated rather than reported as already set up. Every call in
+  it that touches the real keychain or trust store sits behind a named function, which is what lets
+  `mac/scripts/setup-signing-identity.test.sh` drive the whole decision path without the password dialog
+  that made it untestable before. `build-install.sh` fails loud if that identity is missing rather than
+  falling back to ad-hoc. The one-time switch to this identity re-prompts for permissions on the first
+  install after it, then they persist.
 - `build-install.sh` builds WHATEVER IS CHECKED OUT, which is what you want when installing a branch build
   deliberately. The freshness panel's Update button does NOT run it directly: it runs
   `mac/scripts/update-overture.sh`, which brings the checkout up to origin/main first and only then

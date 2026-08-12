@@ -1,0 +1,14 @@
+# The two files in this repo that are GENERATED from the source, sent to a merge driver that resolves
+# them instead of asking a person to hand-merge text nobody wrote (#2557).
+#
+# Both are produced from the tree, so any two branches touching the app's wording or its file list
+# conflict on them by construction, and neither side's text carries a decision. The driver only removes
+# the conflict; the freshness gates (scripts/check-pbxproj-fresh.sh and CopyInventoryTests, both inside
+# scripts/test-all.sh) are what settle the content, on the complete merged tree.
+#
+# The driver is registered per clone by scripts/install-git-hooks.sh, because merge.<name>.driver lives
+# in the git config, which is not tracked. Without that step git falls back to an ordinary text merge,
+# which is exactly the behaviour this repo had before, so a clone that skips the installer is no worse
+# off than it used to be.
+docs/copy-inventory.md merge=overture-generated
+mac/Overture.xcodeproj/project.pbxproj merge=overture-generated
