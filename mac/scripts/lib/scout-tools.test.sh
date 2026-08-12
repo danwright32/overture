@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
+# The shared assertion vocabulary: pass, fail, assert_contains, assert_not_contains,
+# assert_equals, assert_eq, assert_empty (#2501). A definition later in this file replaces
+# the shared one, so nothing below changes meaning by sourcing this.
+# shellcheck source=../../../scripts/lib/shell-assertions.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../scripts/lib/shell-assertions.sh"
+
 # #1026: the scout-extract run reads UNTRUSTED web content (the pinned org pages, plus each event's
 # detail page it follows with WebFetch) and writes the outreach data Dan later pitches from. It must be
 # scoped to exactly the three tools its job needs: Read (the local pinned page), WebFetch (the detail

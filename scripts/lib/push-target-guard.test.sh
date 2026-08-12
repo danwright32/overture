@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
+# The shared assertion vocabulary: pass, fail, assert_contains, assert_not_contains,
+# assert_equals, assert_eq, assert_empty (#2501). A definition later in this file replaces
+# the shared one, so nothing below changes meaning by sourcing this.
+# shellcheck source=../../scripts/lib/shell-assertions.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../scripts/lib/shell-assertions.sh"
+
 # #2291: on 2026-08-07 a whole issue's work landed directly on main, past the pull request flow this repo
 # uses for everything. Both existing pre-push gates passed, because neither asks which branch the push is
 # going to, and the only visible sign was "HEAD -> main" in the push output.

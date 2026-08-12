@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
+# The shared assertion vocabulary: pass, fail, assert_contains, assert_not_contains,
+# assert_equals, assert_eq, assert_empty (#2501). A definition later in this file replaces
+# the shared one, so nothing below changes meaning by sourcing this.
+# shellcheck source=../../scripts/lib/shell-assertions.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../scripts/lib/shell-assertions.sh"
+
 # #2497 put the four-item completeness enumeration into AGENTS.md, and nothing enforced it: no script
 # in this repo read a PR body at all. A rule that lives only in a prompt is a hope (L27), which is the
 # same defect one level up from the two the enumeration exists to catch (#2490, #2495).

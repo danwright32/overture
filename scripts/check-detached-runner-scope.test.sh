@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
+# The shared assertion vocabulary: pass, fail, assert_contains, assert_not_contains,
+# assert_equals, assert_eq, assert_empty (#2501). A definition later in this file replaces
+# the shared one, so nothing below changes meaning by sourcing this.
+# shellcheck source=../scripts/lib/shell-assertions.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../scripts/lib/shell-assertions.sh"
+
 # Pure-function coverage for check-detached-runner-scope.sh's detached_runner_scope_violations (#1102).
 # The real check scans every mac/scripts/*.sh file for a detached "$CLAUDE" -p call that bypasses the
 # fail-closed *_claude_scope functions in mac/scripts/lib/claude-run-scope.sh (#1026/#1097); this

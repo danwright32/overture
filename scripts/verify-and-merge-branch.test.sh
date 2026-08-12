@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
+# The shared assertion vocabulary: pass, fail, assert_contains, assert_not_contains,
+# assert_equals, assert_eq, assert_empty (#2501). A definition later in this file replaces
+# the shared one, so nothing below changes meaning by sourcing this.
+# shellcheck source=../scripts/lib/shell-assertions.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../scripts/lib/shell-assertions.sh"
+
 # Coverage for verify-and-merge-branch.sh's verify_and_merge orchestration (#525): merge ONLY
 # when the branch's own local suite comes back clean, and always clean up the throwaway worktree
 # on both the happy and failure paths. Stubs every side-effecting step (resolve_pr, setup_worktree,

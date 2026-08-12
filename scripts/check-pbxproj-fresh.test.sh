@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
+# The shared assertion vocabulary: pass, fail, assert_contains, assert_not_contains,
+# assert_equals, assert_eq, assert_empty (#2501). A definition later in this file replaces
+# the shared one, so nothing below changes meaning by sourcing this.
+# shellcheck source=../scripts/lib/shell-assertions.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../scripts/lib/shell-assertions.sh"
+
 # Pure-function coverage for check-pbxproj-fresh.sh's pbxproj_freshness_verdict (Phase 1 of #1251,
 # closes #1368). The real gate runs xcodegen and asks git whether the committed project.pbxproj changed;
 # this fixture drives the DECISION over those two facts (does the installed xcodegen match the pinned

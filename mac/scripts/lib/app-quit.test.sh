@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
+# The shared assertion vocabulary: pass, fail, assert_contains, assert_not_contains,
+# assert_equals, assert_eq, assert_empty (#2501). A definition later in this file replaces
+# the shared one, so nothing below changes meaning by sourcing this.
+# shellcheck source=../../../scripts/lib/shell-assertions.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../scripts/lib/shell-assertions.sh"
+
 # #2072: build-install.sh stalled indefinitely when Overture was running: its polite
 # `osascript ... to quit` blocks waiting on an Apple event reply that never comes, and the
 # `|| true` only covers an error return, not a call that never returns. These checks pin the

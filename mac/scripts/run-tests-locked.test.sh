@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
+# The shared assertion vocabulary: pass, fail, assert_contains, assert_not_contains,
+# assert_equals, assert_eq, assert_empty (#2501). A definition later in this file replaces
+# the shared one, so nothing below changes meaning by sourcing this.
+# shellcheck source=../../scripts/lib/shell-assertions.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../scripts/lib/shell-assertions.sh"
+
 # Coverage for run-tests-locked.sh's stale_debug_test_host_pids (#632): xcodebuild test boots
 # the full Debug-configuration app as an app-hosted XCTest host but never tears it down when the
 # run finishes, so a leftover instance can shadow the current code in a later interactive check.

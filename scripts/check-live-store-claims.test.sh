@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
+# The shared assertion vocabulary: pass, fail, assert_contains, assert_not_contains,
+# assert_equals, assert_eq, assert_empty (#2501). A definition later in this file replaces
+# the shared one, so nothing below changes meaning by sourcing this.
+# shellcheck source=../scripts/lib/shell-assertions.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../scripts/lib/shell-assertions.sh"
+
 # Pure-function coverage for check-live-store-claims.sh (#1063). The real check greps every tracked
 # Swift/Markdown file for the LIVE-STORE-CLAIM tag (docs/scout-extract-runbook.md, ExtractedEventGuard.swift,
 # VenueDisplay.swift, and others #1063's own sweep found), which is why it can't be driven against the real

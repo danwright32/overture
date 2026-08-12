@@ -134,6 +134,20 @@ already drifting from the Swift version it mirrored.
   reaches for. Two tells worth knowing: NO OUTPUT AT ALL from something that normally prints a line
   per check means it died rather than passed, and `set -o pipefail` or `${PIPESTATUS[0]}` is what
   makes the reading honest when a pipe is genuinely wanted.
+- **Writing a shell fixture: the assertions come from `scripts/lib/shell-assertions.sh`, which every
+  `*.test.sh` sources.** It gives one vocabulary (`pass`, `fail`, `assert_contains`,
+  `assert_not_contains`, `assert_equals`, `assert_eq`, `assert_empty`), all reporting through
+  `FAILURES` and none exiting early, so a fixture runs every check it has and reports the total.
+  Before #2501 each of the 48 fixtures defined its own, and which names existed varied file to file
+  (22 had `assert_contains`, 13 `assert_equals`, 10 `assert_eq`), so reaching for the wrong one printed
+  `command not found` to stderr, checked nothing, and the fixture still reported every assertion
+  passing. `scripts/run-shell-fixtures.sh` now fails any fixture whose output shows bash could not
+  resolve a command, which is the half that holds even if a fixture forgets to source the library. A
+  fixture that drives a missing dependency ON PURPOSE (`models.test.sh` runs `record_model` with `PATH`
+  pointing at nothing) prints `shell-fixture-expects-missing-command: <name>` to declare it; that
+  exempts the one command named and nothing else. A fixture keeping its own definition of a helper is
+  fine and deliberately still supported: two fixtures read `assert_contains` as
+  (desc, needle, haystack), and a definition after the source line wins.
 - **Quoting a character the style gate forbids: write it as an escape, never override the gate.**
   The pre-push style gate blocks any new line holding an em dash, en dash or emoji, and it cannot
   tell a line that USES one from a line that must QUOTE one, which is the gate working correctly.

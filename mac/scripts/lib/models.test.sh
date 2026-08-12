@@ -1,6 +1,19 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
+# The shared assertion vocabulary: pass, fail, assert_contains, assert_not_contains,
+# assert_equals, assert_eq, assert_empty (#2501). A definition later in this file replaces
+# the shared one, so nothing below changes meaning by sourcing this.
+# shellcheck source=../../../scripts/lib/shell-assertions.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../scripts/lib/shell-assertions.sh"
+
+# Two cases below run record_model and record_run_cost with PATH pointing at a directory that holds
+# nothing, to prove a detached run still succeeds when there is no node to stamp it with. Bash writes
+# "node: command not found" while that happens, which is the same thing it writes for a mistyped
+# assertion, so this declares the absence is the thing being rehearsed (#2501). It names only node:
+# any other unresolved command in this fixture still fails the run.
+echo "shell-fixture-expects-missing-command: node"
+
 # #804: every detached run used to invoke `claude -p` with no --model flag, so it silently inherited
 # whatever the CLI default happened to be on Dan's machine that day.
 #

@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
+# The shared assertion vocabulary: pass, fail, assert_contains, assert_not_contains,
+# assert_equals, assert_eq, assert_empty (#2501). A definition later in this file replaces
+# the shared one, so nothing below changes meaning by sourcing this.
+# shellcheck source=../scripts/lib/shell-assertions.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../scripts/lib/shell-assertions.sh"
+
 # #1808: the shape of `shipped-commit.json` is a contract the Swift app decodes (BuildFreshness), so it
 # is pinned here rather than only being produced. A field renamed on this side and not the other leaves
 # the app permanently unable to tell how old it is, which it reports honestly but which nobody would
