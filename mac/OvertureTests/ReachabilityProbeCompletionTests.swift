@@ -256,6 +256,42 @@ struct ReachabilityProbeCompletionTests {
         #expect(after?.reachabilityResult == .emailFound)
     }
 
+    // #1611: the fourth outcome, and the one the writer ORDER exists for. `markProbed` writes the
+    // "no email found" floor BEFORE the ingest, so at that moment nothing has told a sendable address
+    // from the room's own front desk. Only after `PrepImporter` has run the venue and press guards can
+    // this row be classified, and the answer is `weakContactOnly`: there IS an address, it just is not
+    // one Dan can pitch. Nothing else pins this end to end. The three tests above would all stay green
+    // through a reordered settle, an early return, or a fourth writer that judged only "is anybody
+    // sendable", any of which leaves this show reading "No email found" with a real address printed
+    // underneath it, which is invisible on screen and only costs something when he dismisses a bookable
+    // show over it.
+    @Test func aProbeThatFoundOnlyTheRoomsOwnAddressRecordsWeakContactOnly() throws {
+        let ctx = ModelContext(try container())
+        let a = newProspect(ctx, group: "Aurora Strings")
+        let d = dir()
+        let markerURL = d.appendingPathComponent("probe-run.json")
+        let resultsURL = d.appendingPathComponent("results.json")
+        let now = Date(timeIntervalSince1970: 1_780_000_000)
+        try ReachabilityProbeMarker.write(ReachabilityProbeMarker(keys: [a], startedAt: "s"), to: markerURL)
+        // The one address the check came home with belongs to the show's own room. Weill Recital Hall
+        // resolves to Carnegie Hall, so VenueContactGuard holds this at ingest: real, and never sendable.
+        try writeResults(resultsURL, PrepResults(version: 2, generatedAt: "now", results: [
+            PrepResult(naturalKey: a, contacts: [PrepContact(name: "Box office", role: "Front desk",
+                                                             email: "boxoffice@carnegiehall.org",
+                                                             method: "general_inbox",
+                                                             confidence: "high", formUrl: nil,
+                                                             provenance: "act")], draft: nil)
+        ]))
+
+        _ = PrepQueueService.settleReachabilityProbe(
+            markerURL: markerURL, resultsURL: resultsURL, into: ctx, now: now, defaults: freshDefaults())
+
+        let after = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == a })).first
+        #expect(after?.reachabilityResult == .weakContactOnly)
+        // The address is on the row, which is what makes the floor wrong rather than merely early.
+        #expect(after?.recipients.first?.email == "boxoffice@carnegiehall.org")
+    }
+
     private func freshDefaults() -> UserDefaults {
         let d = UserDefaults(suiteName: "probe-\(UUID().uuidString)")!
         return d
