@@ -94,6 +94,59 @@ struct ManualPrepOnScreenTests {
         #expect(try rendered.find(ViewType.TextField.self).input() == "")
     }
 
+    // MARK: - Why Save draft is refusing (#2544)
+    //
+    // The rule and its wording are unit-tested in ManualPrepSaveReasonTests. What no pure test can see is
+    // whether the sentence reaches the sheet: before this it was computed on every keystroke, thrown away,
+    // and left Dan looking at a greyed out button with an empty Subject box and nothing joining the two.
+
+    // Read off the footer's own first element rather than by searching the whole sheet for the sentence.
+    // A deep search cannot tell a line Dan can SEE from one that only exists in the button's tooltip and
+    // VoiceOver hint: `.help()` puts its string into the hierarchy, so the first version of these tests
+    // passed with the visible line deleted, which is the very defect they exist to catch.
+    private func footerReasonLine(_ sheet: ManualPrepSheet) throws -> String? {
+        try? sheet.inspect().vStack().hStack(3).text(0).string()
+    }
+
+    // A freshly opened editor has an address and no subject yet, so the reason names the subject. Compared
+    // against the domain's own answer rather than a copy of the sentence typed in here, so the screen
+    // cannot drift from the gate.
+    @Test func theEditorSaysWhySaveDraftIsRefusing() throws {
+        let prior = ManualPrepPrefill.PriorOutreach(email: "olga@bargemusic.org", showName: "Bargemusic",
+                                                    sentAt: EasternDate.date(from: "2025-11-02")!)
+        let sheet = ManualPrepSheet(groupName: "Bargemusic",
+                                    prefill: .init(filled: prior, suggestions: [], emptyReason: nil),
+                                    onSave: { _, _, _, _, _ in })
+
+        let expected = ManualPrepEditing.reasonSaveIsDisabled(email: "olga@bargemusic.org", subject: "",
+                                                              body: "")
+        #expect(expected != nil)
+        #expect(try footerReasonLine(sheet) == expected)
+    }
+
+    // The clause that reports on a press nobody has made must not ride along onto the sheet. Asserted on
+    // the rendered screen and not only on the string, because the sheet is where it would have been read.
+    @Test func theReasonOnScreenDoesNotReportOnASaveThatHasNotHappened() throws {
+        let sheet = ManualPrepSheet(groupName: "Bargemusic",
+                                    prefill: .init(filled: nil, suggestions: [], emptyReason: .nothingFound),
+                                    onSave: { _, _, _, _, _ in })
+
+        for line in try texts(sheet) {
+            #expect(!line.lowercased().contains("nothing was saved"),
+                    "the opened sheet says \"\(line)\" before anything has been pressed")
+        }
+    }
+
+    // With no address prefilled the reason is about the address, not the subject: the sheet names the first
+    // field he would look at rather than whichever rule ran last.
+    @Test func anEmptyEditorNamesTheAddressRatherThanTheSubject() throws {
+        let sheet = ManualPrepSheet(groupName: "Bargemusic",
+                                    prefill: .init(filled: nil, suggestions: [], emptyReason: .nothingFound),
+                                    onSave: { _, _, _, _, _ in })
+
+        #expect(try footerReasonLine(sheet) == "Add an address to send to")
+    }
+
     // MARK: - What an idle card costs
     //
     // The prefill walks every prospect and reads the booking-history file off disk. A queue is hundreds

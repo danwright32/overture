@@ -111,8 +111,25 @@ struct ManualPrepSheet: View {
         }
     }
 
+    // #2544: the reason Save draft is refusing, taken from the same call that decides whether it is
+    // refusing at all. Dan met the grey button with the Subject box empty and nothing on screen joining
+    // the two, while the app had already computed the sentence and thrown it away.
+    //
+    // Shown at rest, from the moment the sheet opens, rather than waiting until he has typed something. The
+    // alternative leaves exactly the state he reported reachable: a control that is off with no reason
+    // beside it. The wording is what to do next ("Add a subject line"), not a report on a press, so it
+    // reads as the label on a control that is not ready yet rather than as a scolding.
+    //
+    // It sits beside the button and not under the field it names, so it cannot become a second line saying
+    // what the address field's own note already says (#843).
     private var footer: some View {
-        HStack {
+        let reason = ManualPrepEditing.reasonSaveIsDisabled(email: email, subject: subject, body: emailBody)
+        return HStack(alignment: .firstTextBaseline) {
+            if let reason {
+                Text(reason)
+                    .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Spacer()
             Button("Cancel") { dismiss() }.buttonStyle(.plain).foregroundStyle(OVColor.inkSoft)
             Button {
@@ -125,7 +142,11 @@ struct ManualPrepSheet: View {
                     .background(Capsule().fill(OVColor.forest))
             }
             .buttonStyle(.plain)
-            .disabled(!ManualPrepEditing.canSave(email: email, subject: subject, body: emailBody))
+            .disabled(reason != nil)
+            // A dimmed control with no label is unreadable to VoiceOver as well as to the eye, and the
+            // pointer asks the same question the eye does.
+            .accessibilityHint(reason ?? "")
+            .help(reason ?? "")
         }
     }
 }
