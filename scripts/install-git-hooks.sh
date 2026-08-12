@@ -24,10 +24,31 @@ install_hooks_into() {
   git -C "${repo_dir}" config core.hooksPath scripts/hooks
 }
 
+# Registers the merge driver that `.gitattributes` sends this repo's two generated files to (#2557).
+# Same per-clone reason as core.hooksPath above: merge.<name>.driver lives in the git config, which is
+# not tracked, and which every worktree of this clone shares. Idempotent for the same reason too, since
+# git overwrites a single-valued key rather than appending.
+#
+# `%O %A %B %L %P` is git's own argument order (ancestor, ours, theirs, marker size, path). The path is
+# what lets the driver refuse a file it does not own instead of resolving whatever it is handed.
+install_generated_merge_driver_into() {
+  local repo_dir="$1"
+  git -C "${repo_dir}" config merge.overture-generated.name \
+    "keep either side of a generated file; the freshness gate regenerates it"
+  git -C "${repo_dir}" config merge.overture-generated.driver \
+    "scripts/lib/merge-generated.sh %O %A %B %L %P"
+}
+
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
   chmod +x "${SCRIPT_DIR}/hooks/"* 2>/dev/null || true
+  chmod +x "${SCRIPT_DIR}/lib/merge-generated.sh" 2>/dev/null || true
   install_hooks_into "${REPO_ROOT}"
+  install_generated_merge_driver_into "${REPO_ROOT}"
   echo "Installed: core.hooksPath=scripts/hooks for this clone."
   echo "  post-merge: regenerates a stale pbxproj after a merge that combined Mac source changes."
   echo "  pre-push:   refuses a push straight to main (override once with ALLOW_PUSH_TO_MAIN=1)."
+  echo "Installed: merge driver overture-generated for this clone."
+  echo "  Resolves a conflict in docs/copy-inventory.md or mac/Overture.xcodeproj/project.pbxproj,"
+  echo "  which are generated, and leaves every other conflict to be read. scripts/test-all.sh is"
+  echo "  still what settles their content."
 fi

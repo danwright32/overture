@@ -94,6 +94,24 @@ already drifting from the Swift version it mirrored.
   `extensions.worktreeConfig` here), so every future worktree inherits it without running the installer.
   What remains uncovered is only a FRESH CLONE elsewhere whose owner skips `scripts/install-git-hooks.sh`
   and then pushes straight to main. Revisit if this ever becomes a repo more than one machine clones.
+  Since #2557 that same installer also registers a MERGE DRIVER, for the same per-clone reason
+  (`merge.<name>.driver` lives in the git config, which is not tracked, and which every worktree shares).
+  `.gitattributes` sends this repo's two GENERATED files, `docs/copy-inventory.md` and
+  `mac/Overture.xcodeproj/project.pbxproj`, to `scripts/lib/merge-generated.sh`. Any two branches that
+  touch the app's wording or its file list conflict on those by construction, and the conflict carries no
+  decision: neither side's text is anybody's to write. Measured 2026-08-11, two branches in a row cost a
+  manual resolve plus two full suite runs each, roughly twelve minutes apiece, for nothing.
+  The driver keeps one side and DOES NOT regenerate, which is the part to understand before changing it.
+  Git runs a merge driver per file while the merge is still in progress, so the worktree it would read is
+  not the merged tree, and a generator run at that moment produces output derived from a state that never
+  existed while looking exactly as authoritative as a correct one. The freshness gates settle the content
+  afterwards, on the complete tree, and they are unchanged: `scripts/check-pbxproj-fresh.sh` blocks on a
+  stale project file (measured: it blocks on the auto-resolved commit, naming the file), and
+  `CopyInventoryTests` fails the Swift suite on a stale inventory. Both ride along in
+  `scripts/test-all.sh`. The driver REFUSES any path outside those two rather than resolving what it is
+  handed, so a mistyped `.gitattributes` line leaves a conflict to read instead of silently dropping
+  somebody's work. A clone that never runs the installer just gets git's ordinary text merge, which is
+  what this repo had before, so skipping it is no worse than the old behaviour.
 - Keeping the checkout tidy: `scripts/tidy-checkout.sh` (#2234) removes local branches and agent
   worktrees whose work has provably shipped. It is a DRY RUN by default and needs `--apply` to
   delete anything. Note WHY it exists rather than the one-line idiom: this repo squash-merges, so a
