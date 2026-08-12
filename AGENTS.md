@@ -120,7 +120,28 @@ already drifting from the Swift version it mirrored.
   still has no gate on it. A scoped run is also exempt from the short-run baseline, and cannot move
   it: the baseline is a full-suite number, so a handful of tests would otherwise read as a 99%
   truncation and then quietly become the bar every later run is measured against.
-  The full suite via `run-tests-locked.sh` with no arguments takes about a minute and a half.
+  How long a full run takes is deliberately NOT written down here. It moved as the suite grew and
+  the stated figure was wrong by minutes, which matters because the paragraph above tells you to
+  check a suspiciously fast run against what a full one costs: an understated number weakens the
+  very warning it was there to support (#2532, L32). Every run ends with its own `Suite shape:`
+  line giving the wall clock it actually took, so read that.
+- **Judging whether a script succeeded: capture its status directly, never through a pipe.**
+  `some-script.sh | tail -5` reports `tail`'s exit status, not the script's, so a script that died
+  instantly on an unbound variable and printed nothing at all reads as a clean pass. That happened
+  on 2026-08-11 to a merge-script fixture and sent the next twenty minutes in the wrong direction
+  (#2502). It is the same shape as the `NOTHING RAN` trap above, and the habit that hides it (piping
+  through `tail` or `rg` to keep the output short) is exactly the habit anyone working at speed
+  reaches for. Two tells worth knowing: NO OUTPUT AT ALL from something that normally prints a line
+  per check means it died rather than passed, and `set -o pipefail` or `${PIPESTATUS[0]}` is what
+  makes the reading honest when a pipe is genuinely wanted.
+- **Quoting a character the style gate forbids: write it as an escape, never override the gate.**
+  The pre-push style gate blocks any new line holding an em dash, en dash or emoji, and it cannot
+  tell a line that USES one from a line that must QUOTE one, which is the gate working correctly.
+  The answer is to build the character rather than type it, so the file holds no literal one:
+  `mac/scripts/lib/suite-stats.test.sh` is the worked example (#2193), where a fixture legitimately
+  needed the marks Swift Testing prints and builds them from their UTF-8 bytes with `printf`. In
+  Swift the same trick is a unicode escape (`\u{2014}`). `SKIP_STYLE_CHECK=1` is visible and
+  tempting and skips past a clean solution, so it is the wrong tool here (#2312).
 - Since #1967 the Swift tests live in TWO targets, and which one a new test belongs in is decided
   by one question: does it need the app RUNNING?
   - `OvertureTests` (`mac/OvertureTests/`) holds almost everything and is where a new test goes
