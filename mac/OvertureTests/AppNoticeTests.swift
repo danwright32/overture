@@ -98,12 +98,19 @@ struct AppNoticePlacementGuardTests {
         #expect(masthead.contains("notices"))
 
         let root = SourceGuardHelper.source("Overture/App/RootView.swift")
-        // #2478 added the booking-feed verdict to the same call, so this pins the two arguments that
-        // decide what the masthead is given rather than one exact line.
-        #expect(root.contains("notices: AppNotices.current(omniFocusFailing: omniFocusFailedAt > 0,"),
-                "the masthead has to be given them, or it draws an empty list forever")
-        #expect(root.contains("bookingsVanished: bookingsVanished, status: status)"),
-                "the masthead has to be given them, or it draws an empty list forever")
+        // #2478 added the booking-feed verdict to the same call, and #1900 the shoot history's, so this
+        // pins each ARGUMENT that decides what the masthead is given, one at a time.
+        //
+        // Deliberately not one exact line any more: it was pinned as a two-line rendering, and the third
+        // argument re-wrapped it, so the guard went red on a change it exists to permit while the wiring
+        // it protects was intact (L103).
+        for argument in ["notices: AppNotices.current(omniFocusFailing: omniFocusFailedAt > 0",
+                         "bookingsVanished: bookingsVanished",
+                         "shootHistory: shootHistoryHealth",
+                         "status: status)"] {
+            #expect(root.contains(argument),
+                    "the masthead has to be given \(argument), or it draws an empty list forever")
+        }
     }
 
     // It wraps rather than clips. That is the property the move exists to gain: #1411's rule was that the
