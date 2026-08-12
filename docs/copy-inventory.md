@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1241 sentences**.
+Every sentence Overture can say to Dan: **1246 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -391,10 +391,14 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/AddLeadSheet.swift`
 "Add a lead..."
     `App/RootView.swift`
+"Add a subject line"
+    `App/ActionFeedback.swift`
 "Add a subject line. Nothing was saved"
     `App/ActionFeedback.swift`
 "Add address"
     `UI/SourcesView.swift`
+"Add an address to send to"
+    `App/ActionFeedback.swift`
 "Add an address to send to. Nothing was saved"
     `App/ActionFeedback.swift`
 "Add an email address. No contact was added"
@@ -1211,6 +1215,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView.swift`
 "One email to everyone"
     `UI/SendConfirmSheet.swift`
+"One of the addresses is blank"
+    `App/ActionFeedback.swift`
 "One of the addresses is blank. No contact was added"
     `App/ActionFeedback.swift`
 "One of the addresses is blank. Nothing was saved"
@@ -2126,6 +2132,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/OrganisationsView.swift`
 "Write a first draft of this one reply, which you can then edit"
     `Domain/ReplyPanel.swift`
+"Write the email before saving it"
+    `App/ActionFeedback.swift`
 "Write the email before saving it. Nothing was saved"
     `App/ActionFeedback.swift`
 "Write this email yourself, with no Prep run and no AI draft"
@@ -2457,6 +2465,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/EventLocationFill.swift`
 "\(pending) calendars have new listings to read."
     `Domain/ScoutReadBudget.swift`
+"\(piece) is not an email address"
+    `App/ActionFeedback.swift`
 "\(piece) is not an email address. No contact was added"
     `App/ActionFeedback.swift`
 "\(piece) is not an email address. Nothing was saved"

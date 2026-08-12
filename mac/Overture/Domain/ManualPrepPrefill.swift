@@ -123,34 +123,80 @@ enum ManualPrepPrefill {
 // He found it on the first show he prepped by hand: "Huge gap and easy to send without one." An email he
 // is genuinely replying into a thread with is a reply, which is a different path with its own subject.
 enum ManualPrepEditing {
-    // Nil when it can be saved, otherwise WHY not, in the words the refusal uses.
+    // #2544: what the sheet is refusing, as a value rather than as one of its two wordings. Everything
+    // below is derived from it: whether Save draft is enabled, the reason shown beside it while it is not,
+    // and the sentence spoken if a save is somehow attempted anyway. One predicate, three readings, so a
+    // grey button and the reason next to it can never disagree, and the button can never be enabled while
+    // a reason exists (L109).
+    enum Refusal: Equatable {
+        case needsRecipient
+        case badAddress(String)
+        case extraSeparator
+        case needsSubject
+        case needsBody
+
+        // Why the button is refusing, in words that are true BEFORE any press.
+        var reason: String {
+            switch self {
+            case .needsRecipient: return ActionAck.manualPrepNeedsRecipientReason
+            case .badAddress(let piece): return ActionAck.manualPrepBadAddressReason(piece)
+            case .extraSeparator: return ActionAck.manualPrepExtraSeparatorReason
+            case .needsSubject: return ActionAck.manualPrepNeedsSubjectReason
+            case .needsBody: return ActionAck.manualPrepNeedsBodyReason
+            }
+        }
+
+        // The same refusal after a press, which is the only moment "Nothing was saved" is a true statement.
+        var acknowledgement: String {
+            switch self {
+            case .needsRecipient: return ActionAck.manualPrepNeedsRecipient
+            case .badAddress(let piece): return ActionAck.manualPrepBadAddress(piece)
+            case .extraSeparator: return ActionAck.manualPrepExtraSeparator
+            case .needsSubject: return ActionAck.manualPrepNeedsSubject
+            case .needsBody: return ActionAck.manualPrepNeedsBody
+            }
+        }
+    }
+
+    // Nil when it can be saved, otherwise WHICH refusal applies.
     //
     // #2023: the address field is READ here, not merely checked for emptiness. It may name several people,
     // and a string that cannot be read as addresses must never reach a Recipient: its identity is what
     // reply detection, follow-ups, bounce handling and the booking match all key off, so one contact
     // identified by "a@x.org, b@y.org" sends, reports success, and can never match a reply from either.
-    static func refusal(email: String, subject: String, body: String) -> String? {
+    static func refusalKind(email: String, subject: String, body: String) -> Refusal? {
         switch EmailAddressList.parse(email) {
         case .empty:
-            return ActionAck.manualPrepNeedsRecipient
+            return .needsRecipient
         case .invalid(let piece):
-            return piece.isEmpty ? ActionAck.manualPrepExtraSeparator : ActionAck.manualPrepBadAddress(piece)
+            return piece.isEmpty ? .extraSeparator : .badAddress(piece)
         case .addresses:
             break
         }
         // Refused in the order the fields sit on the sheet (address, subject, body), so the sentence
         // names the first thing he would look at rather than the last rule that happened to run.
         if subject.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return ActionAck.manualPrepNeedsSubject
+            return .needsSubject
         }
         if body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return ActionAck.manualPrepNeedsBody
+            return .needsBody
         }
         return nil
     }
 
+    // What the save path says once a press has happened.
+    static func refusal(email: String, subject: String, body: String) -> String? {
+        refusalKind(email: email, subject: subject, body: body)?.acknowledgement
+    }
+
+    // What the sheet shows beside Save draft while it is grey. Nil exactly when the button is enabled, so
+    // a live reason and a working button are mutually exclusive by construction.
+    static func reasonSaveIsDisabled(email: String, subject: String, body: String) -> String? {
+        refusalKind(email: email, subject: subject, body: body)?.reason
+    }
+
     static func canSave(email: String, subject: String, body: String) -> Bool {
-        refusal(email: email, subject: subject, body: body) == nil
+        refusalKind(email: email, subject: subject, body: body) == nil
     }
 }
 

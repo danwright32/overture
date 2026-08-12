@@ -325,12 +325,31 @@ enum ActionAck {
     static let jointSendMixedLetters =
         "These contacts have different drafts, so one shared email would send one of them to everyone. Send them separately, or make the drafts match"
 
+    // #2544: each of these refusals exists in TWO renderings, and what separates them is a clause that is
+    // only true once there has been a press. The reason is what Save draft is refusing, shown beside the
+    // button while it is grey; the acknowledgement is that same reason plus what became of the press, and
+    // "Nothing was saved" under a button nobody has pressed reports on something that has not happened.
+    //
+    // Both halves are written out in full rather than the acknowledgement being composed from the reason.
+    // Composing keeps them in step for free, but it costs `docs/copy-inventory.md` the finished sentence:
+    // the file exists so a change to what Overture SAYS shows up in the diff as words Dan will read, and a
+    // fragment plus an interpolation is not a sentence anybody can read cold. So they are two literals,
+    // and `ManualPrepSaveReasonTests` holds them together by asserting each acknowledgement is exactly its
+    // reason plus this clause, for every refusal there is.
+    static let manualPrepNeedsRecipientReason = "Add an address to send to"
+    static let manualPrepNeedsBodyReason = "Write the email before saving it"
+    static let manualPrepNeedsSubjectReason = "Add a subject line"
+
     static let manualPrepNeedsRecipient = "Add an address to send to. Nothing was saved"
     static let manualPrepNeedsBody = "Write the email before saving it. Nothing was saved"
     static let manualPrepNeedsSubject = "Add a subject line. Nothing was saved"
 
     // #2023: names the piece that cannot be read rather than refusing the whole field, because the field
     // may hold several people and only one of them is wrong.
+    static func manualPrepBadAddressReason(_ piece: String) -> String {
+        "\(piece) is not an email address"
+    }
+
     static func manualPrepBadAddress(_ piece: String) -> String {
         "\(piece) is not an email address. Nothing was saved"
     }
@@ -338,6 +357,7 @@ enum ActionAck {
     // A gap between two separators has no address in it to name, so it says what it is instead of reading
     // as a sentence about a blank one. Deliberately does not name the comma: semicolons separate too, and
     // a message may only claim what it actually measured.
+    static let manualPrepExtraSeparatorReason = "One of the addresses is blank"
     static let manualPrepExtraSeparator = "One of the addresses is blank. Nothing was saved"
 
     // #2023: Add contact in Review takes ONE person, and its banner names one, so several at once is
