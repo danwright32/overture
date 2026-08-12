@@ -68,6 +68,55 @@ enum ProducerShapedName {
         from(credit) ?? fallback
     }
 
+    // #2262: the producer a listing BILLS inside its own description, which is how a RENTAL ROOM credits
+    // the company putting the show on. The room's name leads the page, so there is nothing in front of
+    // the title to read; the credit sits in the blurb ("Produced by Productions by Stephan, Re-Arranged
+    // is a one-night-only celebration").
+    //
+    // MEASURED against all 61 listings reachable from https://54below.org/calendar/ on 2026-08-11: 17
+    // bill a producer this way, ONE of them a company and 16 individuals, and a bare personal name is
+    // not producer-shaped, so this returns nothing on those 16 rather than reaching for them.
+    //
+    // Only an ADJACENT "produced by" / "presented by" counts. That is the whole difference between a
+    // credit and prose: the same pages carry "Hayley Trapp presents The Bubbling Cabaret" (the act
+    // introducing her own show), "the Showpeople Theatre Collective returns to New York City" and
+    // "Developed with the historic Apollo Theater and Drama Club Camp Productions" (where a musical was
+    // written), none of which names who is producing tonight.
+    static func billedInProse(_ prose: String) -> String? {
+        guard let mark = creditConnectors
+            .compactMap({ prose.range(of: $0, options: [.caseInsensitive]) })
+            .min(by: { $0.lowerBound < $1.lowerBound })
+        else { return nil }
+
+        let candidate = prose[mark.upperBound...]
+            .prefix { !creditStops.contains($0) }
+            .split(separator: " ")
+            .prefix(creditWordCeiling)
+            .joined(separator: " ")
+
+        // A credit names somebody, and a name starts with a capital. Without this, "produced by the
+        // company that staged it" reads as an organisation, because `company` is one of the words the
+        // rule below looks for and the phrase is short enough to pass.
+        guard let first = candidate.first, first.isUppercase else { return nil }
+        return from(candidate)
+    }
+
+    // Where the credit ENDS. The credit runs into the sentence that carries it, and these are the marks
+    // the real pages separate it with ("Produced by Amanda Negrete . Music direction by Elijah Cox .").
+    // All 17 measured credits are punctuated this way; where one is not, the candidate takes the next
+    // word or two with it and `from`'s six-word ceiling is what stops it becoming a sentence. The dash a
+    // page may separate a clause with is deliberately not on this list, because the app's source may not
+    // hold one at all (`UserFacingDashGuardTests`), and its absence can only make this narrower.
+    // copy-inventory:ignore-start  parser tokens matched against a listing page, never Overture's voice
+    private static let creditConnectors = ["produced by ", "presented by "]
+    private static let creditStops: Set<Character> = [",", ".", ";", ":", "!", "?", "(", ")", "\"",
+                                                      "\u{201C}", "\u{201D}"]
+    // copy-inventory:ignore-end
+
+    // `from` refuses anything longer than six words anyway. This only stops the candidate being the rest
+    // of the page when a sentence happens to carry no punctuation at all.
+    private static let creditWordCeiling = 8
+
     // The trailing possessive belongs to the show title that followed it, never to the company, so it is
     // removed from what gets stored. Left on, every later search for this organisation would carry a stray
     // apostrophe, which is exactly the over-qualified query that buried ICB Productions under a Norwegian

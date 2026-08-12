@@ -229,6 +229,24 @@ For each item in the work-list:
    explores what happens when traditions travel"*. The producer was in the bytes already read. It was not
    missing; it was dropped.
 
+   **A rental room bills its producer further down the page** (#2262). Some rooms are rented to a
+   different independent production every night, and their listing leads with the ROOM's own name rather
+   than with anybody who could be pitched. Measured on all 61 listings reachable from
+   `https://54below.org/calendar/` on 2026-08-11: every one of them opens *"Welcome To 54 Below A
+   Nonprofit Cabaret Venue"* and then the show's title, and 17 of them name the producer only in the
+   description that follows it (*"Produced by Productions by Stephan"*, *"Produced by Amanda Negrete"*).
+   On a page like that, read the credit out of the description and report it as `presenter`: the company
+   or the person billed as producing is who hired the room, and is exactly who this field is for. The
+   room's name at the top of the page is not a second candidate; it is the landlord, and the first
+   "never" below already covers it.
+
+   The app reads the narrowest half of this for itself (an adjacent "produced by" or "presented by"
+   naming a company, taken from the show's own page and handed to the contact run as
+   `organisationNamedOnListing`, #2259/#2262), so what is asked of you is the part no parse can do: a
+   credit phrased around the words (*"Produced and directed by ..."*), a producer named in a sentence
+   rather than in a credit line, and above all telling this show's producer apart from a performer's PAST
+   credits. A past credit in a bio is never the answer.
+
    Three things it is NEVER:
 
    - **Never the venue.** The room does not present the show; a company hires the room. If the only name

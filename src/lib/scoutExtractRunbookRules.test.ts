@@ -36,6 +36,13 @@ const RULES: { name: string; pattern: RegExp }[] = [
   { name: "presenter-never-the-venue", pattern: /\*\*Never the venue\.\*\*/i },
   { name: "presenter-never-the-source-org-name", pattern: /Never the work-list item's own `orgName`/i },
   { name: "presenter-null-rather-than-guessed", pattern: /If the page names nobody, leave it null/i },
+  // #2262: a rental room's listing leads with the ROOM, and bills the company putting the show on in the
+  // description below the title. 54 Below is the second largest source of shows that reach the queue with
+  // no producing organisation at all (56), and measured on 2026-08-11 all 61 of its listings open with the
+  // room's own name. Lose this rule and every one of those shows goes back to arriving with nobody to
+  // pitch, because the only name in front of the title is the landlord's and the app drains it.
+  { name: "presenter-rental-room-bills-below-the-title", pattern: /A rental room bills its producer\s+further down the page/i },
+  { name: "presenter-never-a-performers-past-credit", pattern: /A past credit in a bio is never the answer/i },
 ];
 
 describe("scout-extract-runbook sourceUrl rule is present (#1276)", () => {
