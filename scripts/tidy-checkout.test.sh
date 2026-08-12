@@ -72,8 +72,41 @@ git -C "${REPO}" add other.txt
 git -C "${REPO}" commit -qm "unshipped change"
 git -C "${REPO}" checkout -q main
 
+# A throwaway Xcode build root holding one dead folder, so the run below reports the real thing
+# without any chance of reading or writing ~/Library/Developer/Xcode/DerivedData (#2585, L2).
+DERIVED="${WORK}/derived"
+mkdir -p "${DERIVED}/Overture-dead"
+cat > "${DERIVED}/Overture-dead/info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>WorkspacePath</key>
+	<string>${WORK}/a-worktree-that-is-gone/mac/Overture.xcodeproj</string>
+</dict>
+</plist>
+PLIST
+
 OUTPUT="$(PATH="${WORK}/bin:${PATH}" TIDY_CHECKOUT_REPO_ROOT="${REPO}" \
+  XCODE_DERIVED_DATA_ROOT="${DERIVED}" \
   "${SCRIPT_DIR}/tidy-checkout.sh" --apply 2>&1)"
+
+# #2585: this script's remit is the CHECKOUT. Xcode's build output lives outside it and is reclaimed
+# by scripts/reclaim-orphan-derived-data.sh, which every scripts/test-all.sh run already invokes. So
+# tidy-checkout reports it and does not delete it, even under --apply. Asserted in both directions,
+# because "reports it" alone would pass on a version that also deleted it.
+if grep -q "Would reclaim 1 dead build folder" <<< "${OUTPUT}"; then
+  assert "the run reports dead Xcode build output" "yes"
+else
+  assert "the run reports dead Xcode build output" "no"
+  echo "${OUTPUT}" | sed 's/^/    /'
+fi
+
+if [[ -d "${DERIVED}/Overture-dead" ]]; then
+  assert "--apply does not delete outside the checkout" "yes"
+else
+  assert "--apply does not delete outside the checkout" "no"
+fi
 
 BRANCHES="$(git -C "${REPO}" for-each-ref --format='%(refname:short)' refs/heads/)"
 

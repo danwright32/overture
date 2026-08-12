@@ -121,6 +121,7 @@ main() {
   tidy_worktrees "${current_branch}" "${merged_heads}" "${open_heads}" "${gh_ok}"
   tidy_branches "${current_branch}" "${merged_heads}" "${open_heads}" "${gh_ok}"
   report_build_dir
+  report_derived_data
 }
 
 # Deliberately NOT `[[ -z "${1//[[:space:]]/}" ]]` first. Bash pattern substitution with a character
@@ -293,6 +294,23 @@ report_build_dir() {
   else
     echo "  Left alone. Pass --clean-build to remove it."
   fi
+  echo
+}
+
+# The Xcode build output belonging to worktrees that are already gone (#2585). This is the other half
+# of the same accumulation: removing a worktree above reclaims everything it held EXCEPT its Xcode
+# cache, because that is the one toolchain here whose cache lives outside the checkout, keyed by the
+# checkout's path. Measured 2026-08-12: 148 GB, 101 of 105 folders belonging to directories that had
+# already been deleted, and a volume down to 132 MiB free.
+#
+# Reported, never deleted, even under --apply. This script's remit is the checkout, the actual reclaim
+# already runs on its own inside every scripts/test-all.sh, and delegating rather than reimplementing
+# keeps one rule about what is safe to remove instead of two that can disagree.
+report_derived_data() {
+  echo "== Xcode build output =="
+  "${SCRIPT_DIR}/reclaim-orphan-derived-data.sh" --dry-run || true
+  echo "  Reclaimed automatically by every scripts/test-all.sh run. To do it now:"
+  echo "    scripts/reclaim-orphan-derived-data.sh"
   echo
 }
 
