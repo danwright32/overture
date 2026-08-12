@@ -41,6 +41,10 @@ MAC_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # #2193/#2232: the suite's own shape, reported by the run instead of hand-written into a document.
 # shellcheck source=./lib/suite-stats.sh
 source "${SCRIPT_DIR}/lib/suite-stats.sh"
+# #2577: whether the run is still MOVING, said while it runs. The empty-run gate below can only speak
+# once a run has ended, and the run this exists for never ends.
+# shellcheck source=./lib/test-progress-watch.sh
+source "${SCRIPT_DIR}/lib/test-progress-watch.sh"
 
 # Given `ps -eo pid=,command=`-style output (one process per line: PID then its full command),
 # returns the PIDs of any resident Debug-configuration Overture.app test host (#632): the one
@@ -392,6 +396,11 @@ keep_diagnostic_file() {
 main() {
   command -v flock >/dev/null || { echo "flock not found; install it with: brew install flock" >&2; exit 1; }
 
+  # #2577: however this script leaves, its watcher goes with it. A watcher that outlived the run
+  # would sit printing stall warnings about a temporary file nobody is writing to any more, which is
+  # a worse alarm than none: it would be indistinguishable from a real one and always wrong.
+  trap 'stop_progress_watch "${PROGRESS_WATCH_PID}"' EXIT
+
   cd "${MAC_DIR}"
 
   # #1257: prevent, don't just detect (#1252). A Debug Overture run-debug.sh launched from mac/build holds
@@ -423,6 +432,11 @@ main() {
     test_exit_code=0
     started_at="${SECONDS}"
     output_file="$(mktemp)"
+    # #2577: watch this attempt's own log while it streams. Started BEFORE flock, deliberately, so
+    # the wait for the shared lock is inside what the watcher can see: an empty log is how it knows
+    # the run is queued rather than stalled, and a run that sits behind another worktree's suite for
+    # 50 minutes says so instead of being silent for 50 minutes.
+    start_progress_watch "${output_file}"
     # tee, so the run still streams live: a suite that only prints at the end looks hung (#1006's
     # investigation was slow enough without waiting blind).
     #
@@ -450,6 +464,9 @@ main() {
       2>&1 | tee "${output_file}"
     test_exit_code="${PIPESTATUS[0]}"
     set -e
+    # The run is over, so the watcher has nothing left to watch and the log is about to be deleted.
+    # Stopped here rather than only in the trap, because a retried attempt starts another one.
+    stop_progress_watch "${PROGRESS_WATCH_PID}"
 
     for pid in $(stale_debug_test_host_pids "$(ps -eo pid=,command=)" "${derived_root}"); do
       kill "${pid}" 2>/dev/null || true
@@ -556,11 +573,18 @@ main() {
       echo "run-tests-locked.sh: asking the PURE suite directly, since it does not need the app..." >&2
       local pure_output pure_code=0 pure_outcome
       pure_output="$(mktemp)"
+      # #2577: the SIBLING of the run above, and the identical shape: flock, then xcodebuild, into a
+      # file. It queues for the same lock and runs the same tests, so it can wait the same way and
+      # hang the same way, and it is reached at the worst possible moment (after a crash, when
+      # somebody is already waiting on an answer). Watched by the same watcher rather than left as
+      # the one path where a hang is still invisible (L30).
+      start_progress_watch "${pure_output}"
       set +e
       flock "${LOCK_FILE}" xcodebuild -scheme OvertureCore -destination 'platform=macOS' test \
         > "${pure_output}" 2>&1
       pure_code="$?"
       set -e
+      stop_progress_watch "${PROGRESS_WATCH_PID}"
       pure_outcome="$(run_outcome "$(cat "${pure_output}")" "${pure_code}")"
       echo >&2
       if [[ -z "${pure_outcome}" ]]; then
