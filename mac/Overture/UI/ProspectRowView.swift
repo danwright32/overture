@@ -16,7 +16,6 @@ struct ProspectRowView: View {
     let onKeep: () -> Void
     let onDismiss: (ShowOutcome) -> Void
     var onUnapprove: () -> Void = {}
-    var onSkipDraft: () -> Void = {}
     // #367
     var onReprep: (_ mode: ReprepMode) -> Void = { _ in }
     // #2007: Dan prepped this show by hand, and what he wrote.
@@ -169,7 +168,6 @@ struct ProspectRowView: View {
                 DraftReviewView(
                     item: item,
                     onUnapprove: onUnapprove,
-                    onSkip: onSkipDraft,
                     onReprep: onReprep,
                     onSaveDraft: onSaveDraft,
                     onSaveOpening: onSaveOpening,

@@ -607,6 +607,34 @@ struct StartTimeLabelTests {
         #expect(ClockTime.listLabel([]) == nil)
     }
 
+    // #2376: two separately ticketed performances at the SAME listed curtain time read as "7:00 PM and
+    // 7:00 PM". Measured on real La MaMa OvationTix bytes on 2026-08-09: `Tawasol` on 2026-09-05 lists
+    // performanceIds 11851048 and 11851049, both at `2026-09-05 19:00`, and 1 of the 8 multi-time nights
+    // in that feed is this shape.
+    //
+    // De-duplicated HERE, where the times become a sentence, rather than in the one adapter that can
+    // produce it today, so every present and future producer of a times list is covered at once (L30).
+    @Test func twoPerformancesAtOneTimeSayThatTimeOnce() {
+        #expect(ClockTime.listLabel(["19:00", "19:00"]) == "7:00 PM")
+        #expect(ClockTime.listLabel(["19:00", "19:00", "19:00"]) == "7:00 PM")
+    }
+
+    // The bug is repetition, not plurality: a genuine double bill must keep both of its distinct times,
+    // and the de-duplication must not reorder what is left. Feed order is what the card shows.
+    @Test func aRealDoubleBillKeepsBothTimesInFeedOrder() {
+        #expect(ClockTime.listLabel(["21:15", "17:00"]) == "9:15 PM and 5:00 PM")
+        #expect(ClockTime.listLabel(["17:00", "21:15", "17:00"]) == "5:00 PM and 9:15 PM")
+    }
+
+    // The de-duplication happens on the RENDERED label rather than on the raw string. Today the parser
+    // accepts exactly one spelling ("HH:mm"), so the two are equivalent and this cannot be demonstrated
+    // by a fixture; it is written that way so a parser that later accepts a second spelling of one time
+    // does not put that time on the card twice.
+    @Test func unreadableEntriesStillDropOutRatherThanDeduplicatingToNothing() {
+        #expect(ClockTime.listLabel(["19:00", "7pm", "19:00"]) == "7:00 PM")
+        #expect(ClockTime.listLabel(["7pm", "7pm"]) == nil)
+    }
+
     // Noon and midnight are where 12-hour clocks go wrong, and a show really can start at either.
     @Test func readsNoonAndMidnightTheWayAPersonWould() {
         #expect(ClockTime.listLabel(["12:00"]) == "12:00 PM")

@@ -42,7 +42,7 @@ struct EveryAddressOnScreenTests {
     }
 
     private func view(_ item: QueueItem) -> some View {
-        DraftReviewView(item: item, onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in })
+        DraftReviewView(item: item, onUnapprove: {}, onSaveDraft: { _, _ in })
     }
 
     // The address itself, on the row, even though the contact has a name to show instead.
@@ -96,5 +96,54 @@ struct EveryAddressOnScreenTests {
         let rendered = view(item([contact("sarah@company.example", "Sarah Chen")]))
 
         #expect(try allTexts(rendered).contains("Add contact"))
+    }
+
+    // #2549. Dan, walking the review queue on 2026-08-11, pointing at two places on one card: "there are
+    // 2 places that say the email, that seems redundant."
+    //
+    // The contact line above the draft echoed the address small and grey on the right, and the Contacts
+    // block below the action row printed the same address again. Both were locally defensible: the echo
+    // justified itself against the LEFT of its own line, and the Contacts block did not exist in the same
+    // breath. Two correct local decisions, one duplicated line on screen (#843's shape).
+    //
+    // Counted rather than pattern-matched on the source, because "how many times does this card say it"
+    // is the actual question, and it is the one thing only a rendered view can answer.
+    @Test func thecardSaysEachAddressExactlyOnce() throws {
+        let rendered = view(item([contact("sarah@company.example", "Sarah Chen")]))
+        let texts = try allTexts(rendered)
+
+        #expect(texts.filter { $0 == "sarah@company.example" }.count == 1,
+                "the address appears \(texts.filter { $0 == "sarah@company.example" }.count) times: \(texts)")
+        // The line that stays is the Contacts block's, which is the one that scales past one recipient
+        // and carries the send state and the strike control beside it.
+        #expect(texts.contains("Sarah Chen"), "the contact's name still identifies who the draft is for")
+    }
+
+    // The address must not be lost on the way: a contact with no name has nothing else identifying it, so
+    // it still has to be readable on the card.
+    //
+    // Deliberately NOT a count. Measured while fixing #2549 (2026-08-12): with no name, the contact line's
+    // own identity IS the address, so the card still says it twice, and with two contacts the opening
+    // preview area says it a third time. Those two are #2560, and one of them sits inside the opening block
+    // #2545 is expected to remove outright. Asserting "exactly once" here would either lock in a number
+    // that is about to change or claim a fix this change does not make.
+    @Test func anaddressWithNoNameIsStillReadable() throws {
+        let rendered = view(item([contact("info@thevenue.example", nil)]))
+
+        #expect(try allTexts(rendered).contains("info@thevenue.example"))
+    }
+
+    // Two contacts are two distinct addresses: removing a duplicate must not collapse separate recipients
+    // into one line, which would be the worse defect (Dan would send to someone he cannot see).
+    @Test func twocontactsReadAsTwoAddresses() throws {
+        let rendered = view(item([contact("info@thevenue.example", nil),
+                                  contact("sarah@company.example", "Sarah Chen")]))
+        let texts = try allTexts(rendered)
+
+        #expect(texts.contains("info@thevenue.example"))
+        #expect(texts.contains("sarah@company.example"))
+        // The NAMED contact is the case #2549 reported, and it reads once even beside a second contact.
+        #expect(texts.filter { $0 == "sarah@company.example" }.count == 1,
+                "the named contact's address appears \(texts.filter { $0 == "sarah@company.example" }.count) times")
     }
 }

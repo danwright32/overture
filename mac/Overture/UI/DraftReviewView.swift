@@ -9,7 +9,6 @@ import SwiftUI
 struct DraftReviewView: View {
     let item: QueueItem
     let onUnapprove: () -> Void
-    let onSkip: () -> Void
     // #367: request a re-prep on a prospect that already has a draft.
     var onReprep: (_ mode: ReprepMode) -> Void = { _ in }
     let onSaveDraft: (_ subject: String, _ body: String) -> Void
@@ -172,11 +171,15 @@ struct DraftReviewView: View {
                 ConfidencePip(confidence: conf, sourceURL: primary?.contactSourceLinkURL)
             }
             Spacer()
-            // The address is echoed small on the right only for a named contact (name on the left,
-            // email on the right); the email-only case already shows it on the left, so no repeat.
-            if case let .person(_, _, email?) = display {
-                Text(email).font(.system(size: 11)).foregroundStyle(OVColor.inkFaint)
-            }
+            // #2549: the address is NOT echoed here. It used to be, small and grey on the right, and the
+            // Contacts block below the action row printed the same address again: "there are 2 places that
+            // say the email, that seems redundant" (Dan, 2026-08-11). The echo justified itself against the
+            // LEFT of its own line and never against a block that did not exist in the same breath.
+            //
+            // The Contacts block is the one that earns it: per contact, carrying the send state and the
+            // strike control, and the only one that scales past a single recipient. This line's job is who
+            // the draft is addressed to and how confident the guess is, which the name, role and confidence
+            // pip already say.
         }
         .font(.system(size: 12))
     }
@@ -373,8 +376,11 @@ struct DraftReviewView: View {
                 }
                 // #367: a re-prep still awaiting the next Prep run, distinct from "Edited" (this
                 // just means a run is pending, not that Dan has touched the text).
+                // #2548: "Prep queued" on a show no run has ever served, through the one naming rule.
                 if item.isReprepQueued {
-                    Text("Re-prep queued").font(.system(size: 10)).foregroundStyle(OVColor.gold)
+                    Text(ReprepRequest.queuedBadge(writtenByDan: item.draftWrittenByDan,
+                                                   lastServedAt: item.reprepLastServedAt))
+                        .font(.system(size: 10)).foregroundStyle(OVColor.gold)
                 }
                 draftCheckFlags
             }
@@ -555,8 +561,6 @@ struct DraftReviewView: View {
                     editing = true
                 }
                 .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
-                Button("Skip") { onSkip() }
-                    .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
                 // #1828: this is the card that needs Re-prep MOST. The show has no address at all, so
                 // "find contacts only" is the highest-value action available on it, and it was the one
                 // branch that never drew the control.
@@ -603,8 +607,6 @@ struct DraftReviewView: View {
                     editing = true
                 }
                 .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
-                Button("Skip") { onSkip() }
-                    .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
                 reprepControl
                 // #2050/#2012: the same explanations that used to appear only after approving. The button
                 // above is disabled by exactly the things these name, and Dan met it greyed with nothing
@@ -629,8 +631,13 @@ struct DraftReviewView: View {
         }
         // #733: guard against repeatedly re-prepping the same prospect. #2007: and against replacing an
         // email Dan wrote himself. The sentence is chosen in ReprepRequest.confirmation.
-        .alert("Re-prep this show?", isPresented: $showReprepConfirm) {
-            Button("Re-prep") {
+        // #2548: titled through the one naming rule, so it cannot say "Re-prep" over a control saying
+        // "Prep".
+        .alert(ReprepRequest.confirmTitle(writtenByDan: item.draftWrittenByDan,
+                                          lastServedAt: item.reprepLastServedAt),
+               isPresented: $showReprepConfirm) {
+            Button(ReprepRequest.verb(writtenByDan: item.draftWrittenByDan,
+                                      lastServedAt: item.reprepLastServedAt)) {
                 if let mode = pendingReprepMode { onReprep(mode) }
                 pendingReprepMode = nil
             }
@@ -663,7 +670,9 @@ struct DraftReviewView: View {
     }
 
     private var reprepMenu: some View {
-        Menu("Re-prep") {
+        // #2548: "Prep" when no run has ever served this show and the only draft is Dan's own.
+        Menu(ReprepRequest.menuLabel(writtenByDan: item.draftWrittenByDan,
+                                     lastServedAt: item.reprepLastServedAt)) {
             Button("Redraft only") { requestReprep(.draftOnly) }
                 .disabled(item.isSent)
             Button("Find contacts only") { requestReprep(.contactsOnly) }
@@ -989,7 +998,7 @@ struct DraftReviewView: View {
     item.draftSubject = "Photographing Aurora Strings at Carnegie Hall."
     item.draftBody = "Hi Emma, I photograph performing arts in New York and saw Aurora Strings is at Carnegie Hall. I shoot unobtrusive, no-flash documentary coverage and think it would suit this program."
     item.sentAt = Date()
-    return DraftReviewView(item: item, onUnapprove: {}, onSkip: {}, onSaveDraft: { _, _ in })
+    return DraftReviewView(item: item, onUnapprove: {}, onSaveDraft: { _, _ in })
         .padding(OVSpacing.lg)
         .frame(width: 480)
         .background(OVColor.canvas)
