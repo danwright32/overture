@@ -122,6 +122,57 @@ enum ReachedOutQueue {
             .map { $0.prospect.naturalKey }).count
     }
 
+    // #2550: the moment something is actually OWED on this row, which is not what the row sorts by.
+    //
+    // `nextReachOut` above folds in #2397's floor, and the floor is a sorting anchor: it exists so a live
+    // pitch never falls off the stage, and it asserts nothing about anything being due. Read as a due date
+    // it told Dan to reach out on every show's own night, beside a row with no send control on it at all.
+    //
+    // The three clocks here are the same three, minus the floor, and each is asked through the SAME
+    // predicate the row's control is asked through, so the text and the button cannot disagree (L16):
+    // `FollowUp.nextDue` with `isAwaitingNudge` is what `ReachedOutAction` reads for the nudge, and
+    // `PostEventPrompt.nextPromptDate` is what it reads for the post-event track.
+    //
+    // Nil means nothing is owed. That is a real state, not a missing answer: a spent pitch on a show that
+    // has not happened yet is held on the stage by the floor alone, with nothing left to count down to.
+    static func nextActionableMoment(for r: Recipient, of p: Prospect, now: Date,
+                                     followUpConfig: FollowUpConfig = .init()) -> Date? {
+        let nudge = FollowUp.nextDue(eligible: FollowUp.isAwaitingNudge(r, in: p), sentAt: r.sentAt,
+                                     lastFollowUpAt: r.lastFollowUpAt, followUpCount: r.followUpCount,
+                                     remindedAt: r.nudgeRemindedAt, config: followUpConfig)
+        let candidates = [nudge,
+                          nextFormDecision(for: r, of: p, config: followUpConfig),
+                          PostEventPrompt.nextPromptDate(for: r, of: p, now: now),
+                          r.hasUnhandledReply ? r.replyArrivedAt : nil]
+        return candidates.compactMap { $0 }.min()
+    }
+
+    // What the row's timing slot says, decided from what is OWED rather than from the sort key (#2550).
+    // One entry point, so a caller cannot reassemble the pieces into the disagreement this replaces.
+    static func timingLabel(for r: Recipient, of p: Prospect, now: Date, today: String,
+                            followUpConfig: FollowUpConfig = .init()) -> String {
+        // #2169: a dated form pitch names the NIGHT, whatever its clock says, because there is no send to
+        // count down to. Unchanged, and asked first so the rule stays in one place.
+        if r.outreachChannel == .contactForm, let day = p.performanceDate,
+           EasternDate.date(from: day) != nil {
+            return formNightLabel(eventDay: day, today: today)
+        }
+        guard let next = nextActionableMoment(for: r, of: p, now: now, followUpConfig: followUpConfig) else {
+            return heldOpenLabel
+        }
+        return timingLabel(next: next, now: now, channel: r.outreachChannel,
+                           eventDay: p.performanceDate, today: today)
+    }
+
+    // #2550: the row is open, nothing is owed, and the floor is what is keeping it on the stage. Says what
+    // it is waiting on rather than counting down to a moment nothing happens at, and deliberately does not
+    // name the date: the row carries the show's own date beside the group name (#2551), and a slot that
+    // repeated it would be two lines saying one thing (#843).
+    //
+    // Only reachable BEFORE the show: once it has been and gone the post-event prompt is owed, so this
+    // never has to describe a night already past.
+    static let heldOpenLabel = "Nothing due before the show"
+
     // Plain-language "when to next reach out", shown on each reached-out row (#223). Anything due
     // now or overdue reads "Reach out now"; future dates read "in N day(s)" (whole days, rounded up).
     // #1630: a form pitch's due label asks for a DECISION, because there is nothing left to send. Same
@@ -191,6 +242,16 @@ enum ReachedOutQueue {
     // "Send a follow-up" action and its timing text can never disagree about whether it's due yet.
     static func isDueNow(next: Date, now: Date) -> Bool {
         next <= now
+    }
+
+    // #2550: whether the ROW is urgent, which is the same question the slot's own text answers. The row
+    // paints its timing text rust and fills its Answer button on this, and while it was asked of the sort
+    // key every open pitch went rust on its own night with nothing owed on it. Nothing owed is not urgent.
+    static func isDueNow(for r: Recipient, of p: Prospect, now: Date,
+                         followUpConfig: FollowUpConfig = .init()) -> Bool {
+        guard let next = nextActionableMoment(for: r, of: p, now: now, followUpConfig: followUpConfig)
+        else { return false }
+        return isDueNow(next: next, now: now)
     }
 
     // The next silent nudge for a still-silent recipient, mirroring FollowUp.dueRecipients' own

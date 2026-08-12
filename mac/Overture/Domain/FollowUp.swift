@@ -65,14 +65,30 @@ enum StandDownCopy {
 enum FollowUp {
     // The pacing core (#418 D): eligible AND sent AND under the cap AND the gap has passed since the
     // last touch. Eligibility differs by grain; see the two callers below.
+    //
+    // #2550: asked of `nextDue` rather than recomputing the anchor, so "is a nudge due" and "when is the
+    // next nudge" are one rule. The reached-out row's timing text reads the second and its button reads the
+    // first, and while they were two implementations they disagreed on a stood-down contact and on
+    // "remind me later": the row printed "Reach out now" beside no control at all.
     static func isDue(eligible: Bool, sentAt: Date?, lastFollowUpAt: Date?, followUpCount: Int,
                       remindedAt: Date? = nil, now: Date, config: FollowUpConfig = .init()) -> Bool {
-        guard eligible, let sentAt else { return false }
-        guard followUpCount < config.maxFollowUps else { return false }
+        guard let due = nextDue(eligible: eligible, sentAt: sentAt, lastFollowUpAt: lastFollowUpAt,
+                                followUpCount: followUpCount, remindedAt: remindedAt, config: config)
+        else { return false }
+        return now >= due
+    }
+
+    // WHEN the next nudge comes due, or nil if this contact has no nudge left to come due at all
+    // (ineligible, never sent, or the cap is spent). Same eligibility and same anchor as `isDue`, because
+    // it IS `isDue`'s anchor.
+    static func nextDue(eligible: Bool, sentAt: Date?, lastFollowUpAt: Date?, followUpCount: Int,
+                        remindedAt: Date? = nil, config: FollowUpConfig = .init()) -> Date? {
+        guard eligible, let sentAt else { return nil }
+        guard followUpCount < config.maxFollowUps else { return nil }
         // #1740: "remind me later" moves the clock without pretending a nudge was sent, so the anchor is
         // whichever touch is most recent. `lastFollowUpAt` keeps meaning a nudge actually went.
         let lastTouch = [lastFollowUpAt, remindedAt, sentAt].compactMap { $0 }.max() ?? sentAt
-        return now.timeIntervalSince(lastTouch) >= TimeInterval(config.gapDays) * 86_400
+        return lastTouch.addingTimeInterval(TimeInterval(config.gapDays) * 86_400)
     }
 
     // #1740: eligible for a NUDGE specifically, which is the silent-follow-up eligibility plus Dan's own

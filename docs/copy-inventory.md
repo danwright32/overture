@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1237 sentences**.
+Every sentence Overture can say to Dan: **1238 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1121,6 +1121,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/DaysOffView.swift`
 "Nothing changed."
     `Domain/ShowOutcome.swift`
+"Nothing due before the show"
+    `Domain/ReachedOutQueue.swift`
 "Nothing found here was verified as belonging to this act. Only an address read off a page naming them counts; a generic inbox or an inferred address doesn't. It may still be right, so it's worth a look before you write."
     `Domain/Reachability.swift`
 "Nothing has recorded a merge on this Mac, so there is nothing to compare this copy against."
