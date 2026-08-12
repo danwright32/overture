@@ -1054,8 +1054,19 @@ struct QueueView: View {
                         ForEach(group.rows) { entry in
                             switch entry {
                             case .prospect(let prospect, let recipient, let next):
-                                reachedOutRow((prospect: prospect, recipient: recipient, next: next),
-                                              now: now)
+                                // #2417: the row Dan just closed out draws its quiet exit here, on the
+                                // press, while the write and the queue rebuild behind it take their
+                                // quarter of a second. ReachedOutDepartureAware owns the read, so only
+                                // this row redraws rather than the whole stage.
+                                ReachedOutDepartureAware(sendState: sendState,
+                                                         key: prospect.naturalKey) { snapshot, reason in
+                                    if let snapshot, let reason, !reason.showsSendDelight {
+                                        ClosedOutDepartureRow(item: snapshot)
+                                    } else {
+                                        reachedOutRow((prospect: prospect, recipient: recipient,
+                                                       next: next), now: now)
+                                    }
+                                }
                             case .inquiry(let inquiry, let row, _):
                                 // #1513: the same row shape as a show, so the two read as one list. The
                                 // source capsule and lifecycle line stay, because they say what an

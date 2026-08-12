@@ -49,6 +49,31 @@ struct QueueDateGroups<Header: View, Content: View>: View {
     }
 }
 
+// #2417: one row on the Reached Out list, and whether it is on its way out.
+//
+// This list needs its own view because it is NOT the date-grouped list. The two are alternatives in
+// QueueView's body, never both on screen, and only the date-grouped one goes through QueueDateGroups.
+// Wiring the close-out control into that splice therefore did nothing on the stage the control actually
+// lives on, which is the whole reason this exists.
+//
+// It needs no splice of its own, and that is the useful difference. A send has already dropped its row
+// from the store's answer by the time it departs, so the date-grouped list must put a snapshot back. A
+// close-out marks the departure BEFORE the write, so the row is still in this list and only has to be
+// DRAWN differently. It leaves on its own when the rebuild lands.
+//
+// It reads sendState here and hands a finished value into a closure, rather than taking a built view,
+// for the same reason QueueDateGroups does: a view built at the call site is assembled inside QueueView's
+// body, which is the cost that arrangement exists to remove.
+struct ReachedOutDepartureAware<Content: View>: View {
+    let sendState: SendProgressState
+    let key: String
+    @ViewBuilder let content: (QueueItem?, DepartureReason?) -> Content
+
+    var body: some View {
+        content(sendState.departing[key], sendState.departureReasons[key])
+    }
+}
+
 // One card, and the three things about it that a send changes: whether it is the show a jump is marking,
 // when its own send started, and when a reply to one of its contacts started.
 //

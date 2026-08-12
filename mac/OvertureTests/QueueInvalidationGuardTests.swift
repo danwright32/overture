@@ -128,6 +128,27 @@ struct QueueInvalidationGuardTests {
         }
     }
 
+    // #2417: the stage the close-out control lives on must honour a departure too.
+    //
+    // This is the guard for a defect that shipped past a green suite. The close-out menu was wired into
+    // the departure machinery, which is spliced by QueueDateGroups, but the control lives on the Reached
+    // Out list, which QueueView draws instead of that one, never alongside it. The row therefore went on
+    // rendering exactly as before and the fix was felt by nobody. Nothing failed, because no test knew
+    // which of the two lists the control was on.
+    //
+    // Asserted on the WIRING rather than on any rendering of it: the reached-out branch must hand its row
+    // through ReachedOutDepartureAware, which is the one thing that makes a departure visible there.
+    @Test func theReachedOutListHonoursADeparture() {
+        let stripped = queueView
+            .split(separator: "\n")
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+            .joined(separator: "\n")
+        #expect(stripped.contains("ReachedOutDepartureAware("),
+                "the Reached Out list must route its rows through the departure-aware view, or a row Dan closes out cannot leave until the rebuild lands")
+        #expect(stripped.contains("ClosedOutDepartureRow("),
+                "and it must draw the quiet exit, never the send celebration, on an ending like no response")
+    }
+
     // And the two views that DO read it hand finished values into a closure they run themselves, rather
     // than taking a built view. A view built at the call site is assembled inside QueueView's body, which
     // is the cost this removes arriving one level down (#1774's lesson, again).
