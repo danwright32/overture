@@ -143,6 +143,27 @@ final class WatchedSource {
     // since this began recording, which is deliberately not the same claim as "never returned one".
     var lastNonEmptyAt: Date? = nil
 
+    // #1759: the third way an established source stops working, counted the same way as the two above.
+    // How many consecutive runs came away WITHOUT reading this source, whether the fetch never landed the
+    // page or the read came back unusable.
+    //
+    // It exists because the failure line is a PROMISE ("The next scout will try it again") and nothing
+    // qualified it. A page that had failed ten runs running said exactly what one that hiccupped once
+    // said, so the difference between waiting it out and a calendar that is simply gone was invisible on
+    // a watchlist that only ever grows.
+    //
+    // Reset ONLY by a run that genuinely read the page, never by a fetch. That distinction is the whole
+    // mechanism: a successful fetch clears `health` and `lastFailure` (SourceCheck.decide), and the free
+    // daily run fetches every source and reads none, so a streak a fetch could clear would be cleared
+    // every morning and could never reach any threshold, on exactly the source it is built for.
+    //
+    // Defaulted, so existing rows migrate cleanly. A row already failing when this shipped starts at zero
+    // and takes `SourceAttention.failedReadStreakThreshold` further runs to say so, which is late but
+    // never wrong: nothing stored anywhere counted past failures, so any seeded number would be invented.
+    // What the sentence then says is not late, because it carries the age from `lastSucceededAt`, which
+    // old rows have had all along.
+    var failedReadStreak: Int = 0
+
     // #891: what the last run that READ this source managed to read, and what it could not (an event whose
     // own detail page was never reached comes back with no venue and is dropped).
     //
@@ -296,6 +317,24 @@ final class WatchedSource {
         return SourceAttention.goneQuietLine(runs: emptyStreak, lastNonEmptyAt: lastNonEmptyAt, now: now)
     }
 
+    // #1759: what the row says when several runs in a row have come away without reading this page. Nil
+    // until the streak passes the threshold, so a run that died before reaching a page keeps the honest
+    // unqualified promise beside it (the next scout really will try it again) and only a source that has
+    // had that promise broken several times earns the harder sentence.
+    //
+    // Nil too on a source that has NEVER read its calendar, whatever its streak: that row already carries
+    // a stronger sentence saying so, ending in the same instruction, and two gold lines a line apart both
+    // telling Dan to check the link is the duplicated copy this sheet keeps being filed for (#843).
+    //
+    // Read off the SAME rule that puts the row in the attention section, so the sentence and the badge
+    // cannot disagree about which sources they mean.
+    func repeatedFailureNote(now: Date = Date()) -> String? {
+        guard isActive, !SourceAttention.hasNeverRead(self, now: now),
+              SourceAttention.hasFailedToReadRepeatedly(self) else { return nil }
+        return SourceAttention.repeatedFailureLine(runs: failedReadStreak,
+                                                   lastSucceededAt: lastSucceededAt, now: now)
+    }
+
     // #1544: what the row says about an unencrypted fetch, decided beside the data and never in the view
     // (#863). Nil is the overwhelmingly common case and costs the row nothing.
     var insecureFetchNote: String? {
@@ -369,6 +408,26 @@ final class WatchedSource {
         health = .ok
         lastFailure = nil
         successfulCheckCount += 1
+        // #1759: the page was read, so the run of runs that could not read it is over. Written here, on
+        // the one shared success branch both ingest doors go through, for the same reason every count
+        // above it is (#1001): a second copy is what drifts.
+        failedReadStreak = 0
+    }
+
+    // #1759: the mirror of `recordSuccessfulRead`, for a run that came away without reading this source
+    // at all. Every path that records a failed check goes through it (the extract run's unusable result,
+    // a fetch that never landed the page, a native feed that threw, a row with no usable address), so a
+    // fifth path cannot be added that quietly keeps no history, and the four cannot drift.
+    //
+    // Deliberately does NOT touch `lastSucceededAt`, `successfulCheckCount` or any feed-health field: a
+    // source that has been 404ing for a month must not read as "checked an hour ago, all fine", and a
+    // failed check must never count toward the warmup that lets a source start marking shows as gone.
+    // It stays ACTIVE, always: only an org's refusal or Dan's own removal takes a source off the list.
+    func recordFailedRead(_ failure: SourceFailure, now: Date) {
+        lastCheckedAt = now
+        health = .failing
+        lastFailure = failure
+        failedReadStreak += 1
     }
 
     // #1029: the venue-precision line this source used to show Dan is gone (he did not understand why it

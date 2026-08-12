@@ -511,9 +511,10 @@ enum ScoutService {
             // Typed, named, on the row, and the loop carries on. `ScoutFailure` used to present this as
             // the death of the whole scout, because with one source it was.
             let failure = SourceFailure.fetch(fetchError(from: error))
-            source?.lastCheckedAt = now
-            source?.health = .failing
-            source?.lastFailure = failure
+            // #1759: through the one shared recorder, so a native feed that has been throwing for a week
+            // carries the same history a failing html page does. The row is optional here, and a run
+            // handed no row still records nothing at all, exactly as it already did.
+            source?.recordFailedRead(failure, now: now)
             var outcome = Outcome(found: 0, inserted: 0, updated: 0, skipped: 0)
             outcome.sources = [SourceResult(sourceId: sourceId, orgName: orgName, state: .failed(failure),
                                             listingsURL: source?.listingsURL)]
@@ -659,9 +660,10 @@ enum ScoutService {
             // A watched source with no usable address cannot be checked, and saying so is the whole
             // point: silence here would be a source Dan believes is being watched and is not.
             let failure = SourceFailure.verdict(.unreadable)
-            source.lastCheckedAt = now
-            source.health = .failing
-            source.lastFailure = failure
+            // #1759: through the one shared recorder. This run came away without reading the source, and
+            // it will do so on every run until the address is corrected, which is precisely the state the
+            // streak exists to make visible.
+            source.recordFailedRead(failure, now: now)
             return (result(.failed(failure)), nil)
         }
 

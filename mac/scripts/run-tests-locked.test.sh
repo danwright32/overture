@@ -311,11 +311,16 @@ assert_not_contains() {
 # on PATH, so main's whole path executes without building anything, reading this Mac's process table,
 # or dumping its OS log. Prints the script's combined output, then a "logcalls=<n>" line counting the
 # `log` invocations (#1972: only a dead run may pay for one), then a final "exit=<code>" line.
+#
+# #2321: the fourth argument is where the run may keep a diagnostic it cannot print in full. It
+# defaults inside the throwaway bin_dir, so a fixture is structurally unable to write into the real
+# one (L2); pass a directory of your own when the assertion is about what survives the run.
 run_wrapper_with_stub_xcodebuild() {
-  local xcodebuild_output="$1" xcodebuild_exit="$2" log_output="${3:-}"
+  local xcodebuild_output="$1" xcodebuild_exit="$2" log_output="${3:-}" diagnostics_dir="${4:-}"
   local bin_dir output code log_calls
 
   bin_dir="$(mktemp -d)"
+  [[ -n "${diagnostics_dir}" ]] || diagnostics_dir="${bin_dir}/diagnostics"
 
   # flock's real job is serialising xcodebuild across worktrees, which is irrelevant here; once it
   # holds the lock it execs the rest of its arguments, and so does this.
@@ -358,6 +363,7 @@ STUB
   # file the real gate is measured against either (L2).
   local baseline_file="${bin_dir}/baseline"
   output="$(PATH="${bin_dir}:${PATH}" OVERTURE_TEST_BASELINE_FILE="${baseline_file}" \
+    OVERTURE_TEST_DIAGNOSTICS_DIR="${diagnostics_dir}" \
     "${SCRIPT_DIR}/run-tests-locked.sh" 2>&1)"
   code=$?
   log_calls="$(grep -c . "${bin_dir}/log-calls" 2>/dev/null || echo 0)"
@@ -671,6 +677,163 @@ assert_contains "a run that executed nothing says so instead of reporting zero t
 
 assert_not_contains "and never claims a zero it did not measure" \
   "0 tests in 0 suites" "${BUILD_FAILURE_SHAPE}"
+
+echo
+# --- keep the diagnostic the runner names when it cannot explain a failure (#2321) ----------
+#
+# When the hosted run dies AND the pure-suite fallback dies with it, the runner has nothing left to
+# say about the cause, so it named the file holding the pure suite's whole output and then deleted
+# that file on the very next line. The one artifact worth reading was destroyed at the exact moment
+# it became the only thing worth reading.
+#
+# Measured 2026-08-08: three consecutive full runs failed this way. The message sent the
+# investigation at the app host, then at an external kill, both wrong. The real cause was recovered
+# only by reproducing the run by hand for another 20 minutes, to produce output that had already
+# existed twice. The two decisive lines are the ones in the fixture below; nothing in the code was
+# involved at all (this Mac's testmanagerd had been up since the previous Tuesday and was wedged).
+
+# Captured from that run's shape. It is a CRASH for the combined scheme (exit 65, "** TEST FAILED **"
+# and no named failing test), which is what sends the runner to the pure suite in the first place.
+HUNG_RUNNER_OUTPUT='Test Suite '"'"'All tests'"'"' started
+2026-08-08 09:12:03.100 xcodebuild[41200:9911] Timed out after 120.0s while initiating control session with daemon.
+2026-08-08 09:12:03.200 xctest[41205:9912] [error] CoreData: error: Executing as effective user 501
+xctest encountered an error (The test runner hung before establishing connection.)
+Failing tests:
+** TEST FAILED **'
+
+assert_equals "a hung test runner is a crash, which is what sends the run to the pure suite" \
+  "crashed" "$(run_outcome "${HUNG_RUNNER_OUTPUT}" 65)"
+
+# Named first, because a shell assertion whose helper does not exist is the trap this repo keeps
+# hitting (L100): the call prints "command not found" to stderr, the substitution comes back empty,
+# and every assertion expecting an empty answer below passes on nothing at all.
+for HELPER in pure_failure_evidence keep_diagnostic_file; do
+  assert_equals "${HELPER} is a function run-tests-locked.sh actually defines" \
+    "function" "$(type -t "${HELPER}" 2>/dev/null || echo missing)"
+done
+
+HUNG_EVIDENCE="$(pure_failure_evidence "${HUNG_RUNNER_OUTPUT}")"
+
+assert_contains "the line naming the hung runner is kept" \
+  "xctest encountered an error (The test runner hung before establishing connection.)" \
+  "${HUNG_EVIDENCE}"
+
+assert_contains "and the daemon timeout beside it" \
+  "Timed out after 120.0s while initiating control session with daemon." \
+  "${HUNG_EVIDENCE}"
+
+# The false positive that makes a bare `error:` grep wrong here, exactly as it does in build_failed:
+# every real run of this suite prints CoreData noise carrying "error:", and a filter that keeps it
+# buries the two lines that actually name the cause, which is the same defect as printing nothing.
+assert_not_contains "CoreData error noise is not offered as a cause" \
+  "Executing as effective user 501" "${HUNG_EVIDENCE}"
+
+# What it must PRESERVE, not only what it must catch (L104). A pure suite that genuinely FAILED names
+# its failing tests, and those names are the evidence: they were invisible too, since the pure run's
+# output goes to the file and never to the screen.
+PURE_NAMED_FAILURE_OUTPUT='Test aThingWorks() recorded an issue: Expectation failed
+Failing tests:
+	OvertureTests.FooTests.aThingWorks()
+** TEST FAILED **'
+assert_contains "a pure suite that named a failing test has that name printed" \
+  "OvertureTests.FooTests.aThingWorks()" "$(pure_failure_evidence "${PURE_NAMED_FAILURE_OUTPUT}")"
+
+# A compile failure in the pure scheme names its own cause too.
+assert_contains "a pure suite that did not compile has the compiler error printed" \
+  "error: cannot convert value of type" "$(pure_failure_evidence "${BUILD_FAILURE_OUTPUT}")"
+
+# Nothing matching means nothing to print, so the caller can say so plainly instead of printing an
+# empty block under a heading promising evidence (L11).
+assert_equals "output naming no cause yields no evidence" \
+  "" "$(pure_failure_evidence 'Test run with 10 tests in 2 suites passed after 1.0 seconds.')"
+
+# And a run that matches thousands of times is capped, or the useful lines scroll away exactly as
+# they would have in the raw file.
+MANY_TIMEOUTS="$(for i in $(seq 1 120); do echo "line ${i} Timed out after 120.0s"; done)"
+assert_equals "the evidence is capped at the last 20 lines" \
+  "20" "$(pure_failure_evidence "${MANY_TIMEOUTS}" | grep -c .)"
+
+assert_contains "the cap keeps the LAST lines, nearest the death" \
+  "line 120 Timed out" "$(pure_failure_evidence "${MANY_TIMEOUTS}")"
+
+echo
+# The kept file itself: it must survive the run, and the directory holding it must not grow forever.
+KEEP_DIR="$(mktemp -d)"
+KEEP_SOURCE="$(mktemp)"
+printf 'the whole pure-suite log\n' > "${KEEP_SOURCE}"
+
+KEPT_ONE="$(keep_diagnostic_file "${KEEP_SOURCE}" "${KEEP_DIR}" 3)"
+assert_equals "the kept file holds the output it was handed" \
+  "the whole pure-suite log" "$(cat "${KEPT_ONE}" 2>/dev/null)"
+
+# Bounded, and bounded by DELETING THE OLDEST. Several worktrees run this script on this Mac at once,
+# so the directory is shared and every run must leave it at the same fixed size rather than each run
+# adding one more file forever.
+for i in 1 2 3 4 5; do
+  : > "${KEEP_DIR}/pure-suite-20260101-00000${i}.aaaaaa"
+done
+KEPT_TWO="$(keep_diagnostic_file "${KEEP_SOURCE}" "${KEEP_DIR}" 3)"
+
+assert_equals "the directory is pruned to the number of diagnostics it is allowed to keep" \
+  "3" "$(find "${KEEP_DIR}" -name 'pure-suite-*' | grep -c .)"
+
+assert_equals "the diagnostic just kept is one of the survivors" \
+  "yes" "$(if [[ -f "${KEPT_TWO}" ]]; then echo yes; else echo "no: ${KEPT_TWO}"; fi)"
+
+assert_equals "and the oldest is the one that went" \
+  "no" "$(if [[ -f "${KEEP_DIR}/pure-suite-20260101-000001.aaaaaa" ]]; then echo yes; else echo no; fi)"
+
+assert_equals "while the newest of the old ones stays" \
+  "yes" "$(if [[ -f "${KEEP_DIR}/pure-suite-20260101-000005.aaaaaa" ]]; then echo yes; else echo no; fi)"
+
+# Two runs in the same second must not land on one name, or a second worktree's diagnostic silently
+# overwrites the first one's at exactly the moment both are worth reading.
+assert_equals "two diagnostics kept in the same second are two files, not one" \
+  "no" "$(if [[ "${KEPT_ONE}" == "${KEPT_TWO}" ]]; then echo yes; else echo no; fi)"
+
+rm -rf "${KEEP_DIR}" "${KEEP_SOURCE}"
+
+echo
+# The wiring, which is the whole claim (L3). Every assertion above passes while main still names a
+# file it has already deleted.
+#
+# The pure suite's output goes to a FILE, never to the screen, so anything asserted against the whole
+# run would be satisfied by the combined run's own streamed output carrying the same lines. These
+# assert against the section from the pure-suite probe onward, which pre-fix holds one sentence and a
+# path.
+pure_suite_section() {
+  awk '/asking the PURE suite directly/{f=1} f' <<< "$1"
+}
+
+PURE_DIAG_DIR="$(mktemp -d)"
+PURE_FAIL_RUN="$(run_wrapper_with_stub_xcodebuild "${HUNG_RUNNER_OUTPUT}" 65 "" "${PURE_DIAG_DIR}")"
+PURE_SECTION="$(pure_suite_section "${PURE_FAIL_RUN}")"
+
+assert_contains "the pure-suite failure names the cause on screen, not only a path" \
+  "The test runner hung before establishing connection." "${PURE_SECTION}"
+
+assert_contains "and the daemon timeout with it" \
+  "Timed out after 120.0s while initiating control session with daemon." "${PURE_SECTION}"
+
+# THE case. Whatever path that message points at must still be there when somebody goes to read it.
+# Deliberately reads the path back out of the message rather than assuming this fix's own naming, so
+# the assertion is about the file existing and not about the string we chose to print.
+NAMED_DIAGNOSTIC="$(grep -aoE '/[^[:space:]]+' <<< "${PURE_SECTION}" | tail -1)"
+assert_equals "the file the message names still exists when somebody goes to read it" \
+  "exists" \
+  "$(if [[ -n "${NAMED_DIAGNOSTIC}" && -f "${NAMED_DIAGNOSTIC}" ]]; then echo exists; else echo "missing: ${NAMED_DIAGNOSTIC:-nothing was named}"; fi)"
+
+assert_contains "and it holds the pure suite's whole output, not just the lines printed above" \
+  "CoreData: error: Executing as effective user 501" "$(cat "${NAMED_DIAGNOSTIC}" 2>/dev/null)"
+
+# The common path pays nothing. A run with nothing to explain must leave no file behind at all, or a
+# shared directory fills up with the output of runs nobody will ever read.
+PASS_DIAG_DIR="$(mktemp -d)"
+run_wrapper_with_stub_xcodebuild "${PASSING_OUTPUT}" 0 "" "${PASS_DIAG_DIR}" > /dev/null
+assert_equals "a passing run keeps no diagnostic at all" \
+  "0" "$(find "${PASS_DIAG_DIR}" -type f | grep -c .)"
+
+rm -rf "${PURE_DIAG_DIR}" "${PASS_DIAG_DIR}"
 
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All run-tests-locked.sh stale-host fixtures passed."

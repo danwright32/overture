@@ -223,8 +223,11 @@ enum SourceCheck {
         switch result {
         case .failure(let error):
             let failure = SourceFailure.fetch(error)
-            source.health = .failing
-            source.lastFailure = failure
+            // #1759: through the one shared recorder, which counts this as another run that came away
+            // without reading the page. A fetch that never landed it is exactly that, no less than a read
+            // that came back unusable, and counting only the second would leave a source that has been
+            // 404ing for a fortnight saying the same unqualified line it said on day one.
+            source.recordFailedRead(failure, now: now)
             // NOT lastSucceededAt, and NOT successfulCheckCount. A source that has been 404ing for a
             // month must not read as "checked an hour ago, all fine", and a failed check must never
             // count toward the warmup that lets a source start marking shows as gone.

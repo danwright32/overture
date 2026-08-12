@@ -178,6 +178,13 @@ enum WatchlistEditing {
         source.health = .neverChecked   // not "healthy" and not "broken": nothing has checked it since
         source.lastFailure = nil
         source.hasUnreadChanges = false
+        // #1759: and the count of runs that failed to read it, which is the same kind of claim as the
+        // failure it is a history of. Held apart from `emptyStreak` beside it, which survives a resume
+        // deliberately: that one can only grow through runs that DID read the page, so it is a record of
+        // reads, while this one is a record of failures, and #1673's rule is that nothing this source's
+        // scraper concluded before the stop may present itself as its state now. A revived source that is
+        // still broken re-earns the sentence within three runs, from evidence rather than from memory.
+        source.failedReadStreak = 0
     }
 
     // #1027: correcting a source's URL in place.
@@ -260,6 +267,11 @@ enum WatchlistEditing {
         // standing it would put that sentence, and the attention badge behind it, on a source nobody has
         // given a chance yet, which is precisely the correction being punished for the fault it fixed.
         source.emptyStreak = 0
+        // #1759: and the THIRD streak, for exactly the same reason. "Failed to read five runs in a row"
+        // is a claim about the page that was being watched, and it is the correction's own evidence: the
+        // new address has not been tried once, so carrying the count over would answer Dan's fix by
+        // repeating the complaint that prompted it.
+        source.failedReadStreak = 0
 
         // What the last run managed to read, and what it dropped. All of it was about the old page, and
         // `readabilityNote` is built from these, so a survivor here becomes a sentence Dan reads.
@@ -366,6 +378,10 @@ enum WatchlistEditing {
     static func confirmEmpty(_ source: WatchedSource, in context: ModelContext) -> ConfirmResult {
         source.health = .ok
         source.lastFailure = nil
+        // #1759: Dan has answered the question the repeated-failure line asks him ("Check the link"), and
+        // his answer is that the link is right. Leaving the count standing would keep that line on the row
+        // after the one action offered for it, which is the nag this confirm exists to end.
+        source.failedReadStreak = 0
         guard let hash = source.pendingContentHash ?? source.lastContentHash else {
             try? context.save()
             return .noHash

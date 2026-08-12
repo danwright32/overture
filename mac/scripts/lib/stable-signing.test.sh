@@ -114,6 +114,135 @@ else
   pass "no HOME: stops rather than signing against an unresolvable keychain path"
 fi
 
+# --- #1526: the pre-flight check that codesign will ACCEPT the identity ------------------------------
+# build-install.sh used to discover an unusable identity only at the point of signing, after a full
+# build had run and the working copy in /Applications had already been replaced. `overture_signing_
+# identity_sha` cannot answer this: it asks whether an identity is LISTED, and on 2026-07-26 one was
+# listed while codesign still answered "no identity found". So the pre-flight has to try a real sign.
+if ! declare -f overture_verify_signing_identity_usable >/dev/null; then
+  fail "overture_verify_signing_identity_usable is not defined" \
+       "build-install.sh has no way to ask codesign whether it will accept the identity BEFORE building"
+else
+  # (a) MISSING identity: refuses, and says so in words that name the missing identity.
+  missing_out="$(
+    export OVERTURE_SIGNING_IDENTITY="No Such Overture Identity $$"
+    export OVERTURE_SIGNING_KEYCHAIN=""
+    overture_verify_signing_identity_usable 2>&1
+  )"
+  missing_rc=$?
+  if [[ "${missing_rc}" -ne 0 && "${missing_out}" == *"not found"* ]]; then
+    pass "pre-flight refuses a missing identity and names it (exit ${missing_rc})"
+  else
+    fail "pre-flight did not refuse a missing identity" "rc=${missing_rc} out: ${missing_out}"
+  fi
+
+  # (b) PRESENT but UNUSABLE, which is the whole point of #1526 and the case "is it listed?" cannot
+  # see. Built from a real, self-signed code-signing certificate in a throwaway keychain that is
+  # never trusted and never joins the search list, so `security find-identity` names it (with a real
+  # SHA-1) while `codesign` refuses it outright. Nothing here is simulated except which listing the
+  # name resolves through: the certificate, the keychain, and codesign's refusal are all real.
+  if ! command -v openssl >/dev/null 2>&1; then
+    echo "SKIP present-but-unusable check: openssl unavailable"
+  else
+    unusable_name="Overture Unusable Fixture Identity $$"
+    unusable_kc="${WORK}/unusable.keychain-db"
+    openssl req -x509 -newkey rsa:2048 -nodes \
+      -keyout "${WORK}/unusable-key.pem" -out "${WORK}/unusable-cert.pem" -days 3650 \
+      -subj "/CN=${unusable_name}" \
+      -addext "keyUsage=critical,digitalSignature" \
+      -addext "extendedKeyUsage=critical,codeSigning" \
+      -addext "basicConstraints=critical,CA:false" >/dev/null 2>&1
+    openssl pkcs12 -export -legacy \
+      -inkey "${WORK}/unusable-key.pem" -in "${WORK}/unusable-cert.pem" \
+      -out "${WORK}/unusable.p12" -passout "pass:transfer" \
+      -name "${unusable_name}" >/dev/null 2>&1
+    security create-keychain -p "unusable" "${unusable_kc}" >/dev/null 2>&1
+    security unlock-keychain -p "unusable" "${unusable_kc}" >/dev/null 2>&1
+    security import "${WORK}/unusable.p12" -k "${unusable_kc}" -P "transfer" -T /usr/bin/codesign \
+      >/dev/null 2>&1
+    trap 'security delete-keychain "'"${unusable_kc}"'" >/dev/null 2>&1; rm -rf "${WORK}"' EXIT
+    unusable_sha="$(security find-identity -p codesigning "${unusable_kc}" 2>/dev/null \
+      | awk -v n="${unusable_name}" 'index($0, n) { print $2; exit }')"
+
+    if [[ -z "${unusable_sha}" ]]; then
+      fail "could not build a present-but-unusable identity" \
+           "security listed no identity named ${unusable_name} in ${unusable_kc}"
+    else
+      # Prove the premise before asserting anything on top of it: this identity really is one
+      # codesign will not sign with. Without this the next check could pass on a bundle codesign
+      # was perfectly happy to sign.
+      premise_bundle="${WORK}/premise.app"
+      make_bundle "${premise_bundle}"
+      premise_out="$(codesign --force --sign "${unusable_sha}" "${premise_bundle}" 2>&1)"
+      if [[ $? -ne 0 ]]; then
+        pass "premise holds: codesign refuses this identity (${premise_out})"
+      else
+        fail "premise broken: codesign accepted the identity meant to be unusable" \
+             "the present-but-unusable check below would prove nothing"
+      fi
+
+      # The subshell below shadows only the LISTING, with the REAL SHA-1 that security just printed
+      # for this identity. That is exactly the reported state: the listing names an identity and
+      # codesign refuses it. (No comments inside the $( ) below: bash 3.2 mis-parses an apostrophe
+      # in a comment inside a command substitution and reports an unmatched quote at that line.)
+      unusable_out="$(
+        export OVERTURE_SIGNING_IDENTITY="${unusable_name}"
+        export OVERTURE_SIGNING_KEYCHAIN="${unusable_kc}"
+        overture_signing_identity_sha() { printf '%s\n' "${unusable_sha}"; }
+        overture_verify_signing_identity_usable 2>&1
+      )"
+      unusable_rc=$?
+      if [[ "${unusable_out}" == *"command not found"* ]]; then
+        fail "pre-flight call did not resolve to a function" "got: ${unusable_out}"
+      elif [[ "${unusable_rc}" -ne 0 ]]; then
+        pass "pre-flight refuses an identity that is listed but will not sign (exit ${unusable_rc})"
+      else
+        fail "pre-flight passed an identity codesign refuses" \
+             "this is the #1526 defect: the failure surfaces after the build, mid-install"
+      fi
+      if [[ "${unusable_out}" == *"will not sign with it"* ]]; then
+        pass "pre-flight says the identity exists but codesign will not use it"
+      else
+        fail "pre-flight did not distinguish unusable from missing" "got: ${unusable_out}"
+      fi
+      if [[ "${unusable_out}" == *"${unusable_sha}"* ]]; then
+        pass "pre-flight names which identity codesign refused"
+      else
+        fail "pre-flight did not name the refused identity" "got: ${unusable_out}"
+      fi
+    fi
+  fi
+
+  # (c) A USABLE identity passes, and the probe leaves nothing behind. A guard that fails closed
+  # forever is still a guard that does not work: this is what proves the check is not simply
+  # refusing everything.
+  if [[ -z "${existing}" ]]; then
+    echo "SKIP pre-flight accepts-a-usable-identity check: no valid codesigning identity here"
+  else
+    probe_tmp="${WORK}/probe-tmp"
+    mkdir -p "${probe_tmp}"
+    usable_out="$(
+      export OVERTURE_SIGNING_IDENTITY="${existing}"
+      export OVERTURE_SIGNING_KEYCHAIN=""
+      export TMPDIR="${probe_tmp}"
+      overture_verify_signing_identity_usable 2>&1
+    )"
+    usable_rc=$?
+    if [[ "${usable_rc}" -eq 0 ]]; then
+      pass "pre-flight accepts an identity codesign will actually use"
+    else
+      fail "pre-flight refused a usable identity (it would block every install)" \
+           "rc=${usable_rc} out: ${usable_out}"
+    fi
+    leftovers="$(find "${probe_tmp}" -mindepth 1 2>/dev/null | head -5)"
+    if [[ -z "${leftovers}" ]]; then
+      pass "pre-flight cleans up its throwaway bundle"
+    else
+      fail "pre-flight left its probe behind" "found: ${leftovers}"
+    fi
+  fi
+fi
+
 echo
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "stable-signing.test.sh: all checks passed"
