@@ -976,6 +976,16 @@ struct SourcesView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            // #1759: several runs in a row have come away without reading this page, so the promise on the
+            // failure line above ("The next scout will try it again") is one Overture has already made and
+            // broken that many times. GOLD, by the same rule as the two lines above it: the link is the
+            // thing to check, and a calendar nothing can read contributes nothing while it sits there.
+            if let repeatedFailure = source.repeatedFailureNote() {
+                Text(repeatedFailure).font(.system(size: 11))
+                    .foregroundStyle(OVColor.gold)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             // #1544: this source's page came back unencrypted, because its https handshake is broken and
             // Overture fell back to the cleartext address Dan stored. Worth saying: those bytes could have
             // been altered in flight and they feed the reconcile that cancels shows.

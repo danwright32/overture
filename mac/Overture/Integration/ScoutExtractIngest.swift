@@ -233,9 +233,11 @@ enum ScoutExtractIngest {
     // the next scout reads the page again rather than skipping it forever on the strength of a bad run.
     private static func fail(_ source: WatchedSource, as failure: SourceFailure, now: Date,
                              outcome: inout ScoutService.Outcome) {
-        source.lastCheckedAt = now
-        source.health = .failing
-        source.lastFailure = failure
+        // #1759: through the one shared recorder, which also counts this as another run that came away
+        // without reading the page. Counted rather than merely stamped, because "The next scout will try
+        // it again" is a promise, and on the tenth run in a row it is one the app has broken ten times
+        // while saying exactly what it said the first time.
+        source.recordFailedRead(failure, now: now)
         source.hasUnreadChanges = true
         outcome.sources.append(ScoutService.SourceResult(
             sourceId: source.sourceId, orgName: source.orgName, state: .failed(failure),
@@ -252,6 +254,9 @@ enum ScoutExtractIngest {
         source.lastCheckedAt = now
         source.health = .ok
         source.lastFailure = nil
+        // #1759: this page was fetched and read cleanly, and the one verdict against it is the one Dan has
+        // already answered. So the run of runs that could not read it is over.
+        source.failedReadStreak = 0
         source.lastContentHash = source.pendingContentHash ?? source.lastContentHash
         source.pendingContentHash = nil
         source.pendingPageMonths = []
@@ -317,6 +322,10 @@ enum ScoutExtractIngest {
         source.lastCheckedAt = now
         source.health = .ok
         source.lastFailure = nil
+        // #1759: a page read in PART is a page that was read. Real shows came back from it and were
+        // ingested above, so this run is not one that came away with nothing, and leaving the streak
+        // standing would eventually accuse a source that is working of never being readable.
+        source.failedReadStreak = 0
         // Deliberately NOT lastSucceededAt and NOT successfulCheckCount: this run did not finish reading
         // the page, so it should not count as the kind of check that starts the warmup clock.
     }
