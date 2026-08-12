@@ -17,11 +17,16 @@ import {
 // (token-spending) model call happens here: they prove the engine PASSES a compliant output and, crucially,
 // FLAGS each way a runbook regression could produce a bad one (the failure paths).
 
-const CANONICAL_BODY =
+// #2545: the canonical GOOD draft opens with a greeting, because that is now what a correct draft looks
+// like and what Overture will agree to send. `BODY_WITHOUT_A_GREETING` is the same text without it, kept
+// separately so the one test that needs a headless body does not depend on this constant staying wrong.
+const BODY_WITHOUT_A_GREETING =
   "My name is Dan Wright and I'm a professional arts photographer here in NYC. I'm writing in regard to " +
   "the Aurora Strings date at Carnegie Hall on March 10. I shoot unobtrusive, no-flash documentary " +
   "coverage and it would suit your program. Recent work is at danwrightphotography.com. I'd be glad to " +
   "talk about your photography plans for the night. I look forward to hearing from you.";
+
+const CANONICAL_BODY = "Hi Emma,\n\n" + BODY_WITHOUT_A_GREETING;
 
 function results(contacts: unknown[], extra: Record<string, unknown> = {}, draftBody = CANONICAL_BODY): unknown {
   return {
@@ -121,11 +126,29 @@ describe("evaluatePrepResult - universal invariants (always-true runbook rules)"
     expect(r.failures.join(" ")).toMatch(/dash/i);
   });
 
-  it("flags a greeting token at the start of the body (#393)", () => {
-    const bad = results([NAMED_ACT], {}, "Hi Emma, " + CANONICAL_BODY);
-    const r = evaluatePrepResult(bad, { description: "no greeting token" });
+  // #2545 INVERTED this. #393 forbade a greeting in the body because the app composed one above it at
+  // send; the app composes nothing now, so a body with no greeting goes out headless and Overture refuses
+  // to send it (Recipient.isBlockedByGreeting). The scorer has to judge what the app judges, or a run it
+  // marks perfect is a run of drafts that cannot be sent.
+  it("flags a body that does NOT open with a greeting (#2545)", () => {
+    const bad = results([NAMED_ACT], {}, BODY_WITHOUT_A_GREETING);
+    const r = evaluatePrepResult(bad, { description: "opens with a greeting" });
     expect(r.pass).toBe(false);
     expect(r.failures.join(" ")).toMatch(/greeting/i);
+  });
+
+  it("accepts a body that opens with a greeting (#2545)", () => {
+    const good = results([NAMED_ACT], {}, CANONICAL_BODY);
+    const r = evaluatePrepResult(good, { description: "opens with a greeting" });
+    expect(r.failures.join(" ")).not.toMatch(/greeting/i);
+  });
+
+  // The shared-inbox shape: an Attn: line above the greeting must not read as "no greeting".
+  it("accepts an Attn block above the greeting (#2545)", () => {
+    const good = results([NAMED_ACT], {},
+      "Attn: Emma Robinson, Marketing Director\n\nHello,\n\n" + BODY_WITHOUT_A_GREETING);
+    const r = evaluatePrepResult(good, { description: "attn block then greeting" });
+    expect(r.failures.join(" ")).not.toMatch(/greeting/i);
   });
 
   it("flags a link to a host other than danwrightphotography.com (#789 invented URL)", () => {
@@ -301,6 +324,9 @@ describe("evaluatePrepResult - self-produced duo surfaces BOTH performers (#366)
     provenance: "performer",
     sourceUrl: "https://duo.example/bio",
     overrideBody:
+      // #2545: a performer's own letter greets them by name. It goes to one person by definition, so the
+      // named form is the right one here even though the shared body on a two-contact show would not be.
+      `Hi ${name.split(" ")[0]},\n\n` +
       "My name is Dan Wright and I'm an arts photographer here in New York City. I'm writing about your " +
       `March 10 date at Carnegie Hall with ${coName}. I shoot unobtrusive, no-flash documentary coverage ` +
       "and it would suit your program. Recent work is at danwrightphotography.com. I'd be glad to talk about your " +
@@ -472,11 +498,13 @@ describe("evaluatePrepResult - one portfolio link, never a gallery (#1832)", () 
 describe("evaluatePrepResult - returning-client warm register (#1215/#1226)", () => {
   // booked = fully warm: skip the cold self-introduction AND the credential + portfolio scaffolding.
   const BOOKED_BODY =
+    "Hi Emma,\n\n" +
     "It's good to see the Aurora Strings back at Carnegie Hall on March 10, and I'd be glad to cover the " +
     "night for you. Tell me where your photography plans for the night stand and I'll hold the date. I look " +
     "forward to hearing from you.";
   // warm lead = drop the cold self-introduction, keep ONE light credential and the portfolio link.
   const WARM_LEAD_BODY =
+    "Hi Emma,\n\n" +
     "It was good connecting about the Aurora Strings at Carnegie Hall on March 10. I shoot unobtrusive, " +
     "no-flash documentary coverage that suits a concert program, and recent work is at " +
     "danwrightphotography.com. I'd be glad to talk about your photography plans for the night. I look " +

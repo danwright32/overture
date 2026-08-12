@@ -175,7 +175,16 @@ interface ResultEntry {
 const PRESS_LOCALPART = /^(press|media|publicrelations|pressoffice|press-office|mediarelations)/i;
 const CONCESSION = /\b(discount|flexible|free|complimentary)\b/i;
 const DASH = /[\u2014\u2013]/; // em dash / en dash, written as escapes so the source holds no literal dash
-const GREETING = /^\s*(hi|hello|hey|dear|greetings)\b/i;
+// #2545: a body must OPEN with a greeting, the inverse of #393. The app used to compose one above the
+// body at send and forbade one inside it; it composes nothing now, so a body that does not greet goes out
+// headless and Overture refuses to send it. The scorer has to judge what the app judges, or it marks a
+// run perfect whose every draft is unsendable.
+//
+// An `Attn:` line for a shared inbox sits ABOVE the greeting (#610), so it is stripped before the check
+// rather than counted as the opening. Kept deliberately looser than the runbook, which asks for the
+// greeting on its own line: this scores whether a draft can be SENT, and the app accepts either shape.
+const ATTN_BLOCK = /^\s*Attn:[^\n]*\n\s*/i;
+const GREETING = /^\s*(hi|hello|hey|dear|greetings|good morning|good afternoon|good evening)\b/i;
 // #1215: the ways a draft reintroduces Dan as if unknown (a cold self-introduction), which a booked or
 // warm returning client must NOT get. Anchored on the naming and the "I am a photographer" credential
 // self-description; a warm lead's light STYLE credential ("I shoot unobtrusive documentary coverage")
@@ -377,7 +386,9 @@ function checkUniversal(entries: ResultEntry[], failures: string[], coldRegister
   for (const { label, body } of collectBodies(entries)) {
     if (wordingRules && CONCESSION.test(body)) failures.push(`${label}: contains concession language (discount/flexible/free/complimentary)`);
     if (DASH.test(body)) failures.push(`${label}: contains an em/en dash`);
-    if (wordingRules && GREETING.test(body)) failures.push(`${label}: opens with a greeting token; the app owns the greeting (#393)`);
+    if (wordingRules && !GREETING.test(body.replace(ATTN_BLOCK, ""))) {
+      failures.push(`${label}: does not open with a greeting, so Overture will refuse to send it (#2545)`);
+    }
     if (PLACEHOLDER.test(body)) failures.push(`${label}: contains an unfilled placeholder (#789)`);
     if (wordingRules && RECIPIENT_CATEGORY.test(body)) {
       failures.push(`${label}: categorizes the recipient instead of describing Dan (#1824)`);

@@ -35,7 +35,7 @@ struct UnapprovedDraftNamesNobodyTests {
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                          status: status, ingestedAt: Date())
         p.draftSubject = "Photographs of your September concert"
-        p.draftBody = "I photograph performing arts in New York."
+        p.draftBody = "Hello,\n\nI photograph performing arts in New York."
         p.sendsTogetherOverride = together
         ctx.insert(p)
         p.setRecipients(contacts.map { email, name in

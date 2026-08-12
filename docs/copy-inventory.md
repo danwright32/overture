@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1242 sentences**.
+Every sentence Overture can say to Dan: **1241 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -30,6 +30,7 @@ What is not, and why:
 - `Domain/DebugStaging.swift`: a debug-only stand-in draft body (contact-facing email copy, not app voice)
 - `Domain/DraftCheck.swift`: draft lint needles: phrases the linter HUNTS FOR, never words it says (#915)
 - `Domain/DraftCheck.swift`: Words MATCHED in a draft, never shown to Dan (#1887)
+- `Domain/DraftGreeting.swift`: Search terms and regex fragments, not anything Overture says to Dan.
 - `Domain/DriftedRunMerge.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Domain/EventLocationFill.swift`: A location VALUE written into a data field, never a sentence Dan reads (#2378)
 - `Domain/EventPlace.swift`: Place names the resolver MATCHES against, never says: Dan reads a verdict, not this data (#970)
@@ -2653,8 +2654,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreSchemaGuard.swift`
 "high confidence"
     `Domain/ReviewStatus.swift`
-"hi|hello|hey|dear|good morning|good afternoon|good evening"
-    `Domain/DraftGreeting.swift`
 "in 1 day"
     `Domain/ReachedOutQueue.swift`
 "in \(days) days"

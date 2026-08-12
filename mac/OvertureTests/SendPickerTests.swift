@@ -55,7 +55,7 @@ struct SendPickerTests {
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                          status: .approved, ingestedAt: Date(timeIntervalSince1970: 1))
         p.draftSubject = "Photographing Lumen"
-        p.draftBody = "I document choral work."
+        p.draftBody = "Hello,\n\nI document choral work."
         p.sendsTogetherOverride = together
         ctx.insert(p)
         let act = Recipient(id: "ann@org.example", email: "ann@org.example", name: "Ann", provenance: .act)

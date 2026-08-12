@@ -122,7 +122,7 @@ struct ApproveAndSendIsOneActionTests {
 
         // Approving is synchronous, so the show is committed before the network work even starts.
         #expect(p.status == .approved)
-        while cleared.isEmpty { await Task.yield() }
+        await waitUntil("the sending flag to clear") { !cleared.isEmpty }
         #expect(sender.sent.count == 1)
         #expect(p.status == .contacted)
         #expect(p.sentAt != nil)
@@ -141,7 +141,7 @@ struct ApproveAndSendIsOneActionTests {
                                          sender: sender, markSending: { _ in },
                                          clearSending: { cleared.append($0) }, onNeedsReconnect: {})
 
-        while cleared.isEmpty { await Task.yield() }
+        await waitUntil("the sending flag to clear") { !cleared.isEmpty }
         #expect(sender.sent.count == 1)
         #expect(p.status == .contacted)
     }
@@ -163,7 +163,7 @@ struct ApproveAndSendIsOneActionTests {
                                          sender: sender, markSending: { _ in },
                                          clearSending: { cleared.append($0) }, onNeedsReconnect: {})
 
-        while cleared.isEmpty { await Task.yield() }
+        await waitUntil("the sending flag to clear") { !cleared.isEmpty }
         #expect(sender.sent.isEmpty)
         #expect(p.status == .approved)
         #expect(p.sentAt == nil)

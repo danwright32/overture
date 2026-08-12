@@ -262,22 +262,7 @@ struct ProspectMutationsTests {
         #expect(marked == ["k"])       // fired synchronously, before the async send even starts
         #expect(cleared.isEmpty)       // not yet: the send hasn't completed
 
-        // A DEADLINE, not a bare spin. Without one this loop cannot fail, it can only hang, and a test
-        // that hangs is worse than one that fails: it takes the whole suite and the machine-wide test
-        // lock with it, and it reads from outside as a slow run rather than a broken one.
-        //
-        // Measured on 2026-08-12, which is why this is here: #2545 made a body with no greeting
-        // unsendable, this fixture had none, so the send never completed and `cleared` never filled. The
-        // run span for over an hour writing 21MB of CoreData noise while holding the lock, and a second
-        // run queued behind it the whole time (L98: a wait that cannot time out reports nothing).
-        var timedOut = false
-        let deadline = ContinuousClock.now + .seconds(10)
-        while cleared.isEmpty {
-            if ContinuousClock.now >= deadline { timedOut = true; break }
-            await Task.yield()
-        }
-
-        #expect(!timedOut, "the send never completed: the recipient is HELD, not slow")
+        await waitUntil("the sending flag to clear") { !cleared.isEmpty }
         #expect(cleared == ["k"])
         #expect(sender.sent.count == 1)
         #expect(p.status == .contacted)
@@ -303,7 +288,7 @@ struct ProspectMutationsTests {
                                       onNeedsReconnect: {},
                                       onSent: { id, fullySent in sentReports.append((id, fullySent)) })
 
-        while sentReports.isEmpty { await Task.yield() }
+        await waitUntil("the send to report back") { !sentReports.isEmpty }
         #expect(sentReports.count == 1)
         #expect(sentReports.first?.0 == "k")
         #expect(sentReports.first?.1 == true)
@@ -331,7 +316,7 @@ struct ProspectMutationsTests {
                                       onNeedsReconnect: {},
                                       onSent: { id, fullySent in sentReports.append((id, fullySent)) })
 
-        while sentReports.isEmpty { await Task.yield() }
+        await waitUntil("the send to report back") { !sentReports.isEmpty }
         #expect(sentReports.first?.1 == false)
     }
 
@@ -354,7 +339,7 @@ struct ProspectMutationsTests {
         #expect(marked == ["r1"])
         #expect(cleared.isEmpty)
 
-        while cleared.isEmpty { await Task.yield() }
+        await waitUntil("the sending flag to clear") { !cleared.isEmpty }
         #expect(cleared == ["r1"])
         #expect(sender.sent.count == 1)
         #expect(r.replyDraftBody == nil)   // consumed on send
@@ -378,7 +363,7 @@ struct ProspectMutationsTests {
         #expect(marked == ["r1"])
         #expect(cleared.isEmpty)
 
-        while cleared.isEmpty { await Task.yield() }
+        await waitUntil("the sending flag to clear") { !cleared.isEmpty }
         #expect(cleared == ["r1"])
         #expect(sender.sent.count == 1)
         #expect(r.followUpCount == 1)
@@ -403,7 +388,7 @@ struct ProspectMutationsTests {
         #expect(marked == ["r1"])
         #expect(cleared.isEmpty)
 
-        while cleared.isEmpty { await Task.yield() }
+        await waitUntil("the sending flag to clear") { !cleared.isEmpty }
         #expect(cleared == ["r1"])
         #expect(sender.sent.count == 1)
         #expect(r.conversationRemindedAt != nil)
@@ -440,7 +425,7 @@ struct ProspectMutationsTests {
     @Test func overrideDraftLintRecordsOnlyTheBlockedPendingRecipientsText() throws {
         let ctx = ModelContext(try container())
         let p = makeProspect(ctx)
-        p.draftBody = "See my work at https://smugmug.com/dan."
+        p.draftBody = "Hello,\n\nSee my work at https://smugmug.com/dan."
         let blocked = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
         let clean = Recipient(id: "p@perf.example", email: "p@perf.example", provenance: .performer)
         clean.overrideBody = "I photograph performing arts. Work at danwrightphotography.com."
@@ -452,7 +437,7 @@ struct ProspectMutationsTests {
 
         ProspectMutations.overrideDraftLint(QueueItem(p), prospects: [p], context: ctx, feedback: feedback)
 
-        #expect(blocked.lintOverriddenBody == "See my work at https://smugmug.com/dan.")
+        #expect(blocked.lintOverriddenBody == "Hello,\n\nSee my work at https://smugmug.com/dan.")
         #expect(blocked.isSendablePending)
         #expect(clean.lintOverriddenBody == nil)
         #expect(alreadySent.lintOverriddenBody == nil)

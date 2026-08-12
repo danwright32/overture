@@ -481,64 +481,24 @@ struct RecipientTests {
 
     // #407: a recipient with no prospect wired at all (every existing bare-Recipient test in this
     // file) must stay governed by its own state alone, never blocked by a flag it has no way to see.
-    @Test func aRecipientWithNoProspectIsUnaffectedByTheSalutationReviewGate() {
+    // #2545: renamed off the retired salutation gate onto the guards that actually exist now. A bare
+    // recipient with no show wired to it has no body to judge, so every draft-level hold, the greeting
+    // one included, must leave it alone rather than blocking on text it cannot see.
+    @Test func aRecipientWithNoProspectIsUnaffectedByTheDraftLevelGates() {
         let r = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
         #expect(r.prospect == nil)
         #expect(r.isSendablePending)
     }
 
-    @MainActor
-    @Test func aFlaggedDraftBlocksEveryRecipientOnThatPerformance() throws {
-        let ctx = ModelContext(try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
-                                                  configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
-        let p = Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: "V",
-                         performanceDate: "2026-09-01", sourceListingURL: nil, websiteURL: nil,
-                         priorRelationship: "warm", production: "self", profile: "strong",
-                         coverage: "likely_uncovered", fitScore: 8, tier: "high", fitReason: "r",
-                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
-        p.draftNeedsSalutationReview = true
-        ctx.insert(p)
-        let act = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
-        let presenter = Recipient(id: "b@present.example", email: "b@present.example", provenance: .presenter)
-        p.setRecipients([act, presenter])
-
-        // Even the recipient the legacy body was originally written for is blocked (Dan's call:
-        // block entirely, not just the differently-named recipient).
-        #expect(!act.isSendablePending)
-        #expect(!presenter.isSendablePending)
-
-        p.draftNeedsSalutationReview = false
-        #expect(act.isSendablePending)
-        #expect(presenter.isSendablePending)
-    }
-
-    // #718: Dan can override the #407 block for a false-positive flag, but only for the EXACT body
-    // text he approved; a further edit to a different body must not inherit stale permission.
-    @MainActor
-    @Test func anOverriddenFlagUnblocksSendingOnlyForTheExactApprovedBody() throws {
-        let ctx = ModelContext(try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
-                                                  configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
-        let p = Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: "V",
-                         performanceDate: "2026-09-01", sourceListingURL: nil, websiteURL: nil,
-                         priorRelationship: "warm", production: "self", profile: "strong",
-                         coverage: "likely_uncovered", fitScore: 8, tier: "high", fitReason: "r",
-                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
-        // #2052: a draft with no subject line is not sendable, so a fixture about the salutation rule
-        // carries one rather than tripping that one instead.
-        p.draftSubject = "Photographs of your concert"
-        p.draftBody = "Hi 2026 season, here is what we offer."
-        p.draftNeedsSalutationReview = true
-        ctx.insert(p)
-        let act = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
-        p.setRecipients([act])
-        #expect(!act.isSendablePending)
-
-        p.draftSalutationReviewOverriddenBody = p.draftBody
-        #expect(act.isSendablePending)
-
-        p.draftBody = "Hi 2027 season, here is what we offer."   // edited again after overriding
-        #expect(!act.isSendablePending)                          // stale override no longer applies
-    }
+    // #2545 RETIRED the two #407 salutation-review tests that sat here, and the reason is worth keeping
+    // rather than just deleting them. Both set `draftNeedsSalutationReview = true` BY HAND in the fixture.
+    // Nothing in the app has set that flag true since #2010 stopped the launch pass rewriting bodies, so
+    // the block they asserted could never fire in production: they passed on a value only they wrote
+    // (L90). The flag, its override and the hold are gone.
+    //
+    // What SURVIVES is the rule the second one encoded, that an override is pinned to the exact text it
+    // was taken on so a later edit re-arms the block. That is now the greeting hold's override, and it is
+    // covered by GreetingLivesInTheBodyTests.theoverrideClearsTheHoldForThatExactBodyOnly.
 
     // #388: a recipient flagged as looking like the venue is blocked until Dan dismisses that
     // specific guess; the flag lives on the RECIPIENT itself, not the performance.
