@@ -85,3 +85,59 @@ overture_stable_sign() {
   fi
   codesign --force --deep --sign "${sha}" "${bundle}"
 }
+
+# Pre-flight for build-install.sh (#1526): proves codesign will ACCEPT the identity, before anything
+# expensive or destructive happens.
+#
+# On 2026-07-26, the first Release install on this Mac, setup-signing-identity.sh reported success,
+# build-install.sh ran a full Release build, deleted and replaced /Applications/Overture.app, and only
+# THEN found that codesign would not sign with the identity. The build was wasted and the copy Dan had
+# been using was already gone. overture_signing_identity_sha cannot see this coming: it asks whether an
+# identity is LISTED, and that one was listed (as "Invalid Key Usage for policy", the certificate defect
+# #1525 fixed) while codesign answered "no identity found".
+#
+# So this asks the only question that cannot be wrong: it signs a THROWAWAY bundle with the very
+# function that will later sign the real one. A cheaper proxy (is it listed, does the keychain exist,
+# does the certificate parse) is exactly what was already there and exactly what missed it.
+#
+# Prints the reason and returns nonzero on failure, telling the two causes apart: an identity that is
+# not there at all needs setup-signing-identity.sh run for the first time, while one that is there and
+# refused needs it recreated, and the words differ so the message names what was actually measured (L11).
+overture_verify_signing_identity_usable() {
+  local sha probe_root probe out rc
+  sha="$(overture_signing_identity_sha)"
+  if [[ -z "${sha}" ]]; then
+    echo "ERROR: stable signing identity \"${OVERTURE_SIGNING_IDENTITY}\" not found." >&2
+    echo "       Run mac/scripts/setup-signing-identity.sh once to create it." >&2
+    echo "       Stopping before the build: signing with it is what keeps Overture's macOS permission" >&2
+    echo "       grants (calendar, Gmail/automation, reminders) across a reinstall (#1425)." >&2
+    return 1
+  fi
+
+  # An explicit template, not a bare `mktemp -d`: macOS resolves that one through the per-user
+  # confstr temp dir and IGNORES TMPDIR, which both hides the probe from anything scoping it to a
+  # directory of its own and leaves its name saying nothing about where it came from.
+  probe_root="$(mktemp -d "${TMPDIR:-/tmp}/overture-signing-probe.XXXXXX")" || return 1
+  probe="${probe_root}/OvertureSigningProbe.app"
+  mkdir -p "${probe}/Contents/MacOS"
+  printf '#!/bin/sh\ntrue\n' > "${probe}/Contents/MacOS/probe"
+  chmod +x "${probe}/Contents/MacOS/probe"
+  printf '%s' '<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>com.danwright.overture.signingprobe</string><key>CFBundleExecutable</key><string>probe</string></dict></plist>' \
+    > "${probe}/Contents/Info.plist"
+
+  out="$(overture_stable_sign "${probe}" 2>&1)"
+  rc=$?
+  rm -rf "${probe_root}"
+
+  if [[ "${rc}" -ne 0 ]]; then
+    echo "ERROR: signing identity \"${OVERTURE_SIGNING_IDENTITY}\" (${sha}) is listed, but codesign" >&2
+    echo "       will not sign with it." >&2
+    echo "       codesign said: ${out}" >&2
+    echo "       Run mac/scripts/setup-signing-identity.sh to recreate it (delete the old certificate" >&2
+    echo "       from Keychain Access first if it is still there)." >&2
+    echo "       Stopping before the build: signing with it is what keeps Overture's macOS permission" >&2
+    echo "       grants (calendar, Gmail/automation, reminders) across a reinstall (#1425)." >&2
+    return 1
+  fi
+  return 0
+}
