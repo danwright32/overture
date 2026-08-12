@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
+# The shared assertion vocabulary: pass, fail, assert_contains, assert_not_contains,
+# assert_equals, assert_eq, assert_empty (#2501). A definition later in this file replaces
+# the shared one, so nothing below changes meaning by sourcing this.
+# shellcheck source=../scripts/lib/shell-assertions.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../scripts/lib/shell-assertions.sh"
+
 # Stubbed coverage for check-pr-ci.sh's classify_check_run and check_mergeable. #1347 retired
 # the self-hosted swift-tests runner and #1352 removed the stall-detection this file used to
 # cover; classify_check_run is now a pure text classifier over a completed/pending check with

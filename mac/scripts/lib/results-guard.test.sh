@@ -1,6 +1,19 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
+# The shared assertion vocabulary: pass, fail, assert_contains, assert_not_contains,
+# assert_equals, assert_eq, assert_empty (#2501). A definition later in this file replaces
+# the shared one, so nothing below changes meaning by sourcing this.
+# shellcheck source=../../../scripts/lib/shell-assertions.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../scripts/lib/shell-assertions.sh"
+
+# Two cases below run the guards with PATH pointing at a directory that holds nothing, to prove they
+# report a failure rather than passing silently when there is no node to read the results with. Bash
+# writes "node: command not found" while that happens, which is the same thing it writes for a mistyped
+# assertion, so this declares the absence is the thing being rehearsed (#2501). It names only node: any
+# other unresolved command in this fixture still fails the run.
+echo "shell-fixture-expects-missing-command: node"
+
 # #856: a detached run that exits without results must write an honest failure, not vanish.
 #
 # Three times in one evening a run did real work and produced nothing usable: it stopped to ask a

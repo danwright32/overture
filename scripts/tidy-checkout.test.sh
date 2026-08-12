@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
+# The shared assertion vocabulary: pass, fail, assert_contains, assert_not_contains,
+# assert_equals, assert_eq, assert_empty (#2501). A definition later in this file replaces
+# the shared one, so nothing below changes meaning by sourcing this.
+# shellcheck source=../scripts/lib/shell-assertions.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../scripts/lib/shell-assertions.sh"
+
 # #2301: the DRIVER, not the decision. `scripts/lib/checkout-tidy.test.sh` has 31 fixtures pinning
 # which branches and worktrees may be removed, including every case that must be kept. Nothing covered
 # the part that turns a verdict into `git branch -D`, which is the piece that was wrong twice while it

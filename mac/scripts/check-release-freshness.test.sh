@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
+# The shared assertion vocabulary: pass, fail, assert_contains, assert_not_contains,
+# assert_equals, assert_eq, assert_empty (#2501). A definition later in this file replaces
+# the shared one, so nothing below changes meaning by sourcing this.
+# shellcheck source=../../scripts/lib/shell-assertions.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../scripts/lib/shell-assertions.sh"
+
 # #1345: coverage for check-release-freshness.sh's freshness_verdict, the pure comparison at its core. The
 # installed Release app is STALE if it was built BEFORE the latest commit (it may be missing merged work),
 # and FRESH if it was built at or after it. main()'s I/O (reading the app mtime and the git commit time) is
