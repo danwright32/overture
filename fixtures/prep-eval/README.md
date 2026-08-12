@@ -42,6 +42,12 @@ person, org, venue, or email address. `.example` domains and made-up names throu
      Each real run KEEPS what it produced, in a dated directory under `.overture-eval-runs/` (last 10, and a
      directory renamed off that shape is never pruned). Read a failure's own output there rather than paying
      to produce it again; the run prints the path when it finishes.
+   - A run that FINISHES also records which runbook text it scored, in `.overture-eval-last-run` (#1867).
+     `scripts/check-prep-eval-freshness.sh`, which rides along in `scripts/test-all.sh`, reads it and WARNS
+     when the runbook has changed since, so an edit cannot ship with nothing having scored real output
+     against it. It only ever warns, and it skips cleanly where the eval cannot run at all. The record is
+     written after the last fixture is scored, never before: the dated run directory above is created up
+     front, so a run that died at its first AI call would leave one that looks exactly like a finished run.
 
 ## Rules covered
 

@@ -240,6 +240,17 @@ already drifting from the Swift version it mirrored.
   fixtures through the same headless `claude -p` mechanism as `prep-run.sh` and scores each real output
   with the SAME engine (`src/lib/prepEval.ts`). It SPENDS TOKENS and is wired into no CI job: run it by
   hand before shipping a runbook edit. See `fixtures/prep-eval/README.md`.
+  Remembering to run it was the whole mechanism, and it did not hold: the harness could not start at all
+  from 2026-07-28 to 2026-07-31 (#1862) with nobody noticing, and two runbook edits (#1856, #1817) shipped
+  before it had scored either. So `scripts/check-prep-eval-freshness.sh` (#1867) rides along in
+  `scripts/test-all.sh` and WARNS when `docs/prep-runbook.md` has changed since the eval last completed.
+  It never blocks (the eval spends tokens, so a gate would either be overridden every time or spend money
+  by itself), it keeps "never run here" and "stale since a date" as separate messages, and it skips
+  cleanly where the eval could not run anyway (no `claude` CLI, so CI and a fresh clone). What it reads is
+  `.overture-eval-last-run`, written by the eval only AFTER its last fixture is scored and naming the
+  runbook's content hash rather than any mtime: the dated `.overture-eval-runs/` directory is created
+  before the first AI call, so a run that died there would leave one indistinguishable from a finished
+  run's, and a clone rewrites every mtime.
 - Running multiple Claude agents on this repo at once: give each agent its own git
   worktree so file edits and branches never collide, but xcodebuild itself must stay
   serialized across all of them. `run-tests-locked.sh`'s lock file lives at one fixed

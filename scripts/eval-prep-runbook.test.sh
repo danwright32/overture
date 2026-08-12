@@ -21,6 +21,22 @@ check() {
   fi
 }
 
+# #1867: this fixture drives REAL runs of the harness (against a stub `claude`, so it spends nothing),
+# and a real run writes the repo's own record of when the paid eval last completed. Every such run below
+# points that record at a throwaway path. This snapshot is what PROVES they all did: a forgotten
+# override would leave the record naming a run that only ever happened inside this shell script, and the
+# push-time freshness check would then report the drafting rules as freshly evaluated, silencing the
+# warning it exists to raise.
+REAL_LAST_RUN="${SCRIPT_DIR}/../.overture-eval-last-run"
+real_last_run_state() {
+  if [ -f "${REAL_LAST_RUN}" ]; then
+    shasum -a 256 "${REAL_LAST_RUN}" | cut -d' ' -f1
+  else
+    echo absent
+  fi
+}
+REAL_LAST_RUN_BEFORE="$(real_last_run_state)"
+
 echo "eval-prep-runbook.sh no-spend paths:"
 
 # A bare invocation warns loudly that the real run spends tokens, and spends nothing itself.
@@ -228,9 +244,14 @@ STUB
 chmod +x "${STUB_DIR}/claude"
 
 RUNS_DIR="${STUB_DIR}/runs"
+# Every artifact a real run writes goes to a throwaway path, the freshness record (#1867) included.
+# Left at its default, a stub run here would write the repo's own record and the push-time check would
+# then report an eval as freshly completed against these rules when the only thing that "ran" was this
+# fixture's shell script (L2: a test must be structurally unable to touch what the product relies on).
 started="$(PATH="${STUB_DIR}:${PATH}" \
   OVERTURE_EVAL_RUNS_DIR="${RUNS_DIR}" \
   OVERTURE_EVAL_FAILURES_FILE="${STUB_DIR}/failures" \
+  OVERTURE_EVAL_LAST_RUN_FILE="${STUB_DIR}/last-run" \
   "${SCRIPT}" --yes host-venue-not-target 2>&1 || true)"
 check "a real run gets past its own tool-scope setup" \
   '[[ "${started}" != *"refusing to run, unsafe tool scope"* ]]'
@@ -254,9 +275,96 @@ for d in 01 02 03 04 05 06 07 08 09 10 11 12; do
 done
 PATH="${STUB_DIR}:${PATH}" OVERTURE_EVAL_RUNS_DIR="${RUNS_DIR}" \
   OVERTURE_EVAL_FAILURES_FILE="${STUB_DIR}/failures" \
+  OVERTURE_EVAL_LAST_RUN_FILE="${STUB_DIR}/last-run" \
   "${SCRIPT}" --yes host-venue-not-target >/dev/null 2>&1 || true
 check "kept runs are pruned to the most recent ten" \
   '[[ "$(ls -1d "${RUNS_DIR}"/*/ | wc -l | tr -d " ")" == "10" ]]'
+
+# #1867: the record of a run that GENUINELY COMPLETED.
+#
+# scripts/check-prep-eval-freshness.sh warns at push time when docs/prep-runbook.md has changed since the
+# last completed eval. That warning is worth exactly as much as the record behind it, and the obvious
+# candidates for that record are all writable by a run that died. The run DIRECTORY is the clearest of
+# them: it is created before the first fixture is scored, so a run killed at its first claude call leaves
+# one that is indistinguishable from a finished run's.
+#
+# So the record is written only after the last fixture in the plan has been scored, and the stub below
+# proves the ordering rather than asserting it: it snapshots, AT THE MOMENT the paid call is made, whether
+# the record already exists and whether the run directory does. Token-free, the stub is a shell script.
+echo "the completed-run record (#1867):"
+
+# The assertions below read the record through the same helpers the writer used, and a helper that is
+# not defined expands to an empty string inside `$(...)`. Two of those on either side of a comparison
+# is a green assertion over nothing at all, which is what happened the first time this fixture ran.
+# So prove the helpers exist first, and refuse to report on the rest if they do not.
+record_helpers_missing=0
+for fn in prep_eval_record_field prep_eval_runbook_fingerprint; do
+  if declare -F "${fn}" >/dev/null 2>&1; then
+    echo "  ok: ${fn} is defined"
+  else
+    echo "  FAIL: ${fn} is NOT defined, so every record assertion below would compare empty to empty"
+    fails=$((fails + 1))
+    record_helpers_missing=$((record_helpers_missing + 1))
+  fi
+done
+
+RECORD_STUB="${STUB_DIR}/record-stub"
+mkdir -p "${RECORD_STUB}"
+cat > "${RECORD_STUB}/claude" <<'STUB'
+#!/bin/sh
+case "$1" in
+  plugin) echo '[]' ;;
+  *)
+    if [ -f "${OVERTURE_EVAL_LAST_RUN_FILE}" ]; then
+      cp "${OVERTURE_EVAL_LAST_RUN_FILE}" "${SNAP_RECORD}"
+    else
+      echo absent > "${SNAP_RECORD}"
+    fi
+    ls -1d "${OVERTURE_EVAL_RUNS_DIR}"/*/ > "${SNAP_RUNS}" 2>/dev/null || echo none > "${SNAP_RUNS}"
+    echo '{"version":8,"generatedAt":"now","results":[]}'
+    ;;
+esac
+STUB
+chmod +x "${RECORD_STUB}/claude"
+
+RECORD_FILE="${RECORD_STUB}/last-run"
+SNAP_RECORD="${RECORD_STUB}/record-at-call-time"
+SNAP_RUNS="${RECORD_STUB}/runs-at-call-time"
+RECORD_RUNS_DIR="${RECORD_STUB}/runs"
+
+# A token-free path must never claim an eval ran.
+OVERTURE_EVAL_LAST_RUN_FILE="${RECORD_FILE}" "${SCRIPT}" --list >/dev/null 2>&1 || true
+check "a no-spend invocation records nothing" '[[ ! -f "${RECORD_FILE}" ]]'
+
+PATH="${RECORD_STUB}:${PATH}" \
+  OVERTURE_EVAL_RUNS_DIR="${RECORD_RUNS_DIR}" \
+  OVERTURE_EVAL_FAILURES_FILE="${RECORD_STUB}/failures" \
+  OVERTURE_EVAL_LAST_RUN_FILE="${RECORD_FILE}" \
+  SNAP_RECORD="${SNAP_RECORD}" SNAP_RUNS="${SNAP_RUNS}" \
+  "${SCRIPT}" --yes host-venue-not-target >/dev/null 2>&1 || true
+
+check "a completed run leaves a record" '[[ -s "${RECORD_FILE}" ]]'
+# Both sides must be NON-EMPTY as well as equal: a missing helper, a renamed field or an unwritten
+# record all yield "" on both sides, and "" == "" is a pass that means nothing.
+check "the record names the runbook TEXT that was scored, not the time it was scored at" \
+  '[[ -n "$(prep_eval_record_field "${RECORD_FILE}" runbook)" \
+     && "$(prep_eval_record_field "${RECORD_FILE}" runbook)" == "$(prep_eval_runbook_fingerprint "${REPO_ROOT_FOR_MODELS}/docs/prep-runbook.md")" ]]'
+check "the record says how many fixtures the run actually scored" \
+  '[[ "$(prep_eval_record_field "${RECORD_FILE}" scored)" == "1" ]]'
+check "and how many there were to score, so a targeted run cannot read as a full one" \
+  '[[ "$(prep_eval_record_field "${RECORD_FILE}" available)" == "$(list_fixtures | wc -l | tr -d " ")" ]]'
+
+# THE ORDERING. At the moment the run was doing the work it is meant to vouch for, the record did not
+# exist yet, so a run that died there leaves the previous record standing rather than a fresh-looking
+# lie. The run directory, by contrast, was already there: that is exactly why it cannot be the record.
+check "the record did not exist yet while the run was still working" \
+  '[[ "$(cat "${SNAP_RECORD}")" == "absent" ]]'
+check "the run directory DID already exist then (which is why it is not the record)" \
+  '[[ "$(cat "${SNAP_RUNS}")" == *"${RECORD_RUNS_DIR}"* ]]'
+
+# And nothing in this fixture, across every real run above, touched the repo's own record.
+check "no run in this fixture wrote the repo's own eval record" \
+  '[[ "$(real_last_run_state)" == "${REAL_LAST_RUN_BEFORE}" ]]'
 
 if [[ "${fails}" -eq 0 ]]; then
   echo "eval-prep-runbook.test.sh: PASS"

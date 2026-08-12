@@ -57,3 +57,6 @@ DerivedData/
 .overture-eval-failures
 # #1870: each real eval run's produced outputs, kept so a failure can be read instead of re-bought.
 .overture-eval-runs/
+# #1867: which runbook text the last COMPLETED eval scored, read by check-prep-eval-freshness.sh. Per
+# machine by nature (it records what was run here), so it is never committed.
+.overture-eval-last-run

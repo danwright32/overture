@@ -51,6 +51,13 @@ echo "==> scripts/run-shell-fixtures.sh"
 echo "==> scripts/check-brand-voice-drift.sh"
 "${REPO_ROOT}/scripts/check-brand-voice-drift.sh"
 
+# Warns when docs/prep-runbook.md has changed since the paid eval (scripts/eval-prep-runbook.sh --yes)
+# last COMPLETED, so a drafting rule cannot ship with nothing having scored real model output against
+# it (#1867). Never blocks: that eval spends tokens and is deliberately hand-run, so this reports and
+# exits 0 whatever it finds, and skips cleanly on a machine that cannot run the eval at all.
+echo "==> scripts/check-prep-eval-freshness.sh"
+"${REPO_ROOT}/scripts/check-prep-eval-freshness.sh"
+
 # Fails if a second near-copy source-health recorder has been reintroduced in the scout ingest files
 # (#1073). The #987/#1001/#1005 defect (two recorders drifting until one silently stops writing a
 # field) is caught at push time instead of in production.
