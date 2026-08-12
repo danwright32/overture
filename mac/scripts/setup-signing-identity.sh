@@ -9,72 +9,143 @@ set -euo pipefail
 # identity, so those grants persist. build-install.sh then signs with it automatically and refuses to
 # fall back to ad-hoc.
 #
-# Run this once per Mac. It is idempotent: if the identity already exists it does nothing. The single
-# manual step is a macOS "Certificate Trust Settings" password dialog, which you approve once here so
-# that every build afterward can sign without a prompt.
+# Run this once per Mac. It is idempotent: if the identity already exists AND codesign will sign with
+# it, this does nothing. The single manual step is a macOS "Certificate Trust Settings" password dialog,
+# which you approve once here so that every build afterward can sign without a prompt.
+#
+# #2537: both questions this script asks are now "will codesign sign with it", not "is it listed". It is
+# the script that first told the weaker answer: on 2026-07-26 it printed `Done. Created and trusted ...`
+# for a certificate codesign then refused outright (the missing Digital Signature key usage, fixed in
+# #1525), and only build-install.sh found out, after a full Release build and after
+# /Applications/Overture.app had already been replaced. #1526 fixed build-install.sh by trial signing a
+# throwaway bundle; `overture_verify_signing_identity_usable` is that check, and this now ends on it.
+#
+# Every call that touches the real keychain or the real trust store lives in one of the three functions
+# below, so setup-signing-identity.test.sh can drive this whole decision path with those replaced. That
+# seam is what made the fix testable at all: the trust step opens a password dialog, so the script could
+# never be run end to end by a fixture, which is the stated reason #1526 left this undone.
 
-cd "$(dirname "$0")"
+SETUP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/stable-signing.sh
-source "$(pwd)/lib/stable-signing.sh"
+source "${SETUP_DIR}/lib/stable-signing.sh"
 
-if [[ -n "$(overture_signing_identity_sha)" ]]; then
-  echo "Signing identity \"${OVERTURE_SIGNING_IDENTITY}\" already exists. Nothing to do."
-  exit 0
+# Seam 1: the dedicated keychain. Creates it if absent, stops it auto-locking (so a later build can
+# unlock and sign without it having relocked underneath), unlocks it, and puts it in the user's search
+# list once, so codesign and find-identity resolve the identity without a --keychain scope.
+overture_setup_prepare_keychain() {
+  local kc="${OVERTURE_SIGNING_KEYCHAIN}" pw="${OVERTURE_SIGNING_KEYCHAIN_PASSWORD}"
+
+  echo "==> Creating dedicated signing keychain: ${kc}"
+  if [[ ! -f "${kc}" ]]; then
+    security create-keychain -p "${pw}" "${kc}"
+  fi
+  security set-keychain-settings "${kc}"
+  security unlock-keychain -p "${pw}" "${kc}"
+
+  local existing_keychains=() line k in_list=0
+  while IFS= read -r line; do
+    line="${line#"${line%%[![:space:]]*}"}"   # ltrim
+    line="${line%\"}"; line="${line#\"}"        # strip surrounding quotes
+    [[ -n "${line}" ]] && existing_keychains+=("${line}")
+  done < <(security list-keychains -d user)
+  for k in ${existing_keychains[@]+"${existing_keychains[@]}"}; do
+    [[ "${k}" == "${kc}" ]] && in_list=1
+  done
+  if [[ "${in_list}" -eq 0 ]]; then
+    echo "==> Adding it to the user keychain search list"
+    security list-keychains -d user -s ${existing_keychains[@]+"${existing_keychains[@]}"} "${kc}"
+  fi
+}
+
+# Seam 2: wraps the key and certificate into a PKCS#12 blob `security import` will accept. The transient
+# password exists because macOS rejects an empty-password MAC, and openssl 3.x needs -legacy for a bundle
+# `security` can read. It never leaves this run.
+overture_setup_package_identity() {
+  local key="$1" cert="$2" out="$3" pw="$4"
+  openssl pkcs12 -export -legacy \
+    -inkey "${key}" -in "${cert}" \
+    -out "${out}" -passout "pass:${pw}" \
+    -name "${OVERTURE_SIGNING_IDENTITY}" >/dev/null 2>&1
+}
+
+# Seam 3: imports the identity and authorises codesign to use its private key without prompting.
+overture_setup_import_identity() {
+  local p12="$1" p12pw="$2"
+  security import "${p12}" -k "${OVERTURE_SIGNING_KEYCHAIN}" -P "${p12pw}" -T /usr/bin/codesign >/dev/null
+  security set-key-partition-list -S apple-tool:,apple:,codesign: -s \
+    -k "${OVERTURE_SIGNING_KEYCHAIN_PASSWORD}" "${OVERTURE_SIGNING_KEYCHAIN}" >/dev/null 2>&1
+}
+
+# Seam 4: the trust store, and the one manual step. This is the call that opens the macOS password
+# dialog, which is why the whole script needed a seam before it could be tested at all.
+overture_setup_trust_certificate() {
+  local cert="$1"
+  echo "==> Trusting the certificate for code signing (approve the password dialog)..."
+  security add-trusted-cert -r trustRoot -p codeSign -k "${OVERTURE_SIGNING_KEYCHAIN}" "${cert}"
+}
+
+# Everything that writes into the given scratch directory, so its caller has one place to clean up from
+# however this ends. Nothing here touches the machine except through the seams above.
+overture_setup_create_identity_in() {
+  local tmp="$1"
+  local p12pw="transfer"
+
+  echo "==> Generating a self-signed code-signing certificate"
+  # #1524: generated by the shared function, whose extensions are pinned by signing-cert.test.sh. Inline
+  # here it set no keyUsage extension, which codesign rejects outright ("Invalid Key Usage for policy"),
+  # and nothing checked that the identity it created was one codesign would actually accept.
+  overture_generate_signing_cert "${tmp}/key.pem" "${tmp}/cert.pem" || return 1
+  overture_setup_package_identity "${tmp}/key.pem" "${tmp}/cert.pem" "${tmp}/identity.p12" "${p12pw}" || return 1
+
+  echo "==> Importing it and authorizing codesign to use its key"
+  overture_setup_import_identity "${tmp}/identity.p12" "${p12pw}" || return 1
+
+  overture_setup_trust_certificate "${tmp}/cert.pem" || return 1
+}
+
+overture_setup_signing_identity() {
+  # The SAME question the script ends on, asked first. Asking the weaker one here (is an identity
+  # listed) puts the identical lie one step earlier: an identity that is listed and refused would be
+  # reported as already set up and the person sent away with nothing fixed. `find-identity -v` does not
+  # even list an untrusted certificate, so that weaker question could not tell this case from a fresh
+  # Mac either way.
+  if overture_verify_signing_identity_usable >/dev/null 2>&1; then
+    echo "Signing identity \"${OVERTURE_SIGNING_IDENTITY}\" already exists and codesign signs with it."
+    echo "Nothing to do."
+    return 0
+  fi
+
+  overture_setup_prepare_keychain
+
+  local tmp rc=0
+  tmp="$(mktemp -d)"
+  # Called through `|| rc=$?` so that a failure ANYWHERE inside it still reaches the cleanup below. The
+  # scratch directory holds the certificate's PRIVATE KEY, and a half finished run is exactly when it
+  # would otherwise be left lying in the temp directory. errexit is suspended for the duration of a
+  # command in an `||` list, including inside the function it calls, so this does not swallow the failure
+  # either: the status comes back in rc.
+  overture_setup_create_identity_in "${tmp}" || rc=$?
+  rm -rf "${tmp}"
+  if [[ "${rc}" -ne 0 ]]; then
+    echo "ERROR: could not create the signing identity. See the messages above." >&2
+    return "${rc}"
+  fi
+
+  # The whole point of #2537. `overture_signing_identity_sha` answers whether an identity is LISTED, and
+  # that is what stood here: on 2026-07-26 it said yes for a certificate codesign refused outright. This
+  # signs a throwaway bundle with the very function that will later sign the real one, and prints its own
+  # reason, which already tells absent apart from present-and-refused (L11).
+  if ! overture_verify_signing_identity_usable; then
+    echo "ERROR: the identity was created but codesign will not sign with it, so nothing was fixed." >&2
+    echo "       Do not run mac/build-install.sh yet: it would refuse for the same reason, after a" >&2
+    echo "       full Release build." >&2
+    return 1
+  fi
+
+  echo "Done. Created \"${OVERTURE_SIGNING_IDENTITY}\" ($(overture_signing_identity_sha)) and proved codesign signs with it."
+  echo "Reinstall once with mac/build-install.sh; you will re-grant permissions this one time, then they persist."
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  overture_setup_signing_identity "$@"
 fi
-
-KC="${OVERTURE_SIGNING_KEYCHAIN}"
-PW="${OVERTURE_SIGNING_KEYCHAIN_PASSWORD}"
-
-echo "==> Creating dedicated signing keychain: ${KC}"
-if [[ ! -f "${KC}" ]]; then
-  security create-keychain -p "${PW}" "${KC}"
-fi
-# No auto-lock, so a later build can unlock and sign without the keychain having relocked underneath it.
-security set-keychain-settings "${KC}"
-security unlock-keychain -p "${PW}" "${KC}"
-
-# Add the keychain to the user's search list (once) so codesign and find-identity resolve the identity.
-existing_keychains=()
-while IFS= read -r line; do
-  line="${line#"${line%%[![:space:]]*}"}"   # ltrim
-  line="${line%\"}"; line="${line#\"}"        # strip surrounding quotes
-  [[ -n "${line}" ]] && existing_keychains+=("${line}")
-done < <(security list-keychains -d user)
-in_list=0
-for k in "${existing_keychains[@]}"; do
-  [[ "${k}" == "${KC}" ]] && in_list=1
-done
-if [[ "${in_list}" -eq 0 ]]; then
-  echo "==> Adding it to the user keychain search list"
-  security list-keychains -d user -s "${existing_keychains[@]}" "${KC}"
-fi
-
-echo "==> Generating a self-signed code-signing certificate"
-tmp="$(mktemp -d)"
-trap 'rm -rf "${tmp}"' EXIT
-# A transient password on the PKCS#12 blob: macOS's `security import` rejects an empty-password MAC,
-# and openssl 3.x needs -legacy for a bundle `security` can read. The password never leaves this run.
-p12pw="transfer"
-# #1524: generated by the shared function, whose extensions are pinned by signing-cert.test.sh. Inline
-# here it set no keyUsage extension, which codesign rejects outright ("Invalid Key Usage for policy"),
-# and nothing checked that the identity it created was one codesign would actually accept.
-overture_generate_signing_cert "${tmp}/key.pem" "${tmp}/cert.pem"
-openssl pkcs12 -export -legacy \
-  -inkey "${tmp}/key.pem" -in "${tmp}/cert.pem" \
-  -out "${tmp}/identity.p12" -passout "pass:${p12pw}" \
-  -name "${OVERTURE_SIGNING_IDENTITY}" >/dev/null 2>&1
-
-echo "==> Importing it and authorizing codesign to use its key"
-security import "${tmp}/identity.p12" -k "${KC}" -P "${p12pw}" -T /usr/bin/codesign >/dev/null
-security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "${PW}" "${KC}" >/dev/null 2>&1
-
-echo "==> Trusting the certificate for code signing (approve the password dialog)..."
-security add-trusted-cert -r trustRoot -p codeSign -k "${KC}" "${tmp}/cert.pem"
-
-sha="$(overture_signing_identity_sha)"
-if [[ -z "${sha}" ]]; then
-  echo "ERROR: the identity was not created successfully. See the messages above." >&2
-  exit 1
-fi
-echo "Done. Created and trusted \"${OVERTURE_SIGNING_IDENTITY}\" (${sha})."
-echo "Reinstall once with mac/build-install.sh; you will re-grant permissions this one time, then they persist."

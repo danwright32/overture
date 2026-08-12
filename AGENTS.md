@@ -219,9 +219,18 @@ already drifting from the Swift version it mirrored.
   reminders) across reinstalls instead of dropping them, which an ad-hoc signature silently did because
   its cdhash changes every rebuild (#1425). Run `mac/scripts/setup-signing-identity.sh` ONCE per Mac
   first (it creates and trusts a dedicated "Overture Local Signing" certificate, the one manual step is
-  a trust-settings password dialog); after that every build signs automatically. `build-install.sh`
-  fails loud if that identity is missing rather than falling back to ad-hoc. The one-time switch to this
-  identity re-prompts for permissions on the first install after it, then they persist.
+  a trust-settings password dialog); after that every build signs automatically. Since #2537 that setup
+  proves its own work the same way `build-install.sh` does, by trial signing a throwaway bundle, rather
+  than asking the cheaper question of whether an identity is LISTED. It was the script that answered that
+  question wrongly first: on 2026-07-26 it printed `Done. Created and trusted ...` for a certificate
+  codesign refused outright, and only `build-install.sh` found out, after a full Release build and after
+  `/Applications/Overture.app` had already been replaced. Its early exit asks the same question, so an
+  identity that is present and refused is recreated rather than reported as already set up. Every call in
+  it that touches the real keychain or trust store sits behind a named function, which is what lets
+  `mac/scripts/setup-signing-identity.test.sh` drive the whole decision path without the password dialog
+  that made it untestable before. `build-install.sh` fails loud if that identity is missing rather than
+  falling back to ad-hoc. The one-time switch to this identity re-prompts for permissions on the first
+  install after it, then they persist.
 - `build-install.sh` builds WHATEVER IS CHECKED OUT, which is what you want when installing a branch build
   deliberately. The freshness panel's Update button does NOT run it directly: it runs
   `mac/scripts/update-overture.sh`, which brings the checkout up to origin/main first and only then
