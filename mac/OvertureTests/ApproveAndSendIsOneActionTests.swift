@@ -44,7 +44,7 @@ struct ApproveAndSendIsOneActionTests {
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                          status: .drafted)
         p.draftSubject = subject
-        p.draftBody = "I photograph performances and would love to cover this."
+        p.draftBody = "Hello,\n\nI photograph performances and would love to cover this."
         p.sendsTogetherOverride = together
         ctx.insert(p)
         for i in 0..<contacts {

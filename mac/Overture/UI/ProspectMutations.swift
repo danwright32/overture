@@ -731,21 +731,6 @@ enum ProspectMutations {
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
-    // #2010: Dan's own opening for ONE contact of this show. Blank goes back to Overture's own, so
-    // clearing the field is an undo rather than a request for an email with no greeting at all.
-    //
-    // Matched to a recipient by id within this show, never across shows: the id is the canonical address
-    // and the same person can be a contact on several, so a global lookup would rewrite the opening on a
-    // pitch Dan was not looking at.
-    static func saveOpening(_ item: QueueItem, recipientId: String, opening: String,
-                            prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }),
-              let recipient = model.recipients.first(where: { $0.id == recipientId }) else { return }
-        let trimmed = opening.trimmingCharacters(in: .whitespacesAndNewlines)
-        recipient.openingOverride = trimmed.isEmpty ? nil : trimmed
-        context.saveOrWarn(org: item.groupName, feedback: feedback)
-    }
-
     // #2034: Dan's choice for THIS event, one email to everybody or one each. Written as the override
     // rather than a plain flag, so a show he has never touched still reads as the default rather than as a
     // decision he made.
@@ -753,16 +738,6 @@ enum ProspectMutations {
                                  prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         model.sendsTogetherOverride = together
-        context.saveOrWarn(org: item.groupName, feedback: feedback)
-    }
-
-    // #2033: the opening of a joint email, which belongs to the SHOW because one message has one greeting.
-    // Blank clears it back to Overture's own, matching how a per-contact opening behaves.
-    static func saveJointOpening(_ item: QueueItem, opening: String,
-                                 prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
-        let trimmed = opening.trimmingCharacters(in: .whitespacesAndNewlines)
-        model.jointOpeningOverride = trimmed.isEmpty ? nil : trimmed
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
@@ -995,14 +970,19 @@ enum ProspectMutations {
         return context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
-    // #718: Dan's deliberate, confirmed override of the #407 salutation-review send block, for
-    // when SalutationStrip's heuristic flagged text he's confident is fine to send as-is. Records
-    // the EXACT current draftBody rather than a bare boolean (see
-    // Prospect.isSalutationReviewOverridden), so a later edit to different text silently
-    // invalidates this without any extra reset logic needed here or in the migration.
-    static func overrideSalutationReview(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
+    // #2545: Dan's deliberate, confirmed override of the greeting send block, for a draft he has read
+    // and is happy to send as it stands. Records the EXACT outgoing text of each held recipient rather
+    // than a bare boolean (see Recipient.isGreetingOverridden), so a later edit to different text
+    // silently reinstates the hold with no extra reset logic.
+    //
+    // Written PER RECIPIENT, and deliberately not on the show, because `effectiveBody` is per recipient:
+    // a performer with their own letter can be held while the shared body is fine, and a show-level flag
+    // would wave through text nobody looked at (L83).
+    static func overrideGreeting(_ item: QueueItem, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
-        model.draftSalutationReviewOverriddenBody = model.draftBody
+        for r in model.recipients where r.sendState == .pending && r.isBlockedByGreeting {
+            r.greetingOverriddenBody = r.effectiveBody
+        }
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 

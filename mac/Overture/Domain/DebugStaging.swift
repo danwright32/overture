@@ -96,7 +96,10 @@ enum DebugStaging {
                          fitScore: 7, tier: "high", fitReason: "debug self-send", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .drafted)
         p.draftSubject = "Overture self-send test"
-        p.draftBody = "This is a self-send test from Overture. If you received it, the send path works."
+        // #2545: it opens with a greeting like every other body, because one that does not is held at
+        // send. A staged draft that cannot be sent tests nothing, and this one exists to walk the
+        // real send path end to end.
+        p.draftBody = "Hello,\n\nThis is a self-send test from Overture. If you received it, the send path works."
         let recipient = Recipient(id: Recipient.makeId(email: address, formURL: nil) ?? address,
                                   email: address, name: "Dan (test)", provenance: .act)
         p.setRecipients([recipient])
@@ -125,7 +128,10 @@ enum DebugStaging {
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                          status: .drafted)
         p.draftSubject = "Overture self-send test"
-        p.draftBody = "This is a self-send test from Overture. If you received it, the send path works."
+        // #2545: it opens with a greeting like every other body, because one that does not is held at
+        // send. A staged draft that cannot be sent tests nothing, and this one exists to walk the
+        // real send path end to end.
+        p.draftBody = "Hello,\n\nThis is a self-send test from Overture. If you received it, the send path works."
 
         let act = Recipient(id: Recipient.makeId(email: actEmail, formURL: nil) ?? actEmail, email: actEmail,
                             name: "Dan (test act)", role: "Act", provenance: .act)

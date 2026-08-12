@@ -60,23 +60,24 @@ struct OpenerIsNotAGreetingTests {
         #expect(RecentOpenersBuilder.opener(from: "Hello,").isEmpty)
     }
 
-    // The detector and the stripper must agree about what a leading greeting IS, or the draft screen
-    // will point at one the export has already removed, and the two will drift the first time either
-    // pattern is touched.
-    @Test func thedetectorAndTheStripperAgree() {
+    // The judgment and the stripper must agree about what a leading opening IS, or the send hold will
+    // point at one the export has already removed, and the two will drift the first time either pattern
+    // is touched. #2545 made this the SAME type answering both, which is what makes it hold.
+    @Test func thejudgmentAndTheStripperAgree() {
         let greeted = ["Hi Sarah, Great to see you.", "Hello, I photograph performing arts.",
-                       "Dear Sarah, Great to see you."]
+                       "Dear Sarah, Great to see you.",
+                       "Attn: Sarah Chen, Marketing\n\nHello, I photograph performing arts."]
         let plain = ["I photograph performing arts.", "Highlights from the season are attached.",
                      "Hello Dolly opens at the Palace in March."]
 
         for body in greeted {
-            #expect(DraftOpeningNotice.bodyRepeatsAGreeting(body),
-                    "the draft screen must point at this: \(body)")
-            #expect(!DraftOpeningNotice.bodyRepeatsAGreeting(RecentOpenersBuilder.opener(from: body)),
+            #expect(DraftGreeting.opensWithAGreeting(body),
+                    "the send hold must read this as greeting: \(body)")
+            #expect(!DraftGreeting.opensWithAGreeting(RecentOpenersBuilder.opener(from: body)),
                     "and the export must have already removed it: \(body)")
         }
         for body in plain {
-            #expect(!DraftOpeningNotice.bodyRepeatsAGreeting(body))
+            #expect(!DraftGreeting.opensWithAGreeting(body))
         }
     }
 }

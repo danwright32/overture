@@ -214,7 +214,7 @@ struct FunnelCaptureTests {
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                          status: .approved)
-        p.draftSubject = "S"; p.draftBody = "Hi"
+        p.draftSubject = "S"; p.draftBody = "Hello,\n\nBody."
         ctx.insert(p)
         if let id = Recipient.makeId(email: "to@org.org", formURL: nil) {
             p.setRecipients([Recipient(id: id, email: "to@org.org", name: nil, role: nil, provenance: .act)])

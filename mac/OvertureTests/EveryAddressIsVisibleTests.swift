@@ -32,7 +32,7 @@ struct EveryAddressIsVisibleTests {
                          fitScore: 5, tier: "mid", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .approved)
         p.draftSubject = "Photographing Aurora Strings"
-        p.draftBody = "I photograph performing arts in New York."
+        p.draftBody = "Hello,\n\nI photograph performing arts in New York."
         ctx.insert(p)
         return p
     }

@@ -24,9 +24,10 @@ enum LaunchMigrations {
         // send path, so per-recipient reply detection has a thread to watch. Idempotent; no-op once
         // every contacted recipient carries its own thread.
         RecipientBackfill.repairThreadDown(in: context)
-        // Recover salutation-free bodies from legacy inline-greeting drafts (#393), so the app can
-        // render the greeting per recipient at send. Idempotent (a stripped body has nothing to strip).
-        DraftSalutationMigration.run(in: context)
+        // #393's salutation pass is GONE (#2545). It stripped a greeting out of a stored body so the app
+        // could compose its own per recipient at send; #2010 stopped it rewriting bodies, leaving it only
+        // clearing a flag nothing set any more, and #2545 inverted the rule it served (a body must now
+        // open with a greeting, held by Recipient.isBlockedByGreeting).
         // Choral folded into Music (#350), an editorial taxonomy decision. Idempotent: guarded by
         // "any prospect still stored as choral". Does not touch fitScore/tier (Dan's call).
         DisciplineMigration.run(in: context)

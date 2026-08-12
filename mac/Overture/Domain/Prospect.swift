@@ -329,31 +329,33 @@ final class Prospect {
     var assignedArm: String? = nil
     var experimentOpenerEdited: Bool = false
 
-    // Phase 2.5 (#393): set when the salutation normalizer found a greeting-shaped opener it could
-    // not confidently strip, so the stored body may still carry an inline greeting. Such a draft is
-    // treated as act-only (it can't be reused for a differently-named recipient) until a Prep re-run
-    // produces a salutation-free body.
+    // RETAINED STORAGE, read by nothing (#2545). These are #393/#718's salutation-review flag and its
+    // override: the machinery that policed a greeting INSIDE the body, back when the app composed one
+    // above it and an inline one would double up.
+    //
+    // It was already dead before #2545 touched it, and that is worth recording rather than quietly
+    // deleting, because it looked alive the whole time. `SalutationStrip`, the only thing that ever set
+    // the flag true, lost its last caller in #2010 when the launch pass stopped rewriting bodies; from
+    // then on `DraftSalutationMigration` only ever set the flag to FALSE. So the hold reading it could
+    // not fire, and a guard that cannot fire is indistinguishable from one that is working (L90).
+    //
+    // #2545 inverts what it policed anyway: a body must now open with a greeting, and
+    // `Recipient.isBlockedByGreeting` is the live guard.
+    //
+    // Left on the model rather than deleted for the reason given on the retained columns above: every
+    // schema change this app has made was ADDITIVE and it carries no MigrationPlan or VersionedSchema
+    // (see AppSchema). Measured 2026-08-12: 0 rows carry either value.
     var draftNeedsSalutationReview: Bool = false
-
-    // #718: the EXACT draftBody text Dan explicitly confirmed is fine to send despite the flag
-    // above, deliberately a copy of the text rather than a bare boolean, so a later edit to
-    // DIFFERENT text silently invalidates the override with no extra migration bookkeeping (see
-    // isSalutationReviewOverridden below). `nil` means never overridden (or a stale override).
     var draftSalutationReviewOverriddenBody: String? = nil
-
-    // True only when the current draftBody is the EXACT text Dan overrode; a mismatch (edited
-    // since, or never overridden) means the #407 block still applies.
-    var isSalutationReviewOverridden: Bool {
-        draftSalutationReviewOverriddenBody != nil && draftSalutationReviewOverriddenBody == draftBody
-    }
 
     // A freeze SEPARATE from draftEditedByDan (#392): set once Dan has curated the recipient list
     // (manual add/remove at approval, Phase 7), so a Prep re-run never clobbers his recipient edits
     // even while a body redraft still flows. The two freezes are independent.
     var recipientsEditedByDan: Bool = false
 
-    // #2031: Dan's own opening for a JOINT email, when he has written one. One message has one opening, so
-    // unlike the per-contact override (#2010) this belongs to the show: there is nobody to hang it on.
+    // RETAINED STORAGE, read by nothing (#2545). #2031's own opening for a JOINT email, from when the
+    // app composed an opening above the body. Retained for the same reason as the columns above.
+    // Measured 2026-08-12: 0 rows carry a value.
     var jointOpeningOverride: String? = nil
 
     // #2033: does this event's outreach go out as ONE email to everybody, or one each?
@@ -368,6 +370,22 @@ final class Prospect {
     var sendsTogetherOverride: Bool? = nil
 
     var sendsTogether: Bool { sendsTogetherOverride ?? true }
+
+    // #2545: how many people ONE send reaches, which is what decides whether a greeting may name
+    // somebody. Sending separately is one email each however many contacts the show carries, so the
+    // answer there is one.
+    //
+    // Deliberately NOT `SendGroup.previewGroup`, which is the obvious candidate and is wrong here:
+    // that filters on `isSendablePending`, and the greeting hold is now part of that predicate, so
+    // asking it this question would have the two read each other without end. This counts who could
+    // receive the mail from the fields alone, which is also the honest reading: a contact held by some
+    // OTHER guard is still a person the greeting has to be right for once that guard clears.
+    var greetingAudienceSize: Int {
+        let reachable = recipients.filter {
+            $0.sendState == .pending && $0.email?.isEmpty == false && !$0.pausedByReply
+        }
+        return sendsTogether ? reachable.count : min(reachable.count, 1)
+    }
 
     // #367: Dan asked for a re-prep on a prospect that already has a draft. Independent flags so he
     // can request just a redraft, just a fresh contact search, or both; PrepQueueBuilder.needsPrep

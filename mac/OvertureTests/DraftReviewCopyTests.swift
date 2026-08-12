@@ -54,20 +54,45 @@ struct DraftReviewCopyTests {
     // is still a visible record that the send happened despite it. A sentence that vanished on override
     // would erase exactly the thing worth keeping.
 
+    // #2545: the greeting now lives in the body, so the two ways it can be wrong are that it is absent
+    // and that it names one person on an email several people receive. Each gets its OWN sentence,
+    // because they need opposite fixes: one is "write a greeting", the other is "take the name out".
+    @Test func amissingGreetingSaysSoAndNamesTheFix() {
+        let note = DraftReviewNotes.greeting(missing: true, misaddressed: false, audience: 1,
+                                             overridden: false)
+
+        #expect(note == "This draft won't send: it doesn't open with a greeting. Edit it to add one.")
+    }
+
+    @Test func agreetingThatNamesOnePersonOnASharedEmailSaysHowManyItReaches() {
+        let note = DraftReviewNotes.greeting(missing: false, misaddressed: true, audience: 3,
+                                             overridden: false)
+
+        #expect(note == "This draft won't send: the greeting names one person but this email goes to 3. "
+                + "Open it \"Hello,\" instead.")
+    }
+
     @Test func anOverriddenGreetingWarningStillLeavesATrail() {
-        #expect(DraftReviewNotes.salutation(needsReview: true, overridden: true)
+        #expect(DraftReviewNotes.greeting(missing: true, misaddressed: false, audience: 1,
+                                          overridden: true)
                     == "Sending despite the greeting warning you confirmed.")
     }
 
-    @Test func anUnOverriddenGreetingWarningTellsDanToEditItFirst() {
-        let note = DraftReviewNotes.salutation(needsReview: true, overridden: false)
-
-        #expect(note?.contains("edit it before sending") == true)
+    @Test func aDraftWithNoGreetingProblemSaysNothingAtAll() {
+        #expect(DraftReviewNotes.greeting(missing: false, misaddressed: false, audience: 1,
+                                          overridden: false) == nil)
+        #expect(DraftReviewNotes.greeting(missing: false, misaddressed: false, audience: 1,
+                                          overridden: true) == nil)
     }
 
-    @Test func aDraftWithNoGreetingProblemSaysNothingAtAll() {
-        #expect(DraftReviewNotes.salutation(needsReview: false, overridden: false) == nil)
-        #expect(DraftReviewNotes.salutation(needsReview: false, overridden: true) == nil)
+    // L64/#718: the two-step confirm repeats WHAT is wrong before asking him to send anyway, so the
+    // confirm is never a bare "are you sure" about a fact he has already scrolled past.
+    @Test func thegreetingOverrideConfirmRepeatsWhatIsWrong() {
+        let confirm = DraftReviewNotes.greetingOverrideConfirm(missing: true, misaddressed: false,
+                                                               audience: 1)
+
+        #expect(confirm == "This draft won't send: it doesn't open with a greeting. Edit it to add one. "
+                + "Confirm you've checked it and it's fine to send as-is.")
     }
 
     @Test func anOverriddenLintWarningStillLeavesATrail() {

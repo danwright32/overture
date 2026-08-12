@@ -28,7 +28,7 @@ struct FormOutreachTests {
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                          status: .drafted, ingestedAt: Date(timeIntervalSince1970: 1))
         p.draftSubject = "Photographing Aurora Strings at Jalopy."
-        p.draftBody = "I photograph performing arts in New York."
+        p.draftBody = "Hello,\n\nI photograph performing arts in New York."
         ctx.insert(p)
         let r = Recipient(id: Recipient.makeId(email: nil, formURL: formURL)!, email: nil,
                           name: "Jake Berg", provenance: .act,
@@ -156,7 +156,7 @@ struct FormOutreachTests {
                          fitScore: 5, tier: "mid", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .drafted)
         p.downbeatClientId = "C1"
-        p.draftBody = "I photograph performing arts in New York."
+        p.draftBody = "Hello,\n\nI photograph performing arts in New York."
         ctx.insert(p)
         let form = "https://acmechorus.example/contact"
         let r = Recipient(id: Recipient.makeId(email: nil, formURL: form)!, email: nil,
@@ -251,7 +251,8 @@ struct FormOutreachTests {
 
         let copied = OutgoingPitch.text(for: r, of: p)
 
-        #expect(copied?.hasPrefix("Hi Jake,") == true)
+        // #2545: the copied text is the body, greeting included, with nothing composed above it.
+        #expect(copied?.hasPrefix("Hello,\n\n") == true)
         #expect(copied?.contains("I photograph performing arts in New York.") == true)
 
         // The same recipient, given an address, sent for real: the body Gmail receives is that string.
@@ -282,7 +283,7 @@ struct FormPitchStateTests {
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                          status: .drafted)
-        p.draftBody = "I photograph performing arts in New York."
+        p.draftBody = "Hello,\n\nI photograph performing arts in New York."
         ctx.insert(p)
         if let id = Recipient.makeId(email: email, formURL: formURL) {
             p.setRecipients([Recipient(id: id, email: email, provenance: .act,

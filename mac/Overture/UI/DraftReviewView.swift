@@ -12,19 +12,13 @@ struct DraftReviewView: View {
     // #367: request a re-prep on a prospect that already has a draft.
     var onReprep: (_ mode: ReprepMode) -> Void = { _ in }
     let onSaveDraft: (_ subject: String, _ body: String) -> Void
-    // #2010: Dan's own opening for one contact. Optional so every existing construction site is
-    // unaffected; without it the opening is shown but not editable.
-    var onSaveOpening: ((_ recipientId: String, _ opening: String) -> Void)? = nil
-    // #2033: the opening of a JOINT email belongs to the show, not to a contact, so it saves through its
-    // own seam rather than pretending one of the contacts owns it.
-    var onSaveJointOpening: ((_ opening: String) -> Void)? = nil
     // #2034: Dan's per-event choice between one shared email and one each.
     var onSetSendsTogether: ((_ together: Bool) -> Void)? = nil
     var onSetLostReason: (String) -> Void = { _ in }
     var onSend: () -> Void = {}
-    // #718: Dan's deliberate override of the #407 salutation-review send block, confirmed via a
-    // two-step alert (showOverrideConfirm below) rather than firing on a single tap.
-    var onOverrideSalutationReview: () -> Void = {}
+    // #2545: Dan's deliberate override of the greeting send block, confirmed via a two-step alert
+    // (showGreetingOverrideConfirm below) rather than firing on a single tap.
+    var onOverrideGreeting: () -> Void = {}
     // #789: Dan's confirmed override of the draft-lint send block, same two-step alert shape.
     var onOverrideDraftLint: () -> Void = {}
     var onDismissReply: () -> Void = {}
@@ -83,10 +77,6 @@ struct DraftReviewView: View {
     var outboundSignature: OutboundSignature = GmailSignatureStore.currentSignature()
 
     @State private var editing = false
-    // #2010: in-progress edits to each contact's opening, keyed by recipient id. Cleared on save and on
-    // cancel, so a half-typed opening never survives into the next draft Dan opens.
-    @State private var openingEdits: [String: String] = [:]
-    @State private var jointOpeningEdit: String? = nil
     @State private var askAboutWholeOrg = false   // #769
     @State private var draftSubject = ""
     @State private var draftBody = ""
@@ -97,7 +87,7 @@ struct DraftReviewView: View {
     @State private var showAddContact = false
     @State private var addContactEmail = ""
     @State private var addContactName = ""
-    @State private var showOverrideConfirm = false
+    @State private var showGreetingOverrideConfirm = false
     @State private var showLintOverrideConfirm = false
 
     // #885: the sentence lives in DraftCheck, which is the type that decides what blocks a send.
@@ -252,71 +242,15 @@ struct DraftReviewView: View {
         }
     }
 
-    @ViewBuilder private func openingBlock(editable: Bool) -> some View {
-        if let joint = item.jointOpening {
-            // #2033: one email, so ONE opening. Showing a line per contact here would put two greetings on
-            // screen for a message carrying one of them, which is the #2010 defect in a new place.
-            VStack(alignment: .leading, spacing: 3) {
-                if editable, onSaveJointOpening != nil {
-                    TextField("Opening", text: Binding(get: { jointOpeningEdit ?? joint },
-                                                       set: { jointOpeningEdit = $0 }))
-                        .textFieldStyle(.roundedBorder)
-                        .font(OVType.body)
-                } else {
-                    // #2074: no inline tag after the greeting. A word sitting there reads as part of
-                    // the sentence ("Hello! Yours"), whatever it was meant to mark.
-                    Text(joint)
-                        .font(OVType.body).foregroundStyle(OVColor.ink)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                if DraftOpeningNotice.bodyRepeatsAGreeting(item.draftBody) {
-                    Text(DraftOpeningNotice.note)
-                        .font(OVType.meta).foregroundStyle(OVColor.rust)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-        } else if !item.contacts.isEmpty {
-            VStack(alignment: .leading, spacing: 3) {
-                ForEach(item.contacts) { c in
-                    if editable, onSaveOpening != nil {
-                        HStack(spacing: OVSpacing.xs) {
-                            TextField("Opening", text: Binding(
-                                get: { openingEdits[c.id] ?? c.outgoingOpening },
-                                set: { openingEdits[c.id] = $0 }))
-                                .textFieldStyle(.roundedBorder)
-                                .font(OVType.body)
-                            if item.contacts.count > 1 {
-                                Text(c.displayName).font(OVType.tag).foregroundStyle(OVColor.inkFaint)
-                            }
-                        }
-                    } else {
-                        // #2074: the greeting is a sentence and the contact label is a row label, so
-                        // nothing may sit inline after the greeting (the "Yours" tag read as literal
-                        // text) and the label is pushed to the trailing edge rather than reading as
-                        // "Hello! chelsea@...". The editable row above already trails its label, the
-                        // TextField takes the width.
-                        HStack(spacing: OVSpacing.xs) {
-                            Text(c.outgoingOpening)
-                                .font(OVType.body).foregroundStyle(OVColor.ink)
-                                .fixedSize(horizontal: false, vertical: true)
-                            if item.contacts.count > 1 {
-                                Spacer(minLength: OVSpacing.xs)
-                                Text(c.displayName).font(OVType.tag).foregroundStyle(OVColor.inkFaint)
-                            }
-                        }
-                    }
-                }
-                // The one thing worth pointing at rather than silently fixing: the body greets as well,
-                // so the email says hello twice. Said, never rewritten and never blocked, because he can
-                // now see both halves at once and it is his text.
-                if DraftOpeningNotice.bodyRepeatsAGreeting(item.draftBody) {
-                    Text(DraftOpeningNotice.note)
-                        .font(OVType.meta).foregroundStyle(OVColor.rust)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-        }
-    }
+    // #2545 removed the opening block that used to sit here: a per-contact (or per-joint-email) editable
+    // opening, rendered directly above the body, plus a notice saying the body greeted as well and the
+    // email would say hello twice. All three were the visible half of a greeting the app composed.
+    //
+    // Dan, 2026-08-11, reading exactly that stack on one card: "I want to eliminate the appended
+    // greeting. It should just be included in the AI prep or manual prep where I write it myself. It's
+    // confusing to have it there twice." The greeting is part of the body now, so the body's own box is
+    // the whole of what he reads, and the notice has nothing left to warn about. What replaces it is a
+    // HOLD, in `sendBlockerNotes` below, where the rest of the reasons a draft will not send already live.
 
     @ViewBuilder private var draftBlock: some View {
         if editing {
@@ -324,7 +258,6 @@ struct DraftReviewView: View {
                 TextField("Subject", text: $draftSubject)
                     .textFieldStyle(.roundedBorder)
                 sendModeChoice
-                openingBlock(editable: true)
                 TextEditor(text: $draftBody)
                     .font(OVType.body)
                     .frame(minHeight: 120)
@@ -332,15 +265,11 @@ struct DraftReviewView: View {
                     .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(OVColor.line))
                 HStack {
                     Button("Save") {
-                        // #2010: the opening is part of the email, so it saves with it.
-                        for (id, text) in openingEdits { onSaveOpening?(id, text) }
-                        if let joint = jointOpeningEdit { onSaveJointOpening?(joint) }
-                        openingEdits = [:]
                         onSaveDraft(draftSubject, draftBody)
                         editing = false
                     }
                     .buttonStyle(.borderedProminent)
-                    Button("Cancel") { openingEdits = [:]; editing = false }
+                    Button("Cancel") { editing = false }
                         .buttonStyle(.plain).foregroundStyle(OVColor.inkSoft)
                 }
             }
@@ -350,7 +279,6 @@ struct DraftReviewView: View {
                     Text(subject).font(.system(size: 13, weight: .semibold)).foregroundStyle(OVColor.ink)
                 }
                 sendModeChoice
-                openingBlock(editable: false)
                 if let body = item.draftBody {
                     // #1157/#1203: show the body WITH the sign-off the send path appends, so Dan approves
                     // the real outgoing message. DraftSignaturePreview renders the styled text/html a rich
@@ -459,17 +387,25 @@ struct DraftReviewView: View {
         if let note = DraftReviewNotes.noSubject(subject: item.draftSubject) {
             Text(note).font(.system(size: 10)).foregroundStyle(OVColor.rust).lineLimit(1)
         }
-        // #407: a plain, mostly non-dismissible warning, not a flag Dan can dismiss as wrong. It's a fact
-        // about the stored text, and clears itself once the draft is fixed. #718: he CAN override the
-        // block itself via a deliberate two-step confirm (a native alert, not a single tap), which then
-        // tones the message down rather than hiding it, so there's still a visible trail the send happened
-        // despite it. #885: the wording is DraftReviewNotes'; the view only decides whether the Override
-        // button belongs beside it.
-        if let note = DraftReviewNotes.salutation(needsReview: item.draftNeedsSalutationReview,
-                                                  overridden: item.salutationReviewOverridden) {
-            Text(note).font(.system(size: 10)).foregroundStyle(OVColor.rust).lineLimit(1)
-            if !item.salutationReviewOverridden {
-                Button("Override") { showOverrideConfirm = true }
+        // #2545: the body must open with a greeting, because nothing composes one above it any more, and
+        // a greeting that names one person may only reach one. Both hold the send.
+        //
+        // It says its piece HERE, beside the button it disables, rather than up by the body: a refusal
+        // that only the disabled action could have spoken is a refusal nobody ever reads (L109). #718's
+        // two-step override applies unchanged, and tones the sentence down rather than hiding it, so a
+        // send that went out despite the warning can still be seen to have. #885: the wording is
+        // DraftReviewNotes', tested; the view only decides whether the Override button belongs beside it.
+        //
+        // Not lineLimit(1), unlike its neighbours: this one names what is wrong AND what to do about it,
+        // and truncating it to a single line in a narrow card would cut off the half that helps.
+        if let note = DraftReviewNotes.greeting(missing: item.draftMissingGreeting,
+                                                misaddressed: item.draftGreetingMisaddressed,
+                                                audience: item.greetingAudienceSize,
+                                                overridden: item.greetingOverridden) {
+            Text(note).font(.system(size: 10)).foregroundStyle(OVColor.rust)
+                .fixedSize(horizontal: false, vertical: true)
+            if !item.greetingOverridden {
+                Button("Override") { showGreetingOverrideConfirm = true }
                     .buttonStyle(.plain).font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
             }
         }
@@ -615,11 +551,15 @@ struct DraftReviewView: View {
             }
             if !isApproved { Spacer() }
         }
-        .alert("Send anyway?", isPresented: $showOverrideConfirm) {
-            Button("Send Anyway") { onOverrideSalutationReview() }
+        // #2545: the greeting hold's own two-step confirm. The message is built from the SAME sentence the
+        // note above shows, so the warning and the confirm can never describe different problems.
+        .alert("Send anyway?", isPresented: $showGreetingOverrideConfirm) {
+            Button("Send Anyway") { onOverrideGreeting() }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Overture couldn't safely confirm the greeting in this draft is free of a real name. Confirm you've checked it and it's fine to send as-is.")
+            Text(DraftReviewNotes.greetingOverrideConfirm(missing: item.draftMissingGreeting,
+                                                          misaddressed: item.draftGreetingMisaddressed,
+                                                          audience: item.greetingAudienceSize))
         }
         // #789: the draft lint's own override, deliberately a separate confirm from the greeting one
         // above, so the reason Dan is waving something through is never ambiguous.

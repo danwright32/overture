@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1245 sentences**.
+Every sentence Overture can say to Dan: **1242 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -89,10 +89,13 @@ What is not, and why:
 - `UI/DraftSignaturePreview.swift`: renders the outbound email's own HTML (body + Gmail signature), not Overture's voice (#1203)
 - `UI/DraftSignaturePreview.swift`: browser-side measuring script, not a sentence Overture says to Dan (#915)
 
-## The same sentence, said in more than one place (49)
+## The same sentence, said in more than one place (50)
 
 Two copies of a sentence will drift. #843 owns fixing these.
 
+- " Confirm you've checked it and it's fine to send as-is."
+  - `Domain/DraftReviewNotes.swift`
+  - `Domain/DraftReviewNotes.swift`
 - " a one-off hunt."
   - `Domain/ProbeSelection.swift`
   - `Domain/ProbeSelection.swift`
@@ -469,10 +472,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/OnboardingView.swift`
 "Asks for the date or venue Overture already knows"
     `Domain/DraftCheck.swift`
-"Attn: \(name), \(role)\n\n"
-    `Domain/Salutation.swift`
-"Attn: \(name)\n\n"
-    `Domain/Salutation.swift`
 "Authorize your photography Gmail so you can send approved emails"
     `Domain/DraftReviewNotes.swift`
 "Auto-detected booking, confirm?"
@@ -818,8 +817,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Held, not sending"
     `UI/SendConfirmSheet.swift`
 "Hi \(firstName(name)),"
-    `Domain/Salutation.swift`
-"Hi \(last),"
     `Domain/Salutation.swift`
 "Hidden for a week. Overture still can't keep clear of shoots it doesn't know about."
     `App/ActionFeedback.swift`
@@ -1267,8 +1264,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreRelocation.swift`
 "Overture couldn't read this message, which usually means it's an image or an attachment. Open it in Gmail."
     `Domain/ReplyPanel.swift`
-"Overture couldn't safely confirm the greeting in this draft is free of a real name. Confirm you've checked it and it's fine to send as-is."
-    `UI/DraftReviewView.swift`
 "Overture couldn't start the Gmail sign-in on this Mac, so it didn't open your browser."
     `Integration/GmailAuthManager.swift`
 "Overture couldn't update OmniFocus"
@@ -1927,8 +1922,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/BuildFreshnessPanel.swift`
 "This draft won't send: \(what.isEmpty ? "a blocking issue" : what)."
     `Domain/DraftCheck.swift`
-"This email starts with a greeting and the opening above adds one too, so it will say hello twice."
-    `Domain/DraftOpeningNotice.swift`
+"This draft won't send: it doesn't open with a greeting. Edit it to add one."
+    `Domain/DraftReviewNotes.swift`
+"This draft won't send: the greeting names one person but this email goes to "
+    `Domain/DraftReviewNotes.swift`
 "This group also performs at this venue on other dates"
     `UI/QueueView+Model.swift`
 "This looks up a contact for the \(s.showCount) shows the last check never reached."
@@ -1941,8 +1938,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/Reachability.swift`
 "This looks up a real contact for this one show, even though it already has an answer."
     `Domain/ProbeSelection.swift`
-"This old draft may still have a name in the greeting Overture couldn't safely remove; "
-    `Domain/DraftReviewNotes.swift`
 "This opens Terminal and runs the install. Overture quits partway through and comes back on its own."
     `Domain/BuildFreshnessPanel.swift`
 "This org asked not to be contacted, so none of their shows will be scouted or emailed. Tap to allow contact again."
@@ -2238,6 +2233,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ExperimentReport.swift`
 "\(arrived), and the export now holds none at all. Re-export it from Downbeat, "
     `Domain/AppNotice.swift`
+"\(audience). Open it \"Hello,\" instead."
+    `Domain/DraftReviewNotes.swift`
 "\(base) \($0)"
     `Domain/RunProgress.swift`
 "\(base) looks stuck (\(elapsed))"
@@ -2642,8 +2639,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/BounceDetection.swift`
 "drafter used this shape on \(Int((rate * 100).rounded()))% of sends"
     `Domain/ExperimentReport.swift`
-"edit it before sending."
-    `Domain/DraftReviewNotes.swift`
 "elsewhere on \(dateLabel)"
     `UI/QueueView+Model.swift`
 "export rather than an empty diary. Re-export it from Downbeat, then re-read it "
@@ -2658,6 +2653,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreSchemaGuard.swift`
 "high confidence"
     `Domain/ReviewStatus.swift`
+"hi|hello|hey|dear|good morning|good afternoon|good evening"
+    `Domain/DraftGreeting.swift`
 "in 1 day"
     `Domain/ReachedOutQueue.swift`
 "in \(days) days"

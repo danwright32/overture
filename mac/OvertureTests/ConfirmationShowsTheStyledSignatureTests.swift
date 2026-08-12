@@ -41,7 +41,7 @@ struct ConfirmationShowsTheStyledSignatureTests {
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                          status: .approved, ingestedAt: Date())
         p.draftSubject = "Photographs of your September concert"
-        p.draftBody = "I photograph performing arts in New York."
+        p.draftBody = "Hello,\n\nI photograph performing arts in New York."
         ctx.insert(p)
         let r = Recipient(id: "marcus@org.example", email: "marcus@org.example", name: "Marcus Hale",
                           provenance: .presenter)

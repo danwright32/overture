@@ -246,7 +246,7 @@ struct ProspectMutationsTests {
     @Test func performSendMarksSendingImmediatelyAndClearsAfterTheSendCompletes() async throws {
         let ctx = ModelContext(try container())
         let p = makeProspect(ctx, status: .approved)
-        p.draftSubject = "S"; p.draftBody = "Hi"
+        p.draftSubject = "S"; p.draftBody = "Hello,\n\nI photograph performing arts."
         let r = Recipient(id: "act@example.com", email: "act@example.com", provenance: .act)
         p.recipients = [r]
         try? ctx.save()
@@ -262,7 +262,22 @@ struct ProspectMutationsTests {
         #expect(marked == ["k"])       // fired synchronously, before the async send even starts
         #expect(cleared.isEmpty)       // not yet: the send hasn't completed
 
-        while cleared.isEmpty { await Task.yield() }
+        // A DEADLINE, not a bare spin. Without one this loop cannot fail, it can only hang, and a test
+        // that hangs is worse than one that fails: it takes the whole suite and the machine-wide test
+        // lock with it, and it reads from outside as a slow run rather than a broken one.
+        //
+        // Measured on 2026-08-12, which is why this is here: #2545 made a body with no greeting
+        // unsendable, this fixture had none, so the send never completed and `cleared` never filled. The
+        // run span for over an hour writing 21MB of CoreData noise while holding the lock, and a second
+        // run queued behind it the whole time (L98: a wait that cannot time out reports nothing).
+        var timedOut = false
+        let deadline = ContinuousClock.now + .seconds(10)
+        while cleared.isEmpty {
+            if ContinuousClock.now >= deadline { timedOut = true; break }
+            await Task.yield()
+        }
+
+        #expect(!timedOut, "the send never completed: the recipient is HELD, not slow")
         #expect(cleared == ["k"])
         #expect(sender.sent.count == 1)
         #expect(p.status == .contacted)
@@ -274,7 +289,7 @@ struct ProspectMutationsTests {
     @Test func performSendReportsFullySentWhenTheLastRecipientGoes() async throws {
         let ctx = ModelContext(try container())
         let p = makeProspect(ctx, status: .approved)
-        p.draftSubject = "S"; p.draftBody = "Hi"
+        p.draftSubject = "S"; p.draftBody = "Hello,\n\nI photograph performing arts."
         p.recipients = [Recipient(id: "act@example.com", email: "act@example.com", provenance: .act)]
         // #2033: this is the one-at-a-time mode. A show sending TOGETHER empties in a single press, so
         // "not fully sent yet" is a fact about sending separately, which is what this guards.
@@ -299,7 +314,7 @@ struct ProspectMutationsTests {
     @Test func performSendReportsNotFullySentWhileARecipientRemains() async throws {
         let ctx = ModelContext(try container())
         let p = makeProspect(ctx, status: .approved)
-        p.draftSubject = "S"; p.draftBody = "Hi"
+        p.draftSubject = "S"; p.draftBody = "Hello,\n\nI photograph performing arts."
         p.recipients = [
             Recipient(id: "act@example.com", email: "act@example.com", provenance: .act),
             Recipient(id: "pres@example.com", email: "pres@example.com", provenance: .presenter),
@@ -394,21 +409,29 @@ struct ProspectMutationsTests {
         #expect(r.conversationRemindedAt != nil)
     }
 
-    // #718: overriding records the EXACT current draft body, so a later edit to different text
-    // silently invalidates it (Recipient.isSendablePending/Prospect.isSalutationReviewOverridden
-    // compare against this stored copy, not a bare boolean).
-    @Test func overrideSalutationReviewRecordsTheCurrentDraftBody() throws {
+    // #2545: overriding the greeting hold records the EXACT outgoing text of each HELD, still PENDING
+    // recipient, so a later edit to different text silently reinstates the hold. Written per recipient
+    // rather than on the show, because `effectiveBody` is per recipient: a clean one must gain no
+    // override, or it would wave through a future bad edit to text nobody looked at.
+    @Test func overrideGreetingRecordsOnlyTheHeldPendingRecipientsText() throws {
         let ctx = ModelContext(try container())
         let p = makeProspect(ctx)
-        p.draftBody = "Hi 2026 season, here is what we offer."
-        p.draftNeedsSalutationReview = true
+        p.draftBody = "I photograph performing arts in New York."   // no greeting: held
+        let held = Recipient(id: "held@org.example", email: "held@org.example", name: "Held Person",
+                             provenance: .presenter)
+        let sent = Recipient(id: "sent@org.example", email: "sent@org.example", name: "Sent Person",
+                             provenance: .presenter)
+        sent.sendState = .sent
+        p.recipients.append(contentsOf: [held, sent])
+        ctx.insert(held); ctx.insert(sent)
         try? ctx.save()
-        let feedback = ActionFeedback()
 
-        ProspectMutations.overrideSalutationReview(QueueItem(p), prospects: [p], context: ctx, feedback: feedback)
+        ProspectMutations.overrideGreeting(QueueItem(p), prospects: [p], context: ctx,
+                                           feedback: ActionFeedback())
 
-        #expect(p.draftSalutationReviewOverriddenBody == "Hi 2026 season, here is what we offer.")
-        #expect(p.isSalutationReviewOverridden == true)
+        #expect(held.greetingOverriddenBody == "I photograph performing arts in New York.")
+        #expect(held.isGreetingOverridden)
+        #expect(sent.greetingOverriddenBody == nil, "an already-sent recipient is left alone")
     }
 
     // #789: overriding the draft-lint block records the EXACT outgoing text of each BLOCKED, still
