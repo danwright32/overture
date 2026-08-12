@@ -41,8 +41,19 @@ enum SourceAttention {
     // between the first and the fifth, which is exactly the judgment the warning was asking him for.
     static let emptyStreakThreshold = 3
 
+    // #1759: and the same number again for the OTHER half of that judgment, a source no run can read at
+    // all. Held as its own constant rather than a reuse of `emptyStreakThreshold`, because they answer
+    // different questions and a future retune of one must not silently move the other, but set equal
+    // deliberately: a page that came back empty and a page that could not be read are the two ways an
+    // established calendar stops contributing, and there is no reason for Dan to hear about one sooner.
+    static let failedReadStreakThreshold = 3
+
     static func hasGoneQuiet(_ source: WatchedSource) -> Bool {
         source.emptyStreak >= emptyStreakThreshold
+    }
+
+    static func hasFailedToReadRepeatedly(_ source: WatchedSource) -> Bool {
+        source.failedReadStreak >= failedReadStreakThreshold
     }
 
     static func hasNeverRead(_ source: WatchedSource, now: Date) -> Bool {
@@ -59,6 +70,11 @@ enum SourceAttention {
         if SourceGrade(source) == .failing { return true }
         if hasNeverRead(source, now: now) { return true }
         if hasGoneQuiet(source) { return true }
+        // #1759: and the state none of the others can see. A source whose page fetches fine and cannot be
+        // READ has its failing display wiped by the next morning's watch-only fetch (SourceCheck.decide
+        // clears health and lastFailure on every successful fetch), so it grades as perfectly healthy
+        // while nothing on it has been read for a fortnight. Only its own history says otherwise.
+        if hasFailedToReadRepeatedly(source) { return true }
         // The silent half worth Dan's eyes: it ran and looks fine, but too many of its event pages came back
         // unreadable, so it has forfeited the right to say a show is gone and its scraper may be genuinely
         // broken. Asked of FeedReconcile, the one place that line is drawn, so this can never disagree with
@@ -126,6 +142,24 @@ enum SourceAttention {
         let days = max(1, Int(now.timeIntervalSince(lastNonEmptyAt) / 86_400))
         let dayWord = days == 1 ? "day" : "days"
         return "Came back empty \(runs) \(runWord) in a row, and hasn't listed a show for \(days) \(dayWord). Check the link."
+    }
+
+    // #1759: the row's own sentence for a source several runs in a row have failed to read. It names
+    // WHICH run this is and WHEN anything was last read here, because those two facts are the whole of
+    // what the failure line beside it could not say: without them run ten reads exactly like run one.
+    //
+    // The age matters most on a row that predates this counting. Its streak starts at zero and takes a
+    // few runs to arm, but the day it does, this clause tells the truth about the whole history rather
+    // than about the three runs since. A row that has never been read leaves the clause out rather than
+    // inventing a date, exactly as the gone-quiet line above does.
+    static func repeatedFailureLine(runs: Int, lastSucceededAt: Date?, now: Date) -> String {
+        let runWord = runs == 1 ? "run" : "runs"
+        guard let lastSucceededAt else {
+            return "Failed to read \(runs) \(runWord) in a row. Check the link."
+        }
+        let days = max(1, Int(now.timeIntervalSince(lastSucceededAt) / 86_400))
+        let dayWord = days == 1 ? "day" : "days"
+        return "Failed to read \(runs) \(runWord) in a row, and hasn't been read for \(days) \(dayWord). Check the link."
     }
 
     static let sectionLabel = "Needs a look"
