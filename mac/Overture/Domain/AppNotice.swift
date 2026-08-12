@@ -51,9 +51,10 @@ enum AppNoticeAction: Equatable, Sendable {
     // #2478: re-read Downbeat's export now, so the line reporting a broken one clears the moment a good
     // one lands rather than waiting for the next reconcile tick.
     case recheckDownbeatExport
-    // #1900: the same offer for the shoot history file. Overture cannot export Dan's Shoots calendar for
-    // him (it holds no calendar permission and asks for none), but it can read the file again, and
-    // without that the line would stand until the next launch even after he had fixed it.
+    // #1900: Dan reports that he has run the shoot-history import, so Overture reads the file again.
+    // It cannot export his Shoots calendar or run the import for him (it holds no calendar permission
+    // and asks for none); without this the line would stand until the next launch even after he had
+    // done both. See `title` for why it is phrased as his report rather than as a re-read.
     case recheckShootHistory
 
     // What the control says. Short, because it sits at the end of a sentence that has just said what is
@@ -68,12 +69,19 @@ enum AppNoticeAction: Equatable, Sendable {
         // buttons reading the same and doing different things, one of them paid, is worse than a longer
         // label (#843).
         case .recheckDownbeatExport: return "Re-read the export"
-        // The same shape as the line above, because it is the same promise: read the file again, not
-        // fetch a new one. "Re-import" would claim Overture can run the import itself, which is the one
-        // part of this remedy only Dan can do, and it is already in the sentence. Named in full rather
-        // than as "the history", because the export button sits on this same surface and two vague
-        // Re-read labels beside each other is worse than a longer one (#843).
-        case .recheckShootHistory: return "Re-read the shoot history"
+        // Dan's own words, like "I sent it" and "I turned them down", NOT another "Re-read the ..." in
+        // Overture's. The label has to survive being read by someone who has not re-exported anything,
+        // and every "Re-read"/"Re-check" wording fails that test: it sits directly beneath a sentence
+        // telling him to re-export his calendar and run the import, so its position promises it IS that
+        // remedy, while all it can do is read the file already on disk. Pressed before the import, it
+        // re-reads the same stale file and reports the same staleness, which is a control that visibly
+        // does nothing sitting under the instruction it appears to carry out (L44).
+        //
+        // What it is genuinely for is the moment AFTER: he has run the import in the terminal and wants
+        // the line to clear without relaunching. So the label states the thing only he can know, and the
+        // re-read is what Overture does about it. True of a first import and a fourth, which is what
+        // lets one label serve the missing state as well as stale and unreadable.
+        case .recheckShootHistory: return "I've run the import"
         // Deliberately not "Retry". A Prep run's shortfall genuinely re-queues itself, and this does not:
         // it starts a new paid run over a set of shows, through the same confirmation as any other check.
         case .finishShowsACheckMissed: return "Check the rest"

@@ -205,8 +205,23 @@ struct RootView: View {
 
     // The ONE place the file is read for this line, so the launch load and the notice's own re-read
     // cannot reach different verdicts about the same file.
-    private func readShootHistoryHealth() {
-        shootHistoryHealth = ShootHistory.loadWithHealth(now: Date()).health
+    // Returns what it read as well as storing it, so the caller that has to ANSWER the read never has
+    // to re-derive it from the state (or invent a fallback for an optional that cannot be empty here).
+    @discardableResult
+    private func readShootHistoryHealth() -> ShootHistory.Health {
+        let health = ShootHistory.loadWithHealth(now: Date()).health
+        shootHistoryHealth = health
+        return health
+    }
+
+    // #1900: the same read, ANSWERED, for the press Dan makes after running the import himself.
+    // Silence would be wrong here in the one case that matters: an import that did not take leaves the
+    // verdict unchanged and the masthead line exactly where it was, so a control that worked and one
+    // that never registered look identical (L12). The launch load stays silent for the opposite reason:
+    // nobody asked it anything.
+    private func rereadShootHistoryHealth() {
+        let answer = ActionAck.shootHistoryReread(readShootHistoryHealth())
+        feedback.acknowledge(answer.text, tone: answer.resolved ? .info : .warning)
     }
 
     private var daysOffReason: DaysOffAttention.Reason {
@@ -448,10 +463,12 @@ struct RootView: View {
                       // A fixed export clears the line on the spot; a still-broken one leaves it standing,
                       // which is the honest answer to "has Overture noticed yet".
                       case .recheckDownbeatExport: DownbeatBookingFeedStore.observe(now: Date())
-                      // #1900: read the shoot history file again, through the same call the launch load
-                      // uses, so pressing this and relaunching can never reach different verdicts. A
-                      // finished import clears the line on the spot; an unfixed one leaves it standing.
-                      case .recheckShootHistory: readShootHistoryHealth()
+                      // #1900: Dan has run the shoot-history import, so read the file again through the
+                      // same call the launch load uses (pressing this and relaunching can never reach
+                      // different verdicts) and SAY what it found. A finished import clears the line on
+                      // the spot; an import that did not take leaves it standing, and that outcome is
+                      // the whole reason the press answers rather than changing nothing in silence.
+                      case .recheckShootHistory: rereadShootHistoryHealth()
                       }
                   },
                   onShowFollowUps: { showFollowUps = true },

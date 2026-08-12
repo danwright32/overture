@@ -93,13 +93,67 @@ struct ShootHistoryWarningReachesDanTests {
         #expect(notices.contains { $0.text == "Prep finished" })
     }
 
+    // The control is offered in EVERY state the warning appears in, including the one where no file
+    // has ever existed.
+    //
+    // That case was the one worth deciding rather than assuming. Withholding it until a file exists
+    // would withhold it at the only moment it is useful: the missing state is cleared by Dan running
+    // the import for the FIRST time, so the file only comes into being by way of the very thing this
+    // control reports, and until the next launch the line would stand with no way to clear it (L44).
+    // One label covers all three because "I've run the import" is true of a first run and a fourth.
+    @Test func everyStateTheWarningAppearsInOffersTheControl() {
+        for health: ShootHistory.Health in [.missing, .unreadable, .stale(ageDays: 214)] {
+            #expect(AppNotices.shootHistoryWarning(health)?.action == .recheckShootHistory,
+                    "\(health) leaves Dan no way to clear the line once he has run the import")
+        }
+    }
+
+    // A press that finds the same file is indistinguishable from a press that never registered: the
+    // sentence it sits under does not move, so the screen answers a question by staying still. The
+    // two outcomes the press can have must therefore arrive as two different sentences (L11, L12).
+    @Test func apressSaysWhetherAnythingActuallyChanged() {
+        let stillBroken = ActionAck.shootHistoryReread(.stale(ageDays: 214))
+        let nowCurrent = ActionAck.shootHistoryReread(.ok)
+
+        #expect(stillBroken.resolved == false)
+        #expect(nowCurrent.resolved == true)
+        #expect(stillBroken.text != nowCurrent.text)
+        #expect(!stillBroken.text.isEmpty)
+        #expect(!nowCurrent.text.isEmpty)
+    }
+
+    // And it answers on every unhealthy state, not only the one that is easy to reach. A press on a
+    // missing or unreadable history has exactly the same "did that register?" problem.
+    @Test func everyUnhealthyStateGetsAnAnswerToThePress() {
+        for health: ShootHistory.Health in [.missing, .unreadable, .stale(ageDays: 214)] {
+            let ack = ActionAck.shootHistoryReread(health)
+            #expect(ack.resolved == false)
+            #expect(!ack.text.isEmpty)
+        }
+    }
+
     // L3: built is not wired. Every assertion above would pass on a masthead nobody ever handed a
     // verdict to, which is precisely the defect this issue exists for: the check already ran and its
-    // answer was thrown away one call up. So the wiring itself is asserted, in the file that owns it.
+    // answer was thrown away one call up. So the wiring itself is asserted, in the file that owns it,
+    // including the half that ANSWERS the press: a re-read that updates the state silently is the
+    // same do-nothing-looking control the answer exists to prevent.
     @Test func rootViewActuallyHandsTheVerdictToTheMasthead() {
         let source = SourceGuardHelper.source("Overture/App/RootView.swift")
         #expect(source.contains("shootHistory: shootHistoryHealth"))
         #expect(source.contains("ShootHistory.loadWithHealth"))
-        #expect(source.contains("case .recheckShootHistory"))
+        // The answering function is asked for the sentence rather than inventing its own.
+        #expect(source.contains("ActionAck.shootHistoryReread"))
+
+        // And the PRESS reaches it. Whitespace is collapsed first so re-indenting or re-wrapping the
+        // switch cannot turn this red on its own (L103); what is pinned is which function that one case
+        // calls.
+        //
+        // Written this way because the obvious version was vacuous and a mutation is what exposed it: an
+        // earlier draft asserted only that the FILE mentioned `ActionAck.shootHistoryReread`, which stayed
+        // true when the case was rewired to the silent read, because the answering function was still
+        // sitting in the file with nothing calling it. It passed the mutation it existed to catch (L1).
+        let normalised = source.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        #expect(normalised.contains("case .recheckShootHistory: rereadShootHistoryHealth()"),
+                "the press must reach the read that ANSWERS, not the silent one")
     }
 }
