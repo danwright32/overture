@@ -1133,7 +1133,9 @@ struct QueueView: View {
             VStack(alignment: .trailing, spacing: 6) {
                 // #661 follow-up: the old full card highlighted an overdue reach-out in rust rather
                 // than the plain "in N days" color, so that urgency cue survives the lightweight row.
-                let dueNow = ReachedOutQueue.isDueNow(next: pair.next, now: now)
+                // #2550: asked of what is OWED, not of `pair.next`, which carries the sort floor. Every open
+                // pitch used to go rust on its own night with nothing due on it.
+                let dueNow = ReachedOutQueue.isDueNow(for: r, of: p, now: now)
                 let replyOffered = ReplyPanel.isOffered(for: r, in: p)
                 // #2166: the label yields to Answer, whose existence already means "now". Suppressed
                 // rather than deleted: on a row with nobody waiting it is the only thing saying when the
@@ -1159,11 +1161,11 @@ struct QueueView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     } else {
                     // #2169: a dated form pitch names the NIGHT here ("tonight", "3 days ago") instead of
-                    // counting down to a send that will never happen. eventDay/today are threaded in
-                    // rather than read inside, so the label is decided from the same date the row's clock
-                    // is set to and the two cannot drift.
-                    Text(ReachedOutQueue.timingLabel(next: pair.next, now: now, channel: r.outreachChannel,
-                                                     eventDay: p.performanceDate, today: today))
+                    // counting down to a send that will never happen.
+                    // #2550: and the whole slot is decided from what is OWED, not from `pair.next`, which
+                    // carries #2397's floor and is a SORT anchor. Read as a due date it told Dan to reach
+                    // out on every show's own night beside a row with nothing to press.
+                    Text(ReachedOutQueue.timingLabel(for: r, of: p, now: now, today: today))
                         .font(OVType.meta).foregroundStyle(dueNow ? OVColor.rust : OVColor.inkSoft)
                     }
                 }
