@@ -806,7 +806,12 @@ enum ProspectMutations {
         // .alreadyRunning, and since the flag is already saved the show simply rides the next run.
         do {
             try await startPrep(context, now, [item.id])
-            feedback.acknowledge(ActionAck.reprepStarted(mode: mode, draftGranted: draftGranted, org: item.groupName))
+            feedback.acknowledge(ActionAck.reprepStarted(
+                mode: mode, draftGranted: draftGranted, org: item.groupName,
+                // #2548: read BEFORE the run stamps `reprepLastServedAt`, which is the state the control
+                // Dan just pressed was labelled from.
+                isFirstPrep: ReprepRequest.isFirstPrep(writtenByDan: item.draftWrittenByDan,
+                                                       lastServedAt: item.reprepLastServedAt)))
         } catch PrepQueueService.PrepLaunchError.alreadyRunning {
             feedback.acknowledge(ActionAck.reprepRunInFlight(org: item.groupName))
         } catch {

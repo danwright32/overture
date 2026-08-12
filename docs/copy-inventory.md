@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1240 sentences**.
+Every sentence Overture can say to Dan: **1245 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1351,14 +1351,24 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ProspectRowView.swift`
 "Prep matched this show's performer to a past client, which raised the fit score. The draft won't treat them as a returning client until you confirm it."
     `UI/QueueView+Model.swift`
+"Prep queued"
+    `Domain/ReprepRequest.swift`
 "Prep these \(count) shows"
     `Domain/PrepQueueButton.swift`
 "Prep this 1 show"
     `Domain/PrepQueueButton.swift`
+"Prep this show?"
+    `Domain/ReprepRequest.swift`
 "Prep's research found this show may already have its own photographer. Tap if that's wrong."
     `UI/ProspectRowView.swift`
 "Prepped drafts land here to read and send."
     `Domain/StageEmptyState.swift`
+"Prepping \(org) to find new contacts"
+    `App/ActionFeedback.swift`
+"Prepping \(org) to redraft"
+    `App/ActionFeedback.swift`
+"Prepping \(org) to redraft and find new contacts"
+    `App/ActionFeedback.swift`
 "Press Run scout again once it finishes."
     `Domain/ScoutStartGate.swift`
 "Presumes the booking instead of handing back the decision"
@@ -1378,9 +1388,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Re-prep kept"
     `App/RootView.swift`
 "Re-prep queued"
-    `UI/DraftReviewView.swift`
+    `Domain/ReprepRequest.swift`
 "Re-prep this show?"
-    `UI/DraftReviewView.swift`
+    `Domain/ReprepRequest.swift`
 "Re-prepping \(org) to find new contacts"
     `App/ActionFeedback.swift`
 "Re-prepping \(org) to redraft"

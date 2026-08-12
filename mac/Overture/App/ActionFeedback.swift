@@ -257,15 +257,27 @@ enum ActionAck {
     // #367/#1143: the per-prospect re-prep confirmation. Re-prep now LAUNCHES a run for just this show,
     // so it says the run is under way, not merely "queued". draftGranted false for the `both` mode means
     // the show had already been sent to, so only the contacts half runs; Dan needs to see that narrowing.
-    static func reprepStarted(mode: ReprepMode, draftGranted: Bool, org: String) -> String {
+    // #2548: the word matches the control Dan just pressed. On a show he prepped by hand that no run has
+    // served, that control says "Prep", and an acknowledgement saying "Re-prepping" would be the app
+    // renaming his action back on the way out. The `both` narrowing keeps saying "re-prepping": it only
+    // fires on a show already sent to, which by definition a run has served.
+    static func reprepStarted(mode: ReprepMode, draftGranted: Bool, org: String,
+                              isFirstPrep: Bool) -> String {
+        // Both spellings written out, not composed, so the copy inventory carries the sentences Dan
+        // actually reads rather than a line of Swift.
         switch mode {
         case .contactsOnly:
-            return "Re-prepping \(org) to find new contacts"
+            return isFirstPrep ? "Prepping \(org) to find new contacts"
+                               : "Re-prepping \(org) to find new contacts"
         case .draftOnly:
-            return "Re-prepping \(org) to redraft"
+            return isFirstPrep ? "Prepping \(org) to redraft"
+                               : "Re-prepping \(org) to redraft"
         case .both:
-            return draftGranted ? "Re-prepping \(org) to redraft and find new contacts"
-                                : "\(org) has already been sent to; re-prepping to find new contacts only"
+            guard draftGranted else {
+                return "\(org) has already been sent to; re-prepping to find new contacts only"
+            }
+            return isFirstPrep ? "Prepping \(org) to redraft and find new contacts"
+                               : "Re-prepping \(org) to redraft and find new contacts"
         }
     }
 

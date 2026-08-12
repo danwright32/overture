@@ -46,8 +46,21 @@ enum ClockTime {
     // than a card showing none. The clash check deliberately does the opposite and treats a partly
     // readable schedule as unknown: rendering has nothing to lose by being generous, and a rule that can
     // quiet a double-booking warning has everything to lose (L11).
+    // #2376: a REPEATED time is said once. A venue can sell two separately ticketed performances at the
+    // same listed curtain time, and the card then read "7:00 PM and 7:00 PM". Measured on real La MaMa
+    // OvationTix bytes, 2026-08-09: `Tawasol` on 2026-09-05 lists performanceIds 11851048 and 11851049,
+    // both at 19:00, and 1 of that feed's 8 multi-time nights is this shape.
+    //
+    // De-duplicated HERE rather than in the one adapter that can produce it today, so every present and
+    // future producer of a times list is covered by one rule (L30). The bug is repetition, not plurality:
+    // a genuine double bill keeps both of its distinct times, in the order the feed gave them, because
+    // that order is what the card shows.
     static func listLabel(_ times: [String]) -> String? {
-        let rendered = times.compactMap(label)
+        var seen = Set<String>()
+        // De-duplicated on the RENDERED label, not the raw string: today the parser accepts exactly one
+        // spelling so the two are the same, and this way a parser that later accepts a second spelling of
+        // one time still cannot put that time on a card twice.
+        let rendered = times.compactMap(label).filter { seen.insert($0).inserted }
         guard !rendered.isEmpty else { return nil }   // nothing readable stays nil, not an empty label
         return Plural.list(rendered)
     }

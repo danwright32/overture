@@ -112,8 +112,13 @@ struct ReprepBlockedActionTests {
         #expect(counter.launches == 0)
         #expect(p.reprepContactsRequested == false)   // no flag left behind to ride a later run silently
         #expect(feedback.message?.isEmpty == false)
-        #expect(feedback.message != ActionAck.reprepStarted(mode: .contactsOnly, draftGranted: false,
-                                                            org: "Aurora Strings"))
+        // #2548: neither spelling of the started message, so this cannot pass merely because the naming
+        // rule chose the other word.
+        for isFirstPrep in [true, false] {
+            #expect(feedback.message != ActionAck.reprepStarted(mode: .contactsOnly, draftGranted: false,
+                                                                org: "Aurora Strings",
+                                                                isFirstPrep: isFirstPrep))
+        }
     }
 
     // The same action on a show with no clash is untouched: this is a refusal of the impossible case only.

@@ -19,6 +19,54 @@ enum ReprepRequest {
         draftRequested || contactsRequested
     }
 
+    // MARK: what to CALL it (#2548)
+    //
+    // Dan, on a show he had prepped by hand: "we should hide re-prep if it was a manual prep or rename it
+    // since it would be the first prep." The card said "Written by you" and the control beside it said
+    // "Re-prep", with no Prep run having ever served that show.
+    //
+    // Renamed rather than hidden, because hiding takes away "Find contacts only", which is the most useful
+    // thing on a hand-prepped card: Dan typed one address himself and a run could find the others.
+    //
+    // The rule lives here, beside the offer decision, rather than as an `if` inside each surface. Four of
+    // them say the word (the menu, the queued badge, the confirm's title and its button) and a fifth says
+    // it in the acknowledgement afterwards; spelled out at each one they would eventually disagree on a
+    // single card (L16).
+
+    // Has any Prep run served this show? `draftWrittenByDan` alone cannot answer it: Dan can hand-prep and
+    // then press "Find contacts only", which finds contacts without touching his text, so the flag stays
+    // true while a run really has run. `reprepLastServedAt` is stamped by PrepImporter whenever a run
+    // serves the show, so the two together mean "Dan wrote the first and only draft this show has had".
+    static func isFirstPrep(writtenByDan: Bool, lastServedAt: Date?) -> Bool {
+        writtenByDan && lastServedAt == nil
+    }
+
+    static func verb(writtenByDan: Bool, lastServedAt: Date?) -> String {
+        isFirstPrep(writtenByDan: writtenByDan, lastServedAt: lastServedAt) ? "Prep" : "Re-prep"
+    }
+
+    static func gerund(writtenByDan: Bool, lastServedAt: Date?) -> String {
+        isFirstPrep(writtenByDan: writtenByDan, lastServedAt: lastServedAt) ? "Prepping" : "Re-prepping"
+    }
+
+    static func menuLabel(writtenByDan: Bool, lastServedAt: Date?) -> String {
+        verb(writtenByDan: writtenByDan, lastServedAt: lastServedAt)
+    }
+
+    // Both spellings are written out as LITERALS rather than composed from `verb`, deliberately. The copy
+    // inventory exists so a PR that changes the app's wording shows that change in the words Dan will read;
+    // composed here, these five sentences appeared in it as `"\(verb(writtenByDan:…)) queued"`, which is a
+    // line of Swift. `everySurfaceSpellsItTheSameWayOnOneShow` is what keeps the pairs in step with `verb`.
+    static func confirmTitle(writtenByDan: Bool, lastServedAt: Date?) -> String {
+        isFirstPrep(writtenByDan: writtenByDan, lastServedAt: lastServedAt)
+            ? "Prep this show?" : "Re-prep this show?"
+    }
+
+    static func queuedBadge(writtenByDan: Bool, lastServedAt: Date?) -> String {
+        isFirstPrep(writtenByDan: writtenByDan, lastServedAt: lastServedAt)
+            ? "Prep queued" : "Re-prep queued"
+    }
+
     // #733: guard against repeatedly re-prepping the same prospect. 24 hours from when a Prep run
     // last actually served this prospect (a normal fresh draft, or a served re-prep), simple and
     // predictable rather than tied to the Prep run cadence itself.
