@@ -34,7 +34,7 @@ struct CardSendGroupsTests {
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                          status: status, ingestedAt: Date())
         p.draftSubject = "Photographs of your September concert"
-        p.draftBody = "I photograph performing arts in New York."
+        p.draftBody = "Hello,\n\nI photograph performing arts in New York."
         p.sendsTogetherOverride = together
         ctx.insert(p)
         p.setRecipients(contacts.map { Recipient(id: $0, email: $0, name: nil, provenance: .presenter) })
@@ -54,7 +54,6 @@ struct CardSendGroupsTests {
 
         #expect(item.hasPendingRecipient == false)
         #expect(item.nextRecipientIds.isEmpty)
-        #expect(item.jointOpening == nil)
     }
 
     // And the groups themselves keep the distinction the card depends on (#2049): what the email will
@@ -97,6 +96,5 @@ struct CardSendGroupsTests {
         #expect(item.hasPendingRecipient)
         #expect(item.nextRecipientIds.sorted()
                 == ["chelsea@everyvoicechoirs.org", "marcus@everyvoicechoirs.org"])
-        #expect(item.jointOpening == "Hello,")
     }
 }

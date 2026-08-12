@@ -45,7 +45,7 @@ struct DebugStagingTests {
 
     @Test func leavesUnrelatedOutreachStateUntouched() {
         let p = makeProspect()
-        p.draftBody = "hello"
+        p.draftBody = "Hello,\n\nhello"
         p.draftSubject = "subj"
 
         DebugStaging.stageAsSent(p, now: Date())
@@ -57,7 +57,7 @@ struct DebugStagingTests {
         // id), unlike gmailThreadId above, which nothing reads for that purpose.
         #expect(p.gmailMessageId != nil)
         #expect(p.lastReplyText == nil)
-        #expect(p.draftBody == "hello")
+        #expect(p.draftBody == "Hello,\n\nhello")
         #expect(p.draftSubject == "subj")
     }
 

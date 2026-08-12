@@ -70,13 +70,18 @@ enum RecentOpenersBuilder {
     // a greeting. Two of those three were the same real opener, kept apart only by what sat in front of
     // them, so they burned three of fifteen slots between them.
     //
-    // The greeting is identified by `DraftOpeningNotice`, the same judgment the draft screen uses to
-    // point one out, so the screen cannot flag a greeting this export has already dropped. Splits on
+    // The opening is identified by `DraftGreeting`, the same judgment the send holds use, so what the
+    // screen calls a greeting and what this export drops can never differ.
+    //
+    // #2545 made this MORE load-bearing, not less: every body now opens with a greeting rather than
+    // occasionally carrying one, and a shared-inbox body opens with an `Attn:` block above it. Strip
+    // only the greeting and every opener compared here would begin "Attn: ...", which is the reader's
+    // name, so no two openers would ever look alike and the nudge would stop firing entirely. Splits on
     // the first '.'/'!'/'?' that ends the sentence (followed by a space or the end of the text); a body
     // with no terminator is taken whole. A rare early split on an abbreviation is harmless here: this
     // feeds a "don't reuse this shape" nudge, not a correctness-critical parse.
     static func opener(from body: String) -> String {
-        let norm = normalize(DraftOpeningNotice.withoutLeadingGreeting(body))
+        let norm = normalize(DraftGreeting.withoutLeadingOpening(body))
         let chars = Array(norm)
         for (i, c) in chars.enumerated() where c == "." || c == "!" || c == "?" {
             let isEnd = i == chars.count - 1

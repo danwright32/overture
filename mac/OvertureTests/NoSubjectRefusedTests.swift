@@ -31,7 +31,7 @@ struct NoSubjectRefusedTests {
     }
 
     @discardableResult
-    private func show(_ ctx: ModelContext, subject: String?, body: String? = "Hi there.",
+    private func show(_ ctx: ModelContext, subject: String?, body: String? = "Hello,\n\nI photograph performing arts.",
                       status: ReviewStatus = .approved) -> Prospect {
         let key = Prospect.makeNaturalKey(groupName: "G", performanceDate: "2026-09-01", venue: "V")
         let p = Prospect(naturalKey: key, groupName: "G", discipline: "choral", venue: "V",

@@ -69,7 +69,7 @@ struct SendServiceTests {
     }
 
     private func approved(_ ctx: ModelContext, group: String, email: String? = "to@org.org",
-                          draft: String? = "Hi", ingested: Date) {
+                          draft: String? = "Hello,\n\nI photograph performing arts.", ingested: Date) {
         let key = Prospect.makeNaturalKey(groupName: group, performanceDate: "2026-07-01", venue: "V")
         let p = Prospect(naturalKey: key, groupName: group, discipline: "choral", venue: "V",
                          performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
@@ -112,23 +112,27 @@ struct SendServiceTests {
 
     // Phase 2.5 (#393): the body is salutation-free; the app composes the greeting at send. The frozen
     // sent copy stays the BARE body so the voice pair learns the shared template, not the greeting.
-    @Test func sendOneComposesTheGreetingOverTheBareBody() async throws {
+    // #2545: the send composes NOTHING. What Gmail receives is the stored body, greeting and all, and the
+    // frozen sent copy is that same text. The two used to differ, because the greeting was added on the
+    // way out and deliberately kept out of the sent copy so the voice-learning pair saw the bare template;
+    // there is no bare template any more, so they are now the same string and this pins that they are.
+    @Test func sendOneSendsTheStoredBodyAndFreezesTheSameText() async throws {
         let ctx = ModelContext(try container())
+        let body = "Hi Emma,\n\nI photograph performing arts in New York."
         let p = approvedNamed(ctx, group: "Aurora", name: "Emma Robinson", email: "emma@act.example",
-                              body: "I photograph performing arts in New York.",
-                              ingested: Date(timeIntervalSince1970: 1))
+                              body: body, ingested: Date(timeIntervalSince1970: 1))
         let sender = CapturingSender()
 
         _ = await SendService.sendOne(p, now: Date(timeIntervalSince1970: 10), sender: sender)
 
-        #expect(sender.last?.body == "Hi Emma,\n\nI photograph performing arts in New York.")
-        #expect(p.sentBody == "I photograph performing arts in New York.")
+        #expect(sender.last?.body == body)
+        #expect(p.sentBody == body)
     }
 
     @Test func sendOneGreetsHelloWhenNoName() async throws {
         let ctx = ModelContext(try container())
         let p = approvedNamed(ctx, group: "Aurora", name: nil, email: "info@act.example",
-                              body: "I document dance unobtrusively.",
+                              body: "Hello,\n\nI document dance unobtrusively.",
                               ingested: Date(timeIntervalSince1970: 1))
         let sender = CapturingSender()
 
@@ -137,12 +141,14 @@ struct SendServiceTests {
         #expect(sender.last?.body == "Hello,\n\nI document dance unobtrusively.")
     }
 
-    // #610: a name Prep found behind a generic-inbox address gets an Attn: line ahead of the
-    // (still impersonal) greeting, so the pitch routes to the right desk in a shared inbox.
-    @Test func sendOneAddsAnAttnLineForANamedGenericInboxContact() async throws {
+    // #610's Attn: line routes a shared-inbox pitch to the right desk. #2545 made it the DRAFTER's job to
+    // write rather than the app's to compose, so what this pins now is that the send passes it through
+    // untouched: it is part of the body, and the body is what leaves.
+    @Test func sendOnePassesThroughTheAttnLineAGenericInboxNeeds() async throws {
         let ctx = ModelContext(try container())
         let p = approvedNamed(ctx, group: "Clarion Society", name: "Jane Doe", email: "info@clarion.example",
-                              body: "I photograph performing arts in New York.",
+                              body: "Attn: Jane Doe, PR Associate Director\n\nHello,\n\n"
+                                    + "I photograph performing arts in New York.",
                               ingested: Date(timeIntervalSince1970: 1),
                               role: "PR Associate Director", method: .genericInbox)
         let sender = CapturingSender()
@@ -153,37 +159,11 @@ struct SendServiceTests {
                 "Attn: Jane Doe, PR Associate Director\n\nHello,\n\nI photograph performing arts in New York.")
     }
 
-    // #407: a draft still carrying an old, un-strippable inline greeting must never send at all,
-    // to any recipient, until Dan (or a fresh Prep re-run) actually fixes it.
-    @Test func sendOneNeverSendsWhileTheDraftNeedsSalutationReview() async throws {
-        let ctx = ModelContext(try container())
-        let p = approvedNamed(ctx, group: "Aurora", name: "Emma Robinson", email: "emma@act.example",
-                              body: "Hi 2026 season, I photograph performing arts in New York.",
-                              ingested: Date(timeIntervalSince1970: 1))
-        p.draftNeedsSalutationReview = true
-        let sender = CapturingSender()
-
-        let sent = await SendService.sendOne(p, now: Date(timeIntervalSince1970: 10), sender: sender)
-
-        #expect(sent == false)
-        #expect(sender.last == nil)
-    }
-
-    // #718: an override for the EXACT current body unblocks sending despite the flag.
-    @Test func sendOneSendsWhenTheSalutationReviewFlagIsOverriddenForTheCurrentBody() async throws {
-        let ctx = ModelContext(try container())
-        let p = approvedNamed(ctx, group: "Aurora", name: "Emma Robinson", email: "emma@act.example",
-                              body: "Hi 2026 season, I photograph performing arts in New York.",
-                              ingested: Date(timeIntervalSince1970: 1))
-        p.draftNeedsSalutationReview = true
-        p.draftSalutationReviewOverriddenBody = p.draftBody
-        let sender = CapturingSender()
-
-        let sent = await SendService.sendOne(p, now: Date(timeIntervalSince1970: 10), sender: sender)
-
-        #expect(sent == true)
-        #expect(sender.last != nil)
-    }
+    // #2545 RETIRED the two #407 send-gate tests that sat here, for the same reason as their siblings in
+    // RecipientTests: both set `draftNeedsSalutationReview = true` by hand, and nothing in the app has set
+    // that flag since #2010, so the block they asserted could not fire in production. They passed on a
+    // value only they wrote (L90). The live gate is now the greeting hold, which SendServiceTests exercises
+    // throughout: every fixture in this file greets, because one that does not is refused.
 
     @Test func sendingSnapshotsTheRelationshipAtContact() async throws {
         // #66: capture what the relationship was the moment Dan pitched, so a later Downbeat
@@ -194,7 +174,7 @@ struct SendServiceTests {
                          priorRelationship: "booked", production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .approved)
-        p.draftSubject = "S"; p.draftBody = "Hi"
+        p.draftSubject = "S"; p.draftBody = "Hello,\n\nI photograph performing arts."
         ctx.insert(p)
         seedRecipient(p, email: "to@org.org", name: nil)
 
@@ -261,7 +241,7 @@ struct SendServiceTests {
                          priorRelationship: "none", production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .contacted)
-        p.draftSubject = "Photographs for \(group)"; p.draftBody = "Hi"; p.sentAt = Date(timeIntervalSince1970: 100)
+        p.draftSubject = "Photographs for \(group)"; p.draftBody = "Hello,\n\nI photograph performing arts."; p.sentAt = Date(timeIntervalSince1970: 100)
         ctx.insert(p)
         let r = Recipient(id: group + "@act.example", email: group + "@act.example", name: "Emma", provenance: .act)
         r.sendState = .sent; r.sentAt = Date(timeIntervalSince1970: 100)
@@ -363,12 +343,12 @@ struct SendServiceTests {
         let modelContainer = try container()
         let ctx = ModelContext(modelContainer)
         let p = approvedNamed(ctx, group: "Aurora", name: "Emma", email: "emma@act.example",
-                              body: "Hi", ingested: Date(timeIntervalSince1970: 1))
+                              body: "Hello,\n\nHi", ingested: Date(timeIntervalSince1970: 1))
         let recipient = p.recipients.first!
         let sender = GatedSender()
 
         let task = Task { await SendService.sendOne(p, now: Date(timeIntervalSince1970: 10), sender: sender) }
-        while sender.callCount == 0 { await Task.yield() }
+        await waitUntil("the send to reach the sender") { sender.callCount > 0 }
 
         // Claimed in memory before the send resolves: not sent yet, not plain pending either.
         #expect(recipient.sendState == .sending)
@@ -389,7 +369,7 @@ struct SendServiceTests {
     // MARK: - #2031 one pitch to several contacts at once
 
     // Two contacts on one show, both still to be written to, sharing the same letter.
-    private func showWithTwoContacts(_ ctx: ModelContext, body: String = "I document dance.",
+    private func showWithTwoContacts(_ ctx: ModelContext, body: String = "Hello,\n\nI document dance.",
                                      secondName: String? = "Noah Ellis") -> (Prospect, Recipient, Recipient) {
         let key = Prospect.makeNaturalKey(groupName: "Aurora", performanceDate: "2026-07-01", venue: "V")
         let p = Prospect(naturalKey: key, groupName: "Aurora", discipline: "dance", venue: "V",
@@ -455,7 +435,7 @@ struct SendServiceTests {
         let ctx = ModelContext(try container())
         let (p, a, b) = showWithTwoContacts(ctx)
         b.provenance = .performer
-        b.overrideBody = "Noah, I document dance."
+        b.overrideBody = "Hi Noah,\n\nI document dance."
         let sender = CapturingSender()
 
         #expect(await SendService.sendJointly(p, to: [a, b], now: Date(timeIntervalSince1970: 10),
@@ -573,11 +553,11 @@ struct SendServiceTests {
     @Test func aSecondSendAttemptWhileTheFirstIsInFlightIsRefused() async throws {
         let ctx = ModelContext(try container())
         let p = approvedNamed(ctx, group: "Aurora", name: "Emma", email: "emma@act.example",
-                              body: "Hi", ingested: Date(timeIntervalSince1970: 1))
+                              body: "Hello,\n\nHi", ingested: Date(timeIntervalSince1970: 1))
         let sender = GatedSender()
 
         let firstTask = Task { await SendService.sendOne(p, now: Date(timeIntervalSince1970: 10), sender: sender) }
-        while sender.callCount == 0 { await Task.yield() }   // the first call is now parked mid-send
+        await waitUntil("the first send to be parked mid-call") { sender.callCount > 0 }
 
         let secondResult = await SendService.sendOne(p, now: Date(timeIntervalSince1970: 20), sender: sender)
         #expect(secondResult == false)
@@ -631,24 +611,31 @@ struct SendServiceTests {
         return p
     }
 
-    @Test func sendOneFansOutToEachRecipientWithItsOwnGreeting() async throws {
+    // #2545 RENAMED this from "...WithItsOwnGreeting". The fan-out is unchanged and is what this still
+    // pins: one click per contact, each to their own address, and a third click that does nothing.
+    //
+    // What went is the per-recipient greeting. One show has one body, and the greeting now lives inside
+    // it, so both contacts read the same words. That is Dan's rule (2026-08-12): a show with two contacts
+    // opens "Hello," with no name, precisely because one letter cannot address two people by name.
+    @Test func sendOneFansOutToEachRecipientInTurn() async throws {
         let ctx = ModelContext(try container())
-        let p = twoRecipients(ctx, body: "I document dance.", ingested: Date(timeIntervalSince1970: 1))
+        let body = "Hello,\n\nI document dance."
+        let p = twoRecipients(ctx, body: body, ingested: Date(timeIntervalSince1970: 1))
         let sender = CapturingSender()
 
-        // First click -> the act contact, greeted by her own name.
+        // First click -> the act contact.
         #expect(await SendService.sendOne(p, now: Date(timeIntervalSince1970: 10), sender: sender) == true)
         #expect(sender.last?.to == ["emma@act.example"])
-        #expect(sender.last?.body == "Hi Emma,\n\nI document dance.")
+        #expect(sender.last?.body == body)
         // The show keeps a pending recipient, so it is NOT yet fully contacted and stays sendable.
         #expect(p.status == .approved)
         #expect(p.recipients.first { $0.email == "emma@act.example" }?.sendState == .sent)
         #expect(p.recipients.first { $0.email == "noah@present.example" }?.sendState == .pending)
 
-        // Second click -> the presenter, greeted by his own name.
+        // Second click -> the presenter, who reads the SAME letter.
         #expect(await SendService.sendOne(p, now: Date(timeIntervalSince1970: 20), sender: sender) == true)
         #expect(sender.last?.to == ["noah@present.example"])
-        #expect(sender.last?.body == "Hi Noah,\n\nI document dance.")
+        #expect(sender.last?.body == body)
         // Every recipient sent -> now contacted.
         #expect(p.status == .contacted)
 
@@ -658,7 +645,7 @@ struct SendServiceTests {
 
     @Test func firstRecipientSetsTheLeadRollupWriteOnce() async throws {
         let ctx = ModelContext(try container())
-        let p = twoRecipients(ctx, body: "I document dance.", ingested: Date(timeIntervalSince1970: 1))
+        let p = twoRecipients(ctx, body: "Hello,\n\nI document dance.", ingested: Date(timeIntervalSince1970: 1))
         p.priorRelationship = "warm"
         let t1 = Date(timeIntervalSince1970: 100)
         let t2 = Date(timeIntervalSince1970: 500)
@@ -677,13 +664,16 @@ struct SendServiceTests {
     // lead-level and one-per-shared-body, so only the first send writes it (over the bare body).
     @Test func fanOutFreezesExactlyOnePairOverTheBareBody() async throws {
         let ctx = ModelContext(try container())
-        let p = twoRecipients(ctx, body: "I document dance.", ingested: Date(timeIntervalSince1970: 1))
+        let p = twoRecipients(ctx, body: "Hello,\n\nI document dance.", ingested: Date(timeIntervalSince1970: 1))
 
         _ = await SendService.sendOne(p, now: Date(timeIntervalSince1970: 10), sender: CapturingSender())
         let afterFirst = p.sentBody
 
         _ = await SendService.sendOne(p, now: Date(timeIntervalSince1970: 20), sender: CapturingSender())
-        #expect(p.sentBody == "I document dance.")   // the BARE body, no greeting baked in
+        // #2545: the frozen copy is the WHOLE body, greeting included. It used to be deliberately bare,
+        // because the greeting was added on the way out and kept out of the voice-learning pair; there is
+        // no bare version any more, so what was sent and what is stored are one string.
+        #expect(p.sentBody == "Hello,\n\nI document dance.")
         #expect(p.sentBody == afterFirst)            // the second recipient did not re-freeze
     }
 
@@ -711,8 +701,8 @@ struct SendServiceTests {
 
     @Test func sendOneUsesThePerformersOverrideBodyInsteadOfTheSharedDraft() async throws {
         let ctx = ModelContext(try container())
-        let p = performerWithOverride(ctx, overrideBody: "I saw you're self-presenting Midnight Quartet.",
-                                      sharedBody: "I saw Midnight Quartet is self-presenting.",
+        let p = performerWithOverride(ctx, overrideBody: "Hi Maya,\n\nI saw you're self-presenting Midnight Quartet.",
+                                      sharedBody: "Hello,\n\nI saw Midnight Quartet is self-presenting.",
                                       ingested: Date(timeIntervalSince1970: 1))
         let sender = CapturingSender()
 
@@ -725,13 +715,13 @@ struct SendServiceTests {
     // sent, not the shared draft the override replaced, or a later run learns from text nobody read.
     @Test func sendOneFreezesTheOverrideBodyForVoiceLearningNotTheSharedDraft() async throws {
         let ctx = ModelContext(try container())
-        let p = performerWithOverride(ctx, overrideBody: "I saw you're self-presenting Midnight Quartet.",
-                                      sharedBody: "I saw Midnight Quartet is self-presenting.",
+        let p = performerWithOverride(ctx, overrideBody: "Hi Maya,\n\nI saw you're self-presenting Midnight Quartet.",
+                                      sharedBody: "Hello,\n\nI saw Midnight Quartet is self-presenting.",
                                       ingested: Date(timeIntervalSince1970: 1))
 
         _ = await SendService.sendOne(p, now: Date(timeIntervalSince1970: 10), sender: CapturingSender())
 
-        #expect(p.sentBody == "I saw you're self-presenting Midnight Quartet.")
+        #expect(p.sentBody == "Hi Maya,\n\nI saw you're self-presenting Midnight Quartet.")
     }
 
     // Defense in depth: even a .performer recipient with NO overrideBody set falls back to the
@@ -745,7 +735,7 @@ struct SendServiceTests {
                          fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .approved,
                          ingestedAt: Date(timeIntervalSince1970: 1))
-        p.draftSubject = "S"; p.draftBody = "The shared third-person body."
+        p.draftSubject = "S"; p.draftBody = "Hello,\n\nThe shared third-person body."
         ctx.insert(p)
         let performer = Recipient(id: "solo@performer.example", email: "solo@performer.example",
                                   name: "Solo Performer", provenance: .performer)
@@ -755,15 +745,15 @@ struct SendServiceTests {
         let sender = CapturingSender()
         #expect(await SendService.sendOne(p, now: Date(timeIntervalSince1970: 10), sender: sender) == true)
 
-        #expect(sender.last?.body == "Hi Solo,\n\nThe shared third-person body.")
-        #expect(p.sentBody == "The shared third-person body.")
+        #expect(sender.last?.body == "Hello,\n\nThe shared third-person body.")
+        #expect(p.sentBody == "Hello,\n\nThe shared third-person body.")
     }
 
     // MARK: - #421 recipient-scoped reply send + copy-out
 
     @Test func sendReplyDraftSendsOnTheContactThreadAndConsumesTheDraft() async throws {
         let ctx = ModelContext(try container())
-        let p = twoRecipients(ctx, body: "shared body", ingested: Date(timeIntervalSince1970: 1))
+        let p = twoRecipients(ctx, body: "Hello,\n\nshared body", ingested: Date(timeIntervalSince1970: 1))
         let r = p.recipients.first { $0.email == "emma@act.example" }!
         r.gmailThreadId = "rt"; r.gmailMessageId = "<rm>"; r.sendState = .sent; r.replied = true
         r.replyDraftSubject = "Re: Photographing you"; r.replyDraftBody = "Glad to help — July works."
@@ -783,7 +773,7 @@ struct SendServiceTests {
     // the draft is consumed, so a later re-draft can't rewrite the lesson.
     @Test func sendReplyDraftFreezesTheSentReplyForVoiceLearning() async throws {
         let ctx = ModelContext(try container())
-        let p = twoRecipients(ctx, body: "shared body", ingested: Date(timeIntervalSince1970: 1))
+        let p = twoRecipients(ctx, body: "Hello,\n\nshared body", ingested: Date(timeIntervalSince1970: 1))
         let r = p.recipients.first { $0.email == "emma@act.example" }!
         r.gmailThreadId = "rt"; r.gmailMessageId = "<rm>"; r.sendState = .sent; r.replied = true
         r.replyDraftBody = "Glad to help — July works for me."
@@ -796,7 +786,7 @@ struct SendServiceTests {
 
     @Test func sendReplyDraftRefusesWithoutADraft() async throws {
         let ctx = ModelContext(try container())
-        let p = twoRecipients(ctx, body: "x", ingested: Date(timeIntervalSince1970: 1))
+        let p = twoRecipients(ctx, body: "Hello,\n\nx", ingested: Date(timeIntervalSince1970: 1))
         let r = p.recipients.first!
         r.gmailThreadId = "rt"; r.sendState = .sent          // no replyDraftBody
         #expect(await SendService.sendReplyDraft(r, of: p, now: Date(), sender: CapturingSender()) == false)
@@ -806,14 +796,14 @@ struct SendServiceTests {
 
     @Test func aSecondReplyDraftSendAttemptWhileTheFirstIsInFlightIsRefused() async throws {
         let ctx = ModelContext(try container())
-        let p = twoRecipients(ctx, body: "shared body", ingested: Date(timeIntervalSince1970: 1))
+        let p = twoRecipients(ctx, body: "Hello,\n\nshared body", ingested: Date(timeIntervalSince1970: 1))
         let r = p.recipients.first { $0.email == "emma@act.example" }!
         r.gmailThreadId = "rt"; r.gmailMessageId = "<rm>"; r.sendState = .sent; r.replied = true
         r.replyDraftSubject = "Re: Photographing you"; r.replyDraftBody = "Glad to help, July works."
         let sender = GatedSender()
 
         let firstTask = Task { await SendService.sendReplyDraft(r, of: p, now: Date(timeIntervalSince1970: 10), sender: sender) }
-        while sender.callCount == 0 { await Task.yield() }   // the first call is now parked mid-send
+        await waitUntil("the first send to be parked mid-call") { sender.callCount > 0 }
 
         let secondResult = await SendService.sendReplyDraft(r, of: p, now: Date(timeIntervalSince1970: 20), sender: sender)
         #expect(secondResult == false)
@@ -826,7 +816,7 @@ struct SendServiceTests {
 
     @Test func aFailedReplyDraftSendReleasesTheClaimSoARetryCanGoThrough() async throws {
         let ctx = ModelContext(try container())
-        let p = twoRecipients(ctx, body: "shared body", ingested: Date(timeIntervalSince1970: 1))
+        let p = twoRecipients(ctx, body: "Hello,\n\nshared body", ingested: Date(timeIntervalSince1970: 1))
         let r = p.recipients.first { $0.email == "emma@act.example" }!
         r.gmailThreadId = "rt"; r.gmailMessageId = "<rm>"; r.sendState = .sent; r.replied = true
         r.replyDraftBody = "Glad to help."
@@ -843,7 +833,7 @@ struct SendServiceTests {
         let sender = GatedSender()
 
         let firstTask = Task { await SendService.sendFollowUp(r, of: p, now: Date(timeIntervalSince1970: 10), sender: sender) }
-        while sender.callCount == 0 { await Task.yield() }
+        await waitUntil("the send to reach the sender") { sender.callCount > 0 }
 
         let secondResult = await SendService.sendFollowUp(r, of: p, now: Date(timeIntervalSince1970: 20), sender: sender)
         #expect(secondResult == false)
@@ -873,7 +863,7 @@ struct SendServiceTests {
             await SendService.sendClosingNote(r, of: p,
                                                      now: Date(timeIntervalSince1970: 10), sender: sender)
         }
-        while sender.callCount == 0 { await Task.yield() }
+        await waitUntil("the send to reach the sender") { sender.callCount > 0 }
 
         let secondResult = await SendService.sendClosingNote(r, of: p,
                                                                     now: Date(timeIntervalSince1970: 20), sender: sender)
@@ -909,7 +899,7 @@ struct SendServiceTests {
         let replySender = GatedSender()
 
         let replyTask = Task { await SendService.sendReplyDraft(r, of: p, now: Date(timeIntervalSince1970: 10), sender: replySender) }
-        while replySender.callCount == 0 { await Task.yield() }
+        await waitUntil("the reply to reach the sender") { replySender.callCount > 0 }
 
         let nudgeResult = await SendService.sendClosingNote(r, of: p,
                                                                    now: Date(timeIntervalSince1970: 20), sender: CapturingSender())

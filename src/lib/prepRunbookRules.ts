@@ -195,6 +195,25 @@ export const RUNBOOK_RULES: RunbookRule[] = [
   // replaced actively told the drafter NOT to lead with Dan's name, which nobody had asked for.
   { name: "sentence-one-introduces-dan",
     pattern: /Sentence one always introduces Dan, by name and by trade/i },
+  // #2545 INVERTED #393's rule: the app composed the greeting above the body and forbade one inside it,
+  // and now composes nothing, so a body that does not greet goes out headless. Three guards, because
+  // each half fails differently and each returns a shape the app will actually refuse to send.
+  //
+  // Without the first, the drafter writes what #393 trained it to write, a body starting at the first
+  // real sentence, and every draft in the run is held at Recipient.isBlockedByGreeting.
+  { name: "body-opens-with-the-greeting",
+    pattern: /The body OPENS with the greeting \(#2545\)/i },
+  // Without the second, the drafter does the natural thing on a show with two contacts and writes
+  // "Hi Emma and Tom,". The greeting is frozen into the body at draft time and cannot re-address itself
+  // when the contact list changes, which is why a named greeting on a shared email is refused outright
+  // rather than merely discouraged.
+  { name: "several-contacts-get-an-unnamed-hello",
+    pattern: /Two or more contacts on the show.*\n?.*with NO name/i },
+  // Without the third, #610's routing is lost: a pitch to info@ opens "Hello," with nothing telling
+  // whoever reads it which desk it is for. It is the only thing naming a human on those addresses,
+  // measured at 16 live contacts on 2026-08-12.
+  { name: "attn-line-routes-a-shared-inbox",
+    pattern: /routes the pitch to the right desk without pretending/i },
   // Dan works in the CITY, which is a different place from the state.
   { name: "the-city-not-the-state",
     pattern: /never bare "New York"/i },

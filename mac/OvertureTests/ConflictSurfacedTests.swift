@@ -180,7 +180,7 @@ struct ConflictSurfacedTests {
         let p = try #require(stored(ctx).first)
         p.status = .approved
         p.draftSubject = "A subject"
-        p.draftBody = "A body that says nothing wrong."
+        p.draftBody = "Hello,\n\nA body that says nothing wrong."
         let r = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
         p.setRecipients([r])
         try? ctx.save()

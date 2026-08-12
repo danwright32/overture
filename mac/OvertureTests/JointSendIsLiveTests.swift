@@ -28,7 +28,7 @@ struct JointSendIsLiveTests {
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                          status: .approved)
         p.draftSubject = "Photography for your December concert"
-        p.draftBody = "I document dance."
+        p.draftBody = "Hello,\n\nI document dance."
         ctx.insert(p)
         let all = [("emma@org.example", "Emma Robinson"), ("noah@org.example", "Noah Ellis")]
             .prefix(contacts)
@@ -111,13 +111,17 @@ struct JointSendIsLiveTests {
         #expect(c.recipient.contains("noah@org.example"))
     }
 
+    // #2545: the confirmation shows the BODY'S OWN greeting, because nothing composes one on top of it
+    // any more. A group email opens "Hello," with no name, which is the rule for an email two people
+    // read, and the sheet shows exactly that rather than a greeting assembled for the preview.
     @Test func theconfirmationShowsTheGreetingAGroupEmailCarries() throws {
         let ctx = ModelContext(try container())
         let (p, _) = approvedShow(ctx)
 
         let c = try #require(SendConfirmation(prospect: p, signature: .none))
 
-        #expect(c.body.hasPrefix("Hi Emma and Noah,\n\n"))
+        #expect(c.body.hasPrefix("Hello,\n\n"))
+        #expect(c.body.contains("I document dance."))
     }
 
     // The reassurance is a promise about what pressing Send does. "To this recipient only" is a false
@@ -151,22 +155,23 @@ struct JointSendIsLiveTests {
         #expect(Set(item.nextRecipientIds) == ["emma@org.example", "noah@org.example"])
     }
 
-    // One email has one greeting, so the draft screen has one to show and edit. Two openings on a card
-    // for an email carrying one of them is the #2010 defect in a new place: what he reads is not what
-    // sends.
-    @Test func thecardCarriesOneOpeningForAJointEmail() throws {
+    // #2545 replaced the two openings-on-the-card tests that sat here. The app composes no opening now,
+    // so a joint email has nothing to preview: it carries the shared body, greeting and all. What is
+    // worth pinning in their place is the CONSEQUENCE of that for a joint send, which is that the number
+    // of people on the email is what decides whether its greeting may name anyone.
+    @Test func ajointEmailToTwoPeopleCountsBothForTheGreetingRule() throws {
         let ctx = ModelContext(try container())
         let (p, _) = approvedShow(ctx)
 
-        #expect(QueueItem(p).jointOpening == "Hi Emma and Noah,")
+        #expect(p.greetingAudienceSize == 2)
     }
 
-    @Test func thecardCarriesNoJointOpeningWhenEachContactGetsTheirOwnEmail() throws {
+    @Test func thesameShowSendingSeparatelyCountsOne() throws {
         let ctx = ModelContext(try container())
         let (p, _) = approvedShow(ctx)
         p.sendsTogetherOverride = false
 
-        #expect(QueueItem(p).jointOpening == nil, "each contact keeps their own opening in this mode")
+        #expect(p.greetingAudienceSize == 1, "one email each, so a name in the greeting is right")
     }
 
     @Test func thecardMarksOneContactWhenTheShowSendsSeparately() throws {

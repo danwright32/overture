@@ -28,8 +28,11 @@ struct DraftLintSendGateTests {
                                         configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
     }
 
-    private let clean = "I photograph performing arts in New York. Recent work is at danwrightphotography.com."
-    private let foreign = "I photograph performing arts. Recent work is at https://smugmug.com/dan."
+    // #2545: every fixture opens with a greeting, so the ONLY thing that can hold a send in this suite
+    // is the lint it is about. Without it the greeting hold fires too and every assertion here would be
+    // passing or failing for the wrong reason.
+    private let clean = "Hello,\n\nI photograph performing arts in New York. Recent work is at danwrightphotography.com."
+    private let foreign = "Hello,\n\nI photograph performing arts. Recent work is at https://smugmug.com/dan."
 
     @MainActor
     @Test func aCleanDraftLeavesEveryRecipientSendable() throws {
@@ -78,7 +81,7 @@ struct DraftLintSendGateTests {
         act.lintOverriddenBody = act.effectiveBody
         #expect(act.isSendablePending)
 
-        p.draftBody = "Now see https://pixieset.com/dan instead."   // edited again after overriding
+        p.draftBody = "Hello,\n\nNow see https://pixieset.com/dan instead."   // edited again after overriding
         #expect(!act.isSendablePending)                             // stale override no longer applies
     }
 

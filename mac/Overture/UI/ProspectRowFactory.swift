@@ -63,21 +63,13 @@ enum ProspectRowFactory {
             },
             manualPrepPrefill: { ProspectMutations.manualPrepPrefill(item, prospects: prospects) },
             onSaveDraft: { subject, body in ProspectMutations.saveDraft(item, subject, body, prospects: prospects, context: context, feedback: feedback) },
-            onSaveOpening: { recipientId, opening in
-                ProspectMutations.saveOpening(item, recipientId: recipientId, opening: opening,
-                                              prospects: prospects, context: context, feedback: feedback)
-            },
-            onSaveJointOpening: { opening in
-                ProspectMutations.saveJointOpening(item, opening: opening,
-                                                   prospects: prospects, context: context, feedback: feedback)
-            },
             onSetSendsTogether: { together in
                 ProspectMutations.setSendsTogether(item, together,
                                                    prospects: prospects, context: context, feedback: feedback)
             },
             onSetLostReason: { reason in ProspectMutations.setLostReason(item, reason, prospects: prospects, context: context, feedback: feedback) },
             onSend: onSend,
-            onOverrideSalutationReview: { ProspectMutations.overrideSalutationReview(item, prospects: prospects, context: context, feedback: feedback) },
+            onOverrideGreeting: { ProspectMutations.overrideGreeting(item, prospects: prospects, context: context, feedback: feedback) },
             onOverrideDraftLint: { ProspectMutations.overrideDraftLint(item, prospects: prospects, context: context, feedback: feedback) },
             onDismissReply: { ProspectMutations.dismissReply(item, prospects: prospects, context: context, feedback: feedback) },
             // #1752: Dan says where this card's room is. The answer is stored against the ROOM, so it

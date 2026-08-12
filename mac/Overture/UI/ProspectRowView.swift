@@ -27,12 +27,10 @@ struct ProspectRowView: View {
     }
     var onSaveDraft: (_ subject: String, _ body: String) -> Void = { _, _ in }
     // #2010: Dan's own opening for one contact, passed through to the draft review screen.
-    var onSaveOpening: (_ recipientId: String, _ opening: String) -> Void = { _, _ in }
-    var onSaveJointOpening: (_ opening: String) -> Void = { _ in }   // #2033
     var onSetSendsTogether: (_ together: Bool) -> Void = { _ in }   // #2034
     var onSetLostReason: (String) -> Void = { _ in }
     var onSend: () -> Void = {}
-    var onOverrideSalutationReview: () -> Void = {}
+    var onOverrideGreeting: () -> Void = {}
     var onOverrideDraftLint: () -> Void = {}
     var onDismissReply: () -> Void = {}
     // #1752: Dan says where this card's ROOM is. Optional rather than a no-op default, because the
@@ -170,12 +168,10 @@ struct ProspectRowView: View {
                     onUnapprove: onUnapprove,
                     onReprep: onReprep,
                     onSaveDraft: onSaveDraft,
-                    onSaveOpening: onSaveOpening,
-                    onSaveJointOpening: onSaveJointOpening,
                     onSetSendsTogether: onSetSendsTogether,
                     onSetLostReason: onSetLostReason,
                     onSend: onSend,
-                    onOverrideSalutationReview: onOverrideSalutationReview,
+                    onOverrideGreeting: onOverrideGreeting,
                     onOverrideDraftLint: onOverrideDraftLint,
                     onDismissReply: onDismissReply,
                     onBeginFormPitch: onBeginFormPitch,

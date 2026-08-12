@@ -1,38 +1,29 @@
 import Foundation
 
-// #1630: the complete pitch as this contact receives it, greeting and all.
+// The exact text that leaves, for one recipient or for a group sharing one email. Both the Gmail send
+// path and the copy-into-a-contact-form path read this, so the two can never drift.
 //
-// This composition used to live inside SendService.deliver and nowhere else, which was fine while the
-// only way a pitch left Overture was Gmail. It is not fine once Dan copies one into a contact form:
-// `draftBody` is deliberately salutation-free (#393), so copying it hands him a pitch that opens cold
-// with no name on it, and he either pastes it that way or retypes the opener every time.
+// #2545: it is the body, and nothing else. Overture used to compose an opening above it (the `Attn:`
+// block and a greeting, per recipient or per group), which meant a greeting could come from two places
+// and the app could not tell which one Dan meant. His words, 2026-08-11, on a card showing both: "I want
+// to eliminate the appended greeting. It should just be included in the AI prep or manual prep where I
+// write it myself. It's confusing to have it there twice." The greeting is now written into the body by
+// whoever writes the body, and `Recipient.isBlockedByGreeting` holds a body that forgot one.
 //
-// So both paths read this. What lands on the clipboard is by construction the same string the mail
-// would have carried, and the two cannot drift.
+// The signature still takes the prospect it no longer reads, because every caller has one and the
+// symmetry with the group form is worth more than the parameter is worth removing.
 enum OutgoingPitch {
-    // #2010: TWO visible pieces, and nothing else. The opening is the field Dan reads and can edit; the
-    // body is the box he writes in. This function may never add a third thing, because anything it adds
-    // is by definition invisible to the person approving the email (L64).
-    //
-    // It used to compose the greeting and the `Attn:` line here, which meant a draft he read and approved
-    // was not the string that went out, and a greeting he typed into the body sent twice.
-    //
-    // nil when there is no body to send yet, the same condition that stops a send.
     static func text(for recipient: Recipient, of prospect: Prospect) -> String? {
         guard let body = recipient.effectiveBody, !body.isEmpty else { return nil }
-        return recipient.outgoingOpening + "\n\n" + body
+        return body
     }
 
-    // #2031: the same email, for several people at once. Nil when there is no single email to compose,
-    // which is either no body at all or a group whose members would not read the same words.
     static func text(forGroup recipients: [Recipient], of prospect: Prospect) -> String? {
         guard !recipients.isEmpty else { return nil }
-        // Body EQUALITY, not provenance. Measured on the live prep handoff 2026-08-03: the one show
-        // waiting there has three contacts, all of them performers, each carrying a DIFFERENT letter. A
-        // rule phrased as "a performer beside a non-performer" would wave that through and send one
-        // person's letter, greeting them by name, to all three.
+        // One email cannot carry two different letters. A performer's own override body is what makes
+        // this differ, and it is why such a show sends separately rather than jointly.
         let bodies = Set(recipients.map { $0.effectiveBody ?? "" })
         guard bodies.count == 1, let body = bodies.first, !body.isEmpty else { return nil }
-        return JointOpening.text(for: recipients, of: prospect) + "\n\n" + body
+        return body
     }
 }

@@ -67,38 +67,23 @@ struct OvertureNeverRewritesDansTextTests {
                 "what an email says must not depend on whether Overture was restarted")
     }
 
-    // Instead of rewriting, say so. A body that opens with its own greeting is worth pointing at, because
-    // the opening above it carries one too, but it is Dan's text and his call.
-    @Test func abodyThatOpensWithItsOwnGreetingIsReportedNotRewritten() {
-        #expect(DraftOpeningNotice.bodyRepeatsAGreeting("Hi Sarah,\n\nGreat to see the festival back."))
-        #expect(DraftOpeningNotice.bodyRepeatsAGreeting("Hello,\n\nI'm a documentary photographer."))
-        #expect(DraftOpeningNotice.bodyRepeatsAGreeting("Dear Sarah,\n\nGreat to see you."))
-    }
-
-    // The four live bodies this was measured against are all a bare "Hello," with no name, which the old
-    // strip could not match. The notice has to catch exactly the case the rewrite missed.
-    @Test func thenoticeCatchesTheFormTheOldRewriteCouldNotSee() {
-        #expect(DraftOpeningNotice.bodyRepeatsAGreeting("Hello, I photograph performing arts in New York."))
-    }
-
-    // It must stay quiet on an ordinary body, or it is a warning Dan learns to scroll past (L36).
-    @Test func anordinaryBodyGetsNoNotice() {
-        #expect(!DraftOpeningNotice.bodyRepeatsAGreeting("I photograph performing arts in New York."))
-        #expect(!DraftOpeningNotice.bodyRepeatsAGreeting("I've photographed at Carnegie Hall for years."))
-        #expect(!DraftOpeningNotice.bodyRepeatsAGreeting("My name is Dan Wright and I'm a photographer."))
-        #expect(!DraftOpeningNotice.bodyRepeatsAGreeting("Highlights from the season are attached."))
-    }
-
-    // It NOTICES, it does not block. Blocking would be the app deciding for him, and the whole point is
-    // that he can now see the opening and the body together and judge it himself.
-    @Test func thenoticeDoesNotStopTheSend() throws {
+    // #2545 replaced the notice tests that sat here. The notice existed only because the app composed a
+    // greeting ABOVE the body, so a body that greeted too would say hello twice; there is one greeting
+    // now and nothing to warn about. What it recognised as a greeting is pinned in
+    // GreetingLivesInTheBodyTests, against the type that decides it.
+    //
+    // The one thing worth restating here, because it REVERSED: a body that opens with its own greeting
+    // used to be the anomaly and is now the requirement. It sends; a headless one is what does not.
+    @Test func abodyThatOpensWithItsOwnGreetingIsExactlyWhatSendsNow() throws {
         let ctx = try context()
         let p = prospect(ctx, body: "Hi Sarah,\n\nGreat to see the festival back.")
+        p.status = .approved
         let r = Recipient(id: "sarah@aurora.example", email: "sarah@aurora.example", name: "Sarah Chen",
                           provenance: .presenter)
         p.recipients.append(r)
         ctx.insert(r)
 
-        #expect(r.isSendablePending, "a repeated greeting is worth saying, not worth refusing")
+        #expect(r.isSendablePending, "the greeting in the body is the greeting the email carries")
+        #expect(OutgoingPitch.text(for: r, of: p) == "Hi Sarah,\n\nGreat to see the festival back.")
     }
 }

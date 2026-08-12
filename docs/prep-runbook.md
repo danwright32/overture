@@ -608,12 +608,38 @@ Anatomy:
   researched pitch cannot afford. The date and venue are EVIDENCE Dan looked, not an announcement:
   fold them into his reason for writing, never narrate the event. What fills the space instead is
   the half the reader does not know: what Dan does, how he shoots, the credential, the rate, the ask.
-- **No greeting in the body (#393).** The drafted `body` MUST start at the first real
-  sentence with NO greeting token: write "My name is Dan and I'm a professional arts
-  photographer..." NOT "Hi Emma, my name is Dan...". The app owns the greeting and renders it per
-  recipient at send (`Salutation.greeting(for:)`), so the same salutation-free body can go
-  to the act and to a differently-named presenter. A body that opens with "Hi <name>," is a
-  wrong result.
+- **The body OPENS with the greeting (#2545).** This rule REPLACES #393's "no greeting in the
+  body", which said the opposite. Overture used to compose a greeting above the body at send;
+  it no longer composes anything at all, so a `body` that does not open with a greeting is a
+  wrong result and Overture will refuse to send it.
+
+  Write the greeting as the first line, then a blank line, then the first real sentence. Which
+  greeting depends on WHO the email reaches, and there are exactly three cases:
+
+  1. **One named contact.** `Hi <first name>,` on its own line. "Hi Emma," then a blank line,
+     then "My name is Dan and I'm a professional arts photographer...".
+  2. **Two or more contacts on the show.** `Hello,` with NO name, because they share one email
+     and greeting one of them by name tells the others they were an afterthought. Do not write
+     "Hi Emma and Tom,": the contact list can change after the draft is written, and Overture
+     refuses to send a named greeting on an email reaching more than one person.
+  3. **A shared inbox** (`contactMethod: "generic_inbox"`) **where a person's name is known.**
+     An `Attn:` line naming that person and their role, a blank line, then `Hello,`, a blank
+     line, then the first real sentence:
+
+     ```
+     Attn: Raphaele de Boisblanc, Interim Director of Marketing
+
+     Hello,
+
+     My name is Dan and I'm a professional arts photographer here in NYC...
+     ```
+
+     The `Attn:` line routes the pitch to the right desk without pretending the email is
+     addressed to that person directly, which is why the greeting under it stays impersonal.
+     With no name known behind the shared inbox, write `Hello,` alone and no `Attn:` line.
+
+  Nothing else counts as a greeting. "I hope this finds you well" is not one (and is separately
+  forbidden as a tell), and neither is diving straight into the first sentence.
 - **Subject:** specific, low-key. "Photographing [group]'s [performance] at [venue]."
   This formula stays fixed across drafts; the variety budget below goes into the body.
 - **Sentence one always introduces Dan, by name and by trade (Dan, 2026-07-31).** A cold
@@ -654,8 +680,10 @@ Anatomy:
   never echo either token, even if a stale `experimentArmInstruction` names one: write the
   closest live shape and record THAT.
 
-  No greeting token in either shape ("I hope this finds you well" and "Hi Emma," are
-  both wrong), and never fabricate a detail to fill a shape.
+  These shapes describe the FIRST REAL SENTENCE, the one under the greeting, never the greeting
+  itself: the greeting is written above them per the opening rule in this section, and none of
+  these archetypes replaces it. "I hope this finds you well" is not a greeting and is still
+  wrong. Never fabricate a detail to fill a shape.
   If this queue item carries an `experimentArmInstruction` (an A/B experiment assignment,
   one of the live archetype tokens), use THAT archetype for this draft, even when it
   repeats the shape of the draft just before it: the assigned archetype OVERRIDES the
@@ -853,7 +881,10 @@ debut...") reads like a mail-merge mistake to the one person reading it. For eve
 addressing them directly in second person ("you"/"your") instead: "I saw you and Anna
 Pierre are making your U.S. debut..." not "I saw Virgile Roche and Anna Pierre are
 making their debut...". Everything else about it follows the SAME rules as the shared
-body above: no greeting token (the app still injects the greeting separately at send),
+body above, INCLUDING the greeting rule (#2545): this contact receives their own email, so
+its `overrideBody` opens with its own greeting naming them, "Hi Virgile," then a blank line
+then the first sentence. It is a one-person email whatever else is on the show, so the
+two-or-more "Hello," case never applies to it. Everything else follows the shared body too:
 no performative enthusiasm, no em dashes, the same canonical rate and A/B offer
 handling, the same portfolio link, and the same "never ask for a known
 fact" rule. The subject line stays shared and unchanged, third-person subjects read

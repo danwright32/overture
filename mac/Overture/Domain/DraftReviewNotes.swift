@@ -11,14 +11,34 @@ import Foundation
 // reach, and two of those have already drifted here under a green suite (#863, #876).
 enum DraftReviewNotes {
 
-    // #789's deliberate audit trail. An overridden warning TONES DOWN rather than disappearing, so there
-    // is still a visible record that the send happened despite it. A sentence that vanished on override
-    // would erase precisely the thing worth keeping.
-    static func salutation(needsReview: Bool, overridden: Bool) -> String? {
-        guard needsReview else { return nil }
+    // #2545: the greeting lives in the body now, so nothing composes one on top of it and the two ways
+    // it can be wrong both stop the send. Each has its own sentence, because they want opposite fixes:
+    // one is "write a greeting", the other is "take the name out".
+    //
+    // Same shape as the lint below, including the audit trail: an overridden warning TONES DOWN rather
+    // than disappearing, so a send that went out despite it can still be seen to have.
+    static func greeting(missing: Bool, misaddressed: Bool, audience: Int, overridden: Bool) -> String? {
+        guard missing || misaddressed else { return nil }
         guard !overridden else { return "Sending despite the greeting warning you confirmed." }
-        return "This old draft may still have a name in the greeting Overture couldn't safely remove; "
-            + "edit it before sending."
+        return greetingBlockMessage(missing: missing, misaddressed: misaddressed, audience: audience)
+    }
+
+    // #718's two-step confirm: it repeats WHAT is wrong before asking him to send anyway, so the confirm
+    // is never a bare "are you sure" about a fact he has already scrolled past. Built from the same
+    // sentence the note shows, so the warning and the confirm cannot describe different problems.
+    static func greetingOverrideConfirm(missing: Bool, misaddressed: Bool, audience: Int) -> String {
+        greetingBlockMessage(missing: missing, misaddressed: misaddressed, audience: audience)
+            + " Confirm you've checked it and it's fine to send as-is."
+    }
+
+    // A headless body cannot also carry a name, so the two are mutually exclusive in practice; missing
+    // is answered first anyway rather than left to depend on that.
+    private static func greetingBlockMessage(missing: Bool, misaddressed: Bool, audience: Int) -> String {
+        if missing {
+            return "This draft won't send: it doesn't open with a greeting. Edit it to add one."
+        }
+        return "This draft won't send: the greeting names one person but this email goes to "
+            + "\(audience). Open it \"Hello,\" instead."
     }
 
     // The same shape for the draft lint (#789). Blocked names what is holding it; overridden leaves the

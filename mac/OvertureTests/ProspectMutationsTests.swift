@@ -246,7 +246,7 @@ struct ProspectMutationsTests {
     @Test func performSendMarksSendingImmediatelyAndClearsAfterTheSendCompletes() async throws {
         let ctx = ModelContext(try container())
         let p = makeProspect(ctx, status: .approved)
-        p.draftSubject = "S"; p.draftBody = "Hi"
+        p.draftSubject = "S"; p.draftBody = "Hello,\n\nI photograph performing arts."
         let r = Recipient(id: "act@example.com", email: "act@example.com", provenance: .act)
         p.recipients = [r]
         try? ctx.save()
@@ -262,7 +262,7 @@ struct ProspectMutationsTests {
         #expect(marked == ["k"])       // fired synchronously, before the async send even starts
         #expect(cleared.isEmpty)       // not yet: the send hasn't completed
 
-        while cleared.isEmpty { await Task.yield() }
+        await waitUntil("the sending flag to clear") { !cleared.isEmpty }
         #expect(cleared == ["k"])
         #expect(sender.sent.count == 1)
         #expect(p.status == .contacted)
@@ -274,7 +274,7 @@ struct ProspectMutationsTests {
     @Test func performSendReportsFullySentWhenTheLastRecipientGoes() async throws {
         let ctx = ModelContext(try container())
         let p = makeProspect(ctx, status: .approved)
-        p.draftSubject = "S"; p.draftBody = "Hi"
+        p.draftSubject = "S"; p.draftBody = "Hello,\n\nI photograph performing arts."
         p.recipients = [Recipient(id: "act@example.com", email: "act@example.com", provenance: .act)]
         // #2033: this is the one-at-a-time mode. A show sending TOGETHER empties in a single press, so
         // "not fully sent yet" is a fact about sending separately, which is what this guards.
@@ -288,7 +288,7 @@ struct ProspectMutationsTests {
                                       onNeedsReconnect: {},
                                       onSent: { id, fullySent in sentReports.append((id, fullySent)) })
 
-        while sentReports.isEmpty { await Task.yield() }
+        await waitUntil("the send to report back") { !sentReports.isEmpty }
         #expect(sentReports.count == 1)
         #expect(sentReports.first?.0 == "k")
         #expect(sentReports.first?.1 == true)
@@ -299,7 +299,7 @@ struct ProspectMutationsTests {
     @Test func performSendReportsNotFullySentWhileARecipientRemains() async throws {
         let ctx = ModelContext(try container())
         let p = makeProspect(ctx, status: .approved)
-        p.draftSubject = "S"; p.draftBody = "Hi"
+        p.draftSubject = "S"; p.draftBody = "Hello,\n\nI photograph performing arts."
         p.recipients = [
             Recipient(id: "act@example.com", email: "act@example.com", provenance: .act),
             Recipient(id: "pres@example.com", email: "pres@example.com", provenance: .presenter),
@@ -316,7 +316,7 @@ struct ProspectMutationsTests {
                                       onNeedsReconnect: {},
                                       onSent: { id, fullySent in sentReports.append((id, fullySent)) })
 
-        while sentReports.isEmpty { await Task.yield() }
+        await waitUntil("the send to report back") { !sentReports.isEmpty }
         #expect(sentReports.first?.1 == false)
     }
 
@@ -339,7 +339,7 @@ struct ProspectMutationsTests {
         #expect(marked == ["r1"])
         #expect(cleared.isEmpty)
 
-        while cleared.isEmpty { await Task.yield() }
+        await waitUntil("the sending flag to clear") { !cleared.isEmpty }
         #expect(cleared == ["r1"])
         #expect(sender.sent.count == 1)
         #expect(r.replyDraftBody == nil)   // consumed on send
@@ -363,7 +363,7 @@ struct ProspectMutationsTests {
         #expect(marked == ["r1"])
         #expect(cleared.isEmpty)
 
-        while cleared.isEmpty { await Task.yield() }
+        await waitUntil("the sending flag to clear") { !cleared.isEmpty }
         #expect(cleared == ["r1"])
         #expect(sender.sent.count == 1)
         #expect(r.followUpCount == 1)
@@ -388,27 +388,35 @@ struct ProspectMutationsTests {
         #expect(marked == ["r1"])
         #expect(cleared.isEmpty)
 
-        while cleared.isEmpty { await Task.yield() }
+        await waitUntil("the sending flag to clear") { !cleared.isEmpty }
         #expect(cleared == ["r1"])
         #expect(sender.sent.count == 1)
         #expect(r.conversationRemindedAt != nil)
     }
 
-    // #718: overriding records the EXACT current draft body, so a later edit to different text
-    // silently invalidates it (Recipient.isSendablePending/Prospect.isSalutationReviewOverridden
-    // compare against this stored copy, not a bare boolean).
-    @Test func overrideSalutationReviewRecordsTheCurrentDraftBody() throws {
+    // #2545: overriding the greeting hold records the EXACT outgoing text of each HELD, still PENDING
+    // recipient, so a later edit to different text silently reinstates the hold. Written per recipient
+    // rather than on the show, because `effectiveBody` is per recipient: a clean one must gain no
+    // override, or it would wave through a future bad edit to text nobody looked at.
+    @Test func overrideGreetingRecordsOnlyTheHeldPendingRecipientsText() throws {
         let ctx = ModelContext(try container())
         let p = makeProspect(ctx)
-        p.draftBody = "Hi 2026 season, here is what we offer."
-        p.draftNeedsSalutationReview = true
+        p.draftBody = "I photograph performing arts in New York."   // no greeting: held
+        let held = Recipient(id: "held@org.example", email: "held@org.example", name: "Held Person",
+                             provenance: .presenter)
+        let sent = Recipient(id: "sent@org.example", email: "sent@org.example", name: "Sent Person",
+                             provenance: .presenter)
+        sent.sendState = .sent
+        p.recipients.append(contentsOf: [held, sent])
+        ctx.insert(held); ctx.insert(sent)
         try? ctx.save()
-        let feedback = ActionFeedback()
 
-        ProspectMutations.overrideSalutationReview(QueueItem(p), prospects: [p], context: ctx, feedback: feedback)
+        ProspectMutations.overrideGreeting(QueueItem(p), prospects: [p], context: ctx,
+                                           feedback: ActionFeedback())
 
-        #expect(p.draftSalutationReviewOverriddenBody == "Hi 2026 season, here is what we offer.")
-        #expect(p.isSalutationReviewOverridden == true)
+        #expect(held.greetingOverriddenBody == "I photograph performing arts in New York.")
+        #expect(held.isGreetingOverridden)
+        #expect(sent.greetingOverriddenBody == nil, "an already-sent recipient is left alone")
     }
 
     // #789: overriding the draft-lint block records the EXACT outgoing text of each BLOCKED, still
@@ -417,7 +425,7 @@ struct ProspectMutationsTests {
     @Test func overrideDraftLintRecordsOnlyTheBlockedPendingRecipientsText() throws {
         let ctx = ModelContext(try container())
         let p = makeProspect(ctx)
-        p.draftBody = "See my work at https://smugmug.com/dan."
+        p.draftBody = "Hello,\n\nSee my work at https://smugmug.com/dan."
         let blocked = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
         let clean = Recipient(id: "p@perf.example", email: "p@perf.example", provenance: .performer)
         clean.overrideBody = "I photograph performing arts. Work at danwrightphotography.com."
@@ -429,7 +437,7 @@ struct ProspectMutationsTests {
 
         ProspectMutations.overrideDraftLint(QueueItem(p), prospects: [p], context: ctx, feedback: feedback)
 
-        #expect(blocked.lintOverriddenBody == "See my work at https://smugmug.com/dan.")
+        #expect(blocked.lintOverriddenBody == "Hello,\n\nSee my work at https://smugmug.com/dan.")
         #expect(blocked.isSendablePending)
         #expect(clean.lintOverriddenBody == nil)
         #expect(alreadySent.lintOverriddenBody == nil)

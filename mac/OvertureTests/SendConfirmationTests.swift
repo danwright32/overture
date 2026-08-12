@@ -16,7 +16,8 @@ struct SendConfirmationTests {
 
     private func make(_ ctx: ModelContext, status: ReviewStatus = .approved,
                       email: String? = "to@org.org", subject: String? = "A photo of your June concert",
-                      body: String? = "Hi", sentAt: Date? = nil) -> Prospect {
+                      body: String? = "Hello,\n\nI photograph performing arts.",
+                      sentAt: Date? = nil) -> Prospect {
         let key = Prospect.makeNaturalKey(groupName: "G", performanceDate: "2026-07-01", venue: "V")
         let p = Prospect(naturalKey: key, groupName: "G", discipline: "choral", venue: "V",
                          performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
@@ -57,7 +58,8 @@ struct SendConfirmationTests {
         }
 
         @discardableResult
-        private func show(_ ctx: ModelContext, body: String = "I photograph performing arts in New York.")
+        private func show(_ ctx: ModelContext,
+                          body: String = "Hi Marcus,\n\nI photograph performing arts in New York.")
         -> Prospect {
             let key = Prospect.makeNaturalKey(groupName: "G", performanceDate: "2026-07-01", venue: "V")
             let p = Prospect(naturalKey: key, groupName: "G", discipline: "choral", venue: "V",
@@ -99,8 +101,9 @@ struct SendConfirmationTests {
             #expect(c.body == onTheWire)
         }
 
-        // The greeting was the first of the two hidden pieces #2010 made visible on the draft. It was still
-        // missing HERE, on the last screen before the send.
+        // The greeting reaches this screen. #2010 made it visible on the DRAFT while it was still missing
+        // here, on the last screen before the send; #2545 moved it inside the body, so the thing that must
+        // now be true is that the confirmation shows the body's own opening rather than composing one.
         @Test func carriesTheGreetingDanCanSeeOnTheDraft() throws {
             let ctx = ModelContext(try container())
             let p = show(ctx)
@@ -111,10 +114,13 @@ struct SendConfirmationTests {
             #expect(c.body.hasPrefix("Hi Marcus,\n\n"))
         }
 
-        // The `Attn:` block is the more surprising piece, because it appears only for a generic inbox.
+        // The `Attn:` block, which routes a shared-inbox pitch to the right desk. #2545 made it the
+        // drafter's job to write rather than the app's to compose, so what this pins now is that it
+        // survives INTO the confirmation: it is part of the body, and the body is what this screen shows.
         @Test func carriesTheAttnBlockAGenericInboxGets() throws {
             let ctx = ModelContext(try container())
-            let p = show(ctx)
+            let p = show(ctx, body: "Attn: Marcus Hale, Marketing Director\n\nHello,\n\n"
+                         + "I photograph performing arts in New York.")
             contact(ctx, on: p, email: "info@org.org", name: "Marcus Hale",
                     method: ContactMethod.genericInbox.rawValue)
 
@@ -124,12 +130,14 @@ struct SendConfirmationTests {
             #expect(c.body.contains("Hello,"))
         }
 
-        // An opening Dan typed himself is what sends, so it is what the confirmation must show.
+        // An opening Dan typed himself is what sends, so it is what the confirmation must show. #2545
+        // removed the separate per-contact opening field this used to set, so his own wording now reaches
+        // the send the only way anything does, by being in the body. The rule is unchanged and is the
+        // reason the test survives the field: Overture must never show a greeting it will not send.
         @Test func carriesDansOwnOpeningWhenHeWroteOne() throws {
             let ctx = ModelContext(try container())
-            let p = show(ctx)
-            let r = contact(ctx, on: p, email: "marcus@org.org", name: "Marcus Hale")
-            r.openingOverride = "Marcus, hello again,"
+            let p = show(ctx, body: "Marcus, hello again,\n\nI photograph performing arts in New York.")
+            contact(ctx, on: p, email: "marcus@org.org", name: "Marcus Hale")
 
             let c = try #require(SendConfirmation(prospect: p, signature: sig))
 
@@ -141,13 +149,13 @@ struct SendConfirmationTests {
         // shared third-person body. Showing the shared one would preview an email that never sends.
         @Test func carriesAPerformersOwnLetterNotTheSharedBody() throws {
             let ctx = ModelContext(try container())
-            let p = show(ctx, body: "The shared third-person body.")
+            let p = show(ctx, body: "Hello,\n\nThe shared third-person body.")
             let r = contact(ctx, on: p, email: "nina@band.example", name: "Nina Ford", provenance: .performer)
-            r.overrideBody = "Nina, I photograph performing arts in New York."
+            r.overrideBody = "Hi Nina,\n\nI photograph performing arts in New York."
 
             let c = try #require(SendConfirmation(prospect: p, signature: sig))
 
-            #expect(c.body.contains("Nina, I photograph performing arts in New York."))
+            #expect(c.body.contains("Hi Nina,\n\nI photograph performing arts in New York."))
             #expect(!c.body.contains("The shared third-person body."))
         }
 
@@ -242,7 +250,7 @@ struct SendConfirmationTests {
                          priorRelationship: "none", production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .approved, ingestedAt: Date())
-        p.draftSubject = "S"; p.draftBody = "Hi"
+        p.draftSubject = "S"; p.draftBody = "Hello,\n\nI photograph performing arts."
         ctx.insert(p)
         let act = Recipient(id: "emma@act.example", email: "emma@act.example", name: "Emma", provenance: .act)
         let presenter = Recipient(id: "noah@p.example", email: "noah@p.example", name: "Noah", provenance: .presenter)

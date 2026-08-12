@@ -27,7 +27,7 @@ struct QueueItemSnapshotTests {
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                          status: .approved)
-        p.draftSubject = "S"; p.draftBody = "Hi"
+        p.draftSubject = "S"; p.draftBody = "Hello,\n\nI photograph performing arts."
         ctx.insert(p)
         let act = Recipient(id: "a@x.example", email: "a@x.example", name: "A", provenance: .act)
         let presenter = Recipient(id: "b@x.example", email: "b@x.example", name: "B", provenance: .presenter)
@@ -163,7 +163,7 @@ struct QueueItemSnapshotTests {
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                          status: .approved)
-        p.draftSubject = "S"; p.draftBody = "Hi"
+        p.draftSubject = "S"; p.draftBody = "Hello,\n\nI photograph performing arts."
         ctx.insert(p)
 
         // A form-only contact (no email) is not an email to send to.
@@ -237,7 +237,7 @@ struct QueueItemSnapshotTests {
                          coverage: "likely_uncovered", fitScore: 8, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                          status: .contacted)
-        p.draftSubject = "S"; p.draftBody = "Hi"; p.sentAt = Date()
+        p.draftSubject = "S"; p.draftBody = "Hello,\n\nI photograph performing arts."; p.sentAt = Date()
         ctx.insert(p)
         let presenter = Recipient(id: "b@present.example", email: "b@present.example", name: "Bo", provenance: .presenter)
         presenter.sendState = .sent

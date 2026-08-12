@@ -50,7 +50,6 @@ struct ReturnReachesTheDefaultButtonTests {
         Pair(defaultButtonFile: "RootView.swift", fieldFile: "InquiryIntakeSheet.swift", field: "Event (optional)"),
         Pair(defaultButtonFile: "RootView.swift", fieldFile: "InquiryIntakeSheet.swift", field: "Venue (optional)"),
         Pair(defaultButtonFile: "RootView.swift", fieldFile: "InquiryIntakeSheet.swift", field: "Notes (optional)"),
-        Pair(defaultButtonFile: "ProspectRowView.swift", fieldFile: "DraftReviewView.swift", field: "Opening"),
         Pair(defaultButtonFile: "ProspectRowView.swift", fieldFile: "DraftReviewView.swift", field: "Subject"),
         Pair(defaultButtonFile: "ProspectRowView.swift", fieldFile: "DraftReviewView.swift", field: "Email"),
         Pair(defaultButtonFile: "ProspectRowView.swift", fieldFile: "DraftReviewView.swift", field: "Name (optional)"),

@@ -115,10 +115,6 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // together that is all of them, and a card naming one person for an email going to two is the defect
     // #2015 was filed to fix, reintroduced.
     var nextRecipientIds: [String] = []
-    // #2033: the ONE opening a joint email carries, and whether Dan wrote it. Nil when this show's
-    // contacts each get their own email, which is when the per-contact openings are the true ones.
-    var jointOpening: String? = nil
-    var jointOpeningIsCustom: Bool = false
     // #2034: which way this event's email goes, and whether the choice is even offered. A show with one
     // contact is not offered it: a choice between one email and one email is not a choice, and a control
     // that changes nothing is worse than no control.
@@ -188,11 +184,13 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     var performerMatchNote: String? = nil
     var performerMatchDismissed: Bool = false
     var performerMatchReviewed: Bool = false
-    // #407: an old draft still carrying an un-strippable inline greeting; sending is blocked
-    // entirely (Recipient.isSendablePending) until this clears itself on a fresh migration pass.
-    var draftNeedsSalutationReview: Bool = false
-    // #718: Dan's deliberate override of the block above, for the exact draft text he confirmed.
-    var salutationReviewOverridden: Bool = false
+    // #2545: the two ways the greeting inside the body can be wrong, each holding the send
+    // (Recipient.isBlockedByGreeting), plus how many people the email reaches so the sentence beside
+    // the button can say. `greetingOverridden` is Dan's confirmed override, for that exact text.
+    var draftMissingGreeting: Bool = false
+    var draftGreetingMisaddressed: Bool = false
+    var greetingAudienceSize: Int = 1
+    var greetingOverridden: Bool = false
     // #789: blocking lint findings in the text a still-pending recipient would actually receive
     // (each recipient's own, so a performer's override body counts). Gathered across recipients
     // because Send is a per-show button; `draftLintBlocked` is what actually holds the send.
@@ -613,16 +611,10 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     // Only meaningful when sendState == .suppressed (#542); defaulted so existing call sites that
     // never touch a suppressed recipient don't need updating.
     var suppressionReason: RecipientSuppressionReason = .bookedElsewhere
-    // #2010: everything the outgoing email says above the body, as Dan sees and can edit it. Carried on
-    // the snapshot rather than recomputed in the view, so the words on screen are by construction the
-    // words `OutgoingPitch` will send.
-    var outgoingOpening: String = ""
     // #2015: this contact is on the show but is NOT going to be emailed, because a guard is holding it
     // (a venue guess, a press address, a suspected duplicate, the draft lint). "Every email it's going to
     // send to" has to be honest about the ones it will not, or the list quietly overstates itself.
     var isHeldFromSending: Bool = false
-    // Whether that opening is Dan's own, so the screen can say which it is showing him.
-    var openingIsCustom: Bool = false
     var replyDraftSubject: String? = nil
     var replyDraftBody: String? = nil
     var replyDraftRequestedAt: Date? = nil
@@ -2279,13 +2271,6 @@ extension QueueItem {
             excludedFromVoiceLearning: p.excludedFromVoiceLearning,
             hasPendingRecipient: sendGroups.hasPending,
             nextRecipientIds: sendGroups.pending.map(\.id),
-            // #2049: the PREVIEW group, which is the same set without the approval gate. What the email
-            // will look like is a fact about the draft; who the next press of Send reaches (the line
-            // above) is a claim about sending and keeps its gate. Gating both on approval is what put
-            // "One email to everyone" three lines above one greeting per contact on every drafted show.
-            jointOpening: sendGroups.preview.count > 1
-                ? JointOpening.text(for: sendGroups.preview, of: p) : nil,
-            jointOpeningIsCustom: p.jointOpeningOverride?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false,
             sendsTogether: p.sendsTogether,
             offersSendModeChoice: p.recipients.filter { $0.email?.isEmpty == false }.count > 1,
             // #1324: a real address held by a guard, so the badge can say so rather than "No email found"
@@ -2314,8 +2299,18 @@ extension QueueItem {
             performerMatchNote: p.performerMatchNote,
             performerMatchDismissed: p.performerMatchDismissed,
             performerMatchReviewed: p.performerMatchReviewed,
-            draftNeedsSalutationReview: p.draftNeedsSalutationReview,
-            salutationReviewOverridden: p.isSalutationReviewOverridden,
+            // #2545: judged over the recipients that would actually receive this draft, the same way the
+            // lint below is, so what the card says holds the send is what `isSendablePending` holds it on.
+            draftMissingGreeting: p.recipients.contains { $0.sendState == .pending && $0.draftIsMissingGreeting },
+            draftGreetingMisaddressed: p.recipients.contains { $0.sendState == .pending && $0.greetingMisaddressed },
+            greetingAudienceSize: p.greetingAudienceSize,
+            // "nothing is held any more", NOT "somebody has an override", and the difference is the whole
+            // safety of it: this flag both tones the warning down and REMOVES the Override button, so
+            // reading it the second way would take the way out away while the send is genuinely still
+            // blocked. One contact overridden beside one added later and still held is reachable in
+            // ordinary use, and it is the dead-end shape #2052 and #2012 were filed for. Same shape as
+            // `draftLintBlocked` above: the finding stays reported, only the BLOCK clears.
+            greetingOverridden: !p.recipients.contains { $0.sendState == .pending && $0.isBlockedByGreeting },
             draftLintBlockers: DraftIssue.orderedBlockers(
                 Set(p.recipients.filter { $0.sendState == .pending }.flatMap(\.draftLintBlockers))),
             draftLintBlocked: p.recipients.contains { $0.sendState == .pending && $0.isBlockedByDraftLint },
@@ -2354,9 +2349,7 @@ extension RecipientSnapshot {
                   lastReplyText: r.lastReplyText, resolution: r.resolution,
                   bounced: r.bounced, outcomeSource: r.outcomeSource,
                   suppressionReason: r.suppressionReason,
-                  outgoingOpening: r.outgoingOpening,
                   isHeldFromSending: r.isBlockedAwaitingReview,
-                  openingIsCustom: r.openingOverride?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false,
                   replyDraftSubject: r.replyDraftSubject, replyDraftBody: r.replyDraftBody,
                   replyDraftRequestedAt: r.replyDraftRequestedAt, intentHint: r.intentHint,
                   replyDraftEditedByDan: r.replyDraftEditedByDan,

@@ -472,38 +472,20 @@ final class Recipient {
             // THEN he blocked the week or took a booking. Nothing should go out pitching a night he
             // cannot work until he says he can.
             && prospect?.hasUnclearedConflict != true
-            && (prospect?.draftNeedsSalutationReview != true || prospect?.isSalutationReviewOverridden == true)
             // #2052: a written email with no subject line does not go out. Held HERE, and not only on the
             // confirmation sheet, because the sheet showed the gap ("(no subject)") and offered Send
             // beside it anyway: a guard on a screen is not a guard. There is no override, unlike the
-            // salutation and lint holds above, because those are judgements about words Dan can stand
-            // behind and this is a field he has not filled in.
+            // greeting and lint holds, because those are judgements about words Dan can stand behind
+            // and this is a field he has not filled in.
             && prospect?.draftIsMissingSubject != true
             && !(looksLikeVenue && !looksLikeVenueDismissed)
             && !(looksLikePressContact && !looksLikePressContactDismissed)
             && !(looksLikeDuplicateContact && !looksLikeDuplicateContactDismissed)
             && !isBlockedByDraftLint
-    }
-
-    // #2010: everything the outgoing email says ABOVE the body, as one visible, editable string.
-    //
-    // Dan's rule, on learning the app added a greeting he could not see: "I want whatever is in the text
-    // box that I see to be what's sent. There should never be any hidden addition that I cannot see in
-    // the app." This is the whole of what used to be added silently at send, brought into one place the
-    // app can render and he can edit.
-    //
-    // The default is character for character what `SendService` used to compose, so nothing about an
-    // untouched pitch changes: the `Attn:` block for a generic inbox (which is itself a surprise, since
-    // it appears only for some addresses) and then the greeting.
-    //
-    // A blank override falls back rather than sending a headless email: clearing a field is how somebody
-    // undoes an edit, not how they ask for no greeting at all. If he ever genuinely wants none, that is a
-    // different request and should look like one.
-    var outgoingOpening: String {
-        if let written = openingOverride?.trimmingCharacters(in: .whitespacesAndNewlines), !written.isEmpty {
-            return written
-        }
-        return Salutation.attnLine(for: self) + Salutation.greeting(for: self)
+            // #2545: a body that does not greet, or greets one person on an email several people get.
+            // Held here rather than only on the draft card for the reason #2052 gives directly above:
+            // a guard on a screen is not a guard.
+            && !isBlockedByGreeting
     }
 
     // #789 / #641: the text THIS recipient actually receives. A directly-addressed performer's own
@@ -530,13 +512,56 @@ final class Recipient {
 
     var isBlockedByDraftLint: Bool { !draftLintBlockers.isEmpty && !isLintOverridden }
 
-    // #2010: Dan's own opening for THIS contact, when he has written one. Nil, the ordinary case, means
-    // Overture's own (see `outgoingOpening` below), so an untouched draft behaves exactly as before.
+    // #2545: the body must open with a greeting, because nothing composes one above it any more. Judged
+    // on `effectiveBody` for the same reason the lint above is: a performer's own letter is judged by
+    // its own words, and what is CHECKED is what is SENT.
     //
-    // Per CONTACT rather than per show, and that is the safety property rather than a detail. His words
-    // (2026-08-03): "if it's multiple i just don't touch it but if it's single and I want to update it I
-    // can". Stored on the show, an edit made while looking at one contact would silently re-address every
-    // other contact by that person's name, which is a mistake he could not see and would not expect.
+    // A missing body is not this guard's business (the send already refuses one), so it answers false
+    // rather than claiming a greeting is absent from text that does not exist.
+    var draftIsMissingGreeting: Bool {
+        guard let body = effectiveBody, !body.isEmpty else { return false }
+        return !DraftGreeting.opensWithAGreeting(body)
+    }
+
+    // #2545: a greeting that names one person on an email more than one person receives.
+    //
+    // This is the cost of moving the greeting inside the body: it is written once, at draft time, and
+    // can no longer re-address itself when the contact list changes underneath it. A reachability check
+    // that fills in a second address next week is exactly how "Hi Emma," ends up in front of Emma and
+    // Tom, so the mismatch is detected rather than left to be noticed in a sent email.
+    //
+    // Only the wrong direction is held. A plain "Hello," to one person is not an error, and on a shared
+    // inbox it is the correct opening, with the `Attn:` block above it naming the desk.
+    var greetingMisaddressed: Bool {
+        guard let prospect else { return false }
+        // A performer's own second-person letter (#634) goes to them alone, whatever else is on the
+        // show, so a name in it is right by construction.
+        if provenance == .performer, overrideBody?.isEmpty == false { return false }
+        return prospect.greetingAudienceSize > 1 && DraftGreeting.namesSomeone(effectiveBody)
+    }
+
+    // #2545: Dan's deliberate override of the two greeting holds, pinned to the EXACT text he took it
+    // on, the same shape as `lintOverriddenBody` above. Editing the body afterwards re-arms the hold
+    // rather than carrying an approval forward onto words nobody has read.
+    var greetingOverriddenBody: String? = nil
+
+    var isGreetingOverridden: Bool {
+        greetingOverriddenBody != nil && greetingOverriddenBody == effectiveBody
+    }
+
+    var isBlockedByGreeting: Bool {
+        (draftIsMissingGreeting || greetingMisaddressed) && !isGreetingOverridden
+    }
+
+    // RETAINED STORAGE, read by nothing (#2545). This held Dan's own opening for THIS contact, back when
+    // the app composed an opening ABOVE the body (#2010). The greeting now lives inside the body, written
+    // by whoever writes the body, so there is no second field for him to override.
+    //
+    // Left on the model deliberately rather than deleted, for the reason given on Prospect's own retained
+    // columns: every schema change this app has made was ADDITIVE and it carries no MigrationPlan or
+    // VersionedSchema (see AppSchema), so dropping a stored property would be its first subtractive
+    // migration against a live store whose only net is the launch backup. Measured 2026-08-12: 3 rows
+    // carry a value here, all of them on shows already contacted.
     var openingOverride: String? = nil
 
     // #2031: which SEND this contact went out with, when it went out with other people. Nil, the ordinary
@@ -587,7 +612,11 @@ final class Recipient {
     // nagging him about a thing that is working.
     var isBlockedAwaitingReview: Bool {
         guard sendState == .pending, email?.isEmpty == false, !pausedByReply else { return false }
-        return (prospect?.draftNeedsSalutationReview == true && prospect?.isSalutationReviewOverridden != true)
+        // #2545: the greeting hold takes the place of #407's, which policed the same thing from the
+        // other side. It belongs HERE and not only in `isSendablePending` for the reason above: a body
+        // that forgot its greeting is one edit from sendable, so the person behind it is waiting, not
+        // finished, and a show must not leave the queue reading as fully sent on their behalf.
+        return isBlockedByGreeting
             || (looksLikeVenue && !looksLikeVenueDismissed)
             || (looksLikePressContact && !looksLikePressContactDismissed)
             || (looksLikeDuplicateContact && !looksLikeDuplicateContactDismissed)
