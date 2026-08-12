@@ -20,6 +20,25 @@ enum WatchlistEditing {
     // quietly", and it was written out by hand in three view bodies across two files, in two different
     // wordings, with no test on any of them. The type that RETURNS `.refused(orgName)` is the type that
     // should say what a refusal means.
+    // #2530: the one row in Overture that must never be quietly rewritten. It records a person having
+    // asked not to be contacted, so its fields are evidence rather than state, and every route into a
+    // WatchedSource has to stop here before touching one.
+    //
+    // `resumeWatching` already refused, and that was read as the guarantee. It was not: it guarded the
+    // RESULT of one route while nothing guarded the row. Found live in PR #2527, whose revive branch
+    // called `editURL` on whatever `resumeWatching` returned, so typing a refused org back in with a
+    // different address rewrote that record's `listingsURL`, cleared its page-derived state and set
+    // `hasUnreadChanges` on a row that must never be read again. Building the guard found five more
+    // routes that did the same, including `stopWatching`, which overwrote `.orgRefusal` with
+    // `.removedByDan` and so erased the very thing that makes the row a refusal (L38).
+    //
+    // Deliberately a check on the ROW, not on any route's arguments, so it cannot be satisfied by a
+    // route that happens not to have been thought of. `RefusedSourceIsImmutableTests` drives every route
+    // the source declares, and fails when a new one appears that this does not cover.
+    static func isRefusalRecord(_ source: WatchedSource) -> Bool {
+        !source.isActive && source.inactiveReason == .orgRefusal
+    }
+
     static func refusedMessage(orgName: String) -> String {
         "\(orgName) asked not to be contacted, so Overture won't watch their calendar."
     }
@@ -111,6 +130,10 @@ enum WatchlistEditing {
     // The row is kept, not deleted. Deleting it would take its feed history with it, and its id is
     // stamped on every prospect it ever surfaced.
     static func stopWatching(_ source: WatchedSource, in context: ModelContext) {
+        // #2530: a refused row is already stopped, and stopping it again overwrote `.orgRefusal` with
+        // `.removedByDan`, which is the difference between "an org asked not to be contacted" and "Dan
+        // stopped watching this". That second one is offered a Watch again button.
+        guard !isRefusalRecord(source) else { return }
         source.isActive = false
         source.inactiveReason = .removedByDan
         try? context.save()
@@ -203,6 +226,9 @@ enum WatchlistEditing {
 
     @discardableResult
     static func editURL(_ source: WatchedSource, to newURL: String, in context: ModelContext) -> EditResult {
+        // #2530: a refusal record keeps the address it was refused at. Repointing it is how PR #2527
+        // nearly put an org that said no back on a page the scout would read.
+        guard !isRefusalRecord(source) else { return .refused(orgName: source.orgName) }
         let url = newURL.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let host = URL(string: url)?.host, !host.isEmpty,
               URL(string: url)?.scheme?.hasPrefix("http") == true else { return .invalidURL }
@@ -257,6 +283,9 @@ enum WatchlistEditing {
     // AddressCorrectionTests guards the CLASS rather than today's fields: a stored property added to
     // WatchedSource must be cleared here or named there as surviving, so the next one cannot be forgotten.
     static func clearStateDerivedFromTheWatchedPage(_ source: WatchedSource) {
+        // #2530: a refused row's page-derived state is the last thing that was true before the refusal,
+        // and no new page will ever be read to replace it, so clearing it destroys rather than refreshes.
+        guard !isRefusalRecord(source) else { return }
         // Feed history + warmup: the new page must re-earn the right to mark anything gone.
         source.baselineFeedCount = 0
         source.successfulCheckCount = 0
@@ -326,6 +355,8 @@ enum WatchlistEditing {
     @discardableResult
     static func setVenueLocation(_ source: WatchedSource, to newLocation: String,
                                  in context: ModelContext) -> Int {
+        // #2530. Nothing placed, because nothing about a refused row may change.
+        guard !isRefusalRecord(source) else { return 0 }
         let trimmed = newLocation.trimmingCharacters(in: .whitespacesAndNewlines)
         source.venueLocation = trimmed.isEmpty ? nil : trimmed
         markForFreshRead(source)
@@ -345,6 +376,7 @@ enum WatchlistEditing {
     // may say about where they are. An empty string clears it back to nil, and those shows leave the queue
     // again on the next read, which is the honest consequence of withdrawing the answer.
     static func setVenueName(_ source: WatchedSource, to newName: String, in context: ModelContext) {
+        guard !isRefusalRecord(source) else { return }   // #2530
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         source.venueName = trimmed.isEmpty ? nil : trimmed
         markForFreshRead(source)
@@ -372,10 +404,16 @@ enum WatchlistEditing {
     enum ConfirmResult: Equatable, Sendable {
         case confirmed
         case noHash
+        // #2530: a refusal record is not a page whose emptiness can be confirmed. Its own case rather
+        // than `noHash`, so the caller is told the row is untouchable rather than that it happened to
+        // have nothing to compare against, which are different facts about different rows (L11).
+        case refused(orgName: String)
     }
 
     @discardableResult
     static func confirmEmpty(_ source: WatchedSource, in context: ModelContext) -> ConfirmResult {
+        // #2530: there is nothing to confirm about a page that will never be read again.
+        guard !isRefusalRecord(source) else { return .refused(orgName: source.orgName) }
         source.health = .ok
         source.lastFailure = nil
         // #1759: Dan has answered the question the repeated-failure line asks him ("Check the link"), and
