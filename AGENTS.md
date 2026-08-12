@@ -120,6 +120,29 @@ already drifting from the Swift version it mirrored.
   still has no gate on it. A scoped run is also exempt from the short-run baseline, and cannot move
   it: the baseline is a full-suite number, so a handful of tests would otherwise read as a 99%
   truncation and then quietly become the bar every later run is measured against.
+  Since #2577 the wrapper also says whether the run is still MOVING, which `NOTHING RAN` cannot,
+  because that gate can only speak once a run has ended and the run it exists for never ends. On
+  2026-08-12 a hang inside a test's untimed wait loop (#2576) went unnoticed for over an hour while a
+  second run sat blocked behind the shared lock, and three consecutive status reports said "waiting on
+  the suite" when the work had been dead throughout. So the wrapper watches its own log for lines
+  REPORTING a test or suite starting or finishing, and prints a loud `NO TEST HAS FINISHED FOR ...`
+  once nothing has reported for the stall limit, repeating on that cadence and withdrawing itself if
+  progress resumes. It never judges by the log GROWING: that hang wrote 21MB of repeated CoreData
+  errors while standing still, so every byte-based or mtime-based signal called it healthy the whole
+  time. It WARNS rather than kills, because a wrong kill throws a whole suite's work away and reports
+  as a failure nobody caused; the cost of warning is that somebody still has to act on it, and the
+  lock stays held until they do.
+  Waiting for the shared lock is deliberately NOT a stall and can never trip it. That distinction is
+  the whole guard: with several worktrees on this Mac contending for one lock, a run that has not
+  started yet is the ordinary case, and a guard that called it a stall would be switched off within a
+  day. It is told apart by evidence rather than by a threshold, since flock prints nothing until it
+  hands the lock over, so a queued run's log is EMPTY and that is proof rather than inference. That
+  state gets its own `STILL WAITING for the shared xcodebuild lock` notice, and a `Got the shared
+  xcodebuild lock after ...` line when the wait ends, so a queued run is no longer silently
+  indistinguishable from a hung one. The build phase is exempt for the same evidential reason: no run
+  has been observed to hang there, so there is no measured number to set a limit from. Retune with
+  `OVERTURE_TEST_STALL_LIMIT_SECONDS`, `OVERTURE_TEST_STALL_CHECK_SECONDS` and
+  `OVERTURE_TEST_LOCK_NOTICE_SECONDS`.
   How long a full run takes is deliberately NOT written down here. It moved as the suite grew and
   the stated figure was wrong by minutes, which matters because the paragraph above tells you to
   check a suspiciously fast run against what a full one costs: an understated number weakens the
