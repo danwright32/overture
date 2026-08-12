@@ -303,14 +303,24 @@ report_build_dir() {
 # checkout's path. Measured 2026-08-12: 148 GB, 101 of 105 folders belonging to directories that had
 # already been deleted, and a volume down to 132 MiB free.
 #
-# Reported, never deleted, even under --apply. This script's remit is the checkout, the actual reclaim
-# already runs on its own inside every scripts/test-all.sh, and delegating rather than reimplementing
-# keeps one rule about what is safe to remove instead of two that can disagree.
+# It follows this script's own mode rather than having one of its own. Dan's call, 2026-08-12: --apply
+# means clean up everything just reported, and a tool that shows a person a pile and then leaves it
+# there reads as having ignored them. A dry run still changes nothing, which is what --apply exists to
+# be typed against.
+#
+# The work itself is DELEGATED to scripts/reclaim-orphan-derived-data.sh rather than reimplemented
+# here, so there is one rule about which folders can never be used again instead of two that can drift
+# apart. That script also runs on its own inside every scripts/test-all.sh, so in the ordinary case
+# there is nothing left here to take.
 report_derived_data() {
   echo "== Xcode build output =="
-  "${SCRIPT_DIR}/reclaim-orphan-derived-data.sh" --dry-run || true
-  echo "  Reclaimed automatically by every scripts/test-all.sh run. To do it now:"
-  echo "    scripts/reclaim-orphan-derived-data.sh"
+  if [[ "${APPLY}" == "yes" ]]; then
+    "${SCRIPT_DIR}/reclaim-orphan-derived-data.sh" || true
+  else
+    "${SCRIPT_DIR}/reclaim-orphan-derived-data.sh" --dry-run || true
+    echo "  Rerun with --apply to reclaim it, or run it directly:"
+    echo "    scripts/reclaim-orphan-derived-data.sh"
+  fi
   echo
 }
 

@@ -121,6 +121,32 @@ already drifting from the Swift version it mirrored.
   worktree holding uncommitted work, and answers every unanswerable question in the keep direction.
   From #2234 both merge scripts also delete the local branch they just merged, since
   `gh pr merge --delete-branch` only removes it on GitHub, which is where the backlog came from.
+- Reclaiming Xcode's build output: `scripts/reclaim-orphan-derived-data.sh` (#2585) deletes the
+  DerivedData folders belonging to worktrees that no longer exist. It runs by itself inside every
+  `scripts/test-all.sh`, so there is nothing to remember; run it by hand only to act immediately.
+  Worth knowing WHY it is separate from the tidy script above. Every other toolchain here caches
+  INSIDE the project directory (`node_modules`, `.next`, `venv`, `__pycache__`), so deleting a
+  worktree reclaims all of it for free. Xcode is the exception: its cache lives outside the checkout
+  and is keyed by the checkout's PATH, so every worktree that is ever built mints a fresh folder of
+  roughly 1.6 GB that nothing reclaimed. This repo mints those paths constantly (one throwaway
+  worktree per pre-merge verification, one per parallel agent), so the growth is proportional to how
+  much the workflow is used and its ceiling is the disk. It reached that ceiling on 2026-08-12: 148 GB
+  across 105 folders, 101 of them pointing at directories already deleted, and 132 MiB free on a
+  926 GiB volume, at which point no command could run at all, including `df`, because the harness
+  could not write the command's own output file. The rule it reclaims by is narrow on purpose: a
+  folder whose `WorkspacePath` no longer EXISTS can never be reused, so deleting it costs nobody a
+  rebuild, and that is a far safer question than how old is too old. Anything it cannot settle is
+  kept, including a workspace on a volume that is merely unmounted. The three SHARED caches
+  (`ModuleCache.noindex`, `CompilationCache.noindex`, `SDKStatCaches.noindex`, another 44 GB when
+  measured) are only counted, never swept, because clearing them costs every project on the Mac one
+  slow build; `--clear-shared-caches` does it when that is what you want. `verify-and-merge-branch.sh`
+  no longer waits for the sweep at all: it removes the folder its own throwaway worktree caused at the
+  moment it removes the worktree. Agent worktrees under `.claude/worktrees/` are torn down by the
+  Claude Code harness, which this repo cannot hook, so those are what the sweep is for.
+  `tidy-checkout.sh` reports the same thing in its dry run and reclaims it under `--apply`, following
+  its own mode rather than carrying a second one. It DELEGATES to the script above rather than
+  reimplementing the rule, so there is one definition of what can never be used again instead of two
+  that can drift apart.
 - Importer: `pnpm test`, `pnpm typecheck`, `pnpm import-history <csv-path>` (one-shot booking
   history import, see `docs/import-history.md`). The scout itself is entirely native; see
   `docs/scout-runbook.md`.

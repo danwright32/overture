@@ -91,11 +91,12 @@ OUTPUT="$(PATH="${WORK}/bin:${PATH}" TIDY_CHECKOUT_REPO_ROOT="${REPO}" \
   XCODE_DERIVED_DATA_ROOT="${DERIVED}" \
   "${SCRIPT_DIR}/tidy-checkout.sh" --apply 2>&1)"
 
-# #2585: this script's remit is the CHECKOUT. Xcode's build output lives outside it and is reclaimed
-# by scripts/reclaim-orphan-derived-data.sh, which every scripts/test-all.sh run already invokes. So
-# tidy-checkout reports it and does not delete it, even under --apply. Asserted in both directions,
-# because "reports it" alone would pass on a version that also deleted it.
-if grep -q "Would reclaim 1 dead build folder" <<< "${OUTPUT}"; then
+# #2585: Xcode's build output is the one cache that lives OUTSIDE the checkout, keyed by the
+# checkout's path, so removing a worktree above reclaims everything it held except that. Dan's call,
+# 2026-08-12: --apply means clean up everything it just showed, so this deletes it rather than
+# reporting it and leaving it. Asserted in both directions, because "reports it" alone would pass on a
+# version that reported and did nothing, which is what it did when first written.
+if grep -q "Reclaimed 1 dead build folder" <<< "${OUTPUT}"; then
   assert "the run reports dead Xcode build output" "yes"
 else
   assert "the run reports dead Xcode build output" "no"
@@ -103,9 +104,9 @@ else
 fi
 
 if [[ -d "${DERIVED}/Overture-dead" ]]; then
-  assert "--apply does not delete outside the checkout" "yes"
+  assert "--apply reclaims dead Xcode build output" "no"
 else
-  assert "--apply does not delete outside the checkout" "no"
+  assert "--apply reclaims dead Xcode build output" "yes"
 fi
 
 BRANCHES="$(git -C "${REPO}" for-each-ref --format='%(refname:short)' refs/heads/)"
@@ -149,13 +150,37 @@ git -C "${REPO}" format-patch -1 --stdout > "${WORK}/second.patch"
 git -C "${REPO}" checkout -q main
 git -C "${REPO}" am -q < "${WORK}/second.patch"
 
+# A second dead build folder, so the dry run below has something it COULD take. Without one, the
+# assertion that it takes nothing would pass on an empty root and prove nothing.
+mkdir -p "${DERIVED}/Overture-dead-again"
+cat > "${DERIVED}/Overture-dead-again/info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>WorkspacePath</key>
+	<string>${WORK}/another-worktree-that-is-gone/mac/Overture.xcodeproj</string>
+</dict>
+</plist>
+PLIST
+
+# XCODE_DERIVED_DATA_ROOT on this call too, not only the one above: without it a dry run would read
+# the real ~/Library/Developer/Xcode/DerivedData, and a fixture must be structurally unable to reach
+# it whichever path through the script it takes (L2).
 PATH="${WORK}/bin:${PATH}" TIDY_CHECKOUT_REPO_ROOT="${REPO}" \
+  XCODE_DERIVED_DATA_ROOT="${DERIVED}" \
   "${SCRIPT_DIR}/tidy-checkout.sh" >/dev/null 2>&1
 
 if git -C "${REPO}" for-each-ref --format='%(refname:short)' refs/heads/ | grep -qx "shipped-again"; then
   assert "a dry run deletes nothing, even a branch it would remove" "yes"
 else
   assert "a dry run deletes nothing, even a branch it would remove" "no"
+fi
+
+if [[ -d "${DERIVED}/Overture-dead-again" ]]; then
+  assert "a dry run leaves dead build output alone too" "yes"
+else
+  assert "a dry run leaves dead build output alone too" "no"
 fi
 
 echo
