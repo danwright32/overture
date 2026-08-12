@@ -26,6 +26,16 @@ LOCK_FILE="/tmp/overture-mac-tests.lock"
 # as a catastrophically short run. A test that can reach real state should be structurally unable to
 # (L2), and this is also what stops a fixture rewriting the baseline the real gate is measured against.
 BASELINE_FILE="${OVERTURE_TEST_BASELINE_FILE:-${HOME}/.overture-mac-test-baseline}"
+# #2321: where a diagnostic the run cannot print in full is KEPT, and how many are kept there. The
+# pure-suite fallback's output is the only artifact naming the cause of a failure this script cannot
+# explain, and it used to be deleted on the line after the one that named it.
+#
+# A fixed directory holding a fixed number of files: several worktrees run this script on this Mac at
+# once, so it is shared, and a shared directory that only ever grows is a second problem. Overridable
+# for the same reason BASELINE_FILE is, so the shell fixtures are structurally unable to write into
+# the real one (L2).
+DIAGNOSTICS_DIR="${OVERTURE_TEST_DIAGNOSTICS_DIR:-${HOME}/.overture-mac-test-diagnostics}"
+DIAGNOSTICS_KEEP=5
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MAC_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # #2193/#2232: the suite's own shape, reported by the run instead of hand-written into a document.
@@ -319,6 +329,66 @@ report_host_log_evidence() {
   fi
 }
 
+# --- keeping the evidence when the runner cannot explain a failure (#2321) ------------------
+#
+# The pure-suite fallback (#1967) is the last thing this script tries when a run dies. Its output
+# goes to a FILE and never to the screen, because on the common path it is only asked for one line
+# ("the PURE suite PASSED, N tests"). When it does NOT pass, that file is the only artifact anywhere
+# naming the cause, and the message that named it was followed on the very next line by `rm -f`.
+#
+# Measured 2026-08-08: three consecutive full runs failed this way. The message sent the
+# investigation at the app host, then at an external kill, both wrong, and the cause was recovered
+# only by reproducing the run by hand for another 20 minutes to produce output that had already
+# existed twice. Since #1347 this run is the ONLY thing verifying the Mac app before it reaches main,
+# so the case where it cannot explain itself is exactly the case that must not cost an hour.
+#
+# Both halves are done, deliberately, because neither alone is enough: the handful of lines that name
+# the cause are PRINTED (a path is not an answer, and the whole file is thousands of lines of build
+# chatter), and the whole file is KEPT (this filter only knows the shapes seen so far, so the next
+# cause it has never met must still be readable somewhere).
+
+# pure_failure_evidence <pure suite output>. The lines that name WHY the pure suite did not pass:
+# every test it named as failing, plus the infrastructure lines that explain a run which named none.
+#
+# The infrastructure patterns are exact shapes, never the bare word "error", for the same reason
+# build_failed above is: every run of this suite prints CoreData noise carrying "error:", and a
+# filter that keeps that buries the lines that matter, which is the same defect as printing nothing.
+pure_failure_evidence() {
+  local output="$1" named infra
+  # The same block run_outcome reads to decide "failed": every line xcodebuild lists under
+  # "Failing tests:" is a named failure, and on a pure-suite failure those names ARE the evidence.
+  named="$(awk '/^Failing tests:/{f=1;next} /^\*\* TEST/{f=0} f' <<< "${output}" \
+    | grep -a '[^[:space:]]' | head -20 || true)"
+  # A wedged testmanagerd (2026-08-08), a host that could not launch, a relaunch after an unexpected
+  # exit, and code that did not compile. The LAST of these are the ones nearest the death.
+  infra="$(grep -aE 'encountered an error|Timed out |Could not launch|Restarting after unexpected exit|^[^[:space:]].*:[0-9]+:[0-9]+: (fatal )?error: ' <<< "${output}" \
+    | tail -20 || true)"
+  printf '%s\n%s\n' "${named}" "${infra}" | grep -a '[^[:space:]]' | tail -20 || true
+}
+
+# keep_diagnostic_file <source file> [dir] [keep]. Copies the file somewhere it OUTLIVES the run and
+# prints the path it kept it at, then prunes the directory to the newest <keep> diagnostics. Prints
+# nothing when it could not keep it, so the caller says what actually happened rather than naming a
+# path that does not exist, which is the whole defect this exists to fix (L11).
+#
+# mktemp does the naming, so two worktrees crashing in the same second get two files rather than one
+# silently overwriting the other at exactly the moment both are worth reading. The timestamp leads,
+# so a plain name sort is oldest-first and the prune below needs no stat of any kind.
+keep_diagnostic_file() {
+  local source_file="$1" dir="${2:-${DIAGNOSTICS_DIR}}" keep="${3:-${DIAGNOSTICS_KEEP}}"
+  local kept old
+  mkdir -p "${dir}" 2>/dev/null || return 0
+  kept="$(mktemp "${dir}/pure-suite-$(date +%Y%m%d-%H%M%S).XXXXXX" 2>/dev/null)" || return 0
+  cp "${source_file}" "${kept}" 2>/dev/null || { rm -f "${kept}"; return 0; }
+  # Bounded by deleting the OLDEST, so the shared directory stays a fixed size however many runs
+  # crash. `sort -r` puts the newest first; everything past the keep count is older than all of them.
+  while IFS= read -r old; do
+    [[ -n "${old}" ]] && rm -f "${old}"
+  done < <(find "${dir}" -maxdepth 1 -name 'pure-suite-*' -type f 2>/dev/null \
+    | sort -r | tail -n "+$(( keep + 1 ))")
+  echo "${kept}"
+}
+
 main() {
   command -v flock >/dev/null || { echo "flock not found; install it with: brew install flock" >&2; exit 1; }
 
@@ -498,8 +568,29 @@ main() {
         echo "So the domain logic is fine and the failure above is the APP HOST, not your code. What is" >&2
         echo "unverified is only the hosted tests (the handful that render a real SwiftUI view)." >&2
       else
-        echo "run-tests-locked.sh: the PURE suite also did not pass (${pure_outcome}). Its output is in" >&2
-        echo "${pure_output} and this is NOT just a host problem." >&2
+        # #2321: this is the one branch where the script has nothing left to say about the cause, so
+        # the diagnostic is the whole value of the message. Say what the output names, and keep the
+        # output, instead of naming a file and deleting it on the next line.
+        local pure_evidence pure_kept
+        pure_evidence="$(pure_failure_evidence "$(cat "${pure_output}")")"
+        pure_kept="$(keep_diagnostic_file "${pure_output}")"
+        echo "run-tests-locked.sh: the PURE suite also did not pass (${pure_outcome}), so this is NOT" >&2
+        echo "just a host problem." >&2
+        if [[ -n "${pure_evidence}" ]]; then
+          echo "What its output names as the cause:" >&2
+          sed 's/^/  /' <<< "${pure_evidence}" >&2
+        else
+          echo "Its output named no cause in any shape this script knows how to read." >&2
+        fi
+        if [[ -n "${pure_kept}" ]]; then
+          echo "Its FULL output is kept at:" >&2
+          echo "  ${pure_kept}" >&2
+          echo "(that directory keeps the last ${DIAGNOSTICS_KEEP}; older ones are deleted.)" >&2
+        else
+          echo "Its full output could NOT be kept (nothing could be written under ${DIAGNOSTICS_DIR})," >&2
+          echo "so the lines above are all there is. Reproduce it with:" >&2
+          echo "  xcodebuild -scheme OvertureCore -destination 'platform=macOS' test" >&2
+        fi
       fi
       rm -f "${pure_output}"
     fi
