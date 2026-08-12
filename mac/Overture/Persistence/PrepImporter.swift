@@ -338,6 +338,12 @@ enum PrepImporter {
                                               raw: c.confidence, sourceURL: c.sourceUrl),
                                           contactFormURL: c.formUrl,
                                           contactSourceURL: c.sourceUrl)
+                // #1866: and the fact that it did, so "Unverified email found" can say which of the two
+                // things put it there. Written here rather than derived at read time because the guard
+                // rewrites the confidence in place: once `high` has become `low` the row no longer holds
+                // what the run actually claimed, so nothing downstream could work it out again.
+                recipient.heldDownToUnverified = ContactConfidenceGuard.heldDown(raw: c.confidence,
+                                                                                 sourceURL: c.sourceUrl)
                 // overrideBody is only ever meaningful for a .performer recipient (#640); see apply()'s
                 // matching guard for why a non-performer contact never carries one.
                 recipient.overrideBody = provenance == .performer ? c.overrideBody : nil
@@ -427,8 +433,19 @@ enum PrepImporter {
         // #1856: the same bar as a freshly appended contact, judged on the pair this ingest LEAVES
         // BEHIND. The two fields fall back independently above, so a re-run can raise a recipient to
         // high while carrying no page of its own, and only the result is the claim Dan reads.
+        // #1866: judged on that same pair, and re-derived on EVERY ingest rather than latched, exactly like
+        // the three guesses below. A later run that finally names the page clears this along with the
+        // downgrade it explains; a re-run that still cites nothing keeps saying so, which is the live case
+        // (the run does not know Overture downgraded it, so it reports `high` again every time).
+        let heldDown = ContactConfidenceGuard.heldDown(raw: r.contactConfidenceRaw,
+                                                       sourceURL: r.contactSourceURL)
         r.contactConfidenceRaw = ContactConfidenceGuard.confidence(raw: r.contactConfidenceRaw,
                                                                    sourceURL: r.contactSourceURL)
+        // Dan's overrule is a judgement about THIS address, so a genuinely different address gets it asked
+        // again: the same reset-on-real-change convention the venue and duplicate guesses use below. Placed
+        // here rather than in that block because the guard itself runs on every contact, manual included.
+        if r.email != priorEmail { r.heldDownToUnverifiedDismissed = false }
+        r.heldDownToUnverified = heldDown
         // overrideBody is only ever meaningful for a .performer recipient (#640): unlike the fields
         // above, a reclassification AWAY from .performer must CLEAR it rather than preserve it, or a
         // recipient now treated as a generic act/presenter contact would keep stale second-person

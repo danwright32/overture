@@ -375,6 +375,16 @@ enum ProspectMutations {
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
+    // #1866: same shape again. Dan says this address really does belong to the act, so the guard that held
+    // a confident find down for naming no page stops speaking for it and the card stops calling it
+    // unverified. The three above unblock a send; this one corrects a claim, which is the only difference.
+    static func dismissConfidenceHeldDown(_ item: QueueItem, _ recipientId: String,
+                                          prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        model.updateRecipient(id: recipientId) { $0.heldDownToUnverifiedDismissed = true }
+        context.saveOrWarn(org: item.groupName, feedback: feedback)
+    }
+
     static func draftReply(_ item: QueueItem, _ recipientId: String, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         model.updateRecipient(id: recipientId) { $0.replyDraftRequestedAt = Date() }

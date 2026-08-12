@@ -60,6 +60,8 @@ struct ProspectRowView: View {
     var onDismissVenueMatch: (_ recipientId: String) -> Void = { _ in }
     var onDismissPressContactMatch: (_ recipientId: String) -> Void = { _ in }
     var onDismissDuplicateContactMatch: (_ recipientId: String) -> Void = { _ in }
+    // #1866: Dan overruling the guard that held a confident find down to unverified.
+    var onDismissConfidenceHeldDown: (_ recipientId: String) -> Void = { _ in }
     var onDraftReply: (_ recipientId: String) -> Void = { _ in }
     var onSendReply: (_ recipientId: String) -> Void = { _ in }
     var onCopyReply: (_ recipientId: String) -> Void = { _ in }
@@ -190,6 +192,7 @@ struct ProspectRowView: View {
                     onDismissVenueMatch: onDismissVenueMatch,
                     onDismissPressContactMatch: onDismissPressContactMatch,
                     onDismissDuplicateContactMatch: onDismissDuplicateContactMatch,
+                    onDismissConfidenceHeldDown: onDismissConfidenceHeldDown,
                     onAddRecipient: onAddRecipient,
                     onRemoveRecipient: onRemoveRecipient,
                     onDraftReply: onDraftReply,
@@ -622,8 +625,12 @@ struct ProspectRowView: View {
                              // The hover has to follow the WORDING. When the badge says nothing found
                              // was verified, the explanation must say what that means; leaving the plain
                              // "a check found a contact you can email" there explains the wrong thing.
+                             // #1866: and WHICH of the two made it unverified. The check being unsure and
+                             // the check being sure while citing nothing are different situations for Dan,
+                             // and they wore one sentence.
                              help: item.onlyUnverifiedEmailsFound
-                                 ? ReachabilityCopy.unverifiedEmailFoundHelp
+                                 ? ReachabilityCopy.unverifiedEmailFoundHelp(
+                                     heldDown: item.unverifiedBecauseAGuardHeldItDown)
                                  : item.inheritedReachability.map {
                                      ReachabilityCopy.inheritedEmailFoundHelp(organisation: $0.organisation)
                                  } ?? ReachabilityCopy.emailFoundHelp)

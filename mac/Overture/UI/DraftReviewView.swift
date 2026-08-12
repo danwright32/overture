@@ -49,6 +49,8 @@ struct DraftReviewView: View {
     // #722: same, for a suspected press/media contact.
     var onDismissPressContactMatch: (_ recipientId: String) -> Void = { _ in }
     var onDismissDuplicateContactMatch: (_ recipientId: String) -> Void = { _ in }
+    // #1866: same, for a confident find held down to unverified because it named no page.
+    var onDismissConfidenceHeldDown: (_ recipientId: String) -> Void = { _ in }
     var onAddRecipient: (_ email: String, _ name: String?) -> Void = { _, _ in }
     var onRemoveRecipient: (_ recipientId: String) -> Void = { _ in }
     // AI reply drafter (#420 C6 / #421): request a draft, send it on the contact's thread, or copy it out.
@@ -117,6 +119,7 @@ struct DraftReviewView: View {
             venueMatchWarnings
             pressContactWarnings
             duplicateContactWarnings
+            confidenceHeldDownWarnings
             draftBlock
             performerOverridePreviews
             actionRow
@@ -213,6 +216,15 @@ struct DraftReviewView: View {
         recipientWarning(item.contacts.filter { $0.looksLikeDuplicateContact && !$0.looksLikeDuplicateContactDismissed },
                         message: { DraftReviewNotes.duplicateSuspect(name: $0.displayName) },
                         dismissLabel: "Not a duplicate", onDismiss: onDismissDuplicateContactMatch)
+    }
+
+    // #1866: the fourth, through the SAME warning row as the three above rather than a new mechanism. It is
+    // the only place a contact guard has ever been answerable, so putting the overrule anywhere else would
+    // mean two ways to answer a guard depending on which one fired.
+    @ViewBuilder private var confidenceHeldDownWarnings: some View {
+        recipientWarning(item.contacts.filter(\.isHeldDownToUnverified),
+                        message: { DraftReviewNotes.confidenceHeldDown(name: $0.displayName) },
+                        dismissLabel: "It's their address", onDismiss: onDismissConfidenceHeldDown)
     }
 
     // #2010: the top of the email, on screen. Dan's rule (2026-08-03): "I want whatever is in the text

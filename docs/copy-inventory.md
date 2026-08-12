@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1229 sentences**.
+Every sentence Overture can say to Dan: **1232 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -866,6 +866,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/AddLeadSheet.swift`
 "It leaves your queue, filed as \(reason.label)."
     `Domain/BulkDismiss.swift`
+"It's their address"
+    `UI/DraftReviewView.swift`
 "Its listing page couldn't be read"
     `Domain/ShowSummary.swift`
 "Its listing publishes no description"
@@ -1140,6 +1142,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/PrepQueueService.swift`
 "Nothing on this feed names a room, so its shows are filed under \(org)."
     `UI/SourcesView.swift`
+"Nothing recorded which page \(name)'s address was read off, so it isn't counted as verified."
+    `Domain/DraftReviewNotes.swift`
 "Nothing scouted yet"
     `Domain/EmptyState.swift`
 "Nothing to act on. Shows you've emailed appear here for a gentle follow-up, and again once the date has passed so you can close them out. They drop off the moment you record how one ended."
@@ -1776,6 +1780,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "The calendars Overture re-checks on every scout."
     `UI/SourcesView.swift`
 "The check couldn't name anyone to research for this show, so it never got as far as looking for an address. If you know who puts this on, add a contact by hand and it's back in play."
+    `Domain/Reachability.swift`
+"The check said it had verified the address here but never named the page it read it off, so Overture isn't treating it as verified. It may well be right: if you recognise it, say so on the review panel and it stops being called unverified."
     `Domain/Reachability.swift`
 "The city and state it's in"
     `UI/SourcesView.swift`

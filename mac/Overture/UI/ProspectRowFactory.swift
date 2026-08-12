@@ -138,6 +138,7 @@ enum ProspectRowFactory {
             onDismissVenueMatch: { rid in ProspectMutations.dismissVenueMatch(item, rid, prospects: prospects, context: context, feedback: feedback) },
             onDismissPressContactMatch: { rid in ProspectMutations.dismissPressContactMatch(item, rid, prospects: prospects, context: context, feedback: feedback) },
             onDismissDuplicateContactMatch: { rid in ProspectMutations.dismissDuplicateContactMatch(item, rid, prospects: prospects, context: context, feedback: feedback) },
+            onDismissConfidenceHeldDown: { rid in ProspectMutations.dismissConfidenceHeldDown(item, rid, prospects: prospects, context: context, feedback: feedback) },
             onDraftReply: { rid in ProspectMutations.draftReply(item, rid, prospects: prospects, context: context, feedback: feedback) },
             onSendReply: onSendReply,
             onCopyReply: { rid in ProspectMutations.copyReply(item, rid, prospects: prospects, context: context, feedback: feedback) },

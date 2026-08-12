@@ -466,8 +466,14 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     //
     // Per CONTACT, not per row, because a self-produced show can find two performers and verify only one
     // of them. That is why the mark lives on the address line and not on the row's badge.
+    // #1866: unless Dan has overruled the guard that put it here. A contact held down by
+    // ContactConfidenceGuard stores `low` because the run named no page, not because anybody judged the
+    // address weak; when he says the address really is theirs, that answer is the better evidence and the
+    // card stops calling it unverified. Nothing else changes: the stored confidence still says what the
+    // guard left, and contactSourceLinkURL still refuses to print a citation that does not exist.
     private static func isUnverified(_ c: RecipientSnapshot) -> Bool {
-        c.contactConfidence != .high
+        if c.heldDownToUnverified && c.heldDownToUnverifiedDismissed { return false }
+        return c.contactConfidence != .high
     }
 
     // An address INHERITED from another show by the same organisation (#1598 Phase 5) is deliberately
@@ -498,6 +504,29 @@ struct QueueItem: Identifiable, Equatable, Sendable {
         let shown = displayedContactEmails
         guard !shown.isEmpty else { return false }
         return shown.allSatisfy { unverifiedContactEmails.contains($0) }
+    }
+
+    // #1866: WHY the badge above says unverified, which is the half it could never say. Either the check
+    // looked and was not sure, or the check WAS sure and ContactConfidenceGuard held it down for naming no
+    // page. Same badge, same tone, same position: only the hover sentence differs (the #1722 rule the
+    // weak-contact badge already follows).
+    //
+    // Only ever true where the badge is actually showing that wording, so a plain "Email found" row can
+    // never reach the held-down explanation. Judged over the addresses the card PRINTS, because an
+    // inherited address has no contact behind it and no guard ever ran on one.
+    //
+    // "EVERY" is load-bearing, the same way "all" is in onlyUnverifiedEmailsFound above, and for the same
+    // reason: this badge speaks for the whole row rather than for one address (the per-address caveat was
+    // retired in #1628). On a row holding one held-down find beside one ordinarily weak one, the held-down
+    // sentence would be a true statement about half of what Dan is looking at, which is how the previous
+    // wording came to say "this one" about a list. The general sentence stays true of everything shown.
+    var unverifiedBecauseAGuardHeldItDown: Bool {
+        guard onlyUnverifiedEmailsFound else { return false }
+        let held = Set(contacts.filter(\.isHeldDownToUnverified).compactMap {
+            $0.email?.trimmingCharacters(in: .whitespacesAndNewlines)
+        }.filter { !$0.isEmpty })
+        let shown = displayedContactEmails
+        return !shown.isEmpty && shown.allSatisfy { held.contains($0) }
     }
 
 
@@ -636,6 +665,15 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     // looks like the same real-world performance.
     var looksLikeDuplicateContact: Bool = false
     var looksLikeDuplicateContactDismissed: Bool = false
+    // #1866: same shape again, for the guard that held a confident find down to unverified because it
+    // named no page it was read off. Carried so the card can say WHICH of the two things made its
+    // addresses unverified, and so the review panel can offer Dan the same overrule the three above have.
+    var heldDownToUnverified: Bool = false
+    var heldDownToUnverifiedDismissed: Bool = false
+
+    // #1866: mirrors Recipient.isHeldDownToUnverified, so the screen and the stored row answer "is this
+    // hold in force" through one rule rather than two spellings of it.
+    var isHeldDownToUnverified: Bool { heldDownToUnverified && !heldDownToUnverifiedDismissed }
 
     // #363: the confidence badge becomes a clickable link to where the contact was actually
     // verified, so "high confidence" is checkable instead of an unverifiable assertion. Gated
@@ -2338,7 +2376,9 @@ extension RecipientSnapshot {
                   looksLikePressContact: r.looksLikePressContact,
                   looksLikePressContactDismissed: r.looksLikePressContactDismissed,
                   looksLikeDuplicateContact: r.looksLikeDuplicateContact,
-                  looksLikeDuplicateContactDismissed: r.looksLikeDuplicateContactDismissed)
+                  looksLikeDuplicateContactDismissed: r.looksLikeDuplicateContactDismissed,
+                  heldDownToUnverified: r.heldDownToUnverified,
+                  heldDownToUnverifiedDismissed: r.heldDownToUnverifiedDismissed)
     }
 }
 

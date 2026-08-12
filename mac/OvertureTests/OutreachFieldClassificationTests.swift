@@ -49,6 +49,8 @@ struct OutreachFieldClassificationTests {
         "looksLikePressContactDismissed": "Dan waving that guard off, an answer about the address",
         "looksLikeDuplicateContact": "a guard's opinion of the address",
         "looksLikeDuplicateContactDismissed": "Dan waving that guard off, an answer about the address",
+        "heldDownToUnverified": "a guard's opinion of how the address was cited",
+        "heldDownToUnverifiedDismissed": "Dan waving that guard off, an answer about the address",
 
         // Drafted, not sent. A body exists on a contact nobody has written to yet, which is exactly the
         // state the merge is for.

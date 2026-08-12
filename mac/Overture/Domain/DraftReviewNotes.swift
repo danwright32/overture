@@ -98,6 +98,13 @@ enum DraftReviewNotes {
     static func duplicateSuspect(name: String) -> String {
         "\(name) may already be pitched for a nearby show; blocked from sending."
     }
+
+    // #1866: the fourth guard's warning line, in the same list as the three above. It deliberately does NOT
+    // say "blocked from sending", because this one blocks nothing: it downgrades what the card claims about
+    // the address. Saying otherwise would be the L11 overclaim the badge itself was just fixed for.
+    static func confidenceHeldDown(name: String) -> String {
+        "Nothing recorded which page \(name)'s address was read off, so it isn't counted as verified."
+    }
 }
 
 // #885 (guard sweep): the rest of DraftReviewView's computed copy.
