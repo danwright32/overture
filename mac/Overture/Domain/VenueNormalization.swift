@@ -127,7 +127,13 @@ enum VenueNormalization {
 
         var kept = [clauses[0]]
         for clause in clauses.dropFirst() {
-            guard let first = clause.first, !first.isNumber else { break }
+            // #1852: asked through the shared street-clause test rather than "does it start with a
+            // digit". That digit test was a PROXY for "this clause is an address", measured when every
+            // address clause in the store happened to open with a house number, and it has since been
+            // seen to miss: `Sakura Park, W 122nd St & Riverside Dr` printed its whole address on the
+            // card. The #1030 promise that no street address reaches a card was holding by luck of
+            // phrasing rather than by rule.
+            guard !StreetClause.isAddress(clause) else { break }
             kept.append(clause)
         }
         return kept.joined(separator: ", ")
