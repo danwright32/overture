@@ -27,6 +27,19 @@ APP_NAME="Overture.app"
 DEST="/Applications/${APP_NAME}"
 BUILD_DIR="$(pwd)/build"
 
+# #1526: prove codesign will actually accept the stable signing identity BEFORE anything is built,
+# regenerated or replaced. The install signs the bundle at the very end, so an identity codesign
+# refuses used to surface only after a full Release build had run and /Applications/Overture.app had
+# already been deleted and replaced: the two most expensive minutes and the one irreplaceable thing,
+# both spent before the failure was known (2026-07-26). This is deliberately the FIRST thing the
+# script does, above the xcodegen regeneration as well, because that rewrites the checked-in Xcode
+# project. The check signs a throwaway bundle with the same function that signs the real one, so it
+# cannot pass while the real sign would fail.
+echo "==> Checking the stable signing identity"
+if ! overture_verify_signing_identity_usable; then
+  exit 1
+fi
+
 if command -v xcodegen >/dev/null; then
   echo "==> Regenerating ${PROJECT} (xcodegen)"
   xcodegen generate >/dev/null

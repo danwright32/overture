@@ -196,6 +196,34 @@ struct RootView: View {
                                             today: QueueModel.easternToday(now), now: now)
     }
 
+    // #1900: whether Dan's shoot history file is there, readable, and recent enough to be worth drafting
+    // from. Held rather than derived on every read, because answering it decodes a JSON file, and this
+    // view is on the render path (the reason ClientRoster exists, and the reason #1960 had to stop the
+    // days-off mark being worked out three times to draw one button). nil until something has actually
+    // looked, so the masthead says nothing rather than vouching for a file nobody has opened.
+    @State private var shootHistoryHealth: ShootHistory.Health?
+
+    // The ONE place the file is read for this line, so the launch load and the notice's own re-read
+    // cannot reach different verdicts about the same file.
+    // Returns what it read as well as storing it, so the caller that has to ANSWER the read never has
+    // to re-derive it from the state (or invent a fallback for an optional that cannot be empty here).
+    @discardableResult
+    private func readShootHistoryHealth() -> ShootHistory.Health {
+        let health = ShootHistory.loadWithHealth(now: Date()).health
+        shootHistoryHealth = health
+        return health
+    }
+
+    // #1900: the same read, ANSWERED, for the press Dan makes after running the import himself.
+    // Silence would be wrong here in the one case that matters: an import that did not take leaves the
+    // verdict unchanged and the masthead line exactly where it was, so a control that worked and one
+    // that never registered look identical (L12). The launch load stays silent for the opposite reason:
+    // nobody asked it anything.
+    private func rereadShootHistoryHealth() {
+        let answer = ActionAck.shootHistoryReread(readShootHistoryHealth())
+        feedback.acknowledge(answer.text, tone: answer.resolved ? .info : .warning)
+    }
+
     private var daysOffReason: DaysOffAttention.Reason {
         DaysOffAttention.reason(
             ScoutService.blockedCalendar(export: DownbeatBridge.loadedExport(), context: context),
@@ -413,8 +441,12 @@ struct RootView: View {
                   // Dan's ordinary window width, and onto the masthead he reads.
                   // #2478: and the Downbeat export that has lost every shoot it was carrying, which is
                   // upstream of everything else this screen shows.
+                  // #1900: and whether the shoot history behind "you've photographed this room before"
+                  // is still worth drafting from. It is refreshed by hand, so nothing else on this
+                  // screen would ever say it had gone stale.
                   notices: AppNotices.current(omniFocusFailing: omniFocusFailedAt > 0,
-                                              bookingsVanished: bookingsVanished, status: status),
+                                              bookingsVanished: bookingsVanished,
+                                              shootHistory: shootHistoryHealth, status: status),
                   // #2250: the remedy a notice names, run from here where the sync lives.
                   onNoticeAction: { action in
                       switch action {
@@ -431,6 +463,12 @@ struct RootView: View {
                       // A fixed export clears the line on the spot; a still-broken one leaves it standing,
                       // which is the honest answer to "has Overture noticed yet".
                       case .recheckDownbeatExport: DownbeatBookingFeedStore.observe(now: Date())
+                      // #1900: Dan has run the shoot-history import, so read the file again through the
+                      // same call the launch load uses (pressing this and relaunching can never reach
+                      // different verdicts) and SAY what it found. A finished import clears the line on
+                      // the spot; an import that did not take leaves it standing, and that outcome is
+                      // the whole reason the press answers rather than changing nothing in silence.
+                      case .recheckShootHistory: rereadShootHistoryHealth()
                       }
                   },
                   onShowFollowUps: { showFollowUps = true },
@@ -824,6 +862,11 @@ struct RootView: View {
             // own. It is a count, so a client RENAMED without the total moving does not move it; the
             // launch load is what covers that, and the gap between them is a session.
             .task { clientRoster?.reload() }
+            // #1900: and read the shoot history's verdict at launch, for the same reason: without this
+            // the masthead holds nil forever and the warning is built but never wired (L3). Once per
+            // launch is enough for a file only a manual import rewrites, and the notice's own re-read
+            // control covers the case where Dan runs that import mid-session.
+            .task { readShootHistoryHealth() }
             .onChange(of: feedClientCount) { clientRoster?.reload() }
             .task {
                 guard AppEnvironment.shouldStartBackgroundServices else { return }

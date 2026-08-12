@@ -51,6 +51,11 @@ enum AppNoticeAction: Equatable, Sendable {
     // #2478: re-read Downbeat's export now, so the line reporting a broken one clears the moment a good
     // one lands rather than waiting for the next reconcile tick.
     case recheckDownbeatExport
+    // #1900: Dan reports that he has run the shoot-history import, so Overture reads the file again.
+    // It cannot export his Shoots calendar or run the import for him (it holds no calendar permission
+    // and asks for none); without this the line would stand until the next launch even after he had
+    // done both. See `title` for why it is phrased as his report rather than as a re-read.
+    case recheckShootHistory
 
     // What the control says. Short, because it sits at the end of a sentence that has just said what is
     // wrong, and repeating that would be the same thing twice (#843).
@@ -64,6 +69,19 @@ enum AppNoticeAction: Equatable, Sendable {
         // buttons reading the same and doing different things, one of them paid, is worse than a longer
         // label (#843).
         case .recheckDownbeatExport: return "Re-read the export"
+        // Dan's own words, like "I sent it" and "I turned them down", NOT another "Re-read the ..." in
+        // Overture's. The label has to survive being read by someone who has not re-exported anything,
+        // and every "Re-read"/"Re-check" wording fails that test: it sits directly beneath a sentence
+        // telling him to re-export his calendar and run the import, so its position promises it IS that
+        // remedy, while all it can do is read the file already on disk. Pressed before the import, it
+        // re-reads the same stale file and reports the same staleness, which is a control that visibly
+        // does nothing sitting under the instruction it appears to carry out (L44).
+        //
+        // What it is genuinely for is the moment AFTER: he has run the import in the terminal and wants
+        // the line to clear without relaunching. So the label states the thing only he can know, and the
+        // re-read is what Overture does about it. True of a first import and a fourth, which is what
+        // lets one label serve the missing state as well as stale and unreadable.
+        case .recheckShootHistory: return "I've run the import"
         // Deliberately not "Retry". A Prep run's shortfall genuinely re-queues itself, and this does not:
         // it starts a new paid run over a set of shows, through the same confirmation as any other check.
         case .finishShowsACheckMissed: return "Check the rest"
@@ -166,12 +184,39 @@ enum AppNotices {
         }
     }
 
+    // #1900: the shoot history file is missing, unreadable, or months past its window.
+    //
+    // The verdict has existed since #1895 and reached nobody: `VenueShootHistory.current()` took the
+    // shoots out of `loadWithHealth`'s tuple and dropped the health, so the check ran on every prep queue
+    // build and nothing displayed any of it (L3, L46). What it costs while silent is invisible by
+    // construction: the file is refreshed by a manual export Dan has to remember to redo, so an old one
+    // simply under-reports the rooms he has worked, and a pitch that could say he has shot this room
+    // before says nothing instead. A stale count and an accurate one look identical.
+    //
+    // The SENTENCE is `ShootHistory.warningText`'s, not a second wording written here, for the reason
+    // ScoutWarnings gives about the strings it carries as-is: one fault must have one wording. Each of
+    // the three states keeps its own, because "we could not read it" and "it is old" call for different
+    // things from Dan (L11).
+    //
+    // A warning rather than a receipt in all three states, including `missing`, which the domain type
+    // rightly calls a normal state rather than a fault. Normal is not the same as harmless: while it is
+    // true, a whole drafting input is empty and nothing else on this screen would ever say so.
+    static func shootHistoryWarning(_ health: ShootHistory.Health) -> AppNotice? {
+        guard let text = ShootHistory.warningText(for: health) else { return nil }
+        return AppNotice(text: text, tone: .warning, action: .recheckShootHistory)
+    }
+
+    // `shootHistory` is OPTIONAL, and nil means nothing has looked yet rather than a clean bill of
+    // health. A verdict is a measurement, and defaulting to `.ok` before the read would put the
+    // reassuring answer on the one state nobody has checked (L11).
     static func current(omniFocusFailing isFailing: Bool,
                         bookingsVanished: DownbeatBookingFeed.Vanished? = nil,
+                        shootHistory: ShootHistory.Health? = nil,
                         status: StatusLine) -> [AppNotice] {
         var notices: [AppNotice] = []
         if let bookingsVanished { notices.append(downbeatShootsVanished(bookingsVanished)) }
         if isFailing { notices.append(omniFocusFailing) }
+        if let shootHistory, let notice = shootHistoryWarning(shootHistory) { notices.append(notice) }
         if let text = status.text {
             notices.append(AppNotice(text: text,
                                      tone: status.priority == .warning ? .warning : .receipt,

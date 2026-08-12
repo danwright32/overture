@@ -106,6 +106,26 @@ enum ActionAck {
         "Hidden for a week. Overture still can't keep clear of shoots it doesn't know about."
     }
 
+    // #1900: what Dan gets back for pressing "I've run the import" on the shoot history warning.
+    //
+    // It exists because the press has an outcome that changes NOTHING on screen. If the import did not
+    // take (he re-exported the wrong calendar, or the import errored in the terminal and he did not
+    // notice), the verdict comes back the same, the masthead line does not move, and a control that
+    // worked perfectly is indistinguishable from one that never registered (L12). So the two outcomes
+    // arrive as two sentences, opening identically because the same thing was measured both times, and
+    // differing from the second sentence on, which is the part that is actually the answer.
+    //
+    // The unresolved line claims only what was measured: the verdict is STILL a warning. It deliberately
+    // does not say "it's the same file", which nothing here measured (the stamp inside the file is what
+    // would tell them apart), and it does not restate what is wrong, because the line he pressed says
+    // that and is still on screen (#843).
+    static func shootHistoryReread(_ health: ShootHistory.Health) -> (text: String, resolved: Bool) {
+        guard health == .ok else {
+            return ("I read your shoot history again. The warning still stands.", false)
+        }
+        return ("I read your shoot history again. It's current now.", true)
+    }
+
     // #901: a stretch of days off, removed. Reversible from the banner, because the row he just deleted is
     // the one place the range was written down.
     static func dayOffRemoved(range: String) -> String {
