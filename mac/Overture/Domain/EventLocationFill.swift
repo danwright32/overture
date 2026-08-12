@@ -103,10 +103,12 @@ enum EventLocationFill {
                 // Refusing outright is what the old guard did, and its intent was right: a street must
                 // never become a town. `StreetClause.trailingPlace` keeps that intent and answers nil for
                 // everything it is not sure of, so a street with no town still places nothing.
+                // copy-inventory:ignore-start  A location VALUE written into a data field, never a sentence Dan reads (#2378)
                 if StreetClause.isAddress(city) {
                     guard let town = StreetClause.trailingPlace(city) else { return nil }
                     return "\(town), \(state)"
                 }
+                // copy-inventory:ignore-end
                 return "\(city), \(state)"
             }
             // "Chatham NJ": city and state in one clause with no comma between them, a variance

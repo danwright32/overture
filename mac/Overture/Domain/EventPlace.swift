@@ -258,6 +258,7 @@ enum EventPlace {
     // names no state, so this adds no second opinion about what a borough means. The error it can make is
     // placing a Manhattan, Kansas show in New York, which errs toward SHOWING a show rather than hiding
     // one, and hiding is the failure this area guards against.
+    // copy-inventory:ignore-start  A location VALUE written into a data field, never a sentence Dan reads (#2378)
     static func cityShorthandInClause(_ clause: String) -> String? {
         let trimmed = clause.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return nil }
@@ -269,6 +270,7 @@ enum EventPlace {
         if boroughs.contains(trimmed.lowercased()) { return "\(trimmed), NY" }
         return nil
     }
+    // copy-inventory:ignore-end
 
     // #2378: the same predicate, for a caller outside this type. `StreetClause` asks it before it will
     // accept a ONE word tail as a town, so a single word is trusted only when it names a place this
