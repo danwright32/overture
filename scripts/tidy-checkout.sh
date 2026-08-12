@@ -121,6 +121,7 @@ main() {
   tidy_worktrees "${current_branch}" "${merged_heads}" "${open_heads}" "${gh_ok}"
   tidy_branches "${current_branch}" "${merged_heads}" "${open_heads}" "${gh_ok}"
   report_build_dir
+  report_derived_data
 }
 
 # Deliberately NOT `[[ -z "${1//[[:space:]]/}" ]]` first. Bash pattern substitution with a character
@@ -292,6 +293,33 @@ report_build_dir() {
     fi
   else
     echo "  Left alone. Pass --clean-build to remove it."
+  fi
+  echo
+}
+
+# The Xcode build output belonging to worktrees that are already gone (#2585). This is the other half
+# of the same accumulation: removing a worktree above reclaims everything it held EXCEPT its Xcode
+# cache, because that is the one toolchain here whose cache lives outside the checkout, keyed by the
+# checkout's path. Measured 2026-08-12: 148 GB, 101 of 105 folders belonging to directories that had
+# already been deleted, and a volume down to 132 MiB free.
+#
+# It follows this script's own mode rather than having one of its own. Dan's call, 2026-08-12: --apply
+# means clean up everything just reported, and a tool that shows a person a pile and then leaves it
+# there reads as having ignored them. A dry run still changes nothing, which is what --apply exists to
+# be typed against.
+#
+# The work itself is DELEGATED to scripts/reclaim-orphan-derived-data.sh rather than reimplemented
+# here, so there is one rule about which folders can never be used again instead of two that can drift
+# apart. That script also runs on its own inside every scripts/test-all.sh, so in the ordinary case
+# there is nothing left here to take.
+report_derived_data() {
+  echo "== Xcode build output =="
+  if [[ "${APPLY}" == "yes" ]]; then
+    "${SCRIPT_DIR}/reclaim-orphan-derived-data.sh" || true
+  else
+    "${SCRIPT_DIR}/reclaim-orphan-derived-data.sh" --dry-run || true
+    echo "  Rerun with --apply to reclaim it, or run it directly:"
+    echo "    scripts/reclaim-orphan-derived-data.sh"
   fi
   echo
 }

@@ -112,6 +112,18 @@ echo "==> scripts/check-pbxproj-fresh.sh"
 echo "==> mac/scripts/prune-stale-registrations.sh"
 "${REPO_ROOT}/mac/scripts/prune-stale-registrations.sh" || true
 
+# #2585: deletes the Xcode build folders belonging to worktrees that no longer exist, and says how much
+# room is left. Xcode keys DerivedData by workspace PATH, so every throwaway verify worktree and every
+# parallel agent mints a fresh ~1.6 GB folder outside the checkout that nothing reclaimed. On 2026-08-12
+# that reached 148 GB and took the volume to 132 MiB free, at which point no command could run at all.
+#
+# Here, rather than in a script somebody has to remember, because the failure mode IS that nobody looks
+# until the machine stops. Only ever removes a folder whose workspace is gone from disk, so it can never
+# cost anyone a rebuild, and never blocking for the same reason as the line above: a Mac that will not
+# let a folder be deleted is not a defect in the change being pushed.
+echo "==> scripts/reclaim-orphan-derived-data.sh"
+"${REPO_ROOT}/scripts/reclaim-orphan-derived-data.sh" || true
+
 echo "==> mac/scripts/run-tests-locked.sh"
 "${REPO_ROOT}/mac/scripts/run-tests-locked.sh"
 

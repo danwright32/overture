@@ -201,6 +201,66 @@ assert_equals "a refused PR never sets up a worktree" "" "${SETUP_CALLED}"
 assert_equals "a refused PR never runs the suite" "" "${SUITE_RAN}"
 assert_equals "a refused PR never merges" "" "${MERGE_CALLED}"
 
+# --- the throwaway worktree's build output goes with the worktree (#2585) ---
+# Every case above stubs cleanup_worktree, so none of them can see what it actually does. This one
+# runs the REAL function, with only the git registration part stubbed, because the piece worth
+# testing is the piece that deletes 1.6 GB.
+#
+# This script is the single biggest source of the leak: it makes a fresh worktree per verification,
+# Xcode keys its build folder by that path, and nothing ever went back for it. Five verifications in
+# one session on 2026-08-12 left five folders behind.
+#
+# Sourcing the script again FIRST, deliberately: every case above replaced cleanup_worktree with a
+# stub, and a stub is what this case would otherwise call. It would then pass on the real function
+# being deleted, which is the definition of a test that protects nothing (L1).
+# shellcheck source=./verify-and-merge-branch.sh
+source "${SCRIPT_DIR}/verify-and-merge-branch.sh"
+
+DERIVED_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/verify-derived-data.XXXXXX")"
+FAKE_WORKTREE="$(mktemp -d "${TMPDIR:-/tmp}/overture-verify-fixture.XXXXXX")"
+OTHER_WORKTREE="$(mktemp -d "${TMPDIR:-/tmp}/overture-verify-fixture.XXXXXX")"
+
+write_derived_folder() {
+  local name="$1" workspace="$2"
+  mkdir -p "${DERIVED_ROOT}/${name}"
+  cat > "${DERIVED_ROOT}/${name}/info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>WorkspacePath</key>
+	<string>${workspace}</string>
+</dict>
+</plist>
+PLIST
+}
+
+write_derived_folder "Overture-thisrun" "${FAKE_WORKTREE}/mac/Overture.xcodeproj"
+write_derived_folder "Overture-otherrun" "${OTHER_WORKTREE}/mac/Overture.xcodeproj"
+
+REGISTRATION_REMOVED=""
+remove_worktree_registration() { REGISTRATION_REMOVED="$1"; }
+
+export XCODE_DERIVED_DATA_ROOT="${DERIVED_ROOT}"
+cleanup_worktree "${FAKE_WORKTREE}" >/dev/null 2>&1
+
+assert_equals "the worktree registration is still removed" "${FAKE_WORKTREE}" "${REGISTRATION_REMOVED}"
+if [[ -d "${DERIVED_ROOT}/Overture-thisrun" ]]; then
+  fail "this run's build folder should have gone with its worktree"
+else
+  pass "this run's build folder goes with its worktree"
+fi
+# A concurrent verification of another branch is running under the same shared lock, and its build
+# folder is live. Taking it would cost that run a full cold rebuild.
+if [[ -d "${DERIVED_ROOT}/Overture-otherrun" ]]; then
+  pass "another run's build folder is left alone"
+else
+  fail "another run's build folder should be left alone"
+fi
+
+unset XCODE_DERIVED_DATA_ROOT
+rm -rf "${DERIVED_ROOT}" "${FAKE_WORKTREE}" "${OTHER_WORKTREE}"
+
 echo
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All verify-and-merge-branch.sh fixtures passed."

@@ -21,6 +21,9 @@ source "${SCRIPT_DIR}/lib/checkout-tidy.sh"
 # The completeness enumeration AGENTS.md demands. Shared with merge-when-green.sh so the two merge
 # paths cannot disagree about what a mergeable PR looks like.
 source "${SCRIPT_DIR}/lib/pr-completeness-guard.sh"
+# derived_data_reclaim_for_workspace, so the build output this script's throwaway worktree causes goes
+# when the worktree does (#2585).
+source "${SCRIPT_DIR}/lib/derived-data.sh"
 
 usage() {
   echo "Usage: $(basename "$0") <pr-number-or-branch-name>" >&2
@@ -92,11 +95,32 @@ run_full_suite() {
   "${dir}/scripts/test-all.sh"
 }
 
-# Removes the throwaway worktree. Named and extracted so a test can assert it runs on BOTH the
-# happy and failure paths: a failed verification must not leave the worktree behind either.
-cleanup_worktree() {
+# Drops git's registration of the throwaway worktree and the directory with it. Split out from
+# cleanup_worktree so a test can exercise the derived-data half below without touching real git.
+remove_worktree_registration() {
   local dir="$1"
   git -C "${REPO_ROOT}" worktree remove --force "${dir}" 2>/dev/null || true
+}
+
+# Removes the throwaway worktree AND the Xcode build folder that building it created (#2585).
+#
+# Named and extracted so a test can assert it runs on BOTH the happy and failure paths: a failed
+# verification must not leave the worktree behind either.
+#
+# The build folder is the part that used to be left behind. Xcode keys DerivedData by the workspace
+# PATH, so each verification's brand new worktree mints a fresh folder of roughly 1.6 GB, outside the
+# checkout, that nothing here ever went back for. Five verifications in one session on 2026-08-12 left
+# five of them, and the pile eventually filled the disk (#2585). This script created both paths and
+# knows both, so it is the cheapest place to close it: scripts/reclaim-orphan-derived-data.sh sweeping
+# later is the net under it, not the fix.
+#
+# Scoped strictly to this worktree's own folder. Other verifications and other agents run concurrently
+# under the same shared xcodebuild lock, and taking one of their live folders would cost that run a
+# full cold rebuild.
+cleanup_worktree() {
+  local dir="$1"
+  remove_worktree_registration "${dir}"
+  derived_data_reclaim_for_workspace "$(derived_data_root)" "${dir}" >/dev/null || true
 }
 
 # Merges the PR. Named and extracted so a test can assert it was (or wasn't) called, instead of
