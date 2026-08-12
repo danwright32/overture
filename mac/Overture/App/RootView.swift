@@ -299,8 +299,11 @@ struct RootView: View {
         showArchive = true
     }
 
-    private var canStartPrep: Bool {
-        !toPrep.isEmpty && !PrepQueueService.isRunning(now: Date())
+    // #2546: why "Prep kept" is refusing, from the same call that decides whether it is. The rule moved
+    // to PrepStartGate so it is reachable from a test at all (#863); this reads it twice, for the
+    // sentence in the menu and for the item's disabled state, and both are the same answer (L109).
+    private var prepRefusal: String? {
+        PrepStartGate.reason(keptToPrep: toPrep.count, prepRunning: PrepQueueService.isRunning(now: Date()))
     }
 
     // #367/#733: shares ProspectMutations.bulkReprepEligible with bulkReprep itself, so the
@@ -533,7 +536,14 @@ struct RootView: View {
                             Label("Prep kept", systemImage: "envelope.badge")
                         }
                         .keyboardShortcut("p", modifiers: .command)
-                        .disabled(!canStartPrep)
+                        .disabled(prepRefusal != nil)
+                        .accessibilityHint(prepRefusal ?? "")
+                        .help(prepRefusal ?? "")
+                        // #2546: the reason as its own row directly under the item it explains, rather
+                        // than only as a tooltip. A menu item has no room beside it for a sentence, but
+                        // the greyed item is only ever visible while this menu is open, which is exactly
+                        // when this row is on screen too, so the reason is there at rest (L49).
+                        ControlRefusalLine(reason: prepRefusal)
                         // #367: re-prep everything already drafted/approved in one go; each choice
                         // just flags the eligible prospects and they ride along in the next
                         // "Prep kept" run above, no separate run/launch of its own.

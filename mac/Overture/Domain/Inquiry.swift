@@ -266,7 +266,17 @@ enum InquiryIntake {
     // The only required field. Everything else about the event can legitimately be unknown when an
     // inquiry arrives as a bare email.
     static func canSave(name: String) -> Bool {
-        !name.trimmingCharacters(in: .whitespaces).isEmpty
+        reasonSaveIsDisabled(name: name) == nil
+    }
+
+    // #2546: why Save is refusing, taken from the same predicate that decides whether it is. The sheet
+    // shows this beside the button, so a grey Save and the words next to it cannot disagree (L109).
+    //
+    // It names the FIELD rather than saying the form is incomplete, because only one of the six is
+    // required and every other box on the sheet is legitimately blank at that moment. "Fill in the
+    // required fields" would send him looking at five that are already fine.
+    static func reasonSaveIsDisabled(name: String) -> String? {
+        name.trimmingCharacters(in: .whitespaces).isEmpty ? "Add the name of whoever got in touch" : nil
     }
 
     // An unknown date must stay genuinely unknown rather than defaulting to whatever the picker was

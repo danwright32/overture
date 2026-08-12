@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1246 sentences**.
+Every sentence Overture can say to Dan: **1251 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -351,6 +351,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/BlockedCalendar.swift`
 "A later night of this run is out: you're already shooting on \(day)."
     `Domain/BlockedCalendar.swift`
+"A prep run is already going"
+    `Domain/PrepQueueButton.swift`
 "A previous run was still reading pages, so the pages this run found were not handed over. Nothing was lost: press Run scout again once the reading finishes and they will be read."
     `Integration/ScoutService.swift`
 "A reachability check couldn't find an email for this show. You can still keep it and add a contact by hand."
@@ -409,6 +411,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/DraftReviewView.swift`
 "Add one address at a time. No contact was added"
     `App/ActionFeedback.swift`
+"Add the name of whoever got in touch"
+    `Domain/Inquiry.swift`
 "Add this address to this show so a reply from it is recognised. It won't be pitched."
     `Domain/ReplyPanel.swift`
 "Add this venue's address so its shows count as in your area."
@@ -899,6 +903,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/CancelledReadDisposition.swift`
 "Keep \(n) shows"
     `Domain/CancelledReadDisposition.swift`
+"Keep a show first, then prep it"
+    `Domain/PrepQueueButton.swift`
 "Keep a show from Scout and it lands here to prep."
     `Domain/StageEmptyState.swift`
 "Keep editing"
@@ -1026,6 +1032,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/DraftReviewView.swift`
 "No drafted or approved prospects to re-prep"
     `App/ActionFeedback.swift`
+"No email address for this contact"
+    `Domain/SendGate.swift`
 "No email found"
     `Domain/Reachability.swift`
 "No email to send to. Add a contact by hand."
@@ -1253,6 +1261,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SuppressionReport.swift`
 "Outside New York, New Jersey and Connecticut."
     `UI/QueueView+Model.swift`
+"Overture cannot reach its data, so there is nowhere to add a lead"
+    `UI/AddLeadPresenter.swift`
 "Overture cannot tell how old this copy is"
     `Domain/BuildFreshnessPanel.swift`
 "Overture cannot tell whether anything is missing"

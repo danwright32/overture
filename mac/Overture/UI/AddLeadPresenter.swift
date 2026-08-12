@@ -45,7 +45,20 @@ final class AddLeadPresenter {
 
     // What the menu item is enabled by. Decided here and not in the scene, so it is a test rather than a
     // condition buried in a SwiftUI body where nothing can reach it (#863/#885).
-    var canAddLead: Bool { storeIsAvailable }
+    var canAddLead: Bool { reasonAddLeadIsDisabled == nil }
+
+    // #2546: why the command is refusing, from the same predicate that decides whether it is, so the
+    // greying and the sentence cannot disagree (L109). #899 got the greying right and left the silence.
+    //
+    // A menu bar item has no room beside it for a line of text, so this is spoken as the item's help and
+    // its VoiceOver hint rather than as a sentence on screen, which is the one case where a tooltip is
+    // not merely the lazy option (L49). It is not the whole answer either: this can only be false while
+    // the window is showing StoreUnavailableView, whose heading already says Overture's data is
+    // unavailable and what to do. So the reason is on screen; what was missing was the join between that
+    // screen and this greyed item, which is what naming the same fact here supplies.
+    var reasonAddLeadIsDisabled: String? {
+        storeIsAvailable ? nil : "Overture cannot reach its data, so there is nowhere to add a lead"
+    }
 
     // Idempotent on purpose: two entry points ask for the same sheet, and a toggle would let the second
     // one CLOSE the sheet the first just opened.

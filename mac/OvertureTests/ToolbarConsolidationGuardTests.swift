@@ -32,9 +32,66 @@ struct ToolbarConsolidationGuardTests {
         #expect(rootView.contains("keyboardShortcut(\"p\", modifiers: .command)"))
     }
 
+    // #2546: read from the CODE, with comments stripped, and asserting the invariant rather than either
+    // spelling.
+    //
+    // Both halves of this had gone or were about to go vacuous, in the same way. It pinned the exact text
+    // `.disabled(isScanning)`, and #1033 replaced that call with ScoutControlState.isRunScoutDisabled
+    // while quoting the old spelling in the comment explaining the replacement, so from that day this
+    // matched a COMMENT ABOUT the code it was supposed to be checking, and passed for months while the
+    // thing it asserted was no longer there (L103). The Prep half would have gone the same way here, when
+    // `.disabled(!canStartPrep)` became a refusal value.
+    //
+    // What the phase actually cared about is that Scout and Prep are gated INDEPENDENTLY rather than
+    // sharing one condition, which is what this now asks.
     @Test func scoutAndPrepEachKeepTheirOwnDisabledCondition() {
-        #expect(rootView.contains(".disabled(isScanning)"))
-        #expect(rootView.contains(".disabled(!canStartPrep)"))
+        let code = Self.codeOnly(rootView)
+        #expect(!code.isEmpty)
+        // Each search is bounded by where the NEXT control starts, so deleting a gate cannot be covered
+        // by the following control's: unbounded, dropping Prep's `.disabled` would simply find
+        // "Re-prep kept"'s, which differs from Scout's, and this would pass on a control with no gate.
+        let scout = Self.firstDisabledArgument(after: "Button(\"Run scout now\")",
+                                               before: "Label(\"Prep kept\"", in: code)
+        let prep = Self.firstDisabledArgument(after: "Label(\"Prep kept\", systemImage: \"envelope.badge\")",
+                                              before: "Menu(\"Re-prep kept\")", in: code)
+        #expect(scout != nil, "Run scout now carries no .disabled(...) of its own")
+        #expect(prep != nil, "Prep kept carries no .disabled(...) of its own")
+        #expect(scout != prep,
+                "Scout and Prep share one disabled condition (\(scout ?? "nil")); each needs its own")
+    }
+
+    // The source as the compiler sees it: comments gone, so a guard cannot be satisfied by prose.
+    static func codeOnly(_ source: String) -> String {
+        SwiftSource.scannableLines(in: source).map(\.code).joined(separator: "\n")
+    }
+
+    // The argument of the first `.disabled(...)` between two markers, read by balancing parentheses so a
+    // call with its own nested parentheses is captured whole rather than cut at the first one. Nil when
+    // there is no `.disabled(` in that span at all, which is the answer "this control carries no gate".
+    static func firstDisabledArgument(after marker: String, before end: String,
+                                      in code: String) -> String? {
+        guard let markerRange = code.range(of: marker) else { return nil }
+        let tail = markerRange.upperBound..<code.endIndex
+        let limit = code.range(of: end, range: tail)?.lowerBound ?? code.endIndex
+        guard markerRange.upperBound < limit,
+              let callRange = code.range(of: ".disabled(", range: markerRange.upperBound..<limit)
+        else { return nil }
+        var depth = 1
+        var argument = ""
+        var index = callRange.upperBound
+        while index < code.endIndex, depth > 0 {
+            let character = code[index]
+            if character == "(" { depth += 1 }
+            if character == ")" {
+                depth -= 1
+                if depth == 0 { break }
+            }
+            argument.append(character)
+            index = code.index(after: index)
+        }
+        guard depth == 0 else { return nil }
+        // Normalized, so a condition wrapped across lines compares as the one expression it is.
+        return argument.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
     }
 
     // There should be exactly one merged Scout/Prep menu now, not two separate toolbar controls.
