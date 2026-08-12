@@ -136,6 +136,30 @@ final class Recipient {
     var looksLikeDuplicateContact: Bool = false
     var looksLikeDuplicateContactDismissed: Bool = false
 
+    // #1866: the fourth guard on a contact, recorded the way the three above are. ContactConfidenceGuard
+    // (#1856) rewrites a `high` find down to `low` when it names no page it was read off, and used to store
+    // nothing saying it had, so the row read exactly like one the run itself judged weak. Two different
+    // things produced one badge, and Dan could tell neither which it was nor say the guard was wrong.
+    //
+    // Set by PrepImporter, on the pair each ingest LEAVES BEHIND, and re-derived every time rather than
+    // latched: a later run that finally names the page clears it along with the downgrade it explains.
+    //
+    // The dismissal is his answer about THIS address, for the same reason the three above are dismissible:
+    // he can look at an address and judge whether it is really the act's, and a missing citation is a fact
+    // about the run's bookkeeping rather than about the address. Once he says so, the card stops calling it
+    // unverified (QueueItem.isUnverified).
+    //
+    // FALSE on every row written before this shipped, which means "not known to have been held down", not
+    // "the guard did not fire". Nothing asserts anything on a false, so an old row keeps exactly today's
+    // wording; the next ingest over that show restores the truth, because the run still reports `high` and
+    // still cites nothing.
+    var heldDownToUnverified: Bool = false
+    var heldDownToUnverifiedDismissed: Bool = false
+
+    // Whether the hold is IN FORCE, which is not the same as whether it was ever applied. One definition,
+    // so the card, the review panel and the merge cannot each spell the pair differently.
+    var isHeldDownToUnverified: Bool { heldDownToUnverified && !heldDownToUnverifiedDismissed }
+
     // #1630: HOW this contact was actually reached. nil means email, the only channel that existed
     // before this, so every stored record migrates as what it is. `contact_form` means Dan submitted
     // the act's own form by hand and told Overture he did: real outreach that Gmail never touched, so

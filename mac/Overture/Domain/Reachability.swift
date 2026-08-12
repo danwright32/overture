@@ -518,6 +518,23 @@ enum ReachabilityCopy {
     static let unverifiedEmailFoundHelp =
         "Nothing found here was verified as belonging to this act. Only an address read off a page naming them counts; a generic inbox or an inferred address doesn't. It may still be right, so it's worth a look before you write."
 
+    // #1866: the same badge, saying which of the two things put it there. One badge had two causes: the
+    // check looked and was not sure, or the check said it was sure and named no page it read the address
+    // off, so Overture held its answer down. Those ask different things of Dan, and the second one is about
+    // an address that may be perfectly good.
+    //
+    // Only the SENTENCE varies (#1722's rule, the same way the weak-contact badge splits): same wording on
+    // the badge, same tone, same position, so nothing reaches the fit score, the ledger or the palette.
+    // Written for the ROW, like the sentence above it, because this badge speaks for every address on the
+    // card. It also carries the way out: naming what is wrong and giving Dan nowhere to go is the L80 half
+    // of this defect, and the overrule is the whole reason the fact is now recorded.
+    static let confidenceHeldDownHelp =
+        "The check said it had verified the address here but never named the page it read it off, so Overture isn't treating it as verified. It may well be right: if you recognise it, say so on the review panel and it stops being called unverified."
+
+    static func unverifiedEmailFoundHelp(heldDown: Bool) -> String {
+        heldDown ? confidenceHeldDownHelp : unverifiedEmailFoundHelp
+    }
+
     // #1325: the earlier probe result has aged past the freshness window, so it may no longer be true.
     static let staleProbeBadge = "Reachability may be out of date"
     static let staleProbeHelp =

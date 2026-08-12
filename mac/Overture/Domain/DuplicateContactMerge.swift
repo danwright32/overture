@@ -122,5 +122,8 @@ enum DuplicateContactMerge {
             winner.looksLikePressContactDismissed || loser.looksLikePressContactDismissed
         winner.looksLikeDuplicateContactDismissed =
             winner.looksLikeDuplicateContactDismissed || loser.looksLikeDuplicateContactDismissed
+        // #1866: the fourth guard's overrule, carried for the same reason and no other.
+        winner.heldDownToUnverifiedDismissed =
+            winner.heldDownToUnverifiedDismissed || loser.heldDownToUnverifiedDismissed
     }
 }
