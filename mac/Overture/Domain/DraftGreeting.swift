@@ -19,9 +19,18 @@ enum DraftGreeting {
     // say, which is exactly the noise that inventory exists to keep out (it is the same reason the draft
     // lint's own search terms are marked).
 
-    // A word that opens a greeting without naming anyone, so "Hi all," is a good way to write to
-    // several people rather than a name that reaches the wrong ones.
-    private static let fillers: Set<String> = ["there", "all", "everyone", "team", "folks"]
+    // Words that appear in a greeting WITHOUT being somebody's name. They are capitalised at the start
+    // of a line by convention, not because they identify a person, so a capitalised word outside this set
+    // is what marks a greeting as addressed to someone in particular.
+    //
+    // Deliberately covers the openings Dan writes as well as the drafter's ("Thanks for the quick reply,",
+    // "Many thanks for the note,"), because reading one of those as a NAME would hold a send that is
+    // perfectly fine, and a hold he has to override on ordinary wording is how the override stops meaning
+    // anything.
+    private static let notNames: Set<String> = [
+        "hi", "hello", "hey", "dear", "good", "morning", "afternoon", "evening", "greetings",
+        "there", "all", "everyone", "team", "folks", "again", "thanks", "thank", "many", "happy", "welcome",
+    ]
 
     private static let openers = "hi|hello|hey|dear|good morning|good afternoon|good evening"
 
@@ -33,6 +42,17 @@ enum DraftGreeting {
     private static var greetingPattern: String {
         #"^\s*("# + openers + #")\b[^,!\n]{0,40}([,!]|\n)"#
     }
+
+    // A greeting that does NOT begin with an opener word, which is the shape Dan writes himself:
+    // "Marcus, hello again," or "Morning Emma," or just "Sarah and Tom,". Recognised by SHAPE rather
+    // than by vocabulary, because a closed list only ever covers the phrasings somebody thought of, and
+    // the first version of this rule refused every one of the above (#2545, Dan's call 2026-08-12).
+    //
+    // A short FIRST LINE ending in a comma or bang, carrying no sentence-ending punctuation, and followed
+    // by a line break. The three constraints together are what stop a real opening sentence matching:
+    // "I photograph performing arts in New York, and I saw..." runs on past 40 characters and does not end
+    // its line at the comma. Erring toward accepting is deliberate here, since this gate REFUSES a send.
+    private static let greetingShapePattern = #"^[^\n.?!]{1,40}[,!]\s*(\n|$)"#
 
     // An opener followed by at least one word before the punctuation. "Hello," has nothing between
     // the opener and the comma, so it never matches; "Hi Emma," does.
@@ -48,13 +68,23 @@ enum DraftGreeting {
 
     // Whether the greeting addresses somebody by name. Nil-safe because both callers hold an optional
     // body, and a body that is absent greets nobody.
+    // #2545: judged over BOTH greeting shapes, because the two halves of the rule disagreeing about what
+    // a greeting is leaves the hole exactly where Dan's own writing is: "Marcus, hello again," counted as
+    // a greeting but not as a NAMED one, so a two-contact show would have sent it to both of them.
     static func namesSomeone(_ body: String?) -> Bool {
         guard let body, !body.isEmpty else { return false }
         let text = withoutAttnBlock(body)
-        guard let range = text.range(of: namedPattern, options: [.regularExpression, .caseInsensitive]),
-              range.lowerBound == text.startIndex || text[..<range.lowerBound].allSatisfy(\.isWhitespace)
-        else { return false }
-        return !isFiller(namedToken(in: String(text[range])))
+        guard let range = greetingRange(in: text) else { return false }
+        let line = String(text[range]).split(separator: "\n").first.map(String.init) ?? ""
+        // The opener-word form has its own token rule, which knows "Hi all," is a filler rather than a name.
+        if text.range(of: namedPattern, options: [.regularExpression, .caseInsensitive]) != nil {
+            return !isFiller(namedToken(in: line))
+        }
+        return line.split(whereSeparator: { !$0.isLetter && $0 != "'" && $0 != "-" })
+            .contains { word in
+                guard let first = word.first, first.isUppercase else { return false }
+                return !notNames.contains(word.lowercased())
+            }
     }
 
     // Everything before the first real sentence: the `Attn:` block if there is one, then the greeting.
@@ -71,8 +101,11 @@ enum DraftGreeting {
         return String(body[range.upperBound...])
     }
 
+    // Either shape counts. The opener-word form is tried first because it is the one the drafter is told
+    // to write and the one whose extent the strip below needs to know.
     private static func greetingRange(in body: String) -> Range<String.Index>? {
         body.range(of: greetingPattern, options: [.regularExpression, .caseInsensitive])
+            ?? body.range(of: greetingShapePattern, options: [.regularExpression, .caseInsensitive])
     }
 
     // The words between the opener and the punctuation, e.g. "Emma" from "Hi Emma,".
@@ -85,8 +118,11 @@ enum DraftGreeting {
             .trimmingCharacters(in: CharacterSet(charactersIn: ",! "))
     }
 
+    // Judged against `notNames`, the one list of words that appear in a greeting without being a name, so
+    // the two branches of `namesSomeone` cannot disagree: "Hello again," reads as naming nobody whichever
+    // pattern matched it first. There was briefly a second, smaller list here and that was the bug.
     private static func isFiller(_ token: String) -> Bool {
         let words = token.split(separator: " ").map(String.init)
-        return words.count == 1 && fillers.contains(words[0].lowercased())
+        return words.count == 1 && notNames.contains(words[0].lowercased())
     }
 }

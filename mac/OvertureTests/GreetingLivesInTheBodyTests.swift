@@ -130,6 +130,34 @@ struct GreetingLivesInTheBodyTests {
         #expect(DraftGreeting.opensWithAGreeting(body), "should count as greeting: \(body)")
     }
 
+    // Dan's OWN greetings, which are the ones that matter most here: the drafter follows the runbook and
+    // opens "Hi <name>," or "Hello,", but he types what reads naturally to him, and a greeting that leads
+    // with the person's name is completely ordinary. The first version of this rule only recognised an
+    // opener WORD at the start, so "Marcus, hello again," was refused and he would have met the override
+    // every time he wrote in his own voice, which is how a deliberate two-step gate stops meaning anything.
+    //
+    // His call, 2026-08-12: a short opening line ending in a comma is a greeting, whatever it starts with.
+    @Test(arguments: [
+        "Marcus, hello again,\n\nI photograph performing arts.",
+        "Emma, good to hear from you,\n\nI photograph performing arts.",
+        "Morning Emma,\n\nI photograph performing arts.",
+        "Sarah and Tom,\n\nI photograph performing arts.",
+    ])
+    func agreetingInDansOwnVoiceIsAccepted(_ body: String) {
+        #expect(DraftGreeting.opensWithAGreeting(body), "should count as greeting: \(body)")
+    }
+
+    // The line has to look like a GREETING, not merely end in a comma. A real first sentence that happens
+    // to carry an early comma must still read as headless, or the hold accepts every draft and protects
+    // nothing.
+    @Test(arguments: [
+        "I photograph performing arts in New York, and I saw your September concert.",
+        "Aurora Strings are playing Carnegie Hall in March, which is why I am writing.",
+    ])
+    func afirstSentenceWithACommaIsStillNotAGreeting(_ body: String) {
+        #expect(!DraftGreeting.opensWithAGreeting(body), "should NOT count as greeting: \(body)")
+    }
+
     @Test(arguments: [
         "I photograph performing arts in New York and saw your September concert.",
         "My name is Dan Wright and I photograph performing arts.",
@@ -150,6 +178,24 @@ struct GreetingLivesInTheBodyTests {
     @Test(arguments: ["Hello,\n\nrest", "Hi all,\n\nrest", "Hi there,\n\nrest", "Hi everyone,\n\nrest",
                       "I photograph performing arts."])
     func agreetingThatNamesNobodyIsRecognised(_ body: String) {
+        #expect(!DraftGreeting.namesSomeone(body), "should NOT read as named: \(body)")
+    }
+
+    // The two halves of the rule have to agree about what a greeting IS, or the protection has a hole
+    // exactly where Dan's own writing is. Once "Marcus, hello again," counted as a greeting but not as a
+    // NAMED one, a show with two contacts would have sent it unheld: the greeting check saw a greeting,
+    // the naming check saw nothing it recognised, and the person it addresses is one of two readers.
+    @Test(arguments: ["Marcus, hello again,\n\nrest", "Morning Emma,\n\nrest", "Sarah and Tom,\n\nrest",
+                      "Emma, good to hear from you,\n\nrest"])
+    func agreetingInDansOwnVoiceStillCountsAsNamingSomebody(_ body: String) {
+        #expect(DraftGreeting.namesSomeone(body), "should read as named: \(body)")
+    }
+
+    // And the impersonal ones he might write stay impersonal, or every multi-contact show is held on a
+    // greeting that names nobody.
+    @Test(arguments: ["Good to hear from you,\n\nrest", "Thanks for the quick reply,\n\nrest",
+                      "Hello again,\n\nrest"])
+    func animpersonalGreetingInDansOwnVoiceNamesNobody(_ body: String) {
         #expect(!DraftGreeting.namesSomeone(body), "should NOT read as named: \(body)")
     }
 

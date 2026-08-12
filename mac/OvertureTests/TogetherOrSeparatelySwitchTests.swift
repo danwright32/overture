@@ -32,7 +32,7 @@ struct TogetherOrSeparatelySwitchTests {
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                          status: .approved)
-        p.draftSubject = "S"; p.draftBody = "B"
+        p.draftSubject = "S"; p.draftBody = "Hello,\n\nI photograph performing arts."
         ctx.insert(p)
         let all = [("emma@org.example", "Emma"), ("noah@org.example", "Noah")].prefix(contacts)
             .map { Recipient(id: $0.0, email: $0.0, name: $0.1, provenance: .presenter) }

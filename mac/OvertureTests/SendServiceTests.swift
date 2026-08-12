@@ -69,7 +69,7 @@ struct SendServiceTests {
     }
 
     private func approved(_ ctx: ModelContext, group: String, email: String? = "to@org.org",
-                          draft: String? = "Hi", ingested: Date) {
+                          draft: String? = "Hello,\n\nI photograph performing arts.", ingested: Date) {
         let key = Prospect.makeNaturalKey(groupName: group, performanceDate: "2026-07-01", venue: "V")
         let p = Prospect(naturalKey: key, groupName: group, discipline: "choral", venue: "V",
                          performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
@@ -159,37 +159,11 @@ struct SendServiceTests {
                 "Attn: Jane Doe, PR Associate Director\n\nHello,\n\nI photograph performing arts in New York.")
     }
 
-    // #407: a draft still carrying an old, un-strippable inline greeting must never send at all,
-    // to any recipient, until Dan (or a fresh Prep re-run) actually fixes it.
-    @Test func sendOneNeverSendsWhileTheDraftNeedsSalutationReview() async throws {
-        let ctx = ModelContext(try container())
-        let p = approvedNamed(ctx, group: "Aurora", name: "Emma Robinson", email: "emma@act.example",
-                              body: "Hi 2026 season, I photograph performing arts in New York.",
-                              ingested: Date(timeIntervalSince1970: 1))
-        p.draftNeedsSalutationReview = true
-        let sender = CapturingSender()
-
-        let sent = await SendService.sendOne(p, now: Date(timeIntervalSince1970: 10), sender: sender)
-
-        #expect(sent == false)
-        #expect(sender.last == nil)
-    }
-
-    // #718: an override for the EXACT current body unblocks sending despite the flag.
-    @Test func sendOneSendsWhenTheSalutationReviewFlagIsOverriddenForTheCurrentBody() async throws {
-        let ctx = ModelContext(try container())
-        let p = approvedNamed(ctx, group: "Aurora", name: "Emma Robinson", email: "emma@act.example",
-                              body: "Hi 2026 season, I photograph performing arts in New York.",
-                              ingested: Date(timeIntervalSince1970: 1))
-        p.draftNeedsSalutationReview = true
-        p.draftSalutationReviewOverriddenBody = p.draftBody
-        let sender = CapturingSender()
-
-        let sent = await SendService.sendOne(p, now: Date(timeIntervalSince1970: 10), sender: sender)
-
-        #expect(sent == true)
-        #expect(sender.last != nil)
-    }
+    // #2545 RETIRED the two #407 send-gate tests that sat here, for the same reason as their siblings in
+    // RecipientTests: both set `draftNeedsSalutationReview = true` by hand, and nothing in the app has set
+    // that flag since #2010, so the block they asserted could not fire in production. They passed on a
+    // value only they wrote (L90). The live gate is now the greeting hold, which SendServiceTests exercises
+    // throughout: every fixture in this file greets, because one that does not is refused.
 
     @Test func sendingSnapshotsTheRelationshipAtContact() async throws {
         // #66: capture what the relationship was the moment Dan pitched, so a later Downbeat
@@ -461,7 +435,7 @@ struct SendServiceTests {
         let ctx = ModelContext(try container())
         let (p, a, b) = showWithTwoContacts(ctx)
         b.provenance = .performer
-        b.overrideBody = "Noah, I document dance."
+        b.overrideBody = "Hi Noah,\n\nI document dance."
         let sender = CapturingSender()
 
         #expect(await SendService.sendJointly(p, to: [a, b], now: Date(timeIntervalSince1970: 10),
@@ -696,7 +670,10 @@ struct SendServiceTests {
         let afterFirst = p.sentBody
 
         _ = await SendService.sendOne(p, now: Date(timeIntervalSince1970: 20), sender: CapturingSender())
-        #expect(p.sentBody == "I document dance.")   // the BARE body, no greeting baked in
+        // #2545: the frozen copy is the WHOLE body, greeting included. It used to be deliberately bare,
+        // because the greeting was added on the way out and kept out of the voice-learning pair; there is
+        // no bare version any more, so what was sent and what is stored are one string.
+        #expect(p.sentBody == "Hello,\n\nI document dance.")
         #expect(p.sentBody == afterFirst)            // the second recipient did not re-freeze
     }
 
@@ -744,7 +721,7 @@ struct SendServiceTests {
 
         _ = await SendService.sendOne(p, now: Date(timeIntervalSince1970: 10), sender: CapturingSender())
 
-        #expect(p.sentBody == "I saw you're self-presenting Midnight Quartet.")
+        #expect(p.sentBody == "Hi Maya,\n\nI saw you're self-presenting Midnight Quartet.")
     }
 
     // Defense in depth: even a .performer recipient with NO overrideBody set falls back to the

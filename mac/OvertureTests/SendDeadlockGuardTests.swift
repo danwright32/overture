@@ -53,7 +53,7 @@ struct SendDeadlockGuardTests {
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                          status: .approved)
-        p.draftSubject = "S"; p.draftBody = "Hi"
+        p.draftSubject = "S"; p.draftBody = "Hello,\n\nI photograph performing arts."
         ctx.insert(p)
         p.setRecipients([Recipient(id: "to@org.org", email: "to@org.org", provenance: .act)])
         try? ctx.save()

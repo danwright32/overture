@@ -16,7 +16,8 @@ struct SendConfirmationTests {
 
     private func make(_ ctx: ModelContext, status: ReviewStatus = .approved,
                       email: String? = "to@org.org", subject: String? = "A photo of your June concert",
-                      body: String? = "Hi", sentAt: Date? = nil) -> Prospect {
+                      body: String? = "Hello,\n\nI photograph performing arts.",
+                      sentAt: Date? = nil) -> Prospect {
         let key = Prospect.makeNaturalKey(groupName: "G", performanceDate: "2026-07-01", venue: "V")
         let p = Prospect(naturalKey: key, groupName: "G", discipline: "choral", venue: "V",
                          performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
