@@ -112,16 +112,30 @@ struct ReplyConversationView: View {
         }
     }
 
+    // #2546: why Send reply is refusing, from the same call that decides whether it is.
+    //
+    // The address is now part of the gate, where before it was not: the button was enabled for a contact
+    // with no address, and SendService.sendReplyDraft refuses a blank one on its first line, so the press
+    // returned false and nothing happened at all. Code that has already detected a missing required value
+    // must block the action rather than let it run and fail silently (L67).
+    private var sendRefusal: String? {
+        SendGate.reason(gmailConnected: gmailConnected, hasAddress: SendGate.hasAddress(contact.email))
+    }
+
     private var actions: some View {
-        HStack(spacing: OVSpacing.xs) {
+        HStack(alignment: .firstTextBaseline, spacing: OVSpacing.xs) {
             Button { onSendReply(contact.id) } label: {
                 Label("Send reply", systemImage: "paperplane")
                     .font(OVType.meta).foregroundStyle(OVColor.onForest)
                     .padding(.horizontal, OVSpacing.md).padding(.vertical, 5)
                     .background(Capsule().fill(OVColor.forest))
             }
-            .buttonStyle(.plain).disabled(!gmailConnected)
-            .help(GmailCopy.sendHelp(connected: gmailConnected, whenConnected: "Send this reply on the contact's thread"))
+            .buttonStyle(.plain).disabled(sendRefusal != nil)
+            // A dimmed control with no label is unreadable to VoiceOver as well as to the eye.
+            .accessibilityHint(sendRefusal ?? "")
+            .help(sendRefusal ?? "Send this reply on the contact's thread")
+            // Said on screen and not only in the tooltip, which is invisible at rest (L49).
+            ControlRefusalLine(reason: sendRefusal)
             Button("Edit") { editText = contact.replyDraftBody ?? ""; isEditing = true }
                 .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forestText)
             Button("Copy") { onCopyReply(contact.id) }

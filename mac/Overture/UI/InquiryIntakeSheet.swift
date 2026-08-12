@@ -25,7 +25,10 @@ struct InquiryIntakeSheet: View {
     @State private var notes = ""
     @State private var loaded = false
 
-    private var canSave: Bool { InquiryIntake.canSave(name: name) }
+    // #2546: the reason Save is refusing, from the same call that decides whether it is refusing at all.
+    // The button's disabled state is derived from this being non-nil, so there is no second predicate to
+    // drift out of step with the sentence (L109).
+    private var saveRefusal: String? { InquiryIntake.reasonSaveIsDisabled(name: name) }
 
     private var performanceDate: String? {
         InquiryIntake.performanceDate(hasDate: hasDate, date: date)
@@ -108,8 +111,15 @@ struct InquiryIntakeSheet: View {
         }
     }
 
+    // #2546: the sheet opens with every box empty, so Save is grey from the first frame. Saying why
+    // there and then is the whole point: the state Dan meets is the refusing one, and waiting until he
+    // has typed something would leave the silent grey button exactly where it was.
+    //
+    // It sits beside the button rather than under the Name field, so it cannot become a second line
+    // saying what that field's own placeholder already says (#843).
     private var footer: some View {
-        HStack {
+        HStack(alignment: .firstTextBaseline) {
+            ControlRefusalLine(reason: saveRefusal)
             Spacer()
             Button("Cancel") { dismiss() }.buttonStyle(.plain).foregroundStyle(OVColor.inkSoft)
             Button(action: save) {
@@ -119,7 +129,10 @@ struct InquiryIntakeSheet: View {
                     .background(Capsule().fill(OVColor.forest))
             }
             .buttonStyle(.plain)
-            .disabled(!canSave)
+            .disabled(saveRefusal != nil)
+            // A dimmed control with no label is unreadable to VoiceOver as well as to the eye.
+            .accessibilityHint(saveRefusal ?? "")
+            .help(saveRefusal ?? "")
         }
     }
 

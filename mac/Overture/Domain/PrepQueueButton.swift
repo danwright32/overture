@@ -16,3 +16,48 @@ enum PrepQueueButton {
         count == 1 ? "Prep this 1 show" : "Prep these \(count) shows"
     }
 }
+
+// #2546: why "Prep kept" is refusing, beside the rule that decides whether it is.
+//
+// The toolbar menu gated it on `!toPrep.isEmpty && !PrepQueueService.isRunning(...)` and said nothing,
+// so two states Dan can do opposite things about arrived as one grey item: go and keep a show, versus
+// wait for the run already going. A single "not yet" would be wrong for whichever of the two fired
+// (L11), which is why this is a value with a case per cause rather than a boolean.
+//
+// The rule is here rather than in RootView for the reason the rest of this file exists: logic inside a
+// SwiftUI view is logic no test can reach (#863). RootView's `canStartPrep` now asks this.
+enum PrepStartGate {
+    enum Refusal: Equatable {
+        case runInFlight
+        case nothingKept
+
+        // True BEFORE any press: what is standing in the way, never what became of a press (#2544).
+        var reason: String {
+            switch self {
+            // Not "Prepping", which is what the toolbar already says while a run is going. This is the
+            // answer to a different question (why this item will not start another one), and it is read
+            // from inside the open menu where that label is not in view.
+            case .runInFlight: return "A prep run is already going"
+            // Names the step that clears it. Keeping a show is one click away in the Queue behind this
+            // menu, so this is advice that actually changes the state he is stuck in (L111).
+            case .nothingKept: return "Keep a show first, then prep it"
+            }
+        }
+    }
+
+    // A run in flight is named first when both are true. It is the state that clears itself, and telling
+    // him to go and keep a show would have him queue work into a run that cannot start anyway.
+    static func refusal(keptToPrep: Int, prepRunning: Bool) -> Refusal? {
+        if prepRunning { return .runInFlight }
+        if keptToPrep == 0 { return .nothingKept }
+        return nil
+    }
+
+    static func reason(keptToPrep: Int, prepRunning: Bool) -> String? {
+        refusal(keptToPrep: keptToPrep, prepRunning: prepRunning)?.reason
+    }
+
+    static func canStart(keptToPrep: Int, prepRunning: Bool) -> Bool {
+        refusal(keptToPrep: keptToPrep, prepRunning: prepRunning) == nil
+    }
+}

@@ -65,7 +65,13 @@ struct FollowUpsView: View {
 
     // #1770: the cached flag, not the disk read. As written before, this re-opened and JSON-decoded the
     // token file on EVERY access, and the body below reads it once per send button it draws.
-    private var gmailConnected: Bool { GmailConnection.shared.isConnected }
+    // #2546: a seam, not a stored copy of the answer. The app never passes this, so it keeps reading the
+    // live connection through the computed property below, which is what SwiftUI's observation watches;
+    // holding the value in a stored property instead would freeze it at the view's construction and stop
+    // a reconnect redrawing these rows. A test has to render both sides of the Gmail gate, and the
+    // singleton cannot be set from one.
+    var gmailConnectedOverride: Bool?
+    private var gmailConnected: Bool { gmailConnectedOverride ?? GmailConnection.shared.isConnected }
     private var isEmpty: Bool { due.isEmpty && postEventDue.isEmpty }
 
     var body: some View {
@@ -161,7 +167,7 @@ struct FollowUpsView: View {
                     LiveRunLabel(base: "Sending", since: since, timeout: RunTimeouts.send,
                                  font: OVType.meta, color: OVColor.inkSoft)
                 } else {
-                    sendButton("Send nudge", enabled: gmailConnected && (r.email?.isEmpty == false)) { requestNudge(d) }
+                    sendButton("Send nudge", hasAddress: SendGate.hasAddress(r.email)) { requestNudge(d) }
                 }
                 standDownMenu(prospect: d.prospect, recipient: r)
                 // #686: reply text, AI reply drafter, and Mark… only exist on the full card in Archive.
@@ -198,7 +204,7 @@ struct FollowUpsView: View {
                 } else {
                     switch d.prompt.kind {
                     case .closingNote:
-                        sendButton("Send closing note", enabled: gmailConnected && r.email != nil) {
+                        sendButton("Send closing note", hasAddress: SendGate.hasAddress(r.email)) {
                             requestClosingNote(d)
                         }
                         // #1740: Dan may well not want to send a closing note, and this was the same gap
@@ -231,15 +237,29 @@ struct FollowUpsView: View {
             .overlay(Capsule().strokeBorder(color.opacity(0.25)))
     }
 
-    private func sendButton(_ title: String, enabled: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title).font(OVType.meta).foregroundStyle(OVColor.onForest)
-                .padding(.horizontal, OVSpacing.md).padding(.vertical, 6)
-                .background(Capsule().fill(OVColor.forest))
+    // #2546: takes the FACT (has this contact an address) rather than a pre-computed `enabled`, so the
+    // one call below decides both whether the button works and what is said while it does not.
+    //
+    // The tooltip used to be `sendHelp(connected:whenConnected:)`, which reads "Review and send" whenever
+    // Gmail is connected. That is the wrong sentence for the other cause this button refuses on: a
+    // contact with no address got a dead button and a tooltip promising it would send (L11).
+    private func sendButton(_ title: String, hasAddress: Bool, action: @escaping () -> Void) -> some View {
+        let refusal = SendGate.reason(gmailConnected: gmailConnected, hasAddress: hasAddress)
+        return VStack(alignment: .trailing, spacing: 2) {
+            Button(action: action) {
+                Text(title).font(OVType.meta).foregroundStyle(OVColor.onForest)
+                    .padding(.horizontal, OVSpacing.md).padding(.vertical, 6)
+                    .background(Capsule().fill(OVColor.forest))
+            }
+            .buttonStyle(.plain)
+            .disabled(refusal != nil)
+            // A dimmed control with no label is unreadable to VoiceOver as well as to the eye.
+            .accessibilityHint(refusal ?? "")
+            .help(refusal ?? "Review and send")
+            // Said on screen and not only in the tooltip, which is invisible at rest (L49). Under the
+            // button rather than beside it: these rows are already tight to the right edge.
+            ControlRefusalLine(reason: refusal, alignment: .trailing)
         }
-        .buttonStyle(.plain)
-        .disabled(!enabled)
-        .help(GmailCopy.sendHelp(connected: gmailConnected, whenConnected: "Review and send"))
     }
 
     private func requestNudge(_ d: FollowUp.DueRecipient) {

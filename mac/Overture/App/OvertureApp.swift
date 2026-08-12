@@ -247,7 +247,18 @@ struct OvertureApp: App {
                     // open and it would fire into nothing, with no error and no explanation. An action
                     // Dan cannot take must not look available. The rule is AddLeadPresenter's, not this
                     // view's (#863/#885).
-                    .disabled(!addLead.canAddLead)
+                    .disabled(addLead.reasonAddLeadIsDisabled != nil)
+                    // #2546: and it says WHY. #899 got the greying right and left the silence, which is
+                    // the other half of the same defect: an action Dan cannot take must not look
+                    // available, and one he can see is unavailable must say what would make it available.
+                    //
+                    // Help and hint rather than a sentence on screen, because a menu bar item has no room
+                    // beside it and this one sits in the system File menu where a Text row is not ours to
+                    // add. It is not the only thing said: this can be false only while the window shows
+                    // StoreUnavailableView, which names the same fact in full, so what these supply is the
+                    // join between that screen and this grey item.
+                    .accessibilityHint(addLead.reasonAddLeadIsDisabled ?? "")
+                    .help(addLead.reasonAddLeadIsDisabled ?? "")
             }
         }
         // #336: the styled in-content wordmark is the app's name; hide the redundant
