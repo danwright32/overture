@@ -1098,6 +1098,12 @@ struct QueueView: View {
         return HStack(alignment: .top, spacing: OVSpacing.md) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(p.groupName).font(OVType.groupName).foregroundStyle(OVColor.ink)
+                // #2551: the night the show is on. The date headings on this stage are REACH-OUT dates
+                // (#1233's caption says so), so without this the show's own date was nowhere on screen,
+                // and what to do with an open pitch depends heavily on how far out it is.
+                Text(ReachedOutRowChrome.showDateLine(performanceDate: p.performanceDate,
+                                                      runEndDate: p.runEndDate))
+                    .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
                 // #2121: everyone this row's next email reaches, so Dan can see whether he is answering
                 // one person or five before he opens it, with the writer of the reply marked out.
                 //
