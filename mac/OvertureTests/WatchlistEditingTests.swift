@@ -57,14 +57,53 @@ struct WatchlistEditingTests {
         #expect(try sources(ctx).count == 1)
     }
 
+    // #1673: and a LIVE source is not repointed by the add form either, even when the address Dan types is
+    // a different path on the same calendar.
+    //
+    // Deliberate, not an oversight. Repointing is `editURL`'s job, reached from the row itself, where Dan
+    // can see which source he is changing and what it points at now. A correction also wipes the baseline
+    // and warmup by design (#1027), so letting the add form do it silently would cost a source that has
+    // been reading fine for months its whole feed history because he typed a path variant while trying to
+    // add what he took to be a new calendar: a destructive edit with no visible cause (L5). The honest
+    // answer to "watch this calendar" for a calendar already watched is the sentence it already gives.
+    @Test func aLiveSourceIsNeverRepointedByTheAddForm() throws {
+        let ctx = try context()
+        _ = WatchlistEditing.add(orgName: "Bargemusic", listingsURL: "https://bargemusic.org/events",
+                                 into: ctx)
+        let s = try #require(try sources(ctx).first)
+        s.baselineFeedCount = 12
+        s.successfulCheckCount = 7
+
+        let again = WatchlistEditing.add(orgName: "Bargemusic",
+                                         listingsURL: "https://bargemusic.org/calendar", into: ctx)
+
+        #expect(again == .alreadyWatching(orgName: "Bargemusic"))
+        #expect(try sources(ctx).count == 1)
+        #expect(s.listingsURL == "https://bargemusic.org/events")   // NOT the address he typed
+        #expect(s.baselineFeedCount == 12)
+        #expect(s.successfulCheckCount == 7)
+        #expect(!s.hasUnreadChanges)
+    }
+
     // THE one that matters. An org that asked Dan to stop cannot be typed back onto the list by hand
     // any more than it can be pasted back in as a lead. The guarantee lives here, not in a sheet.
+    //
+    // #1673: and a refusal is not merely NOT REVIVED, it is not TOUCHED. The address Dan types differs from
+    // the one stored (that is the interesting case, and it is the one this test has always used), so any
+    // route that treats a differing address as a correction would rewrite the refusal record to whatever he
+    // just typed, wipe what the row knew, and set `hasUnreadChanges` on a row that must never be read
+    // again. The row would still be inactive, so nothing gets scouted or emailed, but the record of what
+    // the refusal was recorded AGAINST is gone and the stale unread flag this issue exists to remove is
+    // back, invisible for as long as the source sits stopped (#1549).
     @Test func anOrgThatRefusedCannotBeAddedByHandEither() throws {
         let ctx = try context()
         let refused = WatchedSource(sourceId: "bargemusic", orgName: "Bargemusic",
                                     listingsURL: "https://bargemusic.org/calendar", kind: .html)
         refused.isActive = false
         refused.inactiveReason = .orgRefusal
+        refused.baselineFeedCount = 12
+        refused.successfulCheckCount = 7
+        refused.notes = "What the calendar looked like when they asked Dan to stop."
         ctx.insert(refused)
 
         let result = WatchlistEditing.add(orgName: "Bargemusic",
@@ -73,14 +112,27 @@ struct WatchlistEditingTests {
         #expect(result == .refused(orgName: "Bargemusic"))
         #expect(try sources(ctx).count == 1)
         #expect(try sources(ctx).first?.isActive == false)   // still left alone
+        #expect(refused.inactiveReason == .orgRefusal)
+        #expect(refused.listingsURL == "https://bargemusic.org/calendar")   // NOT the address he typed
+        #expect(!refused.hasUnreadChanges)
+        #expect(refused.baselineFeedCount == 12)
+        #expect(refused.successfulCheckCount == 7)
+        #expect(refused.notes == "What the calendar looked like when they asked Dan to stop.")
     }
 
     // A source Dan removed as dead is not a refusal, and he may decide it is worth another try. Adding
     // it again REVIVES the existing row rather than creating a second one, so its history is kept.
+    //
+    // #1673 narrowed what this test may claim, and the change is deliberate rather than a weakening. It
+    // used to type a DIFFERENT address (/events onto a row watching /calendar) while asserting the feed
+    // history survived. That combination is the silent-cancellation hole #887/#897 closed: a baseline
+    // measured on one page, standing over a different one, lets a same-sized replacement strike Dan's live
+    // shows. The revive is now judged at the SAME address here, which is what "keeps the history it earned"
+    // was actually about, and the different-address case has its own test below, where the history goes.
     @Test func aSourceDanRemovedCanBeGivenAnotherTry() throws {
         let ctx = try context()
         let dead = WatchedSource(sourceId: "bargemusic", orgName: "Bargemusic",
-                                 listingsURL: "https://bargemusic.org/calendar", kind: .html)
+                                 listingsURL: "https://bargemusic.org/events", kind: .html)
         dead.isActive = false
         dead.inactiveReason = .removedByDan
         dead.baselineFeedCount = 12
@@ -187,5 +239,129 @@ struct WatchlistEditingTests {
 
         #expect(WatchlistEditing.resumeWatching(s, in: ctx) == .alreadyWatching(orgName: "Bargemusic"))
         #expect(s.isActive)
+    }
+
+    // MARK: - What a resumed source may still claim (#1673)
+
+    // #1673. Resuming set `isActive` and cleared `inactiveReason`, and nothing else, so the row kept the
+    // verdict it was carrying when Dan stopped it. Nothing fetched that page for the whole time it sat
+    // stopped, so a source revived after a season landed straight back in the Failing section quoting a
+    // months old conclusion, and the row's instruction ("New listings, not read yet. Run a scout to read
+    // them.") was a claim about listings nobody had looked at since.
+    //
+    // Measured on the live store: the only stopped row, New York Neo-Futurists, carried health `failing`,
+    // `verdict_unreadable` and `hasUnreadChanges = 1`. One press of Watch again presented all three as
+    // this source's current state.
+    //
+    // Three present tense claims, so all three go. #1549 makes this worse rather than less real: it HIDES
+    // the unread line while a source is stopped, so a stale flag is invisible for as long as the source
+    // sits removed and then reappears as a live instruction the moment it is restored.
+    @Test func aResumedSourceCarriesNoVerdictFromBeforeTheStop() throws {
+        let ctx = try context()
+        _ = WatchlistEditing.add(orgName: "New York Neo-Futurists",
+                                 listingsURL: "https://nynf.example/events", into: ctx)
+        let s = try #require(try sources(ctx).first)
+        s.health = .failing
+        s.lastFailure = .verdict(.unreadable)
+        s.hasUnreadChanges = true
+        WatchlistEditing.stopWatching(s, in: ctx)
+
+        #expect(WatchlistEditing.resumeWatching(s, in: ctx) == .resumed)
+
+        #expect(s.health == .neverChecked)
+        #expect(s.lastFailure == nil)
+        #expect(!s.hasUnreadChanges)
+        #expect(SourceGrade(s) == .neverChecked)          // "Not checked yet", until a scout reaches it
+        #expect(!SourceAttention.needsALook(s))           // and not work Dan owes anyone before then
+    }
+
+    // The OTHER route to watching a source again, and the reason this is not a fix to one function. Dan can
+    // retype the org name and the URL into the add form, which matches the row by calendar identity and
+    // revives it (that route predates the button, and is still what the add form does today). It reached
+    // the same stale row by a different door, so it needed the same reset.
+    @Test func watchingAStoppedOrgAgainFromTheAddFormClearsTheSameVerdict() throws {
+        let ctx = try context()
+        _ = WatchlistEditing.add(orgName: "New York Neo-Futurists",
+                                 listingsURL: "https://nynf.example/events", into: ctx)
+        let s = try #require(try sources(ctx).first)
+        s.health = .failing
+        s.lastFailure = .verdict(.unreadable)
+        s.hasUnreadChanges = true
+        WatchlistEditing.stopWatching(s, in: ctx)
+
+        let result = WatchlistEditing.add(orgName: "New York Neo-Futurists",
+                                          listingsURL: "https://nynf.example/events", into: ctx)
+
+        #expect(result == .resumed)
+        #expect(try sources(ctx).count == 1)
+        #expect(s.isActive)
+        #expect(s.health == .neverChecked)
+        #expect(s.lastFailure == nil)
+        #expect(!s.hasUnreadChanges)
+    }
+
+    // The add form also lets Dan type a DIFFERENT address on the same calendar, and that path has always
+    // written the new URL onto the row. That makes it a correction as well as a resume, so it owes
+    // everything `editURL` owes: a corrected URL is a brand new source for reconcile (#1027), and keeping
+    // the old page's baseline under a new address is the silent cancellation hole #887/#897 closed.
+    @Test func retypingADifferentAddressForAStoppedOrgResetsWhatTheOldPageTaught() throws {
+        let ctx = try context()
+        _ = WatchlistEditing.add(orgName: "New York Neo-Futurists",
+                                 listingsURL: "https://nynf.example/events", into: ctx)
+        let s = try #require(try sources(ctx).first)
+        s.baselineFeedCount = 30
+        s.successfulCheckCount = 9
+        s.lastSucceededAt = Date(timeIntervalSince1970: 1_785_000_000)
+        s.notes = "A paragraph about the HTML at /events."
+        WatchlistEditing.stopWatching(s, in: ctx)
+
+        let result = WatchlistEditing.add(orgName: "New York Neo-Futurists",
+                                          listingsURL: "https://nynf.example/calendar", into: ctx)
+
+        #expect(result == .resumed)
+        #expect(try sources(ctx).count == 1)
+        #expect(s.listingsURL == "https://nynf.example/calendar")
+        #expect(s.baselineFeedCount == 0)
+        #expect(s.successfulCheckCount == 0)
+        #expect(s.lastSucceededAt == nil)
+        #expect(s.notes == nil)
+    }
+
+    // The decision #1673 asks for, pinned so it cannot be quietly reversed into `editURL`'s behaviour.
+    //
+    // A pause is NOT a repointing. The address is unchanged, so the baseline is still a measurement of this
+    // very calendar, and wiping it would make the source LESS able to notice a listing has gone, not more:
+    // `successfulCheckCount` back at zero puts the source in warmup, where `absenceIsEvidence` is false for
+    // `warmupRuns` successful reads, and a source that sat out a season is exactly the one whose stored
+    // shows are most likely to have really gone. Clearing `lastSucceededAt` alongside it would also make
+    // `SourceAttention.hasNeverRead` true on an established row, which is a fresh false alarm of the same
+    // kind this issue removes.
+    //
+    // The stale size risk is already handled without a wipe: a grown feed re-baselines at once, and a feed
+    // that came back smaller is not a credible baseline, so it cannot be evidence of absence at all until
+    // the smaller size holds for `selfHealThreshold` reads.
+    @Test func aResumedSourceKeepsTheFeedHistoryItEarned() throws {
+        let ctx = try context()
+        _ = WatchlistEditing.add(orgName: "Bargemusic", listingsURL: "https://bargemusic.org/events",
+                                 into: ctx)
+        let s = try #require(try sources(ctx).first)
+        let lastRead = Date(timeIntervalSince1970: 1_785_000_000)
+        s.baselineFeedCount = 30
+        s.successfulCheckCount = 9
+        s.degradedStreak = 2
+        s.lastDegradedCount = 18
+        s.lastSucceededAt = lastRead
+        s.emptyStreak = 4
+        WatchlistEditing.stopWatching(s, in: ctx)
+
+        #expect(WatchlistEditing.resumeWatching(s, in: ctx) == .resumed)
+
+        #expect(s.baselineFeedCount == 30)
+        #expect(s.successfulCheckCount == 9)
+        #expect(s.degradedStreak == 2)
+        #expect(s.lastDegradedCount == 18)
+        #expect(s.lastSucceededAt == lastRead)
+        #expect(s.emptyStreak == 4)
+        #expect(!SourceAttention.hasNeverRead(s, now: Date()))
     }
 }
