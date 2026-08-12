@@ -631,7 +631,8 @@ struct QueueView: View {
     // month/day, year) and the #1193/#901 "Unavailable" marker up by the date. The grouping
     // (QueueModel.groupByDate) and the unavailability rule (QueueModel.groupIsUnavailable) are tested
     // model helpers; this only renders them.
-    private func dateSection(_ group: QueueModel.DateGroup, data: RenderData, departing: Set<String>) -> some View {
+    private func dateSection(_ group: QueueModel.DateGroup, data: RenderData,
+                             departing: [String: DepartureReason]) -> some View {
         VStack(alignment: .leading, spacing: OVSpacing.sm) {
             HStack(alignment: .firstTextBaseline, spacing: OVSpacing.sm) {
                 if !group.weekday.isEmpty {
@@ -699,10 +700,10 @@ struct QueueView: View {
             // has already kept or drafted is not something to lose to one right-click.
             .contextMenu { if focusedStage == .scout { nightDismissMenu(group) } }
 
-            // #1922: `departing` arrives as a plain set from QueueDateGroups, which is the view that read
-            // it. Reading it here would be the same dependency one level down.
+            // #1922: `departing` arrives as a plain dictionary from QueueDateGroups, which is the view
+            // that read it. Reading it here would be the same dependency one level down.
             ForEach(group.items) { item in
-                prospectRow(item, data: data, isDeparting: departing.contains(item.id))
+                prospectRow(item, data: data, departure: departing[item.id])
             }
         }
     }
@@ -1195,9 +1196,7 @@ struct QueueView: View {
                 // #2395: the endings come from the one vocabulary, and from the half that is possible for
                 // this show, so nobody is offered "Date conflict" on a pitch they already sent.
                 CloseOutMenu(outcomes: ShowOutcome.menu(wasPitched: p.wasPitched)) { outcome in
-                    ProspectMutations.recordOutcome(QueueItem(p), outcome,
-                                                    prospects: prospects, context: context,
-                                                    feedback: feedback)
+                    closeOut(p, as: outcome)
                 }
                 // #2130: the control says what is actually due, because "due now" here is min of three
                 // clocks and meant six different things behind one wording. Nothing due, no button: an
@@ -1211,12 +1210,21 @@ struct QueueView: View {
         .padding(.vertical, OVSpacing.xs)
     }
 
-    @ViewBuilder private func prospectRow(_ item: QueueItem, data: RenderData, isDeparting: Bool) -> some View {
-        if isDeparting {
+    @ViewBuilder private func prospectRow(_ item: QueueItem, data: RenderData,
+                                          departure: DepartureReason?) -> some View {
+        if let departure, departure.showsSendDelight {
             // #361: the leaving delight. Appears instantly in place of the just-sent row (insertion
             // .identity), then the glide-up removal plays when `departing` clears. Reduced Motion drops
             // the glide to a plain fade; the drawn line is already dropped by the timing plan.
             SendDelightRow(item: item, timing: SendDelightTiming.plan(reduceMotion: reduceMotion))
+                .transition(.asymmetric(
+                    insertion: .identity,
+                    removal: reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity)))
+        } else if departure != nil {
+            // #2417: the quiet exit, for a row leaving because Dan recorded an ending. Deliberately NOT
+            // SendDelightRow: the commonest endings are "no response" and "they passed", and the gold
+            // seal on those reads as the app congratulating him on a rejection.
+            ClosedOutDepartureRow(item: item)
                 .transition(.asymmetric(
                     insertion: .identity,
                     removal: reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity)))
@@ -1341,6 +1349,35 @@ struct QueueView: View {
                 performSend(item.id, selecting: selected, together: together)
             }
         )
+    }
+
+    // #2417: record an ending, and make the row start leaving on the PRESS rather than after the write.
+    //
+    // The order is the whole fix. Marking the departure first costs one card, because SendProgressState's
+    // writes notify only the views that read it and QueueView's own body reads none of them (#1922). The
+    // mutation that follows saves and then makes SwiftData rebuild every card, which is a quarter of a
+    // second at the store's present size and grows with it. Doing the cheap visible thing first is what
+    // makes the control answer immediately, whatever the rebuild costs behind the animation.
+    //
+    // The snapshot is taken before the write for the same reason performSend takes one: once the ending
+    // lands, the row is gone from the queue's answer and the card playing the exit cannot come from it.
+    private func closeOut(_ p: Prospect, as outcome: ShowOutcome) {
+        let snapshot = QueueItem(p)
+        withAnimation(.easeOut(duration: 0.15)) {
+            sendState.depart(snapshot.id, as: snapshot, because: .closedOut)
+        }
+        ProspectMutations.recordOutcome(snapshot, outcome,
+                                        prospects: prospects, context: context,
+                                        feedback: feedback)
+        // Cleared after the exit plays. Never before the rebuild lands: clearing early would drop the
+        // snapshot while the real row is still in the queue's answer, and the row Dan just closed out
+        // would flash back onto the screen.
+        let t = SendDelightTiming.plan(reduceMotion: reduceMotion)
+        DispatchQueue.main.asyncAfter(deadline: .now() + t.holdBeforeExit) {
+            withAnimation(.easeOut(duration: t.exit)) {
+                sendState.finishDeparting(snapshot.id)
+            }
+        }
     }
 
     private func performSend(_ naturalKey: String, selecting: [String]? = nil, together: Bool? = nil) {

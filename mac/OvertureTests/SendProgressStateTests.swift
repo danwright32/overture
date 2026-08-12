@@ -80,4 +80,46 @@ struct SendProgressStateTests {
         state.clearHighlight(ifStill: "second-show")
         #expect(state.highlighted == nil)
     }
+
+    // #2417: a row leaves for two quite different reasons, and they must not look alike.
+    //
+    // A send earns the gold seal. An ending recorded from the close-out menu does not: "no response" and
+    // "they passed" are the commonest of them, and celebrating those with the same seal reads as the app
+    // congratulating Dan on a rejection. Gold is reserved for what he can act on.
+    @Test func aDepartureCarriesWhyTheRowIsLeaving() {
+        let state = SendProgressState()
+
+        state.depart("sent-show", as: item("sent-show"), because: .sent)
+        state.depart("closed-show", as: item("closed-show"), because: .closedOut)
+
+        #expect(state.departureReason("sent-show") == .sent)
+        #expect(state.departureReason("closed-show") == .closedOut)
+        #expect(state.departureReason("never-departed") == nil)
+
+        // Only the send gets the celebration, and this is asserted on the reason rather than on any
+        // rendering of it, so it stays true of whatever the two rows are drawn as (L103).
+        #expect(DepartureReason.sent.showsSendDelight)
+        #expect(!DepartureReason.closedOut.showsSendDelight)
+    }
+
+    // The existing send path must keep working untouched, and keep its seal.
+    @Test func aDepartureWithNoStatedReasonIsASend() {
+        let state = SendProgressState()
+
+        state.depart("carnegie-2026-07-01", as: item("carnegie-2026-07-01"))
+
+        #expect(state.departureReason("carnegie-2026-07-01") == .sent)
+    }
+
+    // Finishing clears the reason with the snapshot. A reason left behind would make the NEXT departure
+    // of that same show render as whatever the last one was, and the two look different on purpose.
+    @Test func finishingADepartureClearsItsReasonToo() {
+        let state = SendProgressState()
+        state.depart("closed-show", as: item("closed-show"), because: .closedOut)
+
+        state.finishDeparting("closed-show")
+
+        #expect(state.departureReason("closed-show") == nil)
+        #expect(!state.isDeparting("closed-show"))
+    }
 }

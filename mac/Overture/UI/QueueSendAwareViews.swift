@@ -26,16 +26,23 @@ struct QueueDateGroups<Header: View, Content: View>: View {
     let groups: [QueueModel.DateGroup]
     let sendState: SendProgressState
     @ViewBuilder let header: () -> Header
-    @ViewBuilder let content: (QueueModel.DateGroup, Set<String>) -> Content
+    @ViewBuilder let content: (QueueModel.DateGroup, [String: DepartureReason]) -> Content
 
     var body: some View {
         // Read once, here. Every splice decision below is made from this one value, and the keys travel
-        // down as a plain set so nothing further down reads the object again.
+        // down as a plain dictionary so nothing further down reads the object again.
         let departing = sendState.departing
+        let reasons = sendState.departureReasons
+        // #2417: built from the DEPARTING keys, never from the reasons dictionary, so the two can never
+        // disagree about which rows are leaving. A key with no recorded reason is a send, which is what
+        // every departure was before this issue and what the defaulted `depart` still records.
+        let departureReasons = departing.keys.reduce(into: [String: DepartureReason]()) {
+            $0[$1] = reasons[$1] ?? .sent
+        }
         LazyVStack(alignment: .leading, spacing: OVSpacing.xl) {
             header()
             ForEach(QueueModel.groups(groups, withDeparting: departing)) { group in
-                content(group, Set(departing.keys))
+                content(group, departureReasons)
             }
         }
         .scrollTargetLayout()
