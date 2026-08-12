@@ -134,6 +134,10 @@ enum WatchlistMutations {
             feedback.acknowledge(SourceFixConfirmCopy.confirmedAck(org: source.orgName))
         case .noHash:
             feedback.acknowledge(SourceFixConfirmCopy.confirmedNoHashAck(org: source.orgName), tone: .warning)
+        // #2530: the same sentence the other refusal routes speak, so a row that asked not to be
+        // contacted reads identically whichever control was pressed on it.
+        case .refused(let orgName):
+            feedback.acknowledge(WatchlistEditing.refusedMessage(orgName: orgName), tone: .warning)
         }
     }
 }
