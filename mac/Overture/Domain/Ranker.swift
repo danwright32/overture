@@ -247,12 +247,17 @@ enum Ranker {
             case nil: return 2
             }
         case .contactFormOnly: return 1
-        // #2612: the SAME as a contact form, decided rather than defaulted. Both are a real route Dan
-        // works by hand, and nothing measured says a DM converts worse than a form; inventing a gap
-        // between them would be a guess dressed as a weight, which is what #1648 set out to avoid. What
-        // matters is that it is no longer the -5 of a dead end: the show Dan called a perfect fit was the
-        // one the app was most confident he should drop.
-        case .socialOnly: return 1
+        // #2612: BELOW a contact form, and no longer the -5 of a dead end. Dan's call, 2026-08-13, asked
+        // directly after the first version scored it level with a form: "social dm is worth less than a
+        // contact form. I probably won't use it unless it's a really good fit in other ways like I
+        // mentioned." Zero says exactly that. It neither lifts a show nor buries it, so an Instagram-only
+        // show reaches high fit only when the rest of it is strong, which is the behaviour he described.
+        //
+        // It shares that zero with `weakContactOnly` and `unchecked`, which is not a collapse of three
+        // meanings into one: those two score zero for their own reasons (asked and got a front desk,
+        // versus nobody asked), and the three stay distinct everywhere it matters, in the verdict, the
+        // badge and what the card offers.
+        case .socialOnly: return 0
         case .weakContactOnly: return 0
         case .noEmailFound: return -5
         case .unchecked: return 0
