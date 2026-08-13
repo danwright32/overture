@@ -72,6 +72,7 @@ struct ReachedOutTimingSlotTests {
         // its own date until that date had arrived, so the `min` over the clocks had nothing to compare
         // the nudge against and this test recorded the survivor as correct.
         #expect(ReachedOutQueue.timingLabel(for: r, of: p, now: now, today: today) == "in 1 day")
+    }
 
     // The nudge clock the LABEL reads must be the one the ACTION reads, stand-down included. Before #2550
     // the label used `Recipient.isAwaitingFollowUp` while the action used `FollowUp.isAwaitingNudge`, so a
