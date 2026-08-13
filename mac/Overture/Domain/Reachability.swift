@@ -508,6 +508,8 @@ enum ReachabilityCopy {
         switch reason {
         case .venueOrPress: return weakContactOnlyBadge
         case .duplicate: return "Held as a duplicate"
+        // #2624: neither of the two above is true of it, and the difference is what Dan acts on.
+        case .unaccountedAddress: return "Held, address in another name"
         }
     }
 
@@ -516,6 +518,8 @@ enum ReachabilityCopy {
         case .venueOrPress: return weakContactOnlyHelp
         case .duplicate:
             return "This address is already in play on another show at this venue within a few days, so Overture is holding it rather than writing to the same person twice. If they are different bookings, clear the duplicate flag on the contact and it is sendable again."
+        case .unaccountedAddress:
+            return "The address found here is in a different name from the contact on this show, and no page was recorded showing it reaches them. A pitch would greet one person and arrive with another, so Overture is holding it. If it does reach them, clear the flag on the contact and it is sendable again."
         }
     }
 

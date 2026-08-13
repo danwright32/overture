@@ -45,6 +45,8 @@ struct OutreachFieldClassificationTests {
         // answers about an ADDRESS rather than a record that somebody was written to.
         "looksLikeVenue": "a guard's opinion of the address",
         "looksLikeVenueDismissed": "Dan waving that guard off, an answer about the address",
+        "looksLikeAnotherPersons": "a guard's opinion of the address",
+        "looksLikeAnotherPersonsDismissed": "Dan waving that guard off, an answer about the address",
         "looksLikePressContact": "a guard's opinion of the address",
         "looksLikePressContactDismissed": "Dan waving that guard off, an answer about the address",
         "looksLikeDuplicateContact": "a guard's opinion of the address",

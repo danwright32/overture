@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1258 sentences**.
+Every sentence Overture can say to Dan: **1262 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -825,6 +825,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DraftCheck.swift`
 "Held as a duplicate"
     `Domain/Reachability.swift`
+"Held, address in another name"
+    `Domain/Reachability.swift`
 "Held, not sending"
     `UI/SendConfirmSheet.swift`
 "Hi \(firstName(name)),"
@@ -887,6 +889,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/AddLeadSheet.swift`
 "It leaves your queue, filed as \(reason.label)."
     `Domain/BulkDismiss.swift`
+"It reaches them"
+    `UI/DraftReviewView.swift`
 "It's their address"
     `UI/DraftReviewView.swift`
 "Its listing page couldn't be read"
@@ -1169,6 +1173,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/PrepQueueService.swift`
 "Nothing on this feed names a room, so its shows are filed under \(org)."
     `UI/SourcesView.swift`
+"Nothing on this show connects \(name) to the address found for them, and no page was recorded; blocked from sending."
+    `Domain/DraftReviewNotes.swift`
 "Nothing recorded which page \(name)'s address was read off, so it isn't counted as verified."
     `Domain/DraftReviewNotes.swift`
 "Nothing scouted yet"
@@ -1815,6 +1821,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "The Prep run finished but didn't produce any results. It may have hit an error or found no contacts."
     `Domain/DetachedRunOutcome.swift`
 "The act takes messages through the form on their own site. You'd fill that in yourself; Overture can't send it for you."
+    `Domain/Reachability.swift`
+"The address found here is in a different name from the contact on this show, and no page was recorded showing it reaches them. A pitch would greet one person and arrive with another, so Overture is holding it. If it does reach them, clear the flag on the contact and it is sendable again."
     `Domain/Reachability.swift`
 "The calendar reader ran but produced nothing this run."
     `Domain/ScoutWarnings.swift`

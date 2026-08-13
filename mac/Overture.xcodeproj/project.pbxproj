@@ -167,6 +167,7 @@
 		18F345FF1AC2E86A029C372D /* ReplyIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA29FD36A165F7F09BF65224 /* ReplyIdentity.swift */; };
 		18F9203C90A1D854A1CCF094 /* ClientRoster.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48E84D80C3401B201DAD2E7D /* ClientRoster.swift */; };
 		190FC963761475349137C4EB /* VenueTixCalendar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A30B9ADDD3819FD07425159 /* VenueTixCalendar.swift */; };
+		1911746B62250D27BBD7B33E /* UnaccountedAddressGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51D9BD15AB20C621AEB9FCA6 /* UnaccountedAddressGuardTests.swift */; };
 		191BE98966E82792937090D4 /* DraftEditCaptureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96B240AD82A5B280E1AA7B55 /* DraftEditCaptureTests.swift */; };
 		192DB140070CE5EF5B0BB864 /* SourceConfirmation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CFEF50447A6BA2CC02A5D25 /* SourceConfirmation.swift */; };
 		197F042CC46F148ABB5C09EF /* ContactConfidenceGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97CA69E0512534106A24679F /* ContactConfidenceGuard.swift */; };
@@ -396,6 +397,7 @@
 		38C71875FF4C0A1EE5ED0BB3 /* WatchlistSeedTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3C90F5990C725C002954933 /* WatchlistSeedTests.swift */; };
 		38E58F86230A0A548404BBBA /* DuplicateContactGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA4252A77CC0AE59A4B88D49 /* DuplicateContactGuardTests.swift */; };
 		39048761063890013A86E36C /* SendDelightTiming.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2172CE8354CB41DD0815A77C /* SendDelightTiming.swift */; };
+		39675C9C457E448CF33000DA /* UnaccountedAddressGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFC04602826AA2C2A8A03944 /* UnaccountedAddressGuard.swift */; };
 		39A7CB8D187581277A2DBE98 /* ProspectStageReachabilityGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0FAE5EA1BE7B41DF0A534F /* ProspectStageReachabilityGuardTests.swift */; };
 		39CF1DC228BF80DCE0969B46 /* PartialSweepCannotCancelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E73D4129E9A92AF7133DCAE6 /* PartialSweepCannotCancelTests.swift */; };
 		39E776A8D9AD6A8C2D3172DE /* UnreadGenreIsSaidPlainlyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AAE68A7B6AEE27DFE2A8B97 /* UnreadGenreIsSaidPlainlyTests.swift */; };
@@ -1008,6 +1010,7 @@
 		9E5F1559286C461A393C62F0 /* LeadSubmissions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EE51845D09CC5B147AFA31A /* LeadSubmissions.swift */; };
 		9EC139EDF24D569452F8A449 /* FollowUpsViewUserActionSaveGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E897341D6DCE28A954EE361 /* FollowUpsViewUserActionSaveGuardTests.swift */; };
 		9ED6034687D7A4201690FAF9 /* SameNightLooserTitleMatchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5AC3B41024343EE00F9030E /* SameNightLooserTitleMatchTests.swift */; };
+		9F11186061B6F5433C8A03E0 /* UnaccountedAddressGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFC04602826AA2C2A8A03944 /* UnaccountedAddressGuard.swift */; };
 		9F75D645A63CF463A4E9AC0A /* ReplyPanelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 613970864511262475B3BAB5 /* ReplyPanelTests.swift */; };
 		9F89C043F464F738A5DA0762 /* QueueUndoStack.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36795807A9F454119154EA6A /* QueueUndoStack.swift */; };
 		A02D498BAE774D252215C746 /* TooSoonDismissReasonTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57E7EFEF49D57DEF70DFF640 /* TooSoonDismissReasonTests.swift */; };
@@ -2007,6 +2010,7 @@
 		509E65317079CDE9B3FF3061 /* GeoRefusals.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeoRefusals.swift; sourceTree = "<group>"; };
 		513DB732FDE78DAFF21B9C48 /* DockPresence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockPresence.swift; sourceTree = "<group>"; };
 		5178D84B81F3C41DC943DF9F /* ReachabilityProbeMarker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReachabilityProbeMarker.swift; sourceTree = "<group>"; };
+		51D9BD15AB20C621AEB9FCA6 /* UnaccountedAddressGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnaccountedAddressGuardTests.swift; sourceTree = "<group>"; };
 		51E49C7D7A0552D17A0B564B /* SourceGuardHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceGuardHelper.swift; sourceTree = "<group>"; };
 		52157C78ECE785E01811012D /* ReachedOutRowGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReachedOutRowGuardTests.swift; sourceTree = "<group>"; };
 		5215E42CBAD77A95F94C8966 /* QueueDepartingFoldTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueDepartingFoldTests.swift; sourceTree = "<group>"; };
@@ -2556,6 +2560,7 @@
 		BF13A18B3F23144C2AEAF3BD /* DownbeatBooking.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownbeatBooking.swift; sourceTree = "<group>"; };
 		BF7534F4A263A83BFE275545 /* PrepRunArchiveTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrepRunArchiveTests.swift; sourceTree = "<group>"; };
 		BF91353E155492CFBE45A521 /* TriageWindowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TriageWindowTests.swift; sourceTree = "<group>"; };
+		BFC04602826AA2C2A8A03944 /* UnaccountedAddressGuard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnaccountedAddressGuard.swift; sourceTree = "<group>"; };
 		C038B0DB271163B1E936354F /* SharedReplyConfirmationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedReplyConfirmationTests.swift; sourceTree = "<group>"; };
 		C0F129E428D70A720307D2F9 /* PresenterProvenanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresenterProvenanceTests.swift; sourceTree = "<group>"; };
 		C1096FAF37B64F2AEB5897CA /* ProbeSelectionBarTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProbeSelectionBarTests.swift; sourceTree = "<group>"; };
@@ -3658,6 +3663,7 @@
 				3BEBCF94E20C0F098D5943DD /* ToolbarPopoverGuardTests.swift */,
 				57E7EFEF49D57DEF70DFF640 /* TooSoonDismissReasonTests.swift */,
 				BF91353E155492CFBE45A521 /* TriageWindowTests.swift */,
+				51D9BD15AB20C621AEB9FCA6 /* UnaccountedAddressGuardTests.swift */,
 				71B936B6774AD2236CC89793 /* UnapprovedDraftNamesNobodyTests.swift */,
 				632FAC085FC56CEBFF4A5252 /* UnchangedRefreshInvalidatesNothingTests.swift */,
 				57BCF457E63EF130C9878C23 /* UncheckedShowStaysQuietTests.swift */,
@@ -4031,6 +4037,7 @@
 				ADB6AB214C94FAA63B14B637 /* TicketLink.swift */,
 				15E669DD8FF452B0821055D5 /* TitleNormalization.swift */,
 				F26C128217DB0FB52D89CDBF /* Typography.swift */,
+				BFC04602826AA2C2A8A03944 /* UnaccountedAddressGuard.swift */,
 				EDFA95C28AE2DFD2A2B6C84C /* UpdateAttempt.swift */,
 				A34F8EF3BCFE68C62D3CFE5E /* VenueContactGuard.swift */,
 				C28247DC7A15C79A3B675E23 /* VenueDisplay.swift */,
@@ -4676,6 +4683,7 @@
 				30607A40E77679A3951494E4 /* TitleNormalization.swift in Sources */,
 				76F9973271C5034D209D14BF /* ToolbarHoverLabel.swift in Sources */,
 				A94E926C164498E82612A6AF /* Typography.swift in Sources */,
+				39675C9C457E448CF33000DA /* UnaccountedAddressGuard.swift in Sources */,
 				D66E06837818CD1831CD82C9 /* UpdateAttempt.swift in Sources */,
 				3BA3D6E6BA99D391E8ACEE86 /* UpdateCommandFile.swift in Sources */,
 				F39971708B3FA3D3B69DBDB7 /* UpdateFailureSheet.swift in Sources */,
@@ -5838,6 +5846,8 @@
 				2A5CFE0787DB7369750F37A8 /* ToolbarPopoverGuardTests.swift in Sources */,
 				6F377C52D536A24097BB1DB5 /* TriageWindowTests.swift in Sources */,
 				FA915D26BE37C24F9009BCF4 /* Typography.swift in Sources */,
+				9F11186061B6F5433C8A03E0 /* UnaccountedAddressGuard.swift in Sources */,
+				1911746B62250D27BBD7B33E /* UnaccountedAddressGuardTests.swift in Sources */,
 				943523EDFE1E44FF707884F0 /* UnapprovedDraftNamesNobodyTests.swift in Sources */,
 				3AC9EF2EE58F7BAE0E13E89C /* UnchangedRefreshInvalidatesNothingTests.swift in Sources */,
 				2045FAFEEEFB155A46ACA451 /* UncheckedShowStaysQuietTests.swift in Sources */,

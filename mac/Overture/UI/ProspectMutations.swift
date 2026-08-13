@@ -385,6 +385,17 @@ enum ProspectMutations {
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
+    // #2624: Dan judged the address really does reach the person named, so the hold comes off. His
+    // answer about THIS address, like the four guards beside it, and the next ingest asks again only if
+    // the address or the name actually changes.
+    static func dismissAddressInAnotherName(_ item: QueueItem, _ recipientId: String,
+                                            prospects: [Prospect], context: ModelContext,
+                                            feedback: ActionFeedback) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        model.updateRecipient(id: recipientId) { $0.looksLikeAnotherPersonsDismissed = true }
+        context.saveOrWarn(org: item.groupName, feedback: feedback)
+    }
+
     static func draftReply(_ item: QueueItem, _ recipientId: String, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         model.updateRecipient(id: recipientId) { $0.replyDraftRequestedAt = Date() }

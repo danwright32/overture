@@ -136,6 +136,16 @@ final class Recipient {
     var looksLikeDuplicateContact: Bool = false
     var looksLikeDuplicateContactDismissed: Bool = false
 
+    // #2624: the fifth guard, recorded the way the three above are. UnaccountedAddressGuard catches a
+    // contact naming one person and holding an address in a different person's name with no page cited:
+    // the greeting is composed from `name`, so such a row would greet the artist and be delivered to a
+    // stranger at an agency (L75). Dismissible for the same reason the venue and press guesses are: Dan
+    // can look at an address and judge whether it really reaches the person named.
+    var looksLikeAnotherPersons: Bool = false
+    var looksLikeAnotherPersonsDismissed: Bool = false
+
+    var isLooksLikeAnotherPersons: Bool { looksLikeAnotherPersons && !looksLikeAnotherPersonsDismissed }
+
     // #1866: the fourth guard on a contact, recorded the way the three above are. ContactConfidenceGuard
     // (#1856) rewrites a `high` find down to `low` when it names no page it was read off, and used to store
     // nothing saying it had, so the row read exactly like one the run itself judged weak. Two different
@@ -449,20 +459,25 @@ final class Recipient {
         email?.isEmpty == false
             && ((looksLikeVenue && !looksLikeVenueDismissed)
                 || (looksLikePressContact && !looksLikePressContactDismissed)
-                || (looksLikeDuplicateContact && !looksLikeDuplicateContactDismissed))
+                || (looksLikeDuplicateContact && !looksLikeDuplicateContactDismissed)
+                || isLooksLikeAnotherPersons)
     }
 
     // #1798: WHICH kind of hold, so the card's sentence can be true of the row that produced it. Measured
     // on the live store 2026-07-31: the one row in this state was held by the duplicate guard alone, with
     // the venue and press guards both clear, so the wording written for those two would have been a false
     // claim about a real presenter's own office address.
-    enum HoldReason: Equatable { case venueOrPress, duplicate }
+    // #2624 adds the third: an address nobody on the row accounts for. Its own case for the same reason
+    // the duplicate has one, that the badge has to be true of the row that produced it: neither "weak
+    // contact only" nor "held as a duplicate" describes an address in a stranger's name.
+    enum HoldReason: Equatable { case venueOrPress, duplicate, unaccountedAddress }
 
     var holdReason: HoldReason? {
         guard isHeldByAGuard else { return nil }
         if (looksLikeVenue && !looksLikeVenueDismissed)
             || (looksLikePressContact && !looksLikePressContactDismissed) { return .venueOrPress }
-        return .duplicate
+        if looksLikeDuplicateContact && !looksLikeDuplicateContactDismissed { return .duplicate }
+        return .unaccountedAddress
     }
 
     var isSendablePending: Bool {
@@ -481,6 +496,10 @@ final class Recipient {
             && !(looksLikeVenue && !looksLikeVenueDismissed)
             && !(looksLikePressContact && !looksLikePressContactDismissed)
             && !(looksLikeDuplicateContact && !looksLikeDuplicateContactDismissed)
+            // #2624: an address in a name nobody on this row accounts for. Held here, not merely marked,
+            // because `low` confidence changed how the card DESCRIBED the find and did nothing to stop
+            // the send: the greeting would name the artist and the mail would reach a stranger.
+            && !isLooksLikeAnotherPersons
             && !isBlockedByDraftLint
             // #2545: a body that does not greet, or greets one person on an email several people get.
             // Held here rather than only on the draft card for the reason #2052 gives directly above:
@@ -620,6 +639,7 @@ final class Recipient {
             || (looksLikeVenue && !looksLikeVenueDismissed)
             || (looksLikePressContact && !looksLikePressContactDismissed)
             || (looksLikeDuplicateContact && !looksLikeDuplicateContactDismissed)
+            || isLooksLikeAnotherPersons
             || isBlockedByDraftLint
     }
 

@@ -59,6 +59,7 @@ struct ProspectRowView: View {
     var onDismissDuplicateContactMatch: (_ recipientId: String) -> Void = { _ in }
     // #1866: Dan overruling the guard that held a confident find down to unverified.
     var onDismissConfidenceHeldDown: (_ recipientId: String) -> Void = { _ in }
+    var onDismissAddressInAnotherName: (_ recipientId: String) -> Void = { _ in }
     var onDraftReply: (_ recipientId: String) -> Void = { _ in }
     var onSendReply: (_ recipientId: String) -> Void = { _ in }
     var onCopyReply: (_ recipientId: String) -> Void = { _ in }
@@ -187,6 +188,7 @@ struct ProspectRowView: View {
                     onDismissPressContactMatch: onDismissPressContactMatch,
                     onDismissDuplicateContactMatch: onDismissDuplicateContactMatch,
                     onDismissConfidenceHeldDown: onDismissConfidenceHeldDown,
+                    onDismissAddressInAnotherName: onDismissAddressInAnotherName,
                     onAddRecipient: onAddRecipient,
                     onRemoveRecipient: onRemoveRecipient,
                     onDraftReply: onDraftReply,

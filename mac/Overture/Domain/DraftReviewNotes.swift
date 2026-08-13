@@ -122,6 +122,13 @@ enum DraftReviewNotes {
     // #1866: the fourth guard's warning line, in the same list as the three above. It deliberately does NOT
     // say "blocked from sending", because this one blocks nothing: it downgrades what the card claims about
     // the address. Saying otherwise would be the L11 overclaim the badge itself was just fixed for.
+    // #2624: the fifth guard's warning line, in the same list as the four above. Unlike the confidence
+    // hold directly below, this one DOES block the send, and says so: the greeting is composed from the
+    // contact's name, so an address in another name would greet one person and reach a different one.
+    static func addressInAnotherName(name: String) -> String {
+        "Nothing on this show connects \(name) to the address found for them, and no page was recorded; blocked from sending."
+    }
+
     static func confidenceHeldDown(name: String) -> String {
         "Nothing recorded which page \(name)'s address was read off, so it isn't counted as verified."
     }
