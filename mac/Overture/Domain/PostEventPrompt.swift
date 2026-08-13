@@ -168,10 +168,21 @@ enum PostEventPrompt {
         // date string a scrape happened to leave behind.
         let dayClause = performanceDate.flatMap { EasternDate.longDayLabel($0) }.map { "\($0) " } ?? ""
         let show = "your \(dayClause)show" + ((venue?.isEmpty == false) ? " at \(venue!)" : "")
+        // #2643: the two sentences this used to end on asserted a conversation that by construction never
+        // happened. This note is offered ONLY when nobody on the show has written back (see `prompt(for:)`,
+        // which picks `.closeOut` the moment anybody has), and sending it records
+        // `ShowOutcome.neverHeardBack`. So "the timing didn't line up this round" reported a decision the
+        // recipient never communicated, and "it was good to be in touch" claimed a completed exchange when
+        // there had been one message in one direction. Dan read both in the send sheet on 2026-08-13.
+        //
+        // What replaces them says only what is true of silence: the show has passed, the offer stands, and
+        // no reply is wanted. It holds a door open without inventing a relationship to hold it open on, and
+        // without guilting anybody for not answering.
+        //
         // #1144: the signature is appended once at the send layer, so this ends at its last sentence.
-        return greeting + "\n\nI know \(show) has come and gone, and the timing didn't line up this round. "
-            + "No worries at all. If there's a future performance you'd like documented, I'd be glad to help "
-            + "then. Either way, it was good to be in touch."
+        return greeting + "\n\nI know \(show) has come and gone, and I hope it went well. If there's a "
+            + "future performance you'd like documented, I'd be glad to help then. No need to reply to "
+            + "this one."
     }
 
     // copy-inventory:ignore-end
