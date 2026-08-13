@@ -138,46 +138,11 @@ derived_data_reclaim() {
   return 0
 }
 
-# Every build folder whose workspace lives inside WORKSPACE_DIR, one path per line.
-#
-# Used by the verify script to remove the folder it caused at the moment it removes the worktree,
-# rather than leaving it for a later sweep. Matching is on a full path COMPONENT, never a bare string
-# prefix: two throwaway worktrees from mktemp routinely share a prefix (overture-verify-2585.abcdef
-# and overture-verify-2585.abcdefGHI), and a prefix test would delete another run's live folder.
-derived_data_for_workspace() {
-  local root="${1:-}" workspace_dir="${2:-}"
-  [[ -n "${workspace_dir}" && -d "${root}" ]] || return 0
-  workspace_dir="${workspace_dir%/}"
-
-  local dir path
-  for dir in "${root}"/*/; do
-    dir="${dir%/}"
-    [[ -d "${dir}" ]] || continue
-    path="$(derived_data_workspace_path "${dir}")"
-    [[ -n "${path}" ]] || continue
-    if [[ "${path}" == "${workspace_dir}/"* ]]; then
-      printf '%s\n' "${dir}"
-    fi
-  done
-  return 0
-}
-
-# Deletes the build folders belonging to one workspace directory and prints how many went. Safe to
-# call after the directory itself is gone, which is the order the caller uses.
-derived_data_reclaim_for_workspace() {
-  local root="${1:-}" workspace_dir="${2:-}"
-  local removed=0 dir
-  while IFS= read -r dir; do
-    [[ -n "${dir}" ]] || continue
-    if rm -rf "${dir}"; then
-      removed=$((removed + 1))
-    else
-      echo "derived-data: could not remove ${dir}" >&2
-    fi
-  done < <(derived_data_for_workspace "${root}" "${workspace_dir}")
-  printf '%s\n' "${removed}"
-  return 0
-}
+# derived_data_for_workspace and derived_data_reclaim_for_workspace used to live here: the verify
+# script called them to remove the build folder its throwaway worktree caused. #2601 made that
+# worktree a persistent slot whose folder is kept warm on purpose, so the last caller went away and
+# both were deleted rather than left looking alive (L29, L46); git remembers them if a per-workspace
+# reclaim is ever needed again.
 
 # The warning to print when free space is getting low, or nothing at all when it is fine.
 #

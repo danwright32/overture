@@ -60,7 +60,7 @@ pbxproj_freshness_verdict() {
 
 # The real gate: read the installed xcodegen version, regenerate the project in the target dir, ask git
 # whether the committed .pbxproj changed, restore it so the tree is left clean, and hand the two facts to
-# the pure verdict. Runs in the given dir (a throwaway verify worktree or this repo). Fails closed with
+# the pure verdict. Runs in the given dir (the verify worktree, a throwaway one, or this repo). Fails closed with
 # the "cannot verify" verdict when xcodegen is not installed at all.
 check_pbxproj_fresh() {
   local dir="${1:-${REPO_ROOT}}"
