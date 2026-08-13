@@ -20,6 +20,25 @@ enum RunKind: Equatable, Sendable {
     // side of the run's start is still this run's. Only a marker clearly older than the run is refused.
     static let sameRunTolerance: TimeInterval = 120
 
+    // #2614: what Dan calls this run, in ONE place. Five surfaces named the run holding the single slot
+    // and three of them said "prep" whatever was going, because they read a boolean that only knew the
+    // slot was taken. A shared noun is what stops a sixth phrasing appearing beside them.
+    var runNoun: String {
+        switch self {
+        case .prep: return "prep run"
+        case .reachabilityCheck: return "reachability check"
+        }
+    }
+
+    // The stop control's label. Its own string rather than "Cancel \(runNoun)", so the Prep wording Dan
+    // already knows is untouched and neither reads as a sentence fragment.
+    var cancelLabel: String {
+        switch self {
+        case .prep: return "Cancel prep"
+        case .reachabilityCheck: return "Cancel reachability check"
+        }
+    }
+
     /// - Parameters:
     ///   - runStartedAt: when the run now finishing began, if the app recorded it. Nil at a launch-time
     ///     settle of a run this process never watched.

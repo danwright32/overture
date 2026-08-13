@@ -208,7 +208,11 @@ struct PrepReplyRunnerWiringGuardTests {
 
     @Test func rootViewPrepCancelWritesTheSentinel() {
         #expect(!rootView.isEmpty)
-        #expect(rootView.contains("Cancel prep"))                       // the control exists
+        // #2614: the label is the RUN's own name now, so the control is found by the value that names
+        // it rather than by a literal that only ever matched the Prep spelling and would have to be
+        // rewritten for every kind of run (L103).
+        #expect(rootView.contains("kind.cancelLabel"))                  // the control exists
+        #expect(RunKind.prep.cancelLabel == "Cancel prep")              // and still says this for a prep
         #expect(rootView.contains("PrepQueueService.requestCancel()"))  // and it asks the run to stop
     }
 

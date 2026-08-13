@@ -671,6 +671,18 @@ enum PrepQueueService {
                           probeMarkerStartedAt: marker?.startedAt) == .reachabilityCheck
     }
 
+    // #2614: WHICH run holds the single slot, or nil for none, in one call. Every surface that NAMES the
+    // run reads this rather than pairing `isRunning` with `isProbeRunning` itself: two booleans read
+    // separately is a state space with a corner the app can never be in (a probe running while Prep is
+    // not), and three surfaces were reading only the first of them and so called every check a prep run.
+    static func runInFlight(probeRunURL: URL = defaultProbeRunURL,
+                            markerURL: URL = defaultMarkerURL, now: Date,
+                            runStartedAt: Date? = lastRunStartedAt) -> RunKind? {
+        guard isRunning(markerURL: markerURL, now: now) else { return nil }
+        return isProbeRunning(probeRunURL: probeRunURL, markerURL: markerURL, now: now,
+                              runStartedAt: runStartedAt) ? .reachabilityCheck : .prep
+    }
+
     // Writes the work-list and launches the detached run. Returns the count queued.
     // URLs are injectable for testing; production uses the default locations.
     @discardableResult

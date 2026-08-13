@@ -47,7 +47,7 @@ struct InquiryStageReachabilityGuardTests {
     private func statuses(for inquiry: Inquiry) -> [AgentStatus] {
         let inputs = AgentInputs.from(prospects: [], inquiries: [inquiry],
                                       context: .at("2026-06-01", now: Date(timeIntervalSince1970: 1_780_500_000)), gmailConnected: true,
-                                      prepRunning: false, replyRunAlive: false)
+                                      runInFlight: nil, replyRunAlive: false)
         return AgentRoster.statuses(inputs)
     }
 

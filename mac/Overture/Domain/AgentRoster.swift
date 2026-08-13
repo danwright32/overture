@@ -33,7 +33,12 @@ struct AgentInputs: Sendable {
     // number rather than a fold into keptToPrep: the Prep run still refuses these, so counting them as
     // "ready to prep" would state a backlog the run then does not work through (#863).
     var prepBlocked: Int = 0
-    var prepRunning: Bool
+    // #2614: WHICH detached run holds the single slot, or nil for none. Deliberately one value rather
+    // than a boolean beside a second boolean: a check is by definition also "running", so two independent
+    // flags is a state space with an impossible corner in it, and the pill read the flag that could not
+    // tell three kinds of run apart. `RunKind` already makes this decision in one place for
+    // `isProbeRunning`, so nothing new decides it here.
+    var runInFlight: RunKind? = nil
     var toReview: Int        // drafted, awaiting Dan's review/approval
     var readyToSend: Int     // approved, not yet sent
     var gmailConnected: Bool
@@ -68,7 +73,7 @@ extension AgentInputs {
     // exactly how a SHIPPING caller forgets a gate invisibly: a pill built without it counts shows its own
     // stage list will not render, which is #1570 over again.
     static func from(prospects: [Prospect], inquiries: [Inquiry] = [], context: StageContext,
-                     gmailConnected: Bool, prepRunning: Bool, replyRunAlive: Bool) -> AgentInputs {
+                     gmailConnected: Bool, runInFlight: RunKind?, replyRunAlive: Bool) -> AgentInputs {
         // Counted THROUGH StageNavigation, never alongside it, so a pill's number and the rows its tap
         // lands on come from one predicate and cannot answer the same question differently.
         // #1121: one traversal for every focus (StageNavigation.counts), not one traversal per focus, so
@@ -83,7 +88,7 @@ extension AgentInputs {
             toTriage: count(.scout),
             keptToPrep: count(.prep),
             prepBlocked: count(.prepBlocked),
-            prepRunning: prepRunning,
+            runInFlight: runInFlight,
             toReview: count(.review) + inquiryCount(.review),   // #1436: un-replied inquiries live here
             readyToSend: count(.sendApproved),
             gmailConnected: gmailConnected,
@@ -186,11 +191,27 @@ enum AgentRoster {
     }
 
     private static func prep(_ i: AgentInputs) -> AgentStatus {
-        if i.prepRunning {
+        if i.runInFlight == .prep {
             // #843: the tooltip shows this after the concept ("Finds a contact and drafts an email…"), so
             // "Finding contacts and drafting…" only said the concept again in the present tense. The live
             // detail's job here is just to say it is happening now.
             return AgentStatus(name: "Prep", state: .working, detail: "Running now…",
+                               focus: .prep, count: i.keptToPrep)
+        }
+        // #2614: a reachability check holds the same single slot, so no Prep run can start, but nothing is
+        // drafting. Dan's decision, shown the alternatives: state his real backlog AND why it cannot move,
+        // rather than describing the check. The count and the focus stay on the backlog, so the number is
+        // still a promise about the rows the tap lands on (#863), and "held by" is the phrasing the date
+        // clash branch below already uses for a backlog that exists and cannot move (#1583/#1691).
+        //
+        // `.working` rather than `.needsAttention`: a held backlog is not something he can act on, and gold
+        // is reserved for what he can, which is also what keeps it distinguishable from that clash.
+        //
+        // Said only when there IS a backlog. "0 ready, held by a check" would promise rows the tap cannot
+        // land on, and with nothing kept the fact that Prep cannot start costs him nothing.
+        if i.runInFlight == .reachabilityCheck, i.keptToPrep > 0 {
+            return AgentStatus(name: "Prep", state: .working,
+                               detail: "\(i.keptToPrep) ready, held by a check",
                                focus: .prep, count: i.keptToPrep)
         }
         // #1583/#1691: a show Dan kept and a booking then landed on. It outranks the ordinary backlog for

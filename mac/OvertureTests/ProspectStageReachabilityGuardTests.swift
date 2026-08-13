@@ -145,7 +145,7 @@ struct ProspectStageReachabilityGuardTests {
         let stage = StageNavigation.stage(containing: "show-1", in: all, reachedOutKeys: reachedOutKeys,
                                           context: .at(today, now: now))
         let inputs = AgentInputs.from(prospects: all, context: .at(today, now: now), gmailConnected: true,
-                                      prepRunning: false, replyRunAlive: false)
+                                      runInFlight: nil, replyRunAlive: false)
         return (stage, AgentRoster.statuses(inputs))
     }
 
