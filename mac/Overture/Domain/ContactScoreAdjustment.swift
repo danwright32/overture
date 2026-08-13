@@ -16,11 +16,16 @@ enum ContactScoreAdjustment {
     @discardableResult
     static func settle(_ p: Prospect, now: Date) -> Bool {
         let route = p.contactRouteForScoring(now: now)
+        // #2622: the answer is now the route AND who was found, because a re-check can return `emailFound`
+        // both times and change the score by finding the producer instead of a cast member. Judged on the
+        // pair, or that row would keep yesterday's score forever while the card showed today's contact
+        // (a changed rule reaching only rows written after it).
+        let tier = p.contactTierForScoring(now: now)
 
         // Already settled at this answer. Covers the common no-op cases in one line: a show nobody has
         // ever checked (unchecked, and nothing recorded), and a row this already ran over.
         let alreadyAt = p.contactRouteAtScore ?? ContactRoute.unchecked.rawValue
-        guard route.rawValue != alreadyAt else { return false }
+        guard route.rawValue != alreadyAt || tier?.rawValue != p.contactTierAtScore else { return false }
 
         // The score as it stands BEFORE this adjustment. Read first, because the write below replaces it.
         p.fitScoreBeforeContactCheck = p.fitScore
@@ -28,6 +33,7 @@ enum ContactScoreAdjustment {
         p.fitScore = refit.score
         p.tier = refit.tier.rawValue
         p.contactRouteAtScore = route.rawValue
+        p.contactTierAtScore = tier?.rawValue
         return true
     }
 

@@ -1,0 +1,54 @@
+{
+  "version": 9,
+  "generatedAt": "2026-07-30T00:00:00.000Z",
+  "results": [
+    {
+      "naturalKey": "alex-example|2026-08-03|the-example-room",
+      "showSummary": "A cabaret concert of new songs by one songwriter, with a cast of five, 75 minutes.",
+      "contacts": [
+        {
+          "name": "Alex Example",
+          "role": "Performer",
+          "tier": "primary",
+          "email": "alex@alexexample.example",
+          "method": "named_decision_maker",
+          "confidence": "high",
+          "provenance": "performer",
+          "sourceUrl": "https://alexexample.example/contact",
+          "overrideBody": "I photograph performing arts in New York and saw you're bringing your evening of new songs to The Example Room on August 3. I shoot unobtrusive, no-flash documentary coverage, which suits a room that size. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com/performing-arts."
+        }
+      ],
+      "draft": {
+        "subject": "Photographing Alex Example's new songs at The Example Room.",
+        "body": "I photograph performing arts in New York and saw Alex Example is bringing an evening of new songs to The Example Room on August 3. I shoot unobtrusive, no-flash documentary coverage, which suits a room that size. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com/performing-arts.",
+        "variant": "reason-first"
+      }
+    },
+    {
+      "naturalKey": "harbour-winds|2026-04-02|the-example-room",
+      "showSummaryAbsentReason": "no_description_published",
+      "contacts": [
+        {
+          "name": "Iris Calder",
+          "role": "Ensemble Manager",
+          "tier": "primary",
+          "email": "iris@harbourwinds.example",
+          "method": "named_decision_maker",
+          "confidence": "high",
+          "provenance": "act",
+          "sourceUrl": "https://harbourwinds.example/about"
+        }
+      ],
+      "draft": {
+        "subject": "Photographing Harbour Winds at The Example Room.",
+        "body": "I photograph performing arts in New York and saw Harbour Winds is playing The Example Room on April 2. I shoot unobtrusive, no-flash documentary coverage from the back of the house. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com/music.",
+        "variant": "direct-intent"
+      }
+    },
+    {
+      "naturalKey": "unlisted-ensemble|2026-08-20|community-hall",
+      "showSummaryAbsentReason": "no_listing_page",
+      "emptyReason": "nothing_published"
+    }
+  ]
+}

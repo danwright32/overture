@@ -51,6 +51,15 @@ fixture carries a summary, an honest absence beside a real draft, and an absence
 contacts at all. Additive, so `v1.json` through `v7.json` still decode with both absent. The absent-reason
 vocabulary is enforced by `assertPrepResultsShape`, which also refuses a v8 entry carrying neither.
 
+`v9.json` (#2622) adds an optional `tier` to a `contacts[]` entry: who this contact is TO THE SHOW, as
+the run judged it from the page it read. `primary` is whoever could actually hire Dan (a self-producing
+headliner, or the producing organisation's producer or artistic director), `secondary` is somebody on the
+show without that authority (a co-performer, a music director, a guest), `tertiary` is a third party
+representing them (a manager, an agent, a booking agency). It is deliberately NOT derivable from `role`,
+which is unbounded free text; the run has the page in front of it and the app does not. Additive, so
+`v1.json` through `v8.json` still decode with it absent, and an absent or unrecognised value reads as
+"nobody has said", never as a tier.
+
 ## The run metadata fixtures (#1678)
 
 `run-metadata-complete-v8.json` and `run-metadata-partial-v8.json` are a different KIND of fixture from the

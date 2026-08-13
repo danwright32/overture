@@ -170,6 +170,18 @@ final class Recipient {
     // so the card, the review panel and the merge cannot each spell the pair differently.
     var isHeldDownToUnverified: Bool { heldDownToUnverified && !heldDownToUnverifiedDismissed }
 
+    // #2622: WHO this contact is to the show (primary, secondary, tertiary), as the check judged it from
+    // the page it read. Raw, like the confidence and method beside it, so a value this build does not know
+    // decodes as nil rather than being invented here. nil means nobody has said, which every contact
+    // stored before this shipped is, and which is deliberately not the same thing as a show no check has
+    // looked at (that is `Prospect.reachabilityResult`).
+    var contactTierRaw: String?
+
+    var contactTier: ContactTier? {
+        get { contactTierRaw.flatMap(ContactTier.init(rawValue:)) }
+        set { contactTierRaw = newValue?.rawValue }
+    }
+
     // #1630: HOW this contact was actually reached. nil means email, the only channel that existed
     // before this, so every stored record migrates as what it is. `contact_form` means Dan submitted
     // the act's own form by hand and told Overture he did: real outreach that Gmail never touched, so

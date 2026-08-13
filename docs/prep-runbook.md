@@ -71,7 +71,7 @@ before this was codified.
   must not guess between (no history there, no history imported at all, or a Carnegie show, where
   the tenure credential already covers that exact room). See §2's rule on saying Dan knows the room.
 - **Write:** `~/Library/Application Support/Overture/overture-prep-results.json`
-  (`PrepResults` version `8`: `results[]` each with `naturalKey`, `contacts[]`, `draft`, an
+  (`PrepResults` version `9`: `results[]` each with `naturalKey`, `contacts[]`, `draft`, an
   optional `alreadyCoveredNote` (see the already-covered fit-risk flag in §1 below), an
   optional `emptyReason` REQUIRED on any entry whose `contacts` is absent, see "Say WHY an
   entry has no contacts" in §1, and (v8, #1824) an optional `showSummary` with a
@@ -79,7 +79,8 @@ before this was codified.
   draft in the listing. This number had said `5` since v5 while real runs wrote v6;
   corrected with the v7 bump in #1722.)
   Each entry in `contacts[]` is one party to email for the performance, carrying a
-  `provenance` of `act`, `performer`, or `presenter` (never the host venue). Emit either
+  `provenance` of `act`, `performer`, or `presenter` (never the host venue), and (v9, #2622)
+  a `tier` saying WHO they are to the show, see "Say who the contact is" in §1. Emit either
   the act OR its named lead performer(s), never both, see §1 below, plus at most one
   real presenting org; the app sends one separate email per contact. A `provenance:
   "performer"` contact MAY also carry its own `overrideBody`, a direct second-person
@@ -508,6 +509,24 @@ medium, form/DM or inferred = low. **For a named performer specifically**, only 
 (name plus instrument/role/context match, e.g. their own site lists this date/venue or
 names this group); a bare name match with no such corroboration is a misidentification
 risk, so mark it `low` instead, same as any other unverified guess.
+
+**Say who the contact is (`tier`, v9, #2622).** Every entry in `contacts[]` carries a `tier`. It answers
+one question, and it is NOT about billing order: **who could actually say yes to hiring a photographer?**
+
+- `"primary"`: whoever owns the show and could hire Dan. A self-producing headliner (the show is theirs),
+  or the producing organisation's producer, artistic director or founder.
+- `"secondary"`: somebody ON the show without that authority. A co-performer, a music director, a special
+  guest, a host.
+- `"tertiary"`: a third party REPRESENTING them. A manager, an agent, a publicist, a booking agency.
+
+Judge it from the page you actually read, the same bar as everything else here, and say what that page
+supports rather than what a role title suggests: a music director who also produces the night is primary,
+and one who was hired for it is secondary. The app deliberately does not derive this from the `role` text,
+because a role is unbounded free text and cannot tell those two apart; you have the page and it does not.
+
+If the page does not support any of the three, OMIT the field. An absent tier reads as "nobody has said",
+which is honest, and it scores exactly what a found address has always scored. A guessed tier is worse
+than none: `primary` moves a show up into what Dan looks at first, and `tertiary` moves it down.
 
 **Already-covered fit-risk flag (#611).** While reading the act/presenter's own site for the
 waterfall above, also watch for an EXPLICIT statement that they already have their own

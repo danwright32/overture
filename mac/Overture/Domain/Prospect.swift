@@ -236,6 +236,10 @@ final class Prospect {
     // afterwards. The after is derived, never remembered.
     var fitScoreBeforeContactCheck: Int? = nil
     var contactRouteAtScore: String? = nil
+    // #2622: and WHO was found at that score, for the same reason, because a re-check can return the same
+    // route and a different person. Without it a show whose check finally found the producer would keep
+    // the score it got for a cast member's address, since the route never moved.
+    var contactTierAtScore: String? = nil
     // #1648: the contact answer as the RANKER should read it. Identical to the stored result except
     // that an answer past its 90 day expiry reads as `.unchecked`, so a demotion lifts at the same
     // moment the badge reverts to "worth re-checking" and the card and the score can never disagree
@@ -244,6 +248,27 @@ final class Prospect {
     //
     // It RECOMPUTES rather than restoring the score stored before the check: restoring an integer
     // would also silently undo any unrelated correction made since (the #1648 Phase A3 mistake).
+    // #2622: which contact speaks for the show. Dan's decision, 2026-08-13: the HIGHEST tier among the
+    // show's SENDABLE contacts, selected over the same set `reachabilityResultFromRecipients` reads for
+    // `isSendablePending`, so the badge and the score can never answer from different lists (L16).
+    //
+    // Two consequences, and they are the cases this rule exists for. A show can hold a PRIMARY contact
+    // with no address at all (the runbook emits a full contact for a named performer even when no email
+    // was verified), and under this rule that entry cannot lift the show: Dan's standing rule is that it
+    // is not a high fit if he cannot email anybody, so a person he has identified and cannot write to must
+    // not score as if he could. And an address held by a guard (venue, press, duplicate, held down to
+    // unverified) does not set the tier either, for the same reason it does not make the show emailFound.
+    var contactTierFromRecipients: ContactTier? {
+        ContactTier.best(of: recipients.filter(\.isSendablePending).map(\.contactTier))
+    }
+
+    // The tier as the SCORE should see it: nil once the answer it came from has aged out, so a stale
+    // find cannot keep lifting a show after its route has fallen back to unchecked.
+    func contactTierForScoring(now: Date) -> ContactTier? {
+        guard !Reachability.probeIsStale(probedAt: reachabilityProbedAt, now: now) else { return nil }
+        return contactTierFromRecipients
+    }
+
     func contactRouteForScoring(now: Date) -> ContactRoute {
         if Reachability.probeIsStale(probedAt: reachabilityProbedAt, now: now) { return .unchecked }
         return ContactRoute(probeResult: reachabilityResult)
