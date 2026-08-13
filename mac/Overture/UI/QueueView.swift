@@ -398,6 +398,9 @@ struct QueueView: View {
     private func requestRecheckNow(_ item: QueueItem) {
         let summary = ProbeSelection.summarizeOneShowRecheck(
             previouslyMissed: item.reachabilityUnansweredAt != nil,
+            // #2621: an answer this show can actually show, its own or its organisation's. False is the
+            // missed show, which since that issue raises this same sheet with nothing behind it.
+            hasAnswer: item.reachabilityProbedAt != nil || item.inheritedReachability != nil,
             secondsPerRound: ProbeSelection.liveSecondsPerRound())
         pendingProbe = ProbeConfirm(keys: [item.id], dateLabel: "",
                                     title: ProbeSelectionCopy.multiDateTitle(summary),

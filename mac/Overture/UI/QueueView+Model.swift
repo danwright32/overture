@@ -1907,9 +1907,9 @@ enum QueueModel {
                                    geo: GeoRefusals = .none) -> [String] {
         items.filter { i in
             probeIsWorthOffering(i, today: today, geo: geo)
-                && i.reachabilityProbedAt == nil
-                && i.reachabilityUnansweredAt != nil
-                && !Reachability.probeIsStale(probedAt: i.reachabilityUnansweredAt, now: now)
+                // #2621: one definition of "a check missed this row", shared with the per-card offer.
+                && Reachability.wasMissedByACheck(probedAt: i.reachabilityProbedAt,
+                                                  unansweredAt: i.reachabilityUnansweredAt, now: now)
         }.map(\.id)
     }
 

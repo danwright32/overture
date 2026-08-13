@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1252 sentences**.
+Every sentence Overture can say to Dan: **1253 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -461,7 +461,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ExcludedTownsView.swift`
 "An AI draft came back while you were writing."
     `Domain/ReplyPanel.swift`
-"An earlier check included this show but never got an answer for it, so it's still unchecked. Nothing re-checks it on its own; picking its date again is what gets it an answer."
+"An earlier check included this show but never got an answer for it, so it's still unchecked. Nothing re-checks it on its own."
     `Domain/Reachability.swift`
 "An email to \(p.replyWatchDisplayName) bounced, and it went to more than one person (\(addresses)), so Overture cannot tell which address failed. Check the bounce in Gmail and fix or remove the dead address"
     `Integration/BounceService.swift`
@@ -1954,6 +1954,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "This looks up a real contact for the still-open shows on \(dateLabel), so you can tell which are emailable before you keep one. It spends a little on that lookup, only for the shows you check here."
     `Domain/Reachability.swift`
 "This looks up a real contact for this one show, even though it already has an answer."
+    `Domain/ProbeSelection.swift`
+"This looks up a real contact for this one show, which an earlier check never got an answer for."
     `Domain/ProbeSelection.swift`
 "This opens Terminal and runs the install. Overture quits partway through and comes back on its own."
     `Domain/BuildFreshnessPanel.swift`

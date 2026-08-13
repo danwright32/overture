@@ -195,7 +195,7 @@ struct ReachabilityRecheckOfferTests {
 struct OneShowRecheckConfirmTests {
 
     @Test func itIsOneShowAndOneLookup() {
-        let s = ProbeSelection.summarizeOneShowRecheck(previouslyMissed: false)
+        let s = ProbeSelection.summarizeOneShowRecheck(previouslyMissed: false, hasAnswer: true)
         #expect(s.showCount == 1)
         #expect(s.researchCount == 1)
         #expect(s.alreadyAnsweredCount == 0)
@@ -206,14 +206,14 @@ struct OneShowRecheckConfirmTests {
     // run long enough that losing the single slot is a real cost, and putting it on every one-show press
     // is how a warning stops being read (L36).
     @Test func oneLookupNeverClaimsToBlockOtherRuns() {
-        let s = ProbeSelection.summarizeOneShowRecheck(previouslyMissed: false)
+        let s = ProbeSelection.summarizeOneShowRecheck(previouslyMissed: false, hasAnswer: true)
         #expect(s.spansSeveralRounds == false)
         #expect(ProbeSelectionCopy.oneShowRecheckMessage(s).contains(ProbeSelectionCopy.blocksOtherRuns) == false)
     }
 
     // The cost sentence is the SAME one the date confirm uses, not a second phrasing of it.
     @Test func itCarriesTheSameCostSentenceAsTheDateConfirm() {
-        let s = ProbeSelection.summarizeOneShowRecheck(previouslyMissed: false)
+        let s = ProbeSelection.summarizeOneShowRecheck(previouslyMissed: false, hasAnswer: true)
         #expect(ProbeSelectionCopy.oneShowRecheckMessage(s).contains(ProbeSelectionCopy.costLine(s)))
     }
 
@@ -221,9 +221,9 @@ struct OneShowRecheckConfirmTests {
     // ordinary press it would be noise.
     @Test func itSaysWhenAnEarlierCheckAlreadyCameHomeEmpty() {
         let missed = ProbeSelectionCopy.oneShowRecheckMessage(
-            ProbeSelection.summarizeOneShowRecheck(previouslyMissed: true))
+            ProbeSelection.summarizeOneShowRecheck(previouslyMissed: true, hasAnswer: true))
         let fresh = ProbeSelectionCopy.oneShowRecheckMessage(
-            ProbeSelection.summarizeOneShowRecheck(previouslyMissed: false))
+            ProbeSelection.summarizeOneShowRecheck(previouslyMissed: false, hasAnswer: true))
         #expect(missed.contains("never got an answer"))
         #expect(fresh.contains("never got an answer") == false)
     }
@@ -378,5 +378,154 @@ struct RecheckAWholeDateTests {
         let keys = QueueModel.keysToReofferForRecheck([item("answered"), item("fresh", probed: false)],
                                                        now: justAfter, today: "2026-09-01")
         #expect(Set(keys) == ["answered"])
+    }
+}
+
+// #2621: the missed-show pill was the one reachability answer on a card with no "Check again" beneath it.
+//
+// Dan, walking the queue 2026-08-13: "Unverified email found" and "Only a social profile" both carry the
+// link; the one saying a check did not finish does not. `recheckState`'s final guard was written for a
+// show nothing has ever looked at ("no answer to re-run and the offer would imply it had"), and it
+// swallowed a third case: something DID run over this row, came home short, and the card says so in its
+// own badge.
+//
+// The remedy that existed was elsewhere and did not last. #1805's "Check the rest" hangs off the status
+// message set when a run ENDS, so it is gone once that message is replaced, while the badge holds for 90
+// days. For most of those days the card named a specific fault and carried nothing to act on (L80), and
+// its hover text pointed at the date tick, which runs the whole date rather than this show.
+@Suite("Re-checking a show a check missed (#2621)")
+struct RecheckAMissedShowTests {
+    private let probedAt = Date(timeIntervalSince1970: 1_780_000_000)
+    private var justAfter: Date { probedAt.addingTimeInterval(100) }
+    private var longAfter: Date { probedAt.addingTimeInterval(Reachability.probeFreshness + 1) }
+
+    private func item(_ key: String, status: ReviewStatus = .new, probedAt: Date? = nil,
+                      unansweredAt: Date? = nil) -> QueueItem {
+        var i = QueueItem(id: key, groupName: key, discipline: "music", venue: "Weill Recital Hall",
+                          performanceDate: "2026-09-12", sourceListingURL: nil, websiteURL: nil,
+                          priorRelationship: "none", production: "self", profile: "strong",
+                          coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
+                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                          status: status)
+        i.reachabilityProbedAt = probedAt
+        i.reachabilityUnansweredAt = unansweredAt
+        return i
+    }
+
+    // THE test: a row a check ran over and came home short is offered the per-card control.
+    @Test func amissedShowIsOfferedTheControl() {
+        #expect(Reachability.recheckState(probedAt: nil, hasInheritedAnswer: false,
+                                          recheckRequestedAt: nil, now: justAfter,
+                                          missedByACheck: true) == .offer)
+    }
+
+    // The case the old guard was written for, unchanged: a show NOTHING has ever checked is served by the
+    // ordinary control, and offering to run it "again" would claim something had.
+    @Test func ashowNothingHasEverCheckedIsStillNotOffered() {
+        #expect(Reachability.recheckState(probedAt: nil, hasInheritedAnswer: false,
+                                          recheckRequestedAt: nil, now: justAfter,
+                                          missedByACheck: false) == .notOffered)
+    }
+
+    // Failure path. The candidacy rule refuses to include a show past the keep-or-dismiss moment in any
+    // check, so the card must not sell a run that would decline it (L16).
+    @Test func amissedShowPastDecidingIsNotOffered() {
+        for status: ReviewStatus in [.dismissed, .contacted] {
+            #expect(Reachability.recheckState(probedAt: nil, hasInheritedAnswer: false,
+                                              recheckRequestedAt: nil, now: justAfter,
+                                              isStillOpen: false,
+                                              missedByACheck: true) == .notOffered,
+                    "\(status) still wore the offer")
+        }
+    }
+
+    // An outstanding request beats the miss, so the new case cannot resurrect a pressable-looking control
+    // over a check already asked for (L44).
+    @Test func amissedShowWithAnOutstandingRequestSaysSoInstead() {
+        #expect(Reachability.recheckState(probedAt: nil, hasInheritedAnswer: false,
+                                          recheckRequestedAt: justAfter, now: justAfter,
+                                          checkIsRunning: false, missedByACheck: true) == .requested)
+        #expect(Reachability.recheckState(probedAt: nil, hasInheritedAnswer: false,
+                                          recheckRequestedAt: justAfter, now: justAfter,
+                                          checkIsRunning: true, missedByACheck: true) == .running)
+    }
+
+    // MARK: which rows count as missed
+
+    // A row a later check ANSWERED is not missed any more, whatever an earlier run did to it, so the two
+    // paths can never both fire and a lookup is never paid for on a show that already succeeded.
+    @Test func arowsinceAnsweredIsNoLongerMissed() {
+        #expect(Reachability.wasMissedByACheck(probedAt: probedAt, unansweredAt: probedAt,
+                                               now: justAfter) == false)
+        // and it still gets the ordinary offer, from its own answer
+        #expect(Reachability.recheckState(probedAt: probedAt, hasInheritedAnswer: false,
+                                          recheckRequestedAt: nil, now: justAfter,
+                                          missedByACheck: false) == .offer)
+    }
+
+    // The mark ages on the same 90-day clock as every other reachability fact, rather than offering to
+    // spend money on one show forever.
+    @Test func amissedMarkThatHasAgedOutStopsCounting() {
+        #expect(Reachability.wasMissedByACheck(probedAt: nil, unansweredAt: probedAt,
+                                               now: longAfter) == false)
+    }
+
+    @Test func arowNoRunEverTouchedWasNotMissed() {
+        #expect(Reachability.wasMissedByACheck(probedAt: nil, unansweredAt: nil, now: justAfter) == false)
+    }
+
+    // The card and the batch control read ONE predicate, so they cannot disagree about which rows a check
+    // missed: "Check the rest" would otherwise run a set the cards never claimed to be in.
+    @Test func thecardAndTheBatchAgreeOnWhichRowsWereMissed() {
+        let missed = item("missed", unansweredAt: probedAt)
+        let answered = item("answered", probedAt: probedAt, unansweredAt: probedAt)
+        let untouched = item("untouched")
+        let closed = item("closed", status: .dismissed, unansweredAt: probedAt)
+        let items = [missed, answered, untouched, closed]
+
+        let batch = QueueModel.keysMissedByACheck(items, now: justAfter, today: "2026-09-01")
+
+        #expect(batch == ["missed"])
+        for i in items {
+            let cardSaysMissed = Reachability.wasMissedByACheck(probedAt: i.reachabilityProbedAt,
+                                                                unansweredAt: i.reachabilityUnansweredAt,
+                                                                now: justAfter)
+                && OpenForDecision.isOpen(status: i.status, performanceDate: i.performanceDate,
+                                          isBooked: i.isBooked, sentAt: i.sentAt, today: "2026-09-01")
+            #expect(cardSaysMissed == batch.contains(i.id), "\(i.id) disagreed")
+        }
+    }
+}
+
+// #2621: the confirm sheet a missed show raises is the one that already exists, and it must not open by
+// telling Dan the show already has an answer, which is the one thing a missed show does not have (L11).
+@Suite("The confirmation for re-checking a missed show (#2621)")
+struct MissedShowRecheckConfirmTests {
+    @Test func amissedShowIsNotDescribedAsAlreadyAnswered() {
+        let s = ProbeSelection.summarizeOneShowRecheck(previouslyMissed: true, hasAnswer: false)
+        let message = ProbeSelectionCopy.oneShowRecheckMessage(s)
+
+        #expect(!message.contains("already has an answer"))
+        #expect(message.contains("never got an answer"))
+        #expect(message.contains(ProbeSelectionCopy.costLine(s)))
+    }
+
+    // An answered show keeps the sentence it had, so this change reaches only the case it was made for.
+    @Test func ananasweredShowStillSaysItIsBeingRunAgain() {
+        let s = ProbeSelection.summarizeOneShowRecheck(previouslyMissed: false, hasAnswer: true)
+        #expect(ProbeSelectionCopy.oneShowRecheckMessage(s).contains("already has an answer"))
+    }
+
+    // The two halves are said ONCE. A show that was missed and has since been answered carries both facts,
+    // and a missed show with no answer must not say "never got an answer" twice (#843).
+    @Test func themissedSentenceIsNotSaidTwice() {
+        let missed = ProbeSelectionCopy.oneShowRecheckMessage(
+            ProbeSelection.summarizeOneShowRecheck(previouslyMissed: true, hasAnswer: false))
+        #expect(missed.components(separatedBy: "never got an answer").count == 2)
+
+        let answeredAfterAMiss = ProbeSelectionCopy.oneShowRecheckMessage(
+            ProbeSelection.summarizeOneShowRecheck(previouslyMissed: true, hasAnswer: true))
+        #expect(answeredAfterAMiss.contains("already has an answer"))
+        #expect(answeredAfterAMiss.contains("never got an answer for it"))
     }
 }

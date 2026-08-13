@@ -76,4 +76,28 @@ struct RecheckControlOnTheRowTests {
         #expect(t.contains { $0.contains(ReachabilityCopy.checkAgain) })
         #expect(!t.contains { $0.contains(ReachabilityCopy.recheckRunning) })
     }
+
+    // #2621: the card that names a specific fault and, until now, carried nothing to act on. Rendered
+    // rather than asserted of the rule, because the fact it turns on (the unanswered mark) has to be
+    // threaded into the row, and a break there leaves every pure test green while the badge sits alone.
+    @Test func acardACheckMissedOffersTheControlBeneathItsBadge() throws {
+        var missed = item(probed: false)
+        missed.reachabilityUnansweredAt = probedAt
+
+        let t = try texts(missed)
+
+        #expect(t.contains { $0.contains(ReachabilityCopy.checkMissedItBadge) })
+        #expect(t.contains { $0.contains(ReachabilityCopy.checkAgain) })
+    }
+
+    // And the hover text beside it stops teaching the wider route, which the card now covers itself.
+    @Test func themissedBadgeNoLongerSendsHimToTheWholeDate() throws {
+        var missed = item(probed: false)
+        missed.reachabilityUnansweredAt = probedAt
+
+        let t = try texts(missed)
+
+        #expect(t.contains { $0.contains(ReachabilityCopy.checkMissedItHelp) })
+        #expect(!t.contains { $0.contains("picking its date again") })
+    }
 }
