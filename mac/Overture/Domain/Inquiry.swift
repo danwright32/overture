@@ -64,6 +64,9 @@ final class Inquiry {
     var gmailThreadId: String?
     var gmailMessageId: String?    // stamped on the sent reply → `wasProvablyContacted`
     var threadIdDegraded: Bool = false
+    // #2647: the Message-ID read back off the sent reply could not be read, so a later message on this
+    // inquiry's thread cannot reference it. The Recipient side carries the same flag for the same reason.
+    var threadingDegraded: Bool = false
 
     // Reply / bounce detection state. An inquiry has ONE thread, not a contact list, so it presents
     // itself to the shared pipeline as a single self-thread (see Inquiry+ReplyWatchable).

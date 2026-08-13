@@ -51,6 +51,12 @@ struct SentReceipt: Equatable, Sendable {
     // threadId is "" in this case, never a guess, so the caller can flag it instead of leaving
     // reply watching silently and permanently broken for that recipient.
     var threadIdDegraded: Bool = false
+    // #2647: true when the send succeeded but the REAL Message-ID could not be read back off the sent
+    // message, so `messageID` is nil rather than a value nothing on the wire ever carried. Its OWN flag
+    // beside threadIdDegraded, not folded into it: they are two independent checks with two different
+    // consequences (replies cannot be watched, versus our next message cannot thread onto this one), and
+    // one field standing for both would let a pass on either erase the other's failure (L53).
+    var messageIDDegraded: Bool = false
 }
 
 protocol MailSender: Sendable {

@@ -37,7 +37,8 @@ enum StageOverlap {
     static func family(of focus: StageFocus) -> Family {
         switch focus {
         case .scout, .prep, .prepBlocked, .review: return .lifecycle
-        case .sendApproved, .sendBlocked, .sendErrors, .sendStuck, .sendDegraded: return .sendProblem
+        case .sendApproved, .sendBlocked, .sendErrors, .sendStuck, .sendDegraded,
+             .sendThreadingDegraded: return .sendProblem
         case .followUps, .reachedOut: return .resolvesNoKeys
         }
     }
