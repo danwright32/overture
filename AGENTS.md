@@ -72,6 +72,19 @@ already drifting from the Swift version it mirrored.
   judges that each change carries a test (and enforces the style rules); it does NOT itself run
   the suites, so `test-all.sh` is what actually runs the full Mac suite plus the TypeScript side
   that CI would otherwise only surface minutes later. Run it before every push.
+  Since #2603 it runs in TWO LANES, which changes how to read its output. The Swift suite starts FIRST,
+  in the background, and the cheap checks (typecheck, vitest, the shell fixtures, the drift checks) run
+  beside it, so the whole command now costs about what the Swift suite costs alone: measured 2026-08-13,
+  the cheap lane took 54s on its own and a full two-lane run took 200s against a Swift suite of 177s.
+  Three consequences. The Swift output does not appear until the cheap lane finishes, then replays from
+  its first line, so a quiet minute at the start is the cheap lane working rather than a hang (its own
+  stall guard cannot be starved by this: the limits are 600s and 300s, an order of magnitude past the
+  cheap lane). A failing cheap check no longer ends the run, because the expensive lane is already going
+  and its verdict is worth having, so the run says `FAILED - <check>` as it happens and both lanes are
+  reported separately at the end; the exit code is red if either lane is red (L53). And two checks
+  deliberately stay ahead of the build, `check-pure-suite-imports.sh` (its whole value is saving a doomed
+  build, which only works before one starts) and `check-pbxproj-fresh.sh` (it regenerates and restores
+  the project file, which must not happen while xcodebuild is reading it).
 - One-time per CLONE: run `scripts/install-git-hooks.sh` once (#1251 Phase 3). Once per clone is the
   whole of it: `core.hooksPath` lives in the shared git config (this repo sets no
   `extensions.worktreeConfig`), so every worktree, including ones made later, inherits it without
