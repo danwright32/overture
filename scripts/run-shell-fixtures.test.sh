@@ -231,6 +231,23 @@ chmod +x "${TIDY}"
 run_shell_fixtures "${TIDY}" >/dev/null 2>&1
 assert_equals "a fixture that cleans up after itself passes" "0" "$?"
 
+# The allowed names are DERIVED from the account the run is under, not written down. tsx names its cache
+# after the user id, so a hardcoded one is correct only on the machine it was written on: on any other
+# Mac or account the guard would call that cache a leak and fail a run for a reason unrelated to the code
+# under test, which is how a guard gets edited until it is quiet.
+#
+# Driven with a made-up account number, because the assertion has to be able to FAIL. Checking this
+# machine's own number would pass whether the name is derived or hardcoded, since they are the same here.
+ALLOWED_FOR_OTHER_ACCOUNT="$(fixture_temp_allowed_names 4242)"
+assert_contains "the allowed names follow the account the run is under" "${ALLOWED_FOR_OTHER_ACCOUNT}" "tsx-4242"
+assert_not_contains "and do not carry the account this was written on" "${ALLOWED_FOR_OTHER_ACCOUNT}" "tsx-501"
+assert_contains "the tool cache that has no account in its name is always allowed" \
+  "${ALLOWED_FOR_OTHER_ACCOUNT}" "node-compile-cache"
+
+# Another account's cache appearing under this run IS unexpected, so it must still be reported.
+OTHER_ACCOUNT_CACHE="$(fixture_temp_allowed_names 4242)"
+assert_not_contains "one account's allowed list does not excuse another's" "${OTHER_ACCOUNT_CACHE}" "tsx-7777"
+
 # node and tsx write their caches wherever TMPDIR points, on any fixture that shells out to either. They
 # are not the fixture's doing, so they must not be reported as its leak.
 TOOL_CACHE="${TMP_DIR}/tool-cache.test.sh"
