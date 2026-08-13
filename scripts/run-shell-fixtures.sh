@@ -77,11 +77,21 @@ unresolved_commands_are_all_declared() {
   return 1
 }
 
-# Files a fixture may leave in its private temp directory without being called a leak, because it did not
-# create them: node and tsx write these caches wherever TMPDIR points, on any run that shells out to
-# either. Named individually rather than by a wildcard, so a fixture's own leftover cannot hide behind a
-# vague pattern.
-FIXTURE_TEMP_ALLOWED="node-compile-cache tsx-501 tsx-0"
+# fixture_temp_allowed_names <uid>: the names a fixture may leave in its private temp directory without
+# being called a leak, because it did not create them. node and tsx write these caches wherever TMPDIR
+# points, on any run that shells out to either.
+#
+# tsx names its cache after the ACCOUNT the run is under, so the name is DERIVED here rather than written
+# down. A hardcoded one is correct only on the machine it was written on: on any other Mac or account the
+# guard would report that cache as a leak and fail a run for a reason unrelated to the code under test,
+# which is how a guard gets edited until it is quiet (#2543 is about exactly that).
+#
+# Named individually rather than by a wildcard, so a fixture's own leftover cannot hide behind a vague
+# pattern, and so one account's cache does not excuse another's turning up.
+fixture_temp_allowed_names() {
+  local uid="$1"
+  echo "node-compile-cache tsx-${uid}"
+}
 
 # Reads one finished fixture's private temp directory and returns nonzero when it left anything of its
 # own behind. Prints what was left.
@@ -96,7 +106,7 @@ fixture_left_temp_files() {
   local dir="$1" entry left=() allowed
   for entry in $(ls -A "${dir}" 2>/dev/null); do
     local is_allowed="false"
-    for allowed in ${FIXTURE_TEMP_ALLOWED}; do
+    for allowed in $(fixture_temp_allowed_names "$(id -u)"); do
       [[ "${entry}" == "${allowed}" ]] && is_allowed="true"
     done
     [[ "${is_allowed}" == "false" ]] && left+=("${entry}")
