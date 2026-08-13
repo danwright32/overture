@@ -20,31 +20,60 @@ enum ManualRecipientCheck {
         let looksLikeVenue: Bool
     }
 
+    // #2629: a ROUTE, not only an address. A contact form on the producer's own site and a social profile
+    // Dan will DM are both ways in he uses by hand, and the Review card tells him to add one on exactly
+    // the shows that have nothing else. Which of the two it is changes only what the informational flags
+    // can say; the create/resume/blocked decision is one rule for both, keyed on the recipient handle,
+    // because "this route already belongs to somebody on this show" means the same thing either way.
+    static func evaluate(route: ManualContactRoute, existingRecipients: [Recipient],
+                         venue: String?) -> Result {
+        switch route {
+        case .email(let address):
+            return evaluate(email: address, existingRecipients: existingRecipients, venue: venue)
+        case .link(let url):
+            let handle = Recipient.makeId(email: nil, formURL: url) ?? url
+            // A link cannot share an email domain with anybody, so `sharesOrgWith` is genuinely nil here
+            // rather than unchecked. The venue flag is asked through the SAME guard the card filters
+            // displayed forms with, so a link the card would hide cannot come back flagged as fine.
+            let looksLikeVenue = VenueContactGuard.looksLikeVenue(formURL: url, venue: venue)
+            if let match = existingRecipients.first(where: { $0.id == handle }) {
+                return Result(action: action(for: match), sharesOrgWith: nil,
+                              looksLikeVenue: looksLikeVenue)
+            }
+            return Result(action: .create, sharesOrgWith: nil, looksLikeVenue: looksLikeVenue)
+        }
+    }
+
     static func evaluate(email: String, existingRecipients: [Recipient], venue: String?) -> Result {
         let canonical = ReplyDetection.email(from: email)
         let emailDomain = domain(of: canonical)
 
         if let match = existingRecipients.first(where: { $0.id == canonical }) {
-            let bookedElsewhere = match.sendState == .suppressed && match.suppressionReason == .bookedElsewhere
-            let removedByDan = match.sendState == .suppressed && match.suppressionReason == .removedByDan
-            let declinedSuppression = match.sendState == .suppressed && match.suppressionReason == .declined
-            let action: Action
-            if match.resolution == .booked || bookedElsewhere {
-                action = .blocked(existingId: match.id)
-            // #2112: a contact closed out for never answering resumes like a soft decline. Nothing was
-            // refused, so re-adding the address is Dan trying again, not overriding a "no".
-            } else if removedByDan || declinedSuppression || match.resolution == .declinedSoft
-                        || match.resolution == .declinedHard || match.resolution == .neverHeardBack {
-                action = .resume(existingId: match.id)
-            } else {
-                action = .blocked(existingId: match.id)   // still active and unresolved
-            }
-            return Result(action: action, sharesOrgWith: nil, looksLikeVenue: looksLikeVenue(emailDomain, venue: venue))
+            return Result(action: action(for: match), sharesOrgWith: nil,
+                          looksLikeVenue: looksLikeVenue(emailDomain, venue: venue))
         }
 
         let orgMatch = existingRecipients.first { !emailDomain.isEmpty && domain(of: $0.id) == emailDomain }
         return Result(action: .create, sharesOrgWith: orgMatch?.id,
                       looksLikeVenue: looksLikeVenue(emailDomain, venue: venue))
+    }
+
+    // #2629: what an existing match means, in ONE place, so the address arm and the link arm cannot
+    // disagree about when re-adding somebody resumes them and when it is refused.
+    private static func action(for match: Recipient) -> Action {
+        let bookedElsewhere = match.sendState == .suppressed && match.suppressionReason == .bookedElsewhere
+        let removedByDan = match.sendState == .suppressed && match.suppressionReason == .removedByDan
+        let declinedSuppression = match.sendState == .suppressed && match.suppressionReason == .declined
+        if match.resolution == .booked || bookedElsewhere {
+            return .blocked(existingId: match.id)
+        }
+        // #2112: a contact closed out for never answering resumes like a soft decline. Nothing was
+        // refused, so re-adding the address is Dan trying again, not overriding a "no".
+        if removedByDan || declinedSuppression || match.resolution == .declinedSoft
+            || match.resolution == .declinedHard || match.resolution == .neverHeardBack {
+            return .resume(existingId: match.id)
+        }
+        return .blocked(existingId: match.id)   // still active and unresolved
     }
 
     private static func domain(of email: String) -> String {
