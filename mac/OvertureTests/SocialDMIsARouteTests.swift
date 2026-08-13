@@ -68,9 +68,13 @@ struct SocialDMIsARouteTests {
 
     // The score. It used to cost the same as a dead end, so an Instagram-only show ranked below shows Dan
     // has no more chance with, purely because the one route it had was thrown away.
-    @Test func aDMNoLongerCostsWhatADeadEndCosts() {
-        #expect(Ranker.contactRoutePoints(.socialOnly) == 1)
-        #expect(Ranker.contactRoutePoints(.socialOnly) == Ranker.contactRoutePoints(.contactFormOnly))
+    // Dan's call, 2026-08-13, asked directly: "social dm is worth less than a contact form. I probably
+    // won't use it unless it's a really good fit in other ways." So it sits between the two: no longer the
+    // dead end's -5, and below the form on its own site.
+    @Test func aDMIsWorthLessThanAFormAndMoreThanADeadEnd() {
+        #expect(Ranker.contactRoutePoints(.socialOnly) == 0)
+        #expect(Ranker.contactRoutePoints(.socialOnly) < Ranker.contactRoutePoints(.contactFormOnly))
+        #expect(Ranker.contactRoutePoints(.socialOnly) > Ranker.contactRoutePoints(.noEmailFound))
         #expect(Ranker.contactRoutePoints(.noEmailFound) == -5)
         // And the verdict maps to it, so the stored answer and the score cannot disagree.
         #expect(ContactRoute(probeResult: .socialOnly) == .socialOnly)
