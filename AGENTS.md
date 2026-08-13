@@ -128,8 +128,9 @@ already drifting from the Swift version it mirrored.
   INSIDE the project directory (`node_modules`, `.next`, `venv`, `__pycache__`), so deleting a
   worktree reclaims all of it for free. Xcode is the exception: its cache lives outside the checkout
   and is keyed by the checkout's PATH, so every worktree that is ever built mints a fresh folder of
-  roughly 1.6 GB that nothing reclaimed. This repo mints those paths constantly (one throwaway
-  worktree per pre-merge verification, one per parallel agent), so the growth is proportional to how
+  roughly 1.6 GB that nothing reclaimed. This repo used to mint those paths constantly (one throwaway
+  worktree per pre-merge verification, one per parallel agent; since #2601 verification reuses one
+  fixed slot, so agents are the remaining minters), so the growth is proportional to how
   much the workflow is used and its ceiling is the disk. It reached that ceiling on 2026-08-12: 148 GB
   across 105 folders, 101 of them pointing at directories already deleted, and 132 MiB free on a
   926 GiB volume, at which point no command could run at all, including `df`, because the harness
@@ -140,9 +141,11 @@ already drifting from the Swift version it mirrored.
   (`ModuleCache.noindex`, `CompilationCache.noindex`, `SDKStatCaches.noindex`, another 44 GB when
   measured) are only counted, never swept, because clearing them costs every project on the Mac one
   slow build; `--clear-shared-caches` does it when that is what you want. `verify-and-merge-branch.sh`
-  no longer waits for the sweep at all: it removes the folder its own throwaway worktree caused at the
-  moment it removes the worktree. Agent worktrees under `.claude/worktrees/` are torn down by the
-  Claude Code harness, which this repo cannot hook, so those are what the sweep is for.
+  stopped minting folders altogether (#2601): it verifies in one persistent worktree at
+  `~/.overture-verify-worktree`, scrubbed to a fresh checkout per run, whose single build folder is
+  kept warm on purpose (a cold path cost 75s more than a warm one, measured 2026-08-12) and survives
+  the sweep because its workspace exists. Agent worktrees under `.claude/worktrees/` are torn down by
+  the Claude Code harness, which this repo cannot hook, so those are what the sweep is for.
   `tidy-checkout.sh` reports the same thing in its dry run and reclaims it under `--apply`, following
   its own mode rather than carrying a second one. It DELEGATES to the script above rather than
   reimplementing the rule, so there is one definition of what can never be used again instead of two
@@ -373,7 +376,7 @@ already drifting from the Swift version it mirrored.
   session then independently re-runs the full suite on every branch under the same
   lock before merging, rather than trusting each agent's self report.
   That re-run is against CURRENT main, not against the base the branch was cut from (#2353):
-  `verify-and-merge-branch.sh` merges `origin/main` into its throwaway worktree before the suite
+  `verify-and-merge-branch.sh` merges `origin/main` into its verify worktree before the suite
   is allowed to judge anything, and refuses (verifying nothing, merging nothing) when that combine
   conflicts. An agent's own green run only ever proves the branch works beside the code it was cut
   from, and when several branches land at once that is the one thing it needs to prove and cannot:

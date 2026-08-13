@@ -147,35 +147,6 @@ assert_equals "a second run reclaims nothing and does not fail" "0" "$(derived_d
 assert_equals "a root that does not exist reclaims nothing" "0" "$(derived_data_reclaim "${TMP_ROOT}/no-such-root")"
 
 echo
-echo "== derived_data_for_workspace =="
-
-SCOPED_ROOT="${TMP_ROOT}/scoped"
-mkdir -p "${SCOPED_ROOT}"
-WT="${TMP_ROOT}/overture-verify-2585.abcdef"
-WT_SIBLING="${TMP_ROOT}/overture-verify-2585.abcdefGHI"
-mkdir -p "${WT}/mac/Overture.xcodeproj" "${WT_SIBLING}/mac/Overture.xcodeproj"
-WT_DERIVED="$(make_folder "${SCOPED_ROOT}" "Overture-wt" "${WT}/mac/Overture.xcodeproj")"
-SIBLING_DERIVED="$(make_folder "${SCOPED_ROOT}" "Overture-sibling" "${WT_SIBLING}/mac/Overture.xcodeproj")"
-
-SCOPED="$(derived_data_for_workspace "${SCOPED_ROOT}" "${WT}")"
-assert_contains "the worktree's own folder is found" "${SCOPED}" "Overture-wt"
-# A plain string prefix test would match this, and would delete a live folder belonging to another
-# run whose temp directory happens to start with the same characters.
-assert_not_contains "a sibling path with the same prefix is not matched" "${SCOPED}" "Overture-sibling"
-assert_empty "a worktree with no build folder yields nothing" \
-  "$(derived_data_for_workspace "${SCOPED_ROOT}" "${TMP_ROOT}/never-built")"
-assert_empty "an empty workspace argument matches nothing" \
-  "$(derived_data_for_workspace "${SCOPED_ROOT}" "")"
-
-# Removing by workspace must still work once the worktree itself is gone, because that is exactly
-# the order the caller does it in: git removes the worktree, then this reclaims what it caused.
-rm -rf "${WT}"
-assert_equals "removing by workspace reclaims one folder" "1" \
-  "$(derived_data_reclaim_for_workspace "${SCOPED_ROOT}" "${WT}")"
-[[ -d "${WT_DERIVED}" ]] && fail "the worktree's folder should be gone" || pass "the worktree's folder is gone"
-[[ -d "${SIBLING_DERIVED}" ]] && pass "the sibling's folder survives" || fail "the sibling's folder should survive"
-
-echo
 echo "== derived_data_space_warning =="
 
 # The threshold has to fire well before the disk is full. When it filled on 2026-08-12 the first
