@@ -1142,9 +1142,14 @@ enum ProspectMutations {
     // #2575: `body` is what Dan had in the send sheet's text box when he pressed Send, or nil for a send
     // he did not edit. It is threaded all the way to SendService rather than recomposed anywhere in
     // between, because a second composition is exactly how what he approved and what leaves come apart.
+    // #2645: `now` is injectable. It was `Date()` read inline, which is not a seam, so no test could pin
+    // the day this send happens on. That mattered the moment nudge eligibility started depending on
+    // whether the show is still ahead: the only way to test it was a fixture dated in the future, which
+    // is a literal date that ages into the past and takes the test with it.
     static func sendFollowUp(_ naturalKey: String, _ recipientId: String, prospects: [Prospect],
                              context: ModelContext, feedback: ActionFeedback,
                              sender: MailSender = liveSender(), body: String? = nil,
+                             now: Date = Date(),
                              markSending: @escaping (String) -> Void, clearSending: @escaping (String) -> Void) {
         guard let model = prospects.first(where: { $0.naturalKey == naturalKey }),
               let recipient = model.recipients.first(where: { $0.id == recipientId }) else { return }
@@ -1152,7 +1157,7 @@ enum ProspectMutations {
         markSending(recipientId)
         Task {
             await GmailSignatureService.refreshBeforeSend()   // #1208
-            let sent = await SendService.sendFollowUp(recipient, of: model, now: Date(), sender: sender,
+            let sent = await SendService.sendFollowUp(recipient, of: model, now: now, sender: sender,
                                                       body: body)
             let saved = context.saveOrWarnSendNotConfirmed(org: org, feedback: feedback)
             clearSending(recipientId)

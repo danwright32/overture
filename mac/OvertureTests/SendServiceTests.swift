@@ -82,6 +82,13 @@ private final class GatedSender: MailSender, @unchecked Sendable {
 @MainActor
 @Suite("Send service")
 struct SendServiceTests {
+    // #2645: a moment before this suite's fixtures perform (they are dated 2026-07-01). The two nudge
+    // tests below used to read the WALL CLOCK, which was fine on the day they were written and silently
+    // became "the show has already happened" as real time passed it, so a gate on the show still being
+    // ahead turned them red for a reason that had nothing to do with what they assert. A pinned clock
+    // cannot age; a literal fixture date read against `Date()` always will.
+    static let beforeTheShow = Date(timeIntervalSince1970: 1_780_000_000)   // 2026-05-28
+
     private func container() throws -> ModelContainer {
         try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
                            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
@@ -669,7 +676,7 @@ struct SendServiceTests {
         let (p, r) = sentContact(ctx, group: "A", threadId: "th-9", msgId: "<orig@x.org>")
 
         let sender = CapturingSender()   // returns messageID "<m>"
-        #expect(await SendService.sendFollowUp(r, of: p, now: Date(), sender: sender) == true)
+        #expect(await SendService.sendFollowUp(r, of: p, now: Self.beforeTheShow, sender: sender) == true)
         #expect(sender.last?.threadId == "th-9")
         #expect(sender.last?.inReplyTo == "<orig@x.org>")   // this nudge replies to the prior message
         #expect(sender.last?.subject == "Re: Photographs for A")
@@ -934,10 +941,12 @@ struct SendServiceTests {
         let ctx = ModelContext(try container())
         let (p, r) = sentContact(ctx, group: "A")
 
-        #expect(await SendService.sendFollowUp(r, of: p, now: Date(), sender: AlwaysFailSender()) == false)
+        #expect(await SendService.sendFollowUp(r, of: p, now: Self.beforeTheShow,
+                                               sender: AlwaysFailSender()) == false)
         #expect(r.nudgeSendClaimedAt == nil)
 
-        #expect(await SendService.sendFollowUp(r, of: p, now: Date(), sender: FakeSender()) == true)
+        #expect(await SendService.sendFollowUp(r, of: p, now: Self.beforeTheShow,
+                                               sender: FakeSender()) == true)
     }
 
     @Test func aSecondConversationNudgeSendAttemptWhileTheFirstIsInFlightIsRefused() async throws {

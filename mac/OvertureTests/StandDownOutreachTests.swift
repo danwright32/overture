@@ -21,10 +21,16 @@ struct StandDownOutreachTests {
     // not optional: forgetting it is what let a stood-down show still be nudged.
     //
     // #2645: the show's date moved from 2026-05-01 to 2026-07-01, and that is a finding rather than
-    // housekeeping. This suite's clock is 2026-05-28, so every fixture here was a show 27 days in the
-    // PAST that the app was happily still nudging, which is exactly the defect #2645 exists to stop. Left
-    // where it was, these tests would have gone on passing while measuring the new gate instead of the
-    // stand-down they are about, so the fixture had to move to keep standing for the state it names (L48).
+    // housekeeping. This suite's clock is 2026-05-28, so the fixture was a show 27 days in the PAST that
+    // the app was happily still nudging, which is exactly the defect #2645 exists to stop. Left where it
+    // was, these tests would have gone on passing while measuring the new gate instead of the stand-down
+    // they are about, so the fixture had to move to keep standing for the state it names (L48).
+    //
+    // The two CLOSING NOTE suites further down deliberately keep 2026-05-01, and the difference is the
+    // point: a post-event prompt only exists once the show has been and gone, so their fixture has to be
+    // in the past for the same reason this one has to be in the future. Moving all of them together (the
+    // first attempt) turned those three green tests red, which is the fixtures saying out loud which
+    // state each suite is actually about.
     private func sentContact(followUps: Int = 0, sentDaysAgo: Int = 30) -> (Prospect, Recipient) {
         let p = Prospect(naturalKey: "k", groupName: "Aurora Strings", discipline: "music",
                          venue: "The Room", performanceDate: "2026-07-01", sourceListingURL: nil,
@@ -260,10 +266,10 @@ struct StandDownClosingNoteTests {
     }
 
     private func showAwaitingAClosingNote(_ ctx: ModelContext) -> Prospect {
-        let key = Prospect.makeNaturalKey(groupName: "Aurora Strings", performanceDate: "2026-07-01",
+        let key = Prospect.makeNaturalKey(groupName: "Aurora Strings", performanceDate: "2026-05-01",
                                           venue: "The Room")
         let p = Prospect(naturalKey: key, groupName: "Aurora Strings", discipline: "music",
-                         venue: "The Room", performanceDate: "2026-07-01", sourceListingURL: nil,
+                         venue: "The Room", performanceDate: "2026-05-01", sourceListingURL: nil,
                          websiteURL: nil, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 6, tier: "mid",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
@@ -328,11 +334,18 @@ struct StandDownScopeTests {
                            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
     }
 
-    private func show(_ ctx: ModelContext, contacts: [String], replied: Bool = false) -> Prospect {
-        let key = Prospect.makeNaturalKey(groupName: "Aurora Strings", performanceDate: "2026-07-01",
+    // #2645: this suite holds BOTH kinds of test, so its fixture takes the date rather than fixing one.
+    // A nudge test needs a show still AHEAD (a nudge chases an upcoming performance, so one after the
+    // night is refused), and the closing-note test needs one already PAST (a post-event prompt does not
+    // exist until the show has been and gone). The default is ahead, because most of the suite is about
+    // nudges; the closing-note test names its own past date, so which state each test is about is now
+    // written down instead of being an accident of one shared literal.
+    private func show(_ ctx: ModelContext, contacts: [String], replied: Bool = false,
+                      performanceDate: String = "2026-07-01") -> Prospect {
+        let key = Prospect.makeNaturalKey(groupName: "Aurora Strings", performanceDate: performanceDate,
                                           venue: "The Room")
         let p = Prospect(naturalKey: key, groupName: "Aurora Strings", discipline: "music",
-                         venue: "The Room", performanceDate: "2026-07-01", sourceListingURL: nil,
+                         venue: "The Room", performanceDate: performanceDate, sourceListingURL: nil,
                          websiteURL: nil, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 6, tier: "mid",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
@@ -386,7 +399,8 @@ struct StandDownScopeTests {
     // the door open for the next one still comes due, because it is not about this event at all.
     @Test func theClosingNoteSurvivesStandingTheShowDown() throws {
         let ctx = ModelContext(try container())
-        let p = show(ctx, contacts: ["one@example.org"], replied: true)
+        // The show is in the PAST here, which is the only state a post-event prompt exists in.
+        let p = show(ctx, contacts: ["one@example.org"], replied: true, performanceDate: "2026-05-01")
         p.standDownOutreach(now: now)
         try? ctx.save()
 
