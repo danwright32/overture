@@ -351,18 +351,39 @@ struct QueueItem: Identifiable, Equatable, Sendable {
         // nil for the same reason, and for the same address: an inherited one has no contact here to have
         // a send state. It is what decides whether the strike is offered (ContactRowControls).
         let sendState: SendState?
+        // #2623: WHOSE address this is. The check that finds an address also names the person and their
+        // role, and neither reached the screen, so a card printing a musical director's personal Gmail
+        // looked exactly like one printing the billed artist's own. nil where nothing is stored, which is
+        // six of the 29 shows measured on 2026-08-13, and always nil for an inherited address.
+        let attribution: String?
         var id: String { email }
+
+        // The one place the two stored fields become the line the card prints, so the model and any
+        // future surface cannot spell it two ways. A blank stored value (a run writing "" rather than
+        // omitting the field) reads as absent, never as an empty line or a stray comma.
+        static func attribution(name: String?, role: String?) -> String? {
+            func clean(_ s: String?) -> String? {
+                let t = (s ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                return t.isEmpty ? nil : t
+            }
+            let parts = [clean(name), clean(role)].compactMap { $0 }
+            return parts.isEmpty ? nil : parts.joined(separator: ", ")
+        }
     }
 
     var displayedContactAddresses: [DisplayedAddress] {
         let own = contacts.compactMap { c -> DisplayedAddress? in
             let email = (c.email ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            return email.isEmpty ? nil : DisplayedAddress(email: email, recipientId: c.id,
-                                                          sendState: c.sendState)
+            return email.isEmpty ? nil : DisplayedAddress(
+                email: email, recipientId: c.id, sendState: c.sendState,
+                attribution: DisplayedAddress.attribution(name: c.name, role: c.role))
         }
         guard own.isEmpty else { return own }
+        // An inherited address is printed from the organisation ledger, which stores addresses and not
+        // who they belong to, so naming anybody beside one would assert something no check on this show
+        // ever found (L75).
         return (inheritedReachability?.emails ?? [])
-            .map { DisplayedAddress(email: $0, recipientId: nil, sendState: nil) }
+            .map { DisplayedAddress(email: $0, recipientId: nil, sendState: nil, attribution: nil) }
     }
 
 

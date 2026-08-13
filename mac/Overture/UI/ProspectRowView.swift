@@ -653,39 +653,54 @@ struct ProspectRowView: View {
             // then its own grid column); every one broke the column, the last by squeezing it until long
             // addresses wrapped. Dan's call, 2026-07-28: the caveat belongs in the badge above, said once,
             // and this line goes back to being a plain right-justified list of addresses.
-            VStack(alignment: .trailing, spacing: 1) {
+            // #2623: the name sits ABOVE its address rather than beside it. The caveat that broke this
+            // column three times was a second thing competing for its WIDTH; a second line costs height
+            // instead, which this row has, and it keeps the address on a line of its own to wrap into.
+            VStack(alignment: .trailing, spacing: 3) {
                 ForEach(item.displayedContactAddresses) { address in
-                    HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        // #2392: the strike, before the prep run. The same xmark.circle the draft-review
-                        // panel uses for a still-pending contact (ContactRowControls), so removing an
-                        // address means the same thing and looks the same wherever Dan meets it.
-                        //
-                        // Visible at rest, not on hover: an interactive element styled like static text
-                        // ships as an invisible feature (L49), and this one exists precisely because he
-                        // was looking straight at the addresses with nothing to do about them.
-                        // Withheld once this address has been written to, or once the show is resolved:
-                        // the same rule the review panel's own leading X follows, decided in
-                        // ContactRowControls so the two surfaces cannot drift into offering one action
-                        // at two different levels of exposure.
-                        if ContactRowControls.strikeIsOffered(
-                            sendState: address.sendState,
-                            showIsResolved: item.sentAt != nil || item.isBooked) {
-                            Button { onRemoveContactAddress(address) } label: {
-                                Image(systemName: "xmark.circle")
-                                    .foregroundStyle(OVColor.inkFaint)
-                            }
-                            .buttonStyle(.plain)
-                            .help(ReachabilityCopy.removeAddressHelp)
-                            .accessibilityLabel(ReachabilityCopy.removeAddressLabel(address.email))
+                    VStack(alignment: .trailing, spacing: 0) {
+                        // Who the address belongs to, when the check named them. Quieter than the address:
+                        // the address is the thing Dan acts on, this is the fact that tells him what it is
+                        // worth. Absent entirely when nothing was stored, rather than a placeholder.
+                        if let who = address.attribution {
+                            Text(who)
+                                .font(OVType.meta)
+                                .foregroundStyle(OVColor.inkFaint)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .multilineTextAlignment(.trailing)
                         }
-                        Text(address.email)
-                            .font(OVType.meta)
-                            .foregroundStyle(OVColor.inkSoft)
-                            .textSelection(.enabled)
-                            // Wrap rather than truncate: an address Dan cannot read in full is no better
-                            // than no address, and this column is narrow.
-                            .fixedSize(horizontal: false, vertical: true)
-                            .multilineTextAlignment(.trailing)
+                        HStack(alignment: .firstTextBaseline, spacing: 4) {
+                            // #2392: the strike, before the prep run. The same xmark.circle the draft-review
+                            // panel uses for a still-pending contact (ContactRowControls), so removing an
+                            // address means the same thing and looks the same wherever Dan meets it.
+                            //
+                            // Visible at rest, not on hover: an interactive element styled like static text
+                            // ships as an invisible feature (L49), and this one exists precisely because he
+                            // was looking straight at the addresses with nothing to do about them.
+                            // Withheld once this address has been written to, or once the show is resolved:
+                            // the same rule the review panel's own leading X follows, decided in
+                            // ContactRowControls so the two surfaces cannot drift into offering one action
+                            // at two different levels of exposure.
+                            if ContactRowControls.strikeIsOffered(
+                                sendState: address.sendState,
+                                showIsResolved: item.sentAt != nil || item.isBooked) {
+                                Button { onRemoveContactAddress(address) } label: {
+                                    Image(systemName: "xmark.circle")
+                                        .foregroundStyle(OVColor.inkFaint)
+                                }
+                                .buttonStyle(.plain)
+                                .help(ReachabilityCopy.removeAddressHelp)
+                                .accessibilityLabel(ReachabilityCopy.removeAddressLabel(address.email))
+                            }
+                            Text(address.email)
+                                .font(OVType.meta)
+                                .foregroundStyle(OVColor.inkSoft)
+                                .textSelection(.enabled)
+                                // Wrap rather than truncate: an address Dan cannot read in full is no better
+                                // than no address, and this column is narrow.
+                                .fixedSize(horizontal: false, vertical: true)
+                                .multilineTextAlignment(.trailing)
+                        }
                     }
                 }
             }
