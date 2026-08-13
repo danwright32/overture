@@ -87,12 +87,12 @@ struct QueueRenderDataGuardTests {
     // running a fixed number of times. Both self-booking lookups sit on paths that run per CARD and per
     // DATE HEADING, and each was rebuilding the entire queue from the store to answer one row's question.
     @Test func theSelfBookingLookupsUseTheItemsTheyWereHanded() {
-        // #1922 widened both signatures with the departing keys, which arrive as a plain set from the view
-        // that read them rather than being read here.
-        for marker in ["@ViewBuilder private func prospectRow(_ item: QueueItem, data: RenderData, isDeparting: Bool) -> some View {",
-                       "private func dateSection(_ group: QueueModel.DateGroup, data: RenderData, departing: Set<String>) -> some View {"] {
-            guard let body = SourceGuardHelper.propertyBody(marker, in: queueView) else {
-                Issue.record("expected to find the body of \(marker)")
+        // Found by NAME, not by signature. #1922 widened both signatures with the departing keys and
+        // #2417 widened them again with the reason each row is leaving, and neither change touched what
+        // this guard asks. A marker pinned to the signature as written goes red for that (L103, #2543).
+        for name in ["prospectRow", "dateSection"] {
+            guard let body = SourceGuardHelper.bodyOfFunction(named: name, in: queueView) else {
+                Issue.record("expected to find the body of \(name)")
                 continue
             }
             #expect(body.contains("among: data.items"))

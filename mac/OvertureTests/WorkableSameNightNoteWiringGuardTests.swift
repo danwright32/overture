@@ -15,10 +15,12 @@ import Foundation
 struct WorkableSameNightNoteWiringGuardTests {
     private var queueView: String { SourceGuardHelper.source("Overture/UI/QueueView.swift") }
 
+    // Found by NAME, not by signature: what these three guards claim is about what the row DRAWS, and
+    // that survives every widening of the row's parameters. Pinned to the signature as written, all
+    // three went red when #2417 added the reason a row is leaving, for formatting rather than for
+    // anything being unwired (L103, #2543).
     private func rowBody() -> String? {
-        SourceGuardHelper.propertyBody(
-            "@ViewBuilder private func prospectRow(_ item: QueueItem, data: RenderData, isDeparting: Bool) -> some View {",
-            in: queueView)
+        SourceGuardHelper.bodyOfFunction(named: "prospectRow", in: queueView)
     }
 
     @Test func theRowAsksForTheNoteAndDrawsIt() throws {

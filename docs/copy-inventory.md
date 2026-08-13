@@ -2334,8 +2334,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AgentRoster.swift`
 "\(i.toTriage) to triage"
     `Domain/AgentRoster.swift`
-"\(item.groupName), closed out"
-    `UI/ClosedOutDepartureRow.swift`
 "\(kept) to prep"
     `Domain/PrepStatus.swift`
 "\(label), \(calendar.component(.year, from: date))"
@@ -2529,6 +2527,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SelfBookingConflict.swift`
 "\(showCount) shows"
     `UI/SourcesView.swift`
+"\(showName), closed out"
+    `Domain/DepartureCopy.swift`
 "\(shows) waiting on this"
     `UI/SourcesView.swift`
 "\(source.droppedRowCount) shows"

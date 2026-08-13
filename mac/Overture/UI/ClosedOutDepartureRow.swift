@@ -31,6 +31,6 @@ struct ClosedOutDepartureRow: View {
         // what is still in the queue.
         .opacity(0.55)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(item.groupName), closed out")
+        .accessibilityLabel(DepartureCopy.spokenClosedOut(showName: item.groupName))
     }
 }

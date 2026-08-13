@@ -122,4 +122,12 @@ struct SendProgressStateTests {
         #expect(state.departureReason("closed-show") == nil)
         #expect(!state.isDeparting("closed-show"))
     }
+
+    // The one sentence the departing row says, out here where a test can read it. The row itself says
+    // the show is leaving by going dim and sliding away, and neither of those is a word, so for a
+    // screen reader this label is the whole of it.
+    @Test func theClosedOutRowSaysWhichShowLeftAndWhy() {
+        #expect(DepartureCopy.spokenClosedOut(showName: "Every Voice Choirs")
+                == "Every Voice Choirs, closed out")
+    }
 }
