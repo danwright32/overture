@@ -249,6 +249,56 @@ else
   fi
 fi
 
+# --- #2595: counting the certificates that carry the identity's name --------------------------------
+#
+# The count exists to notice something find-identity structurally cannot see: a certificate codesign
+# refuses is not listed by `find-identity -v` at all, so the run that replaces it cannot tell whether it
+# left one behind. These two cases pin the branch that needs no keychain at all, since it is the one a
+# first run takes and the one that must never report a failure to read as a count.
+
+COUNT_OUT="$(
+  export OVERTURE_SIGNING_IDENTITY="Overture Fixture Signing"
+  export OVERTURE_SIGNING_KEYCHAIN=""
+  overture_signing_certificate_count 2>&1
+)"
+assert_equals "with no keychain configured the count is 0, not an error" "0" "${COUNT_OUT}"
+
+# UNSET, not empty, and under `set -u`: the #1711 shape. The count is called before anything is created,
+# which is exactly when this variable can be missing, and a function that dies here would take the whole
+# setup script with it and say nothing about signing at all. Written as the case that fails if the guard
+# at the top of the function is removed, since an empty value alone cannot tell the two apart: `security`
+# answers 0 for an empty and for a nonexistent keychain either way.
+COUNT_OUT="$(
+  set -u
+  export OVERTURE_SIGNING_IDENTITY="Overture Fixture Signing"
+  unset OVERTURE_SIGNING_KEYCHAIN
+  overture_signing_certificate_count 2>&1
+  echo "|survived"
+)"
+assert_contains "an UNSET keychain variable answers 0 rather than killing the caller" "${COUNT_OUT}" "0|survived"
+
+COUNT_OUT="$(
+  export OVERTURE_SIGNING_IDENTITY="Overture Fixture Signing"
+  export OVERTURE_SIGNING_KEYCHAIN="${TMPDIR:-/tmp}/overture-no-such-keychain-$$.keychain-db"
+  overture_signing_certificate_count 2>&1
+)"
+assert_equals "a keychain file that does not exist counts 0 rather than failing" "0" "${COUNT_OUT}"
+
+# It must also be read only. A count that created the keychain it was asked about would make the
+# first-run message a lie the moment anything asked for it.
+PROBE_KC="${TMPDIR:-/tmp}/overture-count-probe-$$.keychain-db"
+(
+  export OVERTURE_SIGNING_IDENTITY="Overture Fixture Signing"
+  export OVERTURE_SIGNING_KEYCHAIN="${PROBE_KC}"
+  overture_signing_certificate_count >/dev/null 2>&1
+)
+if [[ -e "${PROBE_KC}" ]]; then
+  fail "counting certificates created a keychain" "at ${PROBE_KC}"
+  rm -f "${PROBE_KC}"
+else
+  pass "counting certificates creates nothing"
+fi
+
 echo
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "stable-signing.test.sh: all checks passed"
