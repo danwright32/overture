@@ -402,6 +402,18 @@ already drifting from the Swift version it mirrored.
   PR #2345 was green on its own branch and red on the main that already carried #1575 and #1940
   (measured 2026-08-09). If you merge some other way, combine current main into the branch and
   re-run `scripts/test-all.sh` on the combined tree yourself before merging.
+  For SEVERAL PRs at once use `scripts/verify-and-merge-batch.sh <pr> <pr> ...` (#2602), which does that
+  combination once instead of once per PR: it refuses every PR up front that cannot be in a batch (an
+  unresolvable identifier, a GitHub-side conflict, a PR named twice, a body missing the completeness
+  enumeration), sets the persistent verify worktree to current `origin/main`, merges each branch in,
+  runs `scripts/test-all.sh` ONCE, and merges them all only on green. It reuses
+  `verify-and-merge-branch.sh`'s own functions rather than copying them, so the two paths cannot
+  disagree about what a mergeable PR looks like. Two things to know before reading its output. On red it
+  says the failure belongs to the COMBINATION and names every branch in it, because a combined run
+  genuinely cannot attribute a failure to one branch, so do not read it as the last branch named. And
+  the merges themselves happen one at a time on GitHub, so one can be refused after the others land;
+  it attempts all of them and its summary says which merged and which did not, rather than stopping at
+  the first refusal and leaving the rest unreported.
 
 The pieces hand off through fixed-shape JSON files, not direct calls. `docs/contracts.md`
 catalogs every one (writer, reader, version, and its `fixtures/` guard); read it before changing
