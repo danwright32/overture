@@ -92,14 +92,26 @@ enum ShowOutcome: String, CaseIterable, Equatable, Hashable, Sendable {
     // than a second phrasing of the same fact, which is the #843 trap from the naming direction, and a
     // test asserts the two never drift apart. Only the pitched endings have one, because only those are
     // counted in a lost split today; a never-pitched ending would need its own reading of the same rule.
-    var countedPhrase: String {
+    //
+    // #2586: nil says that plainly, and the nine are named rather than defaulted. This used to end in
+    // `default: return label`, which answered for every unnamed case with the wording written to be
+    // PICKED off a menu, so a pitched ending added later would have read as "3 Never heard back"
+    // mid-sentence and nothing would have gone red: a default is indistinguishable from a deliberate
+    // choice (L113). Exhaustive now, so adding any case breaks the build here rather than surfacing in a
+    // report, and `CountedPhraseHasNoDefaultTests` judges the decision the break forces.
+    var countedPhrase: String? {
         switch self {
         case .booked: return "booked"
         case .neverHeardBack: return "never heard back"
         case .theySaidNotNow: return "they said not now"
         case .theySaidNo: return "they said no"
         case .turnedThemDown: return "I turned them down"
-        default: return label
+        // Nothing counts these, so giving them wording would be a second vocabulary nothing reads. Note
+        // the label is not merely unread for them, it is wrong: "3 Date conflict" and "3 Duplicate" are
+        // not sentences, which is what the old default produced.
+        case .dateConflict, .hadPaidWork, .pitchingOtherShows, .tooSoon, .notAFit, .dontWantToShoot,
+             .duplicate, .wentBy, .tooFar:
+            return nil
         }
     }
 

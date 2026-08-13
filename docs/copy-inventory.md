@@ -2296,7 +2296,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "\(count) \(count == 1 ? "contact" : "contacts") held for a check"
     `Domain/DraftReviewNotes.swift`
-"\(count) \(outcome.countedPhrase)"
+"\(count) \(outcome.countedPhrase ?? outcome.rawValue)"
     `Domain/OutcomePatterns.swift`
 "\(count) \(prospectWord) already pending or re-prepped recently; nothing new queued"
     `App/ActionFeedback.swift`
