@@ -132,6 +132,10 @@ struct PrepResult: Codable, Equatable, Sendable {
 struct PrepContact: Codable, Equatable, Sendable {
     var name: String?
     var role: String?
+    // v9 (#2622): who this contact IS to the show, judged by the run from the page it read, never derived
+    // here from `role`. See ContactTier for Dan's definition; the run is told it in the runbook, and an
+    // unrecognised or absent value decodes as nil, which reads as "nobody has said", not as a tier.
+    var tier: String?
     var email: String?
     var method: String?       // named_decision_maker | generic_inbox | form_or_dm
     var confidence: String?   // high | medium | low
@@ -171,7 +175,9 @@ enum PrepResultsDecoder {
     // ~90 days with no error anywhere. That is the #1594 shape.
     // #1824 raised this to 8 with `showSummary`/`showSummaryAbsentReason`, IN THE SAME COMMIT as the
     // fixture, for exactly the reason the paragraph above gives.
-    static let supportedVersion = 8
+    // #2622 raised this to 9 with the contact `tier` field, IN THE SAME COMMIT as `fixtures/prep-results/v9.json`,
+    // for exactly the reason the paragraph above gives.
+    static let supportedVersion = 9
     static let minimumVersion = 1
 
     static func decode(_ data: Data) throws -> PrepResults {

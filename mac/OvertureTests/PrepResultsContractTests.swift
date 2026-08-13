@@ -176,6 +176,24 @@ struct PrepResultsContractTests {
         #expect(multi.draft?.variant == "reason-first")
     }
 
+    // #2622: v9 adds `tier` to a contact. The version gate rose with it, in the same commit as the
+    // fixture, which is the rule the decoder's own comment states and the reason #1594's shape cannot
+    // repeat.
+    @Test func decodesTheV9FixtureWithAContactTier() throws {
+        let results = try PrepResultsDecoder.decode(try fixture("v9.json"))
+        #expect(results.version == 9)
+
+        let contact = try #require(results.results.first?.contacts?.first)
+        #expect(contact.tier == "primary")
+        #expect(ContactTier(rawValue: try #require(contact.tier)) == .primary)
+    }
+
+    // Additive: every earlier fixture still decodes, and reads as nobody having said, never as a tier.
+    @Test func anearlierFixtureCarriesNoTier() throws {
+        let v8 = try PrepResultsDecoder.decode(try fixture("v8.json"))
+        #expect(v8.results.first?.contacts?.first?.tier == nil)
+    }
+
     // MARK: - Negative paths (#747)
     //
     // The enumeration guard above only proves a POSITIVE: every committed fixture decodes. That

@@ -357,6 +357,9 @@ enum PrepImporter {
                     recipient.looksLikeDuplicateContact = DuplicateContactGuard.looksLikeDuplicate(
                         email: email, venue: p.venue, performanceDate: p.performanceDate,
                         excludingProspectKey: p.naturalKey, in: context)
+                    // #2622: who the run says this contact is to the show. Written straight through: the
+                    // judgement is the run's, made with the page in front of it.
+                    recipient.contactTierRaw = c.tier
                     // #2624: and whether the address is in a name nobody on this row accounts for.
                     recipient.looksLikeAnotherPersons = UnaccountedAddressGuard.looksLikeAnotherPersons(
                         email: email, name: c.name, sourceURL: c.sourceUrl,
@@ -443,6 +446,10 @@ enum PrepImporter {
         // which is exactly what the store held on two performers.
         r.contactFormURL = ContactIdentity.preferredFormURL(existing: r.contactFormURL, incoming: c.formUrl)
         r.contactSourceURL = c.sourceUrl ?? r.contactSourceURL
+        // #2622: a later run's judgement replaces an earlier one, and a run that says nothing leaves what
+        // is there. Same fall-back shape as the method and confidence above, so a re-check that only
+        // corrects an address cannot silently erase who the contact was judged to be.
+        r.contactTierRaw = c.tier ?? r.contactTierRaw
         // #1856: the same bar as a freshly appended contact, judged on the pair this ingest LEAVES
         // BEHIND. The two fields fall back independently above, so a re-run can raise a recipient to
         // high while carrying no page of its own, and only the result is the claim Dan reads.

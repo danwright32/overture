@@ -690,6 +690,7 @@
 		657DAB03400812B93F6DDA51 /* PerformanceStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEC6CEBFA28D94E2267F6F15 /* PerformanceStatus.swift */; };
 		65999244AC550ED373FB2985 /* InquiryReplyAgainTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B804DBE9ADA33D9D5D70B07 /* InquiryReplyAgainTests.swift */; };
 		65B5D85676DD1F18E37BC30C /* WatchedSourceProposal.swift in Sources */ = {isa = PBXBuildFile; fileRef = A51B0C4EC24DE6663FB70526 /* WatchedSourceProposal.swift */; };
+		65B830BE487A0BE50F1707DB /* ContactTierTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 478E2195C918976D4E677C68 /* ContactTierTests.swift */; };
 		66113AA9BF03EC1F6B19E92E /* RunDurationHistoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F36D245429B07E35DB898B04 /* RunDurationHistoryTests.swift */; };
 		6695178A81669433C52788C1 /* SourcesSheetLeadsWithAttentionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0695E761B46754FE15BCDEE3 /* SourcesSheetLeadsWithAttentionTests.swift */; };
 		66AF52098D3A1A74B16BD672 /* SourceReadState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9C7762E8E079ABC2A067C68 /* SourceReadState.swift */; };
@@ -887,6 +888,7 @@
 		85DEE7E70DB31785FF078578 /* UpdateAttemptTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B9722930780C51F6E593D38 /* UpdateAttemptTests.swift */; };
 		864476758898505BC99F7249 /* DismissAlwaysRecordsAnUndoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A27E98AFB489C2C8CF48F121 /* DismissAlwaysRecordsAnUndoTests.swift */; };
 		86608992B602DAE4BAA199A5 /* ClientHorizon.swift in Sources */ = {isa = PBXBuildFile; fileRef = AED787476CB20A704F60718B /* ClientHorizon.swift */; };
+		866D8E713FC6682F2F1B9671 /* ContactTier.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8B714D41070A6453D2AC877 /* ContactTier.swift */; };
 		86AE682DB2D6C4F261963A62 /* EmailAddressList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BF3B8C01356B62369B2C3DD /* EmailAddressList.swift */; };
 		870FF7F88E5ABBC8CC257B6A /* LoopbackListenerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98F9028B89AB5EDEFDADF826 /* LoopbackListenerTests.swift */; };
 		87258FE39A6B9C5201345588 /* VoiceFeedbackContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9F7EDB806B788E4A5BE8BC4 /* VoiceFeedbackContractTests.swift */; };
@@ -1194,6 +1196,7 @@
 		BEFEA99F7BF0B8CBB6C91F25 /* PreviewOnDarkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCCADC8732BCBB9CF24F2DBC /* PreviewOnDarkTests.swift */; };
 		BF4F2AF366BBBB4BC0570961 /* GmailConnectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6242ECDEBACE6540A1F93F94 /* GmailConnectionTests.swift */; };
 		BF8A9AA36BCA8B1AFBCA0450 /* InquiryStageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 861C98CC450B473F40D7B974 /* InquiryStageTests.swift */; };
+		BFB7D469D065146CD8FA310A /* ContactTier.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8B714D41070A6453D2AC877 /* ContactTier.swift */; };
 		BFBADDCC2ED45B3511A133EF /* ScoutExtractCurrentSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08BA0F4504495B3318601218 /* ScoutExtractCurrentSource.swift */; };
 		BFD743F26A87F309634F7F97 /* SilentlyEmptySourceIsActionableTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEF8220CC0914829266E7CEA /* SilentlyEmptySourceIsActionableTests.swift */; };
 		BFFEE5D7D3066D2BDA119FAD /* StoodDownIsItsOwnStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A67B23D25F4778E0789FB020 /* StoodDownIsItsOwnStateTests.swift */; };
@@ -1956,6 +1959,7 @@
 		464E95007BB1A46AE5C51E8A /* StageOverlapLiveStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StageOverlapLiveStoreTests.swift; sourceTree = "<group>"; };
 		465B91C83FA8755DD3E8D2C0 /* InquiryReporting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InquiryReporting.swift; sourceTree = "<group>"; };
 		472841E01B10A33E33B045B0 /* ReachabilityBadgeToneTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReachabilityBadgeToneTests.swift; sourceTree = "<group>"; };
+		478E2195C918976D4E677C68 /* ContactTierTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactTierTests.swift; sourceTree = "<group>"; };
 		47DB12405A6B9085B8C20464 /* HandoffPathGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandoffPathGuardTests.swift; sourceTree = "<group>"; };
 		47E3BEB909F7601330800414 /* LaunchMigrationsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchMigrationsTests.swift; sourceTree = "<group>"; };
 		47E6C95AEA3C47DC69892A97 /* VenueKeyRealignmentMigration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueKeyRealignmentMigration.swift; sourceTree = "<group>"; };
@@ -2744,6 +2748,7 @@
 		E894E2E958EE3100C3C5FE02 /* OmniFocusSyncStatusTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmniFocusSyncStatusTests.swift; sourceTree = "<group>"; };
 		E8AA42B16919FC72DF30DC23 /* ContactRefusal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactRefusal.swift; sourceTree = "<group>"; };
 		E8AA8F6949356B7411F42B22 /* DueBadgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DueBadgeTests.swift; sourceTree = "<group>"; };
+		E8B714D41070A6453D2AC877 /* ContactTier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactTier.swift; sourceTree = "<group>"; };
 		E963D77028C5C77ED026D4A8 /* ProducerGateVenueIndexTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProducerGateVenueIndexTests.swift; sourceTree = "<group>"; };
 		E9BD29A42F7EB0FCBF843057 /* ReachedOutRowSlotsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReachedOutRowSlotsTests.swift; sourceTree = "<group>"; };
 		E9FD33A4882802D6484467A5 /* ArchiveViewRestoreSaveGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArchiveViewRestoreSaveGuardTests.swift; sourceTree = "<group>"; };
@@ -3066,6 +3071,7 @@
 				9F2A23EB9057853820F03AAF /* ContactFormReachabilityTests.swift */,
 				44B888DB0E3591FDC5508A53 /* ContactRowControlsTests.swift */,
 				ABB289D6F9CC4313A98E087B /* ContactScoreAdjustmentTests.swift */,
+				478E2195C918976D4E677C68 /* ContactTierTests.swift */,
 				704051D5F31C3822AB6C7D00 /* ControlRefusalReasonTests.swift */,
 				AA47A8B118CB18FA1D038483 /* CopyInventoryTests.swift */,
 				23B732F2828EE6317000AABF /* CopySurfacesTests.swift */,
@@ -3834,6 +3840,7 @@
 				9E86C82D226CFE3E327630D2 /* ContactIdentity.swift */,
 				E8AA42B16919FC72DF30DC23 /* ContactRefusal.swift */,
 				CC5BE05DF1C3A6C7254C6425 /* ContactScoreAdjustment.swift */,
+				E8B714D41070A6453D2AC877 /* ContactTier.swift */,
 				F908765C098BDDF1F2382335 /* DayOff.swift */,
 				8B0048782D9B411587285F3D /* DayOffOffer.swift */,
 				1912B26502F23FF9B423BE95 /* DaysOffAttention.swift */,
@@ -4348,6 +4355,7 @@
 				E9E189AC3D445AB92D6C5C68 /* ContactRefusal.swift in Sources */,
 				87A409DC0DF82B31A250BE41 /* ContactRowControls.swift in Sources */,
 				409ACCB3150734E0DFBDC6FE /* ContactScoreAdjustment.swift in Sources */,
+				866D8E713FC6682F2F1B9671 /* ContactTier.swift in Sources */,
 				497EC108FCAAF74A491435D6 /* ControlRefusalLine.swift in Sources */,
 				A102CEF0322ED7301D379095 /* DatedFolderRotation.swift in Sources */,
 				0DC944FB6DBB82B0F4FD77BA /* DayOff.swift in Sources */,
@@ -4908,6 +4916,8 @@
 				23A0C818C3C172A7D804B6FB /* ContactRowControlsTests.swift in Sources */,
 				5286093075D80B48B2E8727B /* ContactScoreAdjustment.swift in Sources */,
 				CE3002C101F02162D47A1636 /* ContactScoreAdjustmentTests.swift in Sources */,
+				BFB7D469D065146CD8FA310A /* ContactTier.swift in Sources */,
+				65B830BE487A0BE50F1707DB /* ContactTierTests.swift in Sources */,
 				D8ACDA28B258FDCF0AA0F050 /* ControlRefusalLine.swift in Sources */,
 				5B8B048A01887311734CF962 /* ControlRefusalReasonTests.swift in Sources */,
 				E7327FCEFD1B624A72E83BF9 /* CopyInventory.swift in Sources */,
