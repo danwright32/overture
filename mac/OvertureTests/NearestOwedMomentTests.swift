@@ -104,7 +104,7 @@ struct NearestOwedMomentTests {
         let (p, r) = neylaShaped(ctx)
         let today = day("2026-08-13")
 
-        let nudgeDue = try #require(FollowUp.nextDue(eligible: FollowUp.isAwaitingNudge(r, in: p),
+        let nudgeDue = try #require(FollowUp.nextDue(eligible: FollowUp.isAwaitingNudge(r, in: p, now: today),
                                                     sentAt: r.sentAt, lastFollowUpAt: r.lastFollowUpAt,
                                                     followUpCount: r.followUpCount,
                                                     remindedAt: r.nudgeRemindedAt))
@@ -138,7 +138,7 @@ struct NearestOwedMomentTests {
     @Test func theNudgeClockAlreadyNamesFutureDates() throws {
         let ctx = try context()
         let (p, r) = neylaShaped(ctx)
-        let due = FollowUp.nextDue(eligible: FollowUp.isAwaitingNudge(r, in: p), sentAt: r.sentAt,
+        let due = FollowUp.nextDue(eligible: FollowUp.isAwaitingNudge(r, in: p, now: day("2026-08-12")), sentAt: r.sentAt,
                                    lastFollowUpAt: r.lastFollowUpAt, followUpCount: r.followUpCount,
                                    remindedAt: r.nudgeRemindedAt)
         #expect(due != nil)

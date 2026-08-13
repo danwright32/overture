@@ -137,7 +137,7 @@ enum ReachedOutQueue {
     // has not happened yet is held on the stage by the floor alone, with nothing left to count down to.
     static func nextActionableMoment(for r: Recipient, of p: Prospect, now: Date,
                                      followUpConfig: FollowUpConfig = .init()) -> Date? {
-        let nudge = FollowUp.nextDue(eligible: FollowUp.isAwaitingNudge(r, in: p), sentAt: r.sentAt,
+        let nudge = FollowUp.nextDue(eligible: FollowUp.isAwaitingNudge(r, in: p, now: now), sentAt: r.sentAt,
                                      lastFollowUpAt: r.lastFollowUpAt, followUpCount: r.followUpCount,
                                      remindedAt: r.nudgeRemindedAt, config: followUpConfig)
         let candidates = [nudge,

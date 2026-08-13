@@ -206,7 +206,7 @@ enum SendService {
         // each member counts separately can be spent twice over by clicking the other row.
         let group = SendGroup.peers(of: recipient, in: prospect)
         let spent = group.map(\.followUpCount).max() ?? recipient.followUpCount
-        guard FollowUp.isAwaitingNudge(recipient, in: prospect), spent < config.maxFollowUps,
+        guard FollowUp.isAwaitingNudge(recipient, in: prospect, now: now), spent < config.maxFollowUps,
               let email = recipient.email, !email.isEmpty else { return false }
         let addresses = group.compactMap(\.email).filter { !$0.isEmpty }
         // Reply on THIS contact's conversation (#74, per-recipient #418 D): same threadId, In-Reply-To
