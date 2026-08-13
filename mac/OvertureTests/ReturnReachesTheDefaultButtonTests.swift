@@ -51,7 +51,8 @@ struct ReturnReachesTheDefaultButtonTests {
         Pair(defaultButtonFile: "RootView.swift", fieldFile: "InquiryIntakeSheet.swift", field: "Venue (optional)"),
         Pair(defaultButtonFile: "RootView.swift", fieldFile: "InquiryIntakeSheet.swift", field: "Notes (optional)"),
         Pair(defaultButtonFile: "ProspectRowView.swift", fieldFile: "DraftReviewView.swift", field: "Subject"),
-        Pair(defaultButtonFile: "ProspectRowView.swift", fieldFile: "DraftReviewView.swift", field: "Email"),
+        // #2629: was "Email". The field takes a route now, and its Return behaviour is unchanged.
+        Pair(defaultButtonFile: "ProspectRowView.swift", fieldFile: "DraftReviewView.swift", field: "Email or link"),
         Pair(defaultButtonFile: "ProspectRowView.swift", fieldFile: "DraftReviewView.swift", field: "Name (optional)"),
         Pair(defaultButtonFile: "ProspectRowView.swift", fieldFile: "ManualPrepSheet.swift", field: "Send to"),
         Pair(defaultButtonFile: "ProspectRowView.swift", fieldFile: "ManualPrepSheet.swift", field: "Subject"),

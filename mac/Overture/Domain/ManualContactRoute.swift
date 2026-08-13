@@ -47,6 +47,15 @@ enum ManualContactRoute: Equatable, Sendable {
         // Anything with whitespace inside it is prose, not a link. Checked before the scheme test so
         // "see the form at x.org/contact" is refused rather than half-read.
         guard !trimmed.contains(where: { $0.isWhitespace }) else { return nil }
+        // An ATTEMPTED address is never a link, however URL-shaped it looks. Without this, `,,olga@x.org`
+        // and `a@x.org, b@y.org` fall past the address parser (which correctly rejects both) and get a
+        // scheme bolted on, so a typo becomes a contact carrying an unopenable route and the person is
+        // told it worked. Caught by `AddContactAddressRuleTests`, which already pinned those two refusals
+        // and went red: the refusals were right and this arm was quietly overruling them.
+        //
+        // An `@` in a genuine http URL is userinfo, which nothing Dan pastes here carries, so refusing it
+        // costs nothing and keeps the two arms from disagreeing about who owns an address-shaped string.
+        guard !trimmed.contains("@"), !trimmed.contains(","), !trimmed.contains(";") else { return nil }
         let withScheme = trimmed.lowercased().hasPrefix("http://") || trimmed.lowercased().hasPrefix("https://")
             ? trimmed
             : "https://" + trimmed
