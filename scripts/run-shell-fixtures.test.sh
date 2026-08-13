@@ -166,6 +166,32 @@ DID_SHOW_FIXTURE_OUTPUT="false"
 [[ "${STREAMED_OUTPUT}" == *"ok"* ]] && DID_SHOW_FIXTURE_OUTPUT="true"
 assert_equals "the fixture's own output is still shown" "true" "${DID_SHOW_FIXTURE_OUTPUT}"
 
+# #2601: fixtures run CONCURRENTLY, not one after another. The serial run cost 113s of which 78s was
+# two fixtures, so the phase should cost roughly the slowest fixture instead of the sum of all of them.
+# Proven by construction rather than by a stopwatch: the FIRST fixture in the list waits (up to 15s)
+# for a marker only the SECOND fixture writes. A serial runner cannot pass this, because the waiter
+# runs to its timeout before the marker's writer ever starts; a concurrent runner sees it in well
+# under a second. No wall-clock assertion, so a slow machine cannot flake it, only fail it honestly.
+WAITER="${TMP_DIR}/waits-for-marker.test.sh"
+cat > "${WAITER}" <<WAITER_EOF
+#!/usr/bin/env bash
+for _ in \$(seq 1 150); do
+  [[ -f "${TMP_DIR}/marker" ]] && { echo "ok - saw the marker"; exit 0; }
+  sleep 0.1
+done
+echo "FAIL - never saw the marker: fixtures are running serially"
+exit 1
+WAITER_EOF
+chmod +x "${WAITER}"
+
+MARKER_WRITER="${TMP_DIR}/writes-marker.test.sh"
+printf '#!/usr/bin/env bash\ntouch "%s"\necho ok\nexit 0\n' "${TMP_DIR}/marker" > "${MARKER_WRITER}"
+chmod +x "${MARKER_WRITER}"
+
+run_shell_fixtures "${WAITER}" "${MARKER_WRITER}" >/dev/null 2>&1
+assert_equals "fixtures run concurrently: an early fixture can see a later one's effect" "0" "$?"
+rm -f "${TMP_DIR}/marker"
+
 echo
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All run-shell-fixtures.sh fixtures passed."
