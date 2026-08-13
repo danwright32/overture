@@ -20,6 +20,13 @@ enum StageFocus: String, Equatable, Sendable {
     // focus at all, and the queue is stage-scoped only, so they were rendered nowhere (#1691).
     case prepBlocked
     case sendApproved, sendBlocked, sendErrors, sendStuck, sendDegraded
+    // #2647: sent, but the real Message-ID Gmail assigned could not be read back, so Overture's NEXT
+    // message on that conversation cannot reference it and a standards based client will file it as a
+    // separate conversation. Its own focus rather than a fold into .sendDegraded, on the #863 rule: the
+    // two name different sets of shows, so sharing one focus would state a number and land Dan on a
+    // different list. It is also a different problem with a different consequence (their replies are
+    // still watched fine here; it is OUR next message that comes adrift).
+    case sendThreadingDegraded
     // Not a queue filter: the pill opens FollowUpsView, which lists the due RECIPIENTS itself.
     case followUps
     // #1134: like .followUps, not a matches-based focus. Its rows are per-recipient (rendered by
@@ -127,7 +134,7 @@ enum StageNavigation {
     // and resolves no keys (matches returns false), so counting it here would only ever add a zero.
     static let countedFocuses: [StageFocus] = [
         .scout, .prep, .prepBlocked, .review,
-        .sendApproved, .sendBlocked, .sendErrors, .sendStuck, .sendDegraded
+        .sendApproved, .sendBlocked, .sendErrors, .sendStuck, .sendDegraded, .sendThreadingDegraded
     ]
 
     // #1121: one pass over the prospects for ALL pill counts, instead of one full pass per focus. The
@@ -277,6 +284,12 @@ enum StageNavigation {
             // shows are SENT, so they are neither approved nor blocked: before #863 the pill counted
             // them and its tap resolved none of them.
             return p.recipients.contains { $0.replyTrackingDegraded }
+
+        case .sendThreadingDegraded:
+            // #2647: the send went out and its replies are watched normally; what is missing is the id
+            // our own next message on that conversation would reference, so a nudge or closing note
+            // will read as a separate conversation in every client that is not Gmail.
+            return p.recipients.contains { $0.threadingDegraded }
 
         case .followUps:
             return false

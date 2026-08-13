@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1267 sentences**.
+Every sentence Overture can say to Dan: **1268 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -69,6 +69,7 @@ What is not, and why:
 - `Integration/GmailReplyChecker.swift`: the HTTP Authorization header Google reads, not a sentence
 - `Integration/GmailSender.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Integration/GmailSender.swift`: the HTTP Authorization header Google reads, not a sentence
+- `Integration/GmailSender.swift`: a Google API URL and developer diagnostic reasons, not the app's own voice (#915)
 - `Integration/GmailSignatureHealth.swift`: developer diagnostic reason (log/badge detail), not the app's own voice (#915)
 - `Integration/GmailSignatureHealth.swift`: developer diagnostic reason (log/badge detail), not the app's own voice (#915)
 - `Integration/GmailSignatureService.swift`: the HTTP Authorization header Google reads, not a sentence
@@ -177,6 +178,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
   - `UI/DraftReviewView.swift`
   - `UI/DraftReviewView.swift`
 - "Send issues"
+  - `Domain/AgentRoster.swift`
   - `Domain/AgentRoster.swift`
   - `Domain/AgentRoster.swift`
   - `Domain/AgentRoster.swift`
@@ -2388,6 +2390,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "\(months[month - 1]) \(year)"
     `UI/LeadIntakeModel.swift`
 "\(n) \(shows(n)) held by a date clash"
+    `Domain/AgentRoster.swift`
+"\(n) \(shows(n)) sent, but a later nudge will arrive as a new email, not a reply"
     `Domain/AgentRoster.swift`
 "\(n) \(shows(n)) sent, but replies can't be tracked: check Gmail"
     `Domain/AgentRoster.swift`

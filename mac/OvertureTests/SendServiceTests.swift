@@ -32,6 +32,25 @@ private struct DegradedThreadIdSender: MailSender {
     }
 }
 
+// #2647: the guard the issue names. Gmail DISCARDS the Message-ID a client puts in the raw message and
+// stamps its own, so this sender returns one that deliberately differs from whatever it was handed. What
+// gets stored has to be the RETURNED one; storing the supplied one is the defect, and it is invisible
+// unless the two values differ.
+private struct ReassigningMessageIDSender: MailSender {
+    static let assigned = "<assigned-by-gmail@mail.gmail.com>"
+    func send(_ mail: OutgoingMail) async throws -> SentReceipt {
+        SentReceipt(threadId: "t-reassigned", messageID: Self.assigned)
+    }
+}
+
+// #2647: a send that succeeded but whose real Message-ID could not be read back off Gmail. Never a
+// minted fall back: nil, plus the flag.
+private struct UnreadableMessageIDSender: MailSender {
+    func send(_ mail: OutgoingMail) async throws -> SentReceipt {
+        SentReceipt(threadId: "t-ok", messageID: nil, messageIDDegraded: true)
+    }
+}
+
 // Records the URL the injected fetch was handed, so a test can prove the live network path
 // was never reached when driving the real GmailSender through sendOne (#194).
 private final class Hit: @unchecked Sendable { var url: URL? }
@@ -297,16 +316,24 @@ struct SendServiceTests {
         let sender = GmailSender(
             fromEmail: "dan@danwrightphotography.com",
             token: { "tok" },
+            // #2647: the send is a POST followed by a GET that reads the real Message-ID back, so the
+            // send URL is recorded off the POST specifically rather than off whichever call happened
+            // to be last.
             fetch: { req in
-                hit.url = req.url
-                return (Data(#"{"threadId":"t-194","id":"m1"}"#.utf8),
+                if req.httpMethod == "POST" {
+                    hit.url = req.url
+                    return (Data(#"{"threadId":"t-194","id":"m1"}"#.utf8),
+                            HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+                }
+                let meta = #"{"payload":{"headers":[{"name":"Message-ID","value":"<real-194@mail.gmail.com>"}]}}"#
+                return (Data(meta.utf8),
                         HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
             })
 
         #expect(await SendService.sendOne(p, now: now, sender: sender) == true)
         #expect(p.sentAt == now)
         #expect(p.gmailThreadId == "t-194")
-        #expect(p.gmailMessageId?.hasSuffix("@danwrightphotography.com>") == true)
+        #expect(p.gmailMessageId == "<real-194@mail.gmail.com>")
         // The injected fetch was the one that ran (the real URLSession path was never reached).
         #expect(hit.url?.absoluteString == "https://gmail.googleapis.com/gmail/v1/users/me/messages/send")
     }
@@ -335,6 +362,65 @@ struct SendServiceTests {
         #expect(recipient.gmailThreadId == "")
         #expect(recipient.replyTrackingDegraded == true)
         #expect(recipient.sendError == nil)   // this is a degraded success, not a failure
+    }
+
+    // #2647: the id stored is the one the SEND came back with, never the one Overture put in the raw
+    // message. Gmail throws the supplied one away, so a stored copy of it references a message that
+    // exists nowhere and every follow-up written from it comes adrift in any client but Gmail.
+    @Test func theStoredMessageIdIsTheOneTheSendReturnedNotTheOneSupplied() async throws {
+        let ctx = ModelContext(try container())
+        approved(ctx, group: "Ready", ingested: Date(timeIntervalSince1970: 1))
+        let p = try ctx.fetch(FetchDescriptor<Prospect>()).first!
+        let recipient = p.recipients.first!
+        let sender = ReassigningMessageIDSender()
+
+        #expect(await SendService.sendOne(p, now: Date(), sender: sender) == true)
+
+        #expect(recipient.gmailMessageId == ReassigningMessageIDSender.assigned)
+        #expect(recipient.threadingDegraded == false)
+        // Deliberately NOT asserting here that nothing was minted: minting lived in GmailSender, and a
+        // fake sender cannot mint, so through this seam such a check would pass for a reason unrelated
+        // to the rule and be green forever (L1). `GmailSenderTests` asserts it where it can actually
+        // fail, against the real raw message.
+    }
+
+    // The failure path: the send worked, the id could not be read back. The recipient is FLAGGED, so a
+    // conversation whose threading cannot be trusted is visible rather than quietly wrong, and no minted
+    // value is stored in place of the real one.
+    @Test func anUnreadableMessageIdFlagsTheRecipientAndStoresNothing() async throws {
+        let ctx = ModelContext(try container())
+        approved(ctx, group: "Ready", ingested: Date(timeIntervalSince1970: 1))
+        let p = try ctx.fetch(FetchDescriptor<Prospect>()).first!
+        let recipient = p.recipients.first!
+
+        #expect(await SendService.sendOne(p, now: Date(), sender: UnreadableMessageIDSender()) == true)
+
+        #expect(recipient.sendState == .sent)          // a degraded success, not a failure
+        #expect(recipient.sendError == nil)
+        #expect(recipient.gmailMessageId == nil)
+        #expect(recipient.threadingDegraded == true)
+        #expect(recipient.replyTrackingDegraded == false)   // the threadId was fine: two separate checks
+    }
+
+    // L5: a follow-up whose own Message-ID could not be read back must KEEP the prior id rather than
+    // blank it. The prior id is a real ancestor of the conversation, so referencing it still threads
+    // everywhere; blanking it turns the next message into an unthreaded one, a worse defect than a
+    // slightly stale reference.
+    @Test func aFollowUpWithAnUnreadableMessageIdKeepsThePriorId() async throws {
+        let ctx = ModelContext(try container())
+        approved(ctx, group: "Ready", ingested: Date(timeIntervalSince1970: 1))
+        let p = try ctx.fetch(FetchDescriptor<Prospect>()).first!
+        let recipient = p.recipients.first!
+        let sentAt = Date(timeIntervalSince1970: 1_000_000)
+        #expect(await SendService.sendOne(p, now: sentAt, sender: FakeSender()) == true)
+        #expect(recipient.gmailMessageId == "<mid-1@x.org>")
+
+        let later = sentAt.addingTimeInterval(60 * 60 * 24 * 7)
+        #expect(await SendService.sendFollowUp(recipient, of: p, now: later,
+                                               sender: UnreadableMessageIDSender()) == true)
+
+        #expect(recipient.gmailMessageId == "<mid-1@x.org>")   // kept, not blanked
+        #expect(recipient.threadingDegraded == true)
     }
 
     // MARK: - #475/#476 send-path claim (crash safety + concurrency guard)

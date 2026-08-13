@@ -112,6 +112,7 @@ enum SendService {
             recipient.gmailThreadId = receipt.threadId
             recipient.gmailMessageId = receipt.messageID
             recipient.replyTrackingDegraded = receipt.threadIdDegraded
+            recipient.threadingDegraded = receipt.messageIDDegraded   // #2647
             recipient.sendError = nil
             // Lead-level first-send rollup (#389 Phase 1): set once, never overwritten, so the ~20
             // "was this performance contacted at all" readers keep working unchanged. The thread/
@@ -240,6 +241,11 @@ enum SendService {
                 r.followUpCount = spent + 1
                 r.lastFollowUpAt = now
                 if let m = receipt.messageID { r.gmailMessageId = m }   // thread the next reply off the nudge
+                // #2647: when the nudge's own Message-ID could not be read back, the PRIOR id above is
+                // kept rather than blanked. It is a real ancestor of the conversation, so referencing it
+                // still threads in every client; blanking it would turn the next message into an
+                // unthreaded one, which is a worse defect than a stale reference (L5).
+                r.threadingDegraded = receipt.messageIDDegraded
                 r.sendError = nil
                 r.nudgeSendClaimedAt = nil
             }
@@ -353,7 +359,11 @@ enum SendService {
         guard claimSecondarySend(recipient, \.replySendClaimedAt, now: now) else { return false }
         do {
             let receipt = try await sender.send(mail)
-            recipient.gmailMessageId = receipt.messageID          // thread the contact's next reply off ours
+            // #2647: only when there IS one. This used to assign unconditionally, which after the read
+            // back landed would have BLANKED a good id whenever the read back failed, leaving the next
+            // message on this conversation with nothing to reference at all (L5).
+            if let m = receipt.messageID { recipient.gmailMessageId = m }   // thread their next reply off ours
+            recipient.threadingDegraded = receipt.messageIDDegraded
             if !receipt.threadId.isEmpty { recipient.gmailThreadId = receipt.threadId }
             // #2170: the same routine the copy-out path runs, rather than the four lines it used to
             // repeat here. They had drifted into two copies of one idea, and the fact neither of them
@@ -433,6 +443,7 @@ enum SendService {
                 r.gmailThreadId = receipt.threadId
                 r.gmailMessageId = receipt.messageID
                 r.replyTrackingDegraded = receipt.threadIdDegraded
+                r.threadingDegraded = receipt.messageIDDegraded   // #2647
                 r.sendGroupId = groupId
                 r.sendError = nil
             }

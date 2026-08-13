@@ -218,6 +218,12 @@ final class Recipient {
     // #483: set when a send succeeded but Gmail's response had no parseable threadId, so this
     // recipient's replies can never be auto-detected until Dan checks Gmail directly.
     var replyTrackingDegraded: Bool = false
+    // #2647: set when a send succeeded but the real Message-ID Gmail stamped on it could not be read
+    // back, so `gmailMessageId` holds no id for that message and the NEXT message Overture sends on this
+    // conversation cannot reference it. Its own field beside replyTrackingDegraded rather than folded
+    // into it: replies can still be watched (the threadId is fine), and only the outbound threading is
+    // broken, so one field for both would say the wrong thing about whichever check actually failed (L53).
+    var threadingDegraded: Bool = false
     var sendError: String?
     // When the current .sending claim was made (#475/#476); cleared when it resolves to .sent or
     // reverts to .pending. Only meaningful while sendState == .sending.

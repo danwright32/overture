@@ -70,6 +70,7 @@ struct OutreachFieldClassificationTests {
         "sendStateRaw": "read as sendState, which is counted",
         "sendError": "what a send attempt failed with; the attempt set sendClaimedAt",
         "replyTrackingDegraded": "a property of a send that happened",
+        "threadingDegraded": "a property of a send that happened: its Message-ID could not be read back",
         "replyFromAddress": "read off a reply, and replied is counted",
         "replyFromName": "read off a reply, and replied is counted",
         "inboundReplySentAt": "when their reply was sent, and replied is counted",

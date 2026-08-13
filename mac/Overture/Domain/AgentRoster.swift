@@ -47,6 +47,11 @@ struct AgentInputs: Sendable {
     var stalledReplyDrafts: Int = 0   // #431: reply-draft runs that died without producing a draft
     var stuckSends: Int = 0   // #475/#476: claimed .sending, never resolved (outcome unknown)
     var degradedReplyTracking: Int = 0   // #483: sent, but no usable threadId so replies can't be auto-detected
+    // #2647: sent, but the real Message-ID could not be read back, so Overture's own next message on
+    // that conversation cannot reference it. Its own count beside degradedReplyTracking, never folded
+    // into it: they are different problems on different shows, and one number for both would state a
+    // total whose tap lands on a different list (#863) while naming only one of the two causes (L11).
+    var degradedThreading: Int = 0
     // #792: real contacts held back by a review guard (the venue guess, the press contact, the
     // duplicate, the salutation review, the draft lint), each waiting on one glance from Dan. They used
     // to be invisible: the show they belong to reads as fully Sent, because a held contact is not
@@ -99,6 +104,7 @@ extension AgentInputs {
             },
             stuckSends: count(.sendStuck),
             degradedReplyTracking: count(.sendDegraded),
+            degradedThreading: count(.sendThreadingDegraded),
             blockedContacts: count(.sendBlocked),
             // #1134: the SAME function the reached-out view lists its rows from, so the pill's count and
             // that list agree by construction (one per contacted recipient still in play).
@@ -277,6 +283,16 @@ enum AgentRoster {
             return AgentStatus(name: "Send issues", state: .needsAttention,
                                detail: "\(n) \(shows(n)) sent, but replies can't be tracked: check Gmail",
                                focus: .sendDegraded, count: n)
+        }
+        // #2647: the send went out and its replies ARE watched; what was lost is the id Overture's own
+        // next message would reference, so a nudge on that conversation reads as a separate one in any
+        // client that isn't Gmail. Ranked below the reply-tracking gap, which is the worse of the two:
+        // that one loses their answer entirely, this one only breaks how ours is filed.
+        if i.degradedThreading > 0 {
+            let n = i.degradedThreading
+            return AgentStatus(name: "Send issues", state: .needsAttention,
+                               detail: "\(n) \(shows(n)) sent, but a later nudge will arrive as a new email, not a reply",
+                               focus: .sendThreadingDegraded, count: n)
         }
         // #792: a contact held back by a review guard. It ranks BELOW a real failure (a send that failed,
         // or one whose outcome is unknown, needs Dan's eyes more urgently than a heuristic he only has to

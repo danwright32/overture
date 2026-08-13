@@ -30,8 +30,11 @@ enum InquiryReplySender {
             let receipt = try await sender.send(mail)
             inquiry.sentAt = now
             inquiry.gmailThreadId = receipt.threadId.isEmpty ? nil : receipt.threadId
-            inquiry.gmailMessageId = receipt.messageID
+            // #2647: keep a prior real id rather than blanking it when the read back failed, on the same
+            // reasoning as the prospect reply path: a real ancestor still threads, nothing does not (L5).
+            if let m = receipt.messageID { inquiry.gmailMessageId = m }
             inquiry.threadIdDegraded = receipt.threadIdDegraded
+            inquiry.threadingDegraded = receipt.messageIDDegraded
             if inquiry.replied {
                 inquiry.dismissedReplyId = inquiry.lastReplyId
                 inquiry.replied = false
