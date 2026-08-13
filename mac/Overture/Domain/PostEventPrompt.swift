@@ -138,12 +138,13 @@ enum PostEventPrompt {
     struct NudgeContent: Equatable, Sendable { let subject: String; let body: String; let isClosing: Bool }
 
     static func nudgeContent(kind: Kind, originalSubject: String?, groupName: String, isMerged: Bool = false,
-                             contactName: String?, venue: String?) -> NudgeContent? {
+                             contactName: String?, performanceDate: String?, venue: String?) -> NudgeContent? {
         guard kind == .closingNote else { return nil }
         // #1276/#1273: sanitize the merged-concert name and the venue ONCE here, at the shared chokepoint,
         // so a conductor list never reaches a recipient and a legitimate semicolon title keeps its name.
+        // The body no longer interpolates the name at all (#2615), but the subject's fallback still does.
         let name = FollowUp.safeDisplayName(groupName, isMerged: isMerged)
-        let body = closingNudgeBody(contactName: contactName, groupName: name,
+        let body = closingNudgeBody(contactName: contactName, performanceDate: performanceDate,
                                     venue: FollowUp.safeVenue(venue))
         return NudgeContent(subject: FollowUp.replySubject(originalSubject: originalSubject, groupName: name),
                             body: body, isClosing: true)
@@ -155,11 +156,20 @@ enum PostEventPrompt {
     // future season. #2397: sending it records `ShowOutcome.neverHeardBack`, which is what it has always
     // MEANT and what the send path did not say. It used to resolve the lead to a soft decline in every case,
     // claiming somebody turned Dan down when nobody had written back.
-    static func closingNudgeBody(contactName: String?, groupName: String, venue: String?) -> String {
+    //
+    // #2615: the sentence describes the SHOW, never the group name. `groupName` is whatever the source
+    // listed, and for a large share of Overture's prospects that is a solo performer's own name, so
+    // "I know <groupName> has come and gone" told a person, in Dan's voice, that they had come and gone.
+    // The show is named by its date and room instead, which needs to know nothing about what kind of
+    // thing the group name is, and which the thread's own subject already spells out.
+    static func closingNudgeBody(contactName: String?, performanceDate: String?, venue: String?) -> String {
         let greeting = Salutation.greeting(for: contactName)
-        let g = groupName + ((venue?.isEmpty == false) ? " at \(venue!)" : "")
+        // An unparseable or missing date drops to a plain "your show", never to a half-built clause or a
+        // date string a scrape happened to leave behind.
+        let dayClause = performanceDate.flatMap { EasternDate.longDayLabel($0) }.map { "\($0) " } ?? ""
+        let show = "your \(dayClause)show" + ((venue?.isEmpty == false) ? " at \(venue!)" : "")
         // #1144: the signature is appended once at the send layer, so this ends at its last sentence.
-        return greeting + "\n\nI know \(g) has come and gone, and the timing didn't line up this round. "
+        return greeting + "\n\nI know \(show) has come and gone, and the timing didn't line up this round. "
             + "No worries at all. If there's a future performance you'd like documented, I'd be glad to help "
             + "then. Either way, it was good to be in touch."
     }

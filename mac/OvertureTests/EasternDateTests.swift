@@ -45,4 +45,32 @@ struct EasternDateTests {
     @Test func daysUntilIsNilForAnUnparseableDay() {
         #expect(EasternDate.daysUntil(from: "garbage", to: "2026-06-20") == nil)
     }
+
+    // MARK: the spelled-out day (#2615)
+    //
+    // Overture's own surfaces read "Aug 11" because they are dense lists. An outbound sentence under
+    // Dan's name is prose, so it spells the month out.
+
+    @Test func longDayLabelSpellsTheMonthOut() {
+        #expect(EasternDate.longDayLabel("2026-08-11") == "August 11")
+        #expect(EasternDate.longDayLabel("2026-09-01") == "September 1")
+    }
+
+    @Test func longDayLabelIsNilForAnUnparseableDay() {
+        // Nil rather than a plausible-looking wrong date, the same contract as dayLabel: a caller has
+        // to say what it shows instead.
+        #expect(EasternDate.longDayLabel("garbage") == nil)
+        #expect(EasternDate.longDayLabel("") == nil)
+    }
+
+    // The two month vocabularies must agree, month for month, or one surface names August while the
+    // other names September (L41: a list mirroring another is derived from it, never kept beside it).
+    @Test func theShortMonthIsAlwaysThePrefixOfTheLongOne() {
+        for month in 1...12 {
+            let short = EasternDate.shortMonth(month)
+            let long = EasternDate.longMonth(month)
+            #expect(short.count == 3)
+            #expect(long.hasPrefix(short), "\(long) does not start with \(short)")
+        }
+    }
 }

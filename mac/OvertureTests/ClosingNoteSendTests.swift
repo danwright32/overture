@@ -14,13 +14,15 @@ struct ClosingNoteCopyTests {
 
     @Test func theClosingNoteIsGraciousAndLevel() {
         let body = PostEventPrompt.closingNudgeBody(contactName: "Emma Robinson",
-                                                    groupName: "Aurora Strings", venue: "Carnegie Hall")
-        #expect(body.contains("Aurora Strings"))
+                                                    performanceDate: "2026-11-16", venue: "Carnegie Hall")
+        // #2615: the show is named by its date and room. The group name is not in this sentence at all,
+        // because it is routinely a person's own name and the verb only works for an event.
+        #expect(body.contains("your November 16 show at Carnegie Hall"))
         #expect(isLevelVoice(body))
     }
 
     @Test func amissingContactNameFallsBackGracefully() {
-        let body = PostEventPrompt.closingNudgeBody(contactName: nil, groupName: "Aurora Strings", venue: nil)
+        let body = PostEventPrompt.closingNudgeBody(contactName: nil, performanceDate: "2026-11-16", venue: nil)
         #expect(!body.isEmpty)
         #expect(isLevelVoice(body))
     }
