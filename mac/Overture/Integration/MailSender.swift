@@ -16,6 +16,11 @@ struct OutgoingMail: Equatable, Sendable {
     // reference it. On a follow-up, `inReplyTo` + `threadId` reply onto the original thread.
     var messageID: String? = nil
     var inReplyTo: String? = nil
+    // #2648: the WHOLE ancestry of this message, oldest first, space separated. `inReplyTo` is the
+    // immediate parent only, which is all RFC 2822 lets that header carry; `References` is defined as the
+    // chain back to the first message, and a third message naming only the second gives a client that
+    // threads by walking the chain no link back to the first. Nil on a first send, which has no ancestry.
+    var references: String? = nil
     var threadId: String? = nil
 
     // Nil when there is nobody to send to. A mail with no addressee is not a mail, and the alternative
@@ -31,7 +36,8 @@ struct OutgoingMail: Equatable, Sendable {
     // the screen above it did. The subject is kept verbatim rather than trimmed here: what he approved is
     // what sends, and this only decides whether there is one at all.
     init?(to: [String], subject: String, body: String,
-          messageID: String? = nil, inReplyTo: String? = nil, threadId: String? = nil) {
+          messageID: String? = nil, inReplyTo: String? = nil, references: String? = nil,
+          threadId: String? = nil) {
         let addresses = to.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
         guard !addresses.isEmpty,
               !subject.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
@@ -40,7 +46,25 @@ struct OutgoingMail: Equatable, Sendable {
         self.body = body
         self.messageID = messageID
         self.inReplyTo = inReplyTo
+        self.references = references
         self.threadId = threadId
+    }
+}
+
+// #2648: how a reply's `References` header is built, in ONE place, so the three send paths that reply onto
+// a conversation (the nudge, the closing note, the reply draft) cannot disagree about what the chain is.
+//
+// RFC 2822: a reply's References is its parent's References followed by its parent's Message-ID, oldest
+// first. Overture already sends three message conversations (a pitch, a nudge, a closing note), and
+// `sendFollowUp` re-stamps the contact's stored id with the nudge's, so before this the closing note
+// referenced the nudge and nothing earlier. A client that threads by walking the chain then had no link
+// from the third message back to the first.
+enum MailThreading {
+    static func references(parentReferences: String?, parentMessageID: String?) -> String? {
+        let parts = [parentReferences, parentMessageID]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        return parts.isEmpty ? nil : parts.joined(separator: " ")
     }
 }
 
