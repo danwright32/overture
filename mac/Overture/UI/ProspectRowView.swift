@@ -951,7 +951,13 @@ struct ProspectRowView: View {
                                          // and the run cannot disagree about which shows are still live.
                                          isStillOpen: OpenForDecision.isOpen(
                                             status: item.status, performanceDate: item.performanceDate,
-                                            isBooked: item.isBooked, sentAt: item.sentAt, today: today)) {
+                                            isBooked: item.isBooked, sentAt: item.sentAt, today: today),
+                                         // #2621: and the same predicate the batch control reads, so a
+                                         // card offering the run and "Check the rest" cannot disagree
+                                         // about which rows a check came home short on.
+                                         missedByACheck: Reachability.wasMissedByACheck(
+                                            probedAt: item.reachabilityProbedAt,
+                                            unansweredAt: item.reachabilityUnansweredAt, now: Date())) {
         case .notOffered:
             EmptyView()
         case .offer:

@@ -127,10 +127,24 @@ enum Reachability {
         case requested
     }
 
+    // #2621: whether a check ran over this row and came home without an answer for it, still inside the
+    // freshness window. ONE definition, read by the card's offer, by the badge, and by
+    // `QueueModel.keysMissedByACheck` (which adds only the candidacy rule on top), so "Check the rest"
+    // can never run a set the cards never claimed to be in (L16).
+    //
+    // `probedAt == nil` is load-bearing: a row a later check ANSWERED is not missed any more, whatever an
+    // earlier run did to it, and paying for a lookup that already succeeded is the one thing this must
+    // never do. The mark ages on the same 90-day clock as every other reachability fact rather than
+    // offering to spend money on one show forever.
+    static func wasMissedByACheck(probedAt: Date?, unansweredAt: Date?, now: Date) -> Bool {
+        probedAt == nil && unansweredAt != nil && !probeIsStale(probedAt: unansweredAt, now: now)
+    }
+
     static func recheckState(probedAt: Date?, hasInheritedAnswer: Bool,
                              recheckRequestedAt: Date?, now: Date,
                              checkIsRunning: Bool = false,
-                             isStillOpen: Bool = true) -> RecheckState {
+                             isStillOpen: Bool = true,
+                             missedByACheck: Bool = false) -> RecheckState {
         // #2267: a show past the keep-or-dismiss moment is not offered one, and this is asked FIRST so it
         // beats even an outstanding request. The candidacy rule already refuses to include such a show in
         // a check, so an offer here would sell an action the rest of the app declines, and the money would
@@ -148,6 +162,10 @@ enum Reachability {
         // run in flight for other shows never makes every card in the queue claim to be in it.
         if recheckRequestedAt != nil { return checkIsRunning ? .running : .requested }
         if hasInheritedAnswer { return .offer }
+        // #2621: something DID run over this row and came home short. The guard below was written for a
+        // show nothing has ever looked at, and swallowed this third case, leaving the one badge that
+        // names a specific fault as the only one with nothing to act on.
+        if missedByACheck { return .offer }
         guard probedAt != nil, !probeIsStale(probedAt: probedAt, now: now) else { return .notOffered }
         return .offer
     }
@@ -556,8 +574,11 @@ enum ReachabilityCopy {
     // rather than reworded. Dan meets both about the same event, minutes apart: the run tells him 2 of 5
     // shows never got an answer, and these are those two shows. Two spellings of one fact read as two
     // different things.
+    // #2621: it used to end "picking its date again is what gets it an answer", which sent Dan to a run
+    // over the whole date while the card itself now carries a link that re-runs this one show. Two
+    // spellings of one remedy, and the coarser of the two was the one written down (#843).
     static let checkMissedItHelp =
-        "An earlier check included this show but never got an answer for it, so it's still unchecked. Nothing re-checks it on its own; picking its date again is what gets it an answer."
+        "An earlier check included this show but never got an answer for it, so it's still unchecked. Nothing re-checks it on its own."
 }
 
 // #1308 Layer 2: the opt-in per-date probe (Layer 2). Kept out of the views (testable, #885), named so the
