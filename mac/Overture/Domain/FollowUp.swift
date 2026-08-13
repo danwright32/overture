@@ -106,9 +106,42 @@ enum FollowUp {
     // was: the send path had already been written asking about the contact alone, which silently ignored a
     // show Dan had walked away from, and it compiled and passed either way. Required, so forgetting it is
     // a compile error rather than a nudge sent about an event he was finished with.
-    static func isAwaitingNudge(_ r: Recipient, in p: Prospect) -> Bool {
+    // #2645: and the show still being AHEAD. A nudge chases a pitch about an upcoming performance, so one
+    // that fires after the night has been and gone asks somebody to consider a show that already happened.
+    //
+    // Dan's call, 2026-08-13, asked directly whether that is wrong or merely untidy: wrong. After the
+    // performance the only things Overture offers on that row are the closing note and the close-out.
+    //
+    // Usually this was MASKED rather than absent: `PostEventPrompt` comes due the day after the show and
+    // sending the closing note records `neverHeardBack`, which takes the row off the stage before the
+    // nudge date arrives. So the stale nudge was only reachable when the post-event prompt sat unanswered
+    // for longer than the remaining gap, which is exactly when Dan is behind, which is exactly when he is
+    // least able to catch it himself. Measured on the live store that day: recipient 147 pitched Aug 11,
+    // show Aug 13, next nudge due Aug 17, four days after the performance.
+    //
+    // The run's END, not its first night, through the same `EasternDate` pair six other callers use
+    // (`runLastNight` then `runHasPassed`). Reading the first date would stop nudging every multi-night
+    // run from its opening night onwards, silently, which is a far worse defect than the one being fixed.
+    //
+    // An UNDATED show keeps nudging: `runHasPassed` answers false for a nil last night, because "date to
+    // be confirmed" is an ordinary listing state and not a show in the past (#798). That is the shared
+    // helper's own rule rather than a second one written here.
+    //
+    // `now` is required, not defaulted, for the same reason `in p:` is: a caller that forgot it would
+    // compile and quietly nudge a show that has been and gone.
+    static func isAwaitingNudge(_ r: Recipient, in p: Prospect, now: Date) -> Bool {
         guard r.isAwaitingFollowUp, !r.isOutreachStoodDown else { return false }
+        guard !hasPerformed(p, now: now) else { return false }
         return !p.isOutreachStoodDown(asOf: r.repliedAt)
+    }
+
+    // Has the whole run been and gone, as of `now`? Its own function so the gate above and any later
+    // reader ask it one way.
+    static func hasPerformed(_ p: Prospect, now: Date) -> Bool {
+        EasternDate.runHasPassed(
+            lastNight: EasternDate.runLastNight(runEndDate: p.runEndDate,
+                                                performanceDate: p.performanceDate),
+            today: EasternDate.today(now))
     }
 
     // Lead-level (legacy / single-contact): eligible = outcome is still no-response (auto-stop on a
@@ -142,7 +175,7 @@ enum FollowUp {
             // conversation whenever the alphabetically first contact was the one not due, so a colleague's
             // overdue nudge vanished behind a contact who had already declined.
             let dueHere = p.recipients.filter { r in
-                isDue(eligible: isAwaitingNudge(r, in: p), sentAt: r.sentAt,
+                isDue(eligible: isAwaitingNudge(r, in: p, now: now), sentAt: r.sentAt,
                       lastFollowUpAt: r.lastFollowUpAt, followUpCount: r.followUpCount,
                       remindedAt: r.nudgeRemindedAt, now: now, config: config)
             }

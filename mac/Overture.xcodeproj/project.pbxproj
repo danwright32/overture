@@ -407,6 +407,7 @@
 		39E776A8D9AD6A8C2D3172DE /* UnreadGenreIsSaidPlainlyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AAE68A7B6AEE27DFE2A8B97 /* UnreadGenreIsSaidPlainlyTests.swift */; };
 		3A68CC1E662466A5C1C21846 /* ReconcileSchedulerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA7C882006FA1851C12EEBCC /* ReconcileSchedulerTests.swift */; };
 		3A6A058836C6CD13B0916D16 /* OmniFocusSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7535567133B532960316EB4F /* OmniFocusSettingsView.swift */; };
+		3A72DC4EFF2363E6F14DE4E4 /* NudgesStopWhenTheShowDoesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3305BFEC786F4A350D758E4 /* NudgesStopWhenTheShowDoesTests.swift */; };
 		3AC9EF2EE58F7BAE0E13E89C /* UnchangedRefreshInvalidatesNothingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 632FAC085FC56CEBFF4A5252 /* UnchangedRefreshInvalidatesNothingTests.swift */; };
 		3ACC7D251417FC4721D1E079 /* GmailReplyChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = CED5B3A0D5D7B33059542583 /* GmailReplyChecker.swift */; };
 		3AEDB71282E1915793341D90 /* SourceYield.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A2220FC365AE8020E30A7A1 /* SourceYield.swift */; };
@@ -2662,6 +2663,7 @@
 		D218FAF3DC2AF3D19BE9E781 /* ShowSearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShowSearch.swift; sourceTree = "<group>"; };
 		D2DC69005FAB202973E48392 /* QueueShowableIsOneFilterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueShowableIsOneFilterTests.swift; sourceTree = "<group>"; };
 		D30AB1C746CDE024F6E7BCC1 /* AgentLogLocation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentLogLocation.swift; sourceTree = "<group>"; };
+		D3305BFEC786F4A350D758E4 /* NudgesStopWhenTheShowDoesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NudgesStopWhenTheShowDoesTests.swift; sourceTree = "<group>"; };
 		D33E969396D2DF078F0D8654 /* MenuBarContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarContent.swift; sourceTree = "<group>"; };
 		D36336C5451DA4AD02522DB2 /* VenueTixProducerFromSuperTitleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueTixProducerFromSuperTitleTests.swift; sourceTree = "<group>"; };
 		D3BA73E38C88C3BA40CA80F1 /* MenuBarStatusTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarStatusTests.swift; sourceTree = "<group>"; };
@@ -3281,6 +3283,7 @@
 				619962CF9A81A1D9080846E4 /* NobodyToPursueTests.swift */,
 				0EE5E7087E8933A18444C180 /* NoSubjectRefusedTests.swift */,
 				C10AA74775D09ADD6707F71F /* NotificationServiceTests.swift */,
+				D3305BFEC786F4A350D758E4 /* NudgesStopWhenTheShowDoesTests.swift */,
 				9F17F7263541A45DD564327A /* OmniFocusAutomationPermissionTests.swift */,
 				777EF8190E77DC68B752E3F2 /* OmniFocusSyncLivenessGuardTests.swift */,
 				976998798673F1D7648B4B8A /* OmniFocusSyncRunnerTests.swift */,
@@ -5253,6 +5256,7 @@
 				671E55787AFAD96C49B0128A /* NobodyToPursueTests.swift in Sources */,
 				8252FBC4A09D1F44913F74D1 /* NotificationService.swift in Sources */,
 				534815A4119D1F98E4E5389D /* NotificationServiceTests.swift in Sources */,
+				3A72DC4EFF2363E6F14DE4E4 /* NudgesStopWhenTheShowDoesTests.swift in Sources */,
 				DF29C323DA1550670F39B0D4 /* OVCapsuleActionGuardTests.swift in Sources */,
 				5CD326A8B52670196094D972 /* OVCapsuleButton.swift in Sources */,
 				A6EB8C74D853F664D4FF99F2 /* OVColorResolutionTests.swift in Sources */,

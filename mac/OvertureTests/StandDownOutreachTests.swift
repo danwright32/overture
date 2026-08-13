@@ -19,9 +19,15 @@ struct StandDownOutreachTests {
 
     // A contact and the show it belongs to, because the nudge question is asked about both and the show is
     // not optional: forgetting it is what let a stood-down show still be nudged.
+    //
+    // #2645: the show's date moved from 2026-05-01 to 2026-07-01, and that is a finding rather than
+    // housekeeping. This suite's clock is 2026-05-28, so every fixture here was a show 27 days in the
+    // PAST that the app was happily still nudging, which is exactly the defect #2645 exists to stop. Left
+    // where it was, these tests would have gone on passing while measuring the new gate instead of the
+    // stand-down they are about, so the fixture had to move to keep standing for the state it names (L48).
     private func sentContact(followUps: Int = 0, sentDaysAgo: Int = 30) -> (Prospect, Recipient) {
         let p = Prospect(naturalKey: "k", groupName: "Aurora Strings", discipline: "music",
-                         venue: "The Room", performanceDate: "2026-05-01", sourceListingURL: nil,
+                         venue: "The Room", performanceDate: "2026-07-01", sourceListingURL: nil,
                          websiteURL: nil, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 6, tier: "mid",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
@@ -37,14 +43,14 @@ struct StandDownOutreachTests {
     // The nudge stops for good. Not a snooze: the whole point is that six days from now nothing returns.
     @Test func aStoodDownContactIsNeverDueForANudgeAgain() {
         let (p, r) = sentContact()
-        #expect(FollowUp.isAwaitingNudge(r, in: p))   // the precondition the test rests on
+        #expect(FollowUp.isAwaitingNudge(r, in: p, now: now))   // the precondition the test rests on
 
         r.standDownOutreach(now: now)
 
-        #expect(!FollowUp.isAwaitingNudge(r, in: p))
+        #expect(!FollowUp.isAwaitingNudge(r, in: p, now: now))
         // And still not, a year later, at every gap boundary in between.
         for days in [6, 12, 60, 365] {
-            #expect(!FollowUp.isDue(eligible: FollowUp.isAwaitingNudge(r, in: p), sentAt: r.sentAt,
+            #expect(!FollowUp.isDue(eligible: FollowUp.isAwaitingNudge(r, in: p, now: now), sentAt: r.sentAt,
                                     lastFollowUpAt: r.lastFollowUpAt, followUpCount: r.followUpCount,
                                     now: now.addingTimeInterval(Double(days) * 86_400)),
                     "still due after \(days) days")
@@ -57,11 +63,11 @@ struct StandDownOutreachTests {
         let (p, r) = sentContact()
         r.remindLaterAboutNudge(now: now)
 
-        #expect(!FollowUp.isDue(eligible: FollowUp.isAwaitingNudge(r, in: p), sentAt: r.sentAt,
+        #expect(!FollowUp.isDue(eligible: FollowUp.isAwaitingNudge(r, in: p, now: now), sentAt: r.sentAt,
                                 lastFollowUpAt: r.lastFollowUpAt, followUpCount: r.followUpCount,
                                 remindedAt: r.nudgeRemindedAt, now: now))
         let afterGap = now.addingTimeInterval(Double(FollowUpConfig().gapDays) * 86_400 + 60)
-        #expect(FollowUp.isDue(eligible: FollowUp.isAwaitingNudge(r, in: p), sentAt: r.sentAt,
+        #expect(FollowUp.isDue(eligible: FollowUp.isAwaitingNudge(r, in: p, now: now), sentAt: r.sentAt,
                                lastFollowUpAt: r.lastFollowUpAt, followUpCount: r.followUpCount,
                                remindedAt: r.nudgeRemindedAt, now: afterGap))
         // The send record is untouched: no nudge went, so nothing may say one did (L37).
@@ -87,7 +93,7 @@ struct StandDownOutreachTests {
         r.standDownOutreach(now: now)
         r.resumeOutreach()
 
-        #expect(FollowUp.isAwaitingNudge(r, in: p))
+        #expect(FollowUp.isAwaitingNudge(r, in: p, now: now))
         #expect(r.outreachStoodDownAt == nil)
     }
 
@@ -152,10 +158,10 @@ struct StandDownDueListTests {
 
     @discardableResult
     private func show(_ ctx: ModelContext, contacts: [String]) -> Prospect {
-        let key = Prospect.makeNaturalKey(groupName: "Aurora Strings", performanceDate: "2026-05-01",
+        let key = Prospect.makeNaturalKey(groupName: "Aurora Strings", performanceDate: "2026-07-01",
                                           venue: "The Room")
         let p = Prospect(naturalKey: key, groupName: "Aurora Strings", discipline: "music",
-                         venue: "The Room", performanceDate: "2026-05-01", sourceListingURL: nil,
+                         venue: "The Room", performanceDate: "2026-07-01", sourceListingURL: nil,
                          websiteURL: nil, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 6, tier: "mid",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
@@ -212,12 +218,12 @@ struct StandDownDueListTests {
         let p = show(ctx, contacts: ["one@example.org"])
         p.recipients.first!.standDownOutreach(now: now)
         try? ctx.save()
-        #expect(!FollowUp.isAwaitingNudge(p.recipients.first!, in: p))
+        #expect(!FollowUp.isAwaitingNudge(p.recipients.first!, in: p, now: now))
 
         p.recipients.first!.resumeOutreach()
         p.standDownOutreach(now: now)
         try? ctx.save()
-        #expect(!FollowUp.isAwaitingNudge(p.recipients.first!, in: p))
+        #expect(!FollowUp.isAwaitingNudge(p.recipients.first!, in: p, now: now))
     }
 
     // And the sender really asks with the show in hand, not the contact alone. Source-level because the
@@ -225,7 +231,7 @@ struct StandDownDueListTests {
     // the call compiles and passes either way (#1679).
     @Test func theSenderAsksWithTheShowInHand() {
         let sender = SourceGuardHelper.source("Overture/Integration/SendService.swift")
-        #expect(sender.contains("FollowUp.isAwaitingNudge(recipient, in: prospect)"))
+        #expect(sender.contains("FollowUp.isAwaitingNudge(recipient, in: prospect, now: now)"))
     }
 
     // Standing a NUDGE down must not blind the decide clock: "stop writing to this one" is not "I have
@@ -254,10 +260,10 @@ struct StandDownClosingNoteTests {
     }
 
     private func showAwaitingAClosingNote(_ ctx: ModelContext) -> Prospect {
-        let key = Prospect.makeNaturalKey(groupName: "Aurora Strings", performanceDate: "2026-05-01",
+        let key = Prospect.makeNaturalKey(groupName: "Aurora Strings", performanceDate: "2026-07-01",
                                           venue: "The Room")
         let p = Prospect(naturalKey: key, groupName: "Aurora Strings", discipline: "music",
-                         venue: "The Room", performanceDate: "2026-05-01", sourceListingURL: nil,
+                         venue: "The Room", performanceDate: "2026-07-01", sourceListingURL: nil,
                          websiteURL: nil, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 6, tier: "mid",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
@@ -323,10 +329,10 @@ struct StandDownScopeTests {
     }
 
     private func show(_ ctx: ModelContext, contacts: [String], replied: Bool = false) -> Prospect {
-        let key = Prospect.makeNaturalKey(groupName: "Aurora Strings", performanceDate: "2026-05-01",
+        let key = Prospect.makeNaturalKey(groupName: "Aurora Strings", performanceDate: "2026-07-01",
                                           venue: "The Room")
         let p = Prospect(naturalKey: key, groupName: "Aurora Strings", discipline: "music",
-                         venue: "The Room", performanceDate: "2026-05-01", sourceListingURL: nil,
+                         venue: "The Room", performanceDate: "2026-07-01", sourceListingURL: nil,
                          websiteURL: nil, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 6, tier: "mid",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
