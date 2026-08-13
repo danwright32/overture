@@ -259,7 +259,9 @@ enum SendService {
         guard let content = PostEventPrompt.nudgeContent(kind: .closingNote, originalSubject: prospect.draftSubject,
                                                         groupName: prospect.groupName,
                                                         isMerged: prospect.isMergedConcert,
-                                                        contactName: recipient.name, venue: prospect.venue),
+                                                        contactName: recipient.name,
+                                                        performanceDate: prospect.performanceDate,
+                                                        venue: prospect.venue),
               let mail = OutgoingMail(
                 to: addresses,
                 subject: content.subject,

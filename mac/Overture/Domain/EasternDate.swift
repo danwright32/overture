@@ -70,16 +70,31 @@ enum EasternDate {
         return out
     }
 
-    private static let shortMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                                      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    // #2615: ONE month vocabulary. The short form is derived from the long one rather than kept beside
+    // it, because two hand-maintained lists that must agree month for month is exactly the drift L41
+    // describes, and every English month's three-letter form is its own first three letters.
+    private static let longMonths = ["January", "February", "March", "April", "May", "June",
+                                     "July", "August", "September", "October", "November", "December"]
+
+    private static let shortMonths = longMonths.map { String($0.prefix(3)) }
 
     static func shortMonth(_ component: Int) -> String { shortMonths[(component - 1 + 12) % 12] }
+
+    static func longMonth(_ component: Int) -> String { longMonths[(component - 1 + 12) % 12] }
 
     // A day string as Dan reads it: "Nov 14". Nil for an unparseable day, so a caller has to say what it
     // wants to show instead rather than being handed a plausible-looking wrong date.
     static func dayLabel(_ day: String) -> String? {
         guard let d = date(from: day) else { return nil }
         return "\(shortMonth(calendar.component(.month, from: d))) \(calendar.component(.day, from: d))"
+    }
+
+    // The same day spelled out, for PROSE rather than for a dense list: "August 11". #2615's closing
+    // note is the first caller, and an outbound sentence under Dan's name is not the place for "Aug".
+    // Nil for an unparseable day, the same contract as dayLabel.
+    static func longDayLabel(_ day: String) -> String? {
+        guard let d = date(from: day) else { return nil }
+        return "\(longMonth(calendar.component(.month, from: d))) \(calendar.component(.day, from: d))"
     }
 
     // The same day WITH its year: "Nov 2, 2025". For a fact about the past rather than about the queue.

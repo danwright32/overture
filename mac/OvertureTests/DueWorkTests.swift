@@ -127,10 +127,12 @@ struct FollowUpCopyTests {
     // returns nothing rather than an empty message.
     @Test func aClosingNoteIsMarkedClosingAndTheCloseOutPromptHasNoSendableContent() {
         let closing = PostEventPrompt.nudgeContent(kind: .closingNote, originalSubject: "S",
-                                                   groupName: "G", contactName: "A", venue: "V")
+                                                   groupName: "G", contactName: "A",
+                                                   performanceDate: "2026-03-01", venue: "V")
         #expect(closing?.isClosing == true)
 
         #expect(PostEventPrompt.nudgeContent(kind: .closeOut, originalSubject: "S",
-                                             groupName: "G", contactName: "A", venue: "V") == nil)
+                                             groupName: "G", contactName: "A",
+                                             performanceDate: "2026-03-01", venue: "V") == nil)
     }
 }

@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1251 sentences**.
+Every sentence Overture can say to Dan: **1252 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -2346,6 +2346,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ScoutWarningCopy.swift`
 "\(live.name): \(live.detail)"
     `UI/QueueView.swift`
+"\(longMonth(calendar.component(.month, from: d))) \(calendar.component(.day, from: d))"
+    `Domain/EasternDate.swift`
 "\(lookups) refused, that research never happened"
     `Domain/PrepRunSummary.swift`
 "\(lookups), \(wait)."
