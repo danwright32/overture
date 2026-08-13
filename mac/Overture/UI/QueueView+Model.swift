@@ -683,6 +683,11 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     // addresses unverified, and so the review panel can offer Dan the same overrule the three above have.
     var heldDownToUnverified: Bool = false
     var heldDownToUnverifiedDismissed: Bool = false
+    // #2624: the fifth guard, carried the same way, so the review panel can name it and offer the overrule.
+    var looksLikeAnotherPersons: Bool = false
+    var looksLikeAnotherPersonsDismissed: Bool = false
+
+    var isLooksLikeAnotherPersons: Bool { looksLikeAnotherPersons && !looksLikeAnotherPersonsDismissed }
 
     // #1866: mirrors Recipient.isHeldDownToUnverified, so the screen and the stored row answer "is this
     // hold in force" through one rule rather than two spellings of it.
@@ -2392,7 +2397,9 @@ extension RecipientSnapshot {
                   looksLikeDuplicateContact: r.looksLikeDuplicateContact,
                   looksLikeDuplicateContactDismissed: r.looksLikeDuplicateContactDismissed,
                   heldDownToUnverified: r.heldDownToUnverified,
-                  heldDownToUnverifiedDismissed: r.heldDownToUnverifiedDismissed)
+                  heldDownToUnverifiedDismissed: r.heldDownToUnverifiedDismissed,
+                  looksLikeAnotherPersons: r.looksLikeAnotherPersons,
+                  looksLikeAnotherPersonsDismissed: r.looksLikeAnotherPersonsDismissed)
     }
 }
 

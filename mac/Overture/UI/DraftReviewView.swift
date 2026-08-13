@@ -44,6 +44,7 @@ struct DraftReviewView: View {
     var onDismissDuplicateContactMatch: (_ recipientId: String) -> Void = { _ in }
     // #1866: same, for a confident find held down to unverified because it named no page.
     var onDismissConfidenceHeldDown: (_ recipientId: String) -> Void = { _ in }
+    var onDismissAddressInAnotherName: (_ recipientId: String) -> Void = { _ in }
     var onAddRecipient: (_ email: String, _ name: String?) -> Void = { _, _ in }
     var onRemoveRecipient: (_ recipientId: String) -> Void = { _ in }
     // AI reply drafter (#420 C6 / #421): request a draft, send it on the contact's thread, or copy it out.
@@ -109,6 +110,7 @@ struct DraftReviewView: View {
             pressContactWarnings
             duplicateContactWarnings
             confidenceHeldDownWarnings
+            addressInAnotherNameWarnings
             draftBlock
             performerOverridePreviews
             actionRow
@@ -214,6 +216,14 @@ struct DraftReviewView: View {
     // #1866: the fourth, through the SAME warning row as the three above rather than a new mechanism. It is
     // the only place a contact guard has ever been answerable, so putting the overrule anywhere else would
     // mean two ways to answer a guard depending on which one fired.
+    // #2624: the fifth, through the SAME warning row as the four above rather than a new mechanism, for
+    // the reason given directly below: this is the only place a contact guard has ever been answerable.
+    @ViewBuilder private var addressInAnotherNameWarnings: some View {
+        recipientWarning(item.contacts.filter(\.isLooksLikeAnotherPersons),
+                        message: { DraftReviewNotes.addressInAnotherName(name: $0.displayName) },
+                        dismissLabel: "It reaches them", onDismiss: onDismissAddressInAnotherName)
+    }
+
     @ViewBuilder private var confidenceHeldDownWarnings: some View {
         recipientWarning(item.contacts.filter(\.isHeldDownToUnverified),
                         message: { DraftReviewNotes.confidenceHeldDown(name: $0.displayName) },
