@@ -223,11 +223,17 @@ enum SendService {
         // #2575: an emptied box is not a message, and refusing it HERE (rather than only at the button)
         // means no other caller can mail a signature with nothing above it under Dan's name.
         guard let outgoing = editedOrComposed(body, composed: content.body) else { return false }
+        // #2648: the whole ancestry, not the parent restated. Built through the one shared helper the
+        // closing note and the reply draft also use, so the three reply paths cannot disagree about what
+        // the chain is.
+        let chain = MailThreading.references(parentReferences: recipient.gmailReferences,
+                                             parentMessageID: recipient.gmailMessageId)
         guard let mail = OutgoingMail(
             to: addresses,
             subject: content.subject,
             body: outgoing,
             inReplyTo: recipient.gmailMessageId,
+            references: chain,
             threadId: recipient.gmailThreadId) else { return false }
         // #468: shared with sendConversationNudge's claim below (mutually exclusive by domain
         // state, see the field's doc comment on Recipient), so a fast double-tap on either one
@@ -240,7 +246,13 @@ enum SendService {
             for r in group {
                 r.followUpCount = spent + 1
                 r.lastFollowUpAt = now
-                if let m = receipt.messageID { r.gmailMessageId = m }   // thread the next reply off the nudge
+                // #2648: the id and the chain move TOGETHER or not at all. The chain is the ancestry of
+                // whichever message `gmailMessageId` names, so advancing one without the other would emit
+                // a References that skips a generation.
+                if let m = receipt.messageID {
+                    r.gmailMessageId = m           // thread the next reply off the nudge
+                    r.gmailReferences = chain
+                }
                 // #2647: when the nudge's own Message-ID could not be read back, the PRIOR id above is
                 // kept rather than blanked. It is a real ancestor of the conversation, so referencing it
                 // still threads in every client; blanking it would turn the next message into an
@@ -292,6 +304,8 @@ enum SendService {
                 subject: content.subject,
                 body: outgoing,
                 inReplyTo: recipient.gmailMessageId,
+                references: MailThreading.references(parentReferences: recipient.gmailReferences,
+                                                     parentMessageID: recipient.gmailMessageId),
                 threadId: recipient.gmailThreadId) else { return false }
         // #468: shared with sendFollowUp's claim above. #2033: over the whole group.
         guard claimSecondarySend(group, \.nudgeSendClaimedAt, now: now) else { return false }
@@ -353,8 +367,11 @@ enum SendService {
         // be due for a conversation nudge at the same time.
         let subject = replySubject(for: recipient, of: prospect)
         // #2030: built before the claim, for the same reason as the two nudges above.
+        let chain = MailThreading.references(parentReferences: recipient.gmailReferences,
+                                             parentMessageID: recipient.gmailMessageId)
         guard let mail = OutgoingMail(to: addresses, subject: subject, body: body,
                                       inReplyTo: recipient.gmailMessageId,
+                                      references: chain,
                                       threadId: recipient.gmailThreadId) else { return false }
         guard claimSecondarySend(recipient, \.replySendClaimedAt, now: now) else { return false }
         do {
@@ -362,7 +379,10 @@ enum SendService {
             // #2647: only when there IS one. This used to assign unconditionally, which after the read
             // back landed would have BLANKED a good id whenever the read back failed, leaving the next
             // message on this conversation with nothing to reference at all (L5).
-            if let m = receipt.messageID { recipient.gmailMessageId = m }   // thread their next reply off ours
+            if let m = receipt.messageID {
+                recipient.gmailMessageId = m       // thread their next reply off ours
+                recipient.gmailReferences = chain  // #2648: the ancestry of that message, moved with it
+            }
             recipient.threadingDegraded = receipt.messageIDDegraded
             if !receipt.threadId.isEmpty { recipient.gmailThreadId = receipt.threadId }
             // #2170: the same routine the copy-out path runs, rather than the four lines it used to

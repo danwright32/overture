@@ -80,7 +80,7 @@ struct GmailSender: MailSender {
             fromName: fromName, fromEmail: fromEmail,
             to: mail.to, subject: mail.subject, body: mail.body,
             signature: sig,
-            messageID: suppliedMessageID, inReplyTo: mail.inReplyTo)
+            messageID: suppliedMessageID, inReplyTo: mail.inReplyTo, references: mail.references)
 
         var req = URLRequest(url: URL(string: "https://gmail.googleapis.com/gmail/v1/users/me/messages/send")!)
         req.httpMethod = "POST"

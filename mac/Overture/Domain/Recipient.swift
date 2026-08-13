@@ -215,6 +215,12 @@ final class Recipient {
     var sentAt: Date?
     var gmailThreadId: String?
     var gmailMessageId: String?
+    // #2648: the `References` header carried by the LAST message Overture sent on this contact's
+    // conversation, which is the ancestry the NEXT one has to extend. Kept beside `gmailMessageId` and
+    // written in the same step, because the two are one fact: the chain is only meaningful as the
+    // ancestry OF that message, and updating one without the other would emit a chain that skips a
+    // generation. Nil until a reply has been sent, which is the first message with any ancestry at all.
+    var gmailReferences: String?
     // #483: set when a send succeeded but Gmail's response had no parseable threadId, so this
     // recipient's replies can never be auto-detected until Dan checks Gmail directly.
     var replyTrackingDegraded: Bool = false
