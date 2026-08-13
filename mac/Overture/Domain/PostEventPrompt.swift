@@ -68,9 +68,19 @@ enum PostEventPrompt {
     // The single source of truth for WHEN a post-event prompt is due, shared by the Due gate and by
     // `ReachedOutQueue`'s schedule so the two cannot drift.
     //
-    // nil means none applies: the show has not been and gone, it has no date to pass, Dan has already
-    // recorded how it ended, or this contact is out of play.
-    static func nextPromptDate(for r: Recipient, of p: Prospect, now: Date) -> Date? {
+    // #2646: it takes no clock, and that is the fix. It used to end on `guard now >= dayAfter`, so it
+    // declined to name its own date until that date had already arrived, which is the one question a
+    // function called "when is this due" exists to answer. A clock reporting nil is indistinguishable
+    // from a clock with nothing to report, so `ReachedOutQueue.nextActionableMoment`'s `min` skipped
+    // straight past it to the farther nudge: Dan read "in 5 days" on a row whose closing note was owed
+    // the next morning, and it would have jumped to "Reach out now" overnight with no warning.
+    //
+    // Whether it is due YET is a separate question, asked only by `prompt(for:of:now:)` below.
+    //
+    // nil still means none applies, and every reason below is a genuine absence rather than a moment in
+    // the future: the show has no date to pass, Dan has already recorded how it ended, this contact is
+    // out of play, or a note already sent has stepped the prompt forward.
+    static func nextPromptDate(for r: Recipient, of p: Prospect) -> Date? {
         // Dan closed it out, so Overture stops asking. The inverse of his own rule that nothing is closed
         // unless he closed it: once he has, leave it alone.
         //
@@ -88,14 +98,14 @@ enum PostEventPrompt {
         // Dated the day AFTER the show, not read off the clock, so one owed for a week reads a week overdue
         // rather than arriving fresh every morning (#2116).
         guard let dayAfter = dayAfterShow(p.performanceDate) else { return nil }
-        guard now >= dayAfter else { return nil }
         // A re-anchor from a note already sent steps the prompt forward instead of nagging.
         if let anchored = r.conversationRemindedAt, anchored >= dayAfter { return nil }
         return dayAfter
     }
 
     static func prompt(for r: Recipient, of p: Prospect, now: Date) -> Prompt? {
-        guard let due = nextPromptDate(for: r, of: p, now: now), now >= due else { return nil }
+        // #2646: THIS is where the clock belongs. `nextPromptDate` says when; this says whether it is now.
+        guard let due = nextPromptDate(for: r, of: p), now >= due else { return nil }
         // The one question that decides which kind: did anybody write back? Asked of the SHOW rather than
         // this contact, because a colleague's answer is an answer about the event, and offering a note that
         // says "never heard back" on a show somebody replied to would be false whoever replied.
