@@ -1108,9 +1108,12 @@ enum ProspectMutations {
     // #468 (SUP-006): mirrors performSend/sendReply's markSending/clearSending shape so
     // FollowUpsView's nudge and closing-note sends get the same in-flight feedback (a LiveRunLabel,
     // button disabled while sending) instead of firing a bare Task with the button left clickable.
+    // #2575: `body` is what Dan had in the send sheet's text box when he pressed Send, or nil for a send
+    // he did not edit. It is threaded all the way to SendService rather than recomposed anywhere in
+    // between, because a second composition is exactly how what he approved and what leaves come apart.
     static func sendFollowUp(_ naturalKey: String, _ recipientId: String, prospects: [Prospect],
                              context: ModelContext, feedback: ActionFeedback,
-                             sender: MailSender = liveSender(),
+                             sender: MailSender = liveSender(), body: String? = nil,
                              markSending: @escaping (String) -> Void, clearSending: @escaping (String) -> Void) {
         guard let model = prospects.first(where: { $0.naturalKey == naturalKey }),
               let recipient = model.recipients.first(where: { $0.id == recipientId }) else { return }
@@ -1118,7 +1121,8 @@ enum ProspectMutations {
         markSending(recipientId)
         Task {
             await GmailSignatureService.refreshBeforeSend()   // #1208
-            let sent = await SendService.sendFollowUp(recipient, of: model, now: Date(), sender: sender)
+            let sent = await SendService.sendFollowUp(recipient, of: model, now: Date(), sender: sender,
+                                                      body: body)
             let saved = context.saveOrWarnSendNotConfirmed(org: org, feedback: feedback)
             clearSending(recipientId)
             // #285: the send fires async in a sheet; acknowledge it ran, success or failure.
@@ -1130,9 +1134,10 @@ enum ProspectMutations {
 
     // #2397: the closing note is the only conversation-track email left, so this no longer chooses between
     // two kinds. `isClosing` stays on the acknowledgment wording, which the caller still needs.
+    // #2575: `body` is Dan's edit, as on sendFollowUp above.
     static func sendClosingNote(_ naturalKey: String, _ recipientId: String,
                                 prospects: [Prospect], context: ModelContext, feedback: ActionFeedback,
-                                sender: MailSender = liveSender(),
+                                sender: MailSender = liveSender(), body: String? = nil,
                                 markSending: @escaping (String) -> Void, clearSending: @escaping (String) -> Void) {
         guard let model = prospects.first(where: { $0.naturalKey == naturalKey }),
               let recipient = model.recipients.first(where: { $0.id == recipientId }) else { return }
@@ -1141,7 +1146,8 @@ enum ProspectMutations {
         markSending(recipientId)
         Task {
             await GmailSignatureService.refreshBeforeSend()   // #1208
-            let sent = await SendService.sendClosingNote(recipient, of: model, now: Date(), sender: sender)
+            let sent = await SendService.sendClosingNote(recipient, of: model, now: Date(), sender: sender,
+                                                         body: body)
             let saved = context.saveOrWarnSendNotConfirmed(org: org, feedback: feedback)
             clearSending(recipientId)
             // #285: same async-in-a-sheet acknowledgment, with closing-note vs nudge wording.

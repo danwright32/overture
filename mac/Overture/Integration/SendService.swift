@@ -177,12 +177,26 @@ enum SendService {
         return true
     }
 
+    // #2575: which words actually go out. An edit REPLACES the composed body; an edit that is nothing but
+    // whitespace is not a message at all and returns nil, so both send paths refuse it in one place rather
+    // than each deciding what an empty box means. `SendConfirmEditing.bodyIsSendable` is the same
+    // predicate the Send button is disabled by, so the button and the send cannot disagree (L109).
+    private static func editedOrComposed(_ edited: String?, composed: String) -> String? {
+        guard let edited else { return composed }
+        return SendConfirmEditing.bodyIsSendable(edited) ? edited : nil
+    }
+
     // Sends ONE follow-up nudge for a prospect Dan explicitly chose to re-touch (#45):
     // a short templated message to the same contact. Records the follow-up (count +
     // timestamp) on success so the sequencer paces and caps it. Never resets sentAt or
     // the original outcome; one click = one nudge, never autonomous.
     @discardableResult
+    // #2575: `body`, when given, is what Dan had in the text box at the moment he pressed Send. It
+    // REPLACES the composed body and nothing else: the subject still comes from the shared helper,
+    // because that is what threads the message onto the conversation Gmail is watching (#74). Nil is an
+    // unedited send, which composes exactly as before.
     static func sendFollowUp(_ recipient: Recipient, of prospect: Prospect, now: Date, sender: MailSender,
+                             body: String? = nil,
                              config: FollowUpConfig = .init()) async -> Bool {
         // #1740: the same predicate the row and the Due count read, so a contact Dan stood down cannot be
         // nudged from any surface, including one that never asks the Due list.
@@ -205,10 +219,13 @@ enum SendService {
                                             isMerged: prospect.isMergedConcert,
                                             contactName: recipient.name, venue: prospect.venue,
                                             followUpCount: recipient.followUpCount)
+        // #2575: an emptied box is not a message, and refusing it HERE (rather than only at the button)
+        // means no other caller can mail a signature with nothing above it under Dan's name.
+        guard let outgoing = editedOrComposed(body, composed: content.body) else { return false }
         guard let mail = OutgoingMail(
             to: addresses,
             subject: content.subject,
-            body: content.body,
+            body: outgoing,
             inReplyTo: recipient.gmailMessageId,
             threadId: recipient.gmailThreadId) else { return false }
         // #468: shared with sendConversationNudge's claim below (mutually exclusive by domain
@@ -245,8 +262,9 @@ enum SendService {
     // decision, already locked in on Recipient.setConversationState). Re-anchors this recipient's own
     // reminder clock. One click = one nudge, never autonomous.
     @discardableResult
+    // #2575: `body` is Dan's edit, as above. It replaces the composed body only.
     static func sendClosingNote(_ recipient: Recipient, of prospect: Prospect,
-                                now: Date, sender: MailSender) async -> Bool {
+                                now: Date, sender: MailSender, body: String? = nil) async -> Bool {
         guard let email = recipient.email, !email.isEmpty, recipient.sentAt != nil else { return false }
         // #2033: the note lands on a thread the whole group is reading, so it is addressed to all of them.
         let group = SendGroup.peers(of: recipient, in: prospect)
@@ -262,10 +280,11 @@ enum SendService {
                                                         contactName: recipient.name,
                                                         performanceDate: prospect.performanceDate,
                                                         venue: prospect.venue),
+              let outgoing = editedOrComposed(body, composed: content.body),
               let mail = OutgoingMail(
                 to: addresses,
                 subject: content.subject,
-                body: content.body,
+                body: outgoing,
                 inReplyTo: recipient.gmailMessageId,
                 threadId: recipient.gmailThreadId) else { return false }
         // #468: shared with sendFollowUp's claim above. #2033: over the whole group.

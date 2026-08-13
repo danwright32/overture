@@ -312,8 +312,11 @@ struct QueueView: View {
             }
             .sheet(item: $pendingRowNudge) { pending in
                 SendConfirmSheet(confirmation: pending.confirmation,
-                                 onSend: { performRowNudge(pending) },
-                                 onCancel: { pendingRowNudge = nil })
+                                 onSend: { performRowNudge(pending, body: nil) },
+                                 onCancel: { pendingRowNudge = nil },
+                                 // #2575: both kinds this sheet raises are composed end to end by
+                                 // Overture, so both get the box.
+                                 onSendEdited: { performRowNudge(pending, body: $0) })
             }
             .sheet(item: $answeringReply) { target in
                 // #2145: the one reply screen, told what it is answering. An inquiry builds its own
@@ -1395,16 +1398,20 @@ struct QueueView: View {
         }
     }
 
-    private func performRowNudge(_ pending: PendingRowNudge) {
+    // #2575: `body` is what the send sheet's text box held when Dan pressed Send, nil for a send he did
+    // not edit. Passed straight through; nothing recomposes it on the way.
+    private func performRowNudge(_ pending: PendingRowNudge, body: String?) {
         pendingRowNudge = nil
         if pending.isConversation {
             ProspectMutations.sendClosingNote(pending.naturalKey, pending.recipientId,
                                               prospects: prospects, context: context, feedback: feedback,
+                                              body: body,
                                               markSending: { sendState.markSending($0) },
                                               clearSending: { sendState.clearSending($0) })
         } else {
             ProspectMutations.sendFollowUp(pending.naturalKey, pending.recipientId,
                                            prospects: prospects, context: context, feedback: feedback,
+                                           body: body,
                                            markSending: { sendState.markSending($0) },
                                            clearSending: { sendState.clearSending($0) })
         }
