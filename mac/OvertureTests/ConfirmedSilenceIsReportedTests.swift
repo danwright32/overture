@@ -75,9 +75,14 @@ struct ConfirmedSilenceIsReportedTests {
     // The counted phrase is the LABEL's own words, cased for use after a number, never a second phrasing
     // of the same fact: two wordings for one ending is #843 from the naming direction, and the report and
     // the menu would drift apart with nothing to notice.
-    @Test func theCountedPhraseIsTheLabelsOwnWords() {
+    // #2586 made the phrase optional, so this unwraps rather than comparing: a pitched ending with NO
+    // phrase would otherwise have satisfied a drift check about wording by having no wording to drift.
+    // That a pitched ending has one at all is `CountedPhraseHasNoDefaultTests`; this stays the question
+    // of whether the two agree.
+    @Test func theCountedPhraseIsTheLabelsOwnWords() throws {
         for outcome in ShowOutcome.pitched {
-            #expect(outcome.countedPhrase.lowercased() == outcome.label.lowercased(),
+            let phrase = try #require(outcome.countedPhrase, "\(outcome) has no counted phrase")
+            #expect(phrase.lowercased() == outcome.label.lowercased(),
                     "\(outcome) says one thing on the menu and another in the report")
         }
     }

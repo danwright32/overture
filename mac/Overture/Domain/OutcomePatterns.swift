@@ -68,9 +68,24 @@ enum OutcomePatterns {
             .filter { $0 != .booked }
             .compactMap { outcome -> String? in
                 let count = tally.lostReasons[outcome] ?? 0
-                return count > 0 ? "\(count) \(outcome.countedPhrase)" : nil
+                return count > 0 ? lostFragment(count: count, outcome: outcome) : nil
             }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    // #2586: one row of that split, extracted so the case it exists for can be reached from a test.
+    //
+    // An ending with no counted phrase is a GAP in the vocabulary, not a row to drop. Dropping it would
+    // leave the show inside the lost TOTAL this line claims to break down while removing it from the
+    // breakdown, so the count and the rows it promises would disagree (L16), and a missing row is far
+    // harder to notice than an ugly one. The raw value is deliberately not prose: it reads as broken, so
+    // somebody fixes it, where the menu label read as very slightly off and nobody would.
+    //
+    // Unreachable for the endings this line walks, and two gates keep it that way: the exhaustive switch
+    // on `countedPhrase` breaks the build when a case is added, and `CountedPhraseHasNoDefaultTests`
+    // fails if a pitched ending ships without a phrase.
+    static func lostFragment(count: Int, outcome: ShowOutcome) -> String {
+        "\(count) \(outcome.countedPhrase ?? outcome.rawValue)"
     }
 
     static func percentSuffix(_ rate: Double?) -> String {
