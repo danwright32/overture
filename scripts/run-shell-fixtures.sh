@@ -77,6 +77,41 @@ unresolved_commands_are_all_declared() {
   return 1
 }
 
+# Files a fixture may leave in its private temp directory without being called a leak, because it did not
+# create them: node and tsx write these caches wherever TMPDIR points, on any run that shells out to
+# either. Named individually rather than by a wildcard, so a fixture's own leftover cannot hide behind a
+# vague pattern.
+FIXTURE_TEMP_ALLOWED="node-compile-cache tsx-501 tsx-0"
+
+# Reads one finished fixture's private temp directory and returns nonzero when it left anything of its
+# own behind. Prints what was left.
+#
+# WHY. A fixture that creates a temp file and never removes it leaks one per run, forever, and nothing
+# notices: the files are small, they are outside the checkout, and the fixture passes. Measured
+# 2026-08-13, three fixtures were doing it, and the oldest had been leaking one file per run since at
+# least 2026-08-12 (53 of them) because a second `trap ... EXIT` silently REPLACED the first one that
+# would have cleaned up. That is the same class as #2585, where the same habit at Xcode scale filled the
+# disk and stopped the machine.
+fixture_left_temp_files() {
+  local dir="$1" entry left=() allowed
+  for entry in $(ls -A "${dir}" 2>/dev/null); do
+    local is_allowed="false"
+    for allowed in ${FIXTURE_TEMP_ALLOWED}; do
+      [[ "${entry}" == "${allowed}" ]] && is_allowed="true"
+    done
+    [[ "${is_allowed}" == "false" ]] && left+=("${entry}")
+  done
+
+  [[ "${#left[@]}" -eq 0 ]] && return 0
+
+  echo "FAIL - ${FIXTURE_PATH_FOR_REPORT:-a fixture} left files behind in its temp directory"
+  printf '  %s\n' "${left[@]}"
+  echo "  One per run, forever, outside the checkout where nobody looks. Remove them before the fixture"
+  echo "  ends. If it already has a cleanup trap, check a LATER trap has not replaced it: bash keeps one"
+  echo "  EXIT trap, so the second one silently wins."
+  return 1
+}
+
 # Runs the given fixture scripts CONCURRENTLY (#2601) and returns the count of fixtures that exited
 # nonzero OR that called a command bash could not resolve (so 0 means every fixture passed and every
 # assertion in it was real). Never stops at the first failure, so one broken fixture doesn't hide
@@ -111,7 +146,8 @@ run_shell_fixtures() {
 scratch="$1"; pair="$2"
 idx="${pair%%$'\t'*}"
 fixture="${pair#*$'\t'}"
-( set +e; "${fixture}" >"${scratch}/log-${idx}" 2>&1; echo "$?" > "${scratch}/status-${idx}" )
+mkdir -p "${scratch}/tmp-${idx}"
+( set +e; TMPDIR="${scratch}/tmp-${idx}" "${fixture}" >"${scratch}/log-${idx}" 2>&1; echo "$?" > "${scratch}/status-${idx}" )
 echo "finished ${fixture}"
 exit 0
 WRAPPER
@@ -136,6 +172,8 @@ WRAPPER
       failures=$((failures + 1))
     else
       if ! FIXTURE_PATH_FOR_REPORT="${fixture}" unresolved_commands_are_all_declared "${scratch}/log-${i}"; then
+        failures=$((failures + 1))
+      elif ! FIXTURE_PATH_FOR_REPORT="${fixture}" fixture_left_temp_files "${scratch}/tmp-${i}"; then
         failures=$((failures + 1))
       fi
     fi
