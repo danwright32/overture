@@ -109,9 +109,10 @@ struct PostEventPromptTests {
         let p = show(ctx)
         let r = contact(ctx, on: p)
 
-        let date = PostEventPrompt.nextPromptDate(for: r, of: p, now: day("2026-03-05"))
-
-        #expect(date == day("2026-03-02"))
+        // #2646: it takes no clock now, and names its date whether or not that date has arrived. Asked
+        // from BEFORE the show as well as after, so this pins the dating rule rather than the old
+        // silence.
+        #expect(PostEventPrompt.nextPromptDate(for: r, of: p) == day("2026-03-02"))
     }
 
     // On the show's own day it has not been and gone. A run opening tonight has not opened yet.
