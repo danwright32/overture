@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1253 sentences**.
+Every sentence Overture can say to Dan: **1257 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -331,6 +331,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/PrepQueueService.swift`
 "A Prep run is already in progress. \(org) is queued to re-prep on the next run"
     `App/ActionFeedback.swift`
+"A \(kind.runNoun) is already going"
+    `Domain/PrepQueueButton.swift`
 "A booking was detected that needs your confirmation. Tap to confirm or dismiss."
     `UI/ProspectRowView.swift`
 "A check has already run over this show once and never got an answer for it."
@@ -351,8 +353,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/BlockedCalendar.swift`
 "A later night of this run is out: you're already shooting on \(day)."
     `Domain/BlockedCalendar.swift`
-"A prep run is already going"
-    `Domain/PrepQueueButton.swift`
 "A previous run was still reading pages, so the pages this run found were not handed over. Nothing was lost: press Run scout again once the reading finishes and they will be read."
     `Integration/ScoutService.swift`
 "A reachability check couldn't find an email for this show. You can still keep it and add a contact by hand."
@@ -523,7 +523,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Came back empty \(runs) \(runWord) in a row. Check the link."
     `Domain/SourceAttention.swift`
 "Cancel prep"
-    `App/RootView.swift`
+    `Domain/RunKind.swift`
+"Cancel reachability check"
+    `Domain/RunKind.swift`
 "Carnegie Hall"
     `Domain/WatchedSourceBackfill.swift`
     `Integration/ScoutService.swift`
@@ -2326,6 +2328,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AgentRoster.swift`
 "\(i.keptToPrep) ready to prep"
     `Domain/AgentRoster.swift`
+"\(i.keptToPrep) ready, held by a check"
+    `Domain/AgentRoster.swift`
 "\(i.reachedOutDue) due"
     `Domain/AgentRoster.swift`
 "\(i.readyToSend) approved, connect Gmail to send"
@@ -2710,6 +2714,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreSchemaGuard.swift`
 "permission. A successful sync clears it."
     `Domain/AppNotice.swift`
+"prep run"
+    `Domain/RunKind.swift`
+"reachability check"
+    `Domain/RunKind.swift`
 "read it."
     `UI/LeadIntakeModel.swift`
 "redraft and find new contacts"
