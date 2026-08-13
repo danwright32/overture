@@ -71,6 +71,13 @@ echo "==> scripts/check-health-recorder-drift.sh"
 echo "==> scripts/check-detached-runner-scope.sh"
 "${REPO_ROOT}/scripts/check-detached-runner-scope.sh"
 
+# Fails if the tracked .claude/settings.json stops disabling the Claude Code plugins that have no
+# business loading in this repo (#2605). #1682 turned them off for the DETACHED runs only; this covers
+# the interactive session, where the same plugin was measured injecting 53.2KB of another product's
+# documentation into every session opened here.
+echo "==> scripts/check-project-plugin-scope.sh"
+"${REPO_ROOT}/scripts/check-project-plugin-scope.sh"
+
 # The app launches its runners with /bin/sh, so they must PARSE there. `bash -n` is not enough and
 # missing that shipped a runner that died on its first real run.
 echo "==> scripts/check-runner-posix.sh"

@@ -226,6 +226,25 @@ already drifting from the Swift version it mirrored.
   needed the marks Swift Testing prints and builds them from their UTF-8 bytes with `printf`. In
   Swift the same trick is a unicode escape (`\u{2014}`). `SKIP_STYLE_CHECK=1` is visible and
   tempting and skips past a clean solution, so it is the wrong tool here (#2312).
+- **This repo turns four Claude Code plugins off, in a TRACKED settings file.** `.claude/settings.json`
+  gives `vercel-plugin@vercel-vercel-plugin`, `cloudflare@cloudflare`, `figma@claude-plugins-official`
+  and `stripe@claude-plugins-official` a `false` under `enabledPlugins`, and
+  `scripts/check-project-plugin-scope.sh` (#2605) fails if any of that stops being true. Plugins are
+  enabled at user scope in `~/.claude/settings.json`, so they fire in every project on this Mac whatever
+  the project is: measured 2026-08-13, one session opened here with a single one-line prompt carried
+  53.2KB of injected Vercel documentation, a CLI upgrade nag, and `You must run the Skill(...)` lines
+  under a heading reading `MANDATORY: Your training data for these libraries is OUTDATED and
+  UNRELIABLE`. None of it is true of a SwiftUI app plus a `tsx` importer. #1682 had already measured the
+  same plugin doing the same thing to the DETACHED runs and fixed it there
+  (`claude_run_plugin_lockout`), deliberately covering only the runs this repo launches, so the
+  interactive session kept paying for it. Three details worth keeping. TRACKED rather than
+  `.claude/settings.local.json`, because local settings are excluded by Dan's global gitignore and live
+  per checkout, so every agent worktree would keep getting the text (his call, 2026-08-13). The test for
+  it names the four ids independently rather than reading them back from the script's own list, so
+  dropping one from both places still goes red (L70). And `swift-lsp`, `superpowers` and `plannotator`
+  stay ON deliberately, since all three are in use here, which the same test asserts so a later sweep
+  cannot quietly take them out. Hooks only load at session start, so a change here cannot be verified in
+  the session that makes it.
 - Since #1967 the Swift tests live in TWO targets, and which one a new test belongs in is decided
   by one question: does it need the app RUNNING?
   - `OvertureTests` (`mac/OvertureTests/`) holds almost everything and is where a new test goes
