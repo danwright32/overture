@@ -20,6 +20,9 @@ source "${SCRIPT_DIR}/lib/mac-project-paths.sh"
 # The same completeness enumeration verify-and-merge-branch.sh enforces, from the one shared file,
 # so a PR cannot be waved through by choosing the other merge script.
 source "${SCRIPT_DIR}/lib/pr-completeness-guard.sh"
+# merge_pr: the one implementation of the merge and everything that must follow one, shared with
+# verify-and-merge-branch.sh so a fix to it cannot be missing from one of the two paths.
+source "${SCRIPT_DIR}/lib/pr-merge.sh"
 # delete_merged_local_branch, shared with verify-and-merge-branch.sh and tidy-checkout.sh (#2234).
 source "${SCRIPT_DIR}/lib/checkout-tidy.sh"
 
@@ -185,18 +188,17 @@ main() {
       echo
       echo "CI genuinely passed. Merging PR #${PR_NUMBER}..."
       MERGED_BRANCH="$(gh_as_danwright32 pr view "${PR_NUMBER}" -R "${REPO}" --json headRefName --jq .headRefName 2>/dev/null || echo "")"
-      gh_as_danwright32 pr merge "${PR_NUMBER}" -R "${REPO}" --squash --delete-branch
-      # #2234: --delete-branch deletes the branch on GitHub only, so the local ref stays forever.
-      # That is where 496 local branches came from. Never fatal, for the same reason as the two
-      # steps below: the merge already happened.
-      delete_merged_local_branch "${MERGED_BRANCH}" || true
-      # #1808: something shipped, so record it for the app to compare its own build against. Never fatal:
-      # the merge has already happened and failing here would report a successful merge as a failure.
-      "${REPO_ROOT}/scripts/record-shipped-commit.sh" || true
-      # And say the same thing in the terminal, which is what finally gives #1345's freshness check a
-      # caller. It exits 1 when the installed app is behind, which after a merge it now is, so its
-      # verdict is printed rather than gating anything.
-      "${REPO_ROOT}/mac/scripts/check-release-freshness.sh" || true
+      # The shared merge (scripts/lib/pr-merge.sh), not a second copy of the sequence: it merges, asks
+      # GitHub whether the PR actually reached MERGED, and only then deletes the local branch and records
+      # the shipped commit. This script used to carry its own copy of those four steps, and the copy in
+      # verify-and-merge-branch.sh was the one that reported a failed merge as `merged` on 2026-08-13.
+      if ! merge_pr "${PR_NUMBER}" "${MERGED_BRANCH}"; then
+        echo
+        echo "Stopped: CI passed but the merge itself did not go through, so PR #${PR_NUMBER} is still open." >&2
+        echo "Its reason is above. Nothing was deleted and no shipped commit was recorded; rerun this once" >&2
+        echo "the cause is dealt with." >&2
+        exit 1
+      fi
       exit 0
     fi
 

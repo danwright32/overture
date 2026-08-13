@@ -155,7 +155,14 @@ setup_worktree() { SETUP_CALLED="$1"; WORKTREE_DIR="/fake/worktree-4"; }
 combine_with_main() { COMBINE_CALLED="$1"; return 0; }
 run_full_suite() { return 0; }
 release_verify_slot() { RELEASE_CALLED="yes"; }
-gh_as_danwright32() { :; }
+# Answers both calls merge_pr makes: the merge itself, and the state question that confirms it. A
+# no-op stub (what stood here) now means "the PR is unreadable", which is correctly not a merge.
+gh_as_danwright32() {
+  case "${2:-}" in
+    view) printf 'MERGED' ;;
+    *) return 0 ;;
+  esac
+}
 delete_merged_local_branch() { LOCAL_BRANCH_DELETED="$1"; }
 # merge_pr's two trailing side-effect scripts are neutralised by pointing REPO_ROOT at an empty
 # directory, so they are simply absent; both are already `|| true` in the source, so their absence
@@ -164,6 +171,7 @@ REPO_ROOT="$(mktemp -d)"
 
 verify_and_merge "45" >/dev/null 2>&1
 assert_equals "the merged branch's local ref is handed to the cleanup" "feature-tidy" "${LOCAL_BRANCH_DELETED}"
+
 
 # The failing path must not tidy anything: there was no merge, so the branch is still live work.
 reset_stubs
