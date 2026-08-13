@@ -105,8 +105,8 @@ struct ControlRefusalReasonTests {
     // Two causes behind one dimming, and they call for opposite things: one means go and keep a show,
     // the other means wait. One shared "not yet" would be wrong for whichever of the two fired.
     @Test func eachReasonPrepKeptIsRefusedHasItsOwnSentence() {
-        let nothingKept = PrepStartGate.reason(keptToPrep: 0, prepRunning: false)
-        let alreadyRunning = PrepStartGate.reason(keptToPrep: 3, prepRunning: true)
+        let nothingKept = PrepStartGate.reason(keptToPrep: 0, runInFlight: nil)
+        let alreadyRunning = PrepStartGate.reason(keptToPrep: 3, runInFlight: .prep)
         expectStandingReason(nothingKept, "nothing kept to prep")
         expectStandingReason(alreadyRunning, "a prep run already in flight")
         #expect(nothingKept != alreadyRunning,
@@ -116,19 +116,19 @@ struct ControlRefusalReasonTests {
     // A run in flight is named first when both are true: it is the state that clears itself, and telling
     // him to go and keep a show would have him queue work into a run he cannot start anyway.
     @Test func nothingKeptDuringARunNamesTheRun() {
-        #expect(PrepStartGate.refusal(keptToPrep: 0, prepRunning: true) == .runInFlight)
+        #expect(PrepStartGate.refusal(keptToPrep: 0, runInFlight: .prep) == .runInFlight(.prep))
     }
 
     @Test func keptShowsAndNoRunHaveNoReasonToShow() {
-        #expect(PrepStartGate.reason(keptToPrep: 1, prepRunning: false) == nil)
-        #expect(PrepStartGate.canStart(keptToPrep: 1, prepRunning: false))
+        #expect(PrepStartGate.reason(keptToPrep: 1, runInFlight: nil) == nil)
+        #expect(PrepStartGate.canStart(keptToPrep: 1, runInFlight: nil))
     }
 
     @Test func aPrepReasonAndADisabledPrepAlwaysAgree() {
         for kept in [0, 1, 7] {
             for running in [true, false] {
-                let canStart = PrepStartGate.canStart(keptToPrep: kept, prepRunning: running)
-                let reason = PrepStartGate.reason(keptToPrep: kept, prepRunning: running)
+                let canStart = PrepStartGate.canStart(keptToPrep: kept, runInFlight: running ? .prep : nil)
+                let reason = PrepStartGate.reason(keptToPrep: kept, runInFlight: running ? .prep : nil)
                 #expect(canStart == (reason == nil),
                         "kept \(kept) running \(running): canStart \(canStart) but reason \(reason ?? "nil")")
             }

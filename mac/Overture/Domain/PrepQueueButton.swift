@@ -28,7 +28,9 @@ enum PrepQueueButton {
 // SwiftUI view is logic no test can reach (#863). RootView's `canStartPrep` now asks this.
 enum PrepStartGate {
     enum Refusal: Equatable {
-        case runInFlight
+        // #2614: which run, because this sentence is read from inside the open menu where the toolbar's
+        // own (correct) label is not in view, and during a check it used to say a prep run was going.
+        case runInFlight(RunKind)
         case nothingKept
 
         // True BEFORE any press: what is standing in the way, never what became of a press (#2544).
@@ -37,7 +39,7 @@ enum PrepStartGate {
             // Not "Prepping", which is what the toolbar already says while a run is going. This is the
             // answer to a different question (why this item will not start another one), and it is read
             // from inside the open menu where that label is not in view.
-            case .runInFlight: return "A prep run is already going"
+            case .runInFlight(let kind): return "A \(kind.runNoun) is already going"
             // Names the step that clears it. Keeping a show is one click away in the Queue behind this
             // menu, so this is advice that actually changes the state he is stuck in (L111).
             case .nothingKept: return "Keep a show first, then prep it"
@@ -47,17 +49,17 @@ enum PrepStartGate {
 
     // A run in flight is named first when both are true. It is the state that clears itself, and telling
     // him to go and keep a show would have him queue work into a run that cannot start anyway.
-    static func refusal(keptToPrep: Int, prepRunning: Bool) -> Refusal? {
-        if prepRunning { return .runInFlight }
+    static func refusal(keptToPrep: Int, runInFlight: RunKind?) -> Refusal? {
+        if let kind = runInFlight { return .runInFlight(kind) }
         if keptToPrep == 0 { return .nothingKept }
         return nil
     }
 
-    static func reason(keptToPrep: Int, prepRunning: Bool) -> String? {
-        refusal(keptToPrep: keptToPrep, prepRunning: prepRunning)?.reason
+    static func reason(keptToPrep: Int, runInFlight: RunKind?) -> String? {
+        refusal(keptToPrep: keptToPrep, runInFlight: runInFlight)?.reason
     }
 
-    static func canStart(keptToPrep: Int, prepRunning: Bool) -> Bool {
-        refusal(keptToPrep: keptToPrep, prepRunning: prepRunning) == nil
+    static func canStart(keptToPrep: Int, runInFlight: RunKind?) -> Bool {
+        refusal(keptToPrep: keptToPrep, runInFlight: runInFlight) == nil
     }
 }

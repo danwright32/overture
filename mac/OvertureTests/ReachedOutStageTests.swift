@@ -78,7 +78,7 @@ struct ReachedOutStageTests {
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
 
         let inputs = AgentInputs.from(prospects: all, context: .at(today, now: now),
-                                      gmailConnected: true, prepRunning: false, replyRunAlive: false)
+                                      gmailConnected: true, runInFlight: nil, replyRunAlive: false)
 
         #expect(ReachedOutQueue.activeWithDates(from: all, now: now).count == 2)   // two rows, one per show
         #expect(inputs.reachedOut == 2)                                           // and the pill agrees

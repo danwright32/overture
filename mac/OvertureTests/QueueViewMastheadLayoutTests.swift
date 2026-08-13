@@ -13,7 +13,7 @@ struct QueueViewMastheadLayoutTests {
     // masthead, so these render it with a calm, quiet set rather than the masthead sourcing its own.
     // Calm on purpose: a pill that needed attention would add its own height and confound the
     // height comparisons below.
-    private let calmInputs = AgentInputs(toTriage: 0, keptToPrep: 0, prepRunning: false, toReview: 0,
+    private let calmInputs = AgentInputs(toTriage: 0, keptToPrep: 0, toReview: 0,
                                          readyToSend: 0, gmailConnected: true, sendErrors: 0,
                                          followUpsDue: 0)
 

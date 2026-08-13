@@ -152,7 +152,7 @@ struct BlockedContactVisibilityTests {
     // on the roll-up line that used to sit above the strip. That line counted lit pills, so it could report
     // a held contact was visible while the pill holding it said nothing at all.
     @Test func aBlockedContactShowsUpOnTheSendIssuesPill() {
-        var inputs = AgentInputs(toTriage: 0, keptToPrep: 0, prepRunning: false, toReview: 0,
+        var inputs = AgentInputs(toTriage: 0, keptToPrep: 0, toReview: 0,
                                  readyToSend: 0, gmailConnected: true, sendErrors: 0, followUpsDue: 0)
         inputs.blockedContacts = 2
 
@@ -170,7 +170,7 @@ struct BlockedContactVisibilityTests {
     // A real failure still outranks it: a send that failed, or one whose outcome is unknown, needs his
     // eyes more urgently than a contact held back by a heuristic.
     @Test func aFailedSendStillOutranksAHeldContact() {
-        var inputs = AgentInputs(toTriage: 0, keptToPrep: 0, prepRunning: false, toReview: 0,
+        var inputs = AgentInputs(toTriage: 0, keptToPrep: 0, toReview: 0,
                                  readyToSend: 0, gmailConnected: true, sendErrors: 1, followUpsDue: 0)
         inputs.blockedContacts = 2
 

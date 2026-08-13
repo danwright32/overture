@@ -57,7 +57,7 @@ struct StagePillCountMatchesNavigationTests {
     private func inputs(_ ctx: ModelContext) throws -> AgentInputs {
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
         return AgentInputs.from(prospects: all, context: .at(today, now: now),
-                                gmailConnected: true, prepRunning: false, replyRunAlive: false)
+                                gmailConnected: true, runInFlight: nil, replyRunAlive: false)
     }
 
     private func pill(_ ctx: ModelContext, _ name: String) throws -> AgentStatus {

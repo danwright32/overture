@@ -262,8 +262,7 @@ struct QueueView: View {
             focusedKeys: focusedKeys,
             // #1770: read once for the whole pass, from the cache rather than from the token file.
             gmailConnected: GmailConnection.shared.isConnected,
-            prepRunning: PrepQueueService.isRunning(now: now),
-            probeRunning: PrepQueueService.isProbeRunning(now: now),
+            runInFlight: PrepQueueService.runInFlight(now: now),
             replyRunAlive: ReplyClassifyService.isRunning(now: now),
             trace: renderTrace))
     }
