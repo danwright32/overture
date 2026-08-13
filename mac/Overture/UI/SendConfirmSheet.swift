@@ -44,6 +44,9 @@ enum SendConfirmCopy {
     static let toLabel = "To"
     static let subjectLabel = "Subject"
     static let previewLabel = "The email that will send"
+    // #2575: the same promise, said over a box he can change. "Will send" is the load-bearing half and it
+    // stays: the words in this box are the words that leave.
+    static let editLabel = "The email that will send, edit it here"
     static let send = "Send"
     static let cancel = "Cancel"
     // #361: the gold seal on a just-sent row as it leaves the queue.
@@ -64,10 +67,18 @@ struct SendConfirmSheet: View {
     // Nil on the follow-up and note paths, which send to one contact and offer no choice.
     var rebuild: (@MainActor (_ selected: [String], _ together: Bool) -> SendConfirmation?)? = nil
     var onSendSelection: (@MainActor (_ selected: [String], _ together: Bool) -> Void)? = nil
+    // #2575: set on the two paths Overture composes end to end, the follow-up and the closing note, which
+    // were the only outbound messages in the app with no text box. Given, the preview becomes an editor
+    // and Send hands this closure exactly what the box holds, never the composed original (Dan's rule,
+    // #2010: "whatever is in the text box that I see is what's sent").
+    var onSendEdited: ((String) -> Void)? = nil
 
     @State private var selected: [String] = []
     @State private var together = true
     @State private var touched = false
+    // Seeded from the confirmation on appear. Held here rather than derived, because the whole point is
+    // that it stops tracking the composition the moment Dan types.
+    @State private var editedBody = ""
 
     // What the sheet is currently describing. Falls back to the confirmation it opened with, so a rebuild
     // that cannot produce one (nothing ticked) leaves the screen showing the last good state rather than
@@ -77,7 +88,16 @@ struct SendConfirmSheet: View {
         return rebuild(selected, together) ?? confirmation
     }
 
-    private var offersChoice: Bool { rebuild != nil && confirmation.candidates.count > 1 }
+    private var isEditable: Bool { onSendEdited != nil }
+
+    private var offersChoice: Bool {
+        SendConfirmEditing.offersChoice(hasRebuild: rebuild != nil,
+                                        candidates: confirmation.candidates.count,
+                                        isEditable: isEditable)
+    }
+
+    // What the sheet will send: the box on an editable sheet, the composition everywhere else.
+    private var outgoingBody: String { isEditable ? editedBody : current.bodyBeforeSignOff }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -108,7 +128,7 @@ struct SendConfirmSheet: View {
                 if offersChoice { contactPicker }
 
                 VStack(alignment: .leading, spacing: OVSpacing.xs) {
-                    Text(SendConfirmCopy.previewLabel)
+                    Text(isEditable ? SendConfirmCopy.editLabel : SendConfirmCopy.previewLabel)
                         .font(OVType.meta)
                         .foregroundStyle(OVColor.inkFaint)
                         .textCase(.uppercase)
@@ -122,8 +142,20 @@ struct SendConfirmSheet: View {
                     // #2159: the last screen before a real email leaves, in a 180pt box. A message longer
                     // than that read as the whole message, on the one surface captioned "The email that
                     // will send", so what Dan approved and what left could differ below the fold (L64).
-                    CappedScrollView(maxHeight: 180) {
-                        DraftSignaturePreview(draftBody: current.bodyBeforeSignOff,
+                    // #2575: on the two composed paths this is a real text box, and what it holds is
+                    // what sends. The rendered preview stays directly beneath it, live, so the screen
+                    // still shows the whole outgoing message including the signature the send appends
+                    // (#2053) rather than making him approve his own words with the rest out of sight.
+                    if isEditable {
+                        TextEditor(text: $editedBody)
+                            .font(OVType.body)
+                            .frame(minHeight: 120)
+                            .padding(4)
+                            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(OVColor.line))
+                            .accessibilityLabel(SendConfirmCopy.editLabel)
+                    }
+                    CappedScrollView(maxHeight: isEditable ? 120 : 180) {
+                        DraftSignaturePreview(draftBody: outgoingBody,
                                               signature: current.signature)
                     }
                     .padding(OVSpacing.sm)
@@ -159,7 +191,9 @@ struct SendConfirmSheet: View {
                         .keyboardShortcut(.cancelAction)
                     Spacer()
                     Button {
-                        if let onSendSelection, touched { onSendSelection(selected, together) } else { onSend() }
+                        if let onSendEdited { onSendEdited(editedBody) }
+                        else if let onSendSelection, touched { onSendSelection(selected, together) }
+                        else { onSend() }
                     } label: {
                         Label(SendConfirmCopy.send, systemImage: "paperplane")
                     }
@@ -168,7 +202,10 @@ struct SendConfirmSheet: View {
                     .tint(OVColor.gold)
                     // #2017: nothing ticked is nobody to send to, and the button must not offer to do an
                     // action it cannot do. It is the same refusal the send itself makes, at the control.
-                    .disabled(offersChoice && selected.isEmpty)
+                    // #2575: and an emptied box is nothing to send, judged by the same predicate the send
+                    // refuses it with, so the button and the send cannot disagree.
+                    .disabled((offersChoice && selected.isEmpty)
+                              || (isEditable && !SendConfirmEditing.bodyIsSendable(editedBody)))
                 }
             }
             .padding(OVSpacing.lg)
@@ -178,6 +215,7 @@ struct SendConfirmSheet: View {
         .onAppear {
             selected = confirmation.selected
             together = confirmation.togetherAtOpen
+            editedBody = confirmation.bodyBeforeSignOff
         }
     }
 
