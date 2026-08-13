@@ -39,13 +39,17 @@ trap 'rm -rf "${TMP}"' EXIT
 # `usable` is what overture_verify_signing_identity_usable answers, and `listed` is what
 # overture_signing_identity_sha answers, because the whole point of the issue is that those are two
 # different questions and the script had been asking the weaker one.
+# #2595 adds a fourth argument, `certs_already_there`: how many certificates with this common name the
+# keychain already holds. It defaults to 0 so every case written before it keeps meaning what it meant.
 run_setup() {
-  local usable_before="$1" usable_after="$2" listed="$3"
+  local usable_before="$1" usable_after="$2" listed="$3" certs_already_there="${4:-0}"
   (
     export OVERTURE_SIGNING_KEYCHAIN="${TMP}/throwaway.keychain-db"
     export OVERTURE_SIGNING_IDENTITY="Overture Fixture Signing"
     # shellcheck source=./setup-signing-identity.sh
     source "${SETUP}"
+
+    overture_signing_certificate_count() { printf '%s' "${certs_already_there}"; }
 
     RAN=""
     overture_setup_prepare_keychain() { RAN="${RAN} prepare_keychain"; }
@@ -95,6 +99,41 @@ OUT="$(run_setup "no" "yes" "ABC123")"
 assert_contains "an identity codesign accepts finishes successfully" "${OUT}" "EXIT=0"
 assert_contains "and only then says it is done" "${OUT}" "Done."
 assert_contains "and it did the work" "${OUT}" "trust_certificate"
+
+# --- #2595: it says WHICH of the two things it is doing -----------------------------------------------
+#
+# Since #2537 the early exit asks whether codesign will SIGN with the identity, not whether one is
+# listed, so a certificate that exists and is refused no longer stops the run: it falls through and
+# creates a fresh one. `security find-identity -v` cannot see the broken one, so nothing deletes it and
+# both end up in the keychain, with the new trusted one winning every lookup.
+#
+# Measured on this Mac, 2026-08-13: exactly one certificate carries the name, so no accumulation has
+# happened and no deletion logic is warranted. What was missing is that the two runs are
+# indistinguishable from the outside, and one of them silently leaves a second certificate behind.
+
+OUT="$(run_setup "no" "yes" "ABC123" 0)"
+assert_contains "a first-time run says it is creating the first certificate" \
+  "${OUT}" "No certificate named"
+assert_not_contains "and does not talk about certificates that are already there" \
+  "${OUT}" "already in the keychain"
+assert_contains "and its Done line says how many now carry the name" "${OUT}" "Keychain Access now shows 1"
+
+OUT="$(run_setup "no" "yes" "ABC123" 1)"
+assert_contains "a replacing run says one is already there" "${OUT}" "1 already in the keychain"
+assert_contains "and says plainly that it is not deleting it" "${OUT}" "does not delete"
+assert_contains "and its Done line says the count it leaves behind" "${OUT}" "Keychain Access now shows 2"
+
+# Two already there is the state this issue was written to detect. The message must count what it found
+# rather than assume one, or the report would understate exactly the accumulation it exists to surface.
+OUT="$(run_setup "no" "yes" "ABC123" 2)"
+assert_contains "it counts what it found rather than assuming one" "${OUT}" "2 already in the keychain"
+assert_contains "and says what the count will be afterwards" "${OUT}" "Keychain Access now shows 3"
+
+# The early exit must stay silent about all of this: nothing was created, so there is nothing to report,
+# and a count printed there would read as though something had happened.
+OUT="$(run_setup "yes" "yes" "ABC123" 1)"
+assert_contains "an already-working identity still just says there is nothing to do" "${OUT}" "Nothing to do"
+assert_not_contains "and says nothing about creating or counting certificates" "${OUT}" "Keychain Access now shows"
 
 # --- nothing to do -----------------------------------------------------------------------------------
 #

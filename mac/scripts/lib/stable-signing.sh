@@ -55,6 +55,27 @@ overture_generate_signing_cert() {
     -addext "basicConstraints=critical,CA:false" >/dev/null 2>&1
 }
 
+# How many certificates in the dedicated keychain carry the identity's common name (#2595).
+#
+# A DIFFERENT question from overture_signing_identity_sha, on purpose. That one asks
+# `find-identity -v`, which lists only certificates codesign will accept, so it cannot see an untrusted
+# or otherwise invalid one at all. This asks find-certificate, which lists them whatever their state,
+# and is therefore the only way to notice that a run has left a broken certificate behind beside the one
+# it created.
+#
+# Read only: it creates, deletes and trusts nothing, so it is safe to call before the decision is made.
+# Answers 0 when the keychain file does not exist yet, which is the first-run case.
+overture_signing_certificate_count() {
+  if [[ -z "${OVERTURE_SIGNING_KEYCHAIN:-}" || ! -f "${OVERTURE_SIGNING_KEYCHAIN}" ]]; then
+    printf '0'
+    return 0
+  fi
+  # `grep -c` exits 1 on zero matches, which under `set -e`/`pipefail` would end the caller; the count it
+  # prints (0) is the answer wanted, so the status is discarded rather than the output.
+  security find-certificate -a -c "${OVERTURE_SIGNING_IDENTITY}" "${OVERTURE_SIGNING_KEYCHAIN}" 2>/dev/null \
+    | grep -c '"labl"' || true
+}
+
 overture_signing_identity_sha() {
   local -a scope=()
   if [[ -n "${OVERTURE_SIGNING_KEYCHAIN:-}" && -f "${OVERTURE_SIGNING_KEYCHAIN}" ]]; then
