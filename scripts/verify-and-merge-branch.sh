@@ -26,6 +26,9 @@ source "${SCRIPT_DIR}/lib/checkout-tidy.sh"
 # The completeness enumeration AGENTS.md demands. Shared with merge-when-green.sh so the two merge
 # paths cannot disagree about what a mergeable PR looks like.
 source "${SCRIPT_DIR}/lib/pr-completeness-guard.sh"
+# merge_pr, the one implementation of the merge and everything that must follow one, shared with
+# merge-when-green.sh for the same reason (#2602 found the two copies needing the same fix).
+source "${SCRIPT_DIR}/lib/pr-merge.sh"
 
 usage() {
   echo "Usage: $(basename "$0") <pr-number-or-branch-name>" >&2
@@ -156,21 +159,6 @@ run_full_suite() {
 # whose workspace still exists.
 release_verify_slot() {
   exec 9>&- 2>/dev/null || true
-}
-
-# Merges the PR. Named and extracted so a test can assert it was (or wasn't) called, instead of
-# ever calling gh pr merge for real during a test run.
-merge_pr() {
-  local pr_number="$1" merged_branch="${2:-}"
-  gh_as_danwright32 pr merge "${pr_number}" -R "${REPO}" --squash --delete-branch
-  # #2234: --delete-branch only removes the branch on GitHub. Without this the local ref survives
-  # every merge, which is how the checkout reached 496 branches. Never fatal, same reason as below.
-  delete_merged_local_branch "${merged_branch}" || true
-  # #1808: something shipped, so record it for the app to compare its own build against, and say the
-  # same thing in the terminal (which is what finally gives #1345's freshness check a caller). Neither
-  # is fatal: the merge has already happened, and failing here would report it as a failure.
-  "${REPO_ROOT}/scripts/record-shipped-commit.sh" || true
-  "${REPO_ROOT}/mac/scripts/check-release-freshness.sh" || true
 }
 
 # The orchestration: resolve the PR, bail on a merge conflict or an unresolvable identifier,

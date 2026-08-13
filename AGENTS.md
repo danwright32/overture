@@ -415,6 +415,30 @@ already drifting from the Swift version it mirrored.
   PR #2345 was green on its own branch and red on the main that already carried #1575 and #1940
   (measured 2026-08-09). If you merge some other way, combine current main into the branch and
   re-run `scripts/test-all.sh` on the combined tree yourself before merging.
+  For SEVERAL PRs at once use `scripts/verify-and-merge-batch.sh <pr> <pr> ...` (#2602), which does that
+  combination once instead of once per PR: it refuses every PR up front that cannot be in a batch (an
+  unresolvable identifier, a GitHub-side conflict, a PR named twice, a body missing the completeness
+  enumeration), sets the persistent verify worktree to current `origin/main`, merges each branch in,
+  runs `scripts/test-all.sh` ONCE, and merges them all only on green. It reuses
+  `verify-and-merge-branch.sh`'s own functions rather than copying them, so the two paths cannot
+  disagree about what a mergeable PR looks like. Two things to know before reading its output. On red it
+  says the failure belongs to the COMBINATION and names every branch in it, because a combined run
+  genuinely cannot attribute a failure to one branch, so do not read it as the last branch named. And
+  the merges themselves happen one at a time on GitHub, so one can be refused after the others land;
+  it attempts all of them and its summary says which merged and which did not, rather than stopping at
+  the first refusal and leaving the rest unreported.
+  **A merge is confirmed with GitHub, never assumed, and that is one shared implementation**
+  (`scripts/lib/pr-merge.sh`, used by all three merge paths). Both halves of that come from the same
+  incident, on the batch script's first real run, 2026-08-13: `gh pr merge 2609` exited 1 with
+  `GraphQL: Something went wrong while executing your query`, a transient GitHub fault, and the run
+  printed `merged   PR #2609`, deleted the local branch of a PR that was still open, and exited 0.
+  Nothing had looked at the merge command's status (the steps after it ran unconditionally and the last
+  two end in `|| true`, so the function returned 0; errexit cannot help, because every caller invokes it
+  where errexit is suspended), and a zero status would only have been a claim about the command anyway,
+  not about the PR. So `merge_pr` now fails loud on the command AND asks GitHub whether the PR reads as
+  MERGED, and nothing destructive runs until it does. `pr-merge.test.sh` asserts no other script invokes
+  `gh pr merge` itself, because the reason this needed fixing twice is that two scripts each had their
+  own copy.
 
 The pieces hand off through fixed-shape JSON files, not direct calls. `docs/contracts.md`
 catalogs every one (writer, reader, version, and its `fixtures/` guard); read it before changing
