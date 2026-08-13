@@ -64,10 +64,12 @@ struct SocialProfileIsNotNothingTests {
                                 into: ctx, now: now, isProbe: true)
 
         let p = try fetch(ctx, key)
-        #expect(p?.reachabilityResult == .noEmailFound,
-                "a social DM is still not a route Dan will use")
-        #expect(p?.reachabilityEmptyReason == .onlySocialProfile,
-                "the card must say the check stopped at a social profile, not that nothing is published")
+        // #2612 turned this from a refusal into a verdict. #2265's point stands and is what the verdict
+        // now carries: a run that reached a doorway has NOT established that nothing is published, and
+        // this row must never read as the bare "No email found" it did before that issue.
+        #expect(p?.reachabilityResult == .socialOnly,
+                "a social DM is a route Dan works by hand (#2612), not the absence of one")
+        #expect(p?.reachabilityResult != .noEmailFound)
     }
 
     // The verdict this must NOT be confused with. A run that genuinely came back with nothing keeps the

@@ -93,11 +93,12 @@ struct PrepIngestReachabilityTests {
         let p = try fetch(ctx, key)
         #expect(p?.reachabilityResult == nil)
         #expect(p?.reachabilityProbedAt == nil)
-        // #2421: ONE of the two lands now. Sarah Matsushima's only handle is an Instagram, which is no
-        // longer a contact at all (Dan's call, 2026-08-10), so what this asserts is unchanged in point:
-        // a run that mints no verdict still stores the contacts it found a route to.
-        #expect(p?.recipients.count == 1)
-        #expect(p?.recipients.first?.name == "Jerrick Cavagnaro")
+        // #2612: BOTH land again. Sarah Matsushima's only handle is an Instagram, which #2421 made a
+        // non-contact and Dan reversed on 2026-08-13 ("I'm going to DM them on instagram"), so what this
+        // asserts is unchanged in point: a run that mints no verdict still stores every contact it found
+        // a route to.
+        #expect(p?.recipients.count == 2)
+        #expect(Set(p?.recipients.compactMap(\.name) ?? []) == ["Sarah Matsushima", "Jerrick Cavagnaro"])
     }
 
     // The failure path: the run answered this show with nothing. There is no new evidence, so the
@@ -167,11 +168,13 @@ struct ContactCountPromiseTests {
         return r
     }
 
-    // The live row: two performers, one reachable.
+    // The live row: two performers, one reachable. #2612 changed WHICH route is unusable: a social
+    // profile is a way in now, so the contact with no way in here is one holding the ROOM's own booking
+    // page, which #1629 has always refused and which this issue deliberately did not re-open.
     @Test func aFoundContactWithNoUsableRouteIsCountedAsFoundNotAsReachable() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx)
-        p.setRecipients([performer("Sarah Matsushima", form: "https://instagram.com/sarah.bernadette"),
+        p.setRecipients([performer("Sarah Matsushima", form: "https://www.thegreenroom42.com/contact"),
                          performer("Jerrick Cavagnaro", form: "https://jerrickcavagnaro.com/appointments")])
 
         let item = QueueItem(p)
@@ -185,8 +188,8 @@ struct ContactCountPromiseTests {
     @Test func noneReachableSaysNoneRatherThanZero() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx)
-        p.setRecipients([performer("Sarah Matsushima", form: "https://instagram.com/sarah.bernadette"),
-                         performer("Ana Ruiz", form: "https://instagram.com/anaruiz")])
+        p.setRecipients([performer("Sarah Matsushima", form: "https://www.thegreenroom42.com/contact"),
+                         performer("Ana Ruiz", form: "https://www.thegreenroom42.com/book")])
 
         #expect(QueueItem(p).contactCountLabel == "2 found, none reachable")
     }
@@ -233,17 +236,18 @@ struct ContactCountPromiseTests {
         #expect(QueueItem(p).displayedContactForms.isEmpty)
     }
 
-    // And the promise the count makes is still the card's own: a social profile is not a way in, so a
-    // contact holding only one is not counted as reachable even though it is a contact.
-    @Test func aSocialFormIsStillNotAWayIn() throws {
+    // #2612 reversed this one. A social profile IS a way in (Dan DMs it by hand), so the contact holding
+    // one is reachable and the card offers the link. The promise itself is unchanged: the number and the
+    // rows it promises still come from one predicate.
+    @Test func asocialFormIsAWayInNow() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx)
         p.setRecipients([performer("Sarah Matsushima", email: "sarah@example.com"),
                          performer("Jerrick Cavagnaro", form: "https://instagram.com/jerrick")])
 
         let item = QueueItem(p)
-        #expect(item.displayedContactForms.isEmpty)
-        #expect(item.contactCountLabel == "2 found, 1 reachable")
+        #expect(item.displayedContactForms.map(\.absoluteString) == ["https://instagram.com/jerrick"])
+        #expect(item.contactCountLabel == "2 contacts")
     }
 
     // Unchanged: one contact never earns a pill at all, reachable or not.
