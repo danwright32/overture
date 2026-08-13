@@ -49,7 +49,7 @@ enum Reachability {
     // fourth copy of the same vocabulary, and it would only ever check the cases somebody remembered
     // to add to it (L96), which is the exact defect the guard exists to catch.
     enum Badge: Equatable, CaseIterable {
-        case none, hardToReach, noEmailFound, weakContactOnly, contactFormOnly,
+        case none, hardToReach, noEmailFound, weakContactOnly, contactFormOnly, socialOnly,
              staleProbe, checkMissedIt, emailFound
     }
 
@@ -90,7 +90,10 @@ enum Reachability {
         // #1724: neutral, with `staleProbe`, and for the same reason. Both say "this row has no current
         // answer and another check is how it gets one". It is not rust: rust is reserved for a finding, and
         // a missed show has none. Nothing here is a warning about the show itself.
-        case .contactFormOnly, .weakContactOnly, .hardToReach, .staleProbe, .checkMissedIt, .none:
+        // #2612: a social DM sits with the contact form for the same reason: a real way through that
+        // costs Dan his own time rather than a send, so it is not the loudest thing on the row.
+        case .contactFormOnly, .socialOnly, .weakContactOnly, .hardToReach, .staleProbe, .checkMissedIt,
+             .none:
             return .neutral
         }
     }
@@ -184,6 +187,17 @@ enum Reachability {
         case emailFound = "email_found"
         case weakContactOnly = "weak_contact_only"
         case contactFormOnly = "contact_form_only"
+        // #2612: no address and no form on their own site, but they take messages on a social profile.
+        // Dan, 2026-08-13, on the Song & Word card: "I changed my mind and I actually do want to know when
+        // it's instagram only with no contact form. This actually feels like a perfect fit for me but they
+        // don't have a website so I'm going to DM them on instagram." That reverses #1626 and #2421, both
+        // his own, which made a social handle a dead end and then deleted the ones already stored.
+        //
+        // Its OWN verdict rather than a shade of `contactFormOnly`, because what Dan does differs (a DM in
+        // the Instagram app, not a form on a website) and because the volume of each matters to him. A
+        // fifth case reaches the fit score, the ledger and the badge, which is precisely why it is one:
+        // every one of those was giving the wrong answer about a show he calls a perfect fit.
+        case socialOnly = "social_only"
         case noEmailFound = "no_email_found"
     }
 
@@ -282,6 +296,7 @@ enum Reachability {
             case .emailFound: return .emailFound
             case .weakContactOnly: return .weakContactOnly
             case .contactFormOnly: return .contactFormOnly
+            case .socialOnly: return .socialOnly
             case .noEmailFound: return .noEmailFound
             }
         }
@@ -486,6 +501,13 @@ enum ReachabilityCopy {
     static let contactFormOnlyBadge = "Contact form only"
     static let contactFormOnlyHelp =
         "The act takes messages through the form on their own site. You'd fill that in yourself; Overture can't send it for you."
+
+    // #2612: no address and no form on their own site, and they take messages on a social profile.
+    // Deliberately distinguishable from the form badge above: what Dan does about it is different (a DM in
+    // the app on his phone, not a form in a browser), and he asked to be told which he is looking at.
+    static let socialOnlyBadge = "Social DM only"
+    static let socialOnlyHelp =
+        "No address and no form on their own site, but they take messages on the profile linked here. You'd send the pitch as a DM yourself; Overture can't send it for you."
 
     // #1324: a probe found an address, but only the venue's front desk or a press inbox, not the
     // presenter's own. Real, but weak: worth naming honestly rather than calling it no email at all.

@@ -33,9 +33,10 @@ enum DeadEndContact {
         let address = (email ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard address.isEmpty else { return false }
         let form = (formURL ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !form.isEmpty else { return true }
-        // The SAME predicate the card uses to decide it will not offer this link (#1626), asked here
-        // rather than restated, so the two cannot drift into disagreeing about what a dead end is.
-        return Reachability.isSocialOnly(form)
+        // #2612: a social profile is a ROUTE again, so the only dead end left is a contact with no way
+        // in at all. Dan reversed #2421's call on 2026-08-13 looking at the Song & Word card: "I'm going
+        // to DM them on instagram". Nothing here judges WHICH kind of route it is any more; that is the
+        // card's job now, and `Prospect.socialRouteURLs` is where the distinction lives.
+        return form.isEmpty
     }
 }

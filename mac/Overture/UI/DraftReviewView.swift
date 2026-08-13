@@ -490,10 +490,11 @@ struct DraftReviewView: View {
                 }
                 Spacer()
             } else if case let .ready(recipientId, formURL) = item.formPitch {
+                let isSocial = Reachability.isSocialOnly(formURL)
                 // #1630: this show has no address at all, so Approve is permanently disabled and there is
                 // no other way forward. Dan pitches it by hand; this is the only control that matters here.
                 Button { onBeginFormPitch(recipientId, formURL) } label: {
-                    Label(FormOutreachCopy.copyAndOpen, systemImage: "doc.on.clipboard")
+                    Label(FormOutreachCopy.copyAndOpen(isSocial: isSocial), systemImage: "doc.on.clipboard")
                         .font(OVType.meta).foregroundStyle(OVColor.onForest)
                         .padding(.horizontal, OVSpacing.md).padding(.vertical, 5)
                         .background(Capsule().fill(OVColor.forest))
@@ -512,8 +513,9 @@ struct DraftReviewView: View {
                 // branch that never drew the control.
                 reprepControl
                 Spacer()
-            } else if case let .awaitingConfirmation(recipientId, _, startedAt) = item.formPitch {
-                Text(FormOutreachCopy.awaitingQuestion(startedAt: startedAt, now: Date()))
+            } else if case let .awaitingConfirmation(recipientId, routeURL, startedAt) = item.formPitch {
+                Text(FormOutreachCopy.awaitingQuestion(startedAt: startedAt, now: Date(),
+                                                       isSocial: Reachability.isSocialOnly(routeURL)))
                     .font(OVType.meta).foregroundStyle(OVColor.ink)
                 // #1828, Dan's call: offered here too. A show waiting on his answer is still a show whose
                 // contacts he may want researched, and the answer controls below are untouched by it.

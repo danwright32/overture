@@ -1127,7 +1127,7 @@ struct QueueView: View {
                 // #1630: a form pitch has no address and no thread, so the row has to account for the
                 // silence itself. Said in inkSoft, not rust: nothing is wrong here.
                 if r.outreachChannel == .contactForm {
-                    Text(FormOutreachCopy.sentLine)
+                    Text(FormOutreachCopy.sentLine(formURL: r.formOutreachURL))
                         .font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
                 }
                 // #675: this pipeline never carries a bounced recipient (isInPlay excludes them), so
