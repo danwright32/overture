@@ -263,7 +263,25 @@ final class Prospect {
         // their order untouched keeps #1324's tested behaviour exactly as it was. The combination (a
         // venue address AND the act's own form) was not observed in the 2026-07-27 run and is not
         // re-ranked on speculation.
-        return usableContactFormURLs.isEmpty ? .noEmailFound : .contactFormOnly
+        if !usableContactFormURLs.isEmpty { return .contactFormOnly }
+        // #2612: no address and no form on their own site, but a social profile that takes messages.
+        // Ranked BELOW the form for the same reason the form sits below the address states: a form on
+        // their own site is the stronger of the two hand routes, and a show holding both should say the
+        // one Dan reaches for first. Above `noEmailFound` because it is a route, not the absence of one.
+        return socialRouteURLs.isEmpty ? .noEmailFound : .socialOnly
+    }
+
+    // #2612: the social profiles Dan will actually DM. Judged through the SAME venue and press guards as
+    // the form list below, so a room's own Instagram or a press account is no more a route here than it
+    // is there; only the social-host test differs, and it is inverted.
+    var socialRouteURLs: [String] {
+        recipients.compactMap { r -> String? in
+            guard let raw = r.contactFormURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !raw.isEmpty, Reachability.isSocialOnly(raw),
+                  !VenueContactGuard.looksLikeVenue(formURL: raw, venue: venue),
+                  !PressContactGuard.looksLikePressContact(formURL: raw) else { return nil }
+            return raw
+        }
     }
 
     // #1626: the contact forms Dan would actually use, which is a form on the ACT's own site. An

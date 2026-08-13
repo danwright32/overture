@@ -52,6 +52,7 @@ enum ContactRoute: String, Decodable, Sendable, CaseIterable {
     case unchecked
     case emailFound = "email_found"
     case contactFormOnly = "contact_form_only"
+    case socialOnly = "social_only"
     case weakContactOnly = "weak_contact_only"
     case noEmailFound = "no_email_found"
 
@@ -61,6 +62,7 @@ enum ContactRoute: String, Decodable, Sendable, CaseIterable {
         case .none: self = .unchecked
         case .some(.emailFound): self = .emailFound
         case .some(.contactFormOnly): self = .contactFormOnly
+        case .some(.socialOnly): self = .socialOnly
         case .some(.weakContactOnly): self = .weakContactOnly
         case .some(.noEmailFound): self = .noEmailFound
         }
@@ -218,6 +220,12 @@ enum Ranker {
         switch r {
         case .emailFound: return 2
         case .contactFormOnly: return 1
+        // #2612: the SAME as a contact form, decided rather than defaulted. Both are a real route Dan
+        // works by hand, and nothing measured says a DM converts worse than a form; inventing a gap
+        // between them would be a guess dressed as a weight, which is what #1648 set out to avoid. What
+        // matters is that it is no longer the -5 of a dead end: the show Dan called a perfect fit was the
+        // one the app was most confident he should drop.
+        case .socialOnly: return 1
         case .weakContactOnly: return 0
         case .noEmailFound: return -5
         case .unchecked: return 0

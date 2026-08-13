@@ -328,12 +328,18 @@ struct FormPitchStateTests {
         #expect(FormPitch.state(of: p) == .unavailable)
     }
 
-    // An Instagram is a verified dead end, not a form (#1626, #1004). The judgment is made once, in
-    // usableContactFormURLs, and this control inherits it rather than re-deciding.
-    @Test func aSocialOnlyContactIsNotAForm() throws {
+    // #2612: an Instagram is a route Dan works by hand, exactly as a form is, so it reaches the SAME
+    // control rather than a second one built beside it. The scope rule is unchanged and is what keeps
+    // this safe: only where a hand route is the ONLY way through, which the test above pins.
+    @Test func asocialOnlyContactReachesTheSameControl() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx, formURL: "https://www.instagram.com/heybailay/")
-        #expect(FormPitch.state(of: p) == .unavailable)
+
+        guard case let .ready(_, routeURL) = FormPitch.state(of: p) else {
+            Issue.record("a social-only show offers no way to pitch it by hand")
+            return
+        }
+        #expect(routeURL == "https://www.instagram.com/heybailay/")
     }
 }
 

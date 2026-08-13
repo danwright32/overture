@@ -65,18 +65,19 @@ struct ContactFormReachabilityTests {
         #expect(QueueModel.contactFormSiteLabel(URL(string: pair.0)!) == pair.1)
     }
 
-    // Dan's line. An Instagram is where a check ends up when the act publishes nothing of its own, and
-    // he will not pitch through a DM, so calling it reachable would put a show back in front of him that
-    // he cannot act on.
-    @Test func anInstagramIsStillADeadEnd() throws {
+    // Dan's line, REVERSED by #2612 on 2026-08-13: "I actually do want to know when it's instagram only
+    // with no contact form... I'm going to DM them on instagram." An Instagram is where a check ends up
+    // when the act publishes nothing of its own, and he works that route by hand, so the card offers it
+    // and the verdict says which kind of route it is.
+    @Test func aninstagramIsARouteWithItsOwnVerdict() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx, group: "Gimme A Sign!")
         p.setRecipients([formContact("https://www.instagram.com/heybailay/")])
 
-        #expect(p.reachabilityResultFromRecipients == .noEmailFound)
+        #expect(p.reachabilityResultFromRecipients == .socialOnly)
         var item = QueueItem(p)
-        item.reachabilityResult = .noEmailFound
-        #expect(item.displayedContactForms.isEmpty)
+        item.reachabilityResult = .socialOnly
+        #expect(item.displayedContactForms.map(\.absoluteString) == ["https://www.instagram.com/heybailay/"])
     }
 
     @Test func anEmailStillBeatsAForm() throws {

@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1262 sentences**.
+Every sentence Overture can say to Dan: **1267 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -597,6 +597,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/StoreShrinkNoticeSheet.swift`
 "Copy pitch and open form"
     `Domain/FormOutreach.swift`
+"Copy pitch and open profile"
+    `Domain/FormOutreach.swift`
 "Copy the draft and mark it replied (paste it into Gmail yourself)"
     `UI/ReplyConversationView.swift`
 "Couldn't block \(range)"
@@ -1026,6 +1028,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DownbeatExport.swift`
 "No Prep run or other check can start until it finishes."
     `Domain/ProbeSelection.swift`
+"No address and no form on their own site, but they take messages on the profile linked here. You'd send the pitch as a DM yourself; Overture can't send it for you."
+    `Domain/Reachability.swift`
 "No address to fill in. Checked past emails to this organisation and the booking sheet."
     `Domain/ManualPrepPrefill.swift`
 "No address to reply to"
@@ -1651,6 +1655,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ReplyConversationView.swift`
 "Sending to this one"
     `UI/SendConfirmSheet.swift`
+"Sent as a DM. Overture cannot see a reply to this one."
+    `Domain/FormOutreach.swift`
 "Sent emails that hit a problem, or approved ones you can't send yet."
     `Domain/AgentRoster.swift`
 "Sent through their form. Overture cannot see a reply to this one."
@@ -1709,6 +1715,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ExcludedTownsView.swift`
 "Snoozed \(org). I'll remind you later."
     `App/ActionFeedback.swift`
+"Social DM only"
+    `Domain/Reachability.swift`
 "Some changed calendars couldn't be read this run."
     `Domain/ScoutWarnings.swift`
 "Some of your shows may be missing"
@@ -2188,7 +2196,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/DaysOffView.swift`
 "You have \(pointerPhrase(for: target, count: n)) next."
     `Domain/StageEmptyState.swift`
-"You opened their form \(f.localizedString(for: startedAt, relativeTo: now)). Did you send it?"
+"You opened their form \(when). Did you send it?"
+    `Domain/FormOutreach.swift`
+"You opened their profile \(when). Did you send it?"
     `Domain/FormOutreach.swift`
 "You set this: \(what)"
     `UI/QueueView+Model.swift`

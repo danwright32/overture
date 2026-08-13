@@ -593,6 +593,13 @@ struct ProspectRowView: View {
             // just costs him a few minutes at their site instead of a send.
             reachabilityNote(icon: "square.and.pencil", text: ReachabilityCopy.contactFormOnlyBadge,
                              tone: Reachability.tone(for: .contactFormOnly), help: ReachabilityCopy.contactFormOnlyHelp)
+        case .socialOnly:
+            // #2612: the same weight as the contact form beside it, with its own icon and its own words,
+            // because what Dan does about it is different: a DM in the Instagram app rather than a form
+            // in a browser. The handle itself is on the link directly below this.
+            reachabilityNote(icon: "bubble.left.and.text.bubble.right",
+                             text: ReachabilityCopy.socialOnlyBadge,
+                             tone: Reachability.tone(for: .socialOnly), help: ReachabilityCopy.socialOnlyHelp)
         case .staleProbe:
             // #1325: a clock icon in the calm ink tone: advisory, not alarming. The earlier firm result
             // has aged out, so it asks for a re-check rather than asserting reachable or not.

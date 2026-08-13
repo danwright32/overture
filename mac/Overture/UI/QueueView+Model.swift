@@ -432,9 +432,12 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // so the pill can never promise more ways in than the card shows (L16). Was inline in
     // displayedContactForms; extracted rather than copied, because two copies of "is this form one Dan
     // would use" is exactly how the card and the stored verdict drifted apart in the first place.
+    // #2612: a social profile is one of them now. The card offers what Dan will act on, and he DMs an
+    // Instagram by hand exactly as he fills in a form by hand; the two are told apart by the badge above
+    // and by the label on the link, not by one of them being hidden.
     private func usableContactFormURL(_ c: RecipientSnapshot) -> URL? {
         guard let raw = c.contactFormURL?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !raw.isEmpty, !Reachability.isSocialOnly(raw),
+              !raw.isEmpty,
               !VenueContactGuard.looksLikeVenue(formURL: raw, venue: venue),
               // #1636: and the press rule, kept in step with the stored verdict for the same reason
               // the venue one is.
@@ -2096,7 +2099,12 @@ enum QueueModel {
     static func contactFormSiteLabel(_ url: URL) -> String {
         var host = url.host ?? url.absoluteString
         if host.hasPrefix("www.") { host.removeFirst(4) }
-        return host
+        // #2612: a social profile's host is the same for every act ("instagram.com"), so the host alone
+        // would tell Dan nothing about WHO he would be writing to, which is the whole job this label was
+        // given in #1626. The handle is the identifying half, so it comes too.
+        guard Reachability.isSocialOnly(url.absoluteString) else { return host }
+        let handle = url.path.split(separator: "/").first.map(String.init)
+        return handle.map { "\(host)/\($0)" } ?? host
     }
 
     // #1598 Phase 5: `answers` is the stored organisation ledger and `corpus` is EVERY prospect in the

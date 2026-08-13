@@ -427,6 +427,14 @@ in order, stop at the first that works:
    there. That is where a small independent act publishes its address, and you have already paid for
    the fetch that revealed the link.
 
+   **But when that comes back with nothing, the profile itself is the answer, and you emit it (#2612).**
+   Dan DMs an act on Instagram by hand, so a handle is a route rather than a dead end: report it as a
+   `form_or_dm` contact with the profile URL in `formUrl`. What you must never do is find a profile,
+   fail to get past it, and then report `nothing_published`: that says this show's people publish no
+   address anywhere, which is a claim about a search you did not finish (L11). On 2026-08-13 that
+   happened to Song & Word, whose Instagram Dan found himself in seconds, and the card told him to give
+   up on a show he called a perfect fit.
+
    **(b) When search has not surfaced the target's own site, fetch the canonical guess directly**,
    once: `firstnamelastname.com` for a person, the organisation's name for an organisation. Search is
    not a reliable route to a small act's own site: on 2026-08-07 the literal string
