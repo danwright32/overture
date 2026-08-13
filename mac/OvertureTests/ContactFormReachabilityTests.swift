@@ -171,6 +171,10 @@ struct ContactFormReachabilityTests {
         // Every verdict this pass must NOT touch: found, weak, and never checked.
         let untouchable = before.filter { $0.reachabilityResult != .noEmailFound }
             .map { ($0.naturalKey, $0.reachabilityResultRaw) }
+        // #2664: which rows were ALREADY form-only before this pass ran, so the assertion below can be
+        // about the ones the migration MOVED rather than about every row in Dan's store.
+        let alreadyFormOnly = Set(before.filter { $0.reachabilityResult == .contactFormOnly }
+            .map(\.naturalKey))
 
         let changed = ContactFormResultMigration.run(in: ctx)
         try ctx.save()
@@ -180,9 +184,30 @@ struct ContactFormReachabilityTests {
         // copy-inventory:ignore-end
         let after = try ctx.fetch(FetchDescriptor<Prospect>())
         #expect(after.count == before.count)
-        // Every row it moved really does hold a usable form.
-        #expect(after.filter { $0.reachabilityResult == .contactFormOnly }
-            .allSatisfy { !$0.usableContactFormURLs.isEmpty })
+        // Every row THIS PASS MOVED really does hold a usable form.
+        //
+        // #2664: scoped to the rows it moved, which is what this test is for. It used to assert the rule
+        // over every form-only row in the store, which is a claim about Dan's DATA rather than about the
+        // migration, and any hand edit he makes can break it. One did on 2026-08-13: he deleted a show's
+        // only contact (wanting to add the producer instead, which #2629 is about), the show kept the
+        // `contact_form_only` verdict the check had written, and this assertion went red and blocked every
+        // merge from the repo until somebody repaired his store.
+        //
+        // Deliberately NOT a weakening, and the difference matters: the store-wide rule is real and still
+        // holds, and it now has an owner in #2664, which will carry its own guard on the delete path where
+        // the defect actually lives. What this test is left asserting is the thing it exists to prove, that
+        // the pass only ever moves a row it can justify. Both halves are still watched; the difference is
+        // that a defect in Dan's data no longer reports itself as a defect in this migration.
+        let moved = after.filter {
+            $0.reachabilityResult == .contactFormOnly && !alreadyFormOnly.contains($0.naturalKey)
+        }
+        // The count it REPORTS and the rows it actually moved come from one comparison, so a pass that
+        // claims a number it did not move fails here (L16). This is also what keeps the assertion below
+        // from being quietly vacuous: on a store where the migration has already run, `changed` is 0 and
+        // `moved` is empty, and that agreement is asserted rather than read as a pass (L98).
+        #expect(moved.count == changed,
+                "the pass reported \(changed) upgrades and \(moved.count) rows are newly form-only")
+        #expect(moved.allSatisfy { !$0.usableContactFormURLs.isEmpty })
         // And every verdict it was not allowed to touch is byte for byte what it was.
         let byKey = Dictionary(after.map { ($0.naturalKey, $0.reachabilityResultRaw) },
                                uniquingKeysWith: { a, _ in a })
