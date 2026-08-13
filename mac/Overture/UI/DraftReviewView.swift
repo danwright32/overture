@@ -665,9 +665,16 @@ struct DraftReviewView: View {
         .padding(.top, OVSpacing.xs)
     }
 
-    // #399: opens a small popover to type an email (required) and name (optional). The add itself
+    // #399: opens a small popover to type a route (required) and name (optional). The add itself
     // runs the duplicate/venue check (ManualRecipientCheck via ProspectMutations); this view never
-    // blocks the add on its own, it only requires a plausible email before enabling the button.
+    // blocks the add on its own, it only requires a plausible route before enabling the button.
+    //
+    // #2629: a ROUTE, not only an address. The card tells Dan "No email to send to. Add a contact by
+    // hand" on a show with no emailable contact, and this is the control that sentence points at, so
+    // until now the only route those shows actually have (a contact form on the producer's own site, or
+    // since #2612 an Instagram he will DM) was the one thing it could not accept. He met an instruction
+    // that could not be followed. Enabled and refused through the SAME `ManualContactRoute.parse` the add
+    // uses, so the button cannot look willing to take something the add then rejects (L109).
     private var addContactButton: some View {
         Button { showAddContact = true } label: {
             Label("Add contact", systemImage: "plus.circle")
@@ -677,8 +684,15 @@ struct DraftReviewView: View {
         .popover(isPresented: $showAddContact, arrowEdge: .bottom) {
             VStack(alignment: .leading, spacing: OVSpacing.sm) {
                 Text("Add a contact").font(OVType.dateHeading).foregroundStyle(OVColor.ink)
-                TextField("Email", text: $addContactEmail)
+                TextField("Email or link", text: $addContactEmail)
                     .textFieldStyle(.roundedBorder)
+                // Says what a link MEANS for him rather than restating the field's own label, which has
+                // already said that a link is allowed. The load-bearing half is that a route is not a
+                // send: he opens it and writes there himself, which is the difference that decides
+                // whether this show is usable at all (#843: a second line must add something).
+                Text("You'll open a form or profile and write there by hand.")
+                    .font(OVType.meta).foregroundStyle(OVColor.inkFaint)
+                    .fixedSize(horizontal: false, vertical: true)
                 TextField("Name (optional)", text: $addContactName)
                     .textFieldStyle(.roundedBorder)
                 HStack {
@@ -689,9 +703,10 @@ struct DraftReviewView: View {
                         showAddContact = false
                     }
                     .buttonStyle(.borderedProminent)
-                    // #2023: one readable address, the same rule the add itself is gated on, so this
+                    // #2023: one readable route, the same rule the add itself is gated on, so this
                     // cannot look enabled on a pasted "a@x.org, b@y.org" and then be refused.
-                    .disabled(EmailAddressList.single(addContactEmail) == nil)
+                    // #2629: through the route parser, so a form or profile link enables it too.
+                    .disabled(ManualContactRoute.parse(addContactEmail) == nil)
                     Button("Cancel") { showAddContact = false }
                         .buttonStyle(.plain).foregroundStyle(OVColor.inkSoft)
                 }

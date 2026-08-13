@@ -363,11 +363,20 @@ enum ActionAck {
     // #2023: Add contact in Review takes ONE person, and its banner names one, so several at once is
     // refused here rather than stored as a single contact identified by all of them.
     static let contactNeedsAddress = "Add an email address. No contact was added"
+    // #2629: the control takes a ROUTE now, so its refusal names both kinds. The old sentence asked for
+    // the one thing the shows this control appears on do not have.
+    static let contactNeedsRoute = "Add an email address, or a link to a contact form or profile. No contact was added"
     static let contactOneAtATime = "Add one address at a time. No contact was added"
     static let contactBlankAddress = "One of the addresses is blank. No contact was added"
 
     static func contactBadAddress(_ piece: String) -> String {
         "\(piece) is not an email address. No contact was added"
+    }
+
+    // #2629: what it actually accepts, so a refusal cannot send Dan looking for an address he does not
+    // have when a link would have been taken.
+    static func contactBadRoute(_ piece: String) -> String {
+        "\(piece) is not an email address or a link. No contact was added"
     }
 
     static func manualPrepSaved(org: String) -> String {

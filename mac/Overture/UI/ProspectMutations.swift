@@ -130,26 +130,30 @@ enum ProspectMutations {
                                      prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
 
-        // #2023: this control adds ONE person and its banner names one, so the field is READ rather than
-        // checked for an "@". Before this, "a@x.org, b@y.org" became a single contact whose identity was
-        // that entire string, which sends and reports success while no reply from either person can ever
-        // be matched back to it. Gated on the same `single` the Add button asks, so the two agree.
-        let trimmedEmail: String
-        switch EmailAddressList.parse(email) {
-        case .empty:
-            feedback.acknowledge(ActionAck.contactNeedsAddress, tone: .warning)
+        // #2629: a ROUTE. An address still behaves exactly as it did; a contact form or a social profile
+        // is now accepted too, because those are the ways in Dan actually has on the shows this control's
+        // own advice appears on. `ManualContactRoute.parse` is the SAME function the Add button is
+        // enabled by, so the control can never look willing to take something this then refuses (L109).
+        let route: ManualContactRoute
+        if let parsed = ManualContactRoute.parse(email) {
+            route = parsed
+        } else {
+            // Still says WHICH kind of unusable it was, because "that is not an address" and "you typed
+            // two of them" are different mistakes and only one of them is the person's fault (L11).
+            switch EmailAddressList.parse(email) {
+            case .empty:
+                feedback.acknowledge(ActionAck.contactNeedsRoute, tone: .warning)
+            case .invalid(let piece):
+                // A blank piece is a stray separator, not a second person: saying "one at a time" to
+                // somebody who typed ",,olga@x.org" would name a mistake he did not make.
+                feedback.acknowledge(piece.isEmpty ? ActionAck.contactBlankAddress
+                                                   : ActionAck.contactBadRoute(piece), tone: .warning)
+            case .addresses(let addresses) where addresses.count > 1:
+                feedback.acknowledge(ActionAck.contactOneAtATime, tone: .warning)
+            case .addresses:
+                feedback.acknowledge(ActionAck.contactNeedsRoute, tone: .warning)
+            }
             return
-        case .invalid(let piece):
-            // A blank piece is a stray separator, not a second person: saying "one at a time" to somebody
-            // who typed ",,olga@x.org" would name a mistake he did not make.
-            feedback.acknowledge(piece.isEmpty ? ActionAck.contactBlankAddress
-                                               : ActionAck.contactBadAddress(piece), tone: .warning)
-            return
-        case .addresses(let addresses) where addresses.count > 1:
-            feedback.acknowledge(ActionAck.contactOneAtATime, tone: .warning)
-            return
-        case .addresses(let addresses):
-            trimmedEmail = addresses[0]
         }
 
         let trimmedName = name?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -157,9 +161,13 @@ enum ProspectMutations {
         // one, matching Dan's no-undo rule for removal at review (#2155: "if they want to add it back
         // they can"). Cleared BEFORE the contact is created, so a refusal can never be left standing
         // behind a contact that is now on the card and quietly drop it at the next import.
-        ContactRefusal.allow(email: trimmedEmail, showKey: model.naturalKey,
+        //
+        // #2629: the FORM half too. The strike side has recorded a form-only contact since #2438, so a
+        // reversal that only cleared addresses would leave a struck form refused forever while the card
+        // showed it, and the next import would drop it again (L92).
+        ContactRefusal.allow(email: route.email, formURL: route.link, showKey: model.naturalKey,
                              orgKey: model.presenter.flatMap { OrgKey.stored(for: $0) }, in: context)
-        let result = applyManualRecipient(email: trimmedEmail, name: trimmedName, to: model)
+        let result = applyManualRecipient(route: route, name: trimmedName, to: model)
 
         if case .blocked = result.action {
             feedback.acknowledge(ActionAck.recipientAlreadyExists(name: trimmedName, org: model.groupName))
@@ -182,9 +190,9 @@ enum ProspectMutations {
     // instead of each deciding for itself what a typed address means. Mutates nothing on `.blocked`: that
     // address already belongs to a live contact on this show, and each caller decides what to say about it.
     @discardableResult
-    private static func applyManualRecipient(email: String, name: String?,
-                                             to model: Prospect) -> ManualRecipientCheck.Result {
-        let result = ManualRecipientCheck.evaluate(email: email, existingRecipients: model.recipients,
+    static func applyManualRecipient(route: ManualContactRoute, name: String?,
+                                     to model: Prospect) -> ManualRecipientCheck.Result {
+        let result = ManualRecipientCheck.evaluate(route: route, existingRecipients: model.recipients,
                                                    venue: model.venue)
         switch result.action {
         case .blocked:
@@ -197,9 +205,18 @@ enum ProspectMutations {
                 r.outcomeSourceRaw = nil
             }
         case .create:
-            model.addRecipient(Recipient(id: ReplyDetection.email(from: email), email: email,
-                                         name: (name?.isEmpty == false) ? name : nil,
-                                         provenance: .manual))
+            let fresh = Recipient(id: route.recipientId ?? "", email: route.email,
+                                  name: (name?.isEmpty == false) ? name : nil,
+                                  provenance: .manual)
+            // #2629: a link contact carries its route in the SAME field the reachability check writes for
+            // a form-only or social-only answer, so every reader downstream (the card's links, the count
+            // above them, the stored verdict) treats a hand-added route and a found one as one kind of
+            // thing rather than needing to learn about a second.
+            if let url = route.link {
+                fresh.contactFormURL = url
+                fresh.contactMethodRaw = ContactMethod.formOrDM.rawValue
+            }
+            model.addRecipient(fresh)
         }
         return result
     }
@@ -260,7 +277,10 @@ enum ProspectMutations {
         // to several addresses.
         let trimmedName = (addresses.count == 1) ? name?.trimmingCharacters(in: .whitespacesAndNewlines) : nil
         for address in addresses {
-            applyManualRecipient(email: address, name: trimmedName, to: model)
+            // #2629: these come from `EmailAddressList`, so every one is already an address. Routed
+            // through the same `.email` case rather than re-parsed, because the manual-prep sheet writes
+            // an email he types himself and a link would have nothing to send.
+            applyManualRecipient(route: .email(address), name: trimmedName, to: model)
         }
         // #2034: the choice he made on the sheet, recorded with the draft it belongs to.
         model.sendsTogetherOverride = sendsTogether

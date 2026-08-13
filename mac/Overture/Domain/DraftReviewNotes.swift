@@ -92,9 +92,12 @@ enum DraftReviewNotes {
         return "No subject line. Edit the draft to add one."
     }
 
+    // #2629: names both routes the control now takes. It used to say "Add a contact by hand" full stop,
+    // which pointed at a popover that accepted only an address, on exactly the shows that have no address
+    // to give it. Saying what it accepts is the half that makes the instruction followable.
     static func noSendableEmail(hasPendingRecipient: Bool, hasAnyEmailContact: Bool) -> String? {
         guard !hasPendingRecipient, !hasAnyEmailContact else { return nil }
-        return "No email to send to. Add a contact by hand."
+        return "No email to send to. Add a contact by hand, by address or by link."
     }
 
     // #792: "Sent" was once the whole story, and a contact held back by a review guard is not sendable,

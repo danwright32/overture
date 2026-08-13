@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1268 sentences**.
+Every sentence Overture can say to Dan: **1272 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -405,6 +405,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "Add an address to send to. Nothing was saved"
     `App/ActionFeedback.swift`
+"Add an email address, or a link to a contact form or profile. No contact was added"
+    `App/ActionFeedback.swift`
 "Add an email address. No contact was added"
     `App/ActionFeedback.swift`
 "Add another"
@@ -717,6 +719,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/InquiryCopy.swift`
 "Email found"
     `Domain/Reachability.swift`
+"Email or link"
+    `UI/DraftReviewView.swift`
 "End this experiment"
     `UI/ExperimentReportView.swift`
 "Event (optional)"
@@ -1048,7 +1052,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SendGate.swift`
 "No email found"
     `Domain/Reachability.swift`
-"No email to send to. Add a contact by hand."
+"No email to send to. Add a contact by hand, by address or by link."
     `Domain/DraftReviewNotes.swift`
 "No email yet"
     `UI/QueueView+Model.swift`
@@ -2212,6 +2216,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/FollowUp.swift`
 "You told Overture to read \(name) as the building, not the presenter."
     `Domain/OrganisationListing.swift`
+"You'll open a form or profile and write there by hand."
+    `UI/DraftReviewView.swift`
 "You'll see \(org) again in \(days) days. No email went out"
     `App/ActionFeedback.swift`
 "You're already shooting \(name) on \(day)."
@@ -2508,6 +2514,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "\(pending) calendars have new listings to read."
     `Domain/ScoutReadBudget.swift`
 "\(piece) is not an email address"
+    `App/ActionFeedback.swift`
+"\(piece) is not an email address or a link. No contact was added"
     `App/ActionFeedback.swift`
 "\(piece) is not an email address. No contact was added"
     `App/ActionFeedback.swift`
