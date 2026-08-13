@@ -192,6 +192,59 @@ run_shell_fixtures "${WAITER}" "${MARKER_WRITER}" >/dev/null 2>&1
 assert_equals "fixtures run concurrently: an early fixture can see a later one's effect" "0" "$?"
 rm -f "${TMP_DIR}/marker"
 
+# --- a fixture that leaves temp files behind fails, however green its own assertions are ------------
+#
+# Measured 2026-08-13: three fixtures were each leaking one file per run into the shared temp directory,
+# and one had been doing it since at least the day before (53 files) because a second `trap ... EXIT`
+# silently replaced the first. Nothing noticed, because the files are small, they are outside the
+# checkout, and every one of those fixtures passed. Same class as #2585, where the identical habit at
+# Xcode's scale filled the disk and stopped the machine.
+
+LEAKY="${TMP_DIR}/leaky.test.sh"
+cat > "${LEAKY}" <<'LEAKY_EOF'
+#!/usr/bin/env bash
+# Creates a temp file the way a real fixture does, and never removes it.
+mktemp "${TMPDIR:-/tmp}/leaked-by-a-fixture.XXXXXX" >/dev/null
+echo ok
+exit 0
+LEAKY_EOF
+chmod +x "${LEAKY}"
+
+LEAK_OUTPUT="$(run_shell_fixtures "${LEAKY}" 2>&1)"
+LEAK_STATUS=$?
+assert_equals "a fixture that leaves a temp file behind fails, even though it exited 0" "1" "${LEAK_STATUS}"
+assert_contains "and the report names the file it left" "${LEAK_OUTPUT}" "leaked-by-a-fixture"
+assert_contains "and says where to look for the cause" "${LEAK_OUTPUT}" "EXIT trap"
+
+# The mirror: a fixture that cleans up after itself passes. Without this the guard could be satisfied by
+# refusing everything, which is a different way of checking nothing.
+TIDY="${TMP_DIR}/tidy.test.sh"
+cat > "${TIDY}" <<'TIDY_EOF'
+#!/usr/bin/env bash
+f="$(mktemp "${TMPDIR:-/tmp}/tidy-fixture.XXXXXX")"
+trap 'rm -f "${f}"' EXIT
+echo ok
+exit 0
+TIDY_EOF
+chmod +x "${TIDY}"
+
+run_shell_fixtures "${TIDY}" >/dev/null 2>&1
+assert_equals "a fixture that cleans up after itself passes" "0" "$?"
+
+# node and tsx write their caches wherever TMPDIR points, on any fixture that shells out to either. They
+# are not the fixture's doing, so they must not be reported as its leak.
+TOOL_CACHE="${TMP_DIR}/tool-cache.test.sh"
+cat > "${TOOL_CACHE}" <<'CACHE_EOF'
+#!/usr/bin/env bash
+mkdir -p "${TMPDIR:-/tmp}/node-compile-cache"
+echo ok
+exit 0
+CACHE_EOF
+chmod +x "${TOOL_CACHE}"
+
+run_shell_fixtures "${TOOL_CACHE}" >/dev/null 2>&1
+assert_equals "a node or tsx cache is not counted against the fixture" "0" "$?"
+
 echo
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All run-shell-fixtures.sh fixtures passed."

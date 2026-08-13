@@ -122,8 +122,19 @@ check "run_plan with no name resolves every fixture" '[[ "${n_all}" == "${n_fixt
 
 # #1400: --yes --failed resolves to only the fixtures a prior real run left failing, and the record converges
 # (retested-and-passed drop off; still-failing stay; untested stay). Token-free: FAILURES_FILE -> temp path.
-FAILURES_FILE="$(mktemp -t overture-eval-failures.XXXXXX)"
-trap 'rm -f "${FAILURES_FILE}"' EXIT
+# An explicit template, not `mktemp -t`: on macOS that form resolves through the per-user confstr temp
+# directory and IGNORES TMPDIR, so the file lands somewhere nothing scoping this fixture can see.
+FAILURES_FILE="$(mktemp "${TMPDIR:-/tmp}/overture-eval-failures.XXXXXX")"
+
+# ONE cleanup covering everything this file creates, and ONE trap. Bash keeps a single EXIT trap: the
+# `trap 'rm -rf "${STUB_DIR}"' EXIT` further down used to REPLACE the `rm -f "${FAILURES_FILE}"` one that
+# stood here, so the failures file was never removed and this fixture leaked one per run. 53 of them had
+# accumulated by 2026-08-13.
+fixture_cleanup() {
+  rm -f "${FAILURES_FILE}"
+  rm -rf "${STUB_DIR:-}"
+}
+trap fixture_cleanup EXIT
 
 # read_failures yields nothing until a run has recorded something.
 rm -f "${FAILURES_FILE}"
@@ -236,8 +247,8 @@ check "the prompt asks for the current results version, not a stale one" \
 # So: a stub `claude` on PATH that answers `plugin list --json` and then anything else, and the assertion
 # that a real run REACHES a fixture. It spends nothing (the stub is a shell script) and it fails the moment
 # the setup in front of the spend breaks again.
-STUB_DIR="$(mktemp -d)"
-trap 'rm -rf "${STUB_DIR}"' EXIT
+STUB_DIR="$(mktemp -d "${TMPDIR:-/tmp}/overture-eval-stub.XXXXXX")"
+# No trap here: fixture_cleanup above already removes this, and a second trap would replace that one.
 cat > "${STUB_DIR}/claude" <<'STUB'
 #!/bin/sh
 # `plugin list --json` must answer with the JSON array the lockout requires; every other invocation is

@@ -105,6 +105,9 @@ stream_and_wait() {
   if [[ -z "${status_file}" || ! -s "${status_file}" ]]; then
     echo "The background phase never recorded how it ended, so it cannot be called a pass."
     echo "  Killed part way through (a Ctrl-C, a crash) is the usual cause."
+    # Removed here too, not only on the path that reads a status. This one is the path a killed run
+    # takes, so it is the one that would leak a file every time, which is exactly what it did.
+    rm -f "${status_file}"
     return 1
   fi
   status="$(cat "${status_file}")"

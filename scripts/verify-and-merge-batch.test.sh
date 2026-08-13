@@ -31,6 +31,15 @@ FAILURES=0
 
 BATCH_OUT_FILE=""
 
+# One cleanup for everything this file creates, and ONE trap. Bash keeps a single EXIT trap, so a second
+# `trap ... EXIT` added later silently replaces the first and whatever it removed starts leaking; that is
+# how eval-prep-runbook.test.sh leaked a file per run for days.
+fixture_cleanup() {
+  rm -f "${BATCH_OUT_FILE}"
+  rm -rf "${FIX_ROOT:-}"
+}
+trap fixture_cleanup EXIT
+
 # Runs verify_and_merge_batch in THIS shell, capturing its output in BATCH_OUTPUT and its status in
 # BATCH_STATUS. Not `$(...)`: command substitution runs a subshell, so every variable a stub records
 # (MERGED, RELEASE_CALLED, SUITE_RUNS) would be thrown away with it, and the assertions that read them
