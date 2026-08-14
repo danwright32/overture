@@ -372,6 +372,11 @@ final class Prospect {
     // use, so none of them can answer from a different list, L16), and a sent show has none left. The badge
     // is already silent on those, so this decides nothing on screen today; it is here so the property is
     // safe for any later reader rather than correct only at the one call site that exists now.
+    // #2717: attaching a conversation saves the address the presenter wrote from, and that address does
+    // NOT flip this badge, because the first guard below returns the stored verdict once `sentAt` is set
+    // and a form pitch always has one. Which is the right answer (the show WAS unreachable when it was
+    // pitched, and the badge is a record of that) but it is right by accident rather than by design, so it
+    // is written down here: do not "fix" this into re-deriving on a sent show.
     var reachabilityResultAsHeld: Reachability.ProbeResult? {
         guard let stored = reachabilityResult else { return nil }
         guard sentAt == nil, !isBooked else { return stored }

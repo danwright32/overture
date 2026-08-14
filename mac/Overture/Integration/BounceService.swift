@@ -46,6 +46,25 @@ enum BounceService {
                 if let bounceId = BounceDetection.hardBounceMessageId(threadJSON: data, selfEmail: selfEmail),
                    bounceId != r.dismissedBounceId {
                     let onThread = contactsPerThread[threadId] ?? [r]
+                    // #2717: a conversation Overture never sent on (#2715) was never in this detector's
+                    // calibration. Any bounce notice on an attached thread belongs to a message Dan or the
+                    // presenter sent, never to Overture's pitch, so blaming this contact for it would
+                    // write off a perfectly good address: `bounced` drops the contact out of the
+                    // reached-out queue and closes the show through PerformanceStatus (L66, L42).
+                    //
+                    // Reported rather than ignored, through the same channel and the same once-only
+                    // `lastBounceId` mechanism as the multi-contact case below, so a genuinely dead
+                    // address is not made invisible by the refusal to attribute it (L13). Filtering
+                    // automated senders at SEARCH time cannot cover this, because the classification
+                    // happens here, later, over the whole thread.
+                    if onThread.count == 1, r.replyWatchConversationIsAttached {
+                        if !reportedThreads.contains(threadId), r.lastBounceId != bounceId {
+                            reportedThreads.insert(threadId)
+                            reportProblem("A message in the conversation you linked to \(p.replyWatchDisplayName) bounced. Overture didn't send it, so it cannot tell whose address failed. Check it in Gmail")
+                        }
+                        r.lastBounceId = bounceId
+                        continue
+                    }
                     if onThread.count > 1 {
                         // Nobody is marked. `bounced` removes a contact from follow-ups and the reached-out
                         // queue and closes the show through PerformanceStatus, so marking everyone on the

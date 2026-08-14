@@ -39,6 +39,14 @@ protocol ReplyWatchableRecipient: AnyObject {
     // It is also the bound on that cost: the set of open conversations is small and shrinks as Dan closes
     // them out, where "every contact that ever replied" would grow with every show he ever pitched.
     var replyWatchConversationIsOpen: Bool { get }
+    // #2717: was this conversation ATTACHED by hand rather than started by an Overture send? A thread used
+    // to prove Overture had emailed here; since #2715 it can also be a conversation Dan linked to a form
+    // or DM pitch, on which Overture has sent nothing and therefore has no message to thread a new one
+    // off. Everything that would ADD a message of Overture's own must refuse those (`AttachedConversation`).
+    //
+    // A required member rather than a defaulted `false`, so a later conformer has to state its own answer
+    // instead of silently inheriting an exemption nobody chose (L129).
+    var replyWatchConversationIsAttached: Bool { get }
     var replied: Bool { get set }
     var repliedAt: Date? { get set }
     var lastReplyId: String? { get set }
@@ -115,6 +123,15 @@ extension Recipient: ReplyWatchableRecipient {
     // before it asks anything else, so a conversation that could still put itself in front of Dan is
     // exactly the one still being watched, and the two cannot disagree about which those are.
     var replyWatchConversationIsOpen: Bool { resolution == nil && !bounced }
+    // #2717: a form or DM pitch carrying a conversation Overture never sent on.
+    //
+    // Self-healing rather than a permanent brand, which is why `gmailMessageId` is in it: the moment
+    // Overture's own reply lands on the attached thread, `sendReplyDraft` stores the id Gmail assigned it,
+    // and from then on there IS a message of Overture's to thread off. A rule keyed on the channel alone
+    // would go on refusing long after its reason had gone (L68).
+    var replyWatchConversationIsAttached: Bool {
+        outreachChannel == .contactForm && hasWatchableConversation && gmailMessageId == nil
+    }
 }
 
 extension Prospect: ReplyWatchable {

@@ -19,7 +19,16 @@ enum RecipientBackfill {
         for p in prospects {
             guard p.sentAt != nil, let leadThread = p.gmailThreadId, !leadThread.isEmpty else { continue }
             if p.recipients.contains(where: { $0.gmailThreadId != nil }) { continue }
-            for r in p.recipients where r.provenance == .act && r.gmailThreadId == nil {
+            // #2717: and never onto a form or DM contact. A thread here is a conversation, and since
+            // #2715 the only conversation such a contact may hold is one Dan ATTACHED by hand. Handing it
+            // the lead's thread instead would give it one nobody linked, and the card would then tell him
+            // Overture is watching a conversation he never chose.
+            //
+            // The outer guard already makes this unreachable today, since it needs a lead-level
+            // `gmailThreadId` and `recordFormOutreach` deliberately never writes one, so this is the rule
+            // stated where it belongs rather than left resting on a fact two functions away (L30).
+            for r in p.recipients where r.provenance == .act && r.gmailThreadId == nil
+                && r.outreachChannel != .contactForm {
                 r.gmailThreadId = leadThread
                 r.gmailMessageId = p.gmailMessageId
                 r.sentAt = p.sentAt

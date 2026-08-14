@@ -208,6 +208,15 @@ enum SendService {
         let spent = group.map(\.followUpCount).max() ?? recipient.followUpCount
         guard FollowUp.isAwaitingNudge(recipient, in: prospect, now: now), spent < config.maxFollowUps,
               let email = recipient.email, !email.isEmpty else { return false }
+        // #2717: never onto a conversation Overture did not start. An attached one (#2715) carries a
+        // thread and no `gmailMessageId`, so this would post an unparented message into a stranger's
+        // conversation. Refused BEFORE the claim below, like every other refusal on this path, so it
+        // cannot leave the claim held on a nudge that never went. `ReachedOutAction` already keeps the
+        // button off such a row (#2716); this is the rule at the place that would actually send.
+        if let refusal = AttachedConversation.refusalToContinue(recipient, displayName: prospect.groupName) {
+            AgentLog.problem(refusal)
+            return false
+        }
         let addresses = group.compactMap(\.email).filter { !$0.isEmpty }
         // Reply on THIS contact's conversation (#74, per-recipient #418 D): same threadId, In-Reply-To
         // the contact's last Message-ID, and a "Re:" subject, so a reply to the nudge lands on the
@@ -284,6 +293,13 @@ enum SendService {
     static func sendClosingNote(_ recipient: Recipient, of prospect: Prospect,
                                 now: Date, sender: MailSender, body: String? = nil) async -> Bool {
         guard let email = recipient.email, !email.isEmpty, recipient.sentAt != nil else { return false }
+        // #2717: the same refusal as the follow-up above, for the same reason. The closing note is the one
+        // of the two an attached row can actually come due for (nobody wrote back, the show passed), so
+        // this is the live half rather than the theoretical one.
+        if let refusal = AttachedConversation.refusalToContinue(recipient, displayName: prospect.groupName) {
+            AgentLog.problem(refusal)
+            return false
+        }
         // #2033: the note lands on a thread the whole group is reading, so it is addressed to all of them.
         let group = SendGroup.peers(of: recipient, in: prospect)
         let addresses = group.compactMap(\.email).filter { !$0.isEmpty }
@@ -350,6 +366,12 @@ enum SendService {
                                                                           isMerged: prospect.isMergedConcert))
     }
 
+    // #2717: the third path, and the one deliberately NOT given the attached-conversation refusal the
+    // other two carry. Answering threads on THEIR message (`ReplyThreading`, #2653), which an attached
+    // conversation has and which is the entire point of attaching one; refusing here would make full
+    // parity false. The block on answering is the address guard on the next line and nothing else: the
+    // plan draft cited `Reachability.swift:180` for it, which is a doc comment about a SHOW's probe result
+    // and says nothing about a contact.
     static func sendReplyDraft(_ recipient: Recipient, of prospect: Prospect,
                                now: Date, sender: MailSender) async -> Bool {
         guard let email = recipient.email, !email.isEmpty,

@@ -83,6 +83,11 @@ struct GmailReplyChecker {
     //
     // A never-replied row is watched because a reply might arrive. A replied row is watched only while it
     // still has a gap something could fill.
+    //
+    // #2717: an ATTACHED conversation (#2715) joins this list on exactly the same terms, and that is the
+    // feature rather than an oversight: watching it is the whole reason Dan links it. Detection itself
+    // (`ReplyService`) is unchanged for the same reason. The readers that had to change are the ones that
+    // would WRITE to the conversation or blame this contact for something on it, not the ones that read it.
     static func threadsToCheck(in entities: [any ReplyWatchable]) -> Set<String> {
         var threadIds: Set<String> = []
         for p in entities {
