@@ -21,7 +21,7 @@ struct OutboundSignatureConsolidationTests {
     // #2397: the per-state re-touch bodies went with the states that chose their wording, so the closing
     // note is the only conversation-track email left to check.
     @Test func theClosingNoteEndsAtItsLastSentence() {
-        let closing = PostEventPrompt.closingNudgeBody(contactName: "Sam", groupName: "The Choir",
+        let closing = PostEventPrompt.closingNudgeBody(contactName: "Sam", performanceDate: "2026-11-16",
                                                        venue: "Merkin Hall")
         #expect(!hasSignoff(closing))
     }

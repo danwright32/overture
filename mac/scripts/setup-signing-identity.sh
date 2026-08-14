@@ -115,6 +115,26 @@ overture_setup_signing_identity() {
     return 0
   fi
 
+  # #2595: say WHICH of the two things this run is about to do, before it does it. Since #2537 the check
+  # above asks whether codesign will SIGN with the identity, so a certificate that exists and is refused
+  # no longer stops the run: it falls through to here and creates a fresh one. `find-identity -v` cannot
+  # see the refused one, so nothing deletes it and both stay in the keychain, with the new trusted one
+  # winning every lookup.
+  #
+  # Measured on Dan's Mac, 2026-08-13: exactly one certificate carried the name, so nothing had
+  # accumulated and no deletion logic is warranted. What was missing is that a run which replaces the
+  # first certificate and a run which quietly leaves a second one behind read identically from outside.
+  local certs_before
+  certs_before="$(overture_signing_certificate_count)"
+  if [[ "${certs_before}" -eq 0 ]]; then
+    echo "==> No certificate named \"${OVERTURE_SIGNING_IDENTITY}\" is in ${OVERTURE_SIGNING_KEYCHAIN} yet; creating the first one."
+  else
+    echo "==> ${certs_before} already in the keychain with the name \"${OVERTURE_SIGNING_IDENTITY}\", and codesign will not sign with it."
+    echo "    Creating another one beside it. This run does not delete the old one, because a certificate"
+    echo "    codesign refuses is also one find-identity cannot see, so nothing here can tell a broken one"
+    echo "    from a certificate something else is relying on."
+  fi
+
   overture_setup_prepare_keychain
 
   local tmp rc=0
@@ -143,6 +163,10 @@ overture_setup_signing_identity() {
   fi
 
   echo "Done. Created \"${OVERTURE_SIGNING_IDENTITY}\" ($(overture_signing_identity_sha)) and proved codesign signs with it."
+  # #2595: the count AFTER, so a second certificate left behind is visible here rather than only to
+  # somebody who thinks to open Keychain Access. Stated as what he would see there, since that is the
+  # instruction the issue asked him to follow.
+  echo "      Keychain Access now shows $((certs_before + 1)) certificate(s) with this name."
   echo "Reinstall once with mac/build-install.sh; you will re-grant permissions this one time, then they persist."
 }
 

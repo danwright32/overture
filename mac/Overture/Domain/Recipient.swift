@@ -136,6 +136,16 @@ final class Recipient {
     var looksLikeDuplicateContact: Bool = false
     var looksLikeDuplicateContactDismissed: Bool = false
 
+    // #2624: the fifth guard, recorded the way the three above are. UnaccountedAddressGuard catches a
+    // contact naming one person and holding an address in a different person's name with no page cited:
+    // the greeting is composed from `name`, so such a row would greet the artist and be delivered to a
+    // stranger at an agency (L75). Dismissible for the same reason the venue and press guesses are: Dan
+    // can look at an address and judge whether it really reaches the person named.
+    var looksLikeAnotherPersons: Bool = false
+    var looksLikeAnotherPersonsDismissed: Bool = false
+
+    var isLooksLikeAnotherPersons: Bool { looksLikeAnotherPersons && !looksLikeAnotherPersonsDismissed }
+
     // #1866: the fourth guard on a contact, recorded the way the three above are. ContactConfidenceGuard
     // (#1856) rewrites a `high` find down to `low` when it names no page it was read off, and used to store
     // nothing saying it had, so the row read exactly like one the run itself judged weak. Two different
@@ -159,6 +169,18 @@ final class Recipient {
     // Whether the hold is IN FORCE, which is not the same as whether it was ever applied. One definition,
     // so the card, the review panel and the merge cannot each spell the pair differently.
     var isHeldDownToUnverified: Bool { heldDownToUnverified && !heldDownToUnverifiedDismissed }
+
+    // #2622: WHO this contact is to the show (primary, secondary, tertiary), as the check judged it from
+    // the page it read. Raw, like the confidence and method beside it, so a value this build does not know
+    // decodes as nil rather than being invented here. nil means nobody has said, which every contact
+    // stored before this shipped is, and which is deliberately not the same thing as a show no check has
+    // looked at (that is `Prospect.reachabilityResult`).
+    var contactTierRaw: String?
+
+    var contactTier: ContactTier? {
+        get { contactTierRaw.flatMap(ContactTier.init(rawValue:)) }
+        set { contactTierRaw = newValue?.rawValue }
+    }
 
     // #1630: HOW this contact was actually reached. nil means email, the only channel that existed
     // before this, so every stored record migrates as what it is. `contact_form` means Dan submitted
@@ -193,9 +215,21 @@ final class Recipient {
     var sentAt: Date?
     var gmailThreadId: String?
     var gmailMessageId: String?
+    // #2648: the `References` header carried by the LAST message Overture sent on this contact's
+    // conversation, which is the ancestry the NEXT one has to extend. Kept beside `gmailMessageId` and
+    // written in the same step, because the two are one fact: the chain is only meaningful as the
+    // ancestry OF that message, and updating one without the other would emit a chain that skips a
+    // generation. Nil until a reply has been sent, which is the first message with any ancestry at all.
+    var gmailReferences: String?
     // #483: set when a send succeeded but Gmail's response had no parseable threadId, so this
     // recipient's replies can never be auto-detected until Dan checks Gmail directly.
     var replyTrackingDegraded: Bool = false
+    // #2647: set when a send succeeded but the real Message-ID Gmail stamped on it could not be read
+    // back, so `gmailMessageId` holds no id for that message and the NEXT message Overture sends on this
+    // conversation cannot reference it. Its own field beside replyTrackingDegraded rather than folded
+    // into it: replies can still be watched (the threadId is fine), and only the outbound threading is
+    // broken, so one field for both would say the wrong thing about whichever check actually failed (L53).
+    var threadingDegraded: Bool = false
     var sendError: String?
     // When the current .sending claim was made (#475/#476); cleared when it resolves to .sent or
     // reverts to .pending. Only meaningful while sendState == .sending.
@@ -235,6 +269,11 @@ final class Recipient {
     var replyFromName: String?
     // #2113: when they actually SENT it, off the same message's internalDate.
     var inboundReplySentAt: Date?
+    // #2653: the Message-ID of the message being answered. Overture read the thread to detect the reply
+    // and extract its text and then DISCARDED this, so the answer threaded off Overture's own last
+    // outgoing message instead, making the contact's reply a sibling of Dan's answer rather than its
+    // parent. Read through `ReplyThreading`, never directly, so both send paths answer the same way.
+    var inboundReplyMessageId: String?
     // #2149: when the repair pass last TRIED to fill in the message text, whether or not it found any.
     // Without it a reply with no decodable body stays in the gap and its thread is refetched forever.
     var replyTextCheckedAt: Date?
@@ -449,20 +488,25 @@ final class Recipient {
         email?.isEmpty == false
             && ((looksLikeVenue && !looksLikeVenueDismissed)
                 || (looksLikePressContact && !looksLikePressContactDismissed)
-                || (looksLikeDuplicateContact && !looksLikeDuplicateContactDismissed))
+                || (looksLikeDuplicateContact && !looksLikeDuplicateContactDismissed)
+                || isLooksLikeAnotherPersons)
     }
 
     // #1798: WHICH kind of hold, so the card's sentence can be true of the row that produced it. Measured
     // on the live store 2026-07-31: the one row in this state was held by the duplicate guard alone, with
     // the venue and press guards both clear, so the wording written for those two would have been a false
     // claim about a real presenter's own office address.
-    enum HoldReason: Equatable { case venueOrPress, duplicate }
+    // #2624 adds the third: an address nobody on the row accounts for. Its own case for the same reason
+    // the duplicate has one, that the badge has to be true of the row that produced it: neither "weak
+    // contact only" nor "held as a duplicate" describes an address in a stranger's name.
+    enum HoldReason: Equatable { case venueOrPress, duplicate, unaccountedAddress }
 
     var holdReason: HoldReason? {
         guard isHeldByAGuard else { return nil }
         if (looksLikeVenue && !looksLikeVenueDismissed)
             || (looksLikePressContact && !looksLikePressContactDismissed) { return .venueOrPress }
-        return .duplicate
+        if looksLikeDuplicateContact && !looksLikeDuplicateContactDismissed { return .duplicate }
+        return .unaccountedAddress
     }
 
     var isSendablePending: Bool {
@@ -481,6 +525,10 @@ final class Recipient {
             && !(looksLikeVenue && !looksLikeVenueDismissed)
             && !(looksLikePressContact && !looksLikePressContactDismissed)
             && !(looksLikeDuplicateContact && !looksLikeDuplicateContactDismissed)
+            // #2624: an address in a name nobody on this row accounts for. Held here, not merely marked,
+            // because `low` confidence changed how the card DESCRIBED the find and did nothing to stop
+            // the send: the greeting would name the artist and the mail would reach a stranger.
+            && !isLooksLikeAnotherPersons
             && !isBlockedByDraftLint
             // #2545: a body that does not greet, or greets one person on an email several people get.
             // Held here rather than only on the draft card for the reason #2052 gives directly above:
@@ -620,6 +668,7 @@ final class Recipient {
             || (looksLikeVenue && !looksLikeVenueDismissed)
             || (looksLikePressContact && !looksLikePressContactDismissed)
             || (looksLikeDuplicateContact && !looksLikeDuplicateContactDismissed)
+            || isLooksLikeAnotherPersons
             || isBlockedByDraftLint
     }
 

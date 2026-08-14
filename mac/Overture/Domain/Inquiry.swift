@@ -63,7 +63,22 @@ final class Inquiry {
     var sentAt: Date?
     var gmailThreadId: String?
     var gmailMessageId: String?    // stamped on the sent reply → `wasProvablyContacted`
+    // #2661: the `References` header carried by the LAST message Overture sent on this inquiry's
+    // conversation, which is the ancestry the NEXT one has to extend. Beside `gmailMessageId` and written
+    // in the same step, for the same reason `Recipient.gmailReferences` is (#2648): the chain is only
+    // meaningful as the ancestry OF that message, and updating one without the other emits a chain that
+    // skips a generation. Nil until a reply has been sent, which is the first message with any ancestry.
+    var gmailReferences: String?
     var threadIdDegraded: Bool = false
+    // #2647: the Message-ID read back off the sent reply could not be read, so a later message on this
+    // inquiry's thread cannot reference it. The Recipient side carries the same flag for the same reason.
+    var threadingDegraded: Bool = false
+    // #2675: WHY the last reply failed to go out. Its reader is the inquiry's own row, added in the same
+    // change (L46). Before this the sender returned `false` and stored nothing, so the reason lived only
+    // in a notice that clears, while the inquiry stayed on screen looking unsent with nothing saying why
+    // (L126). The prospect side has carried the same field on `Recipient` and `Prospect` since #499, and
+    // both are read through the same `SendFailureLine`, so one failure cannot be worded two ways.
+    var sendError: String?
 
     // Reply / bounce detection state. An inquiry has ONE thread, not a contact list, so it presents
     // itself to the shared pipeline as a single self-thread (see Inquiry+ReplyWatchable).
@@ -81,6 +96,9 @@ final class Inquiry {
     var replyFromAddress: String?
     var replyFromName: String?
     var inboundReplySentAt: Date?
+    // #2653: the Message-ID of the message being answered, the same fact `Recipient` carries and for the
+    // same reason. Read through `ReplyThreading`.
+    var inboundReplyMessageId: String?
     // #2149: when the repair pass last TRIED to fill in the message text, whether or not it found any.
     // Without it a reply with no decodable body stays in the gap and its thread is refetched forever.
     var replyTextCheckedAt: Date?

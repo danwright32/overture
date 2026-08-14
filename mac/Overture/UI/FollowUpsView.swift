@@ -128,13 +128,16 @@ struct FollowUpsView: View {
         // three consequential sends now look and read the same.
         .sheet(item: $pending) { p in
             SendConfirmSheet(confirmation: p.confirmation,
-                             onSend: { performNudge(p.id, p.recipientId) },
-                             onCancel: { pending = nil })
+                             onSend: { performNudge(p.id, p.recipientId, body: nil) },
+                             onCancel: { pending = nil },
+                             // #2575: the words in the box are the words that send.
+                             onSendEdited: { performNudge(p.id, p.recipientId, body: $0) })
         }
         .sheet(item: $pendingConversation) { p in
             SendConfirmSheet(confirmation: p.confirmation,
-                             onSend: { performClosingNote(p.id, p.recipientId) },
-                             onCancel: { pendingConversation = nil })
+                             onSend: { performClosingNote(p.id, p.recipientId, body: nil) },
+                             onCancel: { pendingConversation = nil },
+                             onSendEdited: { performClosingNote(p.id, p.recipientId, body: $0) })
         }
         .actionFeedbackBanner()
     }
@@ -282,17 +285,19 @@ struct FollowUpsView: View {
     // #468 (SUP-006): routed through ProspectMutations so this sheet's send gets the same
     // in-flight LiveRunLabel every other send surface already shows, instead of a bare Task with
     // the button left clickable.
-    private func performNudge(_ naturalKey: String, _ recipientId: String) {
+    private func performNudge(_ naturalKey: String, _ recipientId: String, body: String?) {
         pending = nil
         ProspectMutations.sendFollowUp(naturalKey, recipientId, prospects: prospects, context: context, feedback: feedback,
+                                       body: body,
                                        markSending: { sending[$0] = Date() },
                                        clearSending: { sending[$0] = nil })
     }
 
-    private func performClosingNote(_ naturalKey: String, _ recipientId: String) {
+    private func performClosingNote(_ naturalKey: String, _ recipientId: String, body: String?) {
         pendingConversation = nil
         ProspectMutations.sendClosingNote(naturalKey, recipientId,
                                           prospects: prospects, context: context, feedback: feedback,
+                                          body: body,
                                           markSending: { sending[$0] = Date() },
                                           clearSending: { sending[$0] = nil })
     }

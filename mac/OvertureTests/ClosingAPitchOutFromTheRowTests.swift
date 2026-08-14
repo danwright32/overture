@@ -240,7 +240,11 @@ struct ReachedOutCloseWiringTests {
 
     @Test func therowDrawsTheHintAndTheControl() throws {
         let row = try #require(SourceGuardHelper.propertyBody(
-            "private func reachedOutRow(_ pair: (prospect: Prospect, recipient: Recipient, next: Date), now: Date) -> some View {",
+            // #2644: the marker follows the signature, which now takes the in-flight timestamp and is
+            // internal so the on-screen test can render it. Pinning the exact rendering of a signature is
+            // what makes a guard fail its first legitimate refinement (L103); what these two assert is
+            // the row's CONTENT, which is unchanged.
+            "func reachedOutRow(_ pair: (prospect: Prospect, recipient: Recipient, next: Date),",
             in: source))
         #expect(row.contains("ReachedOutClose.passedHint(hasOpened: p.hasOpened(today: today)"))
         #expect(row.contains("CloseOutMenu(outcomes: ShowOutcome.menu(wasPitched: p.wasPitched))"))
@@ -276,7 +280,11 @@ struct ReachedOutCloseWiringTests {
     // is what makes them a deliberate system rather than one branded control and one system default.
     @Test func theoutcomeControlIsNotASecondStateMenu() throws {
         let row = try #require(SourceGuardHelper.propertyBody(
-            "private func reachedOutRow(_ pair: (prospect: Prospect, recipient: Recipient, next: Date), now: Date) -> some View {",
+            // #2644: the marker follows the signature, which now takes the in-flight timestamp and is
+            // internal so the on-screen test can render it. Pinning the exact rendering of a signature is
+            // what makes a guard fail its first legitimate refinement (L103); what these two assert is
+            // the row's CONTENT, which is unchanged.
+            "func reachedOutRow(_ pair: (prospect: Prospect, recipient: Recipient, next: Date),",
             in: source))
         let menu = SourceGuardHelper.source("Overture/UI/CloseOutMenu.swift")
         #expect(menu.contains("ContactRowControls.Kind.outcome.icon"))

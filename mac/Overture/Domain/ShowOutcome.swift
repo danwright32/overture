@@ -7,7 +7,7 @@ import Foundation
 // "Mark..." menu, `InquiryLostReason`, `StandDownCopy`, and the show-level `Outcome`): about 28 options
 // describing roughly a dozen actual facts. One field, one column to report on, one list to read.
 //
-// Twelve values Dan picks, split into two halves, plus two Overture writes for itself. Which half is
+// Thirteen values Dan picks, split into two halves, plus two Overture writes for itself. Which half is
 // offered depends on whether anything was SENT, which is a fact about the send record and is
 // deliberately NOT encoded in the words: `ShowOutcome.menu(wasPitched:)` is the only place that
 // decision is made, so an impossible option ("Never heard back" on a show nobody emailed, "Date
@@ -26,8 +26,9 @@ import Foundation
 // spelling of its own is how "still waiting to hear" and "they never answered" became the same record.
 enum ShowOutcome: String, CaseIterable, Equatable, Hashable, Sendable {
 
-    // The seven for a show nothing was ever sent to. Every one of them is a statement about DAN'S
-    // side or about the show, never about a person's answer, because nobody was asked.
+    // The eight for a show nothing was ever sent to. Every one of them is a statement about DAN'S
+    // side, about the show, or about Overture's own failure to find a route, never about a person's
+    // answer, because nobody was asked.
     case dateConflict = "date_conflict"
     // The rename of `DismissReason.alreadyBooked`. "Already booked" meant Dan was busy and read as the
     // client having hired him, which is the exact opposite fact and the one that made the funnel
@@ -43,6 +44,16 @@ enum ShowOutcome: String, CaseIterable, Equatable, Hashable, Sendable {
     case notAFit = "not_a_fit"
     // #351: personal taste, deliberately distinct from `notAFit`, which is a judgement about the show.
     case dontWantToShoot = "dont_want_to_shoot"
+    // #2684: Dan wanted this show and the contact check came back with no usable route (no address at
+    // all, only a web form, only an Instagram handle, only a press inbox, or a list of people with no
+    // authority over the booking). A fact about OVERTURE'S contact finding, never a judgement about the
+    // org or about the night, so it must never be folded into any of the six above: `notAFit` and
+    // `dontWantToShoot` blame the show, `tooSoon` claims he found it late, and the three scheduling
+    // reasons all claim the night was spent. Same argument as #1821's for `pitchingOtherShows`.
+    //
+    // Kept separate is what makes #16 able to ask how many shows a season are dropped purely for want of
+    // a route, which is the number that says whether contact finding is the bottleneck.
+    case noWayToReachThem = "no_way_to_reach_them"
     case duplicate
 
     // The five for a show that WAS pitched. Four of them are somebody's answer, or the absence of one;
@@ -76,6 +87,7 @@ enum ShowOutcome: String, CaseIterable, Equatable, Hashable, Sendable {
         case .tooSoon: return "Too soon"
         case .notAFit: return "Not a fit"
         case .dontWantToShoot: return "Don't want to shoot this"
+        case .noWayToReachThem: return "No way to reach them"
         case .duplicate: return "Duplicate"
         case .booked: return "Booked"
         case .neverHeardBack: return "Never heard back"
@@ -92,14 +104,26 @@ enum ShowOutcome: String, CaseIterable, Equatable, Hashable, Sendable {
     // than a second phrasing of the same fact, which is the #843 trap from the naming direction, and a
     // test asserts the two never drift apart. Only the pitched endings have one, because only those are
     // counted in a lost split today; a never-pitched ending would need its own reading of the same rule.
-    var countedPhrase: String {
+    //
+    // #2586: nil says that plainly, and the nine are named rather than defaulted. This used to end in
+    // `default: return label`, which answered for every unnamed case with the wording written to be
+    // PICKED off a menu, so a pitched ending added later would have read as "3 Never heard back"
+    // mid-sentence and nothing would have gone red: a default is indistinguishable from a deliberate
+    // choice (L113). Exhaustive now, so adding any case breaks the build here rather than surfacing in a
+    // report, and `CountedPhraseHasNoDefaultTests` judges the decision the break forces.
+    var countedPhrase: String? {
         switch self {
         case .booked: return "booked"
         case .neverHeardBack: return "never heard back"
         case .theySaidNotNow: return "they said not now"
         case .theySaidNo: return "they said no"
         case .turnedThemDown: return "I turned them down"
-        default: return label
+        // Nothing counts these, so giving them wording would be a second vocabulary nothing reads. Note
+        // the label is not merely unread for them, it is wrong: "3 Date conflict" and "3 Duplicate" are
+        // not sentences, which is what the old default produced.
+        case .dateConflict, .hadPaidWork, .pitchingOtherShows, .tooSoon, .notAFit, .dontWantToShoot,
+             .noWayToReachThem, .duplicate, .wentBy, .tooFar:
+            return nil
         }
     }
 
@@ -108,7 +132,8 @@ enum ShowOutcome: String, CaseIterable, Equatable, Hashable, Sendable {
     // In the order Dan meets them on the menu, so the order is a property of the vocabulary rather
     // than something each view re-decides.
     static let neverPitched: [ShowOutcome] = [.dateConflict, .hadPaidWork, .pitchingOtherShows,
-                                              .tooSoon, .notAFit, .dontWantToShoot, .duplicate]
+                                              .tooSoon, .notAFit, .dontWantToShoot,
+                                              .noWayToReachThem, .duplicate]
 
     static let pitched: [ShowOutcome] = [.booked, .neverHeardBack, .theySaidNotNow,
                                          .theySaidNo, .turnedThemDown]
@@ -167,6 +192,9 @@ extension ShowOutcome {
         case .tooSoon: return "\(org) dismissed: too soon to pitch it."
         case .notAFit: return "\(org) dismissed: not a fit."
         case .dontWantToShoot: return "\(org) dismissed: you don't want to shoot this."
+        // Names the missing route rather than any judgement, because that is the whole reason this
+        // ending exists: the show was worth pitching and Overture could not find a way in.
+        case .noWayToReachThem: return "\(org) dismissed: no way to reach them."
         case .duplicate: return "\(org) dismissed as a duplicate."
         // Overture's own two are never recorded by hand, so nothing acknowledges them to Dan. They still
         // need words rather than a crash, because a switch that cannot answer for every value is a trap
@@ -244,7 +272,7 @@ extension ShowOutcome {
         case .theySaidNo: return .lostNotInterested
         case .turnedThemDown: return .stoodDown
         case .dateConflict, .hadPaidWork, .pitchingOtherShows, .tooSoon, .notAFit, .dontWantToShoot,
-             .duplicate, .wentBy, .tooFar:
+             .noWayToReachThem, .duplicate, .wentBy, .tooFar:
             return nil
         }
     }
@@ -263,6 +291,12 @@ extension ShowOutcome {
         case .wentBy: return .wentBy
         case .tooFar: return .tooFar
         case .booked, .neverHeardBack, .theySaidNotNow, .theySaidNo, .turnedThemDown: return nil
+        // #2684: this ending never existed under `DismissReason`, so it has no spelling there and the
+        // bridge's contract is now "the nine that predate it" rather than every never-pitched value.
+        // Nil is the stated answer, not a gap: the bridge exists ONLY to read stores written before
+        // #2394 forward, and no store can hold this value under the old vocabulary. Adding a raw value
+        // to a list #2395/#2685 are retiring would mint storage nothing will ever write.
+        case .noWayToReachThem: return nil
         }
     }
 }

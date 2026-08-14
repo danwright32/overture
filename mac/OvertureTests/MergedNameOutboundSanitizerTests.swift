@@ -32,15 +32,20 @@ struct MergedNameOutboundSanitizerTests {
         #expect(legit.body.contains(legitSemicolonTitle))   // the #1276 fix: real name kept
     }
 
+    // #2615 moved the closing note's BODY off the group name entirely (it names the show's date and room
+    // instead), so the whole message is what this has to be asked of: the conductor list must reach the
+    // recipient nowhere, and a legitimate semicolon title must still survive where the name is used.
     @Test func conversationReminderSubstitutesOnlyWhenMerged() {
-        func body(_ name: String, isMerged: Bool) -> String {
-            PostEventPrompt.nudgeContent(kind: .closingNote, originalSubject: nil,
-                                              groupName: name, isMerged: isMerged,
-                                              contactName: "Sam", venue: "Carnegie Hall")?.body ?? ""
+        func message(_ name: String, isMerged: Bool) -> String {
+            let c = PostEventPrompt.nudgeContent(kind: .closingNote, originalSubject: nil,
+                                                 groupName: name, isMerged: isMerged,
+                                                 contactName: "Sam", performanceDate: "2026-11-16",
+                                                 venue: "Carnegie Hall")
+            return (c?.subject ?? "") + "\n" + (c?.body ?? "")
         }
-        #expect(!body(mergedName, isMerged: true).contains(mergedName))
-        #expect(body(mergedName, isMerged: true).contains(FollowUp.mergedNameSubstitute))
-        #expect(body(legitSemicolonTitle, isMerged: false).contains(legitSemicolonTitle))
+        #expect(!message(mergedName, isMerged: true).contains(mergedName))
+        #expect(message(mergedName, isMerged: true).contains(FollowUp.mergedNameSubstitute))
+        #expect(message(legitSemicolonTitle, isMerged: false).contains(legitSemicolonTitle))
     }
 
     // The WIRING: the flag must actually flow from a stored Prospect's persisted seriesId through the
@@ -134,9 +139,11 @@ struct SafeVenueGuardTests {
         func body(venue: String?) -> String {
             PostEventPrompt.nudgeContent(kind: .closingNote, originalSubject: nil,
                                               groupName: "Aurora Strings", contactName: "Dana",
-                                              venue: venue)?.body ?? ""
+                                              performanceDate: "2026-11-16", venue: venue)?.body ?? ""
         }
         #expect(!body(venue: "Carnegie Hall\n881 7th Ave").contains("881 7th Ave"))
-        #expect(body(venue: "Merkin Hall").contains("Aurora Strings at Merkin Hall"))
+        // #2615: the show is named by its date and room, not by the group name.
+        #expect(body(venue: "Merkin Hall").contains("your November 16 show at Merkin Hall"))
+        #expect(body(venue: "Carnegie Hall\n881 7th Ave").contains("your November 16 show has come and gone"))
     }
 }

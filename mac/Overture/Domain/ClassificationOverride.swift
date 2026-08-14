@@ -31,7 +31,9 @@ enum ClassificationOverride {
                   rawCoverage: p.coverage, passedOnThisShow: p.passedOnThisShow,
                   // Read off the row, which is what makes the adjustment idempotent by construction.
                   // Nothing anywhere adds to or subtracts from a stored score.
-                  contactRoute: p.contactRouteForScoring(now: now))
+                  contactRoute: p.contactRouteForScoring(now: now),
+                  // #2622: and WHO the check found, read off the row for the same reason.
+                  contactTier: p.contactTierForScoring(now: now))
     }
 
     static func rescored(_ p: Prospect, now: Date) -> FitResult {

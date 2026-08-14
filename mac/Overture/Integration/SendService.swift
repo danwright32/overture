@@ -112,6 +112,7 @@ enum SendService {
             recipient.gmailThreadId = receipt.threadId
             recipient.gmailMessageId = receipt.messageID
             recipient.replyTrackingDegraded = receipt.threadIdDegraded
+            recipient.threadingDegraded = receipt.messageIDDegraded   // #2647
             recipient.sendError = nil
             // Lead-level first-send rollup (#389 Phase 1): set once, never overwritten, so the ~20
             // "was this performance contacted at all" readers keep working unchanged. The thread/
@@ -177,12 +178,26 @@ enum SendService {
         return true
     }
 
+    // #2575: which words actually go out. An edit REPLACES the composed body; an edit that is nothing but
+    // whitespace is not a message at all and returns nil, so both send paths refuse it in one place rather
+    // than each deciding what an empty box means. `SendConfirmEditing.bodyIsSendable` is the same
+    // predicate the Send button is disabled by, so the button and the send cannot disagree (L109).
+    private static func editedOrComposed(_ edited: String?, composed: String) -> String? {
+        guard let edited else { return composed }
+        return SendConfirmEditing.bodyIsSendable(edited) ? edited : nil
+    }
+
     // Sends ONE follow-up nudge for a prospect Dan explicitly chose to re-touch (#45):
     // a short templated message to the same contact. Records the follow-up (count +
     // timestamp) on success so the sequencer paces and caps it. Never resets sentAt or
     // the original outcome; one click = one nudge, never autonomous.
     @discardableResult
+    // #2575: `body`, when given, is what Dan had in the text box at the moment he pressed Send. It
+    // REPLACES the composed body and nothing else: the subject still comes from the shared helper,
+    // because that is what threads the message onto the conversation Gmail is watching (#74). Nil is an
+    // unedited send, which composes exactly as before.
     static func sendFollowUp(_ recipient: Recipient, of prospect: Prospect, now: Date, sender: MailSender,
+                             body: String? = nil,
                              config: FollowUpConfig = .init()) async -> Bool {
         // #1740: the same predicate the row and the Due count read, so a contact Dan stood down cannot be
         // nudged from any surface, including one that never asks the Due list.
@@ -191,7 +206,7 @@ enum SendService {
         // each member counts separately can be spent twice over by clicking the other row.
         let group = SendGroup.peers(of: recipient, in: prospect)
         let spent = group.map(\.followUpCount).max() ?? recipient.followUpCount
-        guard FollowUp.isAwaitingNudge(recipient, in: prospect), spent < config.maxFollowUps,
+        guard FollowUp.isAwaitingNudge(recipient, in: prospect, now: now), spent < config.maxFollowUps,
               let email = recipient.email, !email.isEmpty else { return false }
         let addresses = group.compactMap(\.email).filter { !$0.isEmpty }
         // Reply on THIS contact's conversation (#74, per-recipient #418 D): same threadId, In-Reply-To
@@ -205,11 +220,20 @@ enum SendService {
                                             isMerged: prospect.isMergedConcert,
                                             contactName: recipient.name, venue: prospect.venue,
                                             followUpCount: recipient.followUpCount)
+        // #2575: an emptied box is not a message, and refusing it HERE (rather than only at the button)
+        // means no other caller can mail a signature with nothing above it under Dan's name.
+        guard let outgoing = editedOrComposed(body, composed: content.body) else { return false }
+        // #2648: the whole ancestry, not the parent restated. Built through the one shared helper the
+        // closing note and the reply draft also use, so the three reply paths cannot disagree about what
+        // the chain is.
+        let chain = MailThreading.references(parentReferences: recipient.gmailReferences,
+                                             parentMessageID: recipient.gmailMessageId)
         guard let mail = OutgoingMail(
             to: addresses,
             subject: content.subject,
-            body: content.body,
+            body: outgoing,
             inReplyTo: recipient.gmailMessageId,
+            references: chain,
             threadId: recipient.gmailThreadId) else { return false }
         // #468: shared with sendConversationNudge's claim below (mutually exclusive by domain
         // state, see the field's doc comment on Recipient), so a fast double-tap on either one
@@ -222,7 +246,18 @@ enum SendService {
             for r in group {
                 r.followUpCount = spent + 1
                 r.lastFollowUpAt = now
-                if let m = receipt.messageID { r.gmailMessageId = m }   // thread the next reply off the nudge
+                // #2648: the id and the chain move TOGETHER or not at all. The chain is the ancestry of
+                // whichever message `gmailMessageId` names, so advancing one without the other would emit
+                // a References that skips a generation.
+                if let m = receipt.messageID {
+                    r.gmailMessageId = m           // thread the next reply off the nudge
+                    r.gmailReferences = chain
+                }
+                // #2647: when the nudge's own Message-ID could not be read back, the PRIOR id above is
+                // kept rather than blanked. It is a real ancestor of the conversation, so referencing it
+                // still threads in every client; blanking it would turn the next message into an
+                // unthreaded one, which is a worse defect than a stale reference (L5).
+                r.threadingDegraded = receipt.messageIDDegraded
                 r.sendError = nil
                 r.nudgeSendClaimedAt = nil
             }
@@ -245,8 +280,9 @@ enum SendService {
     // decision, already locked in on Recipient.setConversationState). Re-anchors this recipient's own
     // reminder clock. One click = one nudge, never autonomous.
     @discardableResult
+    // #2575: `body` is Dan's edit, as above. It replaces the composed body only.
     static func sendClosingNote(_ recipient: Recipient, of prospect: Prospect,
-                                now: Date, sender: MailSender) async -> Bool {
+                                now: Date, sender: MailSender, body: String? = nil) async -> Bool {
         guard let email = recipient.email, !email.isEmpty, recipient.sentAt != nil else { return false }
         // #2033: the note lands on a thread the whole group is reading, so it is addressed to all of them.
         let group = SendGroup.peers(of: recipient, in: prospect)
@@ -259,12 +295,17 @@ enum SendService {
         guard let content = PostEventPrompt.nudgeContent(kind: .closingNote, originalSubject: prospect.draftSubject,
                                                         groupName: prospect.groupName,
                                                         isMerged: prospect.isMergedConcert,
-                                                        contactName: recipient.name, venue: prospect.venue),
+                                                        contactName: recipient.name,
+                                                        performanceDate: prospect.performanceDate,
+                                                        venue: prospect.venue),
+              let outgoing = editedOrComposed(body, composed: content.body),
               let mail = OutgoingMail(
                 to: addresses,
                 subject: content.subject,
-                body: content.body,
+                body: outgoing,
                 inReplyTo: recipient.gmailMessageId,
+                references: MailThreading.references(parentReferences: recipient.gmailReferences,
+                                                     parentMessageID: recipient.gmailMessageId),
                 threadId: recipient.gmailThreadId) else { return false }
         // #468: shared with sendFollowUp's claim above. #2033: over the whole group.
         guard claimSecondarySend(group, \.nudgeSendClaimedAt, now: now) else { return false }
@@ -326,13 +367,25 @@ enum SendService {
         // be due for a conversation nudge at the same time.
         let subject = replySubject(for: recipient, of: prospect)
         // #2030: built before the claim, for the same reason as the two nudges above.
+        // #2653: THEIR message is the parent, not ours. This used to pass `recipient.gmailMessageId`,
+        // which is Overture's own last outgoing message, so the contact's reply became a sibling of Dan's
+        // answer rather than its parent. Through `ReplyThreading` so the inquiry path answers identically.
+        let chain = ReplyThreading.references(for: recipient)
         guard let mail = OutgoingMail(to: addresses, subject: subject, body: body,
-                                      inReplyTo: recipient.gmailMessageId,
+                                      inReplyTo: ReplyThreading.inReplyTo(for: recipient),
+                                      references: chain,
                                       threadId: recipient.gmailThreadId) else { return false }
         guard claimSecondarySend(recipient, \.replySendClaimedAt, now: now) else { return false }
         do {
             let receipt = try await sender.send(mail)
-            recipient.gmailMessageId = receipt.messageID          // thread the contact's next reply off ours
+            // #2647: only when there IS one. This used to assign unconditionally, which after the read
+            // back landed would have BLANKED a good id whenever the read back failed, leaving the next
+            // message on this conversation with nothing to reference at all (L5).
+            if let m = receipt.messageID {
+                recipient.gmailMessageId = m       // thread their next reply off ours
+                recipient.gmailReferences = chain  // #2648: the ancestry of that message, moved with it
+            }
+            recipient.threadingDegraded = receipt.messageIDDegraded
             if !receipt.threadId.isEmpty { recipient.gmailThreadId = receipt.threadId }
             // #2170: the same routine the copy-out path runs, rather than the four lines it used to
             // repeat here. They had drifted into two copies of one idea, and the fact neither of them
@@ -412,6 +465,7 @@ enum SendService {
                 r.gmailThreadId = receipt.threadId
                 r.gmailMessageId = receipt.messageID
                 r.replyTrackingDegraded = receipt.threadIdDegraded
+                r.threadingDegraded = receipt.messageIDDegraded   // #2647
                 r.sendGroupId = groupId
                 r.sendError = nil
             }

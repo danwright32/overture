@@ -109,9 +109,10 @@ struct PostEventPromptTests {
         let p = show(ctx)
         let r = contact(ctx, on: p)
 
-        let date = PostEventPrompt.nextPromptDate(for: r, of: p, now: day("2026-03-05"))
-
-        #expect(date == day("2026-03-02"))
+        // #2646: it takes no clock now, and names its date whether or not that date has arrived. Asked
+        // from BEFORE the show as well as after, so this pins the dating rule rather than the old
+        // silence.
+        #expect(PostEventPrompt.nextPromptDate(for: r, of: p) == day("2026-03-02"))
     }
 
     // On the show's own day it has not been and gone. A run opening tonight has not opened yet.
@@ -176,13 +177,56 @@ struct PostEventPromptTests {
     @Test func onlyTheClosingNoteIsASendableEmail() {
         let closing = PostEventPrompt.nudgeContent(kind: .closingNote, originalSubject: "Photographs",
                                                    groupName: "Aurora Strings", contactName: "Ada",
-                                                   venue: "Merkin Hall")
+                                                   performanceDate: "2026-03-01", venue: "Merkin Hall")
         #expect(closing != nil)
         #expect(closing?.isClosing == true)
 
         #expect(PostEventPrompt.nudgeContent(kind: .closeOut, originalSubject: "Photographs",
                                              groupName: "Aurora Strings", contactName: "Ada",
-                                             venue: "Merkin Hall") == nil)
+                                             performanceDate: "2026-03-01", venue: "Merkin Hall") == nil)
+    }
+
+    // MARK: what the closing note actually says (#2615)
+    //
+    // `groupName` is whatever the source listed, and for a large share of Overture's prospects that is a
+    // solo performer's own name. Dropped into "I know <g> has come and gone" it told Ryan James Monroe,
+    // in an email going out under Dan's name, that he had come and gone. The sentence now describes the
+    // SHOW, which needs to know nothing about what kind of thing the group name is.
+
+    private func closingBody(groupName: String = "Ryan James Monroe", isMerged: Bool = false,
+                             performanceDate: String? = "2026-08-11",
+                             venue: String? = "54 Below") throws -> String {
+        try #require(PostEventPrompt.nudgeContent(kind: .closingNote, originalSubject: "Photographs",
+                                                  groupName: groupName, isMerged: isMerged,
+                                                  contactName: "Ryan", performanceDate: performanceDate,
+                                                  venue: venue)).body
+    }
+
+    @Test func theClosingNoteNeverTellsAPersonTheyHaveComeAndGone() throws {
+        let body = try closingBody()
+        #expect(!body.contains("Ryan James Monroe has come and gone"))
+        #expect(body.contains("your August 11 show at 54 Below has come and gone"))
+    }
+
+    // The date is the only new failure path here: a missing or unparseable one drops to a sentence that
+    // is still true, never to a plausible-looking wrong date or a half-built clause.
+    @Test func anUndatedShowStillReadsAsAShow() throws {
+        #expect(try closingBody(performanceDate: nil).contains("your show at 54 Below has come and gone"))
+        let garbled = try closingBody(performanceDate: "next Tuesday")
+        #expect(garbled.contains("your show at 54 Below has come and gone"))
+        #expect(!garbled.contains("next Tuesday"))
+    }
+
+    @Test func aVenuelessShowStillReadsAsAShow() throws {
+        #expect(try closingBody(venue: nil).contains("your August 11 show has come and gone"))
+    }
+
+    // A merged concert's substitute name ("your upcoming performance") was being told it had come and
+    // gone, which was the same defect wearing the sanitizer's own phrase.
+    @Test func aMergedConcertIsNotToldItsUpcomingPerformanceHasPassed() throws {
+        let body = try closingBody(groupName: "We Sing Noel; Craig Courtney", isMerged: true)
+        #expect(!body.contains("\(FollowUp.mergedNameSubstitute) has come and gone"))
+        #expect(!body.contains("We Sing Noel"))
     }
 
     // Each kind says what it is, and the two must not read the same, because they ask for different

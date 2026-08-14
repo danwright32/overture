@@ -20,6 +20,12 @@ extension Recipient {
 // gets of an outreach Overture cannot observe.
 enum FormOutreachCopy {
     static let copyAndOpen = "Copy pitch and open form"
+    // #2612: the same two-step act with a different app open, so it is the same control with the right
+    // noun in it rather than a second control. What goes on the clipboard is unchanged and needs no
+    // change: `OutgoingPitch.text` has only ever copied the BODY, never a subject line, so a DM (which
+    // has no subject) was already handled by the path this reuses.
+    static let copyAndOpenProfile = "Copy pitch and open profile"
+    static func copyAndOpen(isSocial: Bool) -> String { isSocial ? copyAndOpenProfile : copyAndOpen }
     static let sentIt = "I sent it"
     static let didNotSend = "Didn't send"
 
@@ -48,17 +54,28 @@ enum FormOutreachCopy {
         return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
     }
 
-    static func awaitingQuestion(startedAt: Date, now: Date) -> String {
+    static func awaitingQuestion(startedAt: Date, now: Date, isSocial: Bool = false) -> String {
         guard now.timeIntervalSince(startedAt) >= elapsedWorthSaying else { return "Did you send it?" }
         let f = RelativeDateTimeFormatter()
         f.unitsStyle = .full
-        return "You opened their form \(f.localizedString(for: startedAt, relativeTo: now)). Did you send it?"
+        let when = f.localizedString(for: startedAt, relativeTo: now)
+        // #2612: named for what he actually opened, so the question is answerable. "You opened their
+        // form" about an Instagram profile is a question about something that did not happen.
+        guard isSocial else { return "You opened their form \(when). Did you send it?" }
+        return "You opened their profile \(when). Did you send it?"
     }
 
     // Deliberately NOT the #483 wording ("sent, but replies can't be watched"), which names a FAILURE Dan
     // should go and check in Gmail. Nothing failed here. Saying it the same way would send him hunting a
     // problem that does not exist (L11).
     static let sentLine = "Sent through their form. Overture cannot see a reply to this one."
+    // #2612: the same fact about a DM. Its own sentence because "through their form" is false of one,
+    // and this line is the only account Dan gets of an outreach Overture cannot observe.
+    static let sentLineSocial = "Sent as a DM. Overture cannot see a reply to this one."
+    static func sentLine(formURL: String?) -> String {
+        guard let formURL, Reachability.isSocialOnly(formURL) else { return sentLine }
+        return sentLineSocial
+    }
 }
 
 // What the Review row offers for a form-only show, decided here so the SwiftUI row stays dumb and the
@@ -83,11 +100,17 @@ enum FormPitch {
         // with a working address goes through Overture's own send path, so this can never become a way
         // to mark anything at all as pitched. `contactFormOnly` is the one shared judgment (#1626/#1629)
         // that already excludes a social page and the room's own booking form.
-        guard prospect.reachabilityResultFromRecipients == .contactFormOnly else { return .unavailable }
+        // #2612: and a social DM, which is the same act with a different app open. Dan asked for the
+        // existing path to be reused rather than a second one built, and the scope rule is unchanged:
+        // only where a hand route is the ONLY way through, so this can never become a way to mark a show
+        // with a working address as pitched.
+        let verdict = prospect.reachabilityResultFromRecipients
+        guard verdict == .contactFormOnly || verdict == .socialOnly else { return .unavailable }
+        let routes = prospect.usableContactFormURLs + prospect.socialRouteURLs
         let candidates = prospect.recipients
             .filter { r in
                 guard let raw = r.contactFormURL?.trimmingCharacters(in: .whitespacesAndNewlines) else { return false }
-                return prospect.usableContactFormURLs.contains(raw)
+                return routes.contains(raw)
             }
             .sorted { $0.sendOrderRank != $1.sendOrderRank ? $0.sendOrderRank < $1.sendOrderRank : $0.id < $1.id }
         guard let target = candidates.first,

@@ -5,7 +5,7 @@ import Testing
 // scout is automatic and never blocks on him). This is the pure state computation.
 @Suite("Agent roster status")
 struct AgentRosterTests {
-    private let calm = AgentInputs(toTriage: 0, keptToPrep: 0, prepRunning: false, toReview: 0,
+    private let calm = AgentInputs(toTriage: 0, keptToPrep: 0, toReview: 0,
                                    readyToSend: 0, gmailConnected: true, sendErrors: 0, followUpsDue: 0)
 
     private func status(_ name: String, _ inputs: AgentInputs) -> AgentStatus {
@@ -31,9 +31,9 @@ struct AgentRosterTests {
     }
 
     @Test func prepWorksThenWaits() {
-        var i = calm; i.prepRunning = true
+        var i = calm; i.runInFlight = .prep
         #expect(status("Prep", i).state == .working)
-        i.prepRunning = false; i.keptToPrep = 3
+        i.runInFlight = nil; i.keptToPrep = 3
         #expect(status("Prep", i).state == .needsAttention)
         #expect(status("Prep", i).detail == "3 ready to prep")   // #347: natural phrasing
     }
@@ -168,7 +168,7 @@ struct AgentRosterTests {
     // detail used to restate the concept, so the hover said the same thing twice. The detail now carries
     // only what the concept does not: that it is running (Prep), or the count (Send, Follow-ups).
     @Test func aRunningPrepDoesNotRestateWhatPrepDoes() {
-        var i = calm; i.prepRunning = true
+        var i = calm; i.runInFlight = .prep
         #expect(status("Prep", i).detail == "Running now…")
         // The old detail repeated the concept's own verbs; the new one does not.
         let help = AgentRoster.chipHelp(name: "Prep", detail: status("Prep", i).detail)

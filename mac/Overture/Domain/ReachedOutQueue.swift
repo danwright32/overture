@@ -18,7 +18,7 @@ enum ReachedOutQueue {
         NextReachOut.date(isInPlay: isInPlay(r, of: p), now: now) {
             // #2397: the post-event prompt, which is all that is left of the conversation track. Its
             // trigger is the show's DATE, so it never depended on the state that used to key this.
-            let promptDate = PostEventPrompt.nextPromptDate(for: r, of: p, now: now)
+            let promptDate = PostEventPrompt.nextPromptDate(for: r, of: p)
             // All three are `.scheduled`: each track has already decided which moment it is asking for.
             // #2118: a reply that has ARRIVED and not been answered is dated through the shared rule, the
             // same one a direct hire inquiry's reply gets, so both kinds of row sit under the same headings.
@@ -137,12 +137,12 @@ enum ReachedOutQueue {
     // has not happened yet is held on the stage by the floor alone, with nothing left to count down to.
     static func nextActionableMoment(for r: Recipient, of p: Prospect, now: Date,
                                      followUpConfig: FollowUpConfig = .init()) -> Date? {
-        let nudge = FollowUp.nextDue(eligible: FollowUp.isAwaitingNudge(r, in: p), sentAt: r.sentAt,
+        let nudge = FollowUp.nextDue(eligible: FollowUp.isAwaitingNudge(r, in: p, now: now), sentAt: r.sentAt,
                                      lastFollowUpAt: r.lastFollowUpAt, followUpCount: r.followUpCount,
                                      remindedAt: r.nudgeRemindedAt, config: followUpConfig)
         let candidates = [nudge,
                           nextFormDecision(for: r, of: p, config: followUpConfig),
-                          PostEventPrompt.nextPromptDate(for: r, of: p, now: now),
+                          PostEventPrompt.nextPromptDate(for: r, of: p),
                           r.hasUnhandledReply ? r.replyArrivedAt : nil]
         return candidates.compactMap { $0 }.min()
     }

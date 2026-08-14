@@ -49,7 +49,7 @@ enum Reachability {
     // fourth copy of the same vocabulary, and it would only ever check the cases somebody remembered
     // to add to it (L96), which is the exact defect the guard exists to catch.
     enum Badge: Equatable, CaseIterable {
-        case none, hardToReach, noEmailFound, weakContactOnly, contactFormOnly,
+        case none, hardToReach, noEmailFound, weakContactOnly, contactFormOnly, socialOnly,
              staleProbe, checkMissedIt, emailFound
     }
 
@@ -90,7 +90,10 @@ enum Reachability {
         // #1724: neutral, with `staleProbe`, and for the same reason. Both say "this row has no current
         // answer and another check is how it gets one". It is not rust: rust is reserved for a finding, and
         // a missed show has none. Nothing here is a warning about the show itself.
-        case .contactFormOnly, .weakContactOnly, .hardToReach, .staleProbe, .checkMissedIt, .none:
+        // #2612: a social DM sits with the contact form for the same reason: a real way through that
+        // costs Dan his own time rather than a send, so it is not the loudest thing on the row.
+        case .contactFormOnly, .socialOnly, .weakContactOnly, .hardToReach, .staleProbe, .checkMissedIt,
+             .none:
             return .neutral
         }
     }
@@ -127,10 +130,24 @@ enum Reachability {
         case requested
     }
 
+    // #2621: whether a check ran over this row and came home without an answer for it, still inside the
+    // freshness window. ONE definition, read by the card's offer, by the badge, and by
+    // `QueueModel.keysMissedByACheck` (which adds only the candidacy rule on top), so "Check the rest"
+    // can never run a set the cards never claimed to be in (L16).
+    //
+    // `probedAt == nil` is load-bearing: a row a later check ANSWERED is not missed any more, whatever an
+    // earlier run did to it, and paying for a lookup that already succeeded is the one thing this must
+    // never do. The mark ages on the same 90-day clock as every other reachability fact rather than
+    // offering to spend money on one show forever.
+    static func wasMissedByACheck(probedAt: Date?, unansweredAt: Date?, now: Date) -> Bool {
+        probedAt == nil && unansweredAt != nil && !probeIsStale(probedAt: unansweredAt, now: now)
+    }
+
     static func recheckState(probedAt: Date?, hasInheritedAnswer: Bool,
                              recheckRequestedAt: Date?, now: Date,
                              checkIsRunning: Bool = false,
-                             isStillOpen: Bool = true) -> RecheckState {
+                             isStillOpen: Bool = true,
+                             missedByACheck: Bool = false) -> RecheckState {
         // #2267: a show past the keep-or-dismiss moment is not offered one, and this is asked FIRST so it
         // beats even an outstanding request. The candidacy rule already refuses to include such a show in
         // a check, so an offer here would sell an action the rest of the app declines, and the money would
@@ -148,6 +165,10 @@ enum Reachability {
         // run in flight for other shows never makes every card in the queue claim to be in it.
         if recheckRequestedAt != nil { return checkIsRunning ? .running : .requested }
         if hasInheritedAnswer { return .offer }
+        // #2621: something DID run over this row and came home short. The guard below was written for a
+        // show nothing has ever looked at, and swallowed this third case, leaving the one badge that
+        // names a specific fault as the only one with nothing to act on.
+        if missedByACheck { return .offer }
         guard probedAt != nil, !probeIsStale(probedAt: probedAt, now: now) else { return .notOffered }
         return .offer
     }
@@ -166,6 +187,17 @@ enum Reachability {
         case emailFound = "email_found"
         case weakContactOnly = "weak_contact_only"
         case contactFormOnly = "contact_form_only"
+        // #2612: no address and no form on their own site, but they take messages on a social profile.
+        // Dan, 2026-08-13, on the Song & Word card: "I changed my mind and I actually do want to know when
+        // it's instagram only with no contact form. This actually feels like a perfect fit for me but they
+        // don't have a website so I'm going to DM them on instagram." That reverses #1626 and #2421, both
+        // his own, which made a social handle a dead end and then deleted the ones already stored.
+        //
+        // Its OWN verdict rather than a shade of `contactFormOnly`, because what Dan does differs (a DM in
+        // the Instagram app, not a form on a website) and because the volume of each matters to him. A
+        // fifth case reaches the fit score, the ledger and the badge, which is precisely why it is one:
+        // every one of those was giving the wrong answer about a show he calls a perfect fit.
+        case socialOnly = "social_only"
         case noEmailFound = "no_email_found"
     }
 
@@ -264,6 +296,7 @@ enum Reachability {
             case .emailFound: return .emailFound
             case .weakContactOnly: return .weakContactOnly
             case .contactFormOnly: return .contactFormOnly
+            case .socialOnly: return .socialOnly
             case .noEmailFound: return .noEmailFound
             }
         }
@@ -469,6 +502,13 @@ enum ReachabilityCopy {
     static let contactFormOnlyHelp =
         "The act takes messages through the form on their own site. You'd fill that in yourself; Overture can't send it for you."
 
+    // #2612: no address and no form on their own site, and they take messages on a social profile.
+    // Deliberately distinguishable from the form badge above: what Dan does about it is different (a DM in
+    // the app on his phone, not a form in a browser), and he asked to be told which he is looking at.
+    static let socialOnlyBadge = "Social DM only"
+    static let socialOnlyHelp =
+        "No address and no form on their own site, but they take messages on the profile linked here. You'd send the pitch as a DM yourself; Overture can't send it for you."
+
     // #1324: a probe found an address, but only the venue's front desk or a press inbox, not the
     // presenter's own. Real, but weak: worth naming honestly rather than calling it no email at all.
     static let weakContactOnlyBadge = "Weak contact only"
@@ -490,6 +530,8 @@ enum ReachabilityCopy {
         switch reason {
         case .venueOrPress: return weakContactOnlyBadge
         case .duplicate: return "Held as a duplicate"
+        // #2624: neither of the two above is true of it, and the difference is what Dan acts on.
+        case .unaccountedAddress: return "Held, address in another name"
         }
     }
 
@@ -498,6 +540,8 @@ enum ReachabilityCopy {
         case .venueOrPress: return weakContactOnlyHelp
         case .duplicate:
             return "This address is already in play on another show at this venue within a few days, so Overture is holding it rather than writing to the same person twice. If they are different bookings, clear the duplicate flag on the contact and it is sendable again."
+        case .unaccountedAddress:
+            return "The address found here is in a different name from the contact on this show, and no page was recorded showing it reaches them. A pitch would greet one person and arrive with another, so Overture is holding it. If it does reach them, clear the flag on the contact and it is sendable again."
         }
     }
 
@@ -539,6 +583,32 @@ enum ReachabilityCopy {
         heldDown ? confidenceHeldDownHelp : unverifiedEmailFoundHelp
     }
 
+    // #2657: the check found people and none of them can hire Dan.
+    //
+    // ONE badge for both answers, with the sentence carrying which one, the same #1722 rule the weak
+    // contact and unverified badges already follow: same wording, same tone, same position, so the card
+    // says something truer without getting louder. The badge states the consequence rather than the
+    // finding, because the finding ("13 contacts") is already on the card and is exactly what read as
+    // thirteen ways in.
+    static let noAuthorityBadge = "Nobody who can hire you"
+
+    // Each sentence names WHO was found, since that is the fact that says what the list is worth, and
+    // each ends somewhere Dan can go. Naming a fault and leaving him nowhere is the L80 half of this
+    // defect, and the listing's credits block is where he found the producer himself in seconds.
+    static func noAuthorityHelp(tier: ContactTier) -> String {
+        switch tier {
+        case .secondary:
+            return "Everyone found here is on the show without running it: a co-performer, a music director or a guest. Nobody with a say over the booking was found. The listing's credits are usually where the producer is named, and you can add them by hand."
+        case .tertiary:
+            return "Everything found here represents them rather than runs the show: a manager, an agent, a publicist or a booking agency. That may still get you an answer, but nobody who owns the show was found. The listing's credits are usually where the producer is named."
+        // Unreachable: `contactAuthorityGap` returns nil for a primary, so this badge never renders over
+        // one. Answered rather than crashed, because a switch that cannot answer for every value is a trap
+        // waiting for the first caller who does not know the rule.
+        case .primary:
+            return emailFoundHelp
+        }
+    }
+
     // #1325: the earlier probe result has aged past the freshness window, so it may no longer be true.
     static let staleProbeBadge = "Reachability may be out of date"
     static let staleProbeHelp =
@@ -556,8 +626,11 @@ enum ReachabilityCopy {
     // rather than reworded. Dan meets both about the same event, minutes apart: the run tells him 2 of 5
     // shows never got an answer, and these are those two shows. Two spellings of one fact read as two
     // different things.
+    // #2621: it used to end "picking its date again is what gets it an answer", which sent Dan to a run
+    // over the whole date while the card itself now carries a link that re-runs this one show. Two
+    // spellings of one remedy, and the coarser of the two was the one written down (#843).
     static let checkMissedItHelp =
-        "An earlier check included this show but never got an answer for it, so it's still unchecked. Nothing re-checks it on its own; picking its date again is what gets it an answer."
+        "An earlier check included this show but never got an answer for it, so it's still unchecked. Nothing re-checks it on its own."
 }
 
 // #1308 Layer 2: the opt-in per-date probe (Layer 2). Kept out of the views (testable, #885), named so the

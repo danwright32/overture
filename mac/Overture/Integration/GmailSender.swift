@@ -54,9 +54,17 @@ struct GmailSender: MailSender {
         fetch: (URLRequest) async throws -> (Data, URLResponse) = { try await GmailNetworking.session.data(for: $0) },
         onAuthExpired: () async -> Void = { await GmailAuthManager.shared.signalAuthExpired() }
     ) async throws -> SentReceipt {
-        // Always stamp a Message-ID (use a caller-supplied one, else mint one) so the receipt can
-        // hand it back for a future follow-up to thread against (#74).
-        let messageID = mail.messageID ?? GmailMessage.newMessageID(senderEmail: fromEmail)
+        // #2647: nothing is minted here any more. Gmail DISCARDS a client-supplied Message-ID on
+        // users/me/messages/send and assigns its own (@mail.gmail.com), measured on the live mailbox
+        // 2026-08-13, so a minted value has never been on the wire. Storing it made every In-Reply-To
+        // and References Overture later wrote a dangling reference: Gmail's web view still grouped the
+        // thread, because the send also passes the internal threadId and Gmail threads server side on
+        // that, while every standards based client (Spark, Apple Mail, Outlook) threads purely on the
+        // headers and filed a second conversation. The real id is read back below instead.
+        //
+        // `mail.messageID` is still honoured, for a caller that genuinely supplies one; no production
+        // caller does, and on the Gmail path it would be discarded anyway.
+        let suppliedMessageID = mail.messageID
         // #1144: attach Dan's signature. Prefer his live styled Gmail signature (stored by
         // GmailSignatureService); if none is stored (fetch never succeeded, or he hasn't re-authorized for
         // the settings scope yet) fall back to the plain-text sign-off and log loudly, rather than sending
@@ -72,7 +80,7 @@ struct GmailSender: MailSender {
             fromName: fromName, fromEmail: fromEmail,
             to: mail.to, subject: mail.subject, body: mail.body,
             signature: sig,
-            messageID: messageID, inReplyTo: mail.inReplyTo)
+            messageID: suppliedMessageID, inReplyTo: mail.inReplyTo, references: mail.references)
 
         var req = URLRequest(url: URL(string: "https://gmail.googleapis.com/gmail/v1/users/me/messages/send")!)
         req.httpMethod = "POST"
@@ -101,14 +109,78 @@ struct GmailSender: MailSender {
             throw GmailSendError.api(detail)
         }
         let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        if let threadId = (json?["threadId"] as? String) ?? (json?["id"] as? String), !threadId.isEmpty {
-            return SentReceipt(threadId: threadId, messageID: messageID)
+        // #2647: the id of the message Gmail just created, which is what the read back asks for. Read
+        // on its own rather than through the threadId fallback below, because that fallback deliberately
+        // treats the message id as a stand-in for a missing threadId and this is the message id proper.
+        let sentMessageId = json?["id"] as? String
+        let realMessageID = await readBackMessageID(
+            sentMessageId: sentMessageId, token: token, fetch: fetch)
+        if let threadId = (json?["threadId"] as? String) ?? sentMessageId, !threadId.isEmpty {
+            return SentReceipt(threadId: threadId, messageID: realMessageID,
+                               messageIDDegraded: realMessageID == nil)
         }
         // #483: the send itself succeeded, so this must never throw, but a body we can't read a
         // threadId out of leaves reply watching with nothing to watch. Come back flagged rather
         // than silently empty, so the recipient can be marked degraded instead of just dropped.
-        return SentReceipt(threadId: "", messageID: messageID, threadIdDegraded: true)
+        return SentReceipt(threadId: "", messageID: realMessageID, threadIdDegraded: true,
+                           messageIDDegraded: realMessageID == nil)
     }
+
+    // #2647: the Message-ID Gmail actually stamped on the message it just sent, or nil.
+    //
+    // Nil is the whole point of the return type. Falling back to anything (a minted id, the Gmail
+    // message id, an empty string) would hand every reader downstream a value indistinguishable from a
+    // real one that references a message existing nowhere, which is the defect this exists to end. The
+    // caller flags the receipt instead, so a contact whose threading cannot be trusted is visible
+    // rather than quietly wrong (L11).
+    //
+    // Never throws: the SEND already succeeded by the time this runs, and a failure to read a header
+    // back must not be reported to Dan as a failure to send an email that has gone.
+    // copy-inventory:ignore-start  a Google API URL and developer diagnostic reasons, not the app's own voice (#915)
+    @MainActor
+    private static func readBackMessageID(
+        sentMessageId: String?,
+        token: String,
+        fetch: (URLRequest) async throws -> (Data, URLResponse)
+    ) async -> String? {
+        guard let id = sentMessageId, !id.isEmpty,
+              let escaped = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
+              let url = URL(string: "https://gmail.googleapis.com/gmail/v1/users/me/messages/"
+                            + escaped + "?format=metadata&metadataHeaders=Message-ID")
+        else {
+            logReadBackFailure("the send response named no message id")
+            return nil
+        }
+        var req = URLRequest(url: url)
+        // The Authorization header Google reads needs no ignore marker of its own: the region opened
+        // above already covers this whole function, and a nested pair would CLOSE that region early,
+        // leaking every diagnostic below it into the inventory (measured while writing this).
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        guard let (data, resp) = try? await fetch(req),
+              let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            logReadBackFailure("Gmail refused the read back for message \(id)")
+            return nil
+        }
+        let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        let headers = (json?["payload"] as? [String: Any])?["headers"] as? [[String: Any]] ?? []
+        // Case insensitively: RFC 2822 header names are, and Gmail returns "Message-Id" as often as
+        // "Message-ID", so an exact match would degrade a send that was perfectly fine.
+        let value = headers.first {
+            ($0["name"] as? String)?.caseInsensitiveCompare("Message-ID") == .orderedSame
+        }?["value"] as? String
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let trimmed, !trimmed.isEmpty else {
+            logReadBackFailure("no Message-ID header on message \(id)")
+            return nil
+        }
+        return trimmed
+    }
+
+    private static func logReadBackFailure(_ reason: String) {
+        AgentLog.note("[Overture] Could not read the sent message's Message-ID back: \(reason). "
+                      + "The next message on this conversation will not thread onto it.")
+    }
+    // copy-inventory:ignore-end
 }
 
 enum GmailSendError: LocalizedError {

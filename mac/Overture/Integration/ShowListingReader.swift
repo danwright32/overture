@@ -23,9 +23,19 @@ enum ShowListingReader {
 
     // The most page text one queue item may carry. The detached run reads the queue with a line-oriented
     // Read tool, and one oversized line is the shape that left an 82KB page half-read forever (#1056); it
-    // is also prompt the run pays for on every item. The measured Green Room 42 page is 1,994 characters
-    // of visible text in total, chrome included, so this holds a whole listing of that class with room to
-    // spare, and anything past it is a season index rather than one show's description.
+    // is also prompt the run pays for on every item.
+    //
+    // #2656: the calibration this number was given in 2026-07 is no longer true of the pages it described,
+    // and the number is deliberately UNCHANGED anyway. It used to read: "The measured Green Room 42 page is
+    // 1,994 characters of visible text in total, chrome included, so this holds a whole listing of that
+    // class with room to spare." Measured again on 2026-08-13 across the 40 listings in the archived prep
+    // runs, the same venue now runs to 3,836 characters, 96% of the budget, and every 54 Below listing ever
+    // read (16 of 16) has hit the cap outright.
+    //
+    // Raising it was rejected as the same guess again with a bigger number. What was actually wrong is what
+    // the budget was spent ON: 49% of the 54 Below page is its navigation menu, repeated four times.
+    // `RepeatedBlockStripper` takes the repeats out before the cap applies, which returns the room without
+    // asking anybody to guess how much a listing needs.
     static let textLimit = 4000
 
     // How many pages are rendered at once. Each render is a whole WebKit instance and mostly waiting, so a
@@ -66,7 +76,10 @@ enum ShowListingReader {
             return ShowListing(status: ShowListing.unreadable, url: raw)
         }
 
-        let text = PageNormalizer.visibleText(PageNormalizer.normalize(html))
+        // #2656: the repeated menu goes BEFORE the budget is spent, not after. Applied here rather than
+        // inside `PageNormalizer.visibleText`, which the scout's extract stage also reads through: what the
+        // scout sees is a separate question with its own corpus to measure against.
+        let text = RepeatedBlockStripper.strip(PageNormalizer.visibleText(PageNormalizer.normalize(html)))
         guard !text.isEmpty else { return ShowListing(status: ShowListing.unreadable, url: raw) }
 
         if text.count > textLimit {

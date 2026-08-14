@@ -62,8 +62,16 @@ struct ReachedOutTimingSlotTests {
         // And there is genuinely nothing to press.
         #expect(ReachedOutAction.of(r, in: p, now: now, today: today) == .none)
 
-        // So the slot counts down to the next nudge (2026-08-10 + 6 days), not to the sort anchor.
-        #expect(ReachedOutQueue.timingLabel(for: r, of: p, now: now, today: today) == "in 5 days")
+        // #2646: and it counts down to the NEAREST owed moment, which is the closing note due at Eastern
+        // midnight tomorrow, not the nudge six days after the pitch.
+        //
+        // This assertion used to read "in 5 days", and that is worth naming rather than quietly editing:
+        // #2550 fixed the label to read from what is OWED instead of from the sort key, and pinned the
+        // answer that Dan then reported as wrong two days later (#2646). It was wrong for a reason #2550
+        // could not see from here, one clock lower down: `PostEventPrompt.nextPromptDate` refused to name
+        // its own date until that date had arrived, so the `min` over the clocks had nothing to compare
+        // the nudge against and this test recorded the survivor as correct.
+        #expect(ReachedOutQueue.timingLabel(for: r, of: p, now: now, today: today) == "in 1 day")
     }
 
     // The nudge clock the LABEL reads must be the one the ACTION reads, stand-down included. Before #2550
@@ -94,11 +102,18 @@ struct ReachedOutTimingSlotTests {
     // A pitch with no clock left at all, still held on the stage by the floor. There is nothing to count
     // down to, so the slot says what the row is actually waiting on rather than inventing a countdown.
     //
-    // The shape is the one #2170 settled and the one the app actually reaches: Dan ANSWERED the reply, which
-    // "clears the pressure WITHOUT removing the row". A reply stops the nudge sequence, the show has not
-    // happened yet so no post-event prompt is owed, and the floor is all that is holding the row. The
-    // nudges are deliberately NOT spent here, because a spent row is caught by #2398's own marker one branch
-    // earlier and would never reach this sentence (L48: a fixture must stand for a state that can occur).
+    // The shape is the one #2170 settled: Dan ANSWERED the reply, which "clears the pressure WITHOUT
+    // removing the row". The nudges are deliberately NOT spent, because a spent row is caught by #2398's
+    // own marker one branch earlier and would never reach this sentence (L48: a fixture must stand for a
+    // state that can occur).
+    //
+    // #2646 changed what it takes to reach this state, and the fixture had to move with it. Answering the
+    // reply used to be enough, because the post-event clock stayed silent until the show had passed. Now
+    // that it names its date, a replied and answered row on a future show DOES have something owed: the
+    // close-out, due the day after the show. So the row that genuinely has no clock left is one where the
+    // post-event track is closed too, which is Dan standing the closing note down by hand ("not sent but
+    // also done", #1740). Without this the test would have been kept green by weakening it, which is the
+    // same as deleting the coverage of a state the app still reaches.
     @Test func aRowHeldOpenOnlyByTheFloorSaysWhatItIsWaitingOn() throws {
         let ctx = ModelContext(try container())
         let p = makeShow(ctx, day: "2026-09-30")
@@ -106,6 +121,7 @@ struct ReachedOutTimingSlotTests {
         r.replied = true
         r.repliedAt = now.addingTimeInterval(-10 * 86_400)        // replyArrivedAt derives from this
         r.replyHandledAt = now.addingTimeInterval(-9 * 86_400)    // Dan wrote back
+        r.closingNoteStoodDownAt = now.addingTimeInterval(-86_400)   // and closed the post-event track too
 
         #expect(!SpentNudges.isSpent(show: p))                   // not the spent-marker branch
         #expect(!r.hasUnhandledReply)                            // nobody is waiting on Dan
@@ -115,6 +131,27 @@ struct ReachedOutTimingSlotTests {
                 == ReachedOutQueue.heldOpenLabel)
         // And it is still on the stage, which is the whole reason the floor exists (L45).
         #expect(ReachedOutQueue.nextReachOut(for: r, of: p, now: now) != nil)
+    }
+
+    // #2646, Dan's call 2026-08-13: the same row WITHOUT the hand stand-down counts down to the close-out
+    // rather than saying nothing is due. Asked directly whether a row weeks from its show should stay quiet
+    // or name the moment, he chose the countdown: one rule everywhere, and the slot always names the
+    // nearest thing actually owed.
+    @Test func aReplyAnsweredRowCountsDownToItsCloseOut() throws {
+        let ctx = ModelContext(try container())
+        let p = makeShow(ctx, day: "2026-09-30")
+        let r = makeRecipient(ctx, on: p, sentAt: now.addingTimeInterval(-20 * 86_400))
+        r.replied = true
+        r.repliedAt = now.addingTimeInterval(-10 * 86_400)
+        r.replyHandledAt = now.addingTimeInterval(-9 * 86_400)
+
+        // The close-out prompt, the day after the show, is the only clock left and it is now visible.
+        #expect(ReachedOutQueue.nextActionableMoment(for: r, of: p, now: now)
+                == EasternDate.date(from: "2026-10-01"))
+        #expect(ReachedOutQueue.timingLabel(for: r, of: p, now: now, today: today)
+                != ReachedOutQueue.heldOpenLabel)
+        // Still nothing to press today, which is the point of a countdown rather than an instruction.
+        #expect(ReachedOutAction.of(r, in: p, now: now, today: today) == .none)
     }
 
     // A nudge that IS due still reads "Reach out now", beside the button that sends it. The fix must not

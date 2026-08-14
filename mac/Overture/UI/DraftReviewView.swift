@@ -44,6 +44,7 @@ struct DraftReviewView: View {
     var onDismissDuplicateContactMatch: (_ recipientId: String) -> Void = { _ in }
     // #1866: same, for a confident find held down to unverified because it named no page.
     var onDismissConfidenceHeldDown: (_ recipientId: String) -> Void = { _ in }
+    var onDismissAddressInAnotherName: (_ recipientId: String) -> Void = { _ in }
     var onAddRecipient: (_ email: String, _ name: String?) -> Void = { _, _ in }
     var onRemoveRecipient: (_ recipientId: String) -> Void = { _ in }
     // AI reply drafter (#420 C6 / #421): request a draft, send it on the contact's thread, or copy it out.
@@ -109,6 +110,7 @@ struct DraftReviewView: View {
             pressContactWarnings
             duplicateContactWarnings
             confidenceHeldDownWarnings
+            addressInAnotherNameWarnings
             draftBlock
             performerOverridePreviews
             actionRow
@@ -214,6 +216,14 @@ struct DraftReviewView: View {
     // #1866: the fourth, through the SAME warning row as the three above rather than a new mechanism. It is
     // the only place a contact guard has ever been answerable, so putting the overrule anywhere else would
     // mean two ways to answer a guard depending on which one fired.
+    // #2624: the fifth, through the SAME warning row as the four above rather than a new mechanism, for
+    // the reason given directly below: this is the only place a contact guard has ever been answerable.
+    @ViewBuilder private var addressInAnotherNameWarnings: some View {
+        recipientWarning(item.contacts.filter(\.isLooksLikeAnotherPersons),
+                        message: { DraftReviewNotes.addressInAnotherName(name: $0.displayName) },
+                        dismissLabel: "It reaches them", onDismiss: onDismissAddressInAnotherName)
+    }
+
     @ViewBuilder private var confidenceHeldDownWarnings: some View {
         recipientWarning(item.contacts.filter(\.isHeldDownToUnverified),
                         message: { DraftReviewNotes.confidenceHeldDown(name: $0.displayName) },
@@ -480,10 +490,11 @@ struct DraftReviewView: View {
                 }
                 Spacer()
             } else if case let .ready(recipientId, formURL) = item.formPitch {
+                let isSocial = Reachability.isSocialOnly(formURL)
                 // #1630: this show has no address at all, so Approve is permanently disabled and there is
                 // no other way forward. Dan pitches it by hand; this is the only control that matters here.
                 Button { onBeginFormPitch(recipientId, formURL) } label: {
-                    Label(FormOutreachCopy.copyAndOpen, systemImage: "doc.on.clipboard")
+                    Label(FormOutreachCopy.copyAndOpen(isSocial: isSocial), systemImage: "doc.on.clipboard")
                         .font(OVType.meta).foregroundStyle(OVColor.onForest)
                         .padding(.horizontal, OVSpacing.md).padding(.vertical, 5)
                         .background(Capsule().fill(OVColor.forest))
@@ -502,8 +513,9 @@ struct DraftReviewView: View {
                 // branch that never drew the control.
                 reprepControl
                 Spacer()
-            } else if case let .awaitingConfirmation(recipientId, _, startedAt) = item.formPitch {
-                Text(FormOutreachCopy.awaitingQuestion(startedAt: startedAt, now: Date()))
+            } else if case let .awaitingConfirmation(recipientId, routeURL, startedAt) = item.formPitch {
+                Text(FormOutreachCopy.awaitingQuestion(startedAt: startedAt, now: Date(),
+                                                       isSocial: Reachability.isSocialOnly(routeURL)))
                     .font(OVType.meta).foregroundStyle(OVColor.ink)
                 // #1828, Dan's call: offered here too. A show waiting on his answer is still a show whose
                 // contacts he may want researched, and the answer controls below are untouched by it.
@@ -653,9 +665,16 @@ struct DraftReviewView: View {
         .padding(.top, OVSpacing.xs)
     }
 
-    // #399: opens a small popover to type an email (required) and name (optional). The add itself
+    // #399: opens a small popover to type a route (required) and name (optional). The add itself
     // runs the duplicate/venue check (ManualRecipientCheck via ProspectMutations); this view never
-    // blocks the add on its own, it only requires a plausible email before enabling the button.
+    // blocks the add on its own, it only requires a plausible route before enabling the button.
+    //
+    // #2629: a ROUTE, not only an address. The card tells Dan "No email to send to. Add a contact by
+    // hand" on a show with no emailable contact, and this is the control that sentence points at, so
+    // until now the only route those shows actually have (a contact form on the producer's own site, or
+    // since #2612 an Instagram he will DM) was the one thing it could not accept. He met an instruction
+    // that could not be followed. Enabled and refused through the SAME `ManualContactRoute.parse` the add
+    // uses, so the button cannot look willing to take something the add then rejects (L109).
     private var addContactButton: some View {
         Button { showAddContact = true } label: {
             Label("Add contact", systemImage: "plus.circle")
@@ -665,8 +684,15 @@ struct DraftReviewView: View {
         .popover(isPresented: $showAddContact, arrowEdge: .bottom) {
             VStack(alignment: .leading, spacing: OVSpacing.sm) {
                 Text("Add a contact").font(OVType.dateHeading).foregroundStyle(OVColor.ink)
-                TextField("Email", text: $addContactEmail)
+                TextField("Email or link", text: $addContactEmail)
                     .textFieldStyle(.roundedBorder)
+                // Says what a link MEANS for him rather than restating the field's own label, which has
+                // already said that a link is allowed. The load-bearing half is that a route is not a
+                // send: he opens it and writes there himself, which is the difference that decides
+                // whether this show is usable at all (#843: a second line must add something).
+                Text("You'll open a form or profile and write there by hand.")
+                    .font(OVType.meta).foregroundStyle(OVColor.inkFaint)
+                    .fixedSize(horizontal: false, vertical: true)
                 TextField("Name (optional)", text: $addContactName)
                     .textFieldStyle(.roundedBorder)
                 HStack {
@@ -677,9 +703,10 @@ struct DraftReviewView: View {
                         showAddContact = false
                     }
                     .buttonStyle(.borderedProminent)
-                    // #2023: one readable address, the same rule the add itself is gated on, so this
+                    // #2023: one readable route, the same rule the add itself is gated on, so this
                     // cannot look enabled on a pasted "a@x.org, b@y.org" and then be refused.
-                    .disabled(EmailAddressList.single(addContactEmail) == nil)
+                    // #2629: through the route parser, so a form or profile link enables it too.
+                    .disabled(ManualContactRoute.parse(addContactEmail) == nil)
                     Button("Cancel") { showAddContact = false }
                         .buttonStyle(.plain).foregroundStyle(OVColor.inkSoft)
                 }

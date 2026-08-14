@@ -302,7 +302,8 @@ enum PrepImporter {
 
             if let existing = p.recipients.first(where: { $0.id == id }) {
                 apply(c, email: email, provenance: provenance, venue: p.venue,
-                     performanceDate: p.performanceDate, excludingProspectKey: p.naturalKey, context: context, to: existing)
+                      performanceDate: p.performanceDate, excludingProspectKey: p.naturalKey,
+                      groupName: p.groupName, presenter: p.presenter, context: context, to: existing)
             } else if let existing = matchSamePerson(in: p, name: c.name, among: contacts) {
                 // #2422: the same person, reached a second way. The id routes above cannot see this by
                 // construction (an email and a `form:` URL are two different ids for one person), and the
@@ -311,6 +312,7 @@ enum PrepImporter {
                 // corrected. Dan, 2026-08-10: "and I've got two of the same person."
                 apply(c, email: email, provenance: provenance, venue: p.venue,
                       performanceDate: p.performanceDate, excludingProspectKey: p.naturalKey,
+                      groupName: p.groupName, presenter: p.presenter,
                       context: context, to: existing)
                 // Re-keyed from what the row ENDS UP holding rather than from the incoming handle, which
                 // is what makes an address beat a form: `apply` keeps the better of the two on each field,
@@ -324,7 +326,8 @@ enum PrepImporter {
                 // that just gained an email, matched by its form URL #408) updates the row in place.
                 existing.id = id
                 apply(c, email: email, provenance: provenance, venue: p.venue,
-                     performanceDate: p.performanceDate, excludingProspectKey: p.naturalKey, context: context, to: existing)
+                      performanceDate: p.performanceDate, excludingProspectKey: p.naturalKey,
+                      groupName: p.groupName, presenter: p.presenter, context: context, to: existing)
             } else if provenanceIsUnambiguous,
                       alreadySent(in: p, provenance: provenance) {
                 continue
@@ -354,6 +357,13 @@ enum PrepImporter {
                     recipient.looksLikeDuplicateContact = DuplicateContactGuard.looksLikeDuplicate(
                         email: email, venue: p.venue, performanceDate: p.performanceDate,
                         excludingProspectKey: p.naturalKey, in: context)
+                    // #2622: who the run says this contact is to the show. Written straight through: the
+                    // judgement is the run's, made with the page in front of it.
+                    recipient.contactTierRaw = c.tier
+                    // #2624: and whether the address is in a name nobody on this row accounts for.
+                    recipient.looksLikeAnotherPersons = UnaccountedAddressGuard.looksLikeAnotherPersons(
+                        email: email, name: c.name, sourceURL: c.sourceUrl,
+                        groupName: p.groupName, presenter: p.presenter)
                 }
                 p.addRecipient(recipient)
             }
@@ -414,11 +424,17 @@ enum PrepImporter {
 
     // Refresh a recipient row's contact fields from a found contact, preserving its send/engagement
     // state. nil fields in the new contact don't erase existing values.
+    // #2624: `groupName` and `presenter` are here because the address guard asks whether ANYTHING on the
+    // row accounts for the address, and an address in the show's or the organisation's own name is
+    // accounted for. Passed in rather than reached through `r.prospect`, so this stays the pure refresh
+    // it already was.
     private static func apply(_ c: PrepContact, email: String?, provenance: RecipientProvenance,
                               venue: String?, performanceDate: String?, excludingProspectKey: String,
+                              groupName: String?, presenter: String?,
                               context: ModelContext, to r: Recipient) {
         let priorEmail = r.email
         let priorRole = r.role
+        let priorName = r.name
         if let email { r.email = email }
         r.name = c.name ?? r.name
         r.role = c.role ?? r.role
@@ -430,6 +446,10 @@ enum PrepImporter {
         // which is exactly what the store held on two performers.
         r.contactFormURL = ContactIdentity.preferredFormURL(existing: r.contactFormURL, incoming: c.formUrl)
         r.contactSourceURL = c.sourceUrl ?? r.contactSourceURL
+        // #2622: a later run's judgement replaces an earlier one, and a run that says nothing leaves what
+        // is there. Same fall-back shape as the method and confidence above, so a re-check that only
+        // corrects an address cannot silently erase who the contact was judged to be.
+        r.contactTierRaw = c.tier ?? r.contactTierRaw
         // #1856: the same bar as a freshly appended contact, judged on the pair this ingest LEAVES
         // BEHIND. The two fields fall back independently above, so a re-run can raise a recipient to
         // high while carrying no page of its own, and only the result is the claim Dan reads.
@@ -461,6 +481,13 @@ enum PrepImporter {
                 r.looksLikeVenueDismissed = false
                 r.looksLikeDuplicateContactDismissed = false
             }
+            // #2624: the same reset-on-real-change convention, and the NAME is a matching signal here as
+            // well as the address, so either changing prompts fresh scrutiny. Re-derived every ingest
+            // rather than latched, so a later run that finally cites a page clears it.
+            if r.email != priorEmail || r.name != priorName { r.looksLikeAnotherPersonsDismissed = false }
+            r.looksLikeAnotherPersons = UnaccountedAddressGuard.looksLikeAnotherPersons(
+                email: r.email, name: r.name, sourceURL: r.contactSourceURL,
+                groupName: groupName, presenter: presenter)
             r.looksLikeVenue = VenueContactGuard.looksLikeVenue(email: r.email, venue: venue)
             // #722: same reset-on-real-change convention, but role is ALSO a matching signal here,
             // so either the address or the role text changing should prompt fresh scrutiny.

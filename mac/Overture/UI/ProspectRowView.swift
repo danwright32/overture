@@ -59,6 +59,7 @@ struct ProspectRowView: View {
     var onDismissDuplicateContactMatch: (_ recipientId: String) -> Void = { _ in }
     // #1866: Dan overruling the guard that held a confident find down to unverified.
     var onDismissConfidenceHeldDown: (_ recipientId: String) -> Void = { _ in }
+    var onDismissAddressInAnotherName: (_ recipientId: String) -> Void = { _ in }
     var onDraftReply: (_ recipientId: String) -> Void = { _ in }
     var onSendReply: (_ recipientId: String) -> Void = { _ in }
     var onCopyReply: (_ recipientId: String) -> Void = { _ in }
@@ -187,6 +188,7 @@ struct ProspectRowView: View {
                     onDismissPressContactMatch: onDismissPressContactMatch,
                     onDismissDuplicateContactMatch: onDismissDuplicateContactMatch,
                     onDismissConfidenceHeldDown: onDismissConfidenceHeldDown,
+                    onDismissAddressInAnotherName: onDismissAddressInAnotherName,
                     onAddRecipient: onAddRecipient,
                     onRemoveRecipient: onRemoveRecipient,
                     onDraftReply: onDraftReply,
@@ -591,6 +593,13 @@ struct ProspectRowView: View {
             // just costs him a few minutes at their site instead of a send.
             reachabilityNote(icon: "square.and.pencil", text: ReachabilityCopy.contactFormOnlyBadge,
                              tone: Reachability.tone(for: .contactFormOnly), help: ReachabilityCopy.contactFormOnlyHelp)
+        case .socialOnly:
+            // #2612: the same weight as the contact form beside it, with its own icon and its own words,
+            // because what Dan does about it is different: a DM in the Instagram app rather than a form
+            // in a browser. The handle itself is on the link directly below this.
+            reachabilityNote(icon: "bubble.left.and.text.bubble.right",
+                             text: ReachabilityCopy.socialOnlyBadge,
+                             tone: Reachability.tone(for: .socialOnly), help: ReachabilityCopy.socialOnlyHelp)
         case .staleProbe:
             // #1325: a clock icon in the calm ink tone: advisory, not alarming. The earlier firm result
             // has aged out, so it asks for a re-check rather than asserting reachable or not.
@@ -653,39 +662,54 @@ struct ProspectRowView: View {
             // then its own grid column); every one broke the column, the last by squeezing it until long
             // addresses wrapped. Dan's call, 2026-07-28: the caveat belongs in the badge above, said once,
             // and this line goes back to being a plain right-justified list of addresses.
-            VStack(alignment: .trailing, spacing: 1) {
+            // #2623: the name sits ABOVE its address rather than beside it. The caveat that broke this
+            // column three times was a second thing competing for its WIDTH; a second line costs height
+            // instead, which this row has, and it keeps the address on a line of its own to wrap into.
+            VStack(alignment: .trailing, spacing: 3) {
                 ForEach(item.displayedContactAddresses) { address in
-                    HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        // #2392: the strike, before the prep run. The same xmark.circle the draft-review
-                        // panel uses for a still-pending contact (ContactRowControls), so removing an
-                        // address means the same thing and looks the same wherever Dan meets it.
-                        //
-                        // Visible at rest, not on hover: an interactive element styled like static text
-                        // ships as an invisible feature (L49), and this one exists precisely because he
-                        // was looking straight at the addresses with nothing to do about them.
-                        // Withheld once this address has been written to, or once the show is resolved:
-                        // the same rule the review panel's own leading X follows, decided in
-                        // ContactRowControls so the two surfaces cannot drift into offering one action
-                        // at two different levels of exposure.
-                        if ContactRowControls.strikeIsOffered(
-                            sendState: address.sendState,
-                            showIsResolved: item.sentAt != nil || item.isBooked) {
-                            Button { onRemoveContactAddress(address) } label: {
-                                Image(systemName: "xmark.circle")
-                                    .foregroundStyle(OVColor.inkFaint)
-                            }
-                            .buttonStyle(.plain)
-                            .help(ReachabilityCopy.removeAddressHelp)
-                            .accessibilityLabel(ReachabilityCopy.removeAddressLabel(address.email))
+                    VStack(alignment: .trailing, spacing: 0) {
+                        // Who the address belongs to, when the check named them. Quieter than the address:
+                        // the address is the thing Dan acts on, this is the fact that tells him what it is
+                        // worth. Absent entirely when nothing was stored, rather than a placeholder.
+                        if let who = address.attribution {
+                            Text(who)
+                                .font(OVType.meta)
+                                .foregroundStyle(OVColor.inkFaint)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .multilineTextAlignment(.trailing)
                         }
-                        Text(address.email)
-                            .font(OVType.meta)
-                            .foregroundStyle(OVColor.inkSoft)
-                            .textSelection(.enabled)
-                            // Wrap rather than truncate: an address Dan cannot read in full is no better
-                            // than no address, and this column is narrow.
-                            .fixedSize(horizontal: false, vertical: true)
-                            .multilineTextAlignment(.trailing)
+                        HStack(alignment: .firstTextBaseline, spacing: 4) {
+                            // #2392: the strike, before the prep run. The same xmark.circle the draft-review
+                            // panel uses for a still-pending contact (ContactRowControls), so removing an
+                            // address means the same thing and looks the same wherever Dan meets it.
+                            //
+                            // Visible at rest, not on hover: an interactive element styled like static text
+                            // ships as an invisible feature (L49), and this one exists precisely because he
+                            // was looking straight at the addresses with nothing to do about them.
+                            // Withheld once this address has been written to, or once the show is resolved:
+                            // the same rule the review panel's own leading X follows, decided in
+                            // ContactRowControls so the two surfaces cannot drift into offering one action
+                            // at two different levels of exposure.
+                            if ContactRowControls.strikeIsOffered(
+                                sendState: address.sendState,
+                                showIsResolved: item.sentAt != nil || item.isBooked) {
+                                Button { onRemoveContactAddress(address) } label: {
+                                    Image(systemName: "xmark.circle")
+                                        .foregroundStyle(OVColor.inkFaint)
+                                }
+                                .buttonStyle(.plain)
+                                .help(ReachabilityCopy.removeAddressHelp)
+                                .accessibilityLabel(ReachabilityCopy.removeAddressLabel(address.email))
+                            }
+                            Text(address.email)
+                                .font(OVType.meta)
+                                .foregroundStyle(OVColor.inkSoft)
+                                .textSelection(.enabled)
+                                // Wrap rather than truncate: an address Dan cannot read in full is no better
+                                // than no address, and this column is narrow.
+                                .fixedSize(horizontal: false, vertical: true)
+                                .multilineTextAlignment(.trailing)
+                        }
                     }
                 }
             }
@@ -710,6 +734,27 @@ struct ProspectRowView: View {
                 .foregroundStyle(OVColor.forestText)
                 .multilineTextAlignment(.trailing)
             }
+        }
+    }
+
+    // #2657: a check that came back with people who cannot hire Dan. Directly under the badge that says
+    // something was found, because it qualifies exactly that claim: the row above says an address exists
+    // and this says what it is worth. Its own note rather than a variation of the badge's wording, which
+    // is already carrying #1628's verified-or-not split and cannot say a second thing at once.
+    //
+    // `tentative` (dim gold): the tone's own definition is "found something, but cannot stand behind it",
+    // which is precisely this. Not rust, which is reserved for a finding of nothing, and this row did find
+    // people; not full gold, which Dan reserves for what he can act on immediately, and this asks him to
+    // go and look at the listing first.
+    //
+    // One render site covers all three surfaces the issue asks about: Queue (every stage, Reached out
+    // included) and Archive both draw their rows through ProspectRowFactory, which builds this view.
+    @ViewBuilder private var contactAuthorityFlag: some View {
+        if let gap = item.contactAuthorityGap() {
+            reachabilityNote(icon: "person.crop.circle.badge.questionmark",
+                             text: ReachabilityCopy.noAuthorityBadge,
+                             tone: .tentative,
+                             help: ReachabilityCopy.noAuthorityHelp(tier: gap))
         }
     }
 
@@ -918,6 +963,7 @@ struct ProspectRowView: View {
             // right-justifies under those buttons instead of widening their row (which is what put it
             // beside Dismiss twice and left the cards uneven).
             reachabilityFlag
+            contactAuthorityFlag
             recheckControl
             heldContactFlag
             reachabilityAddresses
@@ -936,7 +982,13 @@ struct ProspectRowView: View {
                                          // and the run cannot disagree about which shows are still live.
                                          isStillOpen: OpenForDecision.isOpen(
                                             status: item.status, performanceDate: item.performanceDate,
-                                            isBooked: item.isBooked, sentAt: item.sentAt, today: today)) {
+                                            isBooked: item.isBooked, sentAt: item.sentAt, today: today),
+                                         // #2621: and the same predicate the batch control reads, so a
+                                         // card offering the run and "Check the rest" cannot disagree
+                                         // about which rows a check came home short on.
+                                         missedByACheck: Reachability.wasMissedByACheck(
+                                            probedAt: item.reachabilityProbedAt,
+                                            unansweredAt: item.reachabilityUnansweredAt, now: Date())) {
         case .notOffered:
             EmptyView()
         case .offer:

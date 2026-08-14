@@ -26,10 +26,20 @@ struct ContactScoreAdjustmentTests {
 
     private let checkedAt = Date(timeIntervalSince1970: 1_800_000_000)
 
+    // #2664: a show stamped `emailFound` carries the contact the check found, because the score now reads
+    // the verdict through what the show HOLDS rather than the stored string alone. Stamping the verdict
+    // with no contacts attached is a state no production path produces: `settleAll` runs after the
+    // importer has written the recipients and after the venue and press guards, deliberately (see
+    // PrepQueueService), so a fixture without one was asserting about a row that cannot exist (L48).
+    private func foundContact() -> Recipient {
+        Recipient(id: "hello@example.com", email: "hello@example.com", provenance: .act)
+    }
+
     @Test func aFoundEmailRaisesTheStoredScoreAndRecordsWhatItWas() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx)
         p.reachabilityProbedAt = checkedAt
+        p.setRecipients([foundContact()])
         p.reachabilityResultRaw = Reachability.ProbeResult.emailFound.rawValue
 
         ContactScoreAdjustment.settle(p, now: checkedAt)
@@ -46,6 +56,7 @@ struct ContactScoreAdjustmentTests {
         let ctx = ModelContext(try container())
         let p = show(ctx)
         p.reachabilityProbedAt = checkedAt
+        p.setRecipients([foundContact()])
         p.reachabilityResultRaw = Reachability.ProbeResult.emailFound.rawValue
 
         #expect(ContactScoreAdjustment.settle(p, now: checkedAt) == true)

@@ -23,7 +23,25 @@ enum VenueContactGuard {
     // will disagree with itself. Only the domain EXTRACTION differs between the two routes.
     static func looksLikeVenue(formURL: String?, venue: String?) -> Bool {
         guard let formURL, !formURL.isEmpty else { return false }
+        // #2612: a social profile puts the identity in the PATH, never the domain: every act on Instagram
+        // shares "instagram.com" and is told apart by its handle. The domain comparison below is therefore
+        // structurally blind to the ROOM's own account, and since #2612 makes a social handle a route
+        // again, that blindness would re-open #368 (a room's own contact is never a real contact) through
+        // a side door. Measured: instagram.com/jalopytheatre on a Jalopy Theatre show read as a route.
+        //
+        // The same comparison, pointed at the identifying half of the URL, which is PressContactGuard's
+        // own reasoning for reading a link's path rather than its host.
+        if Reachability.isSocialOnly(formURL) {
+            return isTheRoomsOwn(domainCore: firstPathComponent(ofURL: formURL), venue: venue)
+        }
         return isTheRoomsOwn(domainCore: secondLevelDomain(ofURL: formURL), venue: venue)
+    }
+
+    // The handle: "jalopytheatre" from "https://www.instagram.com/jalopytheatre/", slugged the same way a
+    // domain label is so the one comparison can take either.
+    private static func firstPathComponent(ofURL raw: String) -> String? {
+        guard let url = URL(string: raw.trimmingCharacters(in: .whitespacesAndNewlines)) else { return nil }
+        return url.path.split(separator: "/").first.map { slug(String($0)) }
     }
 
     // The venue side of the comparison, shared by both routes: the hall's own name or its

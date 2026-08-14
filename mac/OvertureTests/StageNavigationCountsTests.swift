@@ -113,7 +113,7 @@ struct StageNavigationCountsTests {
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
 
         let inputs = AgentInputs.from(prospects: all, context: .at(today, now: now),
-                                      gmailConnected: true, prepRunning: false, replyRunAlive: false)
+                                      gmailConnected: true, runInFlight: nil, replyRunAlive: false)
         func nav(_ f: StageFocus) -> Int { StageNavigation.naturalKeys(for: f, in: all, context: .at(today, now: now)).count }
 
         #expect(inputs.toTriage == nav(.scout))

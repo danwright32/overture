@@ -89,7 +89,11 @@ fail() {
 prompt_region() {
   local region
   region="$(sed -n "/^$2=/,/^\"$/p" "${SCRIPT_DIR}/$1")"
-  if [[ -z "${region//[[:space:]]/}" ]]; then
+  # Emptiness asked with grep rather than "${region//[[:space:]]/}": bash pattern replacement with a
+  # character class is locale-aware per character and rebuilds the string as it goes, which cost NINE
+  # SECONDS per call on the 5KB scout prompt, and this helper is called three times per runner. It
+  # was 27 of this fixture's 32 seconds (#2601); grep answers the same question in milliseconds.
+  if ! printf '%s' "${region}" | grep -q '[^[:space:]]'; then
     echo "no prompt region for \$$2 in $1: the range matched nothing, so every check standing on it would be reading an empty prompt and reporting it clean (#1710)" >&2
     return 1
   fi

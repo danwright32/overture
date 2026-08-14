@@ -89,8 +89,14 @@ final class ReconcileScheduler {
     // #2220: one set of readings for the whole tick, taken once. Read twice, the observe and the stamp
     // could straddle a wake and disagree about how much sleep this tick sat on top of.
     @discardableResult
+    // #2679: the threading repair is injected, defaulting to the real one, for the same reason
+    // `retireShowsThatOpened(save:)` takes its save: without a seam its `saveFailed` cannot be driven from
+    // a test, and a fold nothing can exercise is indistinguishable from no fold at all (L3).
     func runSafeReconcilesOnce(now: Date = Date(), defaults: UserDefaults = .standard,
-                               watchReadings: WatchGap.Readings? = nil)
+                               watchReadings: WatchGap.Readings? = nil,
+                               repairThreading: @MainActor (ModelContext) async -> GmailThreadingRepair.Outcome? = {
+                                   await GmailThreadingRepair().repair(in: $0)
+                               })
         async -> ReconcileSummary {
         let readings = watchReadings ?? WatchHeartbeatStore.readings(now: now, defaults: defaults)
         // #2091: note a silence this tick is resuming after, BEFORE the stamp at the end hides it. Why
@@ -116,6 +122,32 @@ final class ReconcileScheduler {
         let retirement = retireShowsThatOpened(now: now)
         // Reply detection: gated on a live Gmail connection inside checkReplies; best-effort.
         let replyCheckSaveFailed = await GmailReplyChecker().checkReplies(in: context)
+        // #2649: repair the stored Message-ID on conversations that are still live, where Overture wrote
+        // the id it minted and Gmail discarded (#2647 fixed this from the next send onward and could not
+        // touch what was already stored). Rides this same free tick for the same reasons the two Gmail
+        // calls around it do: it is read only, it is gated on the connection inside itself, and it spends
+        // no paid AI run. It selects only rows still holding a minted id, so it empties itself after one
+        // effective pass rather than re-reading Gmail on every tick forever.
+        // #2679: its answer is READ, not discarded. `saveFailed` is the one that matters: the repair
+        // rewrites a stored Message-ID, and when the save then fails nothing persisted and nothing said
+        // so, while the pass looked like it ran. That is success over a write that did not commit (L12)
+        // inside a background job whose failure reached nothing that could report it (L13).
+        //
+        // Folded into the SAME flag the reply checker's failure uses two lines above, rather than given a
+        // second path: both mean "this tick could not write what it found", Dan needs one sentence either
+        // way, and #1912 owns telling him when Gmail access itself has died.
+        //
+        // nil is not a failure. It means Gmail is not connected, so no repair was attempted at all, and
+        // reporting that as a save failure would wake Dan for a tick that did nothing wrong (L98 from the
+        // other side: an empty result is not a bad one).
+        //
+        // `refused` and `unreadable` deliberately get no surface of their own, decided rather than
+        // overlooked. A refusal already marks its rows `threadingDegraded`, which has a reader in the
+        // `.sendThreadingDegraded` focus, so a conversation that cannot thread reaches Dan where he can
+        // act on it (L80). An unreadable thread says Gmail could not be read this tick, which the next
+        // free tick retries and which #1912 is the right home for; a count of it here would be a number
+        // with no action attached.
+        let threadingRepair = await repairThreading(context)
         // #1158: keep the cached Gmail signature current so a signature Dan changes in Gmail is picked up
         // without a manual reconnect. Rides this safe, free tick (launch + periodic + export-change) but
         // self-throttles to at most one fetch per day, and can never clobber a good stored signature on a
@@ -150,7 +182,8 @@ final class ReconcileScheduler {
                                 newReplies: newReplies, newBookings: newBookings,
                                 newReplyKeys: newReplyKeys, newBookingKeys: newBookingKeys,
                                 saveFailed: bookingResult.saveFailed || replyCheckSaveFailed
-                                    || retirement.saveFailed)   // #1566
+                                    || retirement.saveFailed                       // #1566
+                                    || threadingRepair?.saveFailed == true)        // #2679
     }
 
     // #269: an AUTOMATIC tick (timer/watcher, i.e. while Dan is likely away) posts one coalesced

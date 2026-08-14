@@ -303,7 +303,8 @@ struct RootView: View {
     // to PrepStartGate so it is reachable from a test at all (#863); this reads it twice, for the
     // sentence in the menu and for the item's disabled state, and both are the same answer (L109).
     private var prepRefusal: String? {
-        PrepStartGate.reason(keptToPrep: toPrep.count, prepRunning: PrepQueueService.isRunning(now: Date()))
+        PrepStartGate.reason(keptToPrep: toPrep.count,
+                             runInFlight: PrepQueueService.runInFlight(now: Date()))
     }
 
     // #367/#733: shares ProspectMutations.bulkReprepEligible with bulkReprep itself, so the
@@ -557,9 +558,13 @@ struct RootView: View {
                         // run has no trackable PID, so this writes the sentinel the runner checks on its
                         // heartbeat and stops cooperatively). The label stays "Prepping" until the runner
                         // notices on its next tick, exactly like the scout takeover's Cancel.
-                        if PrepQueueService.isRunning(now: Date()) {
+                        // #2614: named after the run it would actually stop. It stops the right thing
+                        // whichever is going (one lock, one runner, one cancel sentinel), but while a
+                        // reachability check held the slot this was the only stop control on screen and it
+                        // called that check a prep run.
+                        if let kind = PrepQueueService.runInFlight(now: Date()) {
                             Divider()
-                            Button("Cancel prep", role: .destructive) { cancelPrep() }
+                            Button(kind.cancelLabel, role: .destructive) { cancelPrep() }
                         }
                     } label: {
                         if isScanning && !scoutIsManual {

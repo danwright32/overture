@@ -68,9 +68,19 @@ enum PostEventPrompt {
     // The single source of truth for WHEN a post-event prompt is due, shared by the Due gate and by
     // `ReachedOutQueue`'s schedule so the two cannot drift.
     //
-    // nil means none applies: the show has not been and gone, it has no date to pass, Dan has already
-    // recorded how it ended, or this contact is out of play.
-    static func nextPromptDate(for r: Recipient, of p: Prospect, now: Date) -> Date? {
+    // #2646: it takes no clock, and that is the fix. It used to end on `guard now >= dayAfter`, so it
+    // declined to name its own date until that date had already arrived, which is the one question a
+    // function called "when is this due" exists to answer. A clock reporting nil is indistinguishable
+    // from a clock with nothing to report, so `ReachedOutQueue.nextActionableMoment`'s `min` skipped
+    // straight past it to the farther nudge: Dan read "in 5 days" on a row whose closing note was owed
+    // the next morning, and it would have jumped to "Reach out now" overnight with no warning.
+    //
+    // Whether it is due YET is a separate question, asked only by `prompt(for:of:now:)` below.
+    //
+    // nil still means none applies, and every reason below is a genuine absence rather than a moment in
+    // the future: the show has no date to pass, Dan has already recorded how it ended, this contact is
+    // out of play, or a note already sent has stepped the prompt forward.
+    static func nextPromptDate(for r: Recipient, of p: Prospect) -> Date? {
         // Dan closed it out, so Overture stops asking. The inverse of his own rule that nothing is closed
         // unless he closed it: once he has, leave it alone.
         //
@@ -88,19 +98,44 @@ enum PostEventPrompt {
         // Dated the day AFTER the show, not read off the clock, so one owed for a week reads a week overdue
         // rather than arriving fresh every morning (#2116).
         guard let dayAfter = dayAfterShow(p.performanceDate) else { return nil }
-        guard now >= dayAfter else { return nil }
         // A re-anchor from a note already sent steps the prompt forward instead of nagging.
         if let anchored = r.conversationRemindedAt, anchored >= dayAfter { return nil }
+        // #2651: the final follow-up has already said goodbye in Dan's voice ("If it would be useful down
+        // the line I'm glad to help, and if not, no need to reply. I'll leave it here either way."), so a
+        // closing note after it would reopen the conversation only to close it a second time. To a
+        // stranger who has ignored two emails that reads as a third unsolicited contact rather than as
+        // grace, and the scheduling makes it ordinary: any lead scouted far enough ahead exhausts its
+        // follow-ups well before the date arrives.
+        //
+        // ONLY the closing note. A close-out is not an email at all, it is Dan recording how the show
+        // ended, it is the more useful of the two prompts to him, and it is a fact only he has, so
+        // suppressing it because Overture happened to send two nudges would lose the outcome the whole
+        // funnel is reported on.
+        //
+        // The other half of the issue's choice, making the final nudge stop saying goodbye so the note
+        // could be the one that does, was rejected: that goodbye has already been SENT to everybody
+        // currently at two nudges, so rewording it would help only future contacts and leave every
+        // existing one still getting two.
+        if kind(for: r, of: p) == .closingNote, r.followUpCount >= FollowUpConfig().maxFollowUps {
+            return nil
+        }
         return dayAfter
     }
 
+    // WHICH prompt this contact is owed, shared by `nextPromptDate` and `prompt` so the rule above and the
+    // Prompt handed to the screen cannot disagree about what kind it is (L16).
+    //
+    // The one question that decides it: did anybody write back? Asked of the SHOW rather than this
+    // contact, because a colleague's answer is an answer about the event, and offering a note that says
+    // "never heard back" on a show somebody replied to would be false whoever replied.
+    static func kind(for r: Recipient, of p: Prospect) -> Kind {
+        p.recipients.contains { $0.replied } ? .closeOut : .closingNote
+    }
+
     static func prompt(for r: Recipient, of p: Prospect, now: Date) -> Prompt? {
-        guard let due = nextPromptDate(for: r, of: p, now: now), now >= due else { return nil }
-        // The one question that decides which kind: did anybody write back? Asked of the SHOW rather than
-        // this contact, because a colleague's answer is an answer about the event, and offering a note that
-        // says "never heard back" on a show somebody replied to would be false whoever replied.
-        let anybodyReplied = p.recipients.contains { $0.replied }
-        let kind: Kind = anybodyReplied ? .closeOut : .closingNote
+        // #2646: THIS is where the clock belongs. `nextPromptDate` says when; this says whether it is now.
+        guard let due = nextPromptDate(for: r, of: p), now >= due else { return nil }
+        let kind = kind(for: r, of: p)
         return Prompt(kind: kind, reason: reason(for: kind))
     }
 
@@ -138,12 +173,13 @@ enum PostEventPrompt {
     struct NudgeContent: Equatable, Sendable { let subject: String; let body: String; let isClosing: Bool }
 
     static func nudgeContent(kind: Kind, originalSubject: String?, groupName: String, isMerged: Bool = false,
-                             contactName: String?, venue: String?) -> NudgeContent? {
+                             contactName: String?, performanceDate: String?, venue: String?) -> NudgeContent? {
         guard kind == .closingNote else { return nil }
         // #1276/#1273: sanitize the merged-concert name and the venue ONCE here, at the shared chokepoint,
         // so a conductor list never reaches a recipient and a legitimate semicolon title keeps its name.
+        // The body no longer interpolates the name at all (#2615), but the subject's fallback still does.
         let name = FollowUp.safeDisplayName(groupName, isMerged: isMerged)
-        let body = closingNudgeBody(contactName: contactName, groupName: name,
+        let body = closingNudgeBody(contactName: contactName, performanceDate: performanceDate,
                                     venue: FollowUp.safeVenue(venue))
         return NudgeContent(subject: FollowUp.replySubject(originalSubject: originalSubject, groupName: name),
                             body: body, isClosing: true)
@@ -155,13 +191,33 @@ enum PostEventPrompt {
     // future season. #2397: sending it records `ShowOutcome.neverHeardBack`, which is what it has always
     // MEANT and what the send path did not say. It used to resolve the lead to a soft decline in every case,
     // claiming somebody turned Dan down when nobody had written back.
-    static func closingNudgeBody(contactName: String?, groupName: String, venue: String?) -> String {
+    //
+    // #2615: the sentence describes the SHOW, never the group name. `groupName` is whatever the source
+    // listed, and for a large share of Overture's prospects that is a solo performer's own name, so
+    // "I know <groupName> has come and gone" told a person, in Dan's voice, that they had come and gone.
+    // The show is named by its date and room instead, which needs to know nothing about what kind of
+    // thing the group name is, and which the thread's own subject already spells out.
+    static func closingNudgeBody(contactName: String?, performanceDate: String?, venue: String?) -> String {
         let greeting = Salutation.greeting(for: contactName)
-        let g = groupName + ((venue?.isEmpty == false) ? " at \(venue!)" : "")
+        // An unparseable or missing date drops to a plain "your show", never to a half-built clause or a
+        // date string a scrape happened to leave behind.
+        let dayClause = performanceDate.flatMap { EasternDate.longDayLabel($0) }.map { "\($0) " } ?? ""
+        let show = "your \(dayClause)show" + ((venue?.isEmpty == false) ? " at \(venue!)" : "")
+        // #2643: the two sentences this used to end on asserted a conversation that by construction never
+        // happened. This note is offered ONLY when nobody on the show has written back (see `prompt(for:)`,
+        // which picks `.closeOut` the moment anybody has), and sending it records
+        // `ShowOutcome.neverHeardBack`. So "the timing didn't line up this round" reported a decision the
+        // recipient never communicated, and "it was good to be in touch" claimed a completed exchange when
+        // there had been one message in one direction. Dan read both in the send sheet on 2026-08-13.
+        //
+        // What replaces them says only what is true of silence: the show has passed, the offer stands, and
+        // no reply is wanted. It holds a door open without inventing a relationship to hold it open on, and
+        // without guilting anybody for not answering.
+        //
         // #1144: the signature is appended once at the send layer, so this ends at its last sentence.
-        return greeting + "\n\nI know \(g) has come and gone, and the timing didn't line up this round. "
-            + "No worries at all. If there's a future performance you'd like documented, I'd be glad to help "
-            + "then. Either way, it was good to be in touch."
+        return greeting + "\n\nI know \(show) has come and gone, and I hope it went well. If there's a "
+            + "future performance you'd like documented, I'd be glad to help then. No need to reply to "
+            + "this one."
     }
 
     // copy-inventory:ignore-end

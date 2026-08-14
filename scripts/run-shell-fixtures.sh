@@ -77,39 +77,118 @@ unresolved_commands_are_all_declared() {
   return 1
 }
 
-# Runs each given fixture script in order, letting its own output through, and returns the count of
-# fixtures that exited nonzero OR that called a command bash could not resolve (so 0 means every
-# fixture passed and every assertion in it was real). Never stops at the first failure, so one
-# broken fixture doesn't hide another one behind it. Takes an explicit path list rather than
-# globbing itself, so it's testable against a throwaway fixture set without touching the real repo
-# scripts.
+# fixture_temp_allowed_names <uid>: the names a fixture may leave in its private temp directory without
+# being called a leak, because it did not create them. node and tsx write these caches wherever TMPDIR
+# points, on any run that shells out to either.
 #
-# The output is teed rather than captured, so a long fixture still prints as it goes instead of
-# appearing all at once when it finishes; the copy on disk is only there to be read afterwards.
+# tsx names its cache after the ACCOUNT the run is under, so the name is DERIVED here rather than written
+# down. A hardcoded one is correct only on the machine it was written on: on any other Mac or account the
+# guard would report that cache as a leak and fail a run for a reason unrelated to the code under test,
+# which is how a guard gets edited until it is quiet (#2543 is about exactly that).
+#
+# Named individually rather than by a wildcard, so a fixture's own leftover cannot hide behind a vague
+# pattern, and so one account's cache does not excuse another's turning up.
+fixture_temp_allowed_names() {
+  local uid="$1"
+  echo "node-compile-cache tsx-${uid}"
+}
+
+# Reads one finished fixture's private temp directory and returns nonzero when it left anything of its
+# own behind. Prints what was left.
+#
+# WHY. A fixture that creates a temp file and never removes it leaks one per run, forever, and nothing
+# notices: the files are small, they are outside the checkout, and the fixture passes. Measured
+# 2026-08-13, three fixtures were doing it, and the oldest had been leaking one file per run since at
+# least 2026-08-12 (53 of them) because a second `trap ... EXIT` silently REPLACED the first one that
+# would have cleaned up. That is the same class as #2585, where the same habit at Xcode scale filled the
+# disk and stopped the machine.
+fixture_left_temp_files() {
+  local dir="$1" entry left=() allowed
+  for entry in $(ls -A "${dir}" 2>/dev/null); do
+    local is_allowed="false"
+    for allowed in $(fixture_temp_allowed_names "$(id -u)"); do
+      [[ "${entry}" == "${allowed}" ]] && is_allowed="true"
+    done
+    [[ "${is_allowed}" == "false" ]] && left+=("${entry}")
+  done
+
+  [[ "${#left[@]}" -eq 0 ]] && return 0
+
+  echo "FAIL - ${FIXTURE_PATH_FOR_REPORT:-a fixture} left files behind in its temp directory"
+  printf '  %s\n' "${left[@]}"
+  echo "  One per run, forever, outside the checkout where nobody looks. Remove them before the fixture"
+  echo "  ends. If it already has a cleanup trap, check a LATER trap has not replaced it: bash keeps one"
+  echo "  EXIT trap, so the second one silently wins."
+  return 1
+}
+
+# Runs the given fixture scripts CONCURRENTLY (#2601) and returns the count of fixtures that exited
+# nonzero OR that called a command bash could not resolve (so 0 means every fixture passed and every
+# assertion in it was real). Never stops at the first failure, so one broken fixture doesn't hide
+# another one behind it. Takes an explicit path list rather than globbing itself, so it's testable
+# against a throwaway fixture set without touching the real repo scripts.
+#
+# Concurrent because the serial run cost 113s of which 78s was two fixtures, so the phase costs
+# roughly the slowest fixture instead of the sum of all of them. Safe because every fixture is
+# isolated by construction: each stubs its dependencies in its own mktemp PATH dir (flock included,
+# so none touches the real xcodebuild lock), kills only PIDs it spawned, and no fixture runs git
+# against the real repo (audited 2026-08-12, #2601). OVERTURE_FIXTURE_JOBS overrides the pool size,
+# and 1 is the old serial behaviour.
+#
+# Each fixture's output goes to its own file and is printed as one block afterwards, in list order,
+# so two fixtures' lines can never interleave and a failure always sits under its own header. The
+# "finished" lines exist because of what that trades away: with output no longer streaming as it is
+# produced, a silent minute would be indistinguishable from a hang without them (L110).
 run_shell_fixtures() {
   local failures=0
-  local fixture status rc
+  local fixture rc
   local scratch
   scratch="$(mktemp -d)"
+  local jobs="${OVERTURE_FIXTURE_JOBS:-8}"
+
+  # The per-fixture wrapper xargs fans out to. `set +e` around the fixture is load-bearing, not
+  # tidying: without it a failing fixture would end the wrapper before the status file is written,
+  # and the read-out below would score it off a missing file rather than its real exit code. The
+  # wrapper itself always exits 0, because xargs would stop dispatching on 255 and treat any other
+  # nonzero as its own verdict; the fixtures' verdicts live in the status files, nowhere else.
+  cat > "${scratch}/run-one.sh" <<'WRAPPER'
+#!/usr/bin/env bash
+scratch="$1"; pair="$2"
+idx="${pair%%$'\t'*}"
+fixture="${pair#*$'\t'}"
+mkdir -p "${scratch}/tmp-${idx}"
+( set +e; TMPDIR="${scratch}/tmp-${idx}" "${fixture}" >"${scratch}/log-${idx}" 2>&1; echo "$?" > "${scratch}/status-${idx}" )
+echo "finished ${fixture}"
+exit 0
+WRAPPER
+  chmod +x "${scratch}/run-one.sh"
+
+  # Index and path travel as one null-delimited argument (tab-split by the wrapper), because the
+  # index is what ties a fixture to its log file when completion order is nobody's to predict.
+  local i=0
+  for fixture in "$@"; do
+    printf '%d\t%s\0' "${i}" "${fixture}"
+    i=$((i + 1))
+  done | xargs -0 -n 1 -P "${jobs}" "${scratch}/run-one.sh" "${scratch}"
+
+  # Every fixture has finished; now read each one's verdict, in list order.
+  i=0
   for fixture in "$@"; do
     echo "==> ${fixture}"
-    status="${scratch}/status"
-    # `set +e` inside the subshell is load-bearing, not tidying: this script runs under `set -e`, and
-    # without it the subshell would exit the instant the fixture failed, never reach the echo, and hand
-    # its own status up through pipefail to kill the whole run at the first failing fixture. That undoes
-    # the never-stop-early property outright, and every fixture passing hides it. The subshell's last
-    # command is then the echo, so the pipeline exits 0 and the fixture's real status comes off disk.
-    ( set +e; "${fixture}" 2>&1; echo "$?" > "${status}" ) | tee "${scratch}/log"
-    rc="$(cat "${status}" 2>/dev/null || echo 1)"
+    cat "${scratch}/log-${i}" 2>/dev/null || true
+    rc="$(cat "${scratch}/status-${i}" 2>/dev/null || echo 1)"
     if [[ "${rc}" -ne 0 ]]; then
       echo "FAIL - ${fixture}"
       failures=$((failures + 1))
     else
-      if ! FIXTURE_PATH_FOR_REPORT="${fixture}" unresolved_commands_are_all_declared "${scratch}/log"; then
+      if ! FIXTURE_PATH_FOR_REPORT="${fixture}" unresolved_commands_are_all_declared "${scratch}/log-${i}"; then
+        failures=$((failures + 1))
+      elif ! FIXTURE_PATH_FOR_REPORT="${fixture}" fixture_left_temp_files "${scratch}/tmp-${i}"; then
         failures=$((failures + 1))
       fi
     fi
     echo
+    i=$((i + 1))
   done
   rm -rf "${scratch}"
   return "${failures}"

@@ -130,26 +130,30 @@ enum ProspectMutations {
                                      prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
 
-        // #2023: this control adds ONE person and its banner names one, so the field is READ rather than
-        // checked for an "@". Before this, "a@x.org, b@y.org" became a single contact whose identity was
-        // that entire string, which sends and reports success while no reply from either person can ever
-        // be matched back to it. Gated on the same `single` the Add button asks, so the two agree.
-        let trimmedEmail: String
-        switch EmailAddressList.parse(email) {
-        case .empty:
-            feedback.acknowledge(ActionAck.contactNeedsAddress, tone: .warning)
+        // #2629: a ROUTE. An address still behaves exactly as it did; a contact form or a social profile
+        // is now accepted too, because those are the ways in Dan actually has on the shows this control's
+        // own advice appears on. `ManualContactRoute.parse` is the SAME function the Add button is
+        // enabled by, so the control can never look willing to take something this then refuses (L109).
+        let route: ManualContactRoute
+        if let parsed = ManualContactRoute.parse(email) {
+            route = parsed
+        } else {
+            // Still says WHICH kind of unusable it was, because "that is not an address" and "you typed
+            // two of them" are different mistakes and only one of them is the person's fault (L11).
+            switch EmailAddressList.parse(email) {
+            case .empty:
+                feedback.acknowledge(ActionAck.contactNeedsRoute, tone: .warning)
+            case .invalid(let piece):
+                // A blank piece is a stray separator, not a second person: saying "one at a time" to
+                // somebody who typed ",,olga@x.org" would name a mistake he did not make.
+                feedback.acknowledge(piece.isEmpty ? ActionAck.contactBlankAddress
+                                                   : ActionAck.contactBadRoute(piece), tone: .warning)
+            case .addresses(let addresses) where addresses.count > 1:
+                feedback.acknowledge(ActionAck.contactOneAtATime, tone: .warning)
+            case .addresses:
+                feedback.acknowledge(ActionAck.contactNeedsRoute, tone: .warning)
+            }
             return
-        case .invalid(let piece):
-            // A blank piece is a stray separator, not a second person: saying "one at a time" to somebody
-            // who typed ",,olga@x.org" would name a mistake he did not make.
-            feedback.acknowledge(piece.isEmpty ? ActionAck.contactBlankAddress
-                                               : ActionAck.contactBadAddress(piece), tone: .warning)
-            return
-        case .addresses(let addresses) where addresses.count > 1:
-            feedback.acknowledge(ActionAck.contactOneAtATime, tone: .warning)
-            return
-        case .addresses(let addresses):
-            trimmedEmail = addresses[0]
         }
 
         let trimmedName = name?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -157,9 +161,13 @@ enum ProspectMutations {
         // one, matching Dan's no-undo rule for removal at review (#2155: "if they want to add it back
         // they can"). Cleared BEFORE the contact is created, so a refusal can never be left standing
         // behind a contact that is now on the card and quietly drop it at the next import.
-        ContactRefusal.allow(email: trimmedEmail, showKey: model.naturalKey,
+        //
+        // #2629: the FORM half too. The strike side has recorded a form-only contact since #2438, so a
+        // reversal that only cleared addresses would leave a struck form refused forever while the card
+        // showed it, and the next import would drop it again (L92).
+        ContactRefusal.allow(email: route.email, formURL: route.link, showKey: model.naturalKey,
                              orgKey: model.presenter.flatMap { OrgKey.stored(for: $0) }, in: context)
-        let result = applyManualRecipient(email: trimmedEmail, name: trimmedName, to: model)
+        let result = applyManualRecipient(route: route, name: trimmedName, to: model)
 
         if case .blocked = result.action {
             feedback.acknowledge(ActionAck.recipientAlreadyExists(name: trimmedName, org: model.groupName))
@@ -182,9 +190,9 @@ enum ProspectMutations {
     // instead of each deciding for itself what a typed address means. Mutates nothing on `.blocked`: that
     // address already belongs to a live contact on this show, and each caller decides what to say about it.
     @discardableResult
-    private static func applyManualRecipient(email: String, name: String?,
-                                             to model: Prospect) -> ManualRecipientCheck.Result {
-        let result = ManualRecipientCheck.evaluate(email: email, existingRecipients: model.recipients,
+    static func applyManualRecipient(route: ManualContactRoute, name: String?,
+                                     to model: Prospect) -> ManualRecipientCheck.Result {
+        let result = ManualRecipientCheck.evaluate(route: route, existingRecipients: model.recipients,
                                                    venue: model.venue)
         switch result.action {
         case .blocked:
@@ -197,9 +205,18 @@ enum ProspectMutations {
                 r.outcomeSourceRaw = nil
             }
         case .create:
-            model.addRecipient(Recipient(id: ReplyDetection.email(from: email), email: email,
-                                         name: (name?.isEmpty == false) ? name : nil,
-                                         provenance: .manual))
+            let fresh = Recipient(id: route.recipientId ?? "", email: route.email,
+                                  name: (name?.isEmpty == false) ? name : nil,
+                                  provenance: .manual)
+            // #2629: a link contact carries its route in the SAME field the reachability check writes for
+            // a form-only or social-only answer, so every reader downstream (the card's links, the count
+            // above them, the stored verdict) treats a hand-added route and a found one as one kind of
+            // thing rather than needing to learn about a second.
+            if let url = route.link {
+                fresh.contactFormURL = url
+                fresh.contactMethodRaw = ContactMethod.formOrDM.rawValue
+            }
+            model.addRecipient(fresh)
         }
         return result
     }
@@ -260,7 +277,10 @@ enum ProspectMutations {
         // to several addresses.
         let trimmedName = (addresses.count == 1) ? name?.trimmingCharacters(in: .whitespacesAndNewlines) : nil
         for address in addresses {
-            applyManualRecipient(email: address, name: trimmedName, to: model)
+            // #2629: these come from `EmailAddressList`, so every one is already an address. Routed
+            // through the same `.email` case rather than re-parsed, because the manual-prep sheet writes
+            // an email he types himself and a link would have nothing to send.
+            applyManualRecipient(route: .email(address), name: trimmedName, to: model)
         }
         // #2034: the choice he made on the sheet, recorded with the draft it belongs to.
         model.sendsTogetherOverride = sendsTogether
@@ -329,6 +349,10 @@ enum ProspectMutations {
             return
         }
         ContactRefusal.refuse(email: email, scope: .organisation(orgKey), in: context)
+        // #2662: this path had NO save of its own and relied on `refuse` committing for it. It is the one
+        // that would have silently stopped working, and with no second write to notice the loss by: Dan
+        // would be told the address was removed and the strike would be gone at the next launch.
+        guard context.saveOrWarn(org: model.groupName, feedback: feedback) else { return }
         feedback.acknowledge(ActionAck.inheritedAddressRemoved(email: email, org: presenter))
     }
 
@@ -382,6 +406,17 @@ enum ProspectMutations {
                                           prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
         model.updateRecipient(id: recipientId) { $0.heldDownToUnverifiedDismissed = true }
+        context.saveOrWarn(org: item.groupName, feedback: feedback)
+    }
+
+    // #2624: Dan judged the address really does reach the person named, so the hold comes off. His
+    // answer about THIS address, like the four guards beside it, and the next ingest asks again only if
+    // the address or the name actually changes.
+    static func dismissAddressInAnotherName(_ item: QueueItem, _ recipientId: String,
+                                            prospects: [Prospect], context: ModelContext,
+                                            feedback: ActionFeedback) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
+        model.updateRecipient(id: recipientId) { $0.looksLikeAnotherPersonsDismissed = true }
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
@@ -1108,9 +1143,17 @@ enum ProspectMutations {
     // #468 (SUP-006): mirrors performSend/sendReply's markSending/clearSending shape so
     // FollowUpsView's nudge and closing-note sends get the same in-flight feedback (a LiveRunLabel,
     // button disabled while sending) instead of firing a bare Task with the button left clickable.
+    // #2575: `body` is what Dan had in the send sheet's text box when he pressed Send, or nil for a send
+    // he did not edit. It is threaded all the way to SendService rather than recomposed anywhere in
+    // between, because a second composition is exactly how what he approved and what leaves come apart.
+    // #2645: `now` is injectable. It was `Date()` read inline, which is not a seam, so no test could pin
+    // the day this send happens on. That mattered the moment nudge eligibility started depending on
+    // whether the show is still ahead: the only way to test it was a fixture dated in the future, which
+    // is a literal date that ages into the past and takes the test with it.
     static func sendFollowUp(_ naturalKey: String, _ recipientId: String, prospects: [Prospect],
                              context: ModelContext, feedback: ActionFeedback,
-                             sender: MailSender = liveSender(),
+                             sender: MailSender = liveSender(), body: String? = nil,
+                             now: Date = Date(),
                              markSending: @escaping (String) -> Void, clearSending: @escaping (String) -> Void) {
         guard let model = prospects.first(where: { $0.naturalKey == naturalKey }),
               let recipient = model.recipients.first(where: { $0.id == recipientId }) else { return }
@@ -1118,7 +1161,8 @@ enum ProspectMutations {
         markSending(recipientId)
         Task {
             await GmailSignatureService.refreshBeforeSend()   // #1208
-            let sent = await SendService.sendFollowUp(recipient, of: model, now: Date(), sender: sender)
+            let sent = await SendService.sendFollowUp(recipient, of: model, now: now, sender: sender,
+                                                      body: body)
             let saved = context.saveOrWarnSendNotConfirmed(org: org, feedback: feedback)
             clearSending(recipientId)
             // #285: the send fires async in a sheet; acknowledge it ran, success or failure.
@@ -1130,9 +1174,10 @@ enum ProspectMutations {
 
     // #2397: the closing note is the only conversation-track email left, so this no longer chooses between
     // two kinds. `isClosing` stays on the acknowledgment wording, which the caller still needs.
+    // #2575: `body` is Dan's edit, as on sendFollowUp above.
     static func sendClosingNote(_ naturalKey: String, _ recipientId: String,
                                 prospects: [Prospect], context: ModelContext, feedback: ActionFeedback,
-                                sender: MailSender = liveSender(),
+                                sender: MailSender = liveSender(), body: String? = nil,
                                 markSending: @escaping (String) -> Void, clearSending: @escaping (String) -> Void) {
         guard let model = prospects.first(where: { $0.naturalKey == naturalKey }),
               let recipient = model.recipients.first(where: { $0.id == recipientId }) else { return }
@@ -1141,7 +1186,8 @@ enum ProspectMutations {
         markSending(recipientId)
         Task {
             await GmailSignatureService.refreshBeforeSend()   // #1208
-            let sent = await SendService.sendClosingNote(recipient, of: model, now: Date(), sender: sender)
+            let sent = await SendService.sendClosingNote(recipient, of: model, now: Date(), sender: sender,
+                                                         body: body)
             let saved = context.saveOrWarnSendNotConfirmed(org: org, feedback: feedback)
             clearSending(recipientId)
             // #285: same async-in-a-sheet acknowledgment, with closing-note vs nudge wording.

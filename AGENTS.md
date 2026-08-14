@@ -72,6 +72,19 @@ already drifting from the Swift version it mirrored.
   judges that each change carries a test (and enforces the style rules); it does NOT itself run
   the suites, so `test-all.sh` is what actually runs the full Mac suite plus the TypeScript side
   that CI would otherwise only surface minutes later. Run it before every push.
+  Since #2603 it runs in TWO LANES, which changes how to read its output. The Swift suite starts FIRST,
+  in the background, and the cheap checks (typecheck, vitest, the shell fixtures, the drift checks) run
+  beside it, so the whole command now costs about what the Swift suite costs alone: measured 2026-08-13,
+  the cheap lane took 54s on its own and a full two-lane run took 200s against a Swift suite of 177s.
+  Three consequences. The Swift output does not appear until the cheap lane finishes, then replays from
+  its first line, so a quiet minute at the start is the cheap lane working rather than a hang (its own
+  stall guard cannot be starved by this: the limits are 600s and 300s, an order of magnitude past the
+  cheap lane). A failing cheap check no longer ends the run, because the expensive lane is already going
+  and its verdict is worth having, so the run says `FAILED - <check>` as it happens and both lanes are
+  reported separately at the end; the exit code is red if either lane is red (L53). And two checks
+  deliberately stay ahead of the build, `check-pure-suite-imports.sh` (its whole value is saving a doomed
+  build, which only works before one starts) and `check-pbxproj-fresh.sh` (it regenerates and restores
+  the project file, which must not happen while xcodebuild is reading it).
 - One-time per CLONE: run `scripts/install-git-hooks.sh` once (#1251 Phase 3). Once per clone is the
   whole of it: `core.hooksPath` lives in the shared git config (this repo sets no
   `extensions.worktreeConfig`), so every worktree, including ones made later, inherits it without
@@ -112,6 +125,33 @@ already drifting from the Swift version it mirrored.
   handed, so a mistyped `.gitattributes` line leaves a conflict to read instead of silently dropping
   somebody's work. A clone that never runs the installer just gets git's ordinary text merge, which is
   what this repo had before, so skipping it is no worse than the old behaviour.
+- **Asking whether the suite cares what year it is: `scripts/check-fixtures-do-not-age.sh` (#2669).** A
+  fixture pinned to a literal date and read against the live clock silently changes which state it stands
+  for as real time passes it: written as a show two months out, it becomes a show in the past, and the test
+  goes on asserting about a case nobody chose. That bit four times in one session while building #2645, and
+  one of those tests had spent months asserting that a show 27 days in the past should still be chased.
+  The check shifts every dated fixture in `mac/` forward three years, runs the Swift suite, restores the
+  tree, and compares the tests that changed verdict against `fixtures/year-sensitive-tests.txt`, which it
+  writes itself with `--record`.
+  It is OPT IN and not in `scripts/test-all.sh`, because it costs a second full suite run. Run it after
+  adding dated fixtures, and periodically.
+  Read its answer correctly, which is the part to understand before using it. It does NOT demand that
+  nothing is year-sensitive: 39 tests are, measured 2026-08-14, almost all for good reasons (a weekday
+  name, an Eastern calendar day, business-day arithmetic, a comparison against a checked-in fixture the
+  shift cannot move). Demanding zero would be a gate nobody could go green on. What it asserts is that the
+  SET has not changed, and the set grows on its own: a fixture dated ahead of today is unaffected by the
+  shift, and the day real time walks past it the same shift starts changing its state, so it joins the set
+  and the check names it. **A new entrant is not a defect, it is a test to look at**, which is the whole of
+  what #2669 asked for. Either it still asserts what it meant to, and you re-record, or real time walked it
+  into a different case.
+  Two approaches were measured and rejected before this one, and both are worth knowing because they look
+  reasonable. The issue's own proposal, a source-text guard flagging a file that pairs a literal
+  `performanceDate` with a bare `Date()`, matches 70 of 783 test files, so it would fire on the common case
+  and be switched off in a day (L93). Shifting only the already-past `performanceDate` literals produced 35
+  failures that were almost all its own doing, because a fixture date is often one half of a
+  literal-to-literal pair and moving one end breaks it for a reason unrelated to the clock. Shifting the
+  whole repo including the app's own source was worse again (69), because it moves constants that are not
+  fixtures at all.
 - Keeping the checkout tidy: `scripts/tidy-checkout.sh` (#2234) removes local branches and agent
   worktrees whose work has provably shipped. It is a DRY RUN by default and needs `--apply` to
   delete anything. Note WHY it exists rather than the one-line idiom: this repo squash-merges, so a
@@ -128,8 +168,9 @@ already drifting from the Swift version it mirrored.
   INSIDE the project directory (`node_modules`, `.next`, `venv`, `__pycache__`), so deleting a
   worktree reclaims all of it for free. Xcode is the exception: its cache lives outside the checkout
   and is keyed by the checkout's PATH, so every worktree that is ever built mints a fresh folder of
-  roughly 1.6 GB that nothing reclaimed. This repo mints those paths constantly (one throwaway
-  worktree per pre-merge verification, one per parallel agent), so the growth is proportional to how
+  roughly 1.6 GB that nothing reclaimed. This repo used to mint those paths constantly (one throwaway
+  worktree per pre-merge verification, one per parallel agent; since #2601 verification reuses one
+  fixed slot, so agents are the remaining minters), so the growth is proportional to how
   much the workflow is used and its ceiling is the disk. It reached that ceiling on 2026-08-12: 148 GB
   across 105 folders, 101 of them pointing at directories already deleted, and 132 MiB free on a
   926 GiB volume, at which point no command could run at all, including `df`, because the harness
@@ -140,9 +181,11 @@ already drifting from the Swift version it mirrored.
   (`ModuleCache.noindex`, `CompilationCache.noindex`, `SDKStatCaches.noindex`, another 44 GB when
   measured) are only counted, never swept, because clearing them costs every project on the Mac one
   slow build; `--clear-shared-caches` does it when that is what you want. `verify-and-merge-branch.sh`
-  no longer waits for the sweep at all: it removes the folder its own throwaway worktree caused at the
-  moment it removes the worktree. Agent worktrees under `.claude/worktrees/` are torn down by the
-  Claude Code harness, which this repo cannot hook, so those are what the sweep is for.
+  stopped minting folders altogether (#2601): it verifies in one persistent worktree at
+  `~/.overture-verify-worktree`, scrubbed to a fresh checkout per run, whose single build folder is
+  kept warm on purpose (a cold path cost 75s more than a warm one, measured 2026-08-12) and survives
+  the sweep because its workspace exists. Agent worktrees under `.claude/worktrees/` are torn down by
+  the Claude Code harness, which this repo cannot hook, so those are what the sweep is for.
   `tidy-checkout.sh` reports the same thing in its dry run and reclaims it under `--apply`, following
   its own mode rather than carrying a second one. It DELEGATES to the script above rather than
   reimplementing the rule, so there is one definition of what can never be used again instead of two
@@ -223,6 +266,25 @@ already drifting from the Swift version it mirrored.
   needed the marks Swift Testing prints and builds them from their UTF-8 bytes with `printf`. In
   Swift the same trick is a unicode escape (`\u{2014}`). `SKIP_STYLE_CHECK=1` is visible and
   tempting and skips past a clean solution, so it is the wrong tool here (#2312).
+- **This repo turns four Claude Code plugins off, in a TRACKED settings file.** `.claude/settings.json`
+  gives `vercel-plugin@vercel-vercel-plugin`, `cloudflare@cloudflare`, `figma@claude-plugins-official`
+  and `stripe@claude-plugins-official` a `false` under `enabledPlugins`, and
+  `scripts/check-project-plugin-scope.sh` (#2605) fails if any of that stops being true. Plugins are
+  enabled at user scope in `~/.claude/settings.json`, so they fire in every project on this Mac whatever
+  the project is: measured 2026-08-13, one session opened here with a single one-line prompt carried
+  53.2KB of injected Vercel documentation, a CLI upgrade nag, and `You must run the Skill(...)` lines
+  under a heading reading `MANDATORY: Your training data for these libraries is OUTDATED and
+  UNRELIABLE`. None of it is true of a SwiftUI app plus a `tsx` importer. #1682 had already measured the
+  same plugin doing the same thing to the DETACHED runs and fixed it there
+  (`claude_run_plugin_lockout`), deliberately covering only the runs this repo launches, so the
+  interactive session kept paying for it. Three details worth keeping. TRACKED rather than
+  `.claude/settings.local.json`, because local settings are excluded by Dan's global gitignore and live
+  per checkout, so every agent worktree would keep getting the text (his call, 2026-08-13). The test for
+  it names the four ids independently rather than reading them back from the script's own list, so
+  dropping one from both places still goes red (L70). And `swift-lsp`, `superpowers` and `plannotator`
+  stay ON deliberately, since all three are in use here, which the same test asserts so a later sweep
+  cannot quietly take them out. Hooks only load at session start, so a change here cannot be verified in
+  the session that makes it.
 - Since #1967 the Swift tests live in TWO targets, and which one a new test belongs in is decided
   by one question: does it need the app RUNNING?
   - `OvertureTests` (`mac/OvertureTests/`) holds almost everything and is where a new test goes
@@ -373,13 +435,37 @@ already drifting from the Swift version it mirrored.
   session then independently re-runs the full suite on every branch under the same
   lock before merging, rather than trusting each agent's self report.
   That re-run is against CURRENT main, not against the base the branch was cut from (#2353):
-  `verify-and-merge-branch.sh` merges `origin/main` into its throwaway worktree before the suite
+  `verify-and-merge-branch.sh` merges `origin/main` into its verify worktree before the suite
   is allowed to judge anything, and refuses (verifying nothing, merging nothing) when that combine
   conflicts. An agent's own green run only ever proves the branch works beside the code it was cut
   from, and when several branches land at once that is the one thing it needs to prove and cannot:
   PR #2345 was green on its own branch and red on the main that already carried #1575 and #1940
   (measured 2026-08-09). If you merge some other way, combine current main into the branch and
   re-run `scripts/test-all.sh` on the combined tree yourself before merging.
+  For SEVERAL PRs at once use `scripts/verify-and-merge-batch.sh <pr> <pr> ...` (#2602), which does that
+  combination once instead of once per PR: it refuses every PR up front that cannot be in a batch (an
+  unresolvable identifier, a GitHub-side conflict, a PR named twice, a body missing the completeness
+  enumeration), sets the persistent verify worktree to current `origin/main`, merges each branch in,
+  runs `scripts/test-all.sh` ONCE, and merges them all only on green. It reuses
+  `verify-and-merge-branch.sh`'s own functions rather than copying them, so the two paths cannot
+  disagree about what a mergeable PR looks like. Two things to know before reading its output. On red it
+  says the failure belongs to the COMBINATION and names every branch in it, because a combined run
+  genuinely cannot attribute a failure to one branch, so do not read it as the last branch named. And
+  the merges themselves happen one at a time on GitHub, so one can be refused after the others land;
+  it attempts all of them and its summary says which merged and which did not, rather than stopping at
+  the first refusal and leaving the rest unreported.
+  **A merge is confirmed with GitHub, never assumed, and that is one shared implementation**
+  (`scripts/lib/pr-merge.sh`, used by all three merge paths). Both halves of that come from the same
+  incident, on the batch script's first real run, 2026-08-13: `gh pr merge 2609` exited 1 with
+  `GraphQL: Something went wrong while executing your query`, a transient GitHub fault, and the run
+  printed `merged   PR #2609`, deleted the local branch of a PR that was still open, and exited 0.
+  Nothing had looked at the merge command's status (the steps after it ran unconditionally and the last
+  two end in `|| true`, so the function returned 0; errexit cannot help, because every caller invokes it
+  where errexit is suspended), and a zero status would only have been a claim about the command anyway,
+  not about the PR. So `merge_pr` now fails loud on the command AND asks GitHub whether the PR reads as
+  MERGED, and nothing destructive runs until it does. `pr-merge.test.sh` asserts no other script invokes
+  `gh pr merge` itself, because the reason this needed fixing twice is that two scripts each had their
+  own copy.
 
 The pieces hand off through fixed-shape JSON files, not direct calls. `docs/contracts.md`
 catalogs every one (writer, reader, version, and its `fixtures/` guard); read it before changing

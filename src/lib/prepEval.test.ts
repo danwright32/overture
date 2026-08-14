@@ -596,6 +596,7 @@ describe("prep-eval fixtures", () => {
       "five-named-performers-none-dropped",
       "host-venue-not-target",
       "listed-house-is-refused",
+      "listing-credits-an-individual-producer",
       "listing-credits-the-producing-company",
       "no-organiser-named-act-pursued",
       "presenter-not-venue",

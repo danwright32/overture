@@ -92,9 +92,12 @@ enum DraftReviewNotes {
         return "No subject line. Edit the draft to add one."
     }
 
+    // #2629: names both routes the control now takes. It used to say "Add a contact by hand" full stop,
+    // which pointed at a popover that accepted only an address, on exactly the shows that have no address
+    // to give it. Saying what it accepts is the half that makes the instruction followable.
     static func noSendableEmail(hasPendingRecipient: Bool, hasAnyEmailContact: Bool) -> String? {
         guard !hasPendingRecipient, !hasAnyEmailContact else { return nil }
-        return "No email to send to. Add a contact by hand."
+        return "No email to send to. Add a contact by hand, by address or by link."
     }
 
     // #792: "Sent" was once the whole story, and a contact held back by a review guard is not sendable,
@@ -122,6 +125,13 @@ enum DraftReviewNotes {
     // #1866: the fourth guard's warning line, in the same list as the three above. It deliberately does NOT
     // say "blocked from sending", because this one blocks nothing: it downgrades what the card claims about
     // the address. Saying otherwise would be the L11 overclaim the badge itself was just fixed for.
+    // #2624: the fifth guard's warning line, in the same list as the four above. Unlike the confidence
+    // hold directly below, this one DOES block the send, and says so: the greeting is composed from the
+    // contact's name, so an address in another name would greet one person and reach a different one.
+    static func addressInAnotherName(name: String) -> String {
+        "Nothing on this show connects \(name) to the address found for them, and no page was recorded; blocked from sending."
+    }
+
     static func confidenceHeldDown(name: String) -> String {
         "Nothing recorded which page \(name)'s address was read off, so it isn't counted as verified."
     }

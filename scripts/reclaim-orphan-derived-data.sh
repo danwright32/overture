@@ -6,7 +6,8 @@ set -uo pipefail
 #
 # Xcode keys DerivedData by the workspace's PATH, so every worktree that is ever built mints a fresh
 # folder of roughly 1.6 GB and nothing reclaims it when the worktree goes. This repo makes those paths
-# constantly (one throwaway worktree per pre-merge verification, one per parallel agent), so the growth
+# constantly (one per parallel agent; pre-merge verification stopped minting when #2601 gave it one
+# persistent worktree), so the growth
 # is proportional to how much the workflow is used and its ceiling is the disk. On 2026-08-12 it reached
 # that ceiling: 148 GB in DerivedData, 101 of 105 folders pointing at deleted directories, 132 MiB free
 # on a 926 GiB volume, and no command able to run at all, including `df`.

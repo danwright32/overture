@@ -262,8 +262,7 @@ struct QueueView: View {
             focusedKeys: focusedKeys,
             // #1770: read once for the whole pass, from the cache rather than from the token file.
             gmailConnected: GmailConnection.shared.isConnected,
-            prepRunning: PrepQueueService.isRunning(now: now),
-            probeRunning: PrepQueueService.isProbeRunning(now: now),
+            runInFlight: PrepQueueService.runInFlight(now: now),
             replyRunAlive: ReplyClassifyService.isRunning(now: now),
             trace: renderTrace))
     }
@@ -313,8 +312,11 @@ struct QueueView: View {
             }
             .sheet(item: $pendingRowNudge) { pending in
                 SendConfirmSheet(confirmation: pending.confirmation,
-                                 onSend: { performRowNudge(pending) },
-                                 onCancel: { pendingRowNudge = nil })
+                                 onSend: { performRowNudge(pending, body: nil) },
+                                 onCancel: { pendingRowNudge = nil },
+                                 // #2575: both kinds this sheet raises are composed end to end by
+                                 // Overture, so both get the box.
+                                 onSendEdited: { performRowNudge(pending, body: $0) })
             }
             .sheet(item: $answeringReply) { target in
                 // #2145: the one reply screen, told what it is answering. An inquiry builds its own
@@ -398,6 +400,9 @@ struct QueueView: View {
     private func requestRecheckNow(_ item: QueueItem) {
         let summary = ProbeSelection.summarizeOneShowRecheck(
             previouslyMissed: item.reachabilityUnansweredAt != nil,
+            // #2621: an answer this show can actually show, its own or its organisation's. False is the
+            // missed show, which since that issue raises this same sheet with nothing behind it.
+            hasAnswer: item.reachabilityProbedAt != nil || item.inheritedReachability != nil,
             secondsPerRound: ProbeSelection.liveSecondsPerRound())
         pendingProbe = ProbeConfirm(keys: [item.id], dateLabel: "",
                                     title: ProbeSelectionCopy.multiDateTitle(summary),
@@ -903,8 +908,12 @@ struct QueueView: View {
             }
             .font(.system(size: 12))
             // #1131: the "Of the N high-fit: ... relationship / ... merit" breakdown line was dropped from
-            // the masthead (Dan does not read it). The relationship/merit split still exists as an internal
-            // diagnostic on QueuePriorityBreakdown (#92); it is simply no longer surfaced here.
+            // the masthead (Dan does not read it). #2638 then deleted the split itself, since nothing had
+            // read it since, and a diagnostic nobody sees is not a diagnostic (L29). If the question it
+            // answered ("is high fit over-filled with warm orgs?") comes back, it is four lines over the
+            // shared Candidate builder and is cheaper to rewrite against the current axes than it would
+            // have been to keep alive unused: this version predated the contact tier weights (#2622) and
+            // would have reported them wrong.
             // #1131: only the "Scouted X ago" half stays. The prep/review/approved counts and "last prep"
             // timing that prepStatus.summary added here are duplicated by the Prep/Review/Send pill row
             // (agentStrip) directly below, so they are dropped; "Scouted X ago" is not shown anywhere else.
@@ -1054,17 +1063,24 @@ struct QueueView: View {
                         ForEach(group.rows) { entry in
                             switch entry {
                             case .prospect(let prospect, let recipient, let next):
-                                // #2417: the row Dan just closed out draws its quiet exit here, on the
-                                // press, while the write and the queue rebuild behind it take their
-                                // quarter of a second. ReachedOutDepartureAware owns the read, so only
-                                // this row redraws rather than the whole stage.
-                                ReachedOutDepartureAware(sendState: sendState,
-                                                         key: prospect.naturalKey) { snapshot, reason in
-                                    if let snapshot, let reason, !reason.showsSendDelight {
-                                        ClosedOutDepartureRow(item: snapshot)
+                                // #2644: the row is wrapped so it can SEE a send of its own in flight.
+                                // Without this it took (pair, now) only, so pressing "Send a closing
+                                // note" left the same button on screen for the whole second the Gmail
+                                // send took, and the row then simply vanished. Dan: "at first I thought
+                                // it didn't work."
+                                // #2417: the same wrapper hands the departure, so the row Dan just closed
+                                // out draws its quiet exit on the PRESS, while the write and the queue
+                                // rebuild behind it take their quarter of a second.
+                                // Read INSIDE the wrapper rather than here, on #1922's rule: read at this
+                                // call site every row would re-derive on every tick of the sending row's
+                                // clock.
+                                ReachedOutSendAwareRow(sendState: sendState,
+                                                       key: prospect.naturalKey) { sendingSince, departure in
+                                    if let departure, !departure.reason.showsSendDelight {
+                                        ClosedOutDepartureRow(item: departure.item)
                                     } else {
-                                        reachedOutRow((prospect: prospect, recipient: recipient,
-                                                       next: next), now: now)
+                                        reachedOutRow((prospect: prospect, recipient: recipient, next: next),
+                                                      now: now, since: sendingSince)
                                     }
                                 }
                             case .inquiry(let inquiry, let row, _):
@@ -1105,7 +1121,15 @@ struct QueueView: View {
     // #661: group name, this one contact, timing, and the conversation-state control (the shared
     // ConversationStateControl, #652/#661), plus a link to Follow-ups once it's actually due, since
     // that screen already owns the real nudge/reply-sending flow rather than a second copy of it here.
-    private func reachedOutRow(_ pair: (prospect: Prospect, recipient: Recipient, next: Date), now: Date) -> some View {
+    // #2644: `since` is when a send on THIS show started, or nil. An explicit parameter rather than an
+    // internal read, the same way `FollowUpsView.row(_:since:)` takes it, so what the row draws is
+    // decided by its caller and a test can drive both states.
+    // Internal rather than private so the on-screen test can render it in both states, the same
+    // refactor #710 made to `FollowUpsView.row` for the same reason: a row whose in-flight state is read
+    // from private @State cannot be driven from outside the view, and an unprovable working state is how
+    // this one stayed missing.
+    func reachedOutRow(_ pair: (prospect: Prospect, recipient: Recipient, next: Date),
+                       now: Date, since: Date?) -> some View {
         let p = pair.prospect, r = pair.recipient
         return HStack(alignment: .top, spacing: OVSpacing.md) {
             VStack(alignment: .leading, spacing: 3) {
@@ -1134,7 +1158,7 @@ struct QueueView: View {
                 // #1630: a form pitch has no address and no thread, so the row has to account for the
                 // silence itself. Said in inkSoft, not rust: nothing is wrong here.
                 if r.outreachChannel == .contactForm {
-                    Text(FormOutreachCopy.sentLine)
+                    Text(FormOutreachCopy.sentLine(formURL: r.formOutreachURL))
                         .font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
                 }
                 // #675: this pipeline never carries a bounced recipient (isInPlay excludes them), so
@@ -1209,10 +1233,22 @@ struct QueueView: View {
                 CloseOutMenu(outcomes: ShowOutcome.menu(wasPitched: p.wasPitched)) { outcome in
                     closeOut(p, as: outcome)
                 }
-                // #2130: the control says what is actually due, because "due now" here is min of three
-                // clocks and meant six different things behind one wording. Nothing due, no button: an
-                // always-present control that refuses on press is the defect this replaces.
-                if let label = ReachedOutAction.of(r, in: p, now: now, today: today).label {
+                // #2644: while a send on this show is in flight, the action control is REPLACED by the
+                // live label rather than sitting there unchanged. The three states the standing rule
+                // requires are all in `LiveRunLabel`: it started (the words appear in place of the
+                // button), it is still alive (the elapsed count moves), and it stalled (the timeout turns
+                // into a retry) instead of one indefinite silence. The same control and the same
+                // `performRowNudge` carry the nudge as well as the closing note, so both are covered.
+                //
+                // Replacing the button rather than sitting beside it is the L44 half: a control that
+                // keeps offering itself after being pressed reads as broken, and gets pressed again.
+                if let since {
+                    LiveRunLabel(base: "Sending", since: since, timeout: RunTimeouts.send,
+                                 font: OVType.meta, color: OVColor.inkSoft)
+                } else if let label = ReachedOutAction.of(r, in: p, now: now, today: today).label {
+                    // #2130: the control says what is actually due, because "due now" here is min of three
+                    // clocks and meant six different things behind one wording. Nothing due, no button: an
+                    // always-present control that refuses on press is the defect this replaces.
                     Button(label) { startRowAction(r, of: p, now: now) }
                         .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forestText)
                 }
@@ -1441,16 +1477,20 @@ struct QueueView: View {
         }
     }
 
-    private func performRowNudge(_ pending: PendingRowNudge) {
+    // #2575: `body` is what the send sheet's text box held when Dan pressed Send, nil for a send he did
+    // not edit. Passed straight through; nothing recomposes it on the way.
+    private func performRowNudge(_ pending: PendingRowNudge, body: String?) {
         pendingRowNudge = nil
         if pending.isConversation {
             ProspectMutations.sendClosingNote(pending.naturalKey, pending.recipientId,
                                               prospects: prospects, context: context, feedback: feedback,
+                                              body: body,
                                               markSending: { sendState.markSending($0) },
                                               clearSending: { sendState.clearSending($0) })
         } else {
             ProspectMutations.sendFollowUp(pending.naturalKey, pending.recipientId,
                                            prospects: prospects, context: context, feedback: feedback,
+                                           body: body,
                                            markSending: { sendState.markSending($0) },
                                            clearSending: { sendState.clearSending($0) })
         }

@@ -236,6 +236,10 @@ final class Prospect {
     // afterwards. The after is derived, never remembered.
     var fitScoreBeforeContactCheck: Int? = nil
     var contactRouteAtScore: String? = nil
+    // #2622: and WHO was found at that score, for the same reason, because a re-check can return the same
+    // route and a different person. Without it a show whose check finally found the producer would keep
+    // the score it got for a cast member's address, since the route never moved.
+    var contactTierAtScore: String? = nil
     // #1648: the contact answer as the RANKER should read it. Identical to the stored result except
     // that an answer past its 90 day expiry reads as `.unchecked`, so a demotion lifts at the same
     // moment the badge reverts to "worth re-checking" and the card and the score can never disagree
@@ -244,8 +248,41 @@ final class Prospect {
     //
     // It RECOMPUTES rather than restoring the score stored before the check: restoring an integer
     // would also silently undo any unrelated correction made since (the #1648 Phase A3 mistake).
+    // #2622: which contact speaks for the show. Dan's decision, 2026-08-13: the HIGHEST tier among the
+    // show's SENDABLE contacts, selected over the same set `reachabilityResultFromRecipients` reads for
+    // `isSendablePending`, so the badge and the score can never answer from different lists (L16).
+    //
+    // Two consequences, and they are the cases this rule exists for. A show can hold a PRIMARY contact
+    // with no address at all (the runbook emits a full contact for a named performer even when no email
+    // was verified), and under this rule that entry cannot lift the show: Dan's standing rule is that it
+    // is not a high fit if he cannot email anybody, so a person he has identified and cannot write to must
+    // not score as if he could. And an address held by a guard (venue, press, duplicate, held down to
+    // unverified) does not set the tier either, for the same reason it does not make the show emailFound.
+    var contactTierFromRecipients: ContactTier? {
+        ContactTier.best(of: recipients.filter(\.isSendablePending).map(\.contactTier))
+    }
+
+    // The tier as the SCORE should see it: nil once the answer it came from has aged out, so a stale
+    // find cannot keep lifting a show after its route has fallen back to unchecked.
+    func contactTierForScoring(now: Date) -> ContactTier? {
+        guard !Reachability.probeIsStale(probedAt: reachabilityProbedAt, now: now) else { return nil }
+        return contactTierFromRecipients
+    }
+
     func contactRouteForScoring(now: Date) -> ContactRoute {
         if Reachability.probeIsStale(probedAt: reachabilityProbedAt, now: now) { return .unchecked }
+        // Deliberately the STORED verdict, not `reachabilityResultAsHeld` which the badge reads.
+        //
+        // #2664 briefly made this follow the badge, on the reasoning that a card saying "No email found"
+        // beside a score still paying route points is a contradiction. Dan's call, 2026-08-13, on being
+        // shown that this went further than the decision he actually made: the badge was what he chose,
+        // and ranking stays tied to what the paid check CONCLUDED.
+        //
+        // The two questions really are different, which is why they may answer differently here. The badge
+        // asks "can I reach this show right now", and a contact deleted by hand changes that. The score
+        // asks "what did the research find", and a hand delete is not a research finding: the score moves
+        // when a re-check moves it. Staleness is still shared, so they cannot disagree about whether an
+        // answer is CURRENT, which was #1648's point and is untouched.
         return ContactRoute(probeResult: reachabilityResult)
     }
     // #1596 Phase 3: classify this row's CURRENT recipients into a stored result. One definition, used by
@@ -263,7 +300,25 @@ final class Prospect {
         // their order untouched keeps #1324's tested behaviour exactly as it was. The combination (a
         // venue address AND the act's own form) was not observed in the 2026-07-27 run and is not
         // re-ranked on speculation.
-        return usableContactFormURLs.isEmpty ? .noEmailFound : .contactFormOnly
+        if !usableContactFormURLs.isEmpty { return .contactFormOnly }
+        // #2612: no address and no form on their own site, but a social profile that takes messages.
+        // Ranked BELOW the form for the same reason the form sits below the address states: a form on
+        // their own site is the stronger of the two hand routes, and a show holding both should say the
+        // one Dan reaches for first. Above `noEmailFound` because it is a route, not the absence of one.
+        return socialRouteURLs.isEmpty ? .noEmailFound : .socialOnly
+    }
+
+    // #2612: the social profiles Dan will actually DM. Judged through the SAME venue and press guards as
+    // the form list below, so a room's own Instagram or a press account is no more a route here than it
+    // is there; only the social-host test differs, and it is inverted.
+    var socialRouteURLs: [String] {
+        recipients.compactMap { r -> String? in
+            guard let raw = r.contactFormURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !raw.isEmpty, Reachability.isSocialOnly(raw),
+                  !VenueContactGuard.looksLikeVenue(formURL: raw, venue: venue),
+                  !PressContactGuard.looksLikePressContact(formURL: raw) else { return nil }
+            return raw
+        }
     }
 
     // #1626: the contact forms Dan would actually use, which is a form on the ACT's own site. An
@@ -293,6 +348,34 @@ final class Prospect {
     var reachabilityResult: Reachability.ProbeResult? {
         get { reachabilityResultRaw.flatMap(Reachability.ProbeResult.init(rawValue:)) }
         set { reachabilityResultRaw = newValue?.rawValue }
+    }
+
+    // #2664: the verdict as anything Dan READS should see it, which is what the show HOLDS rather than what
+    // a check once concluded about it. The two can disagree, because a check's answer is durable and the
+    // contacts justifying it are not: deleting a show's last contact by hand leaves the verdict behind, and
+    // the badge then promises a route that exists nowhere in the app (L38, L80).
+    //
+    // Dan's call, 2026-08-13, choosing this over clearing the verdict on delete: one rule, no paid re-check
+    // to recover something he chose to remove, and it settles every future disagreement rather than the one
+    // row that prompted it. The stored verdict is untouched, so what the paid check concluded survives as
+    // history and only the reading of it moves (L5).
+    //
+    // Two boundaries, and both are the rule rather than caveats on it:
+    //
+    // Never checked stays never checked. `reachabilityResultFromRecipients` answers `noEmailFound` for a
+    // show with no contacts, and a show nobody has looked at has none either, so deriving unconditionally
+    // would stamp a verdict no check reached onto every unchecked show in the queue. Never checked and
+    // checked-and-empty are different screens (L10, L11) and only the stored value tells them apart.
+    //
+    // A show already sent or booked keeps the verdict it went out under. What a show holds is read off its
+    // PENDING contacts (`isSendablePending`, the same predicate the badge, the tier and the send list all
+    // use, so none of them can answer from a different list, L16), and a sent show has none left. The badge
+    // is already silent on those, so this decides nothing on screen today; it is here so the property is
+    // safe for any later reader rather than correct only at the one call site that exists now.
+    var reachabilityResultAsHeld: Reachability.ProbeResult? {
+        guard let stored = reachabilityResult else { return nil }
+        guard sentAt == nil, !isBooked else { return stored }
+        return reachabilityResultFromRecipients
     }
 
     // #1722. An unrecognised stored value reads as nil (no reason given), which the copy degrades to the

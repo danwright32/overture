@@ -103,7 +103,18 @@ enum OmniFocusSync {
                 guard standing.isInPlay || unhandledReply else { continue }
 
                 // The post-event prompt, on its own date, if that falls within the horizon.
-                if let due = PostEventPrompt.nextPromptDate(for: r, of: p, now: now), due <= cutoff {
+                //
+                // #2646: `nextPromptDate` now names a date that has not arrived yet instead of staying
+                // silent until it does, so this site asks the DUE question explicitly rather than reading
+                // nil as "not yet". Behaviour here is deliberately unchanged, and that reveals something
+                // worth naming: the branch only ever fired on an already-due prompt, so `due <= cutoff`
+                // has never once excluded anything (a past date is always inside a future cutoff), and
+                // the horizon this comment describes has never applied. Left in place rather than quietly
+                // dropped, because making it real is a change with a consequence: a prompt coming due next
+                // week would take this contact's single task slot away from a reply needing triage today,
+                // via the `continue` below. That is its own issue (#2663), not a side effect of this one.
+                if let due = PostEventPrompt.nextPromptDate(for: r, of: p),
+                   PostEventPrompt.prompt(for: r, of: p, now: now) != nil, due <= cutoff {
                     let dueDate = easternTime(hour: dueHour, onDayOf: due)
                     earned.append((r, DesiredTask(naturalKey: p.naturalKey, recipientId: r.id, title: title(for: p, r),
                                                   note: note(for: p, r, dueDate: dueDate),

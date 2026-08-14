@@ -52,6 +52,7 @@ enum ContactRoute: String, Decodable, Sendable, CaseIterable {
     case unchecked
     case emailFound = "email_found"
     case contactFormOnly = "contact_form_only"
+    case socialOnly = "social_only"
     case weakContactOnly = "weak_contact_only"
     case noEmailFound = "no_email_found"
 
@@ -61,6 +62,7 @@ enum ContactRoute: String, Decodable, Sendable, CaseIterable {
         case .none: self = .unchecked
         case .some(.emailFound): self = .emailFound
         case .some(.contactFormOnly): self = .contactFormOnly
+        case .some(.socialOnly): self = .socialOnly
         case .some(.weakContactOnly): self = .weakContactOnly
         case .some(.noEmailFound): self = .noEmailFound
         }
@@ -84,6 +86,10 @@ struct Candidate: Decodable, Sendable {
     // months (#1669). Without one, every Swift construction site is forced to answer, so the same class
     // of bug cannot recur on this axis. JSON still defaults, see init(from:) below.
     var contactRoute: ContactRoute
+    // #2622: WHO was found, when an address was. Defaulted nil so every fixture and every caller written
+    // before this scores exactly as it did, which is also the honest reading of the 113 contacts already
+    // in the store: nobody has said who they are.
+    var contactTier: ContactTier? = nil
 
     // Spelled out because providing init(from:) below stops Swift synthesising these. A nested enum
     // does not suppress the memberwise init, so every existing Candidate(...) call site is unaffected.
@@ -107,7 +113,7 @@ extension Candidate {
     // a contact address was found.
     init(rawDiscipline: String, rawProduction: String, rawPriorRelationship: String,
          rawProfile: String, rawCoverage: String, passedOnThisShow: Bool,
-         contactRoute: ContactRoute) {
+         contactRoute: ContactRoute, contactTier: ContactTier? = nil) {
         self.init(reachable: true,
                   priorRelationship: PriorRelationship(rawValue: rawPriorRelationship) ?? .none,
                   production: Production(rawValue: rawProduction) ?? .unknown,
@@ -115,7 +121,8 @@ extension Candidate {
                   coverage: Coverage(rawValue: rawCoverage) ?? .unknown,
                   discipline: Discipline(rawValue: rawDiscipline) ?? .other,
                   passedOnThisShow: passedOnThisShow,
-                  contactRoute: contactRoute)
+                  contactRoute: contactRoute,
+                  contactTier: contactTier)
     }
 }
 
@@ -214,10 +221,43 @@ enum Ranker {
     //
     // `unchecked` and `weakContactOnly` both score zero, for different reasons: nobody asked, versus
     // asked and got a front desk, which is not evidence he can reach the act.
-    static func contactRoutePoints(_ r: ContactRoute) -> Int {
+    // #2622, Dan's weights (2026-08-13), chosen against the measured live distribution the same way
+    // #1648's were rather than by feel. Over the 29 shows then sitting at `email_found`, the scores pile
+    // up either side of the high-fit line: 11 shows at exactly 4 and 5 at exactly 5, so both directions
+    // are violent and both were chosen deliberately.
+    //
+    //   primary    3   promotes the four shows one point below the line whose check found somebody who
+    //                  can say yes. That is the intended behaviour, not a side effect.
+    //   secondary  2   unchanged: today's flat weight, so a co-performer's address is worth what an
+    //                  address has always been worth.
+    //   tertiary  -1   Dan set this himself, over the 0 that was recommended. A nudge, not a burial, the
+    //                  same shape as `noEmailFound`'s -5 being deliberately lighter than a tier floor.
+    //                  Measured effect: Operation Mincemeat 8 to 5 (stays exactly on the line), We've Been
+    //                  Here Before 6 to 3 (leaves high fit), Jordan Smart 4 to 1, Marcus Monroe 2 to -1.
+    //   unknown    2   every contact stored before this shipped, and any the run declines to judge. It
+    //                  scores what it scored yesterday, so nothing moves under a show on the strength of
+    //                  a fact nobody has established (the issue's open question 4, left honest).
+    static func contactRoutePoints(_ r: ContactRoute, tier: ContactTier? = nil) -> Int {
         switch r {
-        case .emailFound: return 2
+        case .emailFound:
+            switch tier {
+            case .primary: return 3
+            case .secondary: return 2
+            case .tertiary: return -1
+            case nil: return 2
+            }
         case .contactFormOnly: return 1
+        // #2612: BELOW a contact form, and no longer the -5 of a dead end. Dan's call, 2026-08-13, asked
+        // directly after the first version scored it level with a form: "social dm is worth less than a
+        // contact form. I probably won't use it unless it's a really good fit in other ways like I
+        // mentioned." Zero says exactly that. It neither lifts a show nor buries it, so an Instagram-only
+        // show reaches high fit only when the rest of it is strong, which is the behaviour he described.
+        //
+        // It shares that zero with `weakContactOnly` and `unchecked`, which is not a collapse of three
+        // meanings into one: those two score zero for their own reasons (asked and got a front desk,
+        // versus nobody asked), and the three stay distinct everywhere it matters, in the verdict, the
+        // badge and what the card offers.
+        case .socialOnly: return 0
         case .weakContactOnly: return 0
         case .noEmailFound: return -5
         case .unchecked: return 0
@@ -231,7 +271,7 @@ enum Ranker {
             + coveragePoints(c.coverage)
             + disciplinePoints(c.discipline)
             + passedPoints(c.passedOnThisShow)
-            + contactRoutePoints(c.contactRoute)
+            + contactRoutePoints(c.contactRoute, tier: c.contactTier)
         let tier: Tier = score >= highTierThreshold ? .high : .longshot
         return FitResult(excluded: !c.reachable, score: score, tier: tier)
     }

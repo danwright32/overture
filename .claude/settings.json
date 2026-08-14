@@ -1,0 +1,8 @@
+{
+  "enabledPlugins": {
+    "vercel-plugin@vercel-vercel-plugin": false,
+    "cloudflare@cloudflare": false,
+    "figma@claude-plugins-official": false,
+    "stripe@claude-plugins-official": false
+  }
+}

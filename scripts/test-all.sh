@@ -12,12 +12,23 @@ set -euo pipefail
 # tests for check-pr-ci.sh, merge-when-green.sh, run-tests-locked.sh, etc.), which previously only
 # ran when someone remembered to run them by hand.
 #
+# #2603: TWO LANES. The Swift suite is the dominant cost by minutes, and its opening seconds go on
+# waiting for the shared xcodebuild lock and then building, during which nothing else here is doing
+# anything. So it starts FIRST, in the background, and the cheap checks run beside it. The plumbing and
+# the reporting rules live in scripts/lib/test-all-phases.sh, which has its own fixture; what matters
+# when reading this file is that a cheap failure no longer ends the run, because the expensive lane is
+# already going and its verdict is worth having. Both verdicts are reported separately at the end and
+# the exit code is red if either lane is red (L53).
+#
 # Usage: scripts/test-all.sh
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 cd "${REPO_ROOT}"
+
+# shellcheck source=./lib/test-all-phases.sh
+source "${REPO_ROOT}/scripts/lib/test-all-phases.sh"
 
 # #2318: record the working tree before anything runs, and compare it at the end. A test that writes
 # into the checkout leaves changes indistinguishable from a person's own edits, so review cannot
@@ -36,45 +47,79 @@ else
   "${REPO_ROOT}/scripts/check-tree-untouched.sh" record "${REPO_ROOT}" "${TREE_SNAPSHOT}"
 fi
 
-echo "==> pnpm typecheck"
-pnpm typecheck
+# --- before the build, and fail-fast, deliberately ------------------------------------------------
+#
+# These two cannot move into the lane beside the Swift suite, and each for its own reason.
+#
+# check-pure-suite-imports.sh is the one break a Swift guard cannot catch: a file in the pure suite
+# importing the app as a module stops that target compiling, so NOT ONE of its tests runs. Naming the
+# file here costs seconds; letting the build start first would cost the whole build and end in "unable
+# to resolve module dependency". That saving only exists if it runs first.
+echo "==> scripts/check-pure-suite-imports.sh"
+"${REPO_ROOT}/scripts/check-pure-suite-imports.sh"
 
-echo "==> pnpm test"
-pnpm test
+# check-pbxproj-fresh.sh does its own xcodegen regen-and-restore inside this checkout, so it must not
+# run WHILE xcodebuild is reading the same project file. It is also the check that decides whether the
+# thing about to be built is even the right project, which is not worth building against if stale.
+echo "==> scripts/check-pbxproj-fresh.sh"
+"${REPO_ROOT}/scripts/check-pbxproj-fresh.sh"
 
-echo "==> scripts/run-shell-fixtures.sh"
-"${REPO_ROOT}/scripts/run-shell-fixtures.sh"
+# --- the expensive lane starts here ---------------------------------------------------------------
+SWIFT_LABEL="mac/scripts/run-tests-locked.sh"
+SWIFT_LOG="$(mktemp "${TMPDIR:-/tmp}/overture-swift-suite.XXXXXX")"
+echo "==> ${SWIFT_LABEL} (started in the background; its output streams below once the cheap checks are done)"
+start_background_phase "${SWIFT_LOG}" "${REPO_ROOT}/mac/scripts/run-tests-locked.sh"
+SWIFT_PID="${BACKGROUND_PHASE_PID}"
+SWIFT_STATUS_FILE="${BACKGROUND_PHASE_STATUS_FILE}"
+
+# However this script leaves, the suite it started goes with it. An orphaned xcodebuild would hold the
+# shared lock and keep every other worktree's run queued behind a run nobody is reading.
+trap 'kill "${SWIFT_PID}" 2>/dev/null || true; rm -f "${TREE_SNAPSHOT}" "${SWIFT_LOG}" "${SWIFT_STATUS_FILE}"' EXIT
+
+# Nothing in the cheap lane touches the Swift build. Audited 2026-08-13: the shell fixtures stub
+# xcodebuild and flock inside their own mktemp PATH dirs (so none reaches the real lock), no fixture
+# kills a process by pattern, and the drift checks are read-only. The two that mutate anything outside
+# the checkout (LaunchServices registrations, orphaned DerivedData folders) only ever touch entries
+# whose target no longer exists.
+
+# --- the cheap lane, beside it --------------------------------------------------------------------
+TEST_ALL_CHEAP_FAILURES=()
+
+run_foreground_check "pnpm typecheck" pnpm typecheck
+run_foreground_check "pnpm test" pnpm test
+run_foreground_check "scripts/run-shell-fixtures.sh" "${REPO_ROOT}/scripts/run-shell-fixtures.sh"
 
 # Warns if docs/prep-runbook.md and the external dan-wright-brand-voice skill have drifted apart
 # (#731). Skips cleanly (exit 0) on any machine without the skill installed, since it lives outside
 # this clone, so it never breaks CI or a fresh checkout; it only fails locally on genuine drift.
-echo "==> scripts/check-brand-voice-drift.sh"
-"${REPO_ROOT}/scripts/check-brand-voice-drift.sh"
+run_foreground_check "scripts/check-brand-voice-drift.sh" "${REPO_ROOT}/scripts/check-brand-voice-drift.sh"
 
 # Warns when docs/prep-runbook.md has changed since the paid eval (scripts/eval-prep-runbook.sh --yes)
 # last COMPLETED, so a drafting rule cannot ship with nothing having scored real model output against
 # it (#1867). Never blocks: that eval spends tokens and is deliberately hand-run, so this reports and
 # exits 0 whatever it finds, and skips cleanly on a machine that cannot run the eval at all.
-echo "==> scripts/check-prep-eval-freshness.sh"
-"${REPO_ROOT}/scripts/check-prep-eval-freshness.sh"
+run_foreground_check "scripts/check-prep-eval-freshness.sh" "${REPO_ROOT}/scripts/check-prep-eval-freshness.sh"
 
 # Fails if a second near-copy source-health recorder has been reintroduced in the scout ingest files
 # (#1073). The #987/#1001/#1005 defect (two recorders drifting until one silently stops writing a
 # field) is caught at push time instead of in production.
-echo "==> scripts/check-health-recorder-drift.sh"
-"${REPO_ROOT}/scripts/check-health-recorder-drift.sh"
+run_foreground_check "scripts/check-health-recorder-drift.sh" "${REPO_ROOT}/scripts/check-health-recorder-drift.sh"
 
 # Fails if any detached "$CLAUDE" -p runner under mac/scripts hardcodes a literal --allowedTools
 # instead of folding through a *_claude_scope function in mac/scripts/lib/claude-run-scope.sh (#1102).
 # Guards against a FUTURE fourth runner reintroducing the bare --allowedTools hole #1026/#1097 already
 # closed for scout-extract, prep and reply-classify.
-echo "==> scripts/check-detached-runner-scope.sh"
-"${REPO_ROOT}/scripts/check-detached-runner-scope.sh"
+run_foreground_check "scripts/check-detached-runner-scope.sh" "${REPO_ROOT}/scripts/check-detached-runner-scope.sh"
+
+# Fails if the tracked .claude/settings.json stops disabling the Claude Code plugins that have no
+# business loading in this repo (#2605). #1682 turned them off for the DETACHED runs only; this covers
+# the interactive session, where one was measured injecting 53.2KB of another product's documentation
+# into every session opened here.
+run_foreground_check "scripts/check-project-plugin-scope.sh" "${REPO_ROOT}/scripts/check-project-plugin-scope.sh"
 
 # The app launches its runners with /bin/sh, so they must PARSE there. `bash -n` is not enough and
 # missing that shipped a runner that died on its first real run.
-echo "==> scripts/check-runner-posix.sh"
-"${REPO_ROOT}/scripts/check-runner-posix.sh"
+run_foreground_check "scripts/check-runner-posix.sh" "${REPO_ROOT}/scripts/check-runner-posix.sh"
 
 # Lists every LIVE-STORE-CLAIM tag (a doc/comment count measured against Dan's live SwiftData store,
 # e.g. "0 of 26 distinct venue strings contain a city") with its last-verified date, and warns
@@ -83,21 +128,7 @@ echo "==> scripts/check-runner-posix.sh"
 # had survived untouched elsewhere in the repo until this issue's own sweep found them. Never depends on
 # the live store itself (CI and any machine without it simply can't have that file), so it only fails on
 # a genuinely malformed tag or a checked-in fixture that disagrees with its own claim.
-echo "==> scripts/check-live-store-claims.sh"
-"${REPO_ROOT}/scripts/check-live-store-claims.sh"
-
-# Blocks a file in the pure Swift suite from importing the app as a module, which stops that target
-# compiling so NOT ONE of its 4,800 tests runs. Deliberately ahead of the Swift run below: this is the
-# one break a Swift guard cannot catch (an offender means no Swift test can execute at all), and naming
-# the file here costs seconds instead of a full build ending in "unable to resolve module dependency".
-echo "==> scripts/check-pure-suite-imports.sh"
-"${REPO_ROOT}/scripts/check-pure-suite-imports.sh"
-
-# Blocks a STALE committed mac/Overture.xcodeproj/project.pbxproj from reaching main (#1368). Compares it
-# against a fresh xcodegen generate and BLOCKS on any difference; a xcodegen version mismatch says "cannot
-# verify" rather than a false "stale". Local-only like the Swift suite below (CI has no xcodegen/Xcode).
-echo "==> scripts/check-pbxproj-fresh.sh"
-"${REPO_ROOT}/scripts/check-pbxproj-fresh.sh"
+run_foreground_check "scripts/check-live-store-claims.sh" "${REPO_ROOT}/scripts/check-live-store-claims.sh"
 
 # #1970: clears LaunchServices registrations pointing at Overture bundles that no longer exist, and
 # says how many it took out. Dan's call, 2026-08-04: "it should clear them without me."
@@ -124,12 +155,15 @@ echo "==> mac/scripts/prune-stale-registrations.sh"
 echo "==> scripts/reclaim-orphan-derived-data.sh"
 "${REPO_ROOT}/scripts/reclaim-orphan-derived-data.sh" || true
 
-echo "==> mac/scripts/run-tests-locked.sh"
-"${REPO_ROOT}/mac/scripts/run-tests-locked.sh"
+# --- back to the expensive lane -------------------------------------------------------------------
+echo
+echo "==> ${SWIFT_LABEL} (streaming from its first line)"
+SWIFT_STATUS=0
+stream_and_wait "${SWIFT_LOG}" "${SWIFT_PID}" "${SWIFT_STATUS_FILE}" || SWIFT_STATUS=$?
 
 if [[ -n "${TREE_SNAPSHOT}" ]]; then
-  echo "==> scripts/check-tree-untouched.sh"
-  "${REPO_ROOT}/scripts/check-tree-untouched.sh" compare "${REPO_ROOT}" "${TREE_SNAPSHOT}"
+  run_foreground_check "scripts/check-tree-untouched.sh" \
+    "${REPO_ROOT}/scripts/check-tree-untouched.sh" compare "${REPO_ROOT}" "${TREE_SNAPSHOT}"
 fi
 
-echo "==> all suites passed"
+report_phase_results "${SWIFT_LABEL}" "${SWIFT_STATUS}"

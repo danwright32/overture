@@ -82,6 +82,12 @@ enum ProbeSelection {
         let previouslyMissedCount: Int
         // Wall clock, not work: lookups overlap, so this is rounds times how long one round takes.
         let estimatedSeconds: TimeInterval
+        // #2621: the ONE show being re-checked has an answer on its card already, its own or its
+        // organisation's. Its own field rather than `alreadyAnsweredCount`, which counts selected shows
+        // that are NOT being researched and cost nothing: this show is being researched, so writing it
+        // there would be a second meaning for one number and the date confirm reads that number too (L83).
+        // Defaulted, so the date summaries are untouched.
+        var showAlreadyHasAnAnswer: Bool = false
 
         var isEmpty: Bool { showCount == 0 && alreadyAnsweredCount == 0 }
 
@@ -102,12 +108,17 @@ enum ProbeSelection {
     // #1616: `secondsPerRound` is passed in rather than read here, so this stays pure and a test never
     // reaches Dan's real history file. Defaulted to the constant, so a caller that does not know quotes
     // what the app quoted before any of this existed.
-    static func summarizeOneShowRecheck(previouslyMissed: Bool,
+    // #2621: `hasAnswer` is false for the show a check MISSED, which since that issue also raises this
+    // sheet. It has no answer at all, so the message must not open by saying it already has one, and it
+    // is deliberately not defaulted: a caller that does not say gets a compiler error rather than a
+    // sentence that is false half the time (L11).
+    static func summarizeOneShowRecheck(previouslyMissed: Bool, hasAnswer: Bool,
                                         secondsPerRound: TimeInterval = fallbackSecondsPerRound) -> Summary {
         Summary(dateCount: 1, showCount: 1, researchCount: 1, organisationCount: 0,
                 performerHuntCount: 0, alreadyAnsweredCount: 0,
                 previouslyMissedCount: previouslyMissed ? 1 : 0,
-                estimatedSeconds: estimatedSeconds(forLookups: 1, secondsPerRound: secondsPerRound))
+                estimatedSeconds: estimatedSeconds(forLookups: 1, secondsPerRound: secondsPerRound),
+                showAlreadyHasAnAnswer: hasAnswer)
     }
 
     // #1805: finishing the shows a check never reached. Every one of them is being paid for a second
@@ -235,9 +246,15 @@ enum ProbeSelectionCopy {
     // not mention blocking other runs: one lookup is a single round, which is the case #1765 decided was
     // not worth a sentence.
     static func oneShowRecheckMessage(_ s: ProbeSelection.Summary) -> String {
-        var parts = ["This looks up a real contact for this one show, even though it already has an answer."]
+        // #2621: the show a check MISSED reaches this sheet too, and it is the one show with no answer at
+        // all, so it opens on what is true of it rather than on the re-run sentence.
+        var parts = [s.showAlreadyHasAnAnswer
+                     ? "This looks up a real contact for this one show, even though it already has an answer."
+                     : "This looks up a real contact for this one show, which an earlier check never got an answer for."]
         parts.append(ProbeSelectionCopy.costLine(s))
-        if s.previouslyMissedCount > 0 {
+        // Said only where it is news. On a missed show the opening line above has already said it, and
+        // twice is how one fact starts reading as two (#843).
+        if s.previouslyMissedCount > 0 && s.showAlreadyHasAnAnswer {
             parts.append("A check has already run over this show once and never got an answer for it.")
         }
         return parts.joined(separator: "\n\n")

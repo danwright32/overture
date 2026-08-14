@@ -63,7 +63,8 @@ struct AddContactAddressRuleTests {
                                                prospects: [p], context: ctx, feedback: feedback)
 
         #expect(p.recipients.isEmpty)
-        #expect(feedback.message == ActionAck.contactBadAddress("ring them"))
+        // #2629: the refusal names what the control ACCEPTS, which is a route now, not only an address.
+        #expect(feedback.message == ActionAck.contactBadRoute("ring them"))
     }
 
     @Test func anEmptyFieldSaysWhatIsMissing() throws {
@@ -75,7 +76,7 @@ struct AddContactAddressRuleTests {
                                                prospects: [p], context: ctx, feedback: feedback)
 
         #expect(p.recipients.isEmpty)
-        #expect(feedback.message == ActionAck.contactNeedsAddress)
+        #expect(feedback.message == ActionAck.contactNeedsRoute)
     }
 
     // A stray separator in front of one address is a typo, not a second person. Saying "one at a time"

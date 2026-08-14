@@ -63,6 +63,14 @@ enum LocalHistory {
             // `turnedThemDown` is DAN'S refusal, about one show. Recording it against the org would say
             // they refused him, which is the opposite of what happened, and would then penalise an org for
             // a decision he made about a single event.
+            //
+            // #2684: `noWayToReachThem` teaches NOTHING, and that is the whole risk the value carries. It
+            // records that Overture could not find a way in, so the org did nothing to be judged on. Filed
+            // as "declined" it would join the scheduling misses; filed as "passed" it would teach a
+            // STANDING pass against that org at that venue, quietly demoting a show Dan would happily
+            // shoot the moment somebody finds an address. It falls through to `return nil` below, exactly
+            // as `notAFit` does, and `NoWayToReachThemOutcomeTests` asserts that against its two
+            // neighbours so a later tidy-up into either branch goes red.
             if p.status == .dismissed,
                let reason = p.showOutcome,
                schedulingDismissals.contains(reason) {

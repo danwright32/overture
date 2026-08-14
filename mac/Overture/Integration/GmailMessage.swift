@@ -77,7 +77,8 @@ enum GmailMessage {
     // is appended HERE, once, so no body producer carries its own.
     static func rfc822(fromName: String, fromEmail: String, to: [String], subject: String, body: String,
                        signature: OutboundSignature = .none, boundary: String? = nil,
-                       messageID: String? = nil, inReplyTo: String? = nil) -> String {
+                       messageID: String? = nil, inReplyTo: String? = nil,
+                       references: String? = nil) -> String {
         let headerSubject = isASCII(subject) ? subject : encodedWord(subject)
         var headers = [
             "From: \(fromName) <\(fromEmail)>",
@@ -90,9 +91,16 @@ enum GmailMessage {
         // nudge can point In-Reply-To/References at it, which is what makes mail clients (and
         // Gmail's reply detection) treat the reply as part of the same conversation.
         if let messageID { headers.append("Message-ID: \(messageID)") }
-        if let inReplyTo {
-            headers.append("In-Reply-To: \(inReplyTo)")
-            headers.append("References: \(inReplyTo)")
+        if let inReplyTo { headers.append("In-Reply-To: \(inReplyTo)") }
+        // #2648: References is the WHOLE ancestry, oldest first, not the parent restated. It used to be
+        // written as the single `inReplyTo` value, so a third message on a conversation named only the
+        // second and a client walking the chain had no link back to the first.
+        //
+        // Falling back to `inReplyTo` when no chain is supplied keeps the old behaviour as the floor: the
+        // parent's id alone is an incomplete References but a valid one, and it is strictly better than
+        // dropping the header for a caller that has not been taught the chain yet.
+        if let refs = references ?? inReplyTo, !refs.isEmpty {
+            headers.append("References: \(refs)")
         }
         let plainBody = previewBody(body: body, signature: signature)
         if let htmlPart = previewHTML(body: body, signature: signature) {
@@ -144,16 +152,40 @@ enum GmailMessage {
 
     static func rawField(fromName: String, fromEmail: String, to: [String], subject: String, body: String,
                          signature: OutboundSignature = .none,
-                         messageID: String? = nil, inReplyTo: String? = nil) -> String {
+                         messageID: String? = nil, inReplyTo: String? = nil,
+                         references: String? = nil) -> String {
         base64url(Data(rfc822(fromName: fromName, fromEmail: fromEmail, to: to, subject: subject, body: body,
                               signature: signature,
-                              messageID: messageID, inReplyTo: inReplyTo).utf8))
+                              messageID: messageID, inReplyTo: inReplyTo,
+                              references: references).utf8))
     }
 
     // A fresh RFC 2822 Message-ID under the sender's domain, e.g. <UUID@danwrightphotography.com>.
     static func newMessageID(senderEmail: String) -> String {
-        let domain = senderEmail.split(separator: "@").last.map(String.init) ?? "overture.local"
-        return "<\(UUID().uuidString)@\(domain)>"
+        return "<\(UUID().uuidString)@\(messageIDDomain(senderEmail: senderEmail))>"
+    }
+
+    // #2649: does this stored id look like one OVERTURE minted rather than one Gmail assigned? It is the
+    // question the threading repair selects on, and it lives here, beside the minting above, so the test
+    // and the thing it recognises cannot drift into disagreeing (L41).
+    //
+    // The reasoning it encodes: Gmail discards a supplied Message-ID and stamps its own under
+    // `mail.gmail.com`, which is what #2647 now reads back. An id under the SENDER's own domain is
+    // therefore one nothing on the wire ever carried, and is exactly what needs repairing. Note this is a
+    // recogniser for a value we wrote ourselves, not a claim about what Gmail will do next: an identifier
+    // handed to somebody else's system is a request, never a fact (L127), which is why the send path reads
+    // its id back rather than trusting the one it offered.
+    static func isLocallyMintedMessageID(_ messageID: String?, senderEmail: String) -> Bool {
+        guard let raw = messageID?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
+            // Nothing stored at all: the next follow-up references nothing either, so it needs the same
+            // repair and is selected by the same predicate.
+            return true
+        }
+        return raw.lowercased().hasSuffix("@\(messageIDDomain(senderEmail: senderEmail))>".lowercased())
+    }
+
+    private static func messageIDDomain(senderEmail: String) -> String {
+        senderEmail.split(separator: "@").last.map(String.init) ?? "overture.local"
     }
 
     private static func isASCII(_ s: String) -> Bool { s.allSatisfy { $0.isASCII } }

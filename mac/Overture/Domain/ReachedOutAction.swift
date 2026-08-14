@@ -68,7 +68,7 @@ enum ReachedOutAction: String, Equatable, Sendable, CaseIterable {
         }
 
         // The silent-nudge sequence.
-        if FollowUp.isDue(eligible: FollowUp.isAwaitingNudge(recipient, in: prospect),
+        if FollowUp.isDue(eligible: FollowUp.isAwaitingNudge(recipient, in: prospect, now: now),
                           sentAt: recipient.sentAt, lastFollowUpAt: recipient.lastFollowUpAt,
                           followUpCount: recipient.followUpCount, remindedAt: recipient.nudgeRemindedAt,
                           now: now, config: followUpConfig) {

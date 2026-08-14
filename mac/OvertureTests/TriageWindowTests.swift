@@ -151,6 +151,16 @@ struct TriageWindowTests {
         degraded.addRecipient(degradedContact)
         keys[.sendDegraded] = "far-degraded"
 
+        // #2647: sent, replies watched fine, but the real Message-ID could not be read back, so a later
+        // nudge on this conversation will not thread onto it.
+        let unthreaded = show(ctx, "far-unthreaded", status: .contacted, date: far, hasDraft: true, sentAt: now)
+        let unthreadedContact = Recipient(id: "unthreaded@org.example", email: "unthreaded@org.example",
+                                          provenance: .act)
+        unthreadedContact.sendState = .sent
+        unthreadedContact.threadingDegraded = true
+        unthreaded.addRecipient(unthreadedContact)
+        keys[.sendThreadingDegraded] = "far-unthreaded"
+
         return keys
     }
 
@@ -226,7 +236,7 @@ struct TriageWindowTests {
         inquiry.performanceDate = day(700)
 
         let inputs = AgentInputs.from(prospects: [], inquiries: [inquiry], context: .at(today, now: now),
-                                      gmailConnected: true, prepRunning: false, replyRunAlive: false)
+                                      gmailConnected: true, runInFlight: nil, replyRunAlive: false)
         #expect(inputs.toReview == 1)
     }
 }

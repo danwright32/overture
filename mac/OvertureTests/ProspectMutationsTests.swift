@@ -357,7 +357,10 @@ struct ProspectMutationsTests {
         var marked: [String] = []
         var cleared: [String] = []
 
+        // #2645: a pinned day before the fixture's show, not the wall clock, so this cannot age into
+        // "the show has already happened" and start failing for a reason it does not assert.
         ProspectMutations.sendFollowUp("k", "r1", prospects: [p], context: ctx, feedback: feedback, sender: sender,
+                                       now: Date(timeIntervalSince1970: 1_780_000_000),
                                        markSending: { marked.append($0) }, clearSending: { cleared.append($0) })
 
         #expect(marked == ["r1"])

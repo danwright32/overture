@@ -351,18 +351,39 @@ struct QueueItem: Identifiable, Equatable, Sendable {
         // nil for the same reason, and for the same address: an inherited one has no contact here to have
         // a send state. It is what decides whether the strike is offered (ContactRowControls).
         let sendState: SendState?
+        // #2623: WHOSE address this is. The check that finds an address also names the person and their
+        // role, and neither reached the screen, so a card printing a musical director's personal Gmail
+        // looked exactly like one printing the billed artist's own. nil where nothing is stored, which is
+        // six of the 29 shows measured on 2026-08-13, and always nil for an inherited address.
+        let attribution: String?
         var id: String { email }
+
+        // The one place the two stored fields become the line the card prints, so the model and any
+        // future surface cannot spell it two ways. A blank stored value (a run writing "" rather than
+        // omitting the field) reads as absent, never as an empty line or a stray comma.
+        static func attribution(name: String?, role: String?) -> String? {
+            func clean(_ s: String?) -> String? {
+                let t = (s ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                return t.isEmpty ? nil : t
+            }
+            let parts = [clean(name), clean(role)].compactMap { $0 }
+            return parts.isEmpty ? nil : parts.joined(separator: ", ")
+        }
     }
 
     var displayedContactAddresses: [DisplayedAddress] {
         let own = contacts.compactMap { c -> DisplayedAddress? in
             let email = (c.email ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            return email.isEmpty ? nil : DisplayedAddress(email: email, recipientId: c.id,
-                                                          sendState: c.sendState)
+            return email.isEmpty ? nil : DisplayedAddress(
+                email: email, recipientId: c.id, sendState: c.sendState,
+                attribution: DisplayedAddress.attribution(name: c.name, role: c.role))
         }
         guard own.isEmpty else { return own }
+        // An inherited address is printed from the organisation ledger, which stores addresses and not
+        // who they belong to, so naming anybody beside one would assert something no check on this show
+        // ever found (L75).
         return (inheritedReachability?.emails ?? [])
-            .map { DisplayedAddress(email: $0, recipientId: nil, sendState: nil) }
+            .map { DisplayedAddress(email: $0, recipientId: nil, sendState: nil, attribution: nil) }
     }
 
 
@@ -411,9 +432,12 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // so the pill can never promise more ways in than the card shows (L16). Was inline in
     // displayedContactForms; extracted rather than copied, because two copies of "is this form one Dan
     // would use" is exactly how the card and the stored verdict drifted apart in the first place.
+    // #2612: a social profile is one of them now. The card offers what Dan will act on, and he DMs an
+    // Instagram by hand exactly as he fills in a form by hand; the two are told apart by the badge above
+    // and by the label on the link, not by one of them being hidden.
     private func usableContactFormURL(_ c: RecipientSnapshot) -> URL? {
         guard let raw = c.contactFormURL?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !raw.isEmpty, !Reachability.isSocialOnly(raw),
+              !raw.isEmpty,
               !VenueContactGuard.looksLikeVenue(formURL: raw, venue: venue),
               // #1636: and the press rule, kept in step with the stored verdict for the same reason
               // the venue one is.
@@ -528,6 +552,40 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     }
 
 
+    // #2657: the check came back with contacts and NONE of them can hire Dan.
+    //
+    // The case it was filed for: 13 contacts on a 54 Below show, every one a co-performer, every one
+    // honestly tiered `secondary`, wearing the same gold "Email found" pill and "13 contacts" that a card
+    // wears when the check reached the person whose show it is. The tier was computed and dropped (L46).
+    //
+    // nil in three different situations, and they are all the same answer to Dan (say nothing):
+    //   - nobody was found, so there is nothing to judge and the row wears its own badge already;
+    //   - somebody with authority WAS found, in which case a crowd of co-performers beside them is not
+    //     worth a warning, exactly as one verified address keeps the plain badge in #1628;
+    //   - nothing found carries a tier at all, which is unknown rather than weak. Rendering those as a
+    //     warning would light up every contact stored before #2622 for no reason, and `ContactTier.best`
+    //     already encodes it by answering nil rather than adding a fourth case.
+    //
+    // Judged over EVERY contact the show holds, deliberately, and not over the sendable-pending set that
+    // `Prospect.contactTierFromRecipients` feeds the score. The two answer different questions and both
+    // are right: the score asks how good a route Dan can actually use, and this asks who the check found.
+    // Using the score's set here would let a producer held by a venue or duplicate guard vanish from the
+    // judgment while their address is printed on the card two lines below, so the card would deny finding
+    // somebody it is showing him.
+    // Only ever spoken under "Email found", which is the one badge that claims Dan can write to somebody.
+    // That gate is not a detail: the runbook emits a full contact for a named performer even when no
+    // address was verified, so a tier can exist on a show whose badge is "No email found: nobody found to
+    // write to". Two negatives, one under the other, the second adding nothing (L118, #843). Every other
+    // badge already qualifies the find itself, and "Only a venue or press address" in particular is
+    // already saying this in its own words.
+    func contactAuthorityGap(now: Date = Date()) -> ContactTier? {
+        guard reachabilityBadge(now: now) == .emailFound else { return nil }
+        guard let best = ContactTier.best(of: contacts.map(\.contactTier)), best != .primary else {
+            return nil
+        }
+        return best
+    }
+
     // #596: a quick-glance hint when a prospect carries more than one recipient (e.g. 2 named
     // performers found for a self-produced show, #366), so Dan doesn't have to expand every row
     // to see when multiple people were found. nil for the common single-contact case (no clutter).
@@ -639,6 +697,11 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     // #654: moved from the now-deleted lead-level QueueItem fields, since contact confidence/method/
     // form-URL are genuinely per-recipient data.
     var contactConfidence: ContactConfidence? = nil
+    // #2657: WHOSE authority this contact has, as the run judged it (see ContactTier for Dan's
+    // definition). Carried so the card can say when a check came back full of people who cannot hire him.
+    // nil where the run declined to judge or the contact predates #2622, which is a different claim from
+    // "somebody without authority" and must never be rendered as one.
+    var contactTier: ContactTier? = nil
     var contactMethod: ContactMethod? = nil
     var contactFormURL: String? = nil
     // #363: mirrors Recipient.contactSourceURL. See contactSourceLinkURL below for the display
@@ -662,6 +725,11 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     // addresses unverified, and so the review panel can offer Dan the same overrule the three above have.
     var heldDownToUnverified: Bool = false
     var heldDownToUnverifiedDismissed: Bool = false
+    // #2624: the fifth guard, carried the same way, so the review panel can name it and offer the overrule.
+    var looksLikeAnotherPersons: Bool = false
+    var looksLikeAnotherPersonsDismissed: Bool = false
+
+    var isLooksLikeAnotherPersons: Bool { looksLikeAnotherPersons && !looksLikeAnotherPersonsDismissed }
 
     // #1866: mirrors Recipient.isHeldDownToUnverified, so the screen and the stored row answer "is this
     // hold in force" through one rule rather than two spellings of it.
@@ -1616,7 +1684,10 @@ enum QueueModel {
                 bounced: inquiry.bounced,
                 bookingSuggested: inquiry.bookingSuggested,
                 followUpNudgeDue: inquiry.followUpNudgeDue(now: now),
-                shouldSuggestClosing: inquiry.shouldSuggestClosing(now: now)
+                shouldSuggestClosing: inquiry.shouldSuggestClosing(now: now),
+                threadIdDegraded: inquiry.threadIdDegraded,
+                threadingDegraded: inquiry.threadingDegraded,
+                sendError: inquiry.sendError
             )
         }
     }
@@ -1886,9 +1957,9 @@ enum QueueModel {
                                    geo: GeoRefusals = .none) -> [String] {
         items.filter { i in
             probeIsWorthOffering(i, today: today, geo: geo)
-                && i.reachabilityProbedAt == nil
-                && i.reachabilityUnansweredAt != nil
-                && !Reachability.probeIsStale(probedAt: i.reachabilityUnansweredAt, now: now)
+                // #2621: one definition of "a check missed this row", shared with the per-card offer.
+                && Reachability.wasMissedByACheck(probedAt: i.reachabilityProbedAt,
+                                                  unansweredAt: i.reachabilityUnansweredAt, now: now)
         }.map(\.id)
     }
 
@@ -2070,7 +2141,12 @@ enum QueueModel {
     static func contactFormSiteLabel(_ url: URL) -> String {
         var host = url.host ?? url.absoluteString
         if host.hasPrefix("www.") { host.removeFirst(4) }
-        return host
+        // #2612: a social profile's host is the same for every act ("instagram.com"), so the host alone
+        // would tell Dan nothing about WHO he would be writing to, which is the whole job this label was
+        // given in #1626. The handle is the identifying half, so it comes too.
+        guard Reachability.isSocialOnly(url.absoluteString) else { return host }
+        let handle = url.path.split(separator: "/").first.map(String.init)
+        return handle.map { "\(host)/\($0)" } ?? host
     }
 
     // #1598 Phase 5: `answers` is the stored organisation ledger and `corpus` is EVERY prospect in the
@@ -2240,7 +2316,9 @@ extension QueueItem {
             presenter: p.presenter,
             reachabilityProbedAt: p.reachabilityProbedAt,
             reachabilityRecheckRequestedAt: p.reachabilityRecheckRequestedAt,
-            reachabilityResult: p.reachabilityResult,
+            // #2664: what the show HOLDS, not what a check once concluded, so a contact Dan deletes by
+            // hand takes the badge's claim with it instead of leaving it promising a route that is gone.
+            reachabilityResult: p.reachabilityResultAsHeld,
             reachabilityEmptyReason: p.reachabilityEmptyReason,
             reachabilityUnansweredAt: p.reachabilityUnansweredAt,
             location: p.location,
@@ -2360,6 +2438,7 @@ extension RecipientSnapshot {
                   conversationRemindedAt: r.conversationRemindedAt,
             outreachStoodDownAt: r.outreachStoodDownAt,
                   contactConfidence: r.contactConfidence,
+                  contactTier: r.contactTier,
                   contactMethod: r.contactMethod,
                   contactFormURL: r.contactFormURL,
                   contactSourceURL: r.contactSourceURL,
@@ -2371,7 +2450,9 @@ extension RecipientSnapshot {
                   looksLikeDuplicateContact: r.looksLikeDuplicateContact,
                   looksLikeDuplicateContactDismissed: r.looksLikeDuplicateContactDismissed,
                   heldDownToUnverified: r.heldDownToUnverified,
-                  heldDownToUnverifiedDismissed: r.heldDownToUnverifiedDismissed)
+                  heldDownToUnverifiedDismissed: r.heldDownToUnverifiedDismissed,
+                  looksLikeAnotherPersons: r.looksLikeAnotherPersons,
+                  looksLikeAnotherPersonsDismissed: r.looksLikeAnotherPersonsDismissed)
     }
 }
 

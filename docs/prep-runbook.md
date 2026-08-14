@@ -45,13 +45,15 @@ before this was codified.
   named the producer twice while this flag was `true` (#2259). Absent is not `false`: it means the app said
   nothing about it (a file predating the field, or a show that names a producer), and you behave exactly as
   you always did. See §1's route for what to do with it.
-  `organisationNamedOnListing` (v11, #2259) is the producing company the show's OWN listing page credits,
-  read by the app off `showListing.text`. When it is present, that organisation is a
-  real research target and a legitimate `provenance: "presenter"`, even on an item whose
-  `onlyTheActIsNamed` is `true`. ABSENT means only that the app's narrow parse (a possessive credit before
-  the title, or an adjacent "produced by" / "presented by" naming a company after it, #2262) found
-  nothing; it is never a statement that the page names no company, and you still read the
-  text yourself. On a rental room this is the common case: measured across 54 Below's 61 listings on
+  `organisationNamedOnListing` (v11, #2259) is the party the show's OWN listing page credits as producing
+  it, read by the app off `showListing.text`. Despite the field's name it may be a COMPANY OR A PERSON
+  since #2554 (the name is kept because v11 and v12 fixtures are frozen records of what those versions
+  were). When it is present, that party is a
+  real research target and a legitimate `provenance: "presenter"`, and a `primary` contact, even on an
+  item whose `onlyTheActIsNamed` is `true`. ABSENT means only that the app's parse (a possessive credit
+  before the title, or an adjacent "produced by" / "presented by" / "produced and directed by" naming
+  somebody after it, #2262/#2554) found nothing; it is never a statement that the page names nobody, and
+  you still read the text yourself. On a rental room this is the common case: measured across 54 Below's 61 listings on
   2026-08-11, 17 bill a producer and 16 of those name an individual, whom the app's rule does not accept
   as a company and leaves for you. See §1's route.
   `refusedEmails` (v12, #2392) is a list of addresses DAN HAS ALREADY STRUCK on this show. Do not
@@ -71,7 +73,7 @@ before this was codified.
   must not guess between (no history there, no history imported at all, or a Carnegie show, where
   the tenure credential already covers that exact room). See §2's rule on saying Dan knows the room.
 - **Write:** `~/Library/Application Support/Overture/overture-prep-results.json`
-  (`PrepResults` version `8`: `results[]` each with `naturalKey`, `contacts[]`, `draft`, an
+  (`PrepResults` version `9`: `results[]` each with `naturalKey`, `contacts[]`, `draft`, an
   optional `alreadyCoveredNote` (see the already-covered fit-risk flag in §1 below), an
   optional `emptyReason` REQUIRED on any entry whose `contacts` is absent, see "Say WHY an
   entry has no contacts" in §1, and (v8, #1824) an optional `showSummary` with a
@@ -79,7 +81,8 @@ before this was codified.
   draft in the listing. This number had said `5` since v5 while real runs wrote v6;
   corrected with the v7 bump in #1722.)
   Each entry in `contacts[]` is one party to email for the performance, carrying a
-  `provenance` of `act`, `performer`, or `presenter` (never the host venue). Emit either
+  `provenance` of `act`, `performer`, or `presenter` (never the host venue), and (v9, #2622)
+  a `tier` saying WHO they are to the show, see "Say who the contact is" in §1. Emit either
   the act OR its named lead performer(s), never both, see §1 below, plus at most one
   real presenting org; the app sends one separate email per contact. A `provenance:
   "performer"` contact MAY also carry its own `overrideBody`, a direct second-person
@@ -252,10 +255,19 @@ item's `production` field first:
   does not exist is a claim you never tested.
   - **First, find out whether the PAGE names a company** (#2259). The flag above is a fact about
     the row the app stored, never about the page. Two things can name one:
-    - `organisationNamedOnListing`, when present, IS a company the app read off this show's own
-      listing page. Research it as an organisation, run the full waterfall below on it, and emit it
-      with `provenance: "presenter"`. It is not a guess and it is not the room (the app refuses the
-      room's own name here).
+    - `organisationNamedOnListing`, when present, IS the party this show's own listing page credits as
+      producing it, read by the app off the page. Research it, run the full waterfall below on it, and
+      emit it with `provenance: "presenter"`. It is not a guess and it is not the room (the app refuses
+      the room's own name here).
+      Since #2554 it may name a PERSON as well as a company, because on a rental room the individual
+      billed as producing is the one who hired the room and who would hire a photographer, and the app
+      used to drop all of them: measured across 54 Below's 61 listings, 17 bill a producer and 16 of
+      those name an individual. Research a person the same way you would research a company, starting
+      with their own site (the canonical `firstnamelastname.com` guess, which is one fetch and is how
+      caseengaines.com/contact was there to be found all along).
+      **A credited producer is a `primary` contact**, whether person or company: they own the show and
+      can say yes. That is the existing tier rule, restated here because this is the field that names
+      them, and because the run that missed Caseen Gaines returned 13 contacts and not one primary.
     - Otherwise read `showListing.text` yourself and look for one: a possessive credit in the title
       line, "presented by" / "produced by", or a bio naming a founder's OWN company ("is the
       Founder/Artistic Director of ICB Productions"). A company you find that way is a legitimate
@@ -427,6 +439,14 @@ in order, stop at the first that works:
    there. That is where a small independent act publishes its address, and you have already paid for
    the fetch that revealed the link.
 
+   **But when that comes back with nothing, the profile itself is the answer, and you emit it (#2612).**
+   Dan DMs an act on Instagram by hand, so a handle is a route rather than a dead end: report it as a
+   `form_or_dm` contact with the profile URL in `formUrl`. What you must never do is find a profile,
+   fail to get past it, and then report `nothing_published`: that says this show's people publish no
+   address anywhere, which is a claim about a search you did not finish (L11). On 2026-08-13 that
+   happened to Song & Word, whose Instagram Dan found himself in seconds, and the card told him to give
+   up on a show he called a perfect fit.
+
    **(b) When search has not surfaced the target's own site, fetch the canonical guess directly**,
    once: `firstnamelastname.com` for a person, the organisation's name for an organisation. Search is
    not a reliable route to a small act's own site: on 2026-08-07 the literal string
@@ -500,6 +520,24 @@ medium, form/DM or inferred = low. **For a named performer specifically**, only 
 (name plus instrument/role/context match, e.g. their own site lists this date/venue or
 names this group); a bare name match with no such corroboration is a misidentification
 risk, so mark it `low` instead, same as any other unverified guess.
+
+**Say who the contact is (`tier`, v9, #2622).** Every entry in `contacts[]` carries a `tier`. It answers
+one question, and it is NOT about billing order: **who could actually say yes to hiring a photographer?**
+
+- `"primary"`: whoever owns the show and could hire Dan. A self-producing headliner (the show is theirs),
+  or the producing organisation's producer, artistic director or founder.
+- `"secondary"`: somebody ON the show without that authority. A co-performer, a music director, a special
+  guest, a host.
+- `"tertiary"`: a third party REPRESENTING them. A manager, an agent, a publicist, a booking agency.
+
+Judge it from the page you actually read, the same bar as everything else here, and say what that page
+supports rather than what a role title suggests: a music director who also produces the night is primary,
+and one who was hired for it is secondary. The app deliberately does not derive this from the `role` text,
+because a role is unbounded free text and cannot tell those two apart; you have the page and it does not.
+
+If the page does not support any of the three, OMIT the field. An absent tier reads as "nobody has said",
+which is honest, and it scores exactly what a found address has always scored. A guessed tier is worse
+than none: `primary` moves a show up into what Dan looks at first, and `tertiary` moves it down.
 
 **Already-covered fit-risk flag (#611).** While reading the act/presenter's own site for the
 waterfall above, also watch for an EXPLICIT statement that they already have their own

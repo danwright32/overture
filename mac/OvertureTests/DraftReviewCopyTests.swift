@@ -36,7 +36,7 @@ struct DraftReviewCopyTests {
     // readable there or it is never read at all.
     @Test func aShowWithNoEmailAtAllExplainsWhyItCannotSend() {
         #expect(DraftReviewNotes.noSendableEmail(hasPendingRecipient: false, hasAnyEmailContact: false)
-                    == "No email to send to. Add a contact by hand.")
+                    == "No email to send to. Add a contact by hand, by address or by link.")
     }
 
     @Test func aShowWhoseEmailIsMerelyHeldSaysNothing() {

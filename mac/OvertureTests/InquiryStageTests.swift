@@ -41,7 +41,7 @@ struct InquiryStageTests {
     // reads "0" and Dan would never tap in. The count and the rows the tap lands on must agree.
     private func inputs(inquiries: [Inquiry]) -> AgentInputs {
         AgentInputs.from(prospects: [], inquiries: inquiries, context: .at("2026-07-01", now: Date()),
-                         gmailConnected: true, prepRunning: false, replyRunAlive: false)
+                         gmailConnected: true, runInFlight: nil, replyRunAlive: false)
     }
 
     @Test func anUnrepliedInquiryAddsToTheReviewPill() {
