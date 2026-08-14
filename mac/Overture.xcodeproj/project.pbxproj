@@ -185,6 +185,7 @@
 		1B01364BE48D5A9A8B4B3594 /* EventLocationFill.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9E9D565058A1B676D0A9256 /* EventLocationFill.swift */; };
 		1B288047682D44DFE0CF3676 /* VenueContactFormGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 832A551D016D3B2F0A76F6AB /* VenueContactFormGuardTests.swift */; };
 		1B2B4041CC6D96FDC4AAE1B6 /* DetachedRunCeremonyGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80F2FCAFEDFE81490FC91D93 /* DetachedRunCeremonyGuardTests.swift */; };
+		1B2FF847746D50124ACE2B41 /* GmailThreadingRepairTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE18BD29C32E44484D0642CA /* GmailThreadingRepairTests.swift */; };
 		1B4E38F31FBF5E58DA618212 /* ScoutOneSourceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9F977AAC23433642848CAC4 /* ScoutOneSourceTests.swift */; };
 		1B515A7DE7F5BC17B5224AF9 /* PrepProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EA25BB391444D3451B7292A /* PrepProgress.swift */; };
 		1B99C134EC4C92F49584571F /* ReviewStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E10A3A36DE78E73EF6EAE0B /* ReviewStatus.swift */; };
@@ -898,6 +899,7 @@
 		866D8E713FC6682F2F1B9671 /* ContactTier.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8B714D41070A6453D2AC877 /* ContactTier.swift */; };
 		86AE682DB2D6C4F261963A62 /* EmailAddressList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BF3B8C01356B62369B2C3DD /* EmailAddressList.swift */; };
 		870FF7F88E5ABBC8CC257B6A /* LoopbackListenerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98F9028B89AB5EDEFDADF826 /* LoopbackListenerTests.swift */; };
+		87125BF6C5F590C81DB8B51A /* GmailThreadingRepair.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B661C11D785CFC53CF7D7B4 /* GmailThreadingRepair.swift */; };
 		87258FE39A6B9C5201345588 /* VoiceFeedbackContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9F7EDB806B788E4A5BE8BC4 /* VoiceFeedbackContractTests.swift */; };
 		8741FC9863F492F38372D198 /* ContactFormResultMigration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F7289D02B17154567BAF295 /* ContactFormResultMigration.swift */; };
 		87A409DC0DF82B31A250BE41 /* ContactRowControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3D13B8CEC5D5DBCD9EC2D6A /* ContactRowControls.swift */; };
@@ -920,6 +922,7 @@
 		8B69B8707839B375C62A455F /* RootViewDebugSaveGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 355E45853FE6D13E2CB22130 /* RootViewDebugSaveGuardTests.swift */; };
 		8B93C8F96D5EC19634D489D9 /* ReachabilityProbeMarker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5178D84B81F3C41DC943DF9F /* ReachabilityProbeMarker.swift */; };
 		8B9F434A1F4E7A472827C431 /* OvationTixCalendar.swift in Sources */ = {isa = PBXBuildFile; fileRef = F915CB57556CFB341F37BFEA /* OvationTixCalendar.swift */; };
+		8C0A1C87FE369199553C742F /* GmailThreadingRepair.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B661C11D785CFC53CF7D7B4 /* GmailThreadingRepair.swift */; };
 		8C72A8276F98718C15E48CC2 /* UpdateAttempt.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDFA95C28AE2DFD2A2B6C84C /* UpdateAttempt.swift */; };
 		8C8455AE5CCB227902F91EC4 /* InquiryReporting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 465B91C83FA8755DD3E8D2C0 /* InquiryReporting.swift */; };
 		8C8DAEA061F5480844E566CE /* TicketTailorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1E00DB2FE38A00D904C212 /* TicketTailorTests.swift */; };
@@ -2071,6 +2074,7 @@
 		59DE693FC4DE46904203D785 /* DaysOffSnoozeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DaysOffSnoozeTests.swift; sourceTree = "<group>"; };
 		5A35AF491DD6E38C51A19C36 /* ShootHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShootHistory.swift; sourceTree = "<group>"; };
 		5AFFF2BD478618FF1D29304A /* HandoffCompletenessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandoffCompletenessTests.swift; sourceTree = "<group>"; };
+		5B661C11D785CFC53CF7D7B4 /* GmailThreadingRepair.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailThreadingRepair.swift; sourceTree = "<group>"; };
 		5B70E5FB7C632BC18DBABE7E /* QueueView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueView.swift; sourceTree = "<group>"; };
 		5B7E7E469E926AD98CEAD41D /* AddressCorrectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddressCorrectionTests.swift; sourceTree = "<group>"; };
 		5BB8460EBE2DAEC45193C19E /* FeedDates.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedDates.swift; sourceTree = "<group>"; };
@@ -2645,6 +2649,7 @@
 		CD4914D3A30D38CE00F29A1A /* WatchGapLine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchGapLine.swift; sourceTree = "<group>"; };
 		CD96F00B038EC759EBC05EED /* SearchScopeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchScopeTests.swift; sourceTree = "<group>"; };
 		CDE3C95FB7FD4D5ADD18D261 /* ScoutReadAsk.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoutReadAsk.swift; sourceTree = "<group>"; };
+		CE18BD29C32E44484D0642CA /* GmailThreadingRepairTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailThreadingRepairTests.swift; sourceTree = "<group>"; };
 		CE691FE057A27E4DFDA467B9 /* DetachedRunActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetachedRunActivity.swift; sourceTree = "<group>"; };
 		CE889E00693587740A5C0BE0 /* DebugSeedTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugSeedTests.swift; sourceTree = "<group>"; };
 		CEC9ECD003CC5290CC5CE4C2 /* SquarespaceCalendar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SquarespaceCalendar.swift; sourceTree = "<group>"; };
@@ -3188,6 +3193,7 @@
 				25CEA888631E3F3292A7A5FB /* GmailSenderTests.swift */,
 				B01583CAAE029ACD32FA2053 /* GmailSignatureDarkBackgroundTests.swift */,
 				77796F32F1347D9B325687F0 /* GmailSignatureTests.swift */,
+				CE18BD29C32E44484D0642CA /* GmailThreadingRepairTests.swift */,
 				50350E8E010D01DD330869F0 /* GoogleOAuthTests.swift */,
 				18E5120B752137FA047A94D9 /* GreetingLivesInTheBodyTests.swift */,
 				4D9C9EFDFCED90C078C89475 /* GroupedAnswerCreditTests.swift */,
@@ -3786,6 +3792,7 @@
 				194D3997867F6F1388DA36B2 /* GmailSignatureHealth.swift */,
 				81906511A2A06D2C689FD640 /* GmailSignatureService.swift */,
 				E7B6482BB9FE1CEA69A3391F /* GmailSignatureStore.swift */,
+				5B661C11D785CFC53CF7D7B4 /* GmailThreadingRepair.swift */,
 				670A67A482A1C4EAAF8F8355 /* GoogleOAuth.swift */,
 				AB837E4A809FF1D7D5DBDDBE /* InquiryReplySender.swift */,
 				931EEF833D4EAB6EBA62DAB2 /* LoopbackListener.swift */,
@@ -4454,6 +4461,7 @@
 				E332DC110ACE2E2C13165D84 /* GmailSignatureHealth.swift in Sources */,
 				78A97D7D205B12284E901DB3 /* GmailSignatureService.swift in Sources */,
 				1543D07DA599629491CAF3FF /* GmailSignatureStore.swift in Sources */,
+				87125BF6C5F590C81DB8B51A /* GmailThreadingRepair.swift in Sources */,
 				03BD933CCB910DF9DDAE98CF /* GoogleOAuth.swift in Sources */,
 				7E190456B52B9E5C862DBDE5 /* GroupNameMatch.swift in Sources */,
 				F7351CAAB7E3082B73E605D5 /* HandoffCleanup.swift in Sources */,
@@ -5121,6 +5129,8 @@
 				4C99373443AD4CB8A633BA1D /* GmailSignatureService.swift in Sources */,
 				F417B1875CC3FB80B4FB7106 /* GmailSignatureStore.swift in Sources */,
 				9AF7EF8E6CA8DC957B860BDC /* GmailSignatureTests.swift in Sources */,
+				8C0A1C87FE369199553C742F /* GmailThreadingRepair.swift in Sources */,
+				1B2FF847746D50124ACE2B41 /* GmailThreadingRepairTests.swift in Sources */,
 				3FBAB3BA5E3628D94243C1AC /* GoogleOAuth.swift in Sources */,
 				7276BAF9E3E0B280F4137B92 /* GoogleOAuthTests.swift in Sources */,
 				1E0C34727A5CFE4D9E30A5BA /* GreetingLivesInTheBodyTests.swift in Sources */,
