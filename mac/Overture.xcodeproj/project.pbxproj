@@ -1171,6 +1171,7 @@
 		B9092BD8B11B1C05D0FE0A20 /* RunProgressTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F07D140D77F8509803AD0A50 /* RunProgressTests.swift */; };
 		B952EE7455237FCCD9984F50 /* RecipientStorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF792C18EDEAD3A65D3FDA5A /* RecipientStorageTests.swift */; };
 		B96D16113C6C25596AE8FB4E /* SecureFileWrite.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67BB37DB5C4FB298BF64EED8 /* SecureFileWrite.swift */; };
+		B97753191E5E5D89655C7372 /* OneGoodbyePerContactTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4572B7E61B8A14DAE65DB5A /* OneGoodbyePerContactTests.swift */; };
 		B97A60B4B3811593188C570C /* SendPickerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E1264DDA3648E69E5CC4AF6 /* SendPickerTests.swift */; };
 		B98BEEDAC62606FDE12C6F6B /* InheritedReachabilityWiringGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F46B18A44111090C0B373E1 /* InheritedReachabilityWiringGuardTests.swift */; };
 		B993238FC2BDD3EB31E45332 /* RecordOutcomeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90660889F14BA654A163D92B /* RecordOutcomeTests.swift */; };
@@ -2621,6 +2622,7 @@
 		C40FBB3CB26053014E3B0C21 /* ApproveAndSendIsOneActionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApproveAndSendIsOneActionTests.swift; sourceTree = "<group>"; };
 		C437F70313F25EC3F948CA1B /* DepartingRowsSpliceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DepartingRowsSpliceTests.swift; sourceTree = "<group>"; };
 		C448AE5287C23B5B098A31E7 /* RecentOpeners.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentOpeners.swift; sourceTree = "<group>"; };
+		C4572B7E61B8A14DAE65DB5A /* OneGoodbyePerContactTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneGoodbyePerContactTests.swift; sourceTree = "<group>"; };
 		C49E2B6F4990C2D026FAAC51 /* ShowListingReaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShowListingReaderTests.swift; sourceTree = "<group>"; };
 		C4AA30A4E3C975BBF29DA61C /* OrganisationListingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganisationListingTests.swift; sourceTree = "<group>"; };
 		C51304F013900E6BF8918D5C /* ManualPrepMutationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualPrepMutationTests.swift; sourceTree = "<group>"; };
@@ -3326,6 +3328,7 @@
 				E894E2E958EE3100C3C5FE02 /* OmniFocusSyncStatusTests.swift */,
 				1BA8782BE24D5499DA7D1C9A /* OmniFocusSyncTests.swift */,
 				8F518441FAAA42A56D2E5A00 /* OnboardingStateTests.swift */,
+				C4572B7E61B8A14DAE65DB5A /* OneGoodbyePerContactTests.swift */,
 				FC0678307653D8A136668ED8 /* OneNextReachOutRuleTests.swift */,
 				6D585629D224CBA481FCDAEC /* OnePersonOneContactTests.swift */,
 				CC3F999DECF60933EB51A570 /* OneRowPerGroupTests.swift */,
@@ -5328,6 +5331,7 @@
 				C9E87635038ABE57469A064E /* OnboardingState.swift in Sources */,
 				8286F3607DE7936DF7F88F3D /* OnboardingStateTests.swift in Sources */,
 				0A227255D2534D6B7A120981 /* OnboardingView.swift in Sources */,
+				B97753191E5E5D89655C7372 /* OneGoodbyePerContactTests.swift in Sources */,
 				D7E84ED05875FF3FB5D86ED1 /* OneNextReachOutRuleTests.swift in Sources */,
 				6B49F392B11D00FDCAD56AF3 /* OnePersonOneContactTests.swift in Sources */,
 				F39713FF0E8EB80D26261EB4 /* OneRowPerGroupTests.swift in Sources */,

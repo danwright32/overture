@@ -100,17 +100,42 @@ enum PostEventPrompt {
         guard let dayAfter = dayAfterShow(p.performanceDate) else { return nil }
         // A re-anchor from a note already sent steps the prompt forward instead of nagging.
         if let anchored = r.conversationRemindedAt, anchored >= dayAfter { return nil }
+        // #2651: the final follow-up has already said goodbye in Dan's voice ("If it would be useful down
+        // the line I'm glad to help, and if not, no need to reply. I'll leave it here either way."), so a
+        // closing note after it would reopen the conversation only to close it a second time. To a
+        // stranger who has ignored two emails that reads as a third unsolicited contact rather than as
+        // grace, and the scheduling makes it ordinary: any lead scouted far enough ahead exhausts its
+        // follow-ups well before the date arrives.
+        //
+        // ONLY the closing note. A close-out is not an email at all, it is Dan recording how the show
+        // ended, it is the more useful of the two prompts to him, and it is a fact only he has, so
+        // suppressing it because Overture happened to send two nudges would lose the outcome the whole
+        // funnel is reported on.
+        //
+        // The other half of the issue's choice, making the final nudge stop saying goodbye so the note
+        // could be the one that does, was rejected: that goodbye has already been SENT to everybody
+        // currently at two nudges, so rewording it would help only future contacts and leave every
+        // existing one still getting two.
+        if kind(for: r, of: p) == .closingNote, r.followUpCount >= FollowUpConfig().maxFollowUps {
+            return nil
+        }
         return dayAfter
+    }
+
+    // WHICH prompt this contact is owed, shared by `nextPromptDate` and `prompt` so the rule above and the
+    // Prompt handed to the screen cannot disagree about what kind it is (L16).
+    //
+    // The one question that decides it: did anybody write back? Asked of the SHOW rather than this
+    // contact, because a colleague's answer is an answer about the event, and offering a note that says
+    // "never heard back" on a show somebody replied to would be false whoever replied.
+    static func kind(for r: Recipient, of p: Prospect) -> Kind {
+        p.recipients.contains { $0.replied } ? .closeOut : .closingNote
     }
 
     static func prompt(for r: Recipient, of p: Prospect, now: Date) -> Prompt? {
         // #2646: THIS is where the clock belongs. `nextPromptDate` says when; this says whether it is now.
         guard let due = nextPromptDate(for: r, of: p), now >= due else { return nil }
-        // The one question that decides which kind: did anybody write back? Asked of the SHOW rather than
-        // this contact, because a colleague's answer is an answer about the event, and offering a note that
-        // says "never heard back" on a show somebody replied to would be false whoever replied.
-        let anybodyReplied = p.recipients.contains { $0.replied }
-        let kind: Kind = anybodyReplied ? .closeOut : .closingNote
+        let kind = kind(for: r, of: p)
         return Prompt(kind: kind, reason: reason(for: kind))
     }
 
