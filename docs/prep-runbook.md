@@ -744,7 +744,25 @@ Anatomy:
   point, and a reader who pictures a photographer parked at the back may hear "distant"
   rather than "discreet". Write what the reader actually cares about: that he is
   unobtrusive, that he works without flash, that the audience doesn't notice him and the
-  performance isn't disturbed. Let the length breathe with
+  performance isn't disturbed.
+  **State every one of those absolutely; never quantify the audience (Dan, 2026-08-14).**
+  Not "most audiences", not "usually", "generally", "typically", "often", "rarely",
+  "hardly anyone", "barely", "mostly", "for the most part", "tend to", "pretty much" or
+  "really", and never "at all" on the end of it. He read "most audiences don't notice I'm
+  there at all" in his own outgoing pitch and said: "It implies that some audiences *do*
+  notice." A hedge invites the reader to picture the audiences that DID notice, which is
+  the exact objection a presenter has about letting a photographer into a performance, and
+  "at all" over-corrects on the other end, so one short claim carries a hedge and an
+  intensifier at once and reads as somebody arguing with themselves. The same goes for the
+  other effect claims here: no flash, the performance not disturbed, documentary rather
+  than posed. Say them as facts about how Dan works, not as estimates about a group he
+  cannot speak for.
+  **And say the audience half ONCE.** "Doesn't distract from what's happening on stage" and
+  "the audience doesn't notice me" are one idea in two clauses, so a sentence carrying both
+  says the same thing twice. A second clause is fine when it is about the PERFORMANCE rather
+  than the audience ("the audience doesn't notice me and the performance isn't disturbed"),
+  which is two facts, not one restated.
+  Let the length breathe with
   the archetype and the material, a short punchy draft and a slightly fuller one both
   read as normal; don't pad to hit a target length.
 - **Offer:** held positively, and carrying NO PRICE AND NO TURNAROUND. Never state the rate,

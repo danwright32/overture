@@ -231,6 +231,13 @@ export const RUNBOOK_RULES: RunbookRule[] = [
   // parked at the back hears "distant" rather than "discreet".
   { name: "effect-not-vantage-point",
     pattern: /Say the EFFECT, not the vantage point/i },
+  // #2722: the instruction was never hedged, and the weakening was the model's own addition. The runbook
+  // said what to claim and never forbade weakening it, so nothing caught "most audiences don't notice I'm
+  // there at all" going out under Dan's name (L27: a rule that lives only in a prompt is a hope).
+  { name: "effect-claim-never-quantified",
+    pattern: /State every one of those absolutely; never quantify the audience/i },
+  { name: "audience-half-said-once",
+    pattern: /And say the audience half ONCE/i },
 ];
 
 /** Returns the names of the rules whose text is absent from the given runbook contents. */

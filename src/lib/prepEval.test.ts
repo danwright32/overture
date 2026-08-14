@@ -849,6 +849,41 @@ describe("the 2026-07-31 drafting rules are enforced on the produced body", () =
     expect(r.failures.join(" ")).toMatch(/where Dan stands/i);
   });
 
+  // #2722, from the same review shape a year on. Dan, 2026-08-14: "'most audiences don't notice I'm
+  // there at all'. It implies that some audiences *do* notice."
+  // The clause is spliced in rather than assumed present: the canonical body does not carry the
+  // audience claim, and a `.replace` that matches nothing would leave every assertion below testing the
+  // canonical body instead of the case named in the test (L100).
+  const APPROACH = "I shoot unobtrusive, no-flash documentary coverage";
+  const withApproach = (replacement: string) => {
+    expect(CANONICAL_BODY).toContain(APPROACH);
+    return CANONICAL_BODY.replace(APPROACH, replacement);
+  };
+  const hedgeFailures = (body: string) =>
+    evaluatePrepResult(results([NAMED_ACT], {}, body), cold).failures
+      .filter((f) => /hedges the claim/i.test(f));
+
+  it("flags a draft that hedges the claim that the audience doesn't notice him", () => {
+    const body = withApproach(
+      "I shoot no-flash documentary coverage, and most audiences don't notice me at all");
+    const r = evaluatePrepResult(results([NAMED_ACT], {}, body), cold);
+    expect(r.pass).toBe(false);
+    expect(r.failures.join(" ")).toMatch(/hedges the claim/i);
+  });
+
+  // The half that keeps the rule usable, built from what it must PRESERVE (L104). The wording every
+  // shipped fixture uses states the claim absolutely and must stay clean, and a hedge about something
+  // else in a DIFFERENT sentence is ordinary writing: a check that fired on either would be switched off
+  // within a day (L93).
+  it("does not flag the absolute claim, nor a hedge in another sentence", () => {
+    expect(hedgeFailures(withApproach(
+      "I shoot unobtrusive, no-flash documentary coverage, so the audience doesn't notice me and "
+      + "the performance isn't disturbed"))).toEqual([]);
+    expect(hedgeFailures(withApproach(
+      "I shoot documentary coverage, so the audience doesn't notice me. Most of my work is concert "
+      + "and choral"))).toEqual([]);
+  });
+
   it("flags the state when the city is meant", () => {
     const body = CANONICAL_BODY.replace("here in NYC", "here in New York");
     const r = evaluatePrepResult(results([NAMED_ACT], {}, body), cold);
