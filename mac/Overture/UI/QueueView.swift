@@ -724,7 +724,8 @@ struct QueueView: View {
         // take, not of everything drawn under the heading, so the count names the same rows the reasons
         // below would have dismissed (L16).
         let genreRefusal = GenreGate.nightRefusal(
-            disciplines: group.items.filter { plan.keys.contains($0.id) }.map(\.discipline))
+            disciplines: group.items.filter { plan.keys.contains($0.id) }.map(\.discipline),
+            dateLabel: group.monthDay)
         if !plan.isEmpty {
             Section(BulkDismiss.menuTitle(count: plan.count, dateLabel: group.monthDay)) {
                 if let genreRefusal {

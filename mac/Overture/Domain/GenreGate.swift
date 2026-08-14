@@ -27,10 +27,13 @@ enum GenreGateCopy {
     // The same refusal for a whole night, which is one confirm covering many shows, so it has to say HOW
     // MANY rather than speak in the singular about a list (#2687's own requirement 3). Failing silently
     // here would be the worst of the three, since the bulk control is the one that looks like it worked.
-    static func nightBlocked(count: Int) -> String {
+    // Names the DATE rather than saying "tonight". The date-heading menu this appears under covers any
+    // night in the queue, most of them weeks out, so "tonight" would be false on nearly every one of
+    // them. It is the same `dateLabel` the heading above it already carries, so the two agree.
+    static func nightBlocked(count: Int, dateLabel: String) -> String {
         count == 1
-            ? "1 show tonight has no genre read. Set it before dismissing the night."
-            : "\(count) shows tonight have no genre read. Set them before dismissing the night."
+            ? "1 show on \(dateLabel) has no genre read. Set it before dismissing the night."
+            : "\(count) shows on \(dateLabel) have no genre read. Set them before dismissing the night."
     }
 }
 
@@ -57,9 +60,9 @@ enum GenreGate {
 
     // How many of a night's shows are blocked, and the sentence naming that count. Nil when the night can
     // be dismissed, so the caller has one thing to ask rather than a count it has to interpret.
-    static func nightRefusal(disciplines: [String]) -> String? {
+    static func nightRefusal(disciplines: [String], dateLabel: String) -> String? {
         let blocked = disciplines.filter { blocks(discipline: $0) }.count
         guard blocked > 0 else { return nil }
-        return GenreGateCopy.nightBlocked(count: blocked)
+        return GenreGateCopy.nightBlocked(count: blocked, dateLabel: dateLabel)
     }
 }

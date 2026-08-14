@@ -49,20 +49,25 @@ struct GenreGateTests {
         let night = [Discipline.opera.rawValue, Discipline.other.rawValue,
                      Discipline.dance.rawValue, Discipline.other.rawValue]
 
-        #expect(GenreGate.nightRefusal(disciplines: night) == GenreGateCopy.nightBlocked(count: 2))
-        #expect(GenreGateCopy.nightBlocked(count: 2).contains("2 shows"))
+        #expect(GenreGate.nightRefusal(disciplines: night, dateLabel: "Aug 19")
+                == GenreGateCopy.nightBlocked(count: 2, dateLabel: "Aug 19"))
+        #expect(GenreGateCopy.nightBlocked(count: 2, dateLabel: "Aug 19").contains("2 shows on Aug 19"))
         // Singular reads as English, because a night with one unread show is the common case near the end
         // of a triage pass.
-        #expect(GenreGateCopy.nightBlocked(count: 1).contains("1 show tonight"))
+        #expect(GenreGateCopy.nightBlocked(count: 1, dateLabel: "Aug 19").contains("1 show on Aug 19"))
+        // And it names the DATE, never "tonight": this menu covers any night in the queue, most of them
+        // weeks out. Caught by reading the generated inventory cold rather than by any test.
+        #expect(!GenreGateCopy.nightBlocked(count: 2, dateLabel: "Aug 19").contains("tonight"))
     }
 
     // And a night with nothing blocked is not refused, which is the half that keeps the control usable. A
     // gate that fired on every night would be switched off within a day (L93).
     @Test func aNightWithEveryGenreSetIsNotRefused() {
         #expect(GenreGate.nightRefusal(disciplines: [Discipline.opera.rawValue,
-                                                     Discipline.theater.rawValue]) == nil)
+                                                     Discipline.theater.rawValue],
+                                       dateLabel: "Aug 19") == nil)
         // An empty night has nothing to block either: nil, never a "0 shows" sentence.
-        #expect(GenreGate.nightRefusal(disciplines: []) == nil)
+        #expect(GenreGate.nightRefusal(disciplines: [], dateLabel: "Aug 19") == nil)
     }
 
     // MARK: the three controls actually ask
