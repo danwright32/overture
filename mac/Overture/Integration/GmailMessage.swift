@@ -136,8 +136,48 @@ enum GmailMessage {
     // The text/html part: the drafted body, HTML-escaped and newline-to-<br> so it can't inject markup and
     // its line breaks survive, followed by the styled signature (already HTML, inserted verbatim).
     private static func htmlDocument(body: String, signatureHTML: String) -> String {
-        let escaped = htmlEscape(body).replacingOccurrences(of: "\n", with: "<br>\n")
+        let escaped = linkPortfolio(in: htmlEscape(body).replacingOccurrences(of: "\n", with: "<br>\n"))
         return "<div>\(escaped)</div><br>\n\(signatureHTML)"
+    }
+
+    // #2723: the portfolio address, as a real link.
+    //
+    // That sentence is the proof behind every cold pitch (one portfolio link, always the site itself,
+    // #1832), and it went out as ordinary characters, so whether the recipient could reach the work at all
+    // was left to their mail client's own URL detection. A bare hostname with no scheme is the weakest
+    // form for that.
+    //
+    // Three things this gets right, and each is the reason it is written the way it is.
+    //
+    // It runs AFTER escaping, and only over the BODY. `htmlEscape` deliberately does not escape quotes, so
+    // drafted text reaching an attribute could break out of the href; escaping first means the only thing
+    // that can end up in the href is the constant below. The signature is separate and already HTML, so it
+    // is never re-linked and no nested anchor is possible.
+    //
+    // It matches the CANONICAL HOST, not URL-shaped text. The draft lint forbids every other host
+    // (`DraftCheck.allowedLinkHost`, and `src/lib/prepEval.ts` on the other side), so there is exactly one
+    // address this can ever be about, and matching a shape instead would link things the pitch merely
+    // mentions (L104). The host is read from that same constant rather than spelled again here, so the
+    // rule and the thing it recognises cannot drift (L41).
+    //
+    // It wraps whatever the drafter wrote WHOLE, scheme and `www.` included, while always pointing at the
+    // canonical https address. A link that reads as one thing and points at another is worse than no link,
+    // and leaving a `https://` fragment outside the anchor looks like a rendering fault.
+    //
+    // The boundaries on either side are the L104 half, and they are about what must be PRESERVED rather
+    // than what must be caught. Without the lookbehind, `dan@danwrightphotography.com` in a body would
+    // have its domain linked and the local part left dangling outside the anchor; without the lookahead, a
+    // longer name beginning with the host would be cut in half. A shape matcher over prose matches more
+    // than its target, and an over-match reads exactly like the feature working.
+    private static func linkPortfolio(in escapedHTML: String) -> String {
+        let host = NSRegularExpression.escapedPattern(for: DraftCheck.allowedLinkHost)
+        guard let re = try? NSRegularExpression(
+            pattern: "(?<![\\w@.-])(?:https?://)?(?:www\\.)?\(host)(?![\\w-])",
+            options: [.caseInsensitive]) else { return escapedHTML }
+        let range = NSRange(escapedHTML.startIndex..., in: escapedHTML)
+        return re.stringByReplacingMatches(
+            in: escapedHTML, range: range,
+            withTemplate: "<a href=\"https://\(DraftCheck.allowedLinkHost)\">$0</a>")
     }
 
     private static func htmlEscape(_ s: String) -> String {
