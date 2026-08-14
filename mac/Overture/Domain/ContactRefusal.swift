@@ -104,15 +104,35 @@ enum ContactRefusal {
 
     // Dan struck this address. Idempotent: the unique id means a repeat is the same refusal rather than
     // a second row that one `allow` would leave standing.
+    //
+    // #2662: DOES NOT COMMIT, and its callers do. Every SwiftData save invalidates the queue's @Query, so
+    // the body re-runs and every card in the queue is rebuilt on the main thread. This used to end in its
+    // own `try? context.save()` while the caller then saved again for the removal, so one click on the X
+    // paid that rebuild TWICE. Nothing between the two needs the first to be durable. Every caller was
+    // found and each now commits: `removeRecipientManually` and `addRecipientManually` already did, and
+    // `removeInheritedAddress` had no save of its own at all and was given one.
+    //
+    // #2662: and it looks the row up BY THE ID IT HAS ALREADY BUILT rather than reading the whole table
+    // and scanning it in memory. That table only grows, and it grows fastest exactly while Dan is doing
+    // the thing this is slow for: striking several contacts in a row. The comment on `ledger` below has
+    // said so since #2392 ("a per-row version would re-fetch the whole table for every card drawn") while
+    // this writer did the per-row version.
     static func refuse(email: String?, formURL: String? = nil, scope: Scope,
                        in context: ModelContext, now: Date = Date()) {
         guard let handleKey = key(for: email, formURL: formURL) else { return }
         let id = rowId(scope: scope, handleKey: handleKey)
-        let existing = ((try? context.fetch(FetchDescriptor<RefusedContactAddress>())) ?? [])
-        guard !existing.contains(where: { $0.id == id }) else { return }
+        guard existingRow(id: id, in: context) == nil else { return }
         context.insert(RefusedContactAddress(id: id, scopeRaw: scope.raw, scopeId: scope.id,
                                              handleKey: handleKey, refusedAt: now))
-        try? context.save()
+    }
+
+    // One row, by its own unique id. `fetchLimit` as well as the predicate, because the id is unique and
+    // a second match would be a store fault rather than an answer worth reading.
+    private static func existingRow(id: String, in context: ModelContext) -> RefusedContactAddress? {
+        var descriptor = FetchDescriptor<RefusedContactAddress>(
+            predicate: #Predicate { $0.id == id })
+        descriptor.fetchLimit = 1
+        return (try? context.fetch(descriptor))?.first
     }
 
     // The reversal, and the reason triage can follow Dan's no-undo rule for removal at review (#2155,
@@ -127,11 +147,14 @@ enum ContactRefusal {
         if let orgKey { ids.insert(rowId(scope: .organisation(orgKey), handleKey: handleKey)) }
         guard !ids.isEmpty else { return }
 
-        let rows = ((try? context.fetch(FetchDescriptor<RefusedContactAddress>())) ?? [])
-            .filter { ids.contains($0.id) }
+        // #2662: the two ids it has already built, not the whole table filtered afterwards, and no
+        // commit of its own. Same reasoning as `refuse` above, and the same caller
+        // (`addRecipientManually`) already saves.
+        let wanted = Array(ids)
+        let rows = ((try? context.fetch(FetchDescriptor<RefusedContactAddress>(
+            predicate: #Predicate { wanted.contains($0.id) }))) ?? [])
         guard !rows.isEmpty else { return }
         for row in rows { context.delete(row) }
-        try? context.save()
     }
 
     // Read ONCE per pass and handed to the readers, on the OrgAnswerLedger precedent: a per-row version
