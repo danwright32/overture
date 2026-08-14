@@ -52,7 +52,7 @@ the workflow's runbook is its spec.
 
 #1678: the results files carry **run metadata written by the runner script, not by the workflow**. On
 `overture-prep-results.json` that is `model` (#1533, which model actually ran), `runCost` (#1593, dollars and
-wall clock) and `webCalls` (#1864, how many web lookups the run made against its allowance). `model` alone is
+wall clock) and `webCalls` (#1864, how many web calls the run made against its allowance). `model` alone is
 also written onto `overture-scout-extract-results.json` and `overture-reply-classify-results.json` by their
 own runners. All of them are added by `lib/models.sh` after the run has finished, and the app's decoders
 ignore them, which is what makes them safely additive.

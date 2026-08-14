@@ -39,8 +39,15 @@ enum PrepRunSummary {
     // promise, so the check states it its own way in ReachabilityRunSummary and suppresses this one.
     static func concernNotes(for outcome: PrepImporter.Outcome, includeRetryNote: Bool = true) -> [String] {
         var notes: [String] = []
-        // #1721: a run that reached the web far more than expected. Said in LOOKUPS and shows, never in
+        // #1721: a run that reached the web far more than expected. Said in WEB CALLS and shows, never in
         // dollars: Dan is on a Max plan and a dollar figure there is both meaningless and alarming.
+        //
+        // #2616: "web calls", not "web lookups", and the word matters more than a rename usually does. A
+        // LOOKUP is one show's research, which is the unit the allowance is sized in, the unit the run
+        // file stores as `lookups`, and the unit the "Check again" button prices at one. Calling these
+        // "web lookups" put both units under one word on two screens Dan reads back to back, so a button
+        // promising one lookup was followed three minutes later by a summary saying eighteen (L118). The
+        // code has always called them `webCalls`; only the copy was out of step.
         //
         // Speaks ONLY when the count is complete AND over the allowance. An incomplete count makes no
         // claim in either direction, because a partial figure cannot show a run was fine and must not be
@@ -56,15 +63,18 @@ enum PrepRunSummary {
             let shows = web.items == 1 ? "1 show" : "\(web.items) shows"
             let parties = web.parties ?? web.items
             let people = parties > web.items ? ", \(parties) people to find" : ""
-            notes.append("\(total) web lookups for \(shows)\(people), more than expected")
+            // Always plural, deliberately: this line only speaks when the run went OVER its allowance,
+            // and the smallest allowance is 15, so "1 web call" here is a branch nothing can reach. A
+            // singular that cannot happen is a second spelling of the sentence for no reader (L90).
+            notes.append("\(total) web calls for \(shows)\(people), more than expected")
         }
-        // #1835: lookups the run asked for and was refused. Said separately from the count above because
+        // #1835: web calls the run asked for and was refused. Said separately from the count above because
         // they are the opposite fact: those calls reached nothing, so whatever the run reported about
         // those shows it found without them. Silent at zero and silent when the figure is absent (an old
         // results file, or an incomplete count), because absent means nobody looked, not none.
         if let web = outcome.webCalls, let denied = web.denied, denied > 0 {
-            let lookups = denied == 1 ? "1 web lookup" : "\(denied) web lookups"
-            notes.append("\(lookups) refused, that research never happened")
+            let calls = denied == 1 ? "1 web call" : "\(denied) web calls"
+            notes.append("\(calls) refused, that research never happened")
         }
         if !outcome.unmatchedKeys.isEmpty { notes.append("\(outcome.unmatchedKeys.count) didn't match") }
         // #876: shows the run was GIVEN and never answered. Left silent, they sit in "ready to prep" run
