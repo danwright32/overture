@@ -130,4 +130,59 @@ struct SendProgressStateTests {
         #expect(DepartureCopy.spokenClosedOut(showName: "Every Voice Choirs")
                 == "Every Voice Choirs, closed out")
     }
+
+    // #2417/#2644: the pair a departing row is drawn from, decided HERE rather than in the view body.
+    //
+    // The Reached Out row needs the snapshot and the reason together, and a view body is somewhere no
+    // test can reach, so the two dictionaries are put in step by this one function instead of by a
+    // couple of lines of SwiftUI. The first version of this DID live in the view, guarded by a check
+    // that the source read `departing[key]`, and that guard passed unchanged on a rewrite that broke
+    // the rule below, because the words it looked for were still in the file (L1, L103).
+    @Test func aDepartureIsTheSnapshotAndItsReasonTogether() {
+        let state = SendProgressState()
+        state.depart("closed-show", as: item("closed-show"), because: .closedOut)
+
+        let departure = state.departure("closed-show")
+
+        #expect(departure?.item.id == "closed-show")
+        #expect(departure?.reason == .closedOut)
+    }
+
+    // A row that is not leaving has no departure, whatever else is recorded about it.
+    @Test func aRowThatIsNotLeavingHasNoDeparture() {
+        let state = SendProgressState()
+        state.depart("closed-show", as: item("closed-show"), because: .closedOut)
+        state.finishDeparting("closed-show")
+
+        #expect(state.departure("closed-show") == nil)
+        #expect(state.departure("never-departed") == nil)
+    }
+
+    // The two halves cannot come apart, which is the point of their being one value.
+    //
+    // This started as a defended invariant instead: two dictionaries, and every reader folding a
+    // `?? .sent` over the case where a row was leaving with no reason recorded beside it. The fold could
+    // not be provoked, because the only writer of either half writes both, so the test written for it
+    // passed just as happily on an implementation that got the rule backwards. A branch no input can
+    // reach is dead code that reads as care (L90), so the halves were made one and the fold deleted.
+    @Test func everyLeavingRowHasBothHalvesAndLosesBothAtOnce() {
+        let state = SendProgressState()
+        state.depart("sent-show", as: item("sent-show"))
+        state.depart("closed-show", as: item("closed-show"), because: .closedOut)
+
+        // Every key the splice will put back is a key the row-level reader can also answer for, and with
+        // the same reason. Those two are what the date list and the Reached Out list each read.
+        for key in state.departing.keys {
+            #expect(state.departure(key) != nil, "\(key) is spliced back in but has no departure to draw")
+            #expect(state.departure(key)?.reason == state.departureReason(key))
+        }
+        #expect(state.departing.count == 2)
+
+        state.finishDeparting("closed-show")
+
+        #expect(state.departing["closed-show"] == nil)
+        #expect(state.departureReason("closed-show") == nil)
+        #expect(state.departure("closed-show") == nil)
+        #expect(state.departing["sent-show"] != nil, "clearing one departure leaves the other alone")
+    }
 }

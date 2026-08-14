@@ -4,7 +4,7 @@ import SwiftUI
 //
 // Its whole job is to appear INSTANTLY, in place of the row he just acted on, so the screen answers on
 // the press rather than after the write. The write and the queue rebuild behind it take a quarter of a
-// second at the store's present size (measured 2026-08-12: 273 ms for 888 rows) and grow with the store,
+// second at the store's present size (measured 2026-08-14: 292 ms for 893 rows) and grow with the store,
 // and a control that does nothing visible for that long reads as broken and gets pressed again. The
 // close-out menu is the one place an ending is recorded, so a second press lands on a row that has
 // already moved (L44).

@@ -34,6 +34,16 @@ enum DepartureReason: String, Equatable, Sendable, CaseIterable {
     var showsSendDelight: Bool { self == .sent }
 }
 
+// #2417: a row on its way out of the queue, and why it is going.
+//
+// The snapshot is here because the row may already be gone from the store's answer (a send drops it at
+// once), and the reason is here because the two exits look nothing alike. They travel as one value so no
+// reader has to put them back in step.
+struct Departure {
+    let item: QueueItem
+    let reason: DepartureReason
+}
+
 @MainActor
 @Observable
 final class SendProgressState {
@@ -42,12 +52,20 @@ final class SendProgressState {
     // Recipient id -> when that reply's send began. Keyed per recipient because a multi-contact show can
     // have one reply in flight while the others sit untouched.
     private(set) var reply: [String: Date] = [:]
-    // Show key -> the snapshot of the row that is leaving. The send has already dropped it from the
-    // store's answer, so the card playing the exit cannot come from the queue any more.
-    private(set) var departing: [String: QueueItem] = [:]
-    // #2417: why each departing row is leaving, kept beside the snapshot rather than on it, so a
-    // QueueItem stays a description of a show rather than of what a screen is doing to it this second.
-    private(set) var departureReasons: [String: DepartureReason] = [:]
+    // Show key -> the row that is leaving, and why. The send has already dropped it from the store's
+    // answer, so the card playing the exit cannot come from the queue any more, and the reason lives
+    // beside the snapshot rather than on it, so a QueueItem stays a description of a show rather than of
+    // what a screen is doing to it this second.
+    //
+    // #2417: ONE dictionary, deliberately, not a snapshot dictionary beside a reason dictionary. The two
+    // halves are written together, cleared together and meaningless apart, so holding them separately
+    // bought nothing and left every reader folding a `?? .sent` over a disagreement that could then never
+    // be provoked in a test: a defended invariant with no reachable failure is dead code that reads as
+    // care (L90). Held as one value, the disagreement cannot be expressed.
+    private(set) var departures: [String: Departure] = [:]
+
+    // The leaving rows alone, for the splice that puts them back into the date list.
+    var departing: [String: QueueItem] { departures.mapValues { $0.item } }
     // The show a jump (a deep link, a search pick) is marking, cleared a couple of seconds later.
     private(set) var highlighted: String?
 
@@ -64,19 +82,22 @@ final class SendProgressState {
     // #2417: `because` defaults to .sent so every existing send call site keeps its exact behaviour and
     // its seal, and only a caller that says otherwise gets the quiet exit.
     func depart(_ key: String, as snapshot: QueueItem, because reason: DepartureReason = .sent) {
-        departing[key] = snapshot
-        departureReasons[key] = reason
+        departures[key] = Departure(item: snapshot, reason: reason)
     }
 
-    func finishDeparting(_ key: String) {
-        departing[key] = nil
-        // Cleared with the snapshot, never left behind: a stale reason would make this show's NEXT
-        // departure render as whatever its last one was, and the two are drawn differently on purpose.
-        departureReasons[key] = nil
-    }
+    // One line clears the whole departure. A reason left behind would make this show's NEXT departure
+    // render as whatever the last one was, and the two are drawn differently on purpose.
+    func finishDeparting(_ key: String) { departures[key] = nil }
 
-    func isDeparting(_ key: String) -> Bool { departing[key] != nil }
-    func departureReason(_ key: String) -> DepartureReason? { departureReasons[key] }
+    func isDeparting(_ key: String) -> Bool { departures[key] != nil }
+    func departureReason(_ key: String) -> DepartureReason? { departures[key]?.reason }
+
+    // #2417/#2644: what a row needs to decide what it draws this second.
+    //
+    // Answered here rather than in the view that wants it, because a rule decided in a view body is a
+    // rule no test can reach (#885), and the only guard left for it would be one reading the source for
+    // the words it expects, which passes just as happily on words that no longer do the job (L1, L103).
+    func departure(_ key: String) -> Departure? { departures[key] }
 
     func highlight(_ key: String?) { highlighted = key }
     // Clears only if it is still the show that asked, so a jump that lands while an earlier one's timer

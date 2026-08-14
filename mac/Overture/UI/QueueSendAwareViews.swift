@@ -32,13 +32,9 @@ struct QueueDateGroups<Header: View, Content: View>: View {
         // Read once, here. Every splice decision below is made from this one value, and the keys travel
         // down as a plain dictionary so nothing further down reads the object again.
         let departing = sendState.departing
-        let reasons = sendState.departureReasons
-        // #2417: built from the DEPARTING keys, never from the reasons dictionary, so the two can never
-        // disagree about which rows are leaving. A key with no recorded reason is a send, which is what
-        // every departure was before this issue and what the defaulted `depart` still records.
-        let departureReasons = departing.keys.reduce(into: [String: DepartureReason]()) {
-            $0[$1] = reasons[$1] ?? .sent
-        }
+        // #2417: one dictionary holds the snapshot and its reason together, so this is a plain projection
+        // rather than a fold reconciling two sources that could disagree about which rows are leaving.
+        let departureReasons = sendState.departures.mapValues { $0.reason }
         LazyVStack(alignment: .leading, spacing: OVSpacing.xl) {
             header()
             ForEach(QueueModel.groups(groups, withDeparting: departing)) { group in
@@ -49,7 +45,8 @@ struct QueueDateGroups<Header: View, Content: View>: View {
     }
 }
 
-// #2417: one row on the Reached Out list, and whether it is on its way out.
+// #2417/#2644: one row on the Reached Out list, and the two transient things that change what it draws:
+// a send of its own in flight, and whether it is on its way out.
 //
 // This list needs its own view because it is NOT the date-grouped list. The two are alternatives in
 // QueueView's body, never both on screen, and only the date-grouped one goes through QueueDateGroups.
@@ -61,16 +58,26 @@ struct QueueDateGroups<Header: View, Content: View>: View {
 // close-out marks the departure BEFORE the write, so the row is still in this list and only has to be
 // DRAWN differently. It leaves on its own when the rebuild lands.
 //
-// It reads sendState here and hands a finished value into a closure, rather than taking a built view,
+// BOTH facts are handed down by this ONE view, deliberately, rather than by nesting a departure reader
+// inside a send reader. They are read from the same object, for the same row, to decide the same
+// question (what this row draws this second), and two wrappers would be two readers to keep in step
+// where one will do. It is not QueueSendAwareRow because that one is used INSIDE the card body on the
+// date-grouped list, which is below the departure decision, so a departure handed there could never be
+// acted on.
+//
+// It reads sendState here and hands finished values into a closure, rather than taking a built view,
 // for the same reason QueueDateGroups does: a view built at the call site is assembled inside QueueView's
 // body, which is the cost that arrangement exists to remove.
-struct ReachedOutDepartureAware<Content: View>: View {
+struct ReachedOutSendAwareRow<Content: View>: View {
     let sendState: SendProgressState
     let key: String
-    @ViewBuilder let content: (QueueItem?, DepartureReason?) -> Content
+    @ViewBuilder let content: (_ sendingSince: Date?, _ departure: Departure?) -> Content
 
     var body: some View {
-        content(sendState.departing[key], sendState.departureReasons[key])
+        // The pairing itself lives on SendProgressState, where a test can reach it: putting the snapshot
+        // and the reason in step is a rule, and a rule decided in a view body is one only a source-text
+        // guard can watch, which is a guard that passes on the words rather than the behaviour.
+        content(sendState.sendingSince(key), sendState.departure(key))
     }
 }
 

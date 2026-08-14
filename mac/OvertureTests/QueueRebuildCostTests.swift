@@ -20,17 +20,17 @@ import SwiftData
 //   TEST_RUNNER_MEASURE_QUEUE_REBUILD=1 mac/scripts/run-tests-locked.sh \
 //     -only-testing:OvertureTests/QueueRebuildCostTests
 //
-// The corpus is MEASURED from Dan's live store on 2026-08-12, never invented, because a rebuild's cost
+// The corpus is MEASURED from Dan's live store on 2026-08-14, never invented, because a rebuild's cost
 // is a function of the corpus's shape and an invented one measures a store that does not exist (L48).
 // Read with sqlite3 against a COPY of the store, so nothing here or in the reading touched the live one:
 //
-//   888 prospects, 280 distinct presenters, 144 distinct venues, 811 distinct group names
-//   108 recipients in total, spread over 82 prospects (68 have 1, 11 have 2, and one each has 5, 6, 7)
-//   14 prospects carry a draft body
-//   73 watched sources, 6 stored organisation answers
+//   893 prospects, 281 distinct presenters, 144 distinct venues, 816 distinct group names
+//   120 recipients in total, spread over 90 prospects (74 have 1, 12 have 2, one each has 4, 5, 6, 7)
+//   18 prospects carry a draft body
+//   73 watched sources, 9 stored organisation answers
 //
-// The recipient distribution is the part most easily got wrong, and the part that matters most: 806 of
-// the 888 rows have NO contacts at all, so the per-card contact work (the send grouping, the sendable
+// The recipient distribution is the part most easily got wrong, and the part that matters most: 803 of
+// the 893 rows have NO contacts at all, so the per-card contact work (the send grouping, the sendable
 // predicate, and with it the draft lint) short circuits on the overwhelming majority. A fixture that
 // gave every row a contact would measure a path the live store does not take, and would argue for a fix
 // aimed at the wrong half (L102).
@@ -38,16 +38,16 @@ import SwiftData
 @Suite("Queue rebuild cost")
 struct QueueRebuildCostTests {
 
-    // LIVE-STORE-CLAIM verified=2026-08-12 measure="prospects, distinct presenters, distinct venues, distinct group names, watched sources, stored organisation answers, and recipients per prospect, all read with sqlite3 from a copy of the live store"
+    // LIVE-STORE-CLAIM verified=2026-08-14 measure="prospects, distinct presenters, distinct venues, distinct group names, watched sources, stored organisation answers, and recipients per prospect, all read with sqlite3 from a WAL-checkpointed copy of the live store"
     private enum LiveShape {
-        static let prospects = 888
-        static let presenters = 280
+        static let prospects = 893
+        static let presenters = 281
         static let venues = 144
-        static let groupNames = 811
+        static let groupNames = 816
         static let sources = 73
-        // The store's 6 organisation answers are deliberately NOT built here, and this is the one place
+        // The store's 9 organisation answers are deliberately NOT built here, and this is the one place
         // the fixture departs from the live shape. `inheritedAnswers` returns immediately on an empty
-        // list, so with 6 answers its cost is a rounding error either way, and leaving them out keeps
+        // list, so with 9 answers its cost is a rounding error either way, and leaving them out keeps
         // the remainder below attributable to the per-card construction alone rather than to a mixture.
         // Named here rather than left silent, so the departure is visible instead of looking like an
         // oversight.
@@ -55,14 +55,15 @@ struct QueueRebuildCostTests {
         static let recipientCounts: [Int] = {
             var counts = Array(repeating: 0, count: prospects)
             var i = 0
-            for _ in 0..<68 { counts[i] = 1; i += 1 }
-            for _ in 0..<11 { counts[i] = 2; i += 1 }
+            for _ in 0..<74 { counts[i] = 1; i += 1 }
+            for _ in 0..<12 { counts[i] = 2; i += 1 }
+            counts[i] = 4; i += 1
             counts[i] = 5; i += 1
             counts[i] = 6; i += 1
             counts[i] = 7
             return counts
         }()
-        static let prospectsWithADraft = 14
+        static let prospectsWithADraft = 18
     }
 
     private func container() throws -> ModelContainer {
@@ -145,7 +146,7 @@ struct QueueRebuildCostTests {
         var brandsSeconds = 0.0
         var totalSeconds = 0.0
 
-        // A warm pass first, so the number is not dominated by first-touch faulting of 888 model objects.
+        // A warm pass first, so the number is not dominated by first-touch faulting of 893 model objects.
         _ = QueueModel.items(from: prospects, sources: sources)
 
         engagementSeconds = seconds {

@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1252 sentences**.
+Every sentence Overture can say to Dan: **1281 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -46,6 +46,7 @@ What is not, and why:
 - `Domain/ProducerGate.swift`: Words matched inside an organisation's own name, never said to Dan (#1749)
 - `Domain/ProducerShapedName.swift`: parser tokens matched against a ticketing feed, never Overture's voice
 - `Domain/ProducerShapedName.swift`: parser tokens matched against a listing page, never Overture's voice
+- `Domain/ProducerShapedName.swift`: parser tokens matched against a listing page, never Overture's voice
 - `Domain/SameNightTitleVariantMerge.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Domain/SendIdentity.swift`: an RFC822 sender identity (name + address), not the app's own voice
 - `Domain/ShowOutcomeBackfill.swift`: agent log, not a sentence Overture says to Dan (#915)
@@ -69,12 +70,15 @@ What is not, and why:
 - `Integration/GmailReplyChecker.swift`: the HTTP Authorization header Google reads, not a sentence
 - `Integration/GmailSender.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Integration/GmailSender.swift`: the HTTP Authorization header Google reads, not a sentence
+- `Integration/GmailSender.swift`: a Google API URL and developer diagnostic reasons, not the app's own voice (#915)
 - `Integration/GmailSignatureHealth.swift`: developer diagnostic reason (log/badge detail), not the app's own voice (#915)
 - `Integration/GmailSignatureHealth.swift`: developer diagnostic reason (log/badge detail), not the app's own voice (#915)
 - `Integration/GmailSignatureService.swift`: the HTTP Authorization header Google reads, not a sentence
 - `Integration/GmailSignatureService.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Integration/GmailSignatureService.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Integration/GmailSignatureStore.swift`: developer diagnostic log, not the app's own voice (#915)
+- `Integration/GmailThreadingRepair.swift`: developer diagnostic log, not the app's own voice (#915)
+- `Integration/GmailThreadingRepair.swift`: a Google API URL and an HTTP header, not sentences Overture says (#915)
 - `Integration/LoopbackListener.swift`: developer diagnostic log, not the app's voice (#915)
 - `Integration/OperaAmericaCalendar.swift`: synthesized source HTML the
 - `Integration/OperaAmericaCalendar.swift`: an outbound API request body, not the app's voice (#915)
@@ -177,6 +181,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
   - `UI/DraftReviewView.swift`
   - `UI/DraftReviewView.swift`
 - "Send issues"
+  - `Domain/AgentRoster.swift`
   - `Domain/AgentRoster.swift`
   - `Domain/AgentRoster.swift`
   - `Domain/AgentRoster.swift`
@@ -319,7 +324,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceAttention.swift`
 "1 venue is still waiting to be checked."
     `UI/ScoutSummaryView.swift`
-"1 web lookup"
+"1 web call"
     `Domain/PrepRunSummary.swift`
 "1px solid rgba(0,0,0,0.12)"
     `Domain/PreviewBackground.swift`
@@ -331,6 +336,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/PrepQueueService.swift`
 "A Prep run is already in progress. \(org) is queued to re-prep on the next run"
     `App/ActionFeedback.swift`
+"A \(kind.runNoun) is already going"
+    `Domain/PrepQueueButton.swift`
 "A booking was detected that needs your confirmation. Tap to confirm or dismiss."
     `UI/ProspectRowView.swift`
 "A check has already run over this show once and never got an answer for it."
@@ -351,8 +358,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/BlockedCalendar.swift`
 "A later night of this run is out: you're already shooting on \(day)."
     `Domain/BlockedCalendar.swift`
-"A prep run is already going"
-    `Domain/PrepQueueButton.swift`
+"A nudge will arrive as a new email"
+    `Domain/InquiryCopy.swift`
 "A previous run was still reading pages, so the pages this run found were not handed over. Nothing was lost: press Run scout again once the reading finishes and they will be read."
     `Integration/ScoutService.swift`
 "A reachability check couldn't find an email for this show. You can still keep it and add a contact by hand."
@@ -402,6 +409,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Add an address to send to"
     `App/ActionFeedback.swift`
 "Add an address to send to. Nothing was saved"
+    `App/ActionFeedback.swift`
+"Add an email address, or a link to a contact form or profile. No contact was added"
     `App/ActionFeedback.swift`
 "Add an email address. No contact was added"
     `App/ActionFeedback.swift`
@@ -461,7 +470,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ExcludedTownsView.swift`
 "An AI draft came back while you were writing."
     `Domain/ReplyPanel.swift`
-"An earlier check included this show but never got an answer for it, so it's still unchecked. Nothing re-checks it on its own; picking its date again is what gets it an answer."
+"An earlier check included this show but never got an answer for it, so it's still unchecked. Nothing re-checks it on its own."
     `Domain/Reachability.swift`
 "An email to \(p.replyWatchDisplayName) bounced, and it went to more than one person (\(addresses)), so Overture cannot tell which address failed. Check the bounce in Gmail and fix or remove the dead address"
     `Integration/BounceService.swift`
@@ -523,7 +532,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Came back empty \(runs) \(runWord) in a row. Check the link."
     `Domain/SourceAttention.swift`
 "Cancel prep"
-    `App/RootView.swift`
+    `Domain/RunKind.swift`
+"Cancel reachability check"
+    `Domain/RunKind.swift`
 "Carnegie Hall"
     `Domain/WatchedSourceBackfill.swift`
     `Integration/ScoutService.swift`
@@ -594,6 +605,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Continue anyway"
     `UI/StoreShrinkNoticeSheet.swift`
 "Copy pitch and open form"
+    `Domain/FormOutreach.swift`
+"Copy pitch and open profile"
     `Domain/FormOutreach.swift`
 "Copy the draft and mark it replied (paste it into Gmail yourself)"
     `UI/ReplyConversationView.swift`
@@ -711,6 +724,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/InquiryCopy.swift`
 "Email found"
     `Domain/Reachability.swift`
+"Email or link"
+    `UI/DraftReviewView.swift`
 "End this experiment"
     `UI/ExperimentReportView.swift`
 "Event (optional)"
@@ -729,6 +744,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/AddLeadSheet.swift`
 "Every show Overture has ever tracked: past its window, booked, closed, or dismissed"
     `App/RootView.swift`
+"Everyone found here is on the show without running it: a co-performer, a music director or a guest. Nobody with a say over the booking was found. The listing's credits are usually where the producer is named, and you can add them by hand."
+    `Domain/Reachability.swift`
+"Everything found here represents them rather than runs the show: a manager, an agent, a publicist or a booking agency. That may still get you an answer, but nobody who owns the show was found. The listing's credits are usually where the producer is named."
+    `Domain/Reachability.swift`
 "Failed to read \(runs) \(runWord) in a row, and hasn't been read for \(days) \(dayWord). Check the link."
     `Domain/SourceAttention.swift`
 "Failed to read \(runs) \(runWord) in a row. Check the link."
@@ -823,6 +842,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DraftCheck.swift`
 "Held as a duplicate"
     `Domain/Reachability.swift`
+"Held, address in another name"
+    `Domain/Reachability.swift`
 "Held, not sending"
     `UI/SendConfirmSheet.swift`
 "Hi \(firstName(name)),"
@@ -885,6 +906,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/AddLeadSheet.swift`
 "It leaves your queue, filed as \(reason.label)."
     `Domain/BulkDismiss.swift`
+"It reaches them"
+    `UI/DraftReviewView.swift`
 "It's their address"
     `UI/DraftReviewView.swift`
 "Its listing page couldn't be read"
@@ -1020,6 +1043,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DownbeatExport.swift`
 "No Prep run or other check can start until it finishes."
     `Domain/ProbeSelection.swift`
+"No address and no form on their own site, but they take messages on the profile linked here. You'd send the pitch as a DM yourself; Overture can't send it for you."
+    `Domain/Reachability.swift`
 "No address to fill in. Checked past emails to this organisation and the booking sheet."
     `Domain/ManualPrepPrefill.swift`
 "No address to reply to"
@@ -1036,7 +1061,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SendGate.swift`
 "No email found"
     `Domain/Reachability.swift`
-"No email to send to. Add a contact by hand."
+"No email to send to. Add a contact by hand, by address or by link."
     `Domain/DraftReviewNotes.swift`
 "No email yet"
     `UI/QueueView+Model.swift`
@@ -1084,7 +1109,11 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/LeadIntake.swift`
 "No venue"
     `Domain/OutcomePatterns.swift`
+"No way to reach them"
+    `Domain/ShowOutcome.swift`
 "Nobody found to write to"
+    `Domain/Reachability.swift`
+"Nobody who can hire you"
     `Domain/Reachability.swift`
 "None due"
     `Domain/AgentRoster.swift`
@@ -1167,6 +1196,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/PrepQueueService.swift`
 "Nothing on this feed names a room, so its shows are filed under \(org)."
     `UI/SourcesView.swift`
+"Nothing on this show connects \(name) to the address found for them, and no page was recorded; blocked from sending."
+    `Domain/DraftReviewNotes.swift`
 "Nothing recorded which page \(name)'s address was read off, so it isn't counted as verified."
     `Domain/DraftReviewNotes.swift`
 "Nothing scouted yet"
@@ -1197,8 +1228,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "Nudges due on shows you've already reached out to."
     `Domain/AgentRoster.swift`
-"Of the \(high) high-fit: \(relationshipDriven) from a prior relationship, \(meritDriven) on event merit"
-    `UI/QueuePriorityBreakdown.swift`
 "Offers a discount or free/complimentary work"
     `Domain/DraftCheck.swift`
 "OmniFocus is syncing due follow-ups. It only fires while Overture is open, so it looks ahead by:"
@@ -1502,6 +1531,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReplyPanel.swift`
 "Replaces the scout's name on this row. Your name stays put across future scouts."
     `UI/ProspectRowView.swift`
+"Replies can't be tracked"
+    `Domain/InquiryCopy.swift`
 "Reply to \(inquirerName)"
     `Domain/InquiryCopy.swift`
 "Reply-classify results couldn't save. Try again."
@@ -1643,6 +1674,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ReplyConversationView.swift`
 "Sending to this one"
     `UI/SendConfirmSheet.swift`
+"Sent as a DM. Overture cannot see a reply to this one."
+    `Domain/FormOutreach.swift`
 "Sent emails that hit a problem, or approved ones you can't send yet."
     `Domain/AgentRoster.swift`
 "Sent through their form. Overture cannot see a reply to this one."
@@ -1701,6 +1734,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ExcludedTownsView.swift`
 "Snoozed \(org). I'll remind you later."
     `App/ActionFeedback.swift`
+"Social DM only"
+    `Domain/Reachability.swift`
 "Some changed calendars couldn't be read this run."
     `Domain/ScoutWarnings.swift`
 "Some of your shows may be missing"
@@ -1814,6 +1849,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DetachedRunOutcome.swift`
 "The act takes messages through the form on their own site. You'd fill that in yourself; Overture can't send it for you."
     `Domain/Reachability.swift`
+"The address found here is in a different name from the contact on this show, and no page was recorded showing it reaches them. A pitch would greet one person and arrive with another, so Overture is holding it. If it does reach them, clear the flag on the contact and it is sendable again."
+    `Domain/Reachability.swift`
 "The calendar reader ran but produced nothing this run."
     `Domain/ScoutWarnings.swift`
 "The calendars Overture re-checks on every scout, and how each one is doing"
@@ -1833,6 +1870,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "The days Overture won't pitch you for: your booked shoots, and the days you block."
     `Domain/DaysOffAttention.swift`
 "The email that will send"
+    `UI/SendConfirmSheet.swift`
+"The email that will send, edit it here"
     `UI/SendConfirmSheet.swift`
 "The last day is before the first day."
     `Domain/DayOff.swift`
@@ -1954,6 +1993,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "This looks up a real contact for the still-open shows on \(dateLabel), so you can tell which are emailable before you keep one. It spends a little on that lookup, only for the shows you check here."
     `Domain/Reachability.swift`
 "This looks up a real contact for this one show, even though it already has an answer."
+    `Domain/ProbeSelection.swift`
+"This looks up a real contact for this one show, which an earlier check never got an answer for."
     `Domain/ProbeSelection.swift`
 "This opens Terminal and runs the install. Overture quits partway through and comes back on its own."
     `Domain/BuildFreshnessPanel.swift`
@@ -2174,7 +2215,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/DaysOffView.swift`
 "You have \(pointerPhrase(for: target, count: n)) next."
     `Domain/StageEmptyState.swift`
-"You opened their form \(f.localizedString(for: startedAt, relativeTo: now)). Did you send it?"
+"You opened their form \(when). Did you send it?"
+    `Domain/FormOutreach.swift`
+"You opened their profile \(when). Did you send it?"
     `Domain/FormOutreach.swift`
 "You set this: \(what)"
     `UI/QueueView+Model.swift`
@@ -2186,6 +2229,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/FollowUp.swift`
 "You told Overture to read \(name) as the building, not the presenter."
     `Domain/OrganisationListing.swift`
+"You'll open a form or profile and write there by hand."
+    `UI/DraftReviewView.swift`
 "You'll see \(org) again in \(days) days. No email went out"
     `App/ActionFeedback.swift`
 "You're already shooting \(name) on \(day)."
@@ -2202,6 +2247,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SendConfirmAndReconnectAlerts.swift`
 "Your reply goes to"
     `Domain/ReplyPanel.swift`
+"Your reply went out and answers to it are still watched. What couldn't be read is the id a later message would quote, so a nudge on this inquiry will arrive as a separate email rather than under the same conversation."
+    `Domain/InquiryCopy.swift`
+"Your reply went out, but Gmail didn't tell Overture which conversation it landed in, so an answer to it won't be spotted automatically. Watch your inbox for this one and mark it here yourself."
+    `Domain/InquiryCopy.swift`
 "Your shoot history is \(days) days old, so rooms you've photographed since then won't be mentioned in a pitch. Re-export your Shoots calendar and run the import again."
     `Domain/ShootHistory.swift`
 "Zankel Hall"
@@ -2258,6 +2307,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/RunProgress.swift`
 "\(base) looks stuck (\(elapsed))"
     `Domain/RunProgress.swift`
+"\(calls) refused, that research never happened"
+    `Domain/PrepRunSummary.swift`
 "\(city), \(state)"
     `Domain/EventLocationFill.swift`
 "\(clauses[cityIndex]), \(code)"
@@ -2272,7 +2323,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "\(count) \(count == 1 ? "contact" : "contacts") held for a check"
     `Domain/DraftReviewNotes.swift`
-"\(count) \(outcome.countedPhrase)"
+"\(count) \(outcome.countedPhrase ?? outcome.rawValue)"
     `Domain/OutcomePatterns.swift`
 "\(count) \(prospectWord) already pending or re-prepped recently; nothing new queued"
     `App/ActionFeedback.swift`
@@ -2290,7 +2341,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ProbeSelection.swift`
 "\(deferredCount) venues are still waiting to be checked."
     `UI/ScoutSummaryView.swift`
-"\(denied) web lookups"
+"\(denied) web calls"
     `Domain/PrepRunSummary.swift`
 "\(drafted) to review"
     `Domain/PrepStatus.swift`
@@ -2324,6 +2375,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AgentRoster.swift`
 "\(i.keptToPrep) ready to prep"
     `Domain/AgentRoster.swift`
+"\(i.keptToPrep) ready, held by a check"
+    `Domain/AgentRoster.swift`
 "\(i.reachedOutDue) due"
     `Domain/AgentRoster.swift`
 "\(i.readyToSend) approved, connect Gmail to send"
@@ -2346,8 +2399,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ScoutWarningCopy.swift`
 "\(live.name): \(live.detail)"
     `UI/QueueView.swift`
-"\(lookups) refused, that research never happened"
-    `Domain/PrepRunSummary.swift`
+"\(longMonth(calendar.component(.month, from: d))) \(calendar.component(.day, from: d))"
+    `Domain/EasternDate.swift`
 "\(lookups), \(wait)."
     `Domain/ProbeSelection.swift`
 "\(lookups), \(wait): shows by the same producer share one."
@@ -2360,6 +2413,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "\(months[month - 1]) \(year)"
     `UI/LeadIntakeModel.swift`
 "\(n) \(shows(n)) held by a date clash"
+    `Domain/AgentRoster.swift`
+"\(n) \(shows(n)) sent, but a later nudge will arrive as a new email, not a reply"
     `Domain/AgentRoster.swift`
 "\(n) \(shows(n)) sent, but replies can't be tracked: check Gmail"
     `Domain/AgentRoster.swift`
@@ -2412,6 +2467,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "\(org) dismissed as a duplicate."
     `Domain/ShowOutcome.swift`
 "\(org) dismissed: date conflict."
+    `Domain/ShowOutcome.swift`
+"\(org) dismissed: no way to reach them."
     `Domain/ShowOutcome.swift`
 "\(org) dismissed: not a fit."
     `Domain/ShowOutcome.swift`
@@ -2476,6 +2533,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "\(pending) calendars have new listings to read."
     `Domain/ScoutReadBudget.swift`
 "\(piece) is not an email address"
+    `App/ActionFeedback.swift`
+"\(piece) is not an email address or a link. No contact was added"
     `App/ActionFeedback.swift`
 "\(piece) is not an email address. No contact was added"
     `App/ActionFeedback.swift`
@@ -2567,7 +2626,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceReadability.swift`
 "\(to) · nudge \(attempt(after: followUpCount)) of \(config.maxFollowUps)"
     `Domain/FollowUp.swift`
-"\(total) web lookups for \(shows)\(people), more than expected"
+"\(total) web calls for \(shows)\(people), more than expected"
     `Domain/PrepRunSummary.swift`
 "\(town) is already on your skip list"
     `App/ActionFeedback.swift`
@@ -2708,6 +2767,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreSchemaGuard.swift`
 "permission. A successful sync clears it."
     `Domain/AppNotice.swift`
+"prep run"
+    `Domain/RunKind.swift`
+"reachability check"
+    `Domain/RunKind.swift`
 "read it."
     `UI/LeadIntakeModel.swift`
 "redraft and find new contacts"
