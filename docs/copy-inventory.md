@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1285 sentences**.
+Every sentence Overture can say to Dan: **1291 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1682,11 +1682,15 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/FormOutreach.swift`
 "Sent as a DM. Overture is watching the email conversation you linked."
     `Domain/FormOutreach.swift`
+"Sent as a DM. You told Overture they replied."
+    `Domain/FormOutreach.swift`
 "Sent emails that hit a problem, or approved ones you can't send yet."
     `Domain/AgentRoster.swift`
 "Sent through their form. Overture cannot see a reply to this one."
     `Domain/FormOutreach.swift`
 "Sent through their form. Overture is watching the email conversation you linked."
+    `Domain/FormOutreach.swift`
+"Sent through their form. You told Overture they replied."
     `Domain/FormOutreach.swift`
 "Sent, waiting to hear back"
     `Domain/InquiryCopy.swift`
@@ -1966,6 +1970,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceGrade.swift`
 "They all leave your queue, filed as \(reason.label)."
     `Domain/BulkDismiss.swift`
+"They got back to me"
+    `Domain/HandMarkedReply.swift`
 "They include \(named.joined(separator: " and ")), and \(others) \(plural)."
     `Domain/SourceReadability.swift`
 "They replied"
@@ -2105,6 +2111,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/QueueUndoStack.swift`
 "Undo \(actionLabel): \(subject)"
     `Domain/QueueUndoStack.swift`
+"Undo that"
+    `Domain/HandMarkedReply.swift`
 "Unknown contact"
     `UI/QueueView+Model.swift`
 "Unverified email found"
@@ -2235,6 +2243,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "You stopped working this show \(ago(stoodDownAt, now: now))"
     `Domain/FollowUp.swift`
+"You told Overture they replied. Their message isn't here, because it didn't come by email."
+    `Domain/ReplyPanel.swift`
 "You told Overture to read \(name) as the building, not the presenter."
     `Domain/OrganisationListing.swift`
 "You'll open a form or profile and write there by hand."
@@ -2247,6 +2257,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/BlockedCalendar.swift`
 "You've already added that link. Its shows are in your queue, and once the watchlist is on, that organization gets re-checked on its own."
     `UI/LeadIntakeModel.swift`
+"You've already answered this one, so Overture can't take the reply back."
+    `Domain/HandMarkedReply.swift`
 "You've already logged an inquiry for this event. You can still add this one."
     `Domain/InquiryCopy.swift`
 "Your Downbeat client export is \(days) days old. Recently booked clients may be missing, so some warm leads could look cold. Open Downbeat to refresh it."

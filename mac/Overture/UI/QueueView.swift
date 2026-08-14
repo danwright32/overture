@@ -1160,9 +1160,12 @@ struct QueueView: View {
                 // #2716: and once a conversation is attached, the half of that sentence claiming a reply
                 // cannot be seen is false, so the line says what is true now instead of contradicting the
                 // address the attach put on the row above it.
+                // #2711: and once Dan has recorded a reply that arrived somewhere Overture cannot see, it
+                // stops saying no reply can be seen, because the badge beside it now says one arrived.
                 if r.outreachChannel == .contactForm {
                     Text(FormOutreachCopy.channelLine(formURL: r.formOutreachURL,
-                                                      hasWatchableConversation: r.hasWatchableConversation))
+                                                      hasWatchableConversation: r.hasWatchableConversation,
+                                                      replyMarkedByHand: r.replyMarkedByHandAt != nil))
                         .font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
                 }
                 // #675: this pipeline never carries a bounced recipient (isInPlay excludes them), so
@@ -1236,6 +1239,22 @@ struct QueueView: View {
                 // this show, so nobody is offered "Date conflict" on a pitch they already sent.
                 CloseOutMenu(outcomes: ShowOutcome.menu(wasPitched: p.wasPitched)) { outcome in
                     closeOut(p, as: outcome)
+                }
+                // #2711: the only thing Dan could record about a DM pitch was that it ENDED. A reply that
+                // arrives inside Instagram never reaches Gmail, so a conversation that had actually
+                // STARTED was unrecordable, and the show sat reading silent until its decide date while
+                // Overture went on pitching the rest of its contacts underneath it.
+                //
+                // Offered only where Overture genuinely cannot watch, so it can never become a second
+                // writer racing reply detection. The undo takes its place once pressed rather than sitting
+                // beside it, because a control that keeps offering itself after being pressed reads as
+                // broken and gets pressed again (L44).
+                HandMarkedReplyControl(recipient: r, prospect: p) {
+                    HandMarkedReply.mark(r, in: p, now: now)
+                    try? context.save()
+                } onUndo: {
+                    HandMarkedReply.undo(r, in: p)
+                    try? context.save()
                 }
                 // #2644: while a send on this show is in flight, the action control is REPLACED by the
                 // live label rather than sitting there unchanged. The three states the standing rule

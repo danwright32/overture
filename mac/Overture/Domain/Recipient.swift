@@ -206,6 +206,15 @@ final class Recipient {
     // makes the in-between state honest, "you opened their form and have not said whether you sent it",
     // instead of collapsing into either end.
     var formOutreachStartedAt: Date?
+    // #2711: when Dan told Overture a reply arrived on a channel it cannot watch (a DM answered inside
+    // Instagram, a form reply that never reached Gmail). Kept as its own stamp rather than folded into
+    // `repliedAt`, so a hand-marked reply is never mistaken for one Overture read: it is what the reply
+    // panel reads to say why there are no words to show, and what the undo reads to know there is a mark
+    // of its own to take back rather than a detection to argue with.
+    var replyMarkedByHandAt: Date?
+    // Whether that mark cleared a stand-down. `reopenOnReply` nulls a `.stoodDown` resolution and nothing
+    // else remembers it, so without this the undo could only guess at an inverse (L5).
+    var replyMarkClearedStandDown: Bool = false
 
     // Per-recipient send + engagement.
     var sendStateRaw: String = SendState.pending.rawValue
@@ -649,6 +658,10 @@ final class Recipient {
         if gmailMessageId != nil || gmailThreadId != nil { return true }
         if sendGroupId != nil { return true }   // #2031: went out with other people, still went out
         if replied || bounced || repliedAt != nil { return true }
+        // #2711: a reply Dan recorded by hand. `replied` above already covers every mark this can make,
+        // since `HandMarkedReply.mark` sets both together, but it is spelled out anyway: this predicate
+        // fails closed on purpose, and the cost of missing a field here is a deleted outreach record.
+        if replyMarkedByHandAt != nil { return true }
         if followUpCount > 0 || lastFollowUpAt != nil { return true }
         if replySentAt != nil || replyDraftBody != nil || replyDraftRequestedAt != nil { return true }
         if replySendClaimedAt != nil || nudgeSendClaimedAt != nil { return true }

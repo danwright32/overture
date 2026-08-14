@@ -109,12 +109,25 @@ enum FormOutreachCopy {
     static let watchedLine = "Sent through their form. Overture is watching the email conversation you linked."
     static let watchedLineSocial = "Sent as a DM. Overture is watching the email conversation you linked."
 
+    // #2711: and the same fact once Dan has told Overture they answered on a channel it cannot watch.
+    // The "cannot see a reply to this one" half is true right up until he says one arrived, and leaving
+    // it up then would have the card contradict the reply badge beside it (L118, #843). It says who
+    // recorded it, because a reply Overture read and a reply Dan reported are different things and the
+    // row must not blur them.
+    static let markedLine = "Sent through their form. You told Overture they replied."
+    static let markedLineSocial = "Sent as a DM. You told Overture they replied."
+
     // One entry point for what the card says about the route, so a caller cannot pair the wrong half of
     // the pair with the wrong state.
-    static func channelLine(formURL: String?, hasWatchableConversation: Bool) -> String {
+    //
+    // An attached conversation wins over a hand mark: Overture really is watching one, which is the more
+    // useful fact and the one that says where the words are.
+    static func channelLine(formURL: String?, hasWatchableConversation: Bool,
+                            replyMarkedByHand: Bool = false) -> String {
         let isSocial = formURL.map(Reachability.isSocialOnly) ?? false
-        guard hasWatchableConversation else { return isSocial ? sentLineSocial : sentLine }
-        return isSocial ? watchedLineSocial : watchedLine
+        if hasWatchableConversation { return isSocial ? watchedLineSocial : watchedLine }
+        if replyMarkedByHand { return isSocial ? markedLineSocial : markedLine }
+        return isSocial ? sentLineSocial : sentLine
     }
 }
 
