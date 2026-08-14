@@ -206,6 +206,15 @@ final class Recipient {
     // makes the in-between state honest, "you opened their form and have not said whether you sent it",
     // instead of collapsing into either end.
     var formOutreachStartedAt: Date?
+    // #2711: when Dan told Overture a reply arrived on a channel it cannot watch (a DM answered inside
+    // Instagram, a form reply that never reached Gmail). Kept as its own stamp rather than folded into
+    // `repliedAt`, so a hand-marked reply is never mistaken for one Overture read: it is what the reply
+    // panel reads to say why there are no words to show, and what the undo reads to know there is a mark
+    // of its own to take back rather than a detection to argue with.
+    var replyMarkedByHandAt: Date?
+    // Whether that mark cleared a stand-down. `reopenOnReply` nulls a `.stoodDown` resolution and nothing
+    // else remembers it, so without this the undo could only guess at an inverse (L5).
+    var replyMarkClearedStandDown: Bool = false
 
     // Per-recipient send + engagement.
     var sendStateRaw: String = SendState.pending.rawValue

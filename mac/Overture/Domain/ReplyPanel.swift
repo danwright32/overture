@@ -8,8 +8,15 @@ import Foundation
 enum ReplyPanel {
     // Whether this row can open the panel at all. Asked of the row the LIST stands on, which may be a
     // colleague who never wrote, so it resolves to the peer who did before answering.
+    // #2711: and only where there is somewhere to answer TO. A reply Dan recorded by hand can sit on a DM
+    // contact that has no address at all, and this panel's only outcome is an email: `sendReplyDraft`
+    // guards on `recipient.email` and would refuse, so the button would open a compose box that can never
+    // send (L109). The conversation is still live and the row still says so; it is answered inside
+    // whatever app it arrived in.
     static func isOffered(for recipient: Recipient, in prospect: Prospect) -> Bool {
-        ReplyIdentity.answering(for: recipient, in: prospect).hasUnhandledReply
+        let answerer = ReplyIdentity.answering(for: recipient, in: prospect)
+        guard answerer.email?.isEmpty == false else { return false }
+        return answerer.hasUnhandledReply
     }
 
     // What they actually wrote, or nil when nothing was captured: a reply detected before the words were
@@ -105,9 +112,15 @@ enum ReplyPanel {
     // inquiry he logged by hand before anything has been sent or received, so there is no inbound message
     // and no Gmail thread to point at. Both sentences above would claim a message exists, and one of them
     // would name a place it is not (L11). Nothing is missing here, so nothing is said.
+    // #2711: and a FOURTH, which is the one this sentence set exists to keep honest. Dan told Overture a
+    // reply arrived on a channel it cannot watch, so there is no message anywhere: both sentences above
+    // would claim one exists and send him hunting in Gmail for something that was never there (L11).
     static func missingWordsReason(_ recipient: any ReplyWatchableRecipient) -> String? {
         guard theirWords(recipient) == nil else { return nil }
         guard hasReceivedAnything(recipient) else { return nil }
+        if (recipient as? Recipient)?.replyMarkedByHandAt != nil {
+            return ReplyPanelCopy.markedByHandHasNoWords
+        }
         return recipient.replyTextCheckedAt == nil
             ? ReplyPanelCopy.noCapturedWords
             : ReplyPanelCopy.unreadableWords
@@ -378,6 +391,11 @@ enum ReplyPanelCopy {
     // rather than that something is broken, and Overture will not keep trying this one.
     static let unreadableWords =
         "Overture couldn't read this message, which usually means it's an image or an attachment. Open it in Gmail."
+    // #2711: a reply Dan recorded by hand, which arrived somewhere Overture cannot see. Points at nothing,
+    // because there is nothing to point at: naming Gmail here would send him looking for a message that
+    // never existed.
+    static let markedByHandHasNoWords =
+        "You told Overture they replied. Their message isn't here, because it didn't come by email."
     // #2145: getting the message ready for him to approve, which is NOT sending it. Nothing has left at
     // this point and he has not yet seen what he would be approving, so calling it "Sending" would claim
     // an act that has not happened (L12).
