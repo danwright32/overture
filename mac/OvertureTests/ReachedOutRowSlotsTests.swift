@@ -137,6 +137,10 @@ struct ReachedOutRowSlotsTests {
             // out inline would put its ITEMS' buttons in this count, so the guard would read four where
             // he sees one, which is why the close-out is its own view.
             + column.components(separatedBy: "CloseOutMenu(").count - 1
+            // #2711: the same reasoning as the close-out above. Its three states (offer it, take it back,
+            // say why it cannot be taken back) are one control to a person, so it is one named view here
+            // rather than three constructs the guard would read as three slots.
+            + column.components(separatedBy: "HandMarkedReplyControl(").count - 1
         #expect(drawn == ReachedOutRowSlots.Slot.allCases.count,
                 """
                 the trailing column draws \(drawn) things but \
@@ -184,6 +188,8 @@ struct ReachedOutRowSlotsTests {
         "Text(hint)": .passedHint,
         // #2398
         "Text(spent)": .spentMarker,
-        "CloseOutMenu(": .closeOut
+        "CloseOutMenu(": .closeOut,
+        // #2711
+        "HandMarkedReplyControl(": .handMarkedReply
     ]
 }

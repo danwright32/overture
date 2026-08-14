@@ -45,6 +45,13 @@ enum ReachedOutRowSlots {
         case answer
         // #2112/#2224: ending the pitch, from here rather than from the Archive card.
         case closeOut
+        // #2711: recording that a reply arrived on a channel Overture cannot watch, which until now was
+        // the one thing about a DM pitch Dan could not tell it. Beside the close-out, because the two are
+        // the same kind of act (he is telling Overture what happened somewhere it cannot see) and because
+        // a conversation STARTING has to be recordable in the same place a conversation ENDING is.
+        //
+        // Draws nothing at all on an emailed contact, which is most rows: Overture watches those itself.
+        case handMarkedReply
         case dueAction
     }
 
@@ -62,11 +69,16 @@ enum ReachedOutRowSlots {
     /// #2398: `spentMarker` sits between the hint and the countdown. A show whose date has gone is spoken
     /// for by `passedHint` first (that is the stronger fact), and a countdown is only honest while there is
     /// still something to count down to.
+    /// #2711: `handMarkedReply` draws only where Overture cannot watch the channel, or where Dan has
+    /// already told it a reply arrived there. On every emailed row it is absent, which is why it takes a
+    /// parameter rather than being unconditional like `closeOut`: the close-out is always a possible act,
+    /// and telling Overture about a reply it can read for itself is not.
     static func slots(replyOffered: Bool, showPassed: Bool = false, nudgesSpent: Bool = false,
-                      dueActionLabel: String?) -> [Slot] {
+                      handMarkedReplyShown: Bool = false, dueActionLabel: String?) -> [Slot] {
         let timingSlot: Slot = showPassed ? .passedHint : (nudgesSpent ? .spentMarker : .timing)
         var slots: [Slot] = [replyOffered ? .answer : timingSlot]
         slots.append(.closeOut)
+        if handMarkedReplyShown { slots.append(.handMarkedReply) }
         if dueActionLabel != nil { slots.append(.dueAction) }
         return slots
     }

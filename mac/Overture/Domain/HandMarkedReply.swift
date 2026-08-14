@@ -16,11 +16,20 @@ import Foundation
 // no message id and no thread, and a surface that would show the reply's text says what actually happened
 // instead of rendering an empty message box (L10, L11).
 enum HandMarkedReplyCopy {
-    // The control, named for the fact it records rather than for the field it writes.
-    static let mark = "They replied"
-    // Its undo. Says the fact, not the mechanism: "undo" alone beside a row full of other controls does
-    // not say what would be undone.
-    static let undo = "They didn't reply"
+    // The control. In Dan's own voice, the same shape as the form pitch's "I sent it", because this is
+    // the same kind of act: him telling Overture something only he can know.
+    //
+    // Deliberately NOT "They replied", which was the first wording and which `InquiryCopy.rowState`
+    // already uses as a STATE LABEL on an inquiry row. One wording standing for a fact on one row and an
+    // action on another is the collision that only shows up when the two are read together (L118), and
+    // the copy inventory's duplicate list is what caught it.
+    static let mark = "They got back to me"
+    // Its undo. Named as an UNDO rather than as the opposite fact, because "They didn't reply" sits one
+    // control away from the close-out menu, where "No response" is a real ending Dan can record: two
+    // controls a row apart, each reading as a statement that nobody answered, would be one wording
+    // standing for two different acts (L118). What it undoes is on the card beside it, which says in
+    // words that he told Overture they replied.
+    static let undo = "Undo that"
     // Why the undo is refused. From the same function that refuses, so a greyed control can never sit
     // beside no reason (L109).
     static let cannotUndoAfterAnswering =

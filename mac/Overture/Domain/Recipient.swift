@@ -658,6 +658,10 @@ final class Recipient {
         if gmailMessageId != nil || gmailThreadId != nil { return true }
         if sendGroupId != nil { return true }   // #2031: went out with other people, still went out
         if replied || bounced || repliedAt != nil { return true }
+        // #2711: a reply Dan recorded by hand. `replied` above already covers every mark this can make,
+        // since `HandMarkedReply.mark` sets both together, but it is spelled out anyway: this predicate
+        // fails closed on purpose, and the cost of missing a field here is a deleted outreach record.
+        if replyMarkedByHandAt != nil { return true }
         if followUpCount > 0 || lastFollowUpAt != nil { return true }
         if replySentAt != nil || replyDraftBody != nil || replyDraftRequestedAt != nil { return true }
         if replySendClaimedAt != nil || nudgeSendClaimedAt != nil { return true }

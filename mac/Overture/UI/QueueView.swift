@@ -1249,23 +1249,12 @@ struct QueueView: View {
                 // writer racing reply detection. The undo takes its place once pressed rather than sitting
                 // beside it, because a control that keeps offering itself after being pressed reads as
                 // broken and gets pressed again (L44).
-                if HandMarkedReply.isOffered(r) {
-                    Button(HandMarkedReplyCopy.mark) {
-                        HandMarkedReply.mark(r, in: p, now: now)
-                        try? context.save()
-                    }
-                    .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forestText)
-                } else if r.replyMarkedByHandAt != nil, let refusal = HandMarkedReply.undoRefusal(r) {
-                    // L109: the reason is rendered from the same function that applies the gate, so a
-                    // control that has gone away can never leave Dan with no account of why.
-                    Text(refusal).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else if r.replyMarkedByHandAt != nil {
-                    Button(HandMarkedReplyCopy.undo) {
-                        HandMarkedReply.undo(r, in: p)
-                        try? context.save()
-                    }
-                    .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                HandMarkedReplyControl(recipient: r, prospect: p) {
+                    HandMarkedReply.mark(r, in: p, now: now)
+                    try? context.save()
+                } onUndo: {
+                    HandMarkedReply.undo(r, in: p)
+                    try? context.save()
                 }
                 // #2644: while a send on this show is in flight, the action control is REPLACED by the
                 // live label rather than sitting there unchanged. The three states the standing rule

@@ -98,6 +98,7 @@ struct OutreachFieldClassificationTests {
         "intentHint": "what a classify run read a REPLY as meaning, and replied is counted",
         "replyDraftEditedByDan": "whether he edited the reply draft, and replyDraftBody is counted",
         "replyDraftWrittenByDan": "whether he wrote the reply draft himself, and replyDraftBody is counted",
+        "replyMarkClearedStandDown": "set with replyMarkedByHandAt by HandMarkedReply.mark, and that is counted",
     ]
 
     @Test func everyStoredPropertyIsEitherCountedAsOutreachOrRecordedAsNotOutreach() throws {
