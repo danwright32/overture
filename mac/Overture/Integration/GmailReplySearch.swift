@@ -29,6 +29,14 @@ struct GmailReplySearch {
         var fromName: String?
         var subject: String
         var sentAt: Date
+        // #2714: the header bulk senders are required to set, and the one honest way to tell a
+        // newsletter from a person. `ReplyDetection.isAutomated` catches only mailer-daemon and
+        // friends, so `hello@`, `info@` and `boxoffice@` sail straight through it, and guessing at
+        // words instead would over-match a personal inbox in a way that reads exactly like the
+        // feature working (L104). Free: it rides the metadata get already being made.
+        //
+        // nil means the header was absent, which is what ordinary personal mail looks like.
+        var listUnsubscribe: String?
     }
 
     // One page of `users.messages.list`, which answers with ids and nothing else.
@@ -153,10 +161,12 @@ struct GmailReplySearch {
         let from = header("From")
         let address = ReplyDetection.email(from: from)
         guard !address.isEmpty else { return nil }
+        let unsubscribe = header("List-Unsubscribe").trimmingCharacters(in: .whitespacesAndNewlines)
         return InboundMessage(messageId: id, threadId: thread, fromAddress: address,
                               fromName: ReplyDetection.displayName(from: from),
                               subject: header("Subject").trimmingCharacters(in: .whitespacesAndNewlines),
-                              sentAt: Date(timeIntervalSince1970: TimeInterval(millis) / 1000))
+                              sentAt: Date(timeIntervalSince1970: TimeInterval(millis) / 1000),
+                              listUnsubscribe: unsubscribe.isEmpty ? nil : unsubscribe)
     }
 
     // MARK: the search
@@ -293,7 +303,8 @@ struct GmailReplySearch {
     static func metadataURL(id: String) -> URL? {
         guard let escaped = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else { return nil }
         return URL(string: "https://gmail.googleapis.com/gmail/v1/users/me/messages/" + escaped
-                   + "?format=metadata&metadataHeaders=From&metadataHeaders=Subject")
+                   + "?format=metadata&metadataHeaders=From&metadataHeaders=Subject"
+                   + "&metadataHeaders=List-Unsubscribe")
     }
 
     // Two answers, never an optional. A nil body would put "Gmail refused" and "Gmail returned nothing"
