@@ -324,7 +324,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceAttention.swift`
 "1 venue is still waiting to be checked."
     `UI/ScoutSummaryView.swift`
-"1 web lookup"
+"1 web call"
     `Domain/PrepRunSummary.swift`
 "1px solid rgba(0,0,0,0.12)"
     `Domain/PreviewBackground.swift`
@@ -2299,6 +2299,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/RunProgress.swift`
 "\(base) looks stuck (\(elapsed))"
     `Domain/RunProgress.swift`
+"\(calls) refused, that research never happened"
+    `Domain/PrepRunSummary.swift`
 "\(city), \(state)"
     `Domain/EventLocationFill.swift`
 "\(clauses[cityIndex]), \(code)"
@@ -2331,7 +2333,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ProbeSelection.swift`
 "\(deferredCount) venues are still waiting to be checked."
     `UI/ScoutSummaryView.swift`
-"\(denied) web lookups"
+"\(denied) web calls"
     `Domain/PrepRunSummary.swift`
 "\(drafted) to review"
     `Domain/PrepStatus.swift`
@@ -2391,8 +2393,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView.swift`
 "\(longMonth(calendar.component(.month, from: d))) \(calendar.component(.day, from: d))"
     `Domain/EasternDate.swift`
-"\(lookups) refused, that research never happened"
-    `Domain/PrepRunSummary.swift`
 "\(lookups), \(wait)."
     `Domain/ProbeSelection.swift`
 "\(lookups), \(wait): shows by the same producer share one."
@@ -2616,7 +2616,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceReadability.swift`
 "\(to) · nudge \(attempt(after: followUpCount)) of \(config.maxFollowUps)"
     `Domain/FollowUp.swift`
-"\(total) web lookups for \(shows)\(people), more than expected"
+"\(total) web calls for \(shows)\(people), more than expected"
     `Domain/PrepRunSummary.swift`
 "\(town) is already on your skip list"
     `App/ActionFeedback.swift`

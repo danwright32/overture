@@ -64,7 +64,7 @@ struct PrepWebCallCountTests {
         outcome.webCalls = PrepResults.WebCalls(recorded: true, total: 47, items: 2, capPerItem: 15,
                                                 allowance: 30, overCap: true)
         let note = PrepRunSummary.notes(for: outcome).first { $0.contains("web") }
-        #expect(note == "47 web lookups for 2 shows, more than expected")
+        #expect(note == "47 web calls for 2 shows, more than expected")
     }
 
     // The count must survive the trip from the FILE to the summary, through the importer the app really
@@ -89,7 +89,7 @@ struct PrepWebCallCountTests {
 
         #expect(outcome?.webCalls?.total == 47)
         #expect(PrepRunSummary.notes(for: outcome ?? PrepImporter.Outcome())
-            .contains("47 web lookups for 2 shows, more than expected"))
+            .contains("47 web calls for 2 shows, more than expected"))
     }
 
     // A single-show run says "1 show", not "1 shows". Caught by reading the generated copy inventory cold,
@@ -100,7 +100,7 @@ struct PrepWebCallCountTests {
         outcome.webCalls = PrepResults.WebCalls(recorded: true, total: 40, items: 1, capPerItem: 15,
                                                 allowance: 15, overCap: true)
         #expect(PrepRunSummary.notes(for: outcome)
-            .contains("40 web lookups for 1 show, more than expected"))
+            .contains("40 web calls for 1 show, more than expected"))
     }
 
     // #1864: a run whose shows named more people than there were shows says so, because "more than
@@ -112,7 +112,7 @@ struct PrepWebCallCountTests {
         outcome.webCalls = PrepResults.WebCalls(recorded: true, total: 100, items: 2, parties: 6,
                                                 capPerItem: 15, allowance: 90, overCap: true)
         let note = PrepRunSummary.notes(for: outcome).first { $0.contains("web") }
-        #expect(note == "100 web lookups for 2 shows, 6 people to find, more than expected")
+        #expect(note == "100 web calls for 2 shows, 6 people to find, more than expected")
     }
 
     // And the ordinary run, where every show was one party, says exactly what it always said. A sentence
@@ -122,7 +122,7 @@ struct PrepWebCallCountTests {
         outcome.webCalls = PrepResults.WebCalls(recorded: true, total: 47, items: 2, parties: 2,
                                                 capPerItem: 15, allowance: 30, overCap: true)
         #expect(PrepRunSummary.notes(for: outcome)
-            .contains("47 web lookups for 2 shows, more than expected"))
+            .contains("47 web calls for 2 shows, more than expected"))
     }
 
     // A results file written before the party count existed still reads, and still says something true.
@@ -132,7 +132,7 @@ struct PrepWebCallCountTests {
                                                 allowance: 30, overCap: true)
         #expect(outcome.webCalls?.parties == nil)
         #expect(PrepRunSummary.notes(for: outcome)
-            .contains("47 web lookups for 2 shows, more than expected"))
+            .contains("47 web calls for 2 shows, more than expected"))
     }
 
     // An incomplete count must never claim a run was fine. It cannot say how many calls there were, so it
@@ -154,7 +154,7 @@ struct PrepWebCallCountTests {
         outcome.webCalls = PrepResults.WebCalls(recorded: true, total: 6, denied: 2, items: 1,
                                                 capPerItem: 15, allowance: 15, overCap: false)
         #expect(PrepRunSummary.notes(for: outcome)
-            .contains("2 web lookups refused, that research never happened"))
+            .contains("2 web calls refused, that research never happened"))
     }
 
     // One refusal is one lookup. Same plural trap the "1 show" sentence fell into, and the same reason it
@@ -164,7 +164,7 @@ struct PrepWebCallCountTests {
         outcome.webCalls = PrepResults.WebCalls(recorded: true, total: 6, denied: 1, items: 1,
                                                 capPerItem: 15, allowance: 15, overCap: false)
         #expect(PrepRunSummary.notes(for: outcome)
-            .contains("1 web lookup refused, that research never happened"))
+            .contains("1 web call refused, that research never happened"))
     }
 
     // The ordinary run is silent. Refusals are rare, and a sentence that appears when nothing was refused
@@ -222,6 +222,6 @@ struct PrepWebCallCountTests {
 
         #expect(outcome?.webCalls?.denied == 2)
         #expect(PrepRunSummary.notes(for: outcome ?? PrepImporter.Outcome())
-            .contains("2 web lookups refused, that research never happened"))
+            .contains("2 web calls refused, that research never happened"))
     }
 }
