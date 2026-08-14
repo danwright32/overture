@@ -9,9 +9,33 @@ enum OutreachChannel: String, CaseIterable, Sendable {
 }
 
 extension Recipient {
+    // #2716: HOW THE PITCH WENT OUT, and nothing else. It is stamped at send and never flips (L37): a
+    // pitch that left through a contact form did not retrospectively become an email because a reply to
+    // it arrived by one. Milestone #58 lets Dan attach the Gmail conversation such a pitch was answered
+    // on, and the question that then matters, "can Overture watch this?", is the separate predicate
+    // below rather than a second meaning loaded onto this one.
     var outreachChannel: OutreachChannel {
         get { outreachChannelRaw.flatMap(OutreachChannel.init) ?? .email }
         set { outreachChannelRaw = newValue.rawValue }
+    }
+
+    // #2716: is there a conversation Overture can read on this contact? Written by every genuine send
+    // (`SendService.deliver`, the reply path, the batch send), by `RecipientBackfill` carrying a lead
+    // rollup down, and, from #2715, by Dan attaching one to a form or DM pitch by hand.
+    //
+    // An empty string is not a conversation. SwiftData hands back whatever was stored, and a blank id
+    // would otherwise read as watchable and be fetched, which is why every Gmail reader in the app
+    // already spells the same `!isEmpty` guard inline. One definition instead of six.
+    var hasWatchableConversation: Bool {
+        guard let t = gmailThreadId else { return false }
+        return !t.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    // #2716: a pitch Overture can neither send on nor watch, which until this milestone was the whole
+    // meaning of `.contactForm`. The four rules that used to ask the channel ask this instead, so a form
+    // pitch carrying an attached conversation stops being treated as a silent one.
+    var isUnwatchedFormPitch: Bool {
+        outreachChannel == .contactForm && !hasWatchableConversation
     }
 }
 
@@ -75,6 +99,22 @@ enum FormOutreachCopy {
     static func sentLine(formURL: String?) -> String {
         guard let formURL, Reachability.isSocialOnly(formURL) else { return sentLine }
         return sentLineSocial
+    }
+
+    // #2716: the same fact once Dan has attached the conversation the presenter answered on (#2715).
+    // The route still leads, because that is where the pitch actually went and it is what Dan
+    // recognises; what changes is the half that is no longer true. Leaving the old line up beside the
+    // address the attach saved would put two adjacent statements on the card, each correct alone,
+    // contradicting each other on the surface he triages from (L118, #843).
+    static let watchedLine = "Sent through their form. Overture is watching the email conversation you linked."
+    static let watchedLineSocial = "Sent as a DM. Overture is watching the email conversation you linked."
+
+    // One entry point for what the card says about the route, so a caller cannot pair the wrong half of
+    // the pair with the wrong state.
+    static func channelLine(formURL: String?, hasWatchableConversation: Bool) -> String {
+        let isSocial = formURL.map(Reachability.isSocialOnly) ?? false
+        guard hasWatchableConversation else { return isSocial ? sentLineSocial : sentLine }
+        return isSocial ? watchedLineSocial : watchedLine
     }
 }
 

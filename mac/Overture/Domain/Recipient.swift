@@ -435,6 +435,13 @@ final class Recipient {
     // contact has neither an address nor a thread, so the whole sequence is unsendable for it. Offering
     // one would put a button in Follow-ups that can only fail, about a pitch that is perfectly fine. Its
     // own decide clock (ReachedOutQueue) covers it instead.
+    // #2716: re-decided, and deliberately unchanged, now that a form pitch can carry an attached
+    // conversation and an address learned from it. It asks the CHANNEL, which is history and never flips,
+    // and that is the right question here: a nudge is an email onto the conversation Overture itself
+    // started, and it anchors on `sentAt`, which for a form pitch is when Dan recorded it by hand and is
+    // typically weeks old. Reading the attach as "this is an email contact now" would make the nudge
+    // instantly OVERDUE, count it in the Due pill, and send a real cold nudge onto a stranger's
+    // conversation. Do not "fix" this to consult the address or the thread.
     var isAwaitingFollowUp: Bool {
         isSilent && resolution == nil && outcomeSource != .manual && outreachChannel == .email
     }

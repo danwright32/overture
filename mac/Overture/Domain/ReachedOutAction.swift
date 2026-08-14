@@ -50,9 +50,15 @@ enum ReachedOutAction: String, Equatable, Sendable, CaseIterable {
     // Asked of the row the list stands on.
     static func of(_ recipient: Recipient, in prospect: Prospect, now: Date, today: String,
                    followUpConfig: FollowUpConfig = .init()) -> ReachedOutAction {
-        // A form pitch has no thread and no send: the only thing that moves it forward is Dan saying where
-        // it stands, and a send button here would promise something Overture cannot do.
-        if recipient.outreachChannel == .contactForm {
+        // A form pitch with no conversation attached has no thread and no send: the only thing that moves
+        // it forward is Dan saying where it stands, and a send button here would promise something
+        // Overture cannot do.
+        //
+        // #2716: asked of `isUnwatchedFormPitch` rather than of the channel. This branch used to return
+        // `.sayWhatHappened` or `.none` FOREVER for a form pitch, and its old comment ("a form pitch has
+        // no thread and no send") became false the moment #2715 let one be attached, so no post-event
+        // prompt could ever be offered on a contact holding a live conversation (L55).
+        if recipient.isUnwatchedFormPitch {
             guard let next = ReachedOutQueue.nextReachOut(for: recipient, of: prospect, now: now,
                                                           followUpConfig: followUpConfig),
                   ReachedOutQueue.isDueNow(next: next, now: now) else { return .none }
@@ -62,7 +68,17 @@ enum ReachedOutAction: String, Equatable, Sendable, CaseIterable {
         // #2397: the post-event track, which is the closing note and the close-out prompt.
         if let prompt = PostEventPrompt.prompt(for: recipient, of: prospect, now: now) {
             switch prompt.kind {
-            case .closingNote: return .sendClosingNote
+            case .closingNote:
+                // #2716: the closing note is a real email that threads off `gmailMessageId`, and an
+                // attached conversation never carries one by design (Overture sent nothing on it). So on
+                // that one row the send is impossible and offering it would put a button there that can
+                // only refuse (L109); Dan records the ending instead, exactly as he does for an
+                // unwatched form pitch. #2717 makes the send path itself refuse, which is the other half.
+                //
+                // Reachable ONLY from an attached form or DM pitch: every emailed contact in this queue
+                // has passed `hasProvenOutreach`, which demands a message id, so this cannot quietly
+                // swallow the closing note on an ordinary row.
+                return recipient.gmailMessageId == nil ? .sayWhatHappened : .sendClosingNote
             case .closeOut: return .sayHowItEnded
             }
         }

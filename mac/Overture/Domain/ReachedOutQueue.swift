@@ -153,15 +153,20 @@ enum ReachedOutQueue {
                             followUpConfig: FollowUpConfig = .init()) -> String {
         // #2169: a dated form pitch names the NIGHT, whatever its clock says, because there is no send to
         // count down to. Unchanged, and asked first so the rule stays in one place.
-        if r.outreachChannel == .contactForm, let day = p.performanceDate,
+        //
+        // #2716: unchanged for a pitch Overture cannot watch, which is every form pitch on the live store
+        // today. Once a conversation is attached the night is the WRONG answer, and visibly so: a reply
+        // landing on Aug 15 for a show on Aug 20 painted the row rust with a filled Answer button (because
+        // `isDueNow` consults `nextActionableMoment`, which includes the unhandled reply) while this slot
+        // short-circuited past that same clock and read "in 5 days" beside it (L16).
+        if r.isUnwatchedFormPitch, let day = p.performanceDate,
            EasternDate.date(from: day) != nil {
             return formNightLabel(eventDay: day, today: today)
         }
         guard let next = nextActionableMoment(for: r, of: p, now: now, followUpConfig: followUpConfig) else {
             return heldOpenLabel
         }
-        return timingLabel(next: next, now: now, channel: r.outreachChannel,
-                           eventDay: p.performanceDate, today: today)
+        return timingLabel(next: next, now: now, awaitingDecision: r.isUnwatchedFormPitch)
     }
 
     // #2550: the row is open, nothing is owed, and the floor is what is keeping it on the stage. Says what
@@ -179,17 +184,18 @@ enum ReachedOutQueue {
     // slot, same threshold, one honest difference at the moment it comes due; the waiting text is
     // identical either way, since a wait is a wait.
     //
-    // #2169: a DATED form pitch answers from the night instead, through formNightLabel below. Kept as one
-    // entry point rather than letting the view choose, so the row cannot end up asking two different
-    // questions about the same clock. The old wording survives only for a form pitch on an undated show,
-    // which is the one case with no night to name.
-    static func timingLabel(next: Date, now: Date, channel: OutreachChannel = .email,
-                            eventDay: String? = nil, today: String = EasternDate.today()) -> String {
-        if channel == .contactForm, let eventDay, EasternDate.date(from: eventDay) != nil {
-            return formNightLabel(eventDay: eventDay, today: today)
-        }
+    // #2169: a DATED form pitch answers from the night instead, through formNightLabel. That rule lives
+    // in `timingLabel(for:of:now:today:)` above and ONLY there: it used to be spelled here as well, and
+    // #2716 is what made the duplicate dangerous. Once the caller stopped short-circuiting for a form
+    // pitch carrying an attached conversation, this copy would have re-applied the very rule the caller
+    // had just declined to apply, and the fix would have been silently undone one function later (L135).
+    //
+    // `awaitingDecision` is the one thing left for the caller to decide: whether this is a pitch Overture
+    // can neither send on nor watch, whose due label therefore asks for a decision rather than offering a
+    // reach-out that cannot happen. The waiting text is identical either way, since a wait is a wait.
+    static func timingLabel(next: Date, now: Date, awaitingDecision: Bool = false) -> String {
         let seconds = next.timeIntervalSince(now)
-        if seconds <= 0 { return channel == .contactForm ? "Say what happened" : "Reach out now" }
+        if seconds <= 0 { return awaitingDecision ? "Say what happened" : "Reach out now" }
         return daysAhead(Int((seconds / 86_400).rounded(.up)))
     }
 
@@ -270,10 +276,20 @@ enum ReachedOutQueue {
     // The pitched-plus-gap clock survives ONLY for a show with no date. Returning nil there would drop the
     // row out of the reached-out queue entirely, and a record that matches no view is gone from the
     // product while still sitting in the data (L45).
+    //
+    // #2716: and the whole clock yields once a conversation is attached. It exists to ask "say what
+    // happened" precisely BECAUSE Overture cannot see a reply; once it can, the conversation answers that
+    // question itself, and the #2397 floor is what keeps the row on the stage in the meantime.
+    //
+    // The one case where yielding is not safe is the same one the paragraph above carves out, for the same
+    // reason: an UNDATED show has no floor, so nil-ing this would drop the row out of the only surface
+    // that tracks the pitch (L45). The gap clock survives there attached or not.
     private static func nextFormDecision(for r: Recipient, of p: Prospect,
                                          config: FollowUpConfig) -> Date? {
         guard r.outreachChannel == .contactForm, let recordedAt = r.formOutreachRecordedAt else { return nil }
-        if let night = formDecisionDate(eventDay: p.performanceDate) { return night }
+        if let night = formDecisionDate(eventDay: p.performanceDate) {
+            return r.hasWatchableConversation ? nil : night
+        }
         return recordedAt.addingTimeInterval(TimeInterval(config.gapDays) * 86_400)
     }
 
