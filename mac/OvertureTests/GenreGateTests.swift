@@ -83,9 +83,13 @@ struct GenreGateTests {
     @Test func theKeepButtonAsksTheGate() throws {
         let body = try keepDismissControls()
 
-        #expect(body.contains("GenreGate.blocks(discipline: item.discipline)"),
-                "Keep no longer consults the genre gate")
-        #expect(body.contains("GenreGate.refusal(discipline: item.discipline)"),
+        // The DISABLING specifically, not merely a mention of the gate. Written as
+        // `contains("GenreGate.blocks(...)")` this guard stayed green with `.disabled` deleted, because
+        // the same call appears one line below in the `.opacity` that dims the button: a guard answered
+        // by a second, legitimate use of the same construct nearby (L135). Caught by mutating it.
+        #expect(body.contains(".disabled(GenreGate.blocks(discipline: item.discipline))"),
+                "Keep is no longer DISABLED by the genre gate")
+        #expect(body.contains(".help(GenreGate.refusal(discipline: item.discipline)"),
                 "the blocked Keep no longer carries its reason")
     }
 
