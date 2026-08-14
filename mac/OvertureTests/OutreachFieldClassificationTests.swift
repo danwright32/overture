@@ -99,6 +99,21 @@ struct OutreachFieldClassificationTests {
         "replyDraftEditedByDan": "whether he edited the reply draft, and replyDraftBody is counted",
         "replyDraftWrittenByDan": "whether he wrote the reply draft himself, and replyDraftBody is counted",
         "replyMarkClearedStandDown": "set with replyMarkedByHandAt by HandMarkedReply.mark, and that is counted",
+        // #2715: the attach can only ever run on a contact that already carries formOutreachRecordedAt
+        // (it refuses otherwise) and it stamps gmailThreadId, and BOTH of those are counted by the rule
+        // above. So every one of these is written strictly inside a state already counted, and none of
+        // them can be the only evidence an outreach happened.
+        "conversationAttachedAt": "when Dan linked a conversation by hand, which is only possible on a "
+            + "contact whose form outreach is already recorded, and it stamps gmailThreadId, both counted",
+        "attachedThreadSubject": "what the linked thread is called, so a reply can carry a subject Gmail "
+            + "will accept; written with gmailThreadId, which is counted",
+        "attachPriorResolutionRaw": "what the attach found before detection cleared it, for the detach "
+            + "to put back; written with gmailThreadId, which is counted",
+        "attachPriorOriginalReplyDraftBody": "the same snapshot, for the reply-draft baseline",
+        "attachPriorReplyDraftWrittenByDan": "the same snapshot, for the reply-draft baseline",
+        "attachPriorReplyDraftEditedByDan": "the same snapshot, for the reply-draft baseline",
+        "attachPausedRecipientIds": "which OTHER contacts on the show this attach froze, so the detach "
+            + "unfreezes only those; a fact about its neighbours, never about this contact being written to",
         "replyCandidateSearchedAt": "when OVERTURE last read the mailbox for an answer to this pitch, "
             + "which is a record of its own looking and says nothing about anybody having been written to; "
             + "the write that proves this contact was reached is formOutreachRecordedAt, which is counted",

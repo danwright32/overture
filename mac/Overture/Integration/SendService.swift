@@ -360,8 +360,19 @@ enum SendService {
     // that leaves both ask this, so the subject line he reads cannot differ from the one on the email. Two
     // expressions of the same rule would drift the first time either changed.
     static func replySubject(for recipient: Recipient, of prospect: Prospect) -> String {
-        recipient.replyDraftSubject
-            ?? FollowUp.replySubject(originalSubject: prospect.draftSubject,
+        if let drafted = recipient.replyDraftSubject { return drafted }
+        // #2715: on an ATTACHED conversation the thread's own Subject wins over the show's draft.
+        //
+        // Gmail requires the Subject to match the thread's when a message is sent with its threadId
+        // (`GmailSender` passes one), and `prospect.draftSubject` on a hand-sent pitch is the subject of
+        // an email that was never sent and that this thread has never carried. The likely outcomes are
+        // an opaque 400 or a message Gmail groups server side while every standards-based client files
+        // it separately, which is the exact split documented at `GmailSender.swift:57`. The confirmation
+        // sheet reads this same value, so Dan would also be approving a subject the recipient will never
+        // see (L64).
+        let original = recipient.attachedThreadSubject.flatMap { $0.isEmpty ? nil : $0 }
+            ?? prospect.draftSubject
+        return FollowUp.replySubject(originalSubject: original,
                                      groupName: FollowUp.safeDisplayName(prospect.groupName,
                                                                           isMerged: prospect.isMergedConcert))
     }

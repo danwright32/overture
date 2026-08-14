@@ -115,6 +115,22 @@ enum ReplyPanel {
     // #2711: and a FOURTH, which is the one this sentence set exists to keep honest. Dan told Overture a
     // reply arrived on a channel it cannot watch, so there is no message anywhere: both sentences above
     // would claim one exists and send him hunting in Gmail for something that was never there (L11).
+    // #2715: this conversation was LINKED by hand, not started by Overture.
+    //
+    // Without saying so the panel reads exactly as it does on a row Overture emailed, and the difference
+    // matters: Overture has sent nothing here, so it has no message to thread a new one off and the
+    // follow-up and closing-note paths refuse (`AttachedConversation`). Nil on a row Overture did email,
+    // so an ordinary conversation gains no sentence it does not need (#843).
+    //
+    // Reads `conversationAttachedAt` rather than `replyWatchConversationIsAttached`, and that is the
+    // point of the two being separate: the predicate is deliberately self-healing and stops being true
+    // the moment Overture's own reply lands on the thread, while the fact that a person made this link
+    // by hand is permanent and is what this line is about.
+    static func linkedByHandLine(for recipient: Recipient) -> String? {
+        guard recipient.conversationAttachedAt != nil else { return nil }
+        return AttachConversationWriteCopy.linkedByHand
+    }
+
     static func missingWordsReason(_ recipient: any ReplyWatchableRecipient) -> String? {
         guard theirWords(recipient) == nil else { return nil }
         guard hasReceivedAnything(recipient) else { return nil }

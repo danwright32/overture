@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1301 sentences**.
+Every sentence Overture can say to Dan: **1310 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1330,6 +1330,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReplyPanel.swift`
 "Overture couldn't start the Gmail sign-in on this Mac, so it didn't open your browser."
     `Integration/GmailAuthManager.swift`
+"Overture couldn't tell which conversation to link, so it linked nothing."
+    `Domain/AttachConversation.swift`
 "Overture couldn't update OmniFocus"
     `Integration/OmniFocusUserNotifier.swift`
 "Overture decided: \(what)"
@@ -1356,6 +1358,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OmniFocusSync.swift`
 "Overture needs OmniFocus permission"
     `Integration/OmniFocusUserNotifier.swift`
+"Overture only links a conversation to a pitch you sent through a form or a DM. It already watches "
+    `Domain/AttachConversation.swift`
 "Overture opened with \(live) \(live == 1 ? "show" : "shows"). Its most recent backup holds "
     `App/StoreShrinkCheck.swift`
 "Overture recorded those before it kept their dates, so it can't say which have "
@@ -2038,6 +2042,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ProspectRowView.swift`
 "This page is right"
     `UI/SourceFixConfirmActions.swift`
+"This pitch already has a conversation linked. Detach that one first if you linked the wrong thread."
+    `Domain/AttachConversation.swift`
 "This production also plays \(list)."
     `UI/QueueView+Model.swift`
 "This production also plays at \(venue) on \(dateLabel)."
@@ -2253,6 +2259,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/DaysOffView.swift`
 "You have \(pointerPhrase(for: target, count: n)) next."
     `Domain/StageEmptyState.swift`
+"You linked this conversation. Overture didn't email them."
+    `Domain/AttachConversation.swift`
 "You opened their form \(when). Did you send it?"
     `Domain/FormOutreach.swift`
 "You opened their profile \(when). Did you send it?"
@@ -2265,6 +2273,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "You stopped working this show \(ago(stoodDownAt, now: now))"
     `Domain/FollowUp.swift`
+"You struck \(address) off this show, so Overture won't link a conversation that would write it "
+    `Domain/AttachConversation.swift`
+"You struck this contact off the show, so Overture won't link a conversation to it. Add the "
+    `Domain/AttachConversation.swift`
 "You told Overture they replied. Their message isn't here, because it didn't come by email."
     `Domain/ReplyPanel.swift`
 "You told Overture to read \(name) as the building, not the presenter."
@@ -2741,6 +2753,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/InquiryCopy.swift`
 "at \(venue) on \(dateLabel)"
     `UI/QueueView+Model.swift`
+"back onto the contact. Add the address back on the card first if you want to use it."
+    `Domain/AttachConversation.swift`
 "backup before working."
     `App/StoreShrinkCheck.swift`
 "book now"
@@ -2753,6 +2767,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreSchemaGuard.swift`
 "come through it before, "
     `Domain/AppNotice.swift`
+"contact back on the card first if you want to use it."
+    `Domain/AttachConversation.swift`
 "couldn't save the producer answers, so other shows by them won't reuse this one"
     `Domain/ReachabilityRunSummary.swift`
 "couldn't save what this check found, so it isn't finished and those shows may be checked again"
@@ -2860,6 +2876,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "the contact"
     `App/ActionFeedback.swift`
     `Domain/OmniFocusSync.swift`
+"the ones it emailed itself."
+    `Domain/AttachConversation.swift`
 "the other \(leftover)"
     `Domain/ScoutReadBudget.swift`
 "the other one"
