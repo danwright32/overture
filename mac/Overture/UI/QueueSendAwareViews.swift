@@ -26,19 +26,58 @@ struct QueueDateGroups<Header: View, Content: View>: View {
     let groups: [QueueModel.DateGroup]
     let sendState: SendProgressState
     @ViewBuilder let header: () -> Header
-    @ViewBuilder let content: (QueueModel.DateGroup, Set<String>) -> Content
+    @ViewBuilder let content: (QueueModel.DateGroup, [String: DepartureReason]) -> Content
 
     var body: some View {
         // Read once, here. Every splice decision below is made from this one value, and the keys travel
-        // down as a plain set so nothing further down reads the object again.
+        // down as a plain dictionary so nothing further down reads the object again.
         let departing = sendState.departing
+        // #2417: one dictionary holds the snapshot and its reason together, so this is a plain projection
+        // rather than a fold reconciling two sources that could disagree about which rows are leaving.
+        let departureReasons = sendState.departures.mapValues { $0.reason }
         LazyVStack(alignment: .leading, spacing: OVSpacing.xl) {
             header()
             ForEach(QueueModel.groups(groups, withDeparting: departing)) { group in
-                content(group, Set(departing.keys))
+                content(group, departureReasons)
             }
         }
         .scrollTargetLayout()
+    }
+}
+
+// #2417/#2644: one row on the Reached Out list, and the two transient things that change what it draws:
+// a send of its own in flight, and whether it is on its way out.
+//
+// This list needs its own view because it is NOT the date-grouped list. The two are alternatives in
+// QueueView's body, never both on screen, and only the date-grouped one goes through QueueDateGroups.
+// Wiring the close-out control into that splice therefore did nothing on the stage the control actually
+// lives on, which is the whole reason this exists.
+//
+// It needs no splice of its own, and that is the useful difference. A send has already dropped its row
+// from the store's answer by the time it departs, so the date-grouped list must put a snapshot back. A
+// close-out marks the departure BEFORE the write, so the row is still in this list and only has to be
+// DRAWN differently. It leaves on its own when the rebuild lands.
+//
+// BOTH facts are handed down by this ONE view, deliberately, rather than by nesting a departure reader
+// inside a send reader. They are read from the same object, for the same row, to decide the same
+// question (what this row draws this second), and two wrappers would be two readers to keep in step
+// where one will do. It is not QueueSendAwareRow because that one is used INSIDE the card body on the
+// date-grouped list, which is below the departure decision, so a departure handed there could never be
+// acted on.
+//
+// It reads sendState here and hands finished values into a closure, rather than taking a built view,
+// for the same reason QueueDateGroups does: a view built at the call site is assembled inside QueueView's
+// body, which is the cost that arrangement exists to remove.
+struct ReachedOutSendAwareRow<Content: View>: View {
+    let sendState: SendProgressState
+    let key: String
+    @ViewBuilder let content: (_ sendingSince: Date?, _ departure: Departure?) -> Content
+
+    var body: some View {
+        // The pairing itself lives on SendProgressState, where a test can reach it: putting the snapshot
+        // and the reason in step is a rule, and a rule decided in a view body is one only a source-text
+        // guard can watch, which is a guard that passes on the words rather than the behaviour.
+        content(sendState.sendingSince(key), sendState.departure(key))
     }
 }
 

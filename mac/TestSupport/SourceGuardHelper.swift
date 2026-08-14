@@ -49,6 +49,38 @@ enum SourceGuardHelper {
         return String(source[startRange.upperBound..<endRange.lowerBound])
     }
 
+    // #2417: the balanced-brace body of a FUNCTION found by name, for a guard whose claim is about what
+    // that function does rather than about the parameters it happens to take today.
+    //
+    // `propertyBody` needs its marker to run all the way to the opening brace, so a guard using it on a
+    // function is pinned to that function's whole signature AS WRITTEN. Adding a parameter, renaming one,
+    // or merely re-wrapping the signature across two lines then turns the guard red for formatting while
+    // the rule it exists for is untouched, and a guard that goes red for the wrong reason teaches the
+    // next person to edit it until it is quiet (L103, #2543). Five guards over two functions did exactly
+    // that when #2417 widened `prospectRow` and `dateSection`.
+    //
+    // Finds the DECLARATION (`func <name>(`, which no call site can look like), walks the parameter list
+    // by paren depth so a brace inside it cannot be mistaken for the body's, then balances from the
+    // opening brace. Returns nil if the function is absent or its body never balances, so a name that
+    // has gone stale reads as missing rather than as an empty body every `contains` is false against.
+    static func bodyOfFunction(named name: String, in source: String) -> String? {
+        guard let declaration = source.range(of: "func \(name)(") else { return nil }
+        var index = source.index(before: declaration.upperBound)   // the "(" itself
+        var parens = 0
+        while index < source.endIndex {
+            let char = source[index]
+            if char == "(" { parens += 1 }
+            if char == ")" {
+                parens -= 1
+                if parens == 0 { break }
+            }
+            index = source.index(after: index)
+        }
+        guard parens == 0, index < source.endIndex else { return nil }
+        guard let brace = source.range(of: "{", range: index..<source.endIndex) else { return nil }
+        return propertyBody(String(source[declaration.lowerBound..<brace.upperBound]), in: source)
+    }
+
     // Returns the balanced-brace body of the property/computed-var declaration whose header line
     // ends in the given open-brace marker (e.g. "private var masthead: some View {"), scanning
     // character-by-character from the marker's own opening brace until depth returns to zero

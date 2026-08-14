@@ -128,6 +128,69 @@ struct QueueInvalidationGuardTests {
         }
     }
 
+    // #2417: the stage the close-out control lives on must honour a departure too.
+    //
+    // This is the guard for a defect that shipped past a green suite. The close-out menu was wired into
+    // the departure machinery, which is spliced by QueueDateGroups, but the control lives on the Reached
+    // Out list, which QueueView draws instead of that one, never alongside it. The row therefore went on
+    // rendering exactly as before and the fix was felt by nobody. Nothing failed, because no test knew
+    // which of the two lists the control was on.
+    //
+    // Asserted on the WIRING rather than on any rendering of it: the reached-out branch must hand its row
+    // through ReachedOutSendAwareRow, which is the one thing that makes a departure visible there.
+    //
+    // Scoped to `reachedOutList` and NOT to the file, which is the difference between a guard and a
+    // decoration here. The date-grouped list draws ClosedOutDepartureRow too, from `prospectRow`, so a
+    // file-wide `contains` is answered by the OTHER list and stays green while this one ignores its
+    // departure entirely. Measured, not reasoned: the file-wide version passed unchanged on a mutation
+    // that deleted this branch's whole conditional (L1).
+    @Test func theReachedOutListHonoursADeparture() {
+        guard let list = SourceGuardHelper.bodyOfFunction(named: "reachedOutList", in: queueView) else {
+            Issue.record("expected to find reachedOutList in QueueView")
+            return
+        }
+        #expect(list.contains("ReachedOutSendAwareRow("),
+                "the Reached Out list must route its rows through the departure-aware view, or a row Dan closes out cannot leave until the rebuild lands")
+        #expect(list.contains("ClosedOutDepartureRow("),
+                "and it must draw the quiet exit, never the send celebration, on an ending like no response")
+        #expect(list.contains("showsSendDelight"),
+                "and it must ASK which exit this is, or a close-out gets the gold seal meant for a send")
+    }
+
+    // #2417/#2644: and it reads that row's transient state ONCE.
+    //
+    // Both facts the row draws from (a send of its own in flight, and whether it is leaving) come from the
+    // same object, for the same row, to answer the same question. They arrived a day apart, each as its own
+    // wrapper, and nesting the two would leave two readers to keep in step where one does. The guard is
+    // here rather than left to review because the second wrapper is exactly what a later change adding a
+    // third transient fact would reach for, and nothing about the nested version looks wrong on the screen.
+    @Test func theReachedOutRowReadsItsTransientStateThroughOneView() {
+        #expect(!strippedQueueView.contains("ReachedOutDepartureAware("),
+                "the departure and the in-flight send are one read on this row, not a departure reader nested in a send reader")
+        let views = SourceGuardHelper.source("Overture/UI/QueueSendAwareViews.swift")
+        #expect(!views.isEmpty)
+        guard let row = SourceGuardHelper.propertyBody(
+                "struct ReachedOutSendAwareRow<Content: View>: View {", in: views) else {
+            Issue.record("expected to find ReachedOutSendAwareRow")
+            return
+        }
+        #expect(row.contains("sendState.sendingSince(key)"),
+                "it hands the row its own send, so a closing note shows a working state (#2644)")
+        #expect(row.contains("sendState.departure(key)"),
+                "and its departure, so a close-out leaves on the press rather than after the rebuild (#2417)")
+        // What that pair MEANS is asserted behaviourally in SendProgressStateTests, deliberately, and this
+        // guard only checks the view asks for it. An earlier draft pinned the pairing as source text here
+        // instead, and it passed unchanged on a rewrite that broke the rule, because the words it searched
+        // for survived the change (L1, L103). Only the reachable version can fail for the right reason.
+    }
+
+    private var strippedQueueView: String {
+        queueView
+            .split(separator: "\n")
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+            .joined(separator: "\n")
+    }
+
     // And the two views that DO read it hand finished values into a closure they run themselves, rather
     // than taking a built view. A view built at the call site is assembled inside QueueView's body, which
     // is the cost this removes arriving one level down (#1774's lesson, again).

@@ -248,7 +248,31 @@ struct ReachedOutCloseWiringTests {
             in: source))
         #expect(row.contains("ReachedOutClose.passedHint(hasOpened: p.hasOpened(today: today)"))
         #expect(row.contains("CloseOutMenu(outcomes: ShowOutcome.menu(wasPitched: p.wasPitched))"))
-        #expect(row.contains("ProspectMutations.recordOutcome("))
+        // #2417: the menu now hands the ending to `closeOut`, which marks the row leaving BEFORE it
+        // writes, so the screen answers on the press. The claim this guard exists to make is unchanged
+        // (an ending picked here reaches the one write), so it follows the ending one hop further
+        // rather than pinning the call that used to sit inline: a guard that pins a rendering instead
+        // of the rule fails the first legitimate refinement of it, which is what happened here (L103).
+        #expect(row.contains("closeOut(p, as: outcome)"))
+    }
+
+    // And the hop lands where it claims to. Asserted separately from the row so a `closeOut` that
+    // animated the departure and never wrote anything could not pass on the row's say-so alone.
+    @Test func theCloseOutMarksTheRowLeavingAndThenRecordsTheEnding() throws {
+        let closeOut = try #require(SourceGuardHelper.propertyBody(
+            "private func closeOut(_ p: Prospect, as outcome: ShowOutcome) {", in: source))
+
+        #expect(closeOut.contains("ProspectMutations.recordOutcome("),
+                "the ending must still reach the one write, whatever the row does on screen first")
+        #expect(closeOut.contains("sendState.depart("),
+                "and the row must be marked leaving, or the press does nothing visible for a quarter of a second")
+
+        // The ORDER is the fix, not either half of it: marking the departure after the write would put
+        // the animation behind the rebuild it exists to hide.
+        let marked = try #require(closeOut.range(of: "sendState.depart("))
+        let written = try #require(closeOut.range(of: "ProspectMutations.recordOutcome("))
+        #expect(marked.lowerBound < written.lowerBound,
+                "the row is marked leaving BEFORE the write, or the screen still waits for the rebuild")
     }
 
     // #1139: the outcome control and the conversation-state control set genuinely different things and

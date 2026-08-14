@@ -43,6 +43,12 @@ struct SourceGuardMarkerIntegrityTests {
     private static let pathLiteral = regex(#""([A-Za-z0-9_/+.-]+\.(?:swift|sh))""#)
     private static let propertyBodyMarker = regex(#"propertyBody\(\s*"((?:[^"\\]|\\.)*)""#)
     private static let betweenMarkers = regex(#"between\(\s*"((?:[^"\\]|\\.)*)"\s*,\s*and:\s*"((?:[^"\\]|\\.)*)""#)
+    // #2417: the third way a guard names the code it reads. `bodyOfFunction` takes a NAME rather than a
+    // signature, which is what makes it survive a parameter change, but the name can go stale in exactly
+    // the same silent way: it returns nil, the caller spells that `?? ""`, and every `contains` against
+    // an empty string is false. Added here in the same change that added the helper, because a scan that
+    // only checks the idioms somebody remembered is a scan that is blind to the newest one (L96).
+    private static let functionNameMarker = regex(#"bodyOfFunction\(\s*named:\s*"([A-Za-z0-9_]+)""#)
 
     private static func captures(_ re: NSRegularExpression, in text: String, groups: [Int]) -> [String] {
         let ns = text as NSString
@@ -86,7 +92,8 @@ struct SourceGuardMarkerIntegrityTests {
             // empty list a guard would read as a clean result.
             for file in AppSourceWalk.files(under: macRoot.appendingPathComponent(dir), floor: 20) {
                 guard !buildsItsOwnText.contains(file.name) else { continue }
-                guard file.text.contains("propertyBody(") || file.text.contains("between(") else { continue }
+                guard file.text.contains("propertyBody(") || file.text.contains("between(")
+                        || file.text.contains("bodyOfFunction(") else { continue }
                 let bodies = Set(captures(pathLiteral, in: file.text, groups: [1])).compactMap {
                     try? String(contentsOf: macRoot.appendingPathComponent($0), encoding: .utf8)
                 }
@@ -145,6 +152,18 @@ struct SourceGuardMarkerIntegrityTests {
                         \(file.name): the marker \(marker.debugDescription) matches nothing in the source \
                         this test reads, so the guard using it is asking nothing at all. Point it at the \
                         code's current wording, or delete the guard (#2192, L1).
+                        """)
+            }
+            // The same question of a `bodyOfFunction` name, asked the way that helper asks it: the
+            // DECLARATION, never a call site, so a function deleted while its callers remain still reads
+            // as gone.
+            for name in Self.captures(Self.functionNameMarker, in: file.text, groups: [1]) {
+                #expect(file.haystack.contains("func \(name)("),
+                        """
+                        \(file.name): no function named \(name) is declared in the source this test \
+                        reads, so bodyOfFunction returns nil and every check standing on it is asking \
+                        nothing at all. Point it at the function's current name, or delete the guard \
+                        (#2192, #2417, L1).
                         """)
             }
         }
