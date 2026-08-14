@@ -60,6 +60,38 @@ struct InquiryRowView: View {
             if row.shouldSuggestClosing { badge("Consider closing", OVColor.inkFaint) }
             Text(stateText).font(OVType.meta).foregroundStyle(OVColor.inkFaint)
         }
+        sendProblems
+    }
+
+    // #2675: an inquiry's send problems, which had writers and no reader anywhere in the app. Here rather
+    // than folded into the shows "Send issues" pill: that pill is a navigation target whose tap resolves
+    // prospect keys, so adding inquiries to its number would name a fault and give Dan nowhere to go
+    // (L80), and it would say it in the word "shows", which an inquiry is not (L118). The row is where
+    // the rest of an inquiry's state already lives, and it is somewhere he can act.
+    //
+    // On their own line beneath the state, not in the badge row above: those three badges are about where
+    // the inquiry IS in its life, and these are about something having gone wrong with the last send.
+    @ViewBuilder private var sendProblems: some View {
+        if row.threadIdDegraded || row.threadingDegraded || SendFailureLine.text(for: row.sendError) != nil {
+            HStack(spacing: OVSpacing.xs) {
+                // Rust, the loudest: an answer to this will not be noticed at all.
+                if row.threadIdDegraded {
+                    badge(InquiryCopy.replyTrackingLostBadge, OVColor.rust)
+                        .help(InquiryCopy.replyTrackingLostHelp)
+                }
+                // Gold: the reply is watched, only the filing of the next one suffers.
+                if row.threadingDegraded {
+                    badge(InquiryCopy.threadingDegradedBadge, OVColor.gold)
+                        .help(InquiryCopy.threadingDegradedHelp)
+                }
+                // The full sentence rather than a badge, because it carries the reason the send gave, and
+                // through the SAME helper the prospect rows use so the two cannot word it differently.
+                if let line = SendFailureLine.text(for: row.sendError) {
+                    Text(line).font(OVType.meta).foregroundStyle(OVColor.rust)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
     }
 
     private func badge(_ text: String, _ color: Color) -> some View {

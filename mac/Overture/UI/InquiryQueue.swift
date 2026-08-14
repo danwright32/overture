@@ -19,6 +19,13 @@ struct InquiryRow: Identifiable, Equatable, Sendable {
     let bookingSuggested: Bool
     let followUpNudgeDue: Bool
     let shouldSuggestClosing: Bool
+    // #2675: the three send problems an inquiry can carry, none of which had a reader. Kept as three
+    // separate facts rather than one "something is wrong" flag, because they ask different things of Dan:
+    // a lost thread means an answer will not be noticed at all, a lost message id means only that a nudge
+    // arrives as a separate email, and a send error means nothing went out (L53).
+    var threadIdDegraded: Bool = false
+    var threadingDegraded: Bool = false
+    var sendError: String? = nil
 }
 
 // One row of the unified daily list: a scouted show to pitch, or a hire inquiry. The queue groups and

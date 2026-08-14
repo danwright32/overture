@@ -1684,7 +1684,10 @@ enum QueueModel {
                 bounced: inquiry.bounced,
                 bookingSuggested: inquiry.bookingSuggested,
                 followUpNudgeDue: inquiry.followUpNudgeDue(now: now),
-                shouldSuggestClosing: inquiry.shouldSuggestClosing(now: now)
+                shouldSuggestClosing: inquiry.shouldSuggestClosing(now: now),
+                threadIdDegraded: inquiry.threadIdDegraded,
+                threadingDegraded: inquiry.threadingDegraded,
+                sendError: inquiry.sendError
             )
         }
     }

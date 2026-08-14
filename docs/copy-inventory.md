@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1276 sentences**.
+Every sentence Overture can say to Dan: **1280 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -358,6 +358,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/BlockedCalendar.swift`
 "A later night of this run is out: you're already shooting on \(day)."
     `Domain/BlockedCalendar.swift`
+"A nudge will arrive as a new email"
+    `Domain/InquiryCopy.swift`
 "A previous run was still reading pages, so the pages this run found were not handed over. Nothing was lost: press Run scout again once the reading finishes and they will be read."
     `Integration/ScoutService.swift`
 "A reachability check couldn't find an email for this show. You can still keep it and add a contact by hand."
@@ -1529,6 +1531,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReplyPanel.swift`
 "Replaces the scout's name on this row. Your name stays put across future scouts."
     `UI/ProspectRowView.swift`
+"Replies can't be tracked"
+    `Domain/InquiryCopy.swift`
 "Reply to \(inquirerName)"
     `Domain/InquiryCopy.swift`
 "Reply-classify results couldn't save. Try again."
@@ -2243,6 +2247,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SendConfirmAndReconnectAlerts.swift`
 "Your reply goes to"
     `Domain/ReplyPanel.swift`
+"Your reply went out and answers to it are still watched. What couldn't be read is the id a later message would quote, so a nudge on this inquiry will arrive as a separate email rather than under the same conversation."
+    `Domain/InquiryCopy.swift`
+"Your reply went out, but Gmail didn't tell Overture which conversation it landed in, so an answer to it won't be spotted automatically. Watch your inbox for this one and mark it here yourself."
+    `Domain/InquiryCopy.swift`
 "Your shoot history is \(days) days old, so rooms you've photographed since then won't be mentioned in a pitch. Re-export your Shoots calendar and run the import again."
     `Domain/ShootHistory.swift`
 "Zankel Hall"

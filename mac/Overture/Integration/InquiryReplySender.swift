@@ -35,12 +35,19 @@ enum InquiryReplySender {
             if let m = receipt.messageID { inquiry.gmailMessageId = m }
             inquiry.threadIdDegraded = receipt.threadIdDegraded
             inquiry.threadingDegraded = receipt.messageIDDegraded
+            // #2675: cleared on success, or a failure Dan has since recovered from would sit on the row
+            // for good. A guard that fails closed forever is still a defect.
+            inquiry.sendError = nil
             if inquiry.replied {
                 inquiry.dismissedReplyId = inquiry.lastReplyId
                 inquiry.replied = false
             }
             return true
         } catch {
+            // #2675: recorded, not merely returned. The caller's `.sendFailed` notice clears, and after it
+            // does the inquiry looked exactly like one nobody had answered yet. Same field, same words and
+            // same reader as a prospect's failed send.
+            inquiry.sendError = error.localizedDescription
             return false
         }
     }

@@ -4,6 +4,24 @@ import Foundation
 // where no test can reach it. Static labels stay in the views; only the sentences that fold in a value
 // or choose between wordings belong here.
 enum InquiryCopy {
+    // #2675: the two send problems an inquiry can carry once its reply has gone out. Short enough for the
+    // row's badge line, where the rest of its state lives, with the explanation on the hover: the badge
+    // says what is wrong and the sentence says what it costs Dan and what to do instead.
+    //
+    // They mean what the shows roster means by the same two conditions, said for one inquiry rather than
+    // for N shows. Deliberately NOT the roster's own sentences: those count ("3 shows sent, but ..."), and
+    // an inquiry is not a show, so borrowing the wording would put the wrong noun on the row (L118).
+    //
+    // The worse of the two is the thread: an answer arrives and nothing notices it. The message id only
+    // affects how OUR next message is filed, which is why they are two badges and not one.
+    static let replyTrackingLostBadge = "Replies can't be tracked"
+    static let replyTrackingLostHelp =
+        "Your reply went out, but Gmail didn't tell Overture which conversation it landed in, so an answer to it won't be spotted automatically. Watch your inbox for this one and mark it here yourself."
+
+    static let threadingDegradedBadge = "A nudge will arrive as a new email"
+    static let threadingDegradedHelp =
+        "Your reply went out and answers to it are still watched. What couldn't be read is the id a later message would quote, so a nudge on this inquiry will arrive as a separate email rather than under the same conversation."
+
     static func replyTitle(to inquirerName: String) -> String {
         "Reply to \(inquirerName)"
     }
