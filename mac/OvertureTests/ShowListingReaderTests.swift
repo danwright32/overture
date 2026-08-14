@@ -109,8 +109,15 @@ struct ShowListingReaderTests {
     // line is the exact shape that left an 82KB page half-read forever (#1056, PageNormalizer's
     // readerLineWidth note). So the text is bounded, and a page that had to be cut SAYS it was cut: a
     // description that fell past the cut must not read to the run as a page that published none.
+    //
+    // #2656: the filler is 2,000 DISTINCT sentences. It used to be one sentence repeated 2,000 times,
+    // which the repeated-block strip now collapses to a single copy, so the page stopped being overlong
+    // and this test stopped testing truncation at all. That is the fixture being wrong rather than the
+    // rule: no real programme note repeats one sentence two thousand times, and an invented shape that
+    // makes a page look long is exactly what L48 warns about. Distinct sentences are what a long page
+    // actually looks like, and they survive the strip untouched.
     @Test func anOverlongPageIsCutAndSaysSo() async {
-        let filler = String(repeating: "long programme note. ", count: 2000)
+        let filler = (0..<2000).map { "Programme note \($0) on the evening's music. " }.joined()
         let listing = await ShowListingReader.read(
             listingURL: "https://tickets.example/showdetails/abc",
             render: { _ in self.showPage(description: filler) })
