@@ -638,6 +638,11 @@ final class Recipient {
     // added later is not covered here, so anything that records contact must be added to this list; the
     // cost of missing one is a deleted outreach record, which is why the cheap direction is to count too
     // much rather than too little.
+    // #2717: re-decided and unchanged for an attached conversation. `gmailThreadId != nil` no longer
+    // proves Overture emailed this contact, but the question here is only whether anything at all marks
+    // it as touched, and it does: Dan pitched them by hand, which `formOutreachRecordedAt` below already
+    // records. The predicate fails CLOSED by design, so counting an attached thread as a mark of contact
+    // errs in the safe direction anyway.
     var wasWrittenTo: Bool {
         if sendState != .pending { return true }        // sent, sending, or deliberately suppressed
         if sentAt != nil || sendClaimedAt != nil { return true }

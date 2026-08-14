@@ -80,6 +80,17 @@ struct GmailThreadingRepair {
             // ticks. That is deliberate rather than overlooked: the read is a free metadata GET, bounded
             // by the number of live conversations, and a thread with nothing of Dan's on it today can
             // gain one, so refusing permanently would be the guard that outlives its reason.
+            // #2717: never a conversation Overture did not send on. The selection above deliberately
+            // takes a row with NO stored id, because a send whose read back failed needs the same repair;
+            // an ATTACHED conversation (#2715) also has no stored id, and repairing it would be actively
+            // wrong twice over. The premise of the manual route is that Dan found the reply in Gmail, and
+            // the ordinary thing to do there is answer it, so his own hand sent message is on that thread:
+            // `latestSentMessageID` would find it and store it, flipping the contact into "Overture
+            // emailed them" and putting the follow-up and closing note paths back in front of him on the
+            // one row they must never reach. And if he has NOT answered, the refusal branch below would
+            // set `threadingDegraded` on a conversation that threads perfectly well, warning him about a
+            // fault that does not exist (L11).
+            guard !row.replyWatchConversationIsAttached else { continue }
             guard GmailMessage.isLocallyMintedMessageID(row.gmailMessageId, senderEmail: fromEmail)
             else { continue }
             rowsByThread[thread, default: []].append(row)

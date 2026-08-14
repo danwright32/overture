@@ -240,6 +240,10 @@ enum NaturalKeyVenueMigration {
     // (false, which is what a DEFERRAL means, since a found address can be found again and a sent email
     // cannot be unsent). One list of clauses with one clause parameterised, rather than two lists that
     // drift, for the same reason this function was split out of the one above in the first place.
+    // #2717: unaffected by attached conversations, and the reason is the LEVEL (L83). An attach writes the
+    // thread on the RECIPIENT and deliberately never touches the Prospect rollup this line reads, so the
+    // clause below cannot see one. It would not matter if it could: a show whose form pitch was answered
+    // has plainly had something happen on it, which is the question being asked.
     static func hasRecordBeyondADismissal(_ p: Prospect, countingFoundAddresses: Bool = true) -> Bool {
         if p.sentAt != nil || p.gmailThreadId != nil || p.gmailMessageId != nil { return true }
         if p.draftBody != nil || p.draftSubject != nil { return true }

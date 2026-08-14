@@ -14,6 +14,12 @@ extension Inquiry: ReplyWatchableRecipient {
     // rides that rather than restating it. `isOpen` is false for booked and for either lost close, which
     // is the same "nothing left to watch" the prospect side means.
     var replyWatchConversationIsOpen: Bool { isOpen }
+    // #2717: never, and the reason is structural rather than a convenience. An inquiry's `gmailThreadId`
+    // is written in exactly one place, `InquiryReplySender` stamping it from the receipt after Dan's
+    // answer has actually gone (`InquiryReplySender.swift:50`), so an inquiry that holds a thread is by
+    // construction one Overture has sent on. There is no attach path here and nothing that could make one
+    // without also writing that id.
+    var replyWatchConversationIsAttached: Bool { false }
 }
 
 extension Inquiry: ReplyWatchable {
