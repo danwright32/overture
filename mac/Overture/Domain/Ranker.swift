@@ -31,7 +31,14 @@ enum Discipline: String, Decodable, Sendable, CaseIterable {
         switch self {
         case .dance: return "Dance"
         case .opera: return "Opera"
-        case .theater: return "Theater"
+        // #2733, Dan 2026-08-14: named for the gallery he actually pitches with. His site's
+        // galleries are Music, Performing Arts, Bands, Comedy and Dance, and a staged opera or play
+        // already maps to Performing Arts, so this puts the app's vocabulary in step with the
+        // portfolio. The stored raw value stays `theater`: it is what the scout writes
+        // (`docs/scout-runbook.md`), what `fixtures/ranker/cases.json` carries, and what every read
+        // resolves through `Discipline(rawValue:) ?? .other`, so renaming it would silently degrade
+        // every stored row to "No genre read" and cost each one 2 fit points. Display name only.
+        case .theater: return "Performing Arts"
         case .music: return "Music"
         case .band: return "Band"
         case .comedy: return "Comedy"

@@ -31,7 +31,7 @@ struct UnreadGenreIsSaidPlainlyTests {
     // A genre that WAS read keeps its own word, and the words are the ones the picker and the row line
     // have always shown.
     @Test func everyReadGenreKeepsItsOwnLabel() {
-        let expected: [Discipline: String] = [.dance: "Dance", .opera: "Opera", .theater: "Theater",
+        let expected: [Discipline: String] = [.dance: "Dance", .opera: "Opera", .theater: "Performing Arts",
                                               .music: "Music", .band: "Band", .comedy: "Comedy"]
         for (discipline, label) in expected {
             #expect(discipline.label == label)

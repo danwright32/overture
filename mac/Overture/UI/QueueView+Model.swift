@@ -922,7 +922,11 @@ enum QueueModel {
         case .excludedTown:
             return "This town is on the skip list."
         case .outsideTheBoroughs:
-            return "Music only travels to the five boroughs. As theater this would stay."
+            // #2733: kept as a literal rather than interpolated from `Discipline.label`, so the
+            // copy inventory carries a sentence Dan can READ rather than an expression. A test
+            // asserts it still names both genres by their current labels, which is what catches
+            // the next rename (L41 the other way round: derive the CHECK, not the copy).
+            return "Music only travels to the five boroughs. As performing arts this would stay."
         case .insideTheBoroughs, .insideTheRegion, .noLocation, .couldNotPlace:
             return nil
         }
