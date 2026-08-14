@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1310 sentences**.
+Every sentence Overture can say to Dan: **1319 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1362,6 +1362,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AttachConversation.swift`
 "Overture opened with \(live) \(live == 1 ? "show" : "shows"). Its most recent backup holds "
     `App/StoreShrinkCheck.swift`
+"Overture put this show back the way it was, but it can't reach outside the app: "
+    `Domain/DetachConversation.swift`
 "Overture recorded those before it kept their dates, so it can't say which have "
     `Domain/AppNotice.swift`
 "Overture was not checking for replies or bookings for \(PrepStatus.duration(seconds: seconds)), "
@@ -1988,6 +1990,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/InquiryIntakeSheet.swift`
 "Their shows sit oddly for a company. Correct one from any of its shows if it looks wrong."
     `UI/OrganisationsView.swift`
+"There's no linked conversation on this pitch to unlink."
+    `Domain/DetachConversation.swift`
 "These contacts have different drafts, so one shared email would send one of them to everyone. Send them separately, or make the drafts match"
     `App/ActionFeedback.swift`
 "These leads are no longer in your queue."
@@ -2141,6 +2145,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/QueueUndoStack.swift`
 "Undo that"
     `Domain/HandMarkedReply.swift`
+"Undoing it would leave this contact holding an address from that conversation and ready "
+    `Domain/FormOutreach.swift`
 "Unknown contact"
     `UI/QueueView+Model.swift`
 "Unverified email found"
@@ -2259,6 +2265,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/DaysOffView.swift`
 "You have \(pointerPhrase(for: target, count: n)) next."
     `Domain/StageEmptyState.swift`
+"You linked a conversation to this pitch, so Overture can't take the send record back. "
+    `Domain/FormOutreach.swift`
 "You linked this conversation. Overture didn't email them."
     `Domain/AttachConversation.swift`
 "You opened their form \(when). Did you send it?"
@@ -2291,6 +2299,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/BlockedCalendar.swift`
 "You've already added that link. Its shows are in your queue, and once the watchlist is on, that organization gets re-checked on its own."
     `UI/LeadIntakeModel.swift`
+"You've already answered on this conversation, so Overture can't unlink it. Your message is on "
+    `Domain/DetachConversation.swift`
 "You've already answered this one, so Overture can't take the reply back."
     `Domain/HandMarkedReply.swift`
 "You've already logged an inquiry for this event. You can still add this one."
@@ -2795,6 +2805,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreSchemaGuard.swift`
 "high confidence"
     `Domain/ReviewStatus.swift`
+"if an alert or an OmniFocus task went out for this reply, clear those yourself."
+    `Domain/DetachConversation.swift`
+"if an alert went out for this reply, clear it yourself."
+    `Domain/DetachConversation.swift`
 "in 1 day"
     `Domain/ReachedOutQueue.swift`
 "in \(days) days"
@@ -2890,6 +2904,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReachabilityRunSummary.swift`
 "the venue"
     `UI/QueueView+Model.swift`
+"their thread and unlinking wouldn't take it back."
+    `Domain/DetachConversation.swift`
 "then re-read it here."
     `Domain/AppNotice.swift`
 "these was not until \(furthest), so all of them going together reads as a broken "
@@ -2898,6 +2914,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ShowOutcome.swift`
 "they said not now"
     `Domain/ShowOutcome.swift`
+"to be emailed."
+    `Domain/FormOutreach.swift`
 "to confirm"
     `UI/QueueView.swift`
 "too few to tell"

@@ -114,6 +114,8 @@ struct OutreachFieldClassificationTests {
         "attachPriorReplyDraftEditedByDan": "the same snapshot, for the reply-draft baseline",
         "attachPausedRecipientIds": "which OTHER contacts on the show this attach froze, so the detach "
             + "unfreezes only those; a fact about its neighbours, never about this contact being written to",
+        "attachWroteAddress": "whether the ATTACH is what put the current address here, so a detach takes "
+            + "back only what it wrote; provenance of a field, not evidence anybody was contacted",
         "replyCandidateSearchedAt": "when OVERTURE last read the mailbox for an answer to this pitch, "
             + "which is a record of its own looking and says nothing about anybody having been written to; "
             + "the write that proves this contact was reached is formOutreachRecordedAt, which is counted",

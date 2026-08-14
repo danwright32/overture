@@ -150,7 +150,14 @@ enum AttachConversation {
         if let subject = subject?.trimmingCharacters(in: .whitespacesAndNewlines), !subject.isEmpty {
             r.attachedThreadSubject = subject
         }
-        if let canonical, (r.email ?? "").isEmpty { r.email = canonical }
+        r.conversationEverAttachedAt = r.conversationEverAttachedAt ?? now
+        if let canonical, (r.email ?? "").isEmpty {
+            r.email = canonical
+            // #2719: recorded at the moment it happens, because afterwards an address the attach wrote
+            // and one that was already there are indistinguishable, and the detach must take back only
+            // what this attach put on the contact.
+            r.attachWroteAddress = true
+        }
 
         // Detection, over the thread already in hand, in this same write.
         let detected = ReplyService.detectReplies(in: [p], selfEmail: selfEmail, now: now,
