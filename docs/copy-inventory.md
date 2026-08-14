@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1274 sentences**.
+Every sentence Overture can say to Dan: **1277 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -742,6 +742,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/AddLeadSheet.swift`
 "Every show Overture has ever tracked: past its window, booked, closed, or dismissed"
     `App/RootView.swift`
+"Everyone found here is on the show without running it: a co-performer, a music director or a guest. Nobody with a say over the booking was found. The listing's credits are usually where the producer is named, and you can add them by hand."
+    `Domain/Reachability.swift`
+"Everything found here represents them rather than runs the show: a manager, an agent, a publicist or a booking agency. That may still get you an answer, but nobody who owns the show was found. The listing's credits are usually where the producer is named."
+    `Domain/Reachability.swift`
 "Failed to read \(runs) \(runWord) in a row, and hasn't been read for \(days) \(dayWord). Check the link."
     `Domain/SourceAttention.swift`
 "Failed to read \(runs) \(runWord) in a row. Check the link."
@@ -1106,6 +1110,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "No way to reach them"
     `Domain/ShowOutcome.swift`
 "Nobody found to write to"
+    `Domain/Reachability.swift`
+"Nobody who can hire you"
     `Domain/Reachability.swift`
 "None due"
     `Domain/AgentRoster.swift`

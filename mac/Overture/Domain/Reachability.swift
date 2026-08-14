@@ -583,6 +583,32 @@ enum ReachabilityCopy {
         heldDown ? confidenceHeldDownHelp : unverifiedEmailFoundHelp
     }
 
+    // #2657: the check found people and none of them can hire Dan.
+    //
+    // ONE badge for both answers, with the sentence carrying which one, the same #1722 rule the weak
+    // contact and unverified badges already follow: same wording, same tone, same position, so the card
+    // says something truer without getting louder. The badge states the consequence rather than the
+    // finding, because the finding ("13 contacts") is already on the card and is exactly what read as
+    // thirteen ways in.
+    static let noAuthorityBadge = "Nobody who can hire you"
+
+    // Each sentence names WHO was found, since that is the fact that says what the list is worth, and
+    // each ends somewhere Dan can go. Naming a fault and leaving him nowhere is the L80 half of this
+    // defect, and the listing's credits block is where he found the producer himself in seconds.
+    static func noAuthorityHelp(tier: ContactTier) -> String {
+        switch tier {
+        case .secondary:
+            return "Everyone found here is on the show without running it: a co-performer, a music director or a guest. Nobody with a say over the booking was found. The listing's credits are usually where the producer is named, and you can add them by hand."
+        case .tertiary:
+            return "Everything found here represents them rather than runs the show: a manager, an agent, a publicist or a booking agency. That may still get you an answer, but nobody who owns the show was found. The listing's credits are usually where the producer is named."
+        // Unreachable: `contactAuthorityGap` returns nil for a primary, so this badge never renders over
+        // one. Answered rather than crashed, because a switch that cannot answer for every value is a trap
+        // waiting for the first caller who does not know the rule.
+        case .primary:
+            return emailFoundHelp
+        }
+    }
+
     // #1325: the earlier probe result has aged past the freshness window, so it may no longer be true.
     static let staleProbeBadge = "Reachability may be out of date"
     static let staleProbeHelp =

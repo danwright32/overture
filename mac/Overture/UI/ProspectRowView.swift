@@ -737,6 +737,27 @@ struct ProspectRowView: View {
         }
     }
 
+    // #2657: a check that came back with people who cannot hire Dan. Directly under the badge that says
+    // something was found, because it qualifies exactly that claim: the row above says an address exists
+    // and this says what it is worth. Its own note rather than a variation of the badge's wording, which
+    // is already carrying #1628's verified-or-not split and cannot say a second thing at once.
+    //
+    // `tentative` (dim gold): the tone's own definition is "found something, but cannot stand behind it",
+    // which is precisely this. Not rust, which is reserved for a finding of nothing, and this row did find
+    // people; not full gold, which Dan reserves for what he can act on immediately, and this asks him to
+    // go and look at the listing first.
+    //
+    // One render site covers all three surfaces the issue asks about: Queue (every stage, Reached out
+    // included) and Archive both draw their rows through ProspectRowFactory, which builds this view.
+    @ViewBuilder private var contactAuthorityFlag: some View {
+        if let gap = item.contactAuthorityGap() {
+            reachabilityNote(icon: "person.crop.circle.badge.questionmark",
+                             text: ReachabilityCopy.noAuthorityBadge,
+                             tone: .tentative,
+                             help: ReachabilityCopy.noAuthorityHelp(tier: gap))
+        }
+    }
+
     private func reachabilityNote(icon: String, text: String, tone: OVPillTone, help: String) -> some View {
         HStack(spacing: 5) {
             Image(systemName: icon).font(.system(size: 12, weight: .semibold))
@@ -942,6 +963,7 @@ struct ProspectRowView: View {
             // right-justifies under those buttons instead of widening their row (which is what put it
             // beside Dismiss twice and left the cards uneven).
             reachabilityFlag
+            contactAuthorityFlag
             recheckControl
             heldContactFlag
             reachabilityAddresses
