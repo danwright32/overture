@@ -1,0 +1,33 @@
+{
+  "id": "198f2a1c9d0e4b77",
+  "threadId": "198f2a1c9d0e4b77",
+  "labelIds": [
+    "IMPORTANT",
+    "CATEGORY_PERSONAL",
+    "INBOX"
+  ],
+  "snippet": "Hi Dan, thanks for getting in touch about the show. We would love to talk about photography for",
+  "historyId": "4412207",
+  "internalDate": "1785900000000",
+  "sizeEstimate": 8421,
+  "payload": {
+    "headers": [
+      {
+        "name": "Delivered-To",
+        "value": "dan@danwrightphotography.com"
+      },
+      {
+        "name": "Date",
+        "value": "Wed, 05 Aug 2026 09:20:00 -0400"
+      },
+      {
+        "name": "From",
+        "value": "Casey Grainger <casey.grainger@examplemail.com>"
+      },
+      {
+        "name": "Subject",
+        "value": "Re: Photography for the anniversary celebration"
+      }
+    ]
+  }
+}
