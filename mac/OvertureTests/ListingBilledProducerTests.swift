@@ -116,12 +116,13 @@ struct ListingBilledProducerTests {
 
     // MARK: - What it has to leave alone
 
-    // 16 of the 17 measured credits name a person, not a company, and a bare personal name is not
-    // producer-shaped. Nothing is invented for them: the field stays empty, which is what the prep run
-    // already treats as "the app's parse found nothing, read the text yourself".
-    @Test func aCreditNamingOnlyIndividualsIsLeftAlone() {
+    // REVERSED by #2554, and this is the whole point of that issue. 16 of the 17 measured credits name a
+    // person, and the rule dropped every one of them, so the number it fired on (1 of 61 real listings)
+    // read as a working feature. On a rental room the individual billed as producing IS the person who
+    // hired the room and who would hire a photographer, so the credit is now read whoever it names.
+    @Test func aCreditNamingAnIndividualIsRead() {
         #expect(ListingOrganiser.producerNamed(inListingText: debut, showTitle: "54 Below! DEBUT!",
-                                               venue: "54 Below") == nil)
+                                               venue: "54 Below") == "Amanda Negrete")
     }
 
     // A page that bills nobody at all. Company-shaped names sit in its prose ("Drama Club Camp
@@ -143,14 +144,19 @@ struct ListingBilledProducerTests {
                                                venue: "54 Below") == nil)
     }
 
-    // The honest miss, kept as a test so it is visible rather than assumed away: this page names a real
-    // producing company in its prose ("the Showpeople Theatre Collective returns") and credits a person
-    // in a phrase this arm does not match ("Produced and directed by Showpeople Resident Artist Colby
-    // Thompson"). Reading either as the billed producer would be a guess, so the answer is nothing.
-    @Test func aCreditPhrasedAroundTheConnectorIsLeftAlone() {
+    // The honest miss #2262 recorded, now READ: #2554 added "produced and directed by" to the credits,
+    // because that phrasing is what the p0 case used ("this concert is produced and directed by Caseen
+    // Gaines") and searching for "produced by" inside it matches nothing at all.
+    //
+    // The value it returns carries the role the page put in front of the name, because the credit really
+    // does read "Produced and directed by Showpeople Resident Artist Colby Thompson". Asserted as it is,
+    // rather than trimmed to "Colby Thompson", because stripping a role would mean enumerating roles and
+    // guessing where the name starts, and this string is not wrong: it names the producer AND the
+    // collective, and the run reads the page itself as well.
+    @Test func aCreditCarryingTheRoleInFrontOfTheNameIsRead() {
         #expect(ListingOrganiser.producerNamed(inListingText: firstDrafts,
                                                showTitle: "First Drafts: Student Edition",
-                                               venue: "54 Below") == nil)
+                                               venue: "54 Below") == "Showpeople Resident Artist Colby Thompson")
     }
 
     // The room guard covers this arm too. Constructed, not measured: the real Re-Arranged text with the
@@ -183,9 +189,11 @@ struct ListingBilledProducerTests {
                 == "Productions by Stephan")
     }
 
-    @Test func theSharedRuleRefusesACreditNamingAPerson() {
+    // #2554: reversed with the arm above. The credit is what says somebody is producing this show, so the
+    // name behind it does not also have to be shaped like a company.
+    @Test func theSharedRuleReadsACreditNamingAPerson() {
         #expect(ProducerShapedName.billedInProse("Produced by Amanda Negrete . Music direction by Elijah "
-                                                + "Cox .") == nil)
+                                                + "Cox .") == "Amanda Negrete")
     }
 
     // The capital is what separates a name from the sentence carrying on. "company" is one of the words
