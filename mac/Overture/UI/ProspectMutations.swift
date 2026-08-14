@@ -349,6 +349,10 @@ enum ProspectMutations {
             return
         }
         ContactRefusal.refuse(email: email, scope: .organisation(orgKey), in: context)
+        // #2662: this path had NO save of its own and relied on `refuse` committing for it. It is the one
+        // that would have silently stopped working, and with no second write to notice the loss by: Dan
+        // would be told the address was removed and the strike would be gone at the next launch.
+        guard context.saveOrWarn(org: model.groupName, feedback: feedback) else { return }
         feedback.acknowledge(ActionAck.inheritedAddressRemoved(email: email, org: presenter))
     }
 
