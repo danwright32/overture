@@ -16,13 +16,17 @@ struct ShowOutcomeTests {
 
     // MARK: the shape of the vocabulary
 
-    @Test func danCanChooseExactlyTwelveValues() {
-        #expect(ShowOutcome.danCanChoose.count == 12)
+    @Test func danCanChooseExactlyThirteenValues() {
+        #expect(ShowOutcome.danCanChoose.count == 13)
     }
 
-    @Test func sevenEndingsForAShowNothingWasSentTo() {
+    // The order is a property of the vocabulary rather than something each view re-decides, so it is
+    // pinned here in the order Dan meets it on the menu. #2684 put `noWayToReachThem` beside the other
+    // reasons and kept `duplicate` last, since that one is housekeeping rather than a reason at all.
+    @Test func eightEndingsForAShowNothingWasSentTo() {
         #expect(ShowOutcome.neverPitched == [.dateConflict, .hadPaidWork, .pitchingOtherShows,
-                                             .tooSoon, .notAFit, .dontWantToShoot, .duplicate])
+                                             .tooSoon, .notAFit, .dontWantToShoot,
+                                             .noWayToReachThem, .duplicate])
     }
 
     @Test func fiveEndingsForAShowThatWasPitched() {
@@ -149,10 +153,24 @@ struct DismissReasonBridgeTests {
         }
     }
 
-    @Test func everyNeverPitchedValueRoundTripsBack() {
-        for outcome in ShowOutcome.neverPitched + [.wentBy, .tooFar] {
+    // #2684 narrowed the contract to exactly the nine that predate the one vocabulary, which is what the
+    // bridge is FOR: reading a store written before #2394 forward. An ending minted afterwards has no
+    // legacy spelling because no store can hold one, so it is named here rather than left as an unstated
+    // gap, and the round trip still has to be total over the nine.
+    @Test func everyLegacyNeverPitchedValueRoundTripsBack() {
+        let predateTheOneVocabulary = Set(DismissReason.allCases.map(\.asShowOutcome))
+        for outcome in ShowOutcome.neverPitched + [.wentBy, .tooFar]
+        where predateTheOneVocabulary.contains(outcome) {
             #expect(outcome.asDismissReason?.asShowOutcome == outcome)
         }
+        #expect(predateTheOneVocabulary.count == 9)
+    }
+
+    // The other half of that narrowing, so "no legacy spelling" cannot quietly grow to cover a value
+    // that should have had one. Exactly one never-pitched ending is outside the bridge today.
+    @Test func onlyTheEndingMintedAfterTheBridgeHasNoLegacySpelling() {
+        let outside = ShowOutcome.neverPitched.filter { $0.asDismissReason == nil }
+        #expect(outside == [.noWayToReachThem])
     }
 
     // Distinctness in BOTH directions, which is what actually rules out a collision: nine reasons must
