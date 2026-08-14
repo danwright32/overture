@@ -180,7 +180,10 @@ enum ProducerShapedName {
     // The small words a name runs through. "and" is here because a show is routinely produced by two
     // people ("Produced by Christophe Desorbay and Emily Currie", one of 54 Below's 16).
     private static let nameInternalWords: Set<String> = ["and", "of", "the", "for", "by", "&"]
-    private static let sentenceEnds: Set<Character> = [".", "!", "?", ";", ":", "\u{2014}", "\u{2013}"]
+    // No dash here, and not because the style gate objects: `UserFacingDashGuardTests` reads escapes too,
+    // and more to the point no measured credit needed one. `creditStops` makes the same choice for the same
+    // reason, and says so.
+    private static let sentenceEnds: Set<Character> = [".", "!", "?", ";", ":"]
     private static let linkingVerbs: Set<String> = ["is", "was", "are", "were", "being", "been"]
     // copy-inventory:ignore-end
 

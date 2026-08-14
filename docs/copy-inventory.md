@@ -46,6 +46,7 @@ What is not, and why:
 - `Domain/ProducerGate.swift`: Words matched inside an organisation's own name, never said to Dan (#1749)
 - `Domain/ProducerShapedName.swift`: parser tokens matched against a ticketing feed, never Overture's voice
 - `Domain/ProducerShapedName.swift`: parser tokens matched against a listing page, never Overture's voice
+- `Domain/ProducerShapedName.swift`: parser tokens matched against a listing page, never Overture's voice
 - `Domain/SameNightTitleVariantMerge.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Domain/SendIdentity.swift`: an RFC822 sender identity (name + address), not the app's own voice
 - `Domain/ShowOutcomeBackfill.swift`: agent log, not a sentence Overture says to Dan (#915)

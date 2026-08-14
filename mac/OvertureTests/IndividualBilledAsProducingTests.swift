@@ -192,7 +192,12 @@ struct SuperTitleCalibrationTests {
         let newlyCredited: Set<String> = ["Desir\u{00E9}e Dabney", "Mackenzie Bruen"]
 
         #expect(accepted == companies.union(selfProducers).union(newlyCredited))
-        #expect(accepted.count == 30)
+        // 29 distinct NAMES out of 30 accepted supertitles: the feed bills "Productions by Stephan" both
+        // with and without its possessive, and both fold to the one company, which is what
+        // `withoutPossessive` is for. Both numbers are stated because they are different questions and
+        // reading one as the other is how a count starts lying about the rows behind it (L16).
+        #expect(accepted.count == 29)
+        #expect(sts.filter { ProducerShapedName.from($0) != nil }.count == 30)
     }
 
     // Stated as its own assertion because it is the claim the whole change rests on: widening the credit
@@ -202,7 +207,9 @@ struct SuperTitleCalibrationTests {
         let accepted = Set(sts.compactMap { ProducerShapedName.from($0) })
         #expect(accepted.contains("Mackenzie Bruen"))
         #expect(accepted.contains("Desir\u{00E9}e Dabney"))
-        // Everything else the rule accepts, it accepted before: 30 less the two.
-        #expect(accepted.count - 2 == 28)
+        // Everything else the rule accepts, it accepted before: 30 accepted supertitles less the two, and
+        // 27 distinct names, which is what the 2026-08-07 calibration's boundary comes to on this feed.
+        #expect(sts.filter { ProducerShapedName.from($0) != nil }.count - 2 == 28)
+        #expect(accepted.count - 2 == 27)
     }
 }
