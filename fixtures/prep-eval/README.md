@@ -66,6 +66,12 @@ person, org, venue, or email address. `.example` domains and made-up names throu
 - `listing-credits-the-producing-company`: a show whose stored presenter is empty while its listing page
   credits the producing company in front of the title: the company is pursued as a presenter, and the
   people on the bill are still pursued beside it (#2259).
+- `listing-credits-an-individual-producer`: the same shape where the credit names a PERSON rather than a
+  company, which the rule refused until #2554 and which is the common case on a rental room (16 of the 17
+  credits measured across 54 Below's listings). The producer is reached through the canonical
+  firstnamelastname.com guess, one fetch and no search, and the performers are still pursued beside her.
+  Note the harness has no expectation key for a contact's `tier`, so this proves she is REACHED and does
+  not assert she comes back `primary`; #2641 owns noticing a run that ignores the tier instruction.
 - `listed-house-is-refused`: an organisation on the queue's `houses` list is the building, so its addresses are disqualified even when the listing calls it the presenter (#1720/#1723).
 - `solo-artist-cabaret-not-an-organisation`: the run says back what the listing says the show IS, and describes Dan without categorizing the recipient (#1824).
 - `venue-history-band-says-he-knows-the-room`: the item carries a `venueHistory` band, so the draft says

@@ -1,0 +1,114 @@
+{
+  "name": "listing-credits-an-individual-producer",
+  "rule": "A rental room's listing can credit an INDIVIDUAL as producing the show rather than a company (#2554), and since that change `organisationNamedOnListing` may hold a person's name despite the field's name. That person owns the show and could hire Dan, so they are a research target pursued exactly as a company is: through their own site, starting with the canonical firstnamelastname.com guess, and emitted with `provenance: \"presenter\"` alongside the performers the listing names. The room stays refused.",
+  "input": {
+    "naturalKey": "ten-years-of-tuesdays|2026-08-17|the-example-room",
+    "groupName": "Ten Years of Tuesdays",
+    "venue": "The Example Room",
+    "performanceDate": "2026-08-17",
+    "discipline": "theater",
+    "production": "self",
+    "priorRelationship": "none",
+    "onlyTheActIsNamed": true,
+    "organisationNamedOnListing": "Marisol Everly",
+    "sourceListingURL": "https://tickets.example/showdetails/aBc123/dEf456",
+    "showListing": {
+      "status": "read",
+      "url": "https://tickets.example/showdetails/aBc123/dEf456",
+      "text": "Events FAQ About Contact Sign in 0 Ten Years of Tuesdays August 17, 2026 Featuring an all-star cast, including several members of the original company, this concert is produced and directed by Marisol Everly (author of Tuesdays Downtown). A decade of the late-night revue that started in a back room and never quite left, sung by the people who built it. Genre Musicals Duration 90 minutes Age Restriction All ages Behind the Act MARISOL EVERLY Marisol Everly (Producer/Director) is a writer and producer based in New York. THEO BRANCH Theo Branch (Performer) has appeared off-Broadway and in regional houses. NELL ADAIR Nell Adair (Performer) is a singer and actor. 570 Example Avenue New York, NY 10036 View on map"
+    }
+  },
+  "sources": [
+    {
+      "label": "The canonical firstnamelastname.com guess, fetched directly without a search",
+      "url": "https://marisoleverly.example/contact",
+      "content": "Marisol Everly, writer, producer and director, New York. Producing credits include Ten Years of Tuesdays. For production enquiries and press: marisol@marisoleverly.example"
+    },
+    {
+      "label": "Theo Branch personal page",
+      "url": "https://theobranch.example",
+      "content": "Theo Branch, actor and singer. Currently: Ten Years of Tuesdays at The Example Room. Enquiries via the form below."
+    },
+    {
+      "label": "Nell Adair social profile",
+      "url": "https://social.example/nelladairsings",
+      "content": "Nell Adair (@nelladairsings). Singer and actor, New York. UPCOMING: Ten Years of Tuesdays, 8/17."
+    },
+    {
+      "label": "The Example Room listing host",
+      "url": "https://theexampleroom.example/contact",
+      "content": "The Example Room is a rental cabaret room. Ticketing questions: tickets@theexampleroom.example. To perform here: programming@theexampleroom.example."
+    }
+  ],
+  "expected": {
+    "description": "Modelled on the real 2026-08-13 run that raised #2554 to p0. On '54 Sings Shuffle Along' the run was handed listing text saying the concert was produced and directed by a named individual, READ that text (all 13 cast names came out of it), and returned 13 contacts, every one a co-performer and not one with authority over the booking. The producer was never a target, and her address was published on the first domain anybody would guess. So `requiredEmails` pins the producer's own address rather than merely counting contacts: a run that comes back with two form-only performers looks complete on every count-based check and is precisely the outcome being regressed against. The performers are still pursued, because the producer is additive and never a replacement. The room's inboxes stay refused: naming a producer relaxes nothing about the venue rule. NOTE the harness has no expectation key for a contact's `tier`, so this fixture proves the producer is REACHED and does not assert she comes back as `primary`; #2641 is the issue positioned to notice a run that ignores the tier instruction.",
+    "requirePresenter": true,
+    "requiredEmails": [
+      "marisol@marisoleverly.example"
+    ],
+    "requiredPerformers": [
+      "Theo Branch",
+      "Nell Adair"
+    ],
+    "performerOverrideBodyRequired": true,
+    "requireSomeContact": true,
+    "forbiddenEmails": [
+      "tickets@theexampleroom.example",
+      "programming@theexampleroom.example"
+    ],
+    "forbiddenDomains": [
+      "theexampleroom.example"
+    ],
+    "requiredShowSummaryTerms": [
+      "revue"
+    ],
+    "requirePortfolioLink": true
+  },
+  "sampleCompliantOutput": {
+    "version": 8,
+    "generatedAt": "2026-08-13T00:00:00.000Z",
+    "results": [
+      {
+        "naturalKey": "ten-years-of-tuesdays|2026-08-17|the-example-room",
+        "showSummary": "A decade of a late-night revue that started in a back room, sung by the company who built it, 90 minutes, all ages.",
+        "contacts": [
+          {
+            "provenance": "presenter",
+            "name": "Marisol Everly",
+            "role": "Producer/Director",
+            "email": "marisol@marisoleverly.example",
+            "method": "personal_email",
+            "confidence": "high",
+            "tier": "primary",
+            "sourceUrl": "https://marisoleverly.example/contact"
+          },
+          {
+            "provenance": "performer",
+            "name": "Theo Branch",
+            "role": "Performer",
+            "method": "form_or_dm",
+            "confidence": "low",
+            "tier": "secondary",
+            "formUrl": "https://theobranch.example",
+            "overrideBody": "My name is Dan and I'm a professional arts photographer here in New York City. I'm writing in regard to Ten Years of Tuesdays at The Example Room on August 17. I shoot unobtrusive, no-flash documentary coverage, so the audience doesn't notice me and the performance isn't disturbed. I've been photographing at Carnegie Hall for close to ten years, and you can see my portfolio at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about your photography plans for the night. I look forward to hearing from you."
+          },
+          {
+            "provenance": "performer",
+            "name": "Nell Adair",
+            "role": "Performer",
+            "method": "form_or_dm",
+            "confidence": "low",
+            "tier": "secondary",
+            "formUrl": "https://social.example/nelladairsings",
+            "overrideBody": "My name is Dan, I'm an arts photographer based in New York City. I'm writing about Ten Years of Tuesdays at The Example Room on August 17. I work in a documentary style, no flash and nothing intrusive, so the room stays as it is and the performance isn't interrupted. I've been shooting at Carnegie Hall for nearly ten years, and my portfolio is at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about your photography plans for that night. I look forward to hearing from you."
+          }
+        ],
+        "draft": {
+          "subject": "Photographing Ten Years of Tuesdays at The Example Room",
+          "body": "My name is Dan and I'm a professional arts photographer here in New York City. I'm writing in regard to Ten Years of Tuesdays at The Example Room on August 17. I shoot unobtrusive, no-flash documentary coverage, so the audience doesn't notice me and the performance isn't disturbed. I've been photographing at Carnegie Hall for close to ten years, and you can see my portfolio at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about your photography plans for the night. I look forward to hearing from you.",
+          "variant": "reason-first"
+        }
+      }
+    ]
+  }
+}
