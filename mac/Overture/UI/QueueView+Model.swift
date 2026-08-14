@@ -552,6 +552,40 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     }
 
 
+    // #2657: the check came back with contacts and NONE of them can hire Dan.
+    //
+    // The case it was filed for: 13 contacts on a 54 Below show, every one a co-performer, every one
+    // honestly tiered `secondary`, wearing the same gold "Email found" pill and "13 contacts" that a card
+    // wears when the check reached the person whose show it is. The tier was computed and dropped (L46).
+    //
+    // nil in three different situations, and they are all the same answer to Dan (say nothing):
+    //   - nobody was found, so there is nothing to judge and the row wears its own badge already;
+    //   - somebody with authority WAS found, in which case a crowd of co-performers beside them is not
+    //     worth a warning, exactly as one verified address keeps the plain badge in #1628;
+    //   - nothing found carries a tier at all, which is unknown rather than weak. Rendering those as a
+    //     warning would light up every contact stored before #2622 for no reason, and `ContactTier.best`
+    //     already encodes it by answering nil rather than adding a fourth case.
+    //
+    // Judged over EVERY contact the show holds, deliberately, and not over the sendable-pending set that
+    // `Prospect.contactTierFromRecipients` feeds the score. The two answer different questions and both
+    // are right: the score asks how good a route Dan can actually use, and this asks who the check found.
+    // Using the score's set here would let a producer held by a venue or duplicate guard vanish from the
+    // judgment while their address is printed on the card two lines below, so the card would deny finding
+    // somebody it is showing him.
+    // Only ever spoken under "Email found", which is the one badge that claims Dan can write to somebody.
+    // That gate is not a detail: the runbook emits a full contact for a named performer even when no
+    // address was verified, so a tier can exist on a show whose badge is "No email found: nobody found to
+    // write to". Two negatives, one under the other, the second adding nothing (L118, #843). Every other
+    // badge already qualifies the find itself, and "Only a venue or press address" in particular is
+    // already saying this in its own words.
+    func contactAuthorityGap(now: Date = Date()) -> ContactTier? {
+        guard reachabilityBadge(now: now) == .emailFound else { return nil }
+        guard let best = ContactTier.best(of: contacts.map(\.contactTier)), best != .primary else {
+            return nil
+        }
+        return best
+    }
+
     // #596: a quick-glance hint when a prospect carries more than one recipient (e.g. 2 named
     // performers found for a self-produced show, #366), so Dan doesn't have to expand every row
     // to see when multiple people were found. nil for the common single-contact case (no clutter).
@@ -663,6 +697,11 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     // #654: moved from the now-deleted lead-level QueueItem fields, since contact confidence/method/
     // form-URL are genuinely per-recipient data.
     var contactConfidence: ContactConfidence? = nil
+    // #2657: WHOSE authority this contact has, as the run judged it (see ContactTier for Dan's
+    // definition). Carried so the card can say when a check came back full of people who cannot hire him.
+    // nil where the run declined to judge or the contact predates #2622, which is a different claim from
+    // "somebody without authority" and must never be rendered as one.
+    var contactTier: ContactTier? = nil
     var contactMethod: ContactMethod? = nil
     var contactFormURL: String? = nil
     // #363: mirrors Recipient.contactSourceURL. See contactSourceLinkURL below for the display
@@ -2396,6 +2435,7 @@ extension RecipientSnapshot {
                   conversationRemindedAt: r.conversationRemindedAt,
             outreachStoodDownAt: r.outreachStoodDownAt,
                   contactConfidence: r.contactConfidence,
+                  contactTier: r.contactTier,
                   contactMethod: r.contactMethod,
                   contactFormURL: r.contactFormURL,
                   contactSourceURL: r.contactSourceURL,
