@@ -31,7 +31,7 @@ struct UnreadGenreIsSaidPlainlyTests {
     // A genre that WAS read keeps its own word, and the words are the ones the picker and the row line
     // have always shown.
     @Test func everyReadGenreKeepsItsOwnLabel() {
-        let expected: [Discipline: String] = [.dance: "Dance", .opera: "Opera", .theater: "Theater",
+        let expected: [Discipline: String] = [.dance: "Dance", .opera: "Opera", .theater: "Performing Arts",
                                               .music: "Music", .band: "Band", .comedy: "Comedy"]
         for (discipline, label) in expected {
             #expect(discipline.label == label)
@@ -64,9 +64,11 @@ struct UnreadGenreIsSaidPlainlyTests {
                                              profile: .neutral, venue: nil).fitReason
         #expect(unread == "Self-produced; worth a look once the fit is confirmed.")
 
+        // #2733: the genre is named by its LABEL now, not by the stored raw value, so this sentence
+        // renamed with the picker instead of drifting away from it.
         let read = EventClassifier.derived(discipline: .theater, production: .selfProduced,
                                            profile: .neutral, venue: nil).fitReason
-        #expect(read == "Self-produced theater; worth a look once the fit is confirmed.")
+        #expect(read == "Self-produced performing arts; worth a look once the fit is confirmed.")
     }
 
     // No sentence this classifier can produce may contain a raw enum value that is not also an English

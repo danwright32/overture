@@ -14,7 +14,7 @@ import Foundation
 struct GenreControlTests {
     @Test func itNamesTheGenreInDansWordsRatherThanTheStoredValue() {
         #expect(GenreControlCopy.accessibilityLabel(for: "music").contains("Music"))
-        #expect(GenreControlCopy.accessibilityLabel(for: "theater").contains("Theater"))
+        #expect(GenreControlCopy.accessibilityLabel(for: "theater").contains("Performing Arts"))
     }
 
     // The case that is now common rather than rare: a show whose genre nothing could establish. The

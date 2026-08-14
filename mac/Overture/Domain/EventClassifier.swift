@@ -295,7 +295,11 @@ enum EventClassifier {
         // classifier finding no genre word at all, so the honest sentence simply does not mention one:
         // "Self-produced group" is true, and naming the absence here would state twice what the row's own
         // genre line already says once.
-        let genre = discipline == .other ? "" : " \(discipline.rawValue)"
+        // #2733: from `.label`, which #1657 made the one place a genre is NAMED, rather than from
+        // the stored raw value. Built from the raw value this sentence said "theater" while the
+        // picker one line above it offered "Performing Arts": one genre under two names on the
+        // same card, each reading fine alone (L118). Lowercased because it sits mid-sentence.
+        let genre = discipline == .other ? "" : " \(discipline.label.lowercased())"
         if production == .selfProduced && profile == .strong {
             let where_ = coverage == .likelyUncovered ? ", likely without its own photographer" : ""
             return "Self-produced\(genre) group, a strong-fit target\(where_)."
