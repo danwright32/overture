@@ -45,13 +45,15 @@ before this was codified.
   named the producer twice while this flag was `true` (#2259). Absent is not `false`: it means the app said
   nothing about it (a file predating the field, or a show that names a producer), and you behave exactly as
   you always did. See §1's route for what to do with it.
-  `organisationNamedOnListing` (v11, #2259) is the producing company the show's OWN listing page credits,
-  read by the app off `showListing.text`. When it is present, that organisation is a
-  real research target and a legitimate `provenance: "presenter"`, even on an item whose
-  `onlyTheActIsNamed` is `true`. ABSENT means only that the app's narrow parse (a possessive credit before
-  the title, or an adjacent "produced by" / "presented by" naming a company after it, #2262) found
-  nothing; it is never a statement that the page names no company, and you still read the
-  text yourself. On a rental room this is the common case: measured across 54 Below's 61 listings on
+  `organisationNamedOnListing` (v11, #2259) is the party the show's OWN listing page credits as producing
+  it, read by the app off `showListing.text`. Despite the field's name it may be a COMPANY OR A PERSON
+  since #2554 (the name is kept because v11 and v12 fixtures are frozen records of what those versions
+  were). When it is present, that party is a
+  real research target and a legitimate `provenance: "presenter"`, and a `primary` contact, even on an
+  item whose `onlyTheActIsNamed` is `true`. ABSENT means only that the app's parse (a possessive credit
+  before the title, or an adjacent "produced by" / "presented by" / "produced and directed by" naming
+  somebody after it, #2262/#2554) found nothing; it is never a statement that the page names nobody, and
+  you still read the text yourself. On a rental room this is the common case: measured across 54 Below's 61 listings on
   2026-08-11, 17 bill a producer and 16 of those name an individual, whom the app's rule does not accept
   as a company and leaves for you. See §1's route.
   `refusedEmails` (v12, #2392) is a list of addresses DAN HAS ALREADY STRUCK on this show. Do not
@@ -253,10 +255,19 @@ item's `production` field first:
   does not exist is a claim you never tested.
   - **First, find out whether the PAGE names a company** (#2259). The flag above is a fact about
     the row the app stored, never about the page. Two things can name one:
-    - `organisationNamedOnListing`, when present, IS a company the app read off this show's own
-      listing page. Research it as an organisation, run the full waterfall below on it, and emit it
-      with `provenance: "presenter"`. It is not a guess and it is not the room (the app refuses the
-      room's own name here).
+    - `organisationNamedOnListing`, when present, IS the party this show's own listing page credits as
+      producing it, read by the app off the page. Research it, run the full waterfall below on it, and
+      emit it with `provenance: "presenter"`. It is not a guess and it is not the room (the app refuses
+      the room's own name here).
+      Since #2554 it may name a PERSON as well as a company, because on a rental room the individual
+      billed as producing is the one who hired the room and who would hire a photographer, and the app
+      used to drop all of them: measured across 54 Below's 61 listings, 17 bill a producer and 16 of
+      those name an individual. Research a person the same way you would research a company, starting
+      with their own site (the canonical `firstnamelastname.com` guess, which is one fetch and is how
+      caseengaines.com/contact was there to be found all along).
+      **A credited producer is a `primary` contact**, whether person or company: they own the show and
+      can say yes. That is the existing tier rule, restated here because this is the field that names
+      them, and because the run that missed Caseen Gaines returned 13 contacts and not one primary.
     - Otherwise read `showListing.text` yourself and look for one: a possessive credit in the title
       line, "presented by" / "produced by", or a bio naming a founder's OWN company ("is the
       Founder/Artistic Director of ICB Productions"). A company you find that way is a legitimate
