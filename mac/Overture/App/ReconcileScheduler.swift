@@ -116,6 +116,13 @@ final class ReconcileScheduler {
         let retirement = retireShowsThatOpened(now: now)
         // Reply detection: gated on a live Gmail connection inside checkReplies; best-effort.
         let replyCheckSaveFailed = await GmailReplyChecker().checkReplies(in: context)
+        // #2649: repair the stored Message-ID on conversations that are still live, where Overture wrote
+        // the id it minted and Gmail discarded (#2647 fixed this from the next send onward and could not
+        // touch what was already stored). Rides this same free tick for the same reasons the two Gmail
+        // calls around it do: it is read only, it is gated on the connection inside itself, and it spends
+        // no paid AI run. It selects only rows still holding a minted id, so it empties itself after one
+        // effective pass rather than re-reading Gmail on every tick forever.
+        await GmailThreadingRepair().repair(in: context)
         // #1158: keep the cached Gmail signature current so a signature Dan changes in Gmail is picked up
         // without a manual reconnect. Rides this safe, free tick (launch + periodic + export-change) but
         // self-throttles to at most one fetch per day, and can never clobber a good stored signature on a

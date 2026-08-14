@@ -87,6 +87,31 @@ enum ReplyDetection {
         return nil
     }
 
+    // #2649: the mirror of `latestReplyMessage`, and the id a follow-up on this conversation should
+    // reference: the Message-ID header of the newest message on the thread that DAN sent.
+    //
+    // Nil is the whole point of the return type, exactly as it is on #2647's read back. There is no
+    // fallback to an older message of his, to the newest message of anybody's, or to a minted value:
+    // referencing a message he did not just send threads his next mail onto the wrong one and looks
+    // identical to success (L75), and a substituted id is what this whole area exists to end. The caller
+    // reports a refusal and leaves the stored value alone.
+    //
+    // Ordered by `newestFirst`, so it reads internalDate rather than trusting the array's order, and it
+    // asks "is this from Dan" through the same `email(from:)` normalisation every other reader here uses,
+    // so a display name or angle brackets cannot make his own message look like a stranger's.
+    static func latestSentMessageID(threadJSON data: Data, selfEmail: String) -> String? {
+        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let messages = obj["messages"] as? [[String: Any]] else { return nil }
+        let me = email(from: selfEmail)
+        guard !me.isEmpty else { return nil }
+        for m in newestFirst(messages) {
+            guard email(from: headerValue("from", of: m)) == me else { continue }
+            let id = headerValue("message-id", of: m).trimmingCharacters(in: .whitespacesAndNewlines)
+            return id.isEmpty ? nil : id
+        }
+        return nil
+    }
+
     private static func headerValue(_ name: String, of message: [String: Any]) -> String {
         guard let payload = message["payload"] as? [String: Any],
               let headers = payload["headers"] as? [[String: Any]] else { return "" }

@@ -13,6 +13,18 @@ import Foundation
 // One contacted address whose Gmail thread is watched for a reply or a bounce.
 protocol ReplyWatchableRecipient: AnyObject {
     var gmailThreadId: String? { get }
+    // #2649: the Message-ID our own next message on this conversation references. Settable, because the
+    // threading repair rewrites the minted ids Gmail discarded (#2647) with the ones it really assigned,
+    // and it does that for every kind of thing that holds a thread rather than for prospects alone: an
+    // inquiry carries its own thread and its own stored id and has exactly the same dangling follow-up.
+    // A second pass written just for inquiries would be one nothing ever ran, since the live store holds
+    // none today (L30).
+    var gmailMessageId: String? { get set }
+    // #2649: and whether the id above can be trusted to thread. Settable here because the repair is what
+    // clears it (the real id is now stored) and what sets it (the thread read fine and named no message of
+    // Dan's, so this conversation cannot be threaded and something has to say so rather than the pass
+    // failing silently, L11).
+    var threadingDegraded: Bool { get set }
     // #2032: the address this contact was written at, so a thread carrying more than one of them can say
     // which one a reply came from.
     var replyWatchAddress: String? { get }
