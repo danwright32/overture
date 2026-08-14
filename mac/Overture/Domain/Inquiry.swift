@@ -63,6 +63,12 @@ final class Inquiry {
     var sentAt: Date?
     var gmailThreadId: String?
     var gmailMessageId: String?    // stamped on the sent reply → `wasProvablyContacted`
+    // #2661: the `References` header carried by the LAST message Overture sent on this inquiry's
+    // conversation, which is the ancestry the NEXT one has to extend. Beside `gmailMessageId` and written
+    // in the same step, for the same reason `Recipient.gmailReferences` is (#2648): the chain is only
+    // meaningful as the ancestry OF that message, and updating one without the other emits a chain that
+    // skips a generation. Nil until a reply has been sent, which is the first message with any ancestry.
+    var gmailReferences: String?
     var threadIdDegraded: Bool = false
     // #2647: the Message-ID read back off the sent reply could not be read, so a later message on this
     // inquiry's thread cannot reference it. The Recipient side carries the same flag for the same reason.
