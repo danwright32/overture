@@ -141,12 +141,18 @@ struct HeldReachabilityVerdictTests {
         #expect(QueueItem(p).reachabilityBadge() == .contactFormOnly)
     }
 
-    // The SIBLING, and the reason it is fixed in the same change rather than filed: the fit score reads the
-    // same verdict through `contactRouteForScoring`, so covering only the badge would leave a card reading
-    // "No email found" beside a score still paying this show for a contact route. The badge and the score
-    // answering the same question from different lists is the exact shape #1648 and #2622 were careful to
-    // avoid (L16), and a contradiction between them is worse than either error alone.
-    @Test func anEmptiedShowStopsScoringAsIfItHadARoute() throws {
+    // The SCORE deliberately does NOT follow the badge here. Dan's call, 2026-08-13, on being shown that
+    // #2664 had extended his decision further than he made it: he chose what the BADGE says, and ranking
+    // stays tied to what the paid check concluded rather than to what is left on the row.
+    //
+    // So the two do say different things about an emptied show, and that is the intended reading rather
+    // than an oversight: the badge answers "can I reach this show right now", which a hand delete really
+    // does change, and the score answers "what did the research find", which a hand delete does not. The
+    // score moves when a re-check moves it.
+    //
+    // Measured before reverting: one show on the live store is in this state, the row that prompted #2664,
+    // so the practical difference between the two readings is a single card's ranking.
+    @Test func anEmptiedShowStillScoresOnWhatTheCheckConcluded() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx, group: "Scored On A Contact That Is Gone")
         let now = Date()
@@ -157,7 +163,10 @@ struct HeldReachabilityVerdictTests {
 
         p.setRecipients([])
 
-        #expect(p.contactRouteForScoring(now: now) == .noEmailFound)
+        // The badge moves...
+        #expect(QueueItem(p).reachabilityBadge(now: now) == .noEmailFound)
+        // ...and the score does not.
+        #expect(p.contactRouteForScoring(now: now) == .emailFound)
     }
 
     // And the same two boundaries hold for the score, so a show nobody has checked is not scored as one a

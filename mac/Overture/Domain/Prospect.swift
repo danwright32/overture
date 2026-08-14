@@ -271,11 +271,19 @@ final class Prospect {
 
     func contactRouteForScoring(now: Date) -> ContactRoute {
         if Reachability.probeIsStale(probedAt: reachabilityProbedAt, now: now) { return .unchecked }
-        // #2664: the same verdict the badge reads, so the card and the score can never disagree about
-        // whether this show has a way in, exactly as they already cannot disagree about whether the answer
-        // is current (L16). A contact Dan deletes by hand stops paying route points at the same moment it
-        // stops being promised on the card.
-        return ContactRoute(probeResult: reachabilityResultAsHeld)
+        // Deliberately the STORED verdict, not `reachabilityResultAsHeld` which the badge reads.
+        //
+        // #2664 briefly made this follow the badge, on the reasoning that a card saying "No email found"
+        // beside a score still paying route points is a contradiction. Dan's call, 2026-08-13, on being
+        // shown that this went further than the decision he actually made: the badge was what he chose,
+        // and ranking stays tied to what the paid check CONCLUDED.
+        //
+        // The two questions really are different, which is why they may answer differently here. The badge
+        // asks "can I reach this show right now", and a contact deleted by hand changes that. The score
+        // asks "what did the research find", and a hand delete is not a research finding: the score moves
+        // when a re-check moves it. Staleness is still shared, so they cannot disagree about whether an
+        // answer is CURRENT, which was #1648's point and is untouched.
+        return ContactRoute(probeResult: reachabilityResult)
     }
     // #1596 Phase 3: classify this row's CURRENT recipients into a stored result. One definition, used by
     // every writer, so the importer's upgrade and the row's own snapshot can never disagree about what
