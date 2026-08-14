@@ -958,6 +958,7 @@
 		8FF6F8007AB2C1A1FA55E169 /* AppModals.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69E9BE251ED385513D31E21F /* AppModals.swift */; };
 		90206CB3772156B9E183715A /* ProspectProvenanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0D2CF2B7A4A5E557A5AC59A /* ProspectProvenanceTests.swift */; };
 		90422E36FC94F83E2304D92B /* PresenterLineLiveStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4AFDB8E0FBD6C94C036E6C8 /* PresenterLineLiveStoreTests.swift */; };
+		90A372AEFDE115FC4AEE1B27 /* HedgedEffectClaimTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A1BFD10CA7EDFA6D358A346 /* HedgedEffectClaimTests.swift */; };
 		90ABC05C7234226EBF1B516F /* CopySurfaces.swift in Sources */ = {isa = PBXBuildFile; fileRef = 831F2EF8938E7C23257CAAF2 /* CopySurfaces.swift */; };
 		90B0EE7B535841BAFD114298 /* ReachabilityRunSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 647334418EA2F723F0EC768A /* ReachabilityRunSummary.swift */; };
 		90B79E6C352A800BAAE690FA /* OrgDoNotContact.swift in Sources */ = {isa = PBXBuildFile; fileRef = 680233A8052DBD4143F80971 /* OrgDoNotContact.swift */; };
@@ -1809,6 +1810,7 @@
 		199FE9F7FE0D5BDB1B598306 /* OutboundSignature.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboundSignature.swift; sourceTree = "<group>"; };
 		19DFF66FCAE3F43F3F5966B5 /* VoiceFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceFeedback.swift; sourceTree = "<group>"; };
 		1A0A0EA6F13AC92C55872AF3 /* CatchAllFitReasonMigration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatchAllFitReasonMigration.swift; sourceTree = "<group>"; };
+		1A1BFD10CA7EDFA6D358A346 /* HedgedEffectClaimTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HedgedEffectClaimTests.swift; sourceTree = "<group>"; };
 		1B334EC6D11CB7EADDF29E0B /* StrikeCostTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrikeCostTests.swift; sourceTree = "<group>"; };
 		1B5DD6C88311CA03A076D517 /* WaitUntil.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaitUntil.swift; sourceTree = "<group>"; };
 		1BA8782BE24D5499DA7D1C9A /* OmniFocusSyncTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmniFocusSyncTests.swift; sourceTree = "<group>"; };
@@ -3265,6 +3267,7 @@
 				A1DA68CB95E9EDFDF6A81A4C /* HandoffOutOfBoundsAgreementTests.swift */,
 				47DB12405A6B9085B8C20464 /* HandoffPathGuardTests.swift */,
 				4D59A3483A4B97B41B9F22A1 /* HandWrittenReplyTests.swift */,
+				1A1BFD10CA7EDFA6D358A346 /* HedgedEffectClaimTests.swift */,
 				13BE0665B3CCB4B2CF5104C3 /* HeldAddressIsNotNoAddressTests.swift */,
 				7BC2AC628ED6DB69E85E71BB /* HeldReachabilityVerdictTests.swift */,
 				D12410D15D2E5425165D9602 /* HouseListLiveStoreTests.swift */,
@@ -5240,6 +5243,7 @@
 				53C0E986891B0112F222E139 /* HandoffOutOfBoundsAgreementTests.swift in Sources */,
 				8AEAE230F42A46977A6E57D0 /* HandoffPathGuardTests.swift in Sources */,
 				BD1F16C2AB183F14484DB1A6 /* HandoffShortfall.swift in Sources */,
+				90A372AEFDE115FC4AEE1B27 /* HedgedEffectClaimTests.swift in Sources */,
 				F101F21AC9C4EE3B5506237F /* HeldAddressIsNotNoAddressTests.swift in Sources */,
 				1ABCDD6D9AFC423B969E9C52 /* HeldReachabilityVerdictTests.swift in Sources */,
 				599F0812CF83C183A028E533 /* HistoryMatch.swift in Sources */,

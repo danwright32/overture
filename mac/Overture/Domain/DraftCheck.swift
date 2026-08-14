@@ -16,6 +16,7 @@ enum DraftIssue: Equatable, Hashable, Sendable, CaseIterable {
     case placeholder              // a template slot the drafter never filled: "[VENUE]" (#789)
     case galleryPathLink          // deep-links one gallery instead of the site itself (#1832)
     case venueHistoryCount        // states how MANY times Dan has shot the room (#1887)
+    case hedgedEffectClaim        // weakens the claim that the audience doesn't notice him (#2722)
 
     var label: String {
         switch self {
@@ -30,6 +31,7 @@ enum DraftIssue: Equatable, Hashable, Sendable, CaseIterable {
         case .placeholder: return "Contains an unfilled placeholder like [VENUE]"
         case .galleryPathLink: return "Links one gallery instead of the portfolio itself"
         case .venueHistoryCount: return "Says how many times Dan has shot the venue"
+        case .hedgedEffectClaim: return "Hedges the claim that the audience doesn't notice Dan"
         }
     }
 
@@ -53,8 +55,13 @@ enum DraftIssue: Equatable, Hashable, Sendable, CaseIterable {
         // history made to someone who works at that venue. The matcher is narrow enough to have nowhere
         // for a false positive to come from: see hasVenueHistoryCount.
         case .foreignLink, .placeholder, .galleryPathLink, .venueHistoryCount: return true
+        // #2722: advisory, deliberately. It is a rule about TONE rather than a fact about the
+        // text, which is the bar #789 set for a blocker, and it reads a hedge from a word
+        // sitting in the same sentence as the claim, so a body can pair them innocently. The
+        // cost of a wrong block is Dan's time on a draft that reads perfectly.
         case .performativeEnthusiasm, .emDash, .presumesBooking, .coldHedge,
-             .asksForKnownFact, .concessionLanguage, .nonCanonicalRate: return false
+             .asksForKnownFact, .concessionLanguage, .nonCanonicalRate,
+             .hedgedEffectClaim: return false
         }
     }
 
@@ -97,6 +104,23 @@ enum DraftCheck {
     // word boundary so "feel free" (natural warm phrasing) doesn't trip it.
     private static let concession = ["discount", "complimentary", "flexible"]
 
+    // #2722: words that WEAKEN the audience-doesn't-notice claim. Dan, 2026-08-14, reading "most
+    // audiences don't notice I'm there at all" in his own outgoing pitch: "It implies that some
+    // audiences *do* notice." A hedge invites the reader to picture the audiences that DID notice,
+    // which is the exact objection a presenter has about letting a photographer into a performance,
+    // and "at all" over-corrects on the other end, so one short claim carries a hedge and an
+    // intensifier at once.
+    //
+    // The multiword entries are the ones whose bare word is too common to hunt alone: "some" and
+    // "many" are ordinary English until they are attached to the audience, where they become the
+    // quantifier this rule exists to catch.
+    private static let effectHedges = [
+        "usually", "generally", "typically", "often", "rarely", "hardly", "barely", "seldom",
+        "mostly", "really", "most", "for the most part", "tend to", "tends to", "tend not to",
+        "pretty much", "by and large", "in general", "at all",
+        "some audiences", "many audiences", "some people", "many people",
+    ]
+
     private static let venueRequests = ["what venue", "which venue", "what's the venue", "what is the venue", "let me know the venue", "name of the venue", "what location", "which location", "what's the location", "what is the location", "let me know the location", "let me know where", "send me the venue", "send me the location", "where is the show", "where's the show", "where is the performance", "where's the performance", "where is the concert", "where's the concert", "where is the event", "where's the event", "where is it being held", "where is it taking place", "where will it be held"]
     // copy-inventory:ignore-end
 
@@ -127,6 +151,7 @@ enum DraftCheck {
         if hasPlaceholder(body) { issues.append(.placeholder) }
         if hasGalleryPathLink(body) { issues.append(.galleryPathLink) }
         if hasVenueHistoryCount(body) { issues.append(.venueHistoryCount) }
+        if hasHedgedEffectClaim(text) { issues.append(.hedgedEffectClaim) }
         return issues
     }
 
@@ -255,6 +280,42 @@ enum DraftCheck {
     // What it deliberately does NOT catch is the sanctioned band wording: "a few shows there" carries
     // no number, and the Carnegie tenure credential ("close to ten years") is a number attached to
     // YEARS, not to a countable occasion, so neither trips it.
+    // #2722: a hedge sitting in the SAME SENTENCE as the audience-doesn't-notice claim.
+    //
+    // A SHAPE rather than a string, deliberately. The drafter can weaken this claim fifty ways, and a
+    // needle for the one phrasing seen in the wild would pass on every paraphrase while reading as
+    // protection (L96). Matching any hedge co-occurring with the claim is wider than that and still
+    // narrow enough to stand somewhere.
+    //
+    // Sentence-scoped, which is the whole of what keeps it usable. Asked of the body as a whole it would
+    // fire on any pitch that says "most of my work is concert" in one paragraph and "the audience doesn't
+    // notice me" in another, which is a correct draft, and a check that fires on the common case gets
+    // switched off within a day (L93). The wording every shipped fixture uses, "the audience doesn't
+    // notice me and the performance isn't disturbed", carries no hedge and is asserted unflagged.
+    //
+    // What it CANNOT do is judge the other effect claims (no flash, the performance not disturbed,
+    // documentary rather than posed), because those have no single word to key on. The runbook and the
+    // brand voice skill state the rule for all of them; this is the tripwire for the one already met.
+    private static func hasHedgedEffectClaim(_ text: String) -> Bool {
+        for sentence in text.components(separatedBy: CharacterSet(charactersIn: ".!?\n")) {
+            guard sentence.contains("notice") else { continue }
+            if effectHedges.contains(where: { hedge in
+                hedge.contains(" ") ? sentence.contains(hedge) : containsWord(hedge, in: sentence)
+            }) {
+                return true
+            }
+        }
+        return false
+    }
+
+    // A whole-word containment test, so "most" does not fire on "almost" and "often" does not fire on
+    // "soften". The needle lists above are matched as substrings by design; this one cannot be, because
+    // its words are short and common enough to sit inside other words.
+    private static func containsWord(_ word: String, in sentence: String) -> Bool {
+        let parts = sentence.components(separatedBy: CharacterSet.alphanumerics.inverted)
+        return parts.contains(word)
+    }
+
     private static func hasVenueHistoryCount(_ body: String) -> Bool {
         // copy-inventory:ignore-start  Words MATCHED in a draft, never shown to Dan (#1887)
         let pastTenseShooting =

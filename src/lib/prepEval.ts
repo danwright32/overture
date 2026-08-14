@@ -210,6 +210,25 @@ const RECIPIENT_CATEGORY =
 // Where Dan stands is his problem to solve, never a selling point: a reader who pictures a photographer
 // parked at the back hears "distant" rather than "discreet". The email says the effect instead.
 const VANTAGE_POINT = /\bback of (?:the )?house\b/i;
+// #2722, from the same paragraph of the runbook and the same kind of review. Dan, 2026-08-14, reading
+// "most audiences don't notice I'm there at all" in his own outgoing pitch: "It implies that some
+// audiences *do* notice." The instruction was never hedged; the weakening is the model's own addition,
+// which is what this scores.
+//
+// Sentence-scoped rather than a body-wide search, so a pitch that says "most of my work is concert" in
+// one paragraph and "the audience doesn't notice me" in another is not failed for a pairing it never
+// made. A check that fires on the common case is one nobody can go green on (L93).
+//
+// `DraftCheck.hedgedEffectClaim` matches the same shape in the app, and that is not an accident to be
+// tidied away: this one judges what the RUNBOOK produced before it ships, and the Swift one is
+// ADVISORY, so a hedged draft still sends. Unlike the venue-history count (which DraftCheck BLOCKS, so
+// a second matcher here would add nothing), each of these covers something the other cannot.
+const EFFECT_HEDGES = /\b(?:usually|generally|typically|often|rarely|hardly|barely|seldom|mostly|really|most)\b|for the most part|tends? (?:not )?to|pretty much|by and large|in general|at all|(?:some|many) (?:audiences|people)/i;
+function hedgesTheEffectClaim(body: string): boolean {
+  return body
+    .split(/[.!?\n]/)
+    .some((sentence) => /notice/i.test(sentence) && EFFECT_HEDGES.test(sentence));
+}
 // Dan works in the CITY, a different place from the state. Deliberately anchored on a preposition rather
 // than every "New York", so a venue or organisation quoted as printed ("New York, NY 10036", a group
 // called the New York Something) is untouched and only Dan's own words are judged.
@@ -406,6 +425,9 @@ function checkUniversal(entries: ResultEntry[], failures: string[], coldRegister
     }
     if (wordingRules && VANTAGE_POINT.test(body)) {
       failures.push(`${label}: names where Dan stands ("back of the house") instead of the effect`);
+    }
+    if (wordingRules && hedgesTheEffectClaim(body)) {
+      failures.push(`${label}: hedges the claim that the audience doesn't notice him; state it absolutely (#2722)`);
     }
     if (wordingRules && STATE_NOT_CITY.test(body)) {
       failures.push(`${label}: says "New York" for the city; it is New York City or NYC`);
