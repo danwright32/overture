@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1293 sentences**.
+Every sentence Overture can say to Dan: **1297 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -320,6 +320,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReachabilityRunSummary.swift`
 "1 of them went through an earlier check and never got an answer."
     `Domain/ProbeSelection.swift`
+"1 show on \(dateLabel) has no genre read. Set it before dismissing the night."
+    `Domain/GenreGate.swift`
 "1 source needs"
     `Domain/SourceAttention.swift`
 "1 venue is still waiting to be checked."
@@ -938,6 +940,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/DaysOffView.swift`
 "Keep this page but stop flagging it, until its contents change"
     `UI/SourceFixConfirmActions.swift`
+"Keep this show to pitch it"
+    `UI/ProspectRowView.swift`
 "Keep watching this calendar"
     `UI/AddLeadSheet.swift`
 "Keeps Overture resident in the menu bar so the syncs run unattended."
@@ -1706,6 +1710,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ClientCoverage.swift`
 "Set this show's genre"
     `UI/QueueView+Model.swift`
+"Set this show's genre before you keep or dismiss it."
+    `Domain/GenreGate.swift`
 "Set up Overture"
     `App/AppDelegate.swift`
     `UI/OnboardingView.swift`
@@ -2355,6 +2361,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ClientCoverage.swift`
 "\(count) didn't come back, they'll be retried"
     `Domain/HandoffShortfall.swift`
+"\(count) shows on \(dateLabel) have no genre read. Set them before dismissing the night."
+    `Domain/GenreGate.swift`
 "\(count) sources couldn't be checked."
     `UI/ScoutSummaryView.swift`
 "\(count) sources need"
