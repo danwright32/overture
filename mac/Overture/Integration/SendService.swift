@@ -208,15 +208,15 @@ enum SendService {
         let spent = group.map(\.followUpCount).max() ?? recipient.followUpCount
         guard FollowUp.isAwaitingNudge(recipient, in: prospect, now: now), spent < config.maxFollowUps,
               let email = recipient.email, !email.isEmpty else { return false }
-        // #2717: never onto a conversation Overture did not start. An attached one (#2715) carries a
-        // thread and no `gmailMessageId`, so this would post an unparented message into a stranger's
-        // conversation. Refused BEFORE the claim below, like every other refusal on this path, so it
-        // cannot leave the claim held on a nudge that never went. `ReachedOutAction` already keeps the
-        // button off such a row (#2716); this is the rule at the place that would actually send.
-        if let refusal = AttachedConversation.refusalToContinue(recipient, displayName: prospect.groupName) {
-            AgentLog.problem(refusal)
-            return false
-        }
+        // #2717: this path needs no attached-conversation refusal of its own, and that is a measured
+        // verdict rather than an omission. `isAwaitingNudge` above reads `Recipient.isAwaitingFollowUp`,
+        // which requires `outreachChannel == .email`, while an attached conversation only ever exists on a
+        // `.contactForm` row: the two are mutually exclusive by construction, so a refusal added here
+        // could never fire. One was written and then removed for exactly that reason, because a guard that
+        // cannot be seen to fail is indistinguishable from no guard while reading as protection (L1, L29).
+        // The rule it would have enforced is asserted where it is actually decided, by
+        // `anAttachedConversationNeverBecomesNudgeable` (#2716) and by the follow-up test in
+        // `AttachedConversationReadersTests`.
         let addresses = group.compactMap(\.email).filter { !$0.isEmpty }
         // Reply on THIS contact's conversation (#74, per-recipient #418 D): same threadId, In-Reply-To
         // the contact's last Message-ID, and a "Re:" subject, so a reply to the nudge lands on the

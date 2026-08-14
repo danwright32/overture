@@ -125,23 +125,33 @@ struct AttachedConversationReadersTests {
 
     // MARK: the three send paths
 
-    // The sharpest of the three. An attached contact has a thread and, by design, no `gmailMessageId`, so
-    // a follow-up would post an unparented message into a stranger's conversation: precisely what #2647,
-    // #2649 and #2653 were filed for, arriving by a new route.
-    @Test func aFollowUpRefusesAConversationOvertureNeverSentOn() async throws {
+    // The follow-up, which must never post an unparented message into a stranger's conversation: precisely
+    // what #2647, #2649 and #2653 were filed for, arriving by a new route.
+    //
+    // It is refused UPSTREAM rather than by a rule of this milestone's own, and that is worth stating
+    // because it is what a reader of the send path will want to know. `isAwaitingNudge` reads
+    // `Recipient.isAwaitingFollowUp`, which demands `outreachChannel == .email`, and an attached
+    // conversation only ever sits on a `.contactForm` row. A refusal written into `sendFollowUp` was
+    // therefore unreachable, and was removed rather than shipped as a guard nothing could ever prove
+    // (L1, L29). This test pins the OUTCOME, which is what actually matters, and it is not vacuous:
+    // restoring the pre-#2716 reading of `isAwaitingFollowUp` makes it fail.
+    @Test func aFollowUpNeverGoesOntoAConversationOvertureNeverSentOn() async throws {
         let ctx = ModelContext(try container())
         let (p, r) = attachedFormPitch(ctx, replied: false)
         let sender = RecordingSender()
 
+        #expect(!r.isAwaitingFollowUp)
         let sent = await SendService.sendFollowUp(r, of: p, now: now, sender: sender)
 
         #expect(!sent)
         #expect(sender.sent.isEmpty)
-        // And it says why rather than failing silently (L11, L13): the claim is released too, so a refusal
-        // cannot leave the send claimed on a message that never went.
+        // Nothing claimed either, so a refusal cannot leave the send held on a nudge that never went.
         #expect(r.nudgeSendClaimedAt == nil)
     }
 
+    // The closing note is the sharp one, and the reason the refusal exists at all. It guards only on the
+    // address and on `sentAt`, both of which an attached form pitch has, so without a rule of its own it
+    // would compose and send a real email onto a conversation Overture never started.
     @Test func aClosingNoteRefusesAConversationOvertureNeverSentOn() async throws {
         let ctx = ModelContext(try container())
         let (p, r) = attachedFormPitch(ctx, replied: false)
