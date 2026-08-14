@@ -719,13 +719,23 @@ struct QueueView: View {
     // here is one Dan could have written by hand: "Went by" and "Too far" are Overture's own.
     @ViewBuilder private func nightDismissMenu(_ group: QueueModel.DateGroup) -> some View {
         let plan = BulkDismiss.plan(for: group.items.map(BulkDismiss.Show.init), on: group.id)
+        // #2687: one confirm covering many shows, so the refusal has to say HOW MANY of them are blocked
+        // rather than speak in the singular about a list. Asked of the shows this action would actually
+        // take, not of everything drawn under the heading, so the count names the same rows the reasons
+        // below would have dismissed (L16).
+        let genreRefusal = GenreGate.nightRefusal(
+            disciplines: group.items.filter { plan.keys.contains($0.id) }.map(\.discipline))
         if !plan.isEmpty {
             Section(BulkDismiss.menuTitle(count: plan.count, dateLabel: group.monthDay)) {
-                ForEach(ShowOutcome.neverPitched, id: \.self) { reason in
-                    Button(reason.label) {
-                        pendingNightDismiss = NightDismiss(dateLabel: group.monthDay, reason: reason,
-                                                           keys: plan.keys, runs: plan.runsPastTheNight,
-                                                           keysOnlyThisNight: plan.keysOnlyThisNight)
+                if let genreRefusal {
+                    Section(genreRefusal) { }
+                } else {
+                    ForEach(ShowOutcome.neverPitched, id: \.self) { reason in
+                        Button(reason.label) {
+                            pendingNightDismiss = NightDismiss(dateLabel: group.monthDay, reason: reason,
+                                                               keys: plan.keys, runs: plan.runsPastTheNight,
+                                                               keysOnlyThisNight: plan.keysOnlyThisNight)
+                        }
                     }
                 }
             }
