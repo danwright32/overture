@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1295 sentences**.
+Every sentence Overture can say to Dan: **1296 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -843,6 +843,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Heads up: shares a domain with another contact already on this show."
     `UI/ProspectMutations.swift`
 "Hedges like a cold pitch at a warm client"
+    `Domain/DraftCheck.swift`
+"Hedges the claim that the audience doesn't notice Dan"
     `Domain/DraftCheck.swift`
 "Held as a duplicate"
     `Domain/Reachability.swift`
