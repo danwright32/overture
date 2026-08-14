@@ -31,7 +31,7 @@ enum DraftIssue: Equatable, Hashable, Sendable, CaseIterable {
         case .placeholder: return "Contains an unfilled placeholder like [VENUE]"
         case .galleryPathLink: return "Links one gallery instead of the portfolio itself"
         case .venueHistoryCount: return "Says how many times Dan has shot the venue"
-        case .hedgedEffectClaim: return "Hedges the claim that the audience doesn't notice him"
+        case .hedgedEffectClaim: return "Hedges the claim that the audience doesn't notice Dan"
         }
     }
 

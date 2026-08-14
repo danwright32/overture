@@ -100,6 +100,6 @@ struct HedgedEffectClaimTests {
     // Every case has a label, which is what Dan actually reads on the card.
     @Test func theFindingSaysWhatIsWrong() {
         #expect(DraftIssue.hedgedEffectClaim.label
-                == "Hedges the claim that the audience doesn't notice him")
+                == "Hedges the claim that the audience doesn't notice Dan")
     }
 }
