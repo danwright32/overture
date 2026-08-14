@@ -229,6 +229,34 @@ final class Recipient {
     // Its second reader is the row (#2718), which has to tell "read for, and nothing arrived" from
     // "never read for" rather than showing one sentence for both (L98).
     var replyCandidateSearchedAt: Date?
+    // #2715: when Dan LINKED a Gmail conversation to this pitch by hand.
+    //
+    // Its own stamp rather than being inferred from `replyWatchConversationIsAttached`, because that
+    // predicate is deliberately self-healing (it stops being true the moment Overture's own reply lands
+    // on the thread), and the fact that a person made this link by hand is permanent. Its reader is
+    // `ReplyPanel.linkedByHandLine`, so the row does not read as though Overture emailed them (L46).
+    var conversationAttachedAt: Date?
+    // #2715: the Subject the linked thread actually carries.
+    //
+    // Gmail requires the Subject to match the thread's when a message is sent with its threadId, and
+    // `SendService.replySubject` otherwise falls back to `prospect.draftSubject`, which on an attached
+    // pitch is the subject of an email that was never sent and that this thread has never carried. The
+    // likely outcomes are an opaque 400 or a message Gmail groups server side while every
+    // standards-based client files it separately. Its reader is `SendService.replySubject`.
+    var attachedThreadSubject: String?
+    // #2715: what the attach found here before detection overwrote it, so the compensating detach
+    // (#2719) can put it back. `reopenOnReply` clears a `.stoodDown` resolution and nulls the three
+    // draft-baseline fields, and nothing else in the app remembers any of them, so without capturing
+    // them at the moment of the write the undo cannot exist at all (L5). Read by #2719.
+    var attachPriorResolutionRaw: String?
+    var attachPriorOriginalReplyDraftBody: String?
+    var attachPriorReplyDraftWrittenByDan: Bool = false
+    var attachPriorReplyDraftEditedByDan: Bool = false
+    // #2715: which of the show's other contacts THIS attach froze. `pausePendingForReply` freezes every
+    // still-pending contact with an address, so a detach that simply cleared every pause it found would
+    // unfreeze rows that were paused for some other reason and were never this attach's to touch. Read
+    // by #2719.
+    var attachPausedRecipientIds: [String]?
 
     // Per-recipient send + engagement.
     var sendStateRaw: String = SendState.pending.rawValue

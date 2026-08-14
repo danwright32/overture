@@ -112,6 +112,26 @@ enum ReplyDetection {
         return nil
     }
 
+    // #2715: is the NEWEST message on this thread one Dan sent?
+    //
+    // Deliberately not the mirror of `latestReplyMessage`, which SKIPS his own messages and so can never
+    // answer this. The attach needs it because the premise of the manual route is that Dan found the
+    // reply in Gmail, where the ordinary thing to do is answer it. Detection still resolves to their
+    // message and sets `replied`, and `hasUnhandledReply` would then stay true for ever, because only
+    // Overture's own send paths set `replyHandledAt`: the row would assert somebody is waiting on him,
+    // permanently, on a conversation he closed days ago (#2170's defect by a new route).
+    //
+    // False, never nil, when the thread cannot be read or carries no message at all: the safe reading is
+    // that he has NOT answered, which leaves the row asking rather than silently marking it dealt with.
+    static func newestMessageIsSelf(threadJSON data: Data, selfEmail: String) -> Bool {
+        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let messages = obj["messages"] as? [[String: Any]],
+              let newest = newestFirst(messages).first else { return false }
+        let me = email(from: selfEmail)
+        guard !me.isEmpty else { return false }
+        return email(from: headerValue("from", of: newest)) == me
+    }
+
     private static func headerValue(_ name: String, of message: [String: Any]) -> String {
         guard let payload = message["payload"] as? [String: Any],
               let headers = payload["headers"] as? [[String: Any]] else { return "" }
