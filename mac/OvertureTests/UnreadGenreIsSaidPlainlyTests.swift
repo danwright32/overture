@@ -64,9 +64,11 @@ struct UnreadGenreIsSaidPlainlyTests {
                                              profile: .neutral, venue: nil).fitReason
         #expect(unread == "Self-produced; worth a look once the fit is confirmed.")
 
+        // #2733: the genre is named by its LABEL now, not by the stored raw value, so this sentence
+        // renamed with the picker instead of drifting away from it.
         let read = EventClassifier.derived(discipline: .theater, production: .selfProduced,
                                            profile: .neutral, venue: nil).fitReason
-        #expect(read == "Self-produced theater; worth a look once the fit is confirmed.")
+        #expect(read == "Self-produced performing arts; worth a look once the fit is confirmed.")
     }
 
     // No sentence this classifier can produce may contain a raw enum value that is not also an English
