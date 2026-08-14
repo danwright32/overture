@@ -907,8 +907,12 @@ struct QueueView: View {
             }
             .font(.system(size: 12))
             // #1131: the "Of the N high-fit: ... relationship / ... merit" breakdown line was dropped from
-            // the masthead (Dan does not read it). The relationship/merit split still exists as an internal
-            // diagnostic on QueuePriorityBreakdown (#92); it is simply no longer surfaced here.
+            // the masthead (Dan does not read it). #2638 then deleted the split itself, since nothing had
+            // read it since, and a diagnostic nobody sees is not a diagnostic (L29). If the question it
+            // answered ("is high fit over-filled with warm orgs?") comes back, it is four lines over the
+            // shared Candidate builder and is cheaper to rewrite against the current axes than it would
+            // have been to keep alive unused: this version predated the contact tier weights (#2622) and
+            // would have reported them wrong.
             // #1131: only the "Scouted X ago" half stays. The prep/review/approved counts and "last prep"
             // timing that prepStatus.summary added here are duplicated by the Prep/Review/Send pill row
             // (agentStrip) directly below, so they are dropped; "Scouted X ago" is not shown anywhere else.
