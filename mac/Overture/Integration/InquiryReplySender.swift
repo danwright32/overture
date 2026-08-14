@@ -24,15 +24,38 @@ enum InquiryReplySender {
         // alone when there is nothing to mirror. Through the same helper as the prospect reply path, so the
         // two cannot answer "who does this reach" differently.
         let addresses = SendGroup.replyAudience(of: inquiry)
+        // #2661: threaded onto the conversation it is answering, through the same three pieces the
+        // prospect reply path uses (`SendService.sendReplyDraft`) rather than a second implementation of
+        // the same idea. It used to send with none of them, so Dan's answer arrived as a brand new
+        // conversation in every client including Gmail, and #1513 made this path send ANY reply he
+        // writes, so a second answer started a third unrelated thread.
+        //
+        // It matters beyond tidiness: reply detection watches `gmailThreadId`, so an answer sent
+        // off-thread means the inquirer's next message lands on the new thread Gmail just created, which
+        // is not the one being watched, and a reply to Dan's own answer can go unnoticed.
+        //
+        // All three are nil on an inquiry Dan logged by hand and has never emailed about, which is
+        // correct: an empty `References` is honest, a fabricated one points at nothing.
+        let chain = MailThreading.references(parentReferences: inquiry.gmailReferences,
+                                             parentMessageID: inquiry.gmailMessageId)
         guard let mail = OutgoingMail(to: addresses.isEmpty ? [to] : addresses,
-                                      subject: subject, body: body) else { return false }
+                                      subject: subject, body: body,
+                                      inReplyTo: inquiry.gmailMessageId,
+                                      references: chain,
+                                      threadId: inquiry.gmailThreadId) else { return false }
         do {
             let receipt = try await sender.send(mail)
             inquiry.sentAt = now
             inquiry.gmailThreadId = receipt.threadId.isEmpty ? nil : receipt.threadId
             // #2647: keep a prior real id rather than blanking it when the read back failed, on the same
             // reasoning as the prospect reply path: a real ancestor still threads, nothing does not (L5).
-            if let m = receipt.messageID { inquiry.gmailMessageId = m }
+            // #2661: the chain moves WITH the message it is the ancestry of, and only when there is a
+            // message to move it to. Assigning either unconditionally would blank a good id the moment a
+            // read back failed, leaving the next message on this conversation nothing to reference (L5).
+            if let m = receipt.messageID {
+                inquiry.gmailMessageId = m
+                inquiry.gmailReferences = chain
+            }
             inquiry.threadIdDegraded = receipt.threadIdDegraded
             inquiry.threadingDegraded = receipt.messageIDDegraded
             // #2675: cleared on success, or a failure Dan has since recovered from would sit on the row
