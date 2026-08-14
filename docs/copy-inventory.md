@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1272 sentences**.
+Every sentence Overture can say to Dan: **1274 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1103,6 +1103,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/LeadIntake.swift`
 "No venue"
     `Domain/OutcomePatterns.swift`
+"No way to reach them"
+    `Domain/ShowOutcome.swift`
 "Nobody found to write to"
     `Domain/Reachability.swift`
 "None due"
@@ -2453,6 +2455,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "\(org) dismissed as a duplicate."
     `Domain/ShowOutcome.swift`
 "\(org) dismissed: date conflict."
+    `Domain/ShowOutcome.swift`
+"\(org) dismissed: no way to reach them."
     `Domain/ShowOutcome.swift`
 "\(org) dismissed: not a fit."
     `Domain/ShowOutcome.swift`
