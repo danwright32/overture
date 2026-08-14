@@ -124,7 +124,7 @@ struct HandMarkedReplyTests {
         let ctx = ModelContext(try container())
         let (p, r) = dmPitched(ctx)
         let colleague = Recipient(id: "boxoffice@jalopy.example", email: "boxoffice@jalopy.example",
-                                  provenance: .venue)
+                                  provenance: .presenter)
         p.addRecipient(colleague)
         #expect(colleague.isSendablePending)
 
@@ -168,7 +168,7 @@ struct HandMarkedReplyTests {
         let ctx = ModelContext(try container())
         let (p, r) = dmPitched(ctx)
         let colleague = Recipient(id: "boxoffice@jalopy.example", email: "boxoffice@jalopy.example",
-                                  provenance: .venue)
+                                  provenance: .presenter)
         p.addRecipient(colleague)
         r.resolution = .stoodDown
 
@@ -191,11 +191,11 @@ struct HandMarkedReplyTests {
         let ctx = ModelContext(try container())
         let (p, r) = dmPitched(ctx)
         let colleague = Recipient(id: "boxoffice@jalopy.example", email: "boxoffice@jalopy.example",
-                                  provenance: .venue)
+                                  provenance: .presenter)
         p.addRecipient(colleague)
         let other = Recipient(id: "artistic@jalopy.example", email: "artistic@jalopy.example",
-                              provenance: .venue)
-        other.sendState = .sent
+                              provenance: .presenter)
+        other.sendState = SendState.sent
         other.sentAt = now.addingTimeInterval(-5 * 86_400)
         other.gmailMessageId = "<ours@mail.gmail.com>"
         other.gmailThreadId = "thread-real"
