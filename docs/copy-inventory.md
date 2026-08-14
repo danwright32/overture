@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1283 sentences**.
+Every sentence Overture can say to Dan: **1285 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -358,6 +358,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/BlockedCalendar.swift`
 "A later night of this run is out: you're already shooting on \(day)."
     `Domain/BlockedCalendar.swift`
+"A message bounced in the conversation you linked for \(p.replyWatchDisplayName). Overture didn't send that message, so it cannot tell which address failed. Check it in Gmail"
+    `Integration/BounceService.swift`
 "A nudge will arrive as a new email"
     `Domain/InquiryCopy.swift`
 "A previous run was still reading pages, so the pages this run found were not handed over. Nothing was lost: press Run scout again once the reading finishes and they will be read."
@@ -1318,6 +1320,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "Overture didn't capture what they wrote. Their message is in Gmail."
     `Domain/ReplyPanel.swift`
+"Overture didn't email \(groupName), so it can't add a message to the conversation you linked. Write to them in Gmail instead."
+    `Domain/AttachedConversation.swift`
 "Overture has not checked for replies or bookings in \(PrepStatus.duration(seconds: seconds))"
     `Domain/WatchGap.swift`
 "Overture is out of date"

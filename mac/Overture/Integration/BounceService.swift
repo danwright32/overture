@@ -60,7 +60,7 @@ enum BounceService {
                     if onThread.count == 1, r.replyWatchConversationIsAttached {
                         if !reportedThreads.contains(threadId), r.lastBounceId != bounceId {
                             reportedThreads.insert(threadId)
-                            reportProblem("A message in the conversation you linked to \(p.replyWatchDisplayName) bounced. Overture didn't send it, so it cannot tell whose address failed. Check it in Gmail")
+                            reportProblem("A message bounced in the conversation you linked for \(p.replyWatchDisplayName). Overture didn't send that message, so it cannot tell which address failed. Check it in Gmail")
                         }
                         r.lastBounceId = bounceId
                         continue
