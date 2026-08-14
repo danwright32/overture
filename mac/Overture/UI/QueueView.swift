@@ -1157,8 +1157,12 @@ struct QueueView: View {
                 }
                 // #1630: a form pitch has no address and no thread, so the row has to account for the
                 // silence itself. Said in inkSoft, not rust: nothing is wrong here.
+                // #2716: and once a conversation is attached, the half of that sentence claiming a reply
+                // cannot be seen is false, so the line says what is true now instead of contradicting the
+                // address the attach put on the row above it.
                 if r.outreachChannel == .contactForm {
-                    Text(FormOutreachCopy.sentLine(formURL: r.formOutreachURL))
+                    Text(FormOutreachCopy.channelLine(formURL: r.formOutreachURL,
+                                                      hasWatchableConversation: r.hasWatchableConversation))
                         .font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
                 }
                 // #675: this pipeline never carries a bounced recipient (isInPlay excludes them), so

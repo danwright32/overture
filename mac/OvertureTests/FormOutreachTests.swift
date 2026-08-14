@@ -379,11 +379,14 @@ struct FormOutreachCopyTests {
     // send, so the same slot asks for the one thing that does move it forward.
     @Test func aFormPitchDueForADecisionAsksForOneInsteadOfOfferingToReachOut() {
         let now = Date(timeIntervalSince1970: 1_000_000)
-        #expect(ReachedOutQueue.timingLabel(next: now, now: now, channel: .contactForm) == "Say what happened")
-        #expect(ReachedOutQueue.timingLabel(next: now, now: now, channel: .email) == "Reach out now")
+        // #2716: asked as "is this a pitch Overture can neither send on nor watch?" rather than as the raw
+        // channel, because a form pitch carrying an attached conversation (#2715) is a form pitch that CAN
+        // be reached out on. Same rule, named after what it actually decides.
+        #expect(ReachedOutQueue.timingLabel(next: now, now: now, awaitingDecision: true) == "Say what happened")
+        #expect(ReachedOutQueue.timingLabel(next: now, now: now, awaitingDecision: false) == "Reach out now")
         // Not yet due reads the same either way: it is a wait, and the wait is the same length.
         let inTwoDays = now.addingTimeInterval(2 * 86_400)
-        #expect(ReachedOutQueue.timingLabel(next: inTwoDays, now: now, channel: .contactForm) == "in 2 days")
+        #expect(ReachedOutQueue.timingLabel(next: inTwoDays, now: now, awaitingDecision: true) == "in 2 days")
     }
 }
 

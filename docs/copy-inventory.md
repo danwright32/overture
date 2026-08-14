@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1281 sentences**.
+Every sentence Overture can say to Dan: **1283 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1676,9 +1676,13 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SendConfirmSheet.swift`
 "Sent as a DM. Overture cannot see a reply to this one."
     `Domain/FormOutreach.swift`
+"Sent as a DM. Overture is watching the email conversation you linked."
+    `Domain/FormOutreach.swift`
 "Sent emails that hit a problem, or approved ones you can't send yet."
     `Domain/AgentRoster.swift`
 "Sent through their form. Overture cannot see a reply to this one."
+    `Domain/FormOutreach.swift`
+"Sent through their form. Overture is watching the email conversation you linked."
     `Domain/FormOutreach.swift`
 "Sent, waiting to hear back"
     `Domain/InquiryCopy.swift`

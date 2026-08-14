@@ -53,6 +53,16 @@ enum ReplyIdentity {
     static func rowAudience(for recipient: Recipient, in prospect: Prospect) -> RowAudience {
         // Everything below asks the peer who WROTE, not the peer the list happens to stand on.
         let answerer = answering(for: recipient, in: prospect)
+        // #2716: a form or DM pitch that nobody has answered has no next email AT ALL, so there is no
+        // audience to name. That was invisible while such a contact had no address; #2715 saves the one
+        // the presenter wrote from, and listing it here would promise a send that does not exist, on a
+        // route Overture cannot take (L64). The row names where the pitch actually WENT instead.
+        //
+        // Only until they write back: an answer is a real send, and it goes to the address they used, so
+        // the reply audience below is exactly right from that moment on.
+        if recipient.outreachChannel == .contactForm, !answerer.hasUnhandledReply {
+            return RowAudience(lines: [pitchedLine(recipient)], responder: nil)
+        }
         let addresses: [String] = answerer.hasUnhandledReply
             ? SendGroup.replyAudience(of: answerer)
             : SendGroup.peers(of: recipient, in: prospect).compactMap(\.email).filter { !$0.isEmpty }
@@ -81,7 +91,14 @@ enum ReplyIdentity {
     // name, a bare "Reeve Carney" reads as an emailable person whose address is merely not shown, which is
     // the same gap in a politer font. "no contact" survives only for a record with neither, which on the
     // live store today is no row at all.
+    //
+    // #2716: and the route leads for a form pitch, ahead of the address too. Until this milestone a form
+    // pitch had no address and the ordering could not be observed; an attach saves one, and the
+    // email-first ordering would then silently swap the host Dan recognises for a stranger's gmail
+    // address on the card he triages from.
     private static func pitchedLine(_ r: Recipient) -> String {
+        if r.outreachChannel == .contactForm,
+           let route = FormOutreachCopy.routeLine(formURL: r.formOutreachURL) { return route }
         if let email = r.email, !email.isEmpty { return email }
         if let route = FormOutreachCopy.routeLine(formURL: r.formOutreachURL) { return route }
         return r.name ?? "no contact"
