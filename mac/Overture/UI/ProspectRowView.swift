@@ -1090,16 +1090,30 @@ struct ProspectRowView: View {
                             .background(Capsule().fill(OVColor.forest))
                     }
                     .buttonStyle(.plain)
+                    // #2687: nothing leaves the queue without a genre. Disabled AND explained, from the
+                    // one function that decides both, because a greyed button beside a line reading "No
+                    // genre read" and nothing connecting the two is #2544 exactly (L109).
+                    .disabled(GenreGate.blocks(discipline: item.discipline))
+                    .help(GenreGate.refusal(discipline: item.discipline) ?? "Keep this show to pitch it")
+                    .opacity(GenreGate.blocks(discipline: item.discipline) ? 0.45 : 1)
                 }
                 // #499 regression check (caught in Task 1 review, 2026-07-07): the Dismiss menu must stay a
                 // sibling of Kept/Keep, exactly as it was before this task, not nested only inside a branch
                 // that excludes the Kept case. Nesting it inside "else if item.isKept { } else { Dismiss }"
                 // silently removed Dismiss for every already-kept prospect in the live Queue.
                 Menu {
+                    // #2687: the same gate the Keep button carries, said in the same words, because a
+                    // menu of live-looking reasons that all refuse on press is worse than one that says
+                    // why up front. A Section header rather than disabled buttons: it is a statement, and
+                    // this menu already uses that shape for the producer verdict below.
+                    if let refusal = GenreGate.refusal(discipline: item.discipline) {
+                        Section(refusal) { }
+                    } else {
                     // #864: `danCanChoose`, not `allCases`. "Went by" is Overture's own reason for a show
                     // whose date passed untriaged; Dan cannot decide that a date has passed.
                     ForEach(ShowOutcome.menu(wasPitched: item.wasPitched), id: \.self) { reason in
                         Button(reason.label) { onDismiss(reason) }
+                    }
                     }
                     // #991: the geographic refusal, the missing half of the rule (#979). Unlike a dismiss,
                     // which only hides THIS show, this banishes the whole town: it drops out now and never
