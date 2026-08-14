@@ -72,13 +72,19 @@ struct QueueItemSnapshotTests {
         #expect(QueueItem(p).hasWeakContactEmail == true)             // but a weak email does exist
         #expect(QueueItem(p).reachabilityBadge() == .weakContactOnly) // so the badge is honest about it
 
-        // #1596 Phase 3 CHANGES this. Dismissing the venue guess makes the same address sendable, but the
-        // badge no longer moves on its own, because it reports what a CHECK concluded rather than what the
-        // row's recipients currently look like. The row's own send surface updates immediately; the
-        // reachability badge waits for a re-check. Tracked as an open risk on the plan (#1592).
+        // #1596 Phase 3 froze this: dismissing the venue guess made the same address sendable while the
+        // badge stayed put, because it reported what a CHECK concluded rather than what the row currently
+        // holds. The send surface moved immediately and the badge waited for a re-check, which #1592
+        // recorded as an open risk on the plan.
+        //
+        // #2664 REVERSES it, and this is the same decision arriving from the other side. Dan chose, on a
+        // show whose contacts he had deleted by hand, that the badge reports what the show HOLDS. That
+        // rule does not distinguish how a contact stopped or started being sendable, so dismissing a
+        // venue guess moves the badge at the moment it moves the send surface, and the two can no longer
+        // say different things about the same address.
         venue.looksLikeVenueDismissed = true
-        #expect(QueueItem(p).hasPendingRecipient == true)             // sendability is live
-        #expect(QueueItem(p).reachabilityBadge() == .weakContactOnly) // the stored answer is not
+        #expect(QueueItem(p).hasPendingRecipient == true)          // sendability is live
+        #expect(QueueItem(p).reachabilityBadge() == .emailFound)   // and now so is the badge
     }
 
     // #1325: a probe result is fresh only within Reachability.probeFreshness. Past that window the firm

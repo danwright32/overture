@@ -271,7 +271,11 @@ final class Prospect {
 
     func contactRouteForScoring(now: Date) -> ContactRoute {
         if Reachability.probeIsStale(probedAt: reachabilityProbedAt, now: now) { return .unchecked }
-        return ContactRoute(probeResult: reachabilityResult)
+        // #2664: the same verdict the badge reads, so the card and the score can never disagree about
+        // whether this show has a way in, exactly as they already cannot disagree about whether the answer
+        // is current (L16). A contact Dan deletes by hand stops paying route points at the same moment it
+        // stops being promised on the card.
+        return ContactRoute(probeResult: reachabilityResultAsHeld)
     }
     // #1596 Phase 3: classify this row's CURRENT recipients into a stored result. One definition, used by
     // every writer, so the importer's upgrade and the row's own snapshot can never disagree about what
@@ -336,6 +340,34 @@ final class Prospect {
     var reachabilityResult: Reachability.ProbeResult? {
         get { reachabilityResultRaw.flatMap(Reachability.ProbeResult.init(rawValue:)) }
         set { reachabilityResultRaw = newValue?.rawValue }
+    }
+
+    // #2664: the verdict as anything Dan READS should see it, which is what the show HOLDS rather than what
+    // a check once concluded about it. The two can disagree, because a check's answer is durable and the
+    // contacts justifying it are not: deleting a show's last contact by hand leaves the verdict behind, and
+    // the badge then promises a route that exists nowhere in the app (L38, L80).
+    //
+    // Dan's call, 2026-08-13, choosing this over clearing the verdict on delete: one rule, no paid re-check
+    // to recover something he chose to remove, and it settles every future disagreement rather than the one
+    // row that prompted it. The stored verdict is untouched, so what the paid check concluded survives as
+    // history and only the reading of it moves (L5).
+    //
+    // Two boundaries, and both are the rule rather than caveats on it:
+    //
+    // Never checked stays never checked. `reachabilityResultFromRecipients` answers `noEmailFound` for a
+    // show with no contacts, and a show nobody has looked at has none either, so deriving unconditionally
+    // would stamp a verdict no check reached onto every unchecked show in the queue. Never checked and
+    // checked-and-empty are different screens (L10, L11) and only the stored value tells them apart.
+    //
+    // A show already sent or booked keeps the verdict it went out under. What a show holds is read off its
+    // PENDING contacts (`isSendablePending`, the same predicate the badge, the tier and the send list all
+    // use, so none of them can answer from a different list, L16), and a sent show has none left. The badge
+    // is already silent on those, so this decides nothing on screen today; it is here so the property is
+    // safe for any later reader rather than correct only at the one call site that exists now.
+    var reachabilityResultAsHeld: Reachability.ProbeResult? {
+        guard let stored = reachabilityResult else { return nil }
+        guard sentAt == nil, !isBooked else { return stored }
+        return reachabilityResultFromRecipients
     }
 
     // #1722. An unrecognised stored value reads as nil (no reason given), which the copy degrades to the

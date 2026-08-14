@@ -2274,7 +2274,9 @@ extension QueueItem {
             presenter: p.presenter,
             reachabilityProbedAt: p.reachabilityProbedAt,
             reachabilityRecheckRequestedAt: p.reachabilityRecheckRequestedAt,
-            reachabilityResult: p.reachabilityResult,
+            // #2664: what the show HOLDS, not what a check once concluded, so a contact Dan deletes by
+            // hand takes the badge's claim with it instead of leaving it promising a route that is gone.
+            reachabilityResult: p.reachabilityResultAsHeld,
             reachabilityEmptyReason: p.reachabilityEmptyReason,
             reachabilityUnansweredAt: p.reachabilityUnansweredAt,
             location: p.location,
