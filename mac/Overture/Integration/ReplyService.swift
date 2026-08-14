@@ -176,5 +176,16 @@ enum ReplyService {
         r.replyFromName = ReplyDetection.latestReplySenderHeader(threadJSON: data, selfEmail: selfEmail)
             .flatMap { ReplyDetection.displayName(from: $0) }
         r.inboundReplySentAt = ReplyDetection.latestReplySentAt(threadJSON: data, selfEmail: selfEmail)
+        // #2653: the id of the message being answered, which was read off this very thread and thrown
+        // away, so the answer threaded off Overture's own last message instead. Captured HERE with the
+        // rest of the writer's facts rather than at a second call site, for the same reason they are.
+        r.inboundReplyMessageId = ReplyDetection.latestReplyMessageID(threadJSON: data, selfEmail: selfEmail)
+    }
+
+    // #2653: the capture, reachable from a test. `recordWriter` is private because nothing outside this
+    // file may write these facts, and that same privacy made the one place they are decided untestable.
+    static func recordWriterForTesting(on r: any ReplyWatchableRecipient, threadJSON data: Data,
+                                       selfEmail: String) {
+        recordWriter(on: r, threadJSON: data, selfEmail: selfEmail)
     }
 }

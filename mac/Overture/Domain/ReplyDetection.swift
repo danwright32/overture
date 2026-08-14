@@ -118,6 +118,19 @@ enum ReplyDetection {
         return headers.first { ($0["name"] as? String)?.lowercased() == name }?["value"] as? String ?? ""
     }
 
+    // #2653: the Message-ID of the newest real reply, which is the message Dan's answer is a direct
+    // response to. The mirror of `latestSentMessageID` above, which reads the newest message HE sent.
+    //
+    // Through the same `latestReplyMessage` every other inbound reader here uses, so "which message wrote"
+    // cannot be answered two ways. Nil when the thread carries no real reply, and nil rather than an empty
+    // string when that message has no Message-ID header, so a caller can tell "not known" from a value
+    // instead of emitting an empty header.
+    static func latestReplyMessageID(threadJSON data: Data, selfEmail: String) -> String? {
+        guard let m = latestReplyMessage(threadJSON: data, selfEmail: selfEmail) else { return nil }
+        let id = headerValue("message-id", of: m).trimmingCharacters(in: .whitespacesAndNewlines)
+        return id.isEmpty ? nil : id
+    }
+
     // #2032: the ADDRESS the newest real reply came from, so a thread carrying more than one contact can
     // say which of them wrote. Nil when there is no real reply, exactly as `latestReplyId` is.
     static func latestReplySender(threadJSON data: Data, selfEmail: String) -> String? {

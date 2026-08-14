@@ -75,6 +75,7 @@ struct OutreachFieldClassificationTests {
         "replyFromAddress": "read off a reply, and replied is counted",
         "replyFromName": "read off a reply, and replied is counted",
         "inboundReplySentAt": "when their reply was sent, and replied is counted",
+        "inboundReplyMessageId": "which message of theirs is being answered, and replied is counted",
         "replyTextCheckedAt": "when a reply was last read, and replied is counted",
         "replyHandledAt": "when Dan dealt with a reply, and replied is counted",
         "lastReplyId": "which reply, and replied is counted",
