@@ -125,6 +125,33 @@ already drifting from the Swift version it mirrored.
   handed, so a mistyped `.gitattributes` line leaves a conflict to read instead of silently dropping
   somebody's work. A clone that never runs the installer just gets git's ordinary text merge, which is
   what this repo had before, so skipping it is no worse than the old behaviour.
+- **Asking whether the suite cares what year it is: `scripts/check-fixtures-do-not-age.sh` (#2669).** A
+  fixture pinned to a literal date and read against the live clock silently changes which state it stands
+  for as real time passes it: written as a show two months out, it becomes a show in the past, and the test
+  goes on asserting about a case nobody chose. That bit four times in one session while building #2645, and
+  one of those tests had spent months asserting that a show 27 days in the past should still be chased.
+  The check shifts every dated fixture in `mac/` forward three years, runs the Swift suite, restores the
+  tree, and compares the tests that changed verdict against `fixtures/year-sensitive-tests.txt`, which it
+  writes itself with `--record`.
+  It is OPT IN and not in `scripts/test-all.sh`, because it costs a second full suite run. Run it after
+  adding dated fixtures, and periodically.
+  Read its answer correctly, which is the part to understand before using it. It does NOT demand that
+  nothing is year-sensitive: 39 tests are, measured 2026-08-14, almost all for good reasons (a weekday
+  name, an Eastern calendar day, business-day arithmetic, a comparison against a checked-in fixture the
+  shift cannot move). Demanding zero would be a gate nobody could go green on. What it asserts is that the
+  SET has not changed, and the set grows on its own: a fixture dated ahead of today is unaffected by the
+  shift, and the day real time walks past it the same shift starts changing its state, so it joins the set
+  and the check names it. **A new entrant is not a defect, it is a test to look at**, which is the whole of
+  what #2669 asked for. Either it still asserts what it meant to, and you re-record, or real time walked it
+  into a different case.
+  Two approaches were measured and rejected before this one, and both are worth knowing because they look
+  reasonable. The issue's own proposal, a source-text guard flagging a file that pairs a literal
+  `performanceDate` with a bare `Date()`, matches 70 of 783 test files, so it would fire on the common case
+  and be switched off in a day (L93). Shifting only the already-past `performanceDate` literals produced 35
+  failures that were almost all its own doing, because a fixture date is often one half of a
+  literal-to-literal pair and moving one end breaks it for a reason unrelated to the clock. Shifting the
+  whole repo including the app's own source was worse again (69), because it moves constants that are not
+  fixtures at all.
 - Keeping the checkout tidy: `scripts/tidy-checkout.sh` (#2234) removes local branches and agent
   worktrees whose work has provably shipped. It is a DRY RUN by default and needs `--apply` to
   delete anything. Note WHY it exists rather than the one-line idiom: this repo squash-merges, so a
