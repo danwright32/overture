@@ -20,6 +20,10 @@ protocol ReplyWatchableRecipient: AnyObject {
     // A second pass written just for inquiries would be one nothing ever ran, since the live store holds
     // none today (L30).
     var gmailMessageId: String? { get set }
+    // #2653: the ancestry of that message. A requirement now that both conformers carry it (Recipient
+    // since #2648, Inquiry since #2661), so `ReplyThreading.references` below can be one implementation
+    // rather than one per send path.
+    var gmailReferences: String? { get set }
     // #2649: and whether the id above can be trusted to thread. Settable here because the repair is what
     // clears it (the real id is now stored) and what sets it (the thread read fine and named no message of
     // Dan's, so this conversation cannot be threaded and something has to say so rather than the pass
@@ -51,6 +55,10 @@ protocol ReplyWatchableRecipient: AnyObject {
     var replyFromAddress: String? { get set }
     var replyFromName: String? { get set }
     var inboundReplySentAt: Date? { get set }
+    // #2653: the Message-ID of the message being answered, so Dan's reply names THEIR message as its
+    // parent rather than his own last one. A settable requirement for the same reason the three above
+    // are: both conformers have a send path that reads it, through `ReplyThreading` below.
+    var inboundReplyMessageId: String? { get set }
     // #2149: when the repair pass last TRIED to fill in the message text, set whether or not it found any.
     // A reply with no decodable body yields nothing every time, so without a record of the attempt the row
     // stays in the gap and its thread is refetched from Gmail forever with nothing changing (L47).
@@ -114,4 +122,38 @@ extension Prospect: ReplyWatchable {
     var replyWatchManualOutcome: Bool { outcomeSourceRaw == OutcomeSource.manual.rawValue }
     var replyWatchIsBooked: Bool { outcome == .booked }
     var replyWatchRecipients: [any ReplyWatchableRecipient] { recipients }
+}
+
+
+// #2653: WHICH message an answer threads onto, in one place so the prospect reply path and the inquiry
+// reply path cannot answer it differently.
+//
+// The defect this replaces: both used the stored `gmailMessageId`, which is OVERTURE'S OWN last outgoing
+// message. `In-Reply-To` is defined as the message this one is a direct response to, so pointing it there
+// made the contact's reply a sibling of Dan's answer rather than its parent, and a client that draws the
+// conversation as a tree hung his answer off his own earlier message instead of under theirs.
+enum ReplyThreading {
+
+    // Their message when it is known, ours when it is not. The fallback is exactly the old behaviour, and
+    // it is deliberate rather than lazy: a reply detected before this shipped carries no inbound id, and
+    // imperfect nesting is a great deal better than a message with no parent at all (L5).
+    static func inReplyTo(for r: any ReplyWatchableRecipient) -> String? {
+        let theirs = r.inboundReplyMessageId?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let theirs, !theirs.isEmpty { return theirs }
+        return r.gmailMessageId
+    }
+
+    // The whole ancestry, oldest first: everything Overture already knew, then OUR last message, then
+    // THEIRS. Their message is the new parent and Dan's own earlier one stays in the chain, because
+    // dropping it would be #2648's defect arriving by a new route: a client that threads by walking
+    // References would lose the link back through his side of the conversation.
+    //
+    // Degrades to exactly today's chain when their id is unknown, since `MailThreading.references` drops
+    // every empty part.
+    static func references(for r: any ReplyWatchableRecipient) -> String? {
+        let ours = MailThreading.references(parentReferences: r.gmailReferences,
+                                            parentMessageID: r.gmailMessageId)
+        return MailThreading.references(parentReferences: ours,
+                                        parentMessageID: r.inboundReplyMessageId)
+    }
 }

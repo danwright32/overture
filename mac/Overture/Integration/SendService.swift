@@ -367,10 +367,12 @@ enum SendService {
         // be due for a conversation nudge at the same time.
         let subject = replySubject(for: recipient, of: prospect)
         // #2030: built before the claim, for the same reason as the two nudges above.
-        let chain = MailThreading.references(parentReferences: recipient.gmailReferences,
-                                             parentMessageID: recipient.gmailMessageId)
+        // #2653: THEIR message is the parent, not ours. This used to pass `recipient.gmailMessageId`,
+        // which is Overture's own last outgoing message, so the contact's reply became a sibling of Dan's
+        // answer rather than its parent. Through `ReplyThreading` so the inquiry path answers identically.
+        let chain = ReplyThreading.references(for: recipient)
         guard let mail = OutgoingMail(to: addresses, subject: subject, body: body,
-                                      inReplyTo: recipient.gmailMessageId,
+                                      inReplyTo: ReplyThreading.inReplyTo(for: recipient),
                                       references: chain,
                                       threadId: recipient.gmailThreadId) else { return false }
         guard claimSecondarySend(recipient, \.replySendClaimedAt, now: now) else { return false }

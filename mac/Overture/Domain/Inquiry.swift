@@ -96,6 +96,9 @@ final class Inquiry {
     var replyFromAddress: String?
     var replyFromName: String?
     var inboundReplySentAt: Date?
+    // #2653: the Message-ID of the message being answered, the same fact `Recipient` carries and for the
+    // same reason. Read through `ReplyThreading`.
+    var inboundReplyMessageId: String?
     // #2149: when the repair pass last TRIED to fill in the message text, whether or not it found any.
     // Without it a reply with no decodable body stays in the gap and its thread is refetched forever.
     var replyTextCheckedAt: Date?

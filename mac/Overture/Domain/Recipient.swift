@@ -269,6 +269,11 @@ final class Recipient {
     var replyFromName: String?
     // #2113: when they actually SENT it, off the same message's internalDate.
     var inboundReplySentAt: Date?
+    // #2653: the Message-ID of the message being answered. Overture read the thread to detect the reply
+    // and extract its text and then DISCARDED this, so the answer threaded off Overture's own last
+    // outgoing message instead, making the contact's reply a sibling of Dan's answer rather than its
+    // parent. Read through `ReplyThreading`, never directly, so both send paths answer the same way.
+    var inboundReplyMessageId: String?
     // #2149: when the repair pass last TRIED to fill in the message text, whether or not it found any.
     // Without it a reply with no decodable body stays in the gap and its thread is refetched forever.
     var replyTextCheckedAt: Date?

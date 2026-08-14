@@ -36,11 +36,12 @@ enum InquiryReplySender {
         //
         // All three are nil on an inquiry Dan logged by hand and has never emailed about, which is
         // correct: an empty `References` is honest, a fabricated one points at nothing.
-        let chain = MailThreading.references(parentReferences: inquiry.gmailReferences,
-                                             parentMessageID: inquiry.gmailMessageId)
+        // #2653: THEIR message is the parent when it is known, through the same `ReplyThreading` the
+        // prospect path uses, so which message an answer threads onto is one rule rather than two.
+        let chain = ReplyThreading.references(for: inquiry)
         guard let mail = OutgoingMail(to: addresses.isEmpty ? [to] : addresses,
                                       subject: subject, body: body,
-                                      inReplyTo: inquiry.gmailMessageId,
+                                      inReplyTo: ReplyThreading.inReplyTo(for: inquiry),
                                       references: chain,
                                       threadId: inquiry.gmailThreadId) else { return false }
         do {
