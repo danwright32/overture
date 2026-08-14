@@ -215,6 +215,20 @@ final class Recipient {
     // Whether that mark cleared a stand-down. `reopenOnReply` nulls a `.stoodDown` resolution and nothing
     // else remembers it, so without this the undo could only guess at an inverse (L5).
     var replyMarkClearedStandDown: Bool = false
+    // #2713: when the mailbox search last READ for a reply to this pitch, set whether or not it found
+    // one. Written by `GmailReplySearch` only on a tick that completed, never on one that failed, so it
+    // is a record of the mailbox having been read rather than of the attempt.
+    //
+    // Its own fact rather than a corner of the shared high-water mark, and read by
+    // `ReplySearchScope.windowStart`, which is what makes the pair work: the mark says how far the
+    // MAILBOX has been read, this says whether THIS contact was in scope while that happened. A pitch
+    // recorded after the mark was set has never been read for, so it needs its window back to the pitch
+    // rather than only the new mail, and without this field the two are indistinguishable and its reply
+    // is skipped for ever.
+    //
+    // Its second reader is the row (#2718), which has to tell "read for, and nothing arrived" from
+    // "never read for" rather than showing one sentence for both (L98).
+    var replyCandidateSearchedAt: Date?
 
     // Per-recipient send + engagement.
     var sendStateRaw: String = SendState.pending.rawValue

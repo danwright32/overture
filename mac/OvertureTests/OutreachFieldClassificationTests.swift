@@ -99,6 +99,9 @@ struct OutreachFieldClassificationTests {
         "replyDraftEditedByDan": "whether he edited the reply draft, and replyDraftBody is counted",
         "replyDraftWrittenByDan": "whether he wrote the reply draft himself, and replyDraftBody is counted",
         "replyMarkClearedStandDown": "set with replyMarkedByHandAt by HandMarkedReply.mark, and that is counted",
+        "replyCandidateSearchedAt": "when OVERTURE last read the mailbox for an answer to this pitch, "
+            + "which is a record of its own looking and says nothing about anybody having been written to; "
+            + "the write that proves this contact was reached is formOutreachRecordedAt, which is counted",
     ]
 
     @Test func everyStoredPropertyIsEitherCountedAsOutreachOrRecordedAsNotOutreach() throws {
