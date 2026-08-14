@@ -1062,8 +1062,18 @@ struct QueueView: View {
                         ForEach(group.rows) { entry in
                             switch entry {
                             case .prospect(let prospect, let recipient, let next):
-                                reachedOutRow((prospect: prospect, recipient: recipient, next: next),
-                                              now: now)
+                                // #2644: the row is wrapped so it can SEE a send of its own in flight.
+                                // Without this it took (pair, now) only, so pressing "Send a closing
+                                // note" left the same button on screen for the whole second the Gmail
+                                // send took, and the row then simply vanished. Dan: "at first I thought
+                                // it didn't work." Read INSIDE QueueSendAwareRow rather than here, on
+                                // #1922's rule: read at this call site every row would re-derive on
+                                // every tick of the sending row's clock.
+                                QueueSendAwareRow(key: prospect.naturalKey, sendState: sendState) {
+                                    _, sendingSince, _ in
+                                    reachedOutRow((prospect: prospect, recipient: recipient, next: next),
+                                                  now: now, since: sendingSince)
+                                }
                             case .inquiry(let inquiry, let row, _):
                                 // #1513: the same row shape as a show, so the two read as one list. The
                                 // source capsule and lifecycle line stay, because they say what an
@@ -1102,7 +1112,15 @@ struct QueueView: View {
     // #661: group name, this one contact, timing, and the conversation-state control (the shared
     // ConversationStateControl, #652/#661), plus a link to Follow-ups once it's actually due, since
     // that screen already owns the real nudge/reply-sending flow rather than a second copy of it here.
-    private func reachedOutRow(_ pair: (prospect: Prospect, recipient: Recipient, next: Date), now: Date) -> some View {
+    // #2644: `since` is when a send on THIS show started, or nil. An explicit parameter rather than an
+    // internal read, the same way `FollowUpsView.row(_:since:)` takes it, so what the row draws is
+    // decided by its caller and a test can drive both states.
+    // Internal rather than private so the on-screen test can render it in both states, the same
+    // refactor #710 made to `FollowUpsView.row` for the same reason: a row whose in-flight state is read
+    // from private @State cannot be driven from outside the view, and an unprovable working state is how
+    // this one stayed missing.
+    func reachedOutRow(_ pair: (prospect: Prospect, recipient: Recipient, next: Date),
+                       now: Date, since: Date?) -> some View {
         let p = pair.prospect, r = pair.recipient
         return HStack(alignment: .top, spacing: OVSpacing.md) {
             VStack(alignment: .leading, spacing: 3) {
@@ -1208,10 +1226,22 @@ struct QueueView: View {
                                                     prospects: prospects, context: context,
                                                     feedback: feedback)
                 }
-                // #2130: the control says what is actually due, because "due now" here is min of three
-                // clocks and meant six different things behind one wording. Nothing due, no button: an
-                // always-present control that refuses on press is the defect this replaces.
-                if let label = ReachedOutAction.of(r, in: p, now: now, today: today).label {
+                // #2644: while a send on this show is in flight, the action control is REPLACED by the
+                // live label rather than sitting there unchanged. The three states the standing rule
+                // requires are all in `LiveRunLabel`: it started (the words appear in place of the
+                // button), it is still alive (the elapsed count moves), and it stalled (the timeout turns
+                // into a retry) instead of one indefinite silence. The same control and the same
+                // `performRowNudge` carry the nudge as well as the closing note, so both are covered.
+                //
+                // Replacing the button rather than sitting beside it is the L44 half: a control that
+                // keeps offering itself after being pressed reads as broken, and gets pressed again.
+                if let since {
+                    LiveRunLabel(base: "Sending", since: since, timeout: RunTimeouts.send,
+                                 font: OVType.meta, color: OVColor.inkSoft)
+                } else if let label = ReachedOutAction.of(r, in: p, now: now, today: today).label {
+                    // #2130: the control says what is actually due, because "due now" here is min of three
+                    // clocks and meant six different things behind one wording. Nothing due, no button: an
+                    // always-present control that refuses on press is the defect this replaces.
                     Button(label) { startRowAction(r, of: p, now: now) }
                         .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forestText)
                 }
