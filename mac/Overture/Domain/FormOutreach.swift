@@ -114,6 +114,19 @@ enum FormOutreachCopy {
     // it up then would have the card contradict the reply badge beside it (L118, #843). It says who
     // recorded it, because a reply Overture read and a reply Dan reported are different things and the
     // row must not blur them.
+    // #2719: why "Didn't send" is refused, from the same fact the refusal itself reads, so the greyed
+    // control and the reason beside it cannot disagree (L109). Nil when it is not refused, so an
+    // untouched pitch gains no sentence it does not need.
+    //
+    // It names the consequence rather than the rule, because "a conversation was attached" is not a
+    // reason Dan can act on and "it would leave a stranger's address on a contact Overture can email" is.
+    static func undoRefusalReason(for recipient: Recipient) -> String? {
+        guard recipient.conversationEverAttachedAt != nil else { return nil }
+        return "You linked a conversation to this pitch, so Overture can't take the send record back. "
+            + "Undoing it would leave this contact holding an address from that conversation and ready "
+            + "to be emailed."
+    }
+
     static let markedLine = "Sent through their form. You told Overture they replied."
     static let markedLineSocial = "Sent as a DM. You told Overture they replied."
 
@@ -225,6 +238,18 @@ extension Prospect {
     func undoFormOutreach(_ recipient: Recipient) -> Bool {
         guard recipient.formOutreachRecordedAt != nil else { return false }
         guard !recipients.contains(where: { $0.gmailMessageId != nil }) else { return false }
+        // #2719: refused PERMANENTLY once a conversation has ever been attached here, not merely while
+        // one is attached.
+        //
+        // This routine sets `sendState = .pending`, `sentAt = nil` and unfreezes the send snapshot, and
+        // clears NONE of `replied`, `repliedAt`, `lastReplyText`, `replyAudience`, `replyFromAddress` or
+        // `pausedByReply`. Combined with an address an attach saved, that leaves a pending recipient
+        // carrying a stranger's address, sendable the moment the pause clears, and Overture queues the
+        // cold pitch to them. Refusing only WHILE a conversation is attached would leave that door open
+        // behind a detach, which is why the marker it reads is one the detach deliberately does not
+        // clear. The refusal and its sentence come from the same fact (`undoRefusalReason`), so a greyed
+        // control and the reason beside it cannot disagree (L109).
+        guard recipient.conversationEverAttachedAt == nil else { return false }
 
         if let raw = recipient.formOutreachPriorStatusRaw, let prior = ReviewStatus(rawValue: raw) {
             status = prior

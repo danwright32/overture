@@ -257,6 +257,20 @@ final class Recipient {
     // unfreeze rows that were paused for some other reason and were never this attach's to touch. Read
     // by #2719.
     var attachPausedRecipientIds: [String]?
+    // #2719: whether the attach WROTE the address now on this contact, so a detach takes back only what
+    // it put there. An address that was already on the contact was never the attach's to remove, and nil
+    // afterwards is indistinguishable from nil before without recording the fact at the time.
+    var attachWroteAddress: Bool = false
+    // #2719: that a conversation has EVER been attached here, which the detach deliberately does not
+    // clear.
+    //
+    // It is what `undoFormOutreach` refuses on, and it has to be permanent rather than "while one is
+    // attached". `undoFormOutreach` sets `sendState = .pending`, `sentAt = nil` and unfreezes the send
+    // snapshot while clearing none of the reply state, so with a saved address it would leave a pending
+    // recipient carrying a stranger's address, sendable the moment the pause clears, and Overture would
+    // queue the cold pitch to them. Refusing only while a conversation is attached would leave that door
+    // open behind a detach.
+    var conversationEverAttachedAt: Date?
 
     // Per-recipient send + engagement.
     var sendStateRaw: String = SendState.pending.rawValue
@@ -708,6 +722,12 @@ final class Recipient {
         if replySentAt != nil || replyDraftBody != nil || replyDraftRequestedAt != nil { return true }
         if replySendClaimedAt != nil || nudgeSendClaimedAt != nil { return true }
         if formOutreachStartedAt != nil || formOutreachRecordedAt != nil { return true }
+        // #2719: a conversation was linked here at some point, which is proof a real exchange existed on
+        // this contact. `formOutreachRecordedAt` above already covers every row this can be true of,
+        // since an attach refuses without it, but it is spelled out anyway for the same reason
+        // `replyMarkedByHandAt` is: this predicate fails closed on purpose, and the cost of missing a
+        // field here is a deleted outreach record.
+        if conversationEverAttachedAt != nil { return true }
         if outreachStoodDownAt != nil || closingNoteStoodDownAt != nil { return true }
         return false
     }
