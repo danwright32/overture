@@ -146,6 +146,17 @@ enum EventClassifier {
         return title.range(of: room, options: [.caseInsensitive]) != nil
     }
 
+    // #2688: does this ONE word already produce a genre here?
+    //
+    // Asked by the correction report, so it can never propose a word the classifier already matches on:
+    // telling Dan to add something that is there, every time, is how a report stops being read. Answered
+    // by RUNNING the real rules over the word rather than by a second copy of the vocabulary, which is
+    // the point. A hand-maintained list of "words we know" beside the list that actually decides is two
+    // definitions of one thing, and it would drift the first time either was edited (L41).
+    static func alreadyReads(_ word: String) -> Bool {
+        detectDiscipline(wordSeparated(word)) != .other
+    }
+
     private static func detectDiscipline(_ text: String) -> Discipline {
         if matches(text, #"\b(dance|ballet|balletto|tap|choreograph|nutcracker)\b"#) { return .dance }
         if matches(text, #"\b(opera|operetta)\b"#) { return .opera }

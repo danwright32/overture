@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1341 sentences**.
+Every sentence Overture can say to Dan: **1351 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1094,6 +1094,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "No experiment running. Start one to test two opener styles against each other and see which earns more replies. Nothing changes until you start it."
     `UI/ExperimentReportView.swift`
+"No genre corrections recorded yet, so there is nothing to learn from."
+    `Domain/GenreCorrection.swift`
 "No genre read"
     `Domain/Ranker.swift`
 "No kept prospects need prepping. Keep some prospects first."
@@ -1299,6 +1301,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/Reachability.swift`
 "Only a social profile"
     `Domain/Reachability.swift`
+"Only counts corrections made since this started recording them. Earlier ones were never kept, "
+    `Domain/GenreCorrection.swift`
 "Only names, no way to reach them"
     `Domain/Reachability.swift`
 "Only the venue's address"
@@ -2239,6 +2243,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "What converts"
     `App/RootView.swift`
     `UI/OutcomePatternsView.swift`
+"What your genre corrections are teaching"
+    `Domain/GenreCorrection.swift`
 "Which kept shows to prep?"
     `Domain/PrepSelectionCopy.swift`
 "Which message is their reply?"
@@ -2425,6 +2431,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "\(contacts.count) found, none reachable"
     `UI/QueueView+Model.swift`
+"\(correctionsSeen) correction\(correctionsSeen == 1 ? "" : "s")."
+    `Domain/GenreCorrection.swift`
+"\(correctionsSeen) genre correction\(correctionsSeen == 1 ? "" : "s") recorded, and no word "
+    `Domain/GenreCorrection.swift`
 "\(count) \(count == 1 ? "contact" : "contacts") held for a check"
     `Domain/DraftReviewNotes.swift`
 "\(count) \(outcome.countedPhrase ?? outcome.rawValue)"
@@ -2720,6 +2730,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SuppressionReport.swift`
 "\(subject), \(f.localizedString(for: sentAt, relativeTo: now))"
     `Domain/ProposedConversation.swift`
+"\(suggestions) word\(suggestions == 1 ? "" : "s") worth adding to the classifier, from "
+    `Domain/GenreCorrection.swift`
 "\(tally.booked) booked of \(tally.contacted)"
     `Domain/OutcomePatterns.swift`
 "\(tally.bookedAuto) auto-detected"
@@ -2797,12 +2809,16 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OrganisationListing.swift`
 "already happened. What it can say is that a new shoot came through as recently as "
     `Domain/AppNotice.swift`
+"and re-reading those rows now would answer with today's rules rather than the ones that "
+    `Domain/GenreCorrection.swift`
 "and resumed \(PrepStatus.relative(from: endedAt, to: now))"
     `Domain/WatchGap.swift`
 "and started again \(PrepStatus.relative(from: endedAt, to: now))"
     `Domain/WatchGap.swift`
 "another show"
     `Domain/SelfBookingConflict.swift`
+"appears often enough yet to be worth adding to the classifier."
+    `Domain/GenreCorrection.swift`
 "at \(v)"
     `Domain/InquiryCopy.swift`
 "at \(venue) on \(dateLabel)"
@@ -2847,6 +2863,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreSchemaGuard.swift`
 "get seats"
     `Domain/TicketLink.swift`
+"got them wrong."
+    `Domain/GenreCorrection.swift`
 "have written to \(path). Nothing has been opened or changed. Check that "
     `App/StoreSchemaGuard.swift`
 "high confidence"
@@ -2980,6 +2998,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/PrepRunSummary.swift`
 "which usually means the match is wrong."
     `Domain/PossibleMatchFanOut.swift`
+"would have read \(count) show\(count == 1 ? "" : "s") as \(discipline.label)"
+    `Domain/GenreCorrection.swift`
 "wrote this"
     `Domain/ReplyPanel.swift`
 "you stopped this check after 1 of \(requested) shows got an answer, and the lookups that were already under way still counted as spent"

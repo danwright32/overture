@@ -928,7 +928,10 @@ enum ProspectMutations {
     static func correctClassification(_ item: QueueItem, discipline: Discipline,
                                       prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
-        ClassificationOverride.correct(model, discipline: discipline, now: Date())
+        // #2688: the context is passed, so the correction is RECORDED as well as applied. Without it
+        // every correction Dan makes is spent on the row he is looking at and the same unreadable title
+        // comes back next week.
+        ClassificationOverride.correct(model, discipline: discipline, now: Date(), in: context)
         if context.saveOrWarn(org: item.groupName, feedback: feedback) {
             feedback.acknowledge(ActionAck.classificationCorrected(org: item.groupName))
         }

@@ -28,6 +28,10 @@ enum AppSchema {
         RefusedContactAddress.self,   // #2392: an address Dan struck. Independent for the same reason, so
                                       // a dismissed or re-keyed prospect can never quietly cancel a
                                       // refusal and let the next run write to somebody again.
+        GenreCorrection.self,         // #2688: what the classifier read and what Dan said instead, so a
+                                      // correction teaches the vocabulary something instead of being
+                                      // spent on one row. Independent for the same reason as the rest:
+                                      // the lesson must outlive the show that taught it.
         VenuePlaceAnswer.self,        // #1752: where Dan says a room is, when no table knows. Independent
                                       // for the same reason, and keyed on the ROOM so one answer reaches
                                       // every spelling of it and every show played there.

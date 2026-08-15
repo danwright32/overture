@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 
 // Pure helper: rebuilds a Ranker.Candidate from a Prospect's stored string fields and re-scores it.
 // Used when Dan corrects a wrong genre, and by the scout and the Prep importer to re-derive a score
@@ -47,7 +48,13 @@ enum ClassificationOverride {
     // #1533: production is deliberately NOT a parameter. It stays exactly as the scout guessed, and the
     // re-score reads it back off the prospect, so an agency row keeps its 2 point penalty through a genre
     // correction instead of being silently re-ranked as if its production were unknown.
-    static func correct(_ p: Prospect, discipline: Discipline, now: Date) {
+    // #2688: `context` is optional and defaulted, so every existing caller is unchanged, and the
+    // correction is RECORDED before the write, which is the only moment the classifier's own answer is
+    // still knowable. `classificationOverriddenByDan` is a bare boolean, and re-reading the row later
+    // would answer with whatever the rules say then.
+    static func correct(_ p: Prospect, discipline: Discipline, now: Date,
+                        in context: ModelContext? = nil) {
+        if let context { GenreCorrection.record(p, danSaid: discipline, now: now, in: context) }
         // #1658: through the one writer, so Dan's own correction cannot be the thing that removes the
         // row he just corrected.
         GenreVisibility.write(discipline, to: p)
