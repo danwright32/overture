@@ -50,9 +50,36 @@ enum VenueContactGuard {
     private static func isTheRoomsOwn(domainCore: String?, venue: String?) -> Bool {
         guard let domainCore, let venue, !venue.isEmpty else { return false }
         let display = VenueDisplay.resolve(venue)
-        let candidates = [display.hall, display.parent].compactMap { $0 }.map(slug)
+        let names = [display.hall, display.parent].compactMap { $0 }
+        // #2743: each name BOTH ways, as stored and with a leading article dropped.
+        //
+        // The comparison stays EXACT and keeps its length floor; what changes is that a room stored as
+        // "The Green Room 42" is now also compared as "greenroom42", which is what its own domain says.
+        // Measured on the live store 2026-08-14: 16 of 144 distinct venues begin with an article, and
+        // The Green Room 42 is the room behind four of Dan's five open form pitches, so the guard
+        // keeping a room's own address out of the product (#368, the oldest standing rule in it) had
+        // never once fired on his most common venue.
+        //
+        // Deliberately NOT a loose match. A room whose domain carries extra words (thecuttingroomnyc.com
+        // for The Cutting Room) is still missed, and that gap is named in the tests rather than closed by
+        // relaxing the comparison: the exactness is what stops this swallowing unrelated sites, which is
+        // the reasoning the guard was built on.
+        let candidates = (names + names.compactMap(withoutLeadingArticle)).map(slug)
         return candidates.contains { $0.count >= minimumSlugLength && $0 == domainCore }
     }
+
+    // #2743: the name with a leading "The", "A" or "An" dropped, or nil when it carries none.
+    //
+    // Taken from the name BEFORE it is slugged, so the article has to be a WHOLE WORD. Stripping a
+    // prefix from the slugged string instead would reduce "Theatre Row" to "atrerow" and start matching
+    // on that, which is the failure this guard's whole design is built to avoid.
+    private static func withoutLeadingArticle(_ name: String) -> String? {
+        let parts = name.split(separator: " ", omittingEmptySubsequences: true)
+        guard parts.count > 1, articles.contains(parts[0].lowercased()) else { return nil }
+        return parts.dropFirst().joined(separator: " ")
+    }
+
+    private static let articles: Set<String> = ["the", "a", "an"]
 
     // The domain's second-level label: "carnegiehall" from "carnegiehall.org" or from
     // "mail.carnegiehall.org" alike (the label right before the last dot-separated component).
