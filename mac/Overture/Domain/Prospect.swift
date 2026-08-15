@@ -720,6 +720,17 @@ final class Prospect {
     // Empty on every row that predates this, which BlockedCalendar.conflict reads as "fall back to the
     // span", so nothing already flagged is cleared on no evidence. Fills in on the next scout.
     var runNights: [String] = []
+    // #2691: the nights Dan DROPPED, each carrying the reason and when, self-describing so this cannot
+    // drift out of step with `runNights` above the way two parallel arrays would (the #1699 precedent,
+    // L15/L41). Read through `DroppedNight`, never parsed at a call site.
+    //
+    // It has to be STORED, because `runNights` is rebuilt from the venue's feed on every scout and the
+    // feed still lists the dropped night: a drop recorded nowhere lasts until the next run and then
+    // quietly undoes itself (L92). `DroppedNight.keeping` is what the fold subtracts it with.
+    //
+    // Empty on every row that predates this, which reads as "nothing dropped" and leaves every existing
+    // card exactly as it is.
+    var droppedRunNights: [String] = []
 
     // #1699: the curtain time(s) of this card, as "HH:mm", in the order the source published them.
     //

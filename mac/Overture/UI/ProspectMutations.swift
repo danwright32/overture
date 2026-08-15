@@ -613,7 +613,8 @@ enum ProspectMutations {
     // dismiss does (#924). Dan's call, 2026-07-26: a bulk dismiss should stay quiet.
     static func dismissAll(_ keys: [String], reason: ShowOutcome, dateLabel: String,
                            prospects: [Prospect], context: ModelContext, feedback: ActionFeedback,
-                           undo: QueueUndoStack? = nil) {
+                           undo: QueueUndoStack? = nil, now: Date = Date(),
+                           export: DayOffEditing.Export = DownbeatBridge.loadedExport()) {
         let byKey = Dictionary(prospects.map { ($0.naturalKey, $0) }, uniquingKeysWith: { first, _ in first })
         // Two rows are skipped rather than recorded: one whose key has no prospect left (deleted at runtime
         // by NaturalKeyVenueMigration), and one this exact action already dismissed for this exact reason
@@ -631,6 +632,21 @@ enum ProspectMutations {
             // alone. Passing nil instead would make undoing a bulk dismiss silently re-block every show on
             // the night that Dan had already waved through.
             let priorClearedConflict = model.conflictClearedKey
+            // #2691: the identical rule as the card's own menu, and this is the path that is easy to
+            // miss, because it lives in different code and takes a list of keys rather than one card. A
+            // bulk "Pitching other shows that night" on Aug 19 would otherwise still archive a run's
+            // September and October nights. `dropNight` answers `.wholeShow` for every row that is not a
+            // live multi-night run, so a single-night show on the same date is dismissed exactly as it
+            // is today.
+            let night = model.performanceDate
+            if RunNightDrop.isAboutOneNight(reason), let night,
+               case .moved = model.dropNight(night, reason: reason, now: now) {
+                ConflictSweep.reapply(model, export: export, in: context)
+                return QueueUndoEntry.Row(recording: model, priorStatus: priorStatus,
+                                          priorShowOutcomeRaw: priorReason, priorDismissedAt: priorExit,
+                                          priorConflictClearedKey: priorClearedConflict,
+                                          droppedNight: night)
+            }
             // #16: the model's own setter, so the exit date is stamped here exactly as a per-card dismiss
             // stamps it, and a show dismissed twice keeps its FIRST exit date.
             model.markDismissed(reason: reason)
@@ -661,7 +677,46 @@ enum ProspectMutations {
     static func dismissForReason(_ item: QueueItem, _ reason: ShowOutcome,
                                  prospects: [Prospect], context: ModelContext,
                                  feedback: ActionFeedback, offer: DayOffOfferRequest,
-                                 undo: QueueUndoStack? = nil) {
+                                 undo: QueueUndoStack? = nil, now: Date = Date(),
+                                 export: DayOffEditing.Export = DownbeatBridge.loadedExport()) {
+        // #2691: the REASON decides the scope. Four of the reasons on this menu are statements about ONE
+        // NIGHT, and applying them to a whole run throws away dates Dan actively wants. `dropNight`
+        // answers `.wholeShow` whenever there is no run to pick apart (a single night, a row with no
+        // recorded nights, the last night left), so this falls through to exactly today's behaviour in
+        // every case that is not a live multi-night run.
+        if RunNightDrop.isAboutOneNight(reason),
+           let model = prospects.first(where: { $0.naturalKey == item.id }) {
+            let priorStatus = model.status
+            let priorReason = model.showOutcomeRaw
+            let priorExit = model.dismissedAt
+            let priorClearedConflict = model.conflictClearedKey
+            // A card with no date at all ("date to be confirmed") has no night to drop, so it takes the
+            // ordinary path below.
+            if let night = model.performanceDate,
+               case .moved = model.dropNight(night, reason: reason, now: now) {
+                // #2691 trap 5: the badge reports the earliest blocked night of the run, so dropping the
+                // blocked one has to re-ask. Through the shared sweep, so the badge after a drop and the
+                // badge after a day off edit cannot be computed two different ways (L16).
+                ConflictSweep.reapply(model, export: export, in: context)
+                // Recorded AFTER the drop, so the row is keyed on where the drop left it: that is what
+                // Cmd+Z has to look up.
+                if let undo {
+                    undo.record(QueueUndoEntry(recording: "Dismiss", on: model,
+                                               priorStatus: priorStatus, priorShowOutcomeRaw: priorReason,
+                                               priorDismissedAt: priorExit,
+                                               priorConflictClearedKey: priorClearedConflict,
+                                               droppedNight: night))
+                }
+                context.saveOrWarn(org: item.groupName, feedback: feedback)
+                // The day off offer is unchanged, and pre-filled with the night he DROPPED rather than
+                // the one the card moved to. Dan's call: "it should function no differently than any
+                // other dismiss in that regard."
+                guard let o = DayOffOffer.offer(reason: reason, performanceDate: night,
+                                                alreadyBlocked: item.hasUnclearedConflict) else { return }
+                offer.request(key: model.naturalKey, org: item.groupName, start: o.start, end: o.end)
+                return
+            }
+        }
         setStatus(item, .dismissed, reason, prospects: prospects, context: context, feedback: feedback,
                   undo: undo, undoLabel: "Dismiss")
         // #2373: the offer covers the dismissed night and nothing else. The engagement sweep that used to

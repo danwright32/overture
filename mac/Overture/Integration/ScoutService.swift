@@ -1448,7 +1448,16 @@ enum ScoutService {
         // #1846's merge relabels the card with the name Dan entered on the watchlist.
         existing.scoutVenue = p.venue
         existing.venue = p.venue
-        existing.performanceDate = p.performanceDate
+        // #2691: the feed's opening night, UNLESS Dan dropped it. Assigning it back would move the card
+        // to a night he explicitly said no to, which is the same silent undo the nights subtraction below
+        // prevents, one field over. `keeping` answers the feed's own date whenever nothing was dropped,
+        // so an ordinary show is untouched.
+        if let fed = p.performanceDate, DroppedNight.all(on: existing).contains(where: { $0.night == fed }) {
+            existing.performanceDate = DroppedNight.keeping(p.runNights, on: existing).min()
+                ?? existing.performanceDate
+        } else {
+            existing.performanceDate = p.performanceDate
+        }
         existing.sourceListingURL = p.sourceListingURL
         existing.seriesId = p.seriesId   // #1260 Phase 2: keep the merged-concert identity current
         // #1663/#1845: the classification block (discipline, production, profile, coverage, fitReason) all
@@ -1543,7 +1552,18 @@ enum ScoutService {
         existing.runEndDate = p.runEndDate
         existing.partOfRelatedRun = p.partOfRelatedRun
         existing.runSourceURLs = p.runSourceURLs
-        existing.runNights = p.runNights        // #1523: keep the played nights current
+        // #1523: keep the played nights current, MINUS the ones Dan dropped.
+        //
+        // #2691: the feed still lists a dropped night on every run, so assigning what it says would put
+        // the night straight back and quietly undo his decision on the next scout. That is L92 exactly: a
+        // removal recorded against nothing recurs. `DroppedNight.keeping` is the one place that
+        // subtraction happens, so the queue and the scout cannot disagree about which nights this run has.
+        existing.runNights = DroppedNight.keeping(p.runNights, on: existing)
+        // And the span has to follow the nights, or a run whose opening night was dropped keeps claiming
+        // to start on a date it no longer plays.
+        if !existing.runNights.isEmpty, !DroppedNight.all(on: existing).isEmpty {
+            existing.runEndDate = existing.runNights.max()
+        }
 
         // #1699, Dan's call (2026-08-02): the NEWEST read wins, INCLUDING when it is empty. A feed that
         // stops publishing times costs the card its time, which is the cheap error; a show that gets
