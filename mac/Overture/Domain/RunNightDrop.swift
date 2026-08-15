@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 
 // #2691: the dismiss REASON decides the scope.
 //
@@ -48,6 +49,11 @@ enum RunNightDrop {
         case wholeShow
         case alreadyDropped
         case moved(to: String)
+        // #2754: the night the run would move to is a night ANOTHER stored card already holds, so moving
+        // this row's key onto it would collide with `Prospect.naturalKey`'s uniqueness. Carries the night
+        // rather than a bare refusal so the caller can say WHICH date is in the way (L109: a refusal the
+        // person cannot be told is a control that does nothing).
+        case cannotMove(to: String)
     }
 }
 
@@ -104,6 +110,24 @@ struct DroppedNight: Equatable, Sendable {
 
 extension Prospect {
 
+    // #2754: may this row take that key, or does another card already hold it?
+    //
+    // Asked of the STORE rather than of whatever array the screen is rendering: a card holding the
+    // candidate key is routinely one the queue is not showing (dismissed, archived, outside the date
+    // window), and a check answered by the visible list would report those as free (L119).
+    //
+    // A read that FAILS answers no. Refusing a drop costs Dan one dismiss he can retry; treating an
+    // unreadable store as an empty one merges two cards and destroys one of them (L105, L42: a guard
+    // that protects fails closed).
+    private func mayTake(key: String, in context: ModelContext) -> Bool {
+        do {
+            guard let holder = try Prospect.stored(key: key, in: context) else { return true }
+            return holder === self
+        } catch {
+            return false
+        }
+    }
+
     // Drop one night of this run, or say that there is no run to pick apart.
     //
     // A run card only ever renders under its OPENING night (the queue groups on `performanceDate`), and
@@ -111,7 +135,8 @@ extension Prospect {
     // first remaining night. There is no way to reach a middle night from either control, which is why
     // this needs no "which night did he mean" answer.
     @discardableResult
-    func dropNight(_ night: String, reason: ShowOutcome, now: Date) -> RunNightDrop.Outcome {
+    func dropNight(_ night: String, reason: ShowOutcome, now: Date,
+                   in context: ModelContext) -> RunNightDrop.Outcome {
         guard DroppedNight.all(on: self).allSatisfy({ $0.night != night }) else { return .alreadyDropped }
         // An empty `runNights` is a row stored before #1523, where the SPAN is all there is and nobody
         // knows which nights it plays. It is not a run whose nights can be picked off one at a time, and
@@ -126,6 +151,19 @@ extension Prospect {
         let remaining = runNights.filter { $0 != night }
         guard let opening = remaining.min() else { return .wholeShow }
 
+        // #2754: settled BEFORE the first write, so a refusal leaves the row exactly as it was rather
+        // than describing a run it no longer carries. MEASURED on the live store 2026-08-15: 8 of 98
+        // multi-night runs would land on a key another card already holds, because a weekly series is
+        // stored both as a run carrying every night and as separate cards for individual nights.
+        //
+        // Writing it anyway does NOT throw, which was the hopeful reading. Measured the same day against
+        // an in-memory store: `save()` succeeds and SwiftData MERGES the two rows into one, taking some
+        // fields from each, so a card's keep decision, its contacts and its outreach record go with no
+        // error raised anywhere (L5).
+        let candidate = Prospect.makeNaturalKey(groupName: groupName, performanceDate: opening,
+                                                venue: venue)
+        guard mayTake(key: candidate, in: context) else { return .cannotMove(to: opening) }
+
         droppedRunNights.append(DroppedNight(night: night, reason: reason, at: now).stored)
         runNights = remaining
         performanceDate = opening
@@ -133,21 +171,35 @@ extension Prospect {
         // The natural key IS the opening night, so it has to move with it. Re-keyed IN PLACE, keeping
         // this row's whole history, never inserted as a second card beside the old one: the URL arms
         // (`matchByAnyRunURL`) exist so the next scout finds this row again under its new key.
-        naturalKey = Prospect.makeNaturalKey(groupName: groupName, performanceDate: opening, venue: venue)
+        naturalKey = candidate
         return .moved(to: opening)
     }
 
     // Cmd+Z. Puts the night back and restores the key, so an undo leaves the row exactly where it was
     // rather than somewhere that merely looks similar.
-    func restoreNight(_ night: String) {
-        let kept = DroppedNight.all(on: self).filter { $0.night != night }
-        guard kept.count != DroppedNight.all(on: self).count else { return }
+    //
+    // #2754: the way back can collide too, and for a reason the drop's own collision does not need. The
+    // feed still lists the dropped night (`DroppedNight.keeping` is what subtracts it from this row), so
+    // a scout run between the drop and the undo can mint a separate card on exactly that night. Answers
+    // whether the night came back, so a caller cannot report a restore that did not happen (L12).
+    @discardableResult
+    func restoreNight(_ night: String, in context: ModelContext) -> Bool {
+        let all = DroppedNight.all(on: self)
+        let kept = all.filter { $0.night != night }
+        guard kept.count != all.count else { return false }
+        let restored = runNights.contains(night) ? runNights : (runNights + [night]).sorted()
+        guard let opening = restored.min() else { return false }
+        let candidate = Prospect.makeNaturalKey(groupName: groupName, performanceDate: opening,
+                                                venue: venue)
+        // Checked before ANY of the four writes below, the same order as the drop: a half-undo that
+        // cleared the dropped-night record without moving the row would lose the record of the drop AND
+        // leave the night out of the run, which no later press could put right.
+        guard mayTake(key: candidate, in: context) else { return false }
         droppedRunNights = kept.map(\.stored)
-        guard !runNights.contains(night) else { return }
-        runNights = (runNights + [night]).sorted()
-        guard let opening = runNights.min() else { return }
+        runNights = restored
         performanceDate = opening
-        runEndDate = runNights.max()
-        naturalKey = Prospect.makeNaturalKey(groupName: groupName, performanceDate: opening, venue: venue)
+        runEndDate = restored.max()
+        naturalKey = candidate
+        return true
     }
 }

@@ -1104,8 +1104,7 @@ enum ScoutService {
 
             let key = Prospect.makeNaturalKey(groupName: enriched.groupName, performanceDate: enriched.performanceDate, venue: enriched.venue)
             seenKeys.insert(key)
-            let descriptor = FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })
-            if let existing = (try? context.fetch(descriptor))?.first {
+            if let existing = try? Prospect.stored(key: key, in: context) {
                 // Exact natural-key match: update in place.
                 apply(enriched, to: existing, now: scoutNow)
                 updated += 1

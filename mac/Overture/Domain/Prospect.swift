@@ -1497,6 +1497,20 @@ final class Prospect {
             .joined(separator: "|")
     }
 
+    // The stored row holding a natural key, or nil when nobody holds it.
+    //
+    // One implementation because there were four (#2754): the prep importer, the reply importer and the
+    // scout's exact-key arm each carried their own copy of this fetch, and the fourth caller is the one
+    // that must not get the answer wrong. It THROWS rather than swallowing a failed read, because "the
+    // store could not answer" and "the key is free" are the same value to every caller and only one of
+    // them is safe to write a unique key on the strength of (L105, L11). The three importer call sites
+    // keep the reading they always had, that an unanswerable read is a key they do not hold.
+    static func stored(key: String, in context: ModelContext) throws -> Prospect? {
+        var descriptor = FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })
+        descriptor.fetchLimit = 1
+        return try context.fetch(descriptor).first
+    }
+
     // #1886: the key this stored row SHOULD carry, which is not the same question as what its card says.
     // Two shipped features rewrite a display field and deliberately leave the key alone, each so the next
     // scout's exact-key match keeps finding the row: #1274 (Dan renames a show) and #1846 (a merged card

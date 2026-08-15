@@ -78,8 +78,7 @@ enum PrepImporter {
         var outcome = Outcome()
         for r in results.results {
             let key = r.naturalKey
-            let descriptor = FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })
-            guard let p = (try? context.fetch(descriptor))?.first else {
+            guard let p = try? Prospect.stored(key: key, in: context) else {
                 outcome.unmatchedKeys.append(key)
                 continue
             }

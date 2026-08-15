@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1351 sentences**.
+Every sentence Overture can say to Dan: **1355 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -331,6 +331,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReachabilityRunSummary.swift`
 "1 of them went through an earlier check and never got an answer."
     `Domain/ProbeSelection.swift`
+"1 run was left alone: it already has a separate card for a later night"
+    `App/ActionFeedback.swift`
 "1 show on \(dateLabel) has no genre read. Set it before dismissing the night."
     `Domain/GenreGate.swift`
 "1 source needs"
@@ -2503,6 +2505,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AgentRoster.swift`
 "\(i.toTriage) to triage"
     `Domain/AgentRoster.swift`
+"\(kept) runs were left alone: they already have separate cards for later nights"
+    `App/ActionFeedback.swift`
 "\(kept) to prep"
     `Domain/PrepStatus.swift`
 "\(label), \(calendar.component(.year, from: date))"
@@ -2568,8 +2572,12 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "\(night) \($0)"
     `Integration/ScoutService.swift`
+"\(nightDismissed(count: count, reason: reason, dateLabel: dateLabel)). \(keptSentence)"
+    `App/ActionFeedback.swift`
 "\(omniFocusChanged) follow-up\(omniFocusChanged == 1 ? "" : "s") updated"
     `Domain/ReconcileSummary.swift`
+"\(org) already has a separate card for \(date), so this night was left alone"
+    `App/ActionFeedback.swift`
 "\(org) already moved on, so there was nothing to undo"
     `App/ActionFeedback.swift`
 "\(org) can be drafted despite the clash"

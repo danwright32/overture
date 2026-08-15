@@ -174,6 +174,27 @@ enum ActionAck {
             : "\(Plural.count(count, "show")) on \(dateLabel) are dismissed as \(reason.label)"
     }
 
+    // #2754: the night was NOT dropped, because the date the run would have moved to is a date this show
+    // already has its own separate card for, and one card cannot take another's identity.
+    //
+    // Names that date rather than saying the dismiss failed, because the date is the whole of what Dan
+    // needs: the show is still in his queue on it, on the other card, which is where he can act.
+    static func runNightKeyTaken(org: String, night: String) -> String {
+        let date = EasternDate.dayLabel(night) ?? night
+        return "\(org) already has a separate card for \(date), so this night was left alone"
+    }
+
+    // #2754: the same refusal inside a whole-night dismiss, where it is one row among several and the
+    // count Dan reads has to exclude it (L12).
+    static func nightDismissedSomeKept(count: Int, kept: Int, reason: ShowOutcome,
+                                       dateLabel: String) -> String {
+        let keptSentence = kept == 1
+            ? "1 run was left alone: it already has a separate card for a later night"
+            : "\(kept) runs were left alone: they already have separate cards for later nights"
+        guard count > 0 else { return keptSentence }
+        return "\(nightDismissed(count: count, reason: reason, dateLabel: dateLabel)). \(keptSentence)"
+    }
+
     // #1500: the same night, back in one press. Names the stage pill to go and look at, for the #1415
     // reason: since #1134 an undo restores rows into a stage Dan is usually not looking at, so the store
     // changes and the screen does not.

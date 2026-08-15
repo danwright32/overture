@@ -274,7 +274,17 @@ enum QueueUndo {
                .first(where: { $0.startDate == blocked.start && $0.endDate == blocked.end }) {
             DayOffEditing.remove(row, export: export, in: context)
         }
+        // #2754: a night whose date another card has taken since the drop cannot come back, and this row
+        // is then left entirely alone rather than half-undone. Counted as NOT restored, which is the same
+        // reading this already gives a row that moved on under Dan: the banner may not say a show is back
+        // when it is not (L12). The night is restored FIRST, before the status writes, so the decision and
+        // the writes cannot disagree, and `restoreNight` stays the one place that knows the rule (L16).
+        var blocked = 0
         for (prospect, row) in applicable {
+            if let night = row.droppedNight, prospect.restoreNight(night, in: context) == false {
+                blocked += 1
+                continue
+            }
             prospect.status = row.priorStatus
             prospect.showOutcomeRaw = row.priorShowOutcomeRaw
             prospect.dismissedAt = row.priorDismissedAt
@@ -283,11 +293,8 @@ enum QueueUndo {
             // so restoring it is a no-op for every action that never touched it, and there is no "did this
             // one accept a clash" flag to get wrong.
             prospect.restoreConflictClearance(row.priorConflictClearedKey)
-            // #2691: and the night, which puts `runNights`, `performanceDate`, `runEndDate` and the key
-            // back together. A no-op for every action that dropped none.
-            if let night = row.droppedNight { prospect.restoreNight(night) }
         }
-        return Outcome(restored: applicable.count, total: entry.rows.count)
+        return Outcome(restored: applicable.count - blocked, total: entry.rows.count)
     }
 
     // The one-show call, unchanged for every caller that reverses a single action on a single row.
