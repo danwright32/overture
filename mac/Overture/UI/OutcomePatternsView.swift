@@ -51,6 +51,16 @@ struct OutcomePatternsView: View {
                             patternRow(name: row.name, tally: row.tally)
                             Divider()
                         }
+                        // #2688: what Dan's genre corrections are teaching, HERE rather than behind a
+                        // toolbar button of its own.
+                        //
+                        // `ToolbarConsolidationGuardTests` pins the toolbar's button count deliberately,
+                        // and says why: SwiftUI's builder tops out at ten children, the row already
+                        // overflows into the macOS ">>" menu, so a new button is never free and whoever
+                        // adds one has to decide what it displaces. The answer here is nothing, because it
+                        // does not belong there: this is a report Dan reads when he chooses, and it is a
+                        // sibling of the one on this very sheet. Both say what his own decisions add up to.
+                        GenreCorrectionsSection()
                     }
                     .padding(OVSpacing.lg)
                 }
