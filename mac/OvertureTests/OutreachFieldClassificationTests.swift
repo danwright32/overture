@@ -114,6 +114,20 @@ struct OutreachFieldClassificationTests {
         "attachPriorReplyDraftEditedByDan": "the same snapshot, for the reply-draft baseline",
         "attachPausedRecipientIds": "which OTHER contacts on the show this attach froze, so the detach "
             + "unfreezes only those; a fact about its neighbours, never about this contact being written to",
+        // #2718: the QUESTION Overture is asking about this contact, which is a fact about a message in
+        // Dan's mailbox rather than about anybody having been written to. Every one of them can only be
+        // set on a contact that already carries formOutreachRecordedAt, which the rule above counts,
+        // because `ProposedConversation.isAskable` refuses otherwise.
+        "replyProposedMessageId": "which message Overture is asking about; a fact about his inbox",
+        "replyProposedThreadId": "which conversation that message is on",
+        "replyProposedFromAddress": "who that message is from, so the row can ask without calling Gmail",
+        "replyProposedFromName": "and what they are called",
+        "replyProposedSubject": "what that message is called",
+        "replyProposedSentAt": "when that message was sent",
+        "replyProposedScore": "how strongly it matched, for diagnosing a wrong proposal",
+        "replyProposedAt": "when Overture started asking",
+        "dismissedConversationIds": "the conversations Dan has said are NOT them, the sibling of "
+            + "dismissedReplyId above and not outreach for the same reason it is not",
         "attachWroteAddress": "whether the ATTACH is what put the current address here, so a detach takes "
             + "back only what it wrote; provenance of a field, not evidence anybody was contacted",
         "replyCandidateSearchedAt": "when OVERTURE last read the mailbox for an answer to this pitch, "

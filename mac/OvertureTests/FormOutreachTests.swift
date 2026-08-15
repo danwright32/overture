@@ -372,7 +372,7 @@ struct FormOutreachCopyTests {
     // not that: it is working exactly as intended, and saying it the same way would send him hunting for a
     // problem that does not exist (L11: distinct causes, distinct messages).
     @Test func theSentLineExplainsTheSilenceWithoutSoundingLikeABrokenSend() {
-        #expect(FormOutreachCopy.sentLine == "Sent through their form. Overture cannot see a reply to this one.")
+        #expect(FormOutreachCopy.sentLine == "Sent through their form.")
     }
 
     // The Reached-out list's due label offers to reach out again. For a form pitch there is nothing to

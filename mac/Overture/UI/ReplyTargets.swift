@@ -8,6 +8,15 @@ struct ReplyTarget: Identifiable {
     var id: String { prospect.naturalKey + "|" + recipient.id }
 }
 
+// #2718: which pitch the manual "Link their reply" picker is open for. Its own type rather than reusing
+// ReplyTarget above, because that one names a conversation being ANSWERED and this one names a pitch with
+// no conversation at all: one word meaning two things is how a sheet ends up opened on the wrong row.
+struct ManualLinkTarget: Identifiable {
+    let prospect: Prospect
+    let recipient: Recipient
+    var id: String { prospect.naturalKey + "|" + recipient.id }
+}
+
 // #2144: the composed reply held while Dan reads it. A wrapper only because SendConfirmation carries no
 // identity of its own and `.sheet(item:)` needs one, the same reason PendingRowNudge below has an id.
 struct PendingReply: Identifiable {

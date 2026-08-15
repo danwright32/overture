@@ -92,10 +92,19 @@ enum FormOutreachCopy {
     // Deliberately NOT the #483 wording ("sent, but replies can't be watched"), which names a FAILURE Dan
     // should go and check in Gmail. Nothing failed here. Saying it the same way would send him hunting a
     // problem that does not exist (L11).
-    static let sentLine = "Sent through their form. Overture cannot see a reply to this one."
-    // #2612: the same fact about a DM. Its own sentence because "through their form" is false of one,
-    // and this line is the only account Dan gets of an outreach Overture cannot observe.
-    static let sentLineSocial = "Sent as a DM. Overture cannot see a reply to this one."
+    //
+    // #2718: it says the CHANNEL and nothing else now. It used to end "Overture cannot see a reply to
+    // this one", which #2713 made false: it reads the inbox for one. The first fix simply swapped in
+    // "Overture is reading your inbox for their reply", and reading the generated inventory cold caught
+    // that landing directly above `ProposedConversationCopy.searchedAndFoundNothing`, which says the
+    // same thing again with one extra clause. Two adjacent lines, each correct alone, saying one thing
+    // twice, is #843 exactly, and the read is the only thing that catches it.
+    //
+    // So the split is by SUBJECT: this line is about where the pitch went, and the line beneath it is
+    // about the reply (not found yet, none declined, stopped looking). Neither restates the other.
+    static let sentLine = "Sent through their form."
+    // #2612: the same fact about a DM. Its own sentence because "through their form" is false of one.
+    static let sentLineSocial = "Sent as a DM."
     static func sentLine(formURL: String?) -> String {
         guard let formURL, Reachability.isSocialOnly(formURL) else { return sentLine }
         return sentLineSocial

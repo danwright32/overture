@@ -14,14 +14,23 @@ enum DueWork {
         var followUps: Int          // silent leads waiting on a gentle nudge
         // #2397: shows whose date has passed, waiting on a closing note or on Dan saying how it ended.
         var afterTheShow: Int
+        // #2718: form and DM pitches where Overture has found a conversation that might be their reply
+        // and is waiting on Dan to say whether it is theirs. It joins this count rather than sitting
+        // quietly on a card because a quiet question would go unanswered until the show had been and
+        // gone (his call, 2026-08-14), and because a proposal shown in Reached out but excluded here
+        // would give a pill whose number is smaller than the list behind it.
+        var conversationsToConfirm: Int = 0
 
-        var total: Int { followUps + afterTheShow }
+        var total: Int { followUps + afterTheShow + conversationsToConfirm }
     }
 
     static func counts(prospects: [Prospect], now: Date,
                        followUp: FollowUpConfig = .init()) -> Counts {
         Counts(followUps: FollowUp.dueRecipients(from: prospects, now: now, config: followUp).count,
-               afterTheShow: PostEventPrompt.dueRecipients(from: prospects, now: now).count)
+               afterTheShow: PostEventPrompt.dueRecipients(from: prospects, now: now).count,
+               // The SAME function the list is built from, never a second predicate that happens to
+               // agree today (L16).
+               conversationsToConfirm: ProposedConversation.dueRecipients(from: prospects).count)
     }
 }
 

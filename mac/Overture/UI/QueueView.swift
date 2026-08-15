@@ -92,6 +92,11 @@ struct QueueView: View {
     // none pending). One guard for both, since they share the dialog and differ only in verb and action.
     @State private var pendingSelfBookingGuard: SelfBookingGuard?
     @State private var showReconnect = false
+    // #2718: which contact's proposed conversation is being linked right now. A confirm makes two Gmail
+    // calls, so the control has to say it is working rather than sitting there looking unpressed.
+    @State private var linkingConversationFor: String?
+    // #2718: which pitch's manual "Link their reply" picker is open.
+    @State private var manualLinkTarget: ManualLinkTarget?
     // #436: in-flight sends, so a tapped Send shows a live "Sending…" state instead of a dead button.
     // Outbound keyed by prospect natural key; replies keyed by recipient id. Cleared when the await ends.
     // #1922: they live on SendProgressState now, an object, so a send animates its own card instead of
@@ -327,6 +332,12 @@ struct QueueView: View {
             }
             // #1504: the same sheet that logs one, opened on an existing record.
             .sheet(item: $editingInquiry) { InquiryIntakeSheet(editing: $0) }
+            // #2718: Dan's manual route, for when the search found their reply and did not back it.
+            .sheet(item: $manualLinkTarget) { target in
+                LinkReplyPicker(prospect: target.prospect, recipient: target.recipient) {
+                    manualLinkTarget = nil
+                }
+            }
     }
 
     // #1219: a committing action (Approve or Re-prep) waiting on the self-booking confirm, so the naming
@@ -1179,6 +1190,12 @@ struct QueueView: View {
                                                       replyMarkedByHand: r.replyMarkedByHandAt != nil))
                         .font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
                 }
+                // #2718: the question Overture wants answered, ON THE ROW, so Dan says yes or no without
+                // opening Gmail. Every branch draws something, because a state that renders nothing sits
+                // in the data and vanishes from the product (L45), and the four say different things
+                // rather than one sentence covering them all: found nothing yet, not read yet, stopped
+                // looking, and all declined are four different facts about the same row (L11).
+                proposedConversationBlock(r, of: p, now: now)
                 // #675: this pipeline never carries a bounced recipient (isInPlay excludes them), so
                 // the only signal worth restoring here is the soft-delay hint (#656) the embedded
                 // DraftReviewView used to show before the lightweight row (#661) replaced it.
@@ -1491,6 +1508,100 @@ struct QueueView: View {
     // #2130: what the row's control actually does, one branch per kind, so the wording and the behaviour
     // are decided in the same place. A send never fires from the press: it builds the exact email and puts
     // it in front of Dan first, the same confirmation the Due sheet uses (L64).
+    // #2718: everything the row says and offers about a proposed conversation. The DECISIONS all live in
+    // `ProposedConversation`, so this stays a rendering of a state rather than a second copy of the rule
+    // (the #863/#885 rule).
+    @ViewBuilder
+    private func proposedConversationBlock(_ r: Recipient, of p: Prospect, now: Date) -> some View {
+        switch ProposedConversation.state(of: r, now: now) {
+        case .notApplicable:
+            EmptyView()
+        case .none(let searched):
+            Text(searched ? ProposedConversationCopy.searchedAndFoundNothing
+                          : ProposedConversationCopy.notSearchedYet)
+                .font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
+            manualLinkControl(r, of: p)
+        case .stoppedLooking:
+            Text(ProposedConversationCopy.stoppedLooking)
+                .font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
+            manualLinkControl(r, of: p)
+        case .allDeclined:
+            Text(ProposedConversationCopy.allDeclined)
+                .font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
+            manualLinkControl(r, of: p)
+        case .attachedAwaitingAnswer:
+            Text(ProposedConversationCopy.attachedAwaitingAnswer)
+                .font(.system(size: 10)).foregroundStyle(OVColor.gold)
+        case .proposed(let candidate):
+            VStack(alignment: .leading, spacing: 3) {
+                Text(ProposedConversationCopy.question)
+                    .font(OVType.meta).foregroundStyle(OVColor.ink)
+                Text(ProposedConversationCopy.sender(name: candidate.fromName,
+                                                     address: candidate.fromAddress))
+                    .font(.system(size: 10)).foregroundStyle(OVColor.ink)
+                Text(ProposedConversationCopy.detail(subject: candidate.subject,
+                                                     sentAt: candidate.sentAt, now: now))
+                    .font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
+                // What confirming DOES, beside the control that does it, so what Dan approves is exactly
+                // what happens including who it reaches (L64).
+                Text(ProposedConversationCopy.confirmDetail(address: candidate.fromAddress))
+                    .font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: OVSpacing.sm) {
+                    // Three visibly different states, never one indefinite spinner: at rest, working, and
+                    // (through the feedback surface) failed.
+                    if linkingConversationFor == r.id {
+                        ProgressView().controlSize(.small)
+                        Text(ProposedConversationCopy.linking).font(OVType.meta)
+                            .foregroundStyle(OVColor.inkSoft)
+                    } else {
+                        Button(ProposedConversationCopy.confirm) { linkProposedConversation(r, of: p) }
+                            .font(OVType.meta)
+                        Button(ProposedConversationCopy.decline) { declineProposedConversation(r) }
+                            .buttonStyle(.plain).font(OVType.meta)
+                            .foregroundStyle(OVColor.inkSoft)
+                    }
+                }
+            }
+            .padding(.top, 2)
+        }
+    }
+
+    // Dan's explicit ask: a way to tell Overture about the email when it did not propose one.
+    @ViewBuilder
+    private func manualLinkControl(_ r: Recipient, of p: Prospect) -> some View {
+        if ProposedConversation.offersManualLink(r) {
+            Button(ProposedConversationCopy.manualLink) { manualLinkTarget = ManualLinkTarget(prospect: p, recipient: r) }
+                .buttonStyle(.plain).font(.system(size: 10)).foregroundStyle(OVColor.gold)
+        }
+    }
+
+    private func linkProposedConversation(_ r: Recipient, of p: Prospect) {
+        linkingConversationFor = r.id
+        Task { @MainActor in
+            let outcome = await ConfirmProposedConversation().confirm(on: r, of: p, in: context)
+            linkingConversationFor = nil
+            switch outcome {
+            case .notConnected: showReconnect = true
+            case .failed(let reason), .refused(let reason):
+                feedback.acknowledge(reason, tone: .warning)
+            case .attached(_, let saveFailed):
+                feedback.acknowledge(saveFailed ? ProposedConversationCopy.couldNotSaveLink
+                                                : ProposedConversationCopy.linked,
+                                     tone: saveFailed ? .warning : .info)
+            }
+        }
+    }
+
+    private func declineProposedConversation(_ r: Recipient) {
+        ProposedConversation.decline(on: r)
+        do {
+            try context.save()
+        } catch {
+            feedback.acknowledge(ProposedConversationCopy.couldNotSaveLink, tone: .warning)
+        }
+    }
+
     private func startRowAction(_ r: Recipient, of p: Prospect, now: Date) {
         switch ReachedOutAction.of(r, in: p, now: now, today: today) {
         case .sendNudge:

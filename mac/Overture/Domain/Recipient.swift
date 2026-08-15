@@ -271,6 +271,33 @@ final class Recipient {
     // queue the cold pitch to them. Refusing only while a conversation is attached would leave that door
     // open behind a detach.
     var conversationEverAttachedAt: Date?
+    // #2718: the conversation Overture is ASKING Dan about, stored in full because a SwiftUI row cannot
+    // make a Gmail call and the question has to be answerable without one.
+    //
+    // Held from the FIRST candidate proposed until he answers it, rather than replaced by whatever
+    // scores highest on the latest tick. A question that changes under him between reading it and
+    // pressing Yes is the defect L64 names: what he approves has to be exactly what happens.
+    //
+    // Written by `ProposedConversation.propose`, read by `ProposedConversation.stored` and, through it,
+    // by the row and by `DueWork.counts`.
+    var replyProposedMessageId: String?
+    var replyProposedThreadId: String?
+    var replyProposedFromAddress: String?
+    var replyProposedFromName: String?
+    var replyProposedSubject: String?
+    var replyProposedSentAt: Date?
+    var replyProposedScore: Int = 0
+    var replyProposedAt: Date?
+    // #2718: the conversations Dan has said are NOT them.
+    //
+    // A SET, and keyed on the CONVERSATION rather than on a message. `dismissedReplyId` above is the
+    // precedent and is deliberately spelled the same way, but it is a single slot, which is sufficient
+    // there because an emailed contact has exactly one watched thread. Here the mailbox search returns
+    // many candidates over time, so a slot would let him decline A, be offered B, decline B, and meet A
+    // again on the next tick (L131). Keying on the message id instead would re-propose the same
+    // conversation the moment that sender writes again, which on a live conversation is what happens
+    // next (L92).
+    var dismissedConversationIds: [String]?
 
     // Per-recipient send + engagement.
     var sendStateRaw: String = SendState.pending.rawValue
