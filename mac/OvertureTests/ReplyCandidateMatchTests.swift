@@ -122,17 +122,22 @@ struct ReplyCandidateMatchTests {
         #expect(ReplyCandidateMatch.refusal(for: m, venue: "The Green Room 42", selfEmail: me) == .bulkMail)
     }
 
-    // MEASURED, not assumed, and recorded here because the refusal above is what actually protects Dan
-    // on four of his five live pitches. `VenueContactGuard` compares the SLUGGED venue name against the
-    // domain's second-level label, and "The Green Room 42" slugs to "thegreenroom42" while the domain
-    // gives "greenroom42", so the leading "The" makes them unequal and the venue guard does NOT fire.
-    // If this ever starts passing, the venue guard has been improved and this test should be read
-    // again rather than deleted.
-    @Test("the venue guard alone does not catch this room, which is why the bulk-mail refusal matters")
-    func theVenueGuardMissesALeadingThe() {
+    // FLIPPED by #2743, in the change that fixed it, which is what the earlier version of this test asked
+    // whoever got there to do.
+    //
+    // It used to assert the guard did NOT catch this room, with a pointer to #2743, because the slugged
+    // venue "thegreenroom42" never equalled the domain label "greenroom42" and so the guard protecting
+    // Dan from a room's own address had never fired on the room behind four of his five open form
+    // pitches. Now it does, and this asserts that, because a test still claiming the old behaviour would
+    // be a guard passing on a fact that is no longer true.
+    //
+    // The bulk-mail refusal above is still the one that matters for a NEWSLETTER, and still has its own
+    // test: it catches one whatever the domain, including from a room whose site Overture cannot connect
+    // to the venue name at all.
+    @Test("the venue guard now catches this room too, since #2743")
+    func theVenueGuardCatchesALeadingThe() {
         #expect(VenueContactGuard.looksLikeVenue(email: "hello@greenroom42.com",
-                                                 venue: "The Green Room 42") == false,
-                "the venue guard now catches a leading The; see overture#2743 and re-read this test")
+                                                 venue: "The Green Room 42"))
     }
 
     @Test("Dan's own mail is refused, so an answer can never be proposed from his own sent copy")
