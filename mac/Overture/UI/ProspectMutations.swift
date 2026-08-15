@@ -628,6 +628,7 @@ enum ProspectMutations {
         // dismissed, and counted here so the acknowledgment can say so. Dismissing it whole instead would
         // be the #2691 defect, silently, on the path where Dan is looking at a count rather than a card.
         var keptWholeRuns = 0
+        var uncheckedRuns = 0
         let rows = targets.compactMap { model -> QueueUndoEntry.Row? in
             let priorStatus = model.status
             let priorReason = model.showOutcomeRaw
@@ -650,6 +651,12 @@ enum ProspectMutations {
                 keptWholeRuns += 1
                 return nil
             }
+            // Skipped for the same reason and counted apart: this row is left exactly as it was, and the
+            // banner may not say a card was found when none was read (L11).
+            if case .cannotCheck = drop {
+                uncheckedRuns += 1
+                return nil
+            }
             if let night, case .moved = drop {
                 ConflictSweep.reapply(model, export: export, in: context)
                 return QueueUndoEntry.Row(recording: model, priorStatus: priorStatus,
@@ -668,8 +675,9 @@ enum ProspectMutations {
         // there is nothing to save and nothing to undo. Dan is still told, because a press that changed
         // nothing and a press that did the work look identical from the keyboard.
         guard !rows.isEmpty else {
-            if keptWholeRuns > 0 {
+            if keptWholeRuns > 0 || uncheckedRuns > 0 {
                 feedback.acknowledge(ActionAck.nightDismissedSomeKept(count: 0, kept: keptWholeRuns,
+                                                                      unchecked: uncheckedRuns,
                                                                       reason: reason,
                                                                       dateLabel: dateLabel),
                                      tone: .warning)
@@ -687,8 +695,9 @@ enum ProspectMutations {
             undo.record(entry)
         }
         // The count is the rows that ACTUALLY went, never the targets asked for (L12).
-        if keptWholeRuns > 0 {
+        if keptWholeRuns > 0 || uncheckedRuns > 0 {
             feedback.acknowledge(ActionAck.nightDismissedSomeKept(count: rows.count, kept: keptWholeRuns,
+                                                                  unchecked: uncheckedRuns,
                                                                   reason: reason, dateLabel: dateLabel),
                                  tone: .warning)
         } else {
@@ -732,6 +741,12 @@ enum ProspectMutations {
             if case .cannotMove(let taken) = drop {
                 feedback.acknowledge(ActionAck.runNightKeyTaken(org: item.groupName, night: taken),
                                      tone: .warning)
+                return
+            }
+            // A store that could not answer gets its own sentence, not the one naming a date: nothing was
+            // read, so there is no date to name (L11).
+            if case .cannotCheck = drop {
+                feedback.acknowledge(ActionAck.runNightCheckFailed(org: item.groupName), tone: .warning)
                 return
             }
             if let night, case .moved = drop {

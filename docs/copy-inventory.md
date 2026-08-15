@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1355 sentences**.
+Every sentence Overture can say to Dan: **1358 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -331,6 +331,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReachabilityRunSummary.swift`
 "1 of them went through an earlier check and never got an answer."
     `Domain/ProbeSelection.swift`
+"1 run was left alone: Overture could not check whether its next night is free"
+    `App/ActionFeedback.swift`
 "1 run was left alone: it already has a separate card for a later night"
     `App/ActionFeedback.swift`
 "1 show on \(dateLabel) has no genre read. Set it before dismissing the night."
@@ -1195,6 +1197,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/InquiryIntakeSheet.swift`
 "Nothing blocked. Add a vacation and Overture will stop pitching you for those nights."
     `UI/DaysOffView.swift`
+"Nothing changed on \(org): Overture could not check whether that night is free. Try again."
+    `App/ActionFeedback.swift`
 "Nothing changed."
     `Domain/ShowOutcome.swift`
 "Nothing due before the show"
@@ -2572,7 +2576,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "\(night) \($0)"
     `Integration/ScoutService.swift`
-"\(nightDismissed(count: count, reason: reason, dateLabel: dateLabel)). \(keptSentence)"
+"\(nightDismissed(count: count, reason: reason, dateLabel: dateLabel)). \(tail)"
     `App/ActionFeedback.swift`
 "\(omniFocusChanged) follow-up\(omniFocusChanged == 1 ? "" : "s") updated"
     `Domain/ReconcileSummary.swift`
@@ -2764,6 +2768,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceReadability.swift`
 "\(unanswered) of \(requested) shows never got an answer and are still unchecked"
     `Domain/ReachabilityRunSummary.swift`
+"\(unchecked) runs were left alone: Overture could not check whether their next nights are free"
+    `App/ActionFeedback.swift`
 "\(undoRestoredNight(count: restored, priorStatuses: priorStatuses)). \(others) already moved on."
     `App/ActionFeedback.swift`
 "\(unread.count == 1 ? "that month" : "those months") isn't here."

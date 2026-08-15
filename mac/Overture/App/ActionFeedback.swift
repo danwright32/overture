@@ -184,15 +184,32 @@ enum ActionAck {
         return "\(org) already has a separate card for \(date), so this night was left alone"
     }
 
+    // #2754: the store could not be read to check, so nothing was changed. Says only what was actually
+    // measured, which is nothing: naming a date would send Dan looking for a card nobody found (L11).
+    static func runNightCheckFailed(org: String) -> String {
+        "Nothing changed on \(org): Overture could not check whether that night is free. Try again."
+    }
+
     // #2754: the same refusal inside a whole-night dismiss, where it is one row among several and the
     // count Dan reads has to exclude it (L12).
-    static func nightDismissedSomeKept(count: Int, kept: Int, reason: ShowOutcome,
+    static func nightDismissedSomeKept(count: Int, kept: Int, unchecked: Int, reason: ShowOutcome,
                                        dateLabel: String) -> String {
-        let keptSentence = kept == 1
-            ? "1 run was left alone: it already has a separate card for a later night"
-            : "\(kept) runs were left alone: they already have separate cards for later nights"
-        guard count > 0 else { return keptSentence }
-        return "\(nightDismissed(count: count, reason: reason, dateLabel: dateLabel)). \(keptSentence)"
+        // Two reasons a run was left behind, kept apart on purpose: one names a card that was found, the
+        // other admits nothing could be read (L11). Both can happen in one press, so both are said.
+        var sentences: [String] = []
+        if kept > 0 {
+            sentences.append(kept == 1
+                ? "1 run was left alone: it already has a separate card for a later night"
+                : "\(kept) runs were left alone: they already have separate cards for later nights")
+        }
+        if unchecked > 0 {
+            sentences.append(unchecked == 1
+                ? "1 run was left alone: Overture could not check whether its next night is free"
+                : "\(unchecked) runs were left alone: Overture could not check whether their next nights are free")
+        }
+        let tail = sentences.joined(separator: ". ")
+        guard count > 0 else { return tail }
+        return "\(nightDismissed(count: count, reason: reason, dateLabel: dateLabel)). \(tail)"
     }
 
     // #1500: the same night, back in one press. Names the stage pill to go and look at, for the #1415

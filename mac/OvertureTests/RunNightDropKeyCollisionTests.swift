@@ -101,6 +101,53 @@ struct RunNightDropKeyCollisionTests {
         #expect(run.dropNight("2026-10-02", reason: .tooSoon, now: now, in: ctx) == .moved(to: "2026-10-03"))
     }
 
+    // MARK: a store that cannot answer
+
+    // The refusal has to fail closed, and it has to say so in its own words. Driven through the lookup
+    // seam because a healthy in-memory store never throws, so nothing else can reach this branch, and a
+    // test that only ever asks a working store proves nothing about the one that matters (L140).
+    struct StoreUnreadable: Error {}
+
+    @Test("a store that cannot answer refuses the drop rather than assuming the night is free")
+    func anUnreadableStoreRefuses() throws {
+        let ctx = ModelContext(try container())
+        let run = card(ctx, night: "2026-10-02", nights: ["2026-10-02", "2026-10-03"])
+        try ctx.save()
+
+        let outcome = run.dropNight("2026-10-02", reason: .dateConflict, now: now,
+                                    lookup: { _ in throw StoreUnreadable() })
+
+        // NOT `.cannotMove`: nothing was read, so there is no date to name.
+        #expect(outcome == .cannotCheck)
+        #expect(run.runNights == ["2026-10-02", "2026-10-03"])
+        #expect(run.performanceDate == "2026-10-02")
+        #expect(run.droppedRunNights.isEmpty)
+    }
+
+    @Test("a store that cannot answer refuses the undo too")
+    func anUnreadableStoreRefusesTheUndo() throws {
+        let ctx = ModelContext(try container())
+        let run = card(ctx, night: "2026-10-02", nights: ["2026-10-02", "2026-10-03"])
+        try ctx.save()
+        _ = run.dropNight("2026-10-02", reason: .dateConflict, now: now, in: ctx)
+
+        #expect(run.restoreNight("2026-10-02", lookup: { _ in throw StoreUnreadable() }) == false)
+        #expect(run.performanceDate == "2026-10-03")
+        #expect(DroppedNight.all(on: run).map(\.night) == ["2026-10-02"])
+    }
+
+    // The two refusals must not share a sentence: one names a card that was found, the other admits
+    // nothing was read. Naming a date here would send Dan looking for a card that does not exist.
+    @Test("the unreadable refusal says what it measured, which is nothing")
+    func theUnreadableRefusalNamesNoDate() {
+        let taken = ActionAck.runNightKeyTaken(org: "Gross Prophets", night: "2026-10-03")
+        let failed = ActionAck.runNightCheckFailed(org: "Gross Prophets")
+
+        #expect(taken.contains("Oct 3"))
+        #expect(failed.contains("Oct 3") == false, "no date was read, so none may be claimed: \(failed)")
+        #expect(failed != taken)
+    }
+
     // MARK: the same defect on the way back (L30: the class, not the instance)
 
     // Cmd+Z re-keys the row onto the night it dropped, and that key can be taken too: the feed still

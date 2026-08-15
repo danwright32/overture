@@ -54,6 +54,18 @@ enum RunNightDrop {
         // rather than a bare refusal so the caller can say WHICH date is in the way (L109: a refusal the
         // person cannot be told is a control that does nothing).
         case cannotMove(to: String)
+        // #2754: the store could not answer whether that night is free. Distinct from `cannotMove`, which
+        // names a card this code has SEEN: sending Dan to look for a card nobody found would be a message
+        // claiming more than its check measured (L11).
+        case cannotCheck
+    }
+
+    // What the store said about a candidate key. Three answers rather than a Bool, so the caller can tell
+    // a refusal it can explain from one it cannot.
+    enum KeyAvailability: Equatable {
+        case free
+        case taken
+        case unreadable
     }
 }
 
@@ -116,16 +128,25 @@ extension Prospect {
     // candidate key is routinely one the queue is not showing (dismissed, archived, outside the date
     // window), and a check answered by the visible list would report those as free (L119).
     //
-    // A read that FAILS answers no. Refusing a drop costs Dan one dismiss he can retry; treating an
-    // unreadable store as an empty one merges two cards and destroys one of them (L105, L42: a guard
-    // that protects fails closed).
-    private func mayTake(key: String, in context: ModelContext) -> Bool {
+    // THREE answers, not two. A read that fails refuses, the same direction as a taken key, because
+    // treating an unreadable store as an empty one merges two cards and destroys one of them (L105,
+    // L42). But it is a DIFFERENT refusal: "another card has Oct 3" is a claim about a card this code
+    // never saw, and a message may only claim what its check actually measured (L11). Naming the wrong
+    // reason would send Dan looking for a card that does not exist.
+    func keyAvailability(_ key: String, lookup: (String) throws -> Prospect?) -> RunNightDrop.KeyAvailability {
         do {
-            guard let holder = try Prospect.stored(key: key, in: context) else { return true }
-            return holder === self
+            guard let holder = try lookup(key) else { return .free }
+            return holder === self ? .free : .taken
         } catch {
-            return false
+            return .unreadable
         }
+    }
+
+    // The store is the lookup on every shipping path. The seam exists so the unreadable branch above can
+    // be exercised at all: a healthy in-memory store never throws, so a test that only ever asks one
+    // proves nothing about the branch that matters most (L140).
+    func keyAvailability(_ key: String, in context: ModelContext) -> RunNightDrop.KeyAvailability {
+        keyAvailability(key, lookup: { try Prospect.stored(key: $0, in: context) })
     }
 
     // Drop one night of this run, or say that there is no run to pick apart.
@@ -137,6 +158,13 @@ extension Prospect {
     @discardableResult
     func dropNight(_ night: String, reason: ShowOutcome, now: Date,
                    in context: ModelContext) -> RunNightDrop.Outcome {
+        dropNight(night, reason: reason, now: now,
+                  lookup: { try Prospect.stored(key: $0, in: context) })
+    }
+
+    @discardableResult
+    func dropNight(_ night: String, reason: ShowOutcome, now: Date,
+                   lookup: (String) throws -> Prospect?) -> RunNightDrop.Outcome {
         guard DroppedNight.all(on: self).allSatisfy({ $0.night != night }) else { return .alreadyDropped }
         // An empty `runNights` is a row stored before #1523, where the SPAN is all there is and nobody
         // knows which nights it plays. It is not a run whose nights can be picked off one at a time, and
@@ -162,7 +190,11 @@ extension Prospect {
         // error raised anywhere (L5).
         let candidate = Prospect.makeNaturalKey(groupName: groupName, performanceDate: opening,
                                                 venue: venue)
-        guard mayTake(key: candidate, in: context) else { return .cannotMove(to: opening) }
+        switch keyAvailability(candidate, lookup: lookup) {
+        case .taken: return .cannotMove(to: opening)
+        case .unreadable: return .cannotCheck
+        case .free: break
+        }
 
         droppedRunNights.append(DroppedNight(night: night, reason: reason, at: now).stored)
         runNights = remaining
@@ -184,6 +216,11 @@ extension Prospect {
     // whether the night came back, so a caller cannot report a restore that did not happen (L12).
     @discardableResult
     func restoreNight(_ night: String, in context: ModelContext) -> Bool {
+        restoreNight(night, lookup: { try Prospect.stored(key: $0, in: context) })
+    }
+
+    @discardableResult
+    func restoreNight(_ night: String, lookup: (String) throws -> Prospect?) -> Bool {
         let all = DroppedNight.all(on: self)
         let kept = all.filter { $0.night != night }
         guard kept.count != all.count else { return false }
@@ -194,7 +231,11 @@ extension Prospect {
         // Checked before ANY of the four writes below, the same order as the drop: a half-undo that
         // cleared the dropped-night record without moving the row would lose the record of the drop AND
         // leave the night out of the run, which no later press could put right.
-        guard mayTake(key: candidate, in: context) else { return false }
+        //
+        // Taken and unreadable are one answer HERE, unlike in the drop, because an undo has no message of
+        // its own to be wrong in: the caller reports how many rows came back, and a row that did not is
+        // counted the same either way.
+        guard keyAvailability(candidate, lookup: lookup) == .free else { return false }
         droppedRunNights = kept.map(\.stored)
         runNights = restored
         performanceDate = opening
