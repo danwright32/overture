@@ -60,6 +60,16 @@ struct QueueUndoEntry: Equatable, Sendable {
         let resultingStatus: ReviewStatus
         let resultingShowOutcomeRaw: String?
 
+        // #2691: the night this action DROPPED from a run, when it dropped one rather than dismissing
+        // the show. nil for every other action, which is almost all of them.
+        //
+        // A drop leaves the status and the reason exactly where they were, so `stillApplies` above can
+        // never notice one; what it changes is `performanceDate` and the natural key. That is why this
+        // row's `naturalKey` is recorded AFTER the drop: it is what the row is keyed on by the time
+        // Cmd+Z is pressed, and recording the old key would look up something nothing holds and make the
+        // press silently do nothing while looking exactly like a working undo (#1415).
+        var droppedNight: String? = nil
+
         // Is the row still exactly how this action left it? If anything moved it since (a background
         // writer, a later action of Dan's, a scout import), undoing would clobber something newer, so this
         // row no longer applies.
@@ -139,14 +149,16 @@ struct QueueUndoEntry: Equatable, Sendable {
     init(naturalKey: String, groupName: String, actionLabel: String,
          priorStatus: ReviewStatus, priorShowOutcomeRaw: String?, priorDismissedAt: Date?,
          priorConflictClearedKey: String?,
-         resultingStatus: ReviewStatus, resultingShowOutcomeRaw: String?) {
+         resultingStatus: ReviewStatus, resultingShowOutcomeRaw: String?,
+         droppedNight: String? = nil) {
         self.init(actionLabel: actionLabel, batchLabel: nil,
                   primaryRow: Row(naturalKey: naturalKey, groupName: groupName,
                                   priorStatus: priorStatus, priorShowOutcomeRaw: priorShowOutcomeRaw,
                                   priorDismissedAt: priorDismissedAt,
                                   priorConflictClearedKey: priorConflictClearedKey,
                                   resultingStatus: resultingStatus,
-                                  resultingShowOutcomeRaw: resultingShowOutcomeRaw),
+                                  resultingShowOutcomeRaw: resultingShowOutcomeRaw,
+                                  droppedNight: droppedNight),
                   otherRows: [])
     }
 
@@ -176,7 +188,7 @@ extension QueueUndoEntry.Row {
     @MainActor
     init(recording prospect: Prospect,
          priorStatus: ReviewStatus, priorShowOutcomeRaw: String?, priorDismissedAt: Date?,
-         priorConflictClearedKey: String?) {
+         priorConflictClearedKey: String?, droppedNight: String? = nil) {
         self.init(naturalKey: prospect.naturalKey,
                   groupName: prospect.groupName,
                   priorStatus: priorStatus,
@@ -184,7 +196,8 @@ extension QueueUndoEntry.Row {
                   priorDismissedAt: priorDismissedAt,
                   priorConflictClearedKey: priorConflictClearedKey,
                   resultingStatus: prospect.status,
-                  resultingShowOutcomeRaw: prospect.showOutcomeRaw)
+                  resultingShowOutcomeRaw: prospect.showOutcomeRaw,
+                  droppedNight: droppedNight)
     }
 }
 
@@ -192,16 +205,17 @@ extension QueueUndoEntry {
     @MainActor
     init(recording actionLabel: String, on prospect: Prospect,
          priorStatus: ReviewStatus, priorShowOutcomeRaw: String?, priorDismissedAt: Date?,
-         priorConflictClearedKey: String?) {
+         priorConflictClearedKey: String?, droppedNight: String? = nil) {
         let row = Row(recording: prospect, priorStatus: priorStatus,
                       priorShowOutcomeRaw: priorShowOutcomeRaw, priorDismissedAt: priorDismissedAt,
-                      priorConflictClearedKey: priorConflictClearedKey)
+                      priorConflictClearedKey: priorConflictClearedKey, droppedNight: droppedNight)
         self.init(naturalKey: row.naturalKey, groupName: row.groupName, actionLabel: actionLabel,
                   priorStatus: row.priorStatus, priorShowOutcomeRaw: row.priorShowOutcomeRaw,
                   priorDismissedAt: row.priorDismissedAt,
                   priorConflictClearedKey: row.priorConflictClearedKey,
                   resultingStatus: row.resultingStatus,
-                  resultingShowOutcomeRaw: row.resultingShowOutcomeRaw)
+                  resultingShowOutcomeRaw: row.resultingShowOutcomeRaw,
+                  droppedNight: row.droppedNight)
     }
 }
 
@@ -269,6 +283,9 @@ enum QueueUndo {
             // so restoring it is a no-op for every action that never touched it, and there is no "did this
             // one accept a clash" flag to get wrong.
             prospect.restoreConflictClearance(row.priorConflictClearedKey)
+            // #2691: and the night, which puts `runNights`, `performanceDate`, `runEndDate` and the key
+            // back together. A no-op for every action that dropped none.
+            if let night = row.droppedNight { prospect.restoreNight(night) }
         }
         return Outcome(restored: applicable.count, total: entry.rows.count)
     }

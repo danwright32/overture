@@ -162,6 +162,21 @@ enum ConflictSweep {
     // Dan's own clearances survive by construction: setScoutConflict compares the new key against the one
     // he cleared, so a show he already waved through stays waved through, and one whose clash has changed
     // under him blocks again. That is the same rule the scout applies, because it is the same call.
+    // #2691: the same question asked of ONE row, for an action that changes only that row's nights.
+    //
+    // Deliberately the same calendar build and the same comparison as the sweep below, rather than a
+    // second spelling of "is this show blocked": two answers to one question is how a card ends up
+    // carrying a badge the sweep would have cleared (L16).
+    @discardableResult
+    static func reapply(_ p: Prospect, export: DayOffEditing.Export, in context: ModelContext) -> Bool {
+        let calendar = ScoutService.blockedCalendar(export: export, context: context)
+        let key = calendar.conflict(performanceDate: p.performanceDate, runEndDate: p.runEndDate,
+                                    nights: p.runNights)?.key
+        guard key != p.conflictKey else { return false }
+        p.setScoutConflict(key)
+        return true
+    }
+
     @discardableResult
     static func reapplyAll(export: DayOffEditing.Export, in context: ModelContext) -> Int {
         let calendar = ScoutService.blockedCalendar(export: export, context: context)
