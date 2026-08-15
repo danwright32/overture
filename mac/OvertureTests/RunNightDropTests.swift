@@ -84,7 +84,7 @@ struct RunNightDropTests {
         let ctx = ModelContext(try container())
         let p = sandler(ctx)
 
-        let outcome = p.dropNight("2026-08-19", reason: .dateConflict, now: now)
+        let outcome = p.dropNight("2026-08-19", reason: .dateConflict, now: now, in: ctx)
 
         #expect(outcome == .moved(to: "2026-09-30"))
         #expect(p.performanceDate == "2026-09-30")
@@ -100,7 +100,7 @@ struct RunNightDropTests {
         let ctx = ModelContext(try container())
         let p = sandler(ctx)
 
-        _ = p.dropNight("2026-08-19", reason: .dateConflict, now: now)
+        _ = p.dropNight("2026-08-19", reason: .dateConflict, now: now, in: ctx)
 
         #expect(p.status != .dismissed)
         #expect(p.dismissedAt == nil)
@@ -115,7 +115,7 @@ struct RunNightDropTests {
         let ctx = ModelContext(try container())
         let p = sandler(ctx)
 
-        _ = p.dropNight("2026-08-19", reason: .pitchingOtherShows, now: now)
+        _ = p.dropNight("2026-08-19", reason: .pitchingOtherShows, now: now, in: ctx)
 
         #expect(p.showOutcomeRaw == nil, "the show has not ended, so it has no outcome")
         #expect(p.dismissedAt == nil)
@@ -129,7 +129,7 @@ struct RunNightDropTests {
         let p = sandler(ctx)
         let before = p.naturalKey
 
-        _ = p.dropNight("2026-08-19", reason: .dateConflict, now: now)
+        _ = p.dropNight("2026-08-19", reason: .dateConflict, now: now, in: ctx)
 
         #expect(p.naturalKey != before)
         #expect(p.naturalKey == Prospect.makeNaturalKey(groupName: "Rachel Sandler's Singer Showcase",
@@ -148,7 +148,7 @@ struct RunNightDropTests {
         let ctx = ModelContext(try container())
         let p = sandler(ctx)
 
-        _ = p.dropNight("2026-08-19", reason: .hadPaidWork, now: now)
+        _ = p.dropNight("2026-08-19", reason: .hadPaidWork, now: now, in: ctx)
 
         let dropped = DroppedNight.all(on: p)
         #expect(dropped.count == 1)
@@ -161,7 +161,7 @@ struct RunNightDropTests {
     func theScoutDoesNotPutItBack() throws {
         let ctx = ModelContext(try container())
         let p = sandler(ctx)
-        _ = p.dropNight("2026-08-19", reason: .dateConflict, now: now)
+        _ = p.dropNight("2026-08-19", reason: .dateConflict, now: now, in: ctx)
 
         // What the next scout hands back: the feed still lists all three nights.
         let refolded = DroppedNight.keeping(["2026-08-19", "2026-09-30", "2026-10-21"], on: p)
@@ -195,7 +195,7 @@ struct RunNightDropTests {
                                              runEndDate: p.runEndDate, nights: p.runNights)?.key)
         #expect(p.conflictOpen, "the live card really does carry the badge")
 
-        _ = p.dropNight("2026-08-19", reason: .dateConflict, now: now)
+        _ = p.dropNight("2026-08-19", reason: .dateConflict, now: now, in: ctx)
         p.setScoutConflict(calendar.conflict(performanceDate: p.performanceDate,
                                              runEndDate: p.runEndDate, nights: p.runNights)?.key)
 
@@ -211,10 +211,10 @@ struct RunNightDropTests {
     func droppingTheLastNightIsADismissal() throws {
         let ctx = ModelContext(try container())
         let p = sandler(ctx)
-        _ = p.dropNight("2026-08-19", reason: .dateConflict, now: now)
-        _ = p.dropNight("2026-09-30", reason: .dateConflict, now: now)
+        _ = p.dropNight("2026-08-19", reason: .dateConflict, now: now, in: ctx)
+        _ = p.dropNight("2026-09-30", reason: .dateConflict, now: now, in: ctx)
 
-        let outcome = p.dropNight("2026-10-21", reason: .dateConflict, now: now)
+        let outcome = p.dropNight("2026-10-21", reason: .dateConflict, now: now, in: ctx)
 
         #expect(outcome == .wholeShow)
         #expect(p.performanceDate == "2026-10-21", "the last night is still what the card is about")
@@ -227,7 +227,7 @@ struct RunNightDropTests {
         p.runNights = ["2026-08-19"]
         p.runEndDate = nil
 
-        #expect(p.dropNight("2026-08-19", reason: .dateConflict, now: now) == .wholeShow)
+        #expect(p.dropNight("2026-08-19", reason: .dateConflict, now: now, in: ctx) == .wholeShow)
     }
 
     // A row stored before `runNights` existed carries an empty list, and the SPAN is all there is. It
@@ -240,7 +240,7 @@ struct RunNightDropTests {
         let p = sandler(ctx)
         p.runNights = []
 
-        #expect(p.dropNight("2026-08-19", reason: .dateConflict, now: now) == .wholeShow)
+        #expect(p.dropNight("2026-08-19", reason: .dateConflict, now: now, in: ctx) == .wholeShow)
     }
 
     // MARK: putting it back
@@ -250,9 +250,9 @@ struct RunNightDropTests {
         let ctx = ModelContext(try container())
         let p = sandler(ctx)
         let key = p.naturalKey
-        _ = p.dropNight("2026-08-19", reason: .dateConflict, now: now)
+        _ = p.dropNight("2026-08-19", reason: .dateConflict, now: now, in: ctx)
 
-        p.restoreNight("2026-08-19")
+        p.restoreNight("2026-08-19", in: ctx)
 
         #expect(p.runNights == ["2026-08-19", "2026-09-30", "2026-10-21"])
         #expect(p.performanceDate == "2026-08-19")
@@ -264,9 +264,9 @@ struct RunNightDropTests {
     func droppingTwiceDropsOnce() throws {
         let ctx = ModelContext(try container())
         let p = sandler(ctx)
-        _ = p.dropNight("2026-08-19", reason: .dateConflict, now: now)
+        _ = p.dropNight("2026-08-19", reason: .dateConflict, now: now, in: ctx)
 
-        let second = p.dropNight("2026-08-19", reason: .dateConflict, now: now.addingTimeInterval(60))
+        let second = p.dropNight("2026-08-19", reason: .dateConflict, now: now.addingTimeInterval(60), in: ctx)
 
         #expect(second == .alreadyDropped)
         #expect(p.runNights == ["2026-09-30", "2026-10-21"])

@@ -624,7 +624,12 @@ enum ProspectMutations {
             .filter { !($0.status == .dismissed && $0.showOutcome == reason) }
         guard !targets.isEmpty else { return }
 
-        let rows = targets.map { model -> QueueUndoEntry.Row in
+        // #2754: a run whose next night is another card's date is left ENTIRELY alone, neither moved nor
+        // dismissed, and counted here so the acknowledgment can say so. Dismissing it whole instead would
+        // be the #2691 defect, silently, on the path where Dan is looking at a count rather than a card.
+        var keptWholeRuns = 0
+        var uncheckedRuns = 0
+        let rows = targets.compactMap { model -> QueueUndoEntry.Row? in
             let priorStatus = model.status
             let priorReason = model.showOutcomeRaw
             let priorExit = model.dismissedAt
@@ -639,8 +644,20 @@ enum ProspectMutations {
             // live multi-night run, so a single-night show on the same date is dismissed exactly as it
             // is today.
             let night = model.performanceDate
-            if RunNightDrop.isAboutOneNight(reason), let night,
-               case .moved = model.dropNight(night, reason: reason, now: now) {
+            let drop = RunNightDrop.isAboutOneNight(reason)
+                ? night.map { model.dropNight($0, reason: reason, now: now, in: context) }
+                : nil
+            if case .cannotMove = drop {
+                keptWholeRuns += 1
+                return nil
+            }
+            // Skipped for the same reason and counted apart: this row is left exactly as it was, and the
+            // banner may not say a card was found when none was read (L11).
+            if case .cannotCheck = drop {
+                uncheckedRuns += 1
+                return nil
+            }
+            if let night, case .moved = drop {
                 ConflictSweep.reapply(model, export: export, in: context)
                 return QueueUndoEntry.Row(recording: model, priorStatus: priorStatus,
                                           priorShowOutcomeRaw: priorReason, priorDismissedAt: priorExit,
@@ -654,6 +671,19 @@ enum ProspectMutations {
                                       priorShowOutcomeRaw: priorReason, priorDismissedAt: priorExit,
                                       priorConflictClearedKey: priorClearedConflict)
         }
+        // #2754: nothing was written at all when every target was a run that had to be left alone, so
+        // there is nothing to save and nothing to undo. Dan is still told, because a press that changed
+        // nothing and a press that did the work look identical from the keyboard.
+        guard !rows.isEmpty else {
+            if keptWholeRuns > 0 || uncheckedRuns > 0 {
+                feedback.acknowledge(ActionAck.nightDismissedSomeKept(count: 0, kept: keptWholeRuns,
+                                                                      unchecked: uncheckedRuns,
+                                                                      reason: reason,
+                                                                      dateLabel: dateLabel),
+                                     tone: .warning)
+            }
+            return
+        }
         // #1417: nothing is claimed and nothing is made undoable until the write is confirmed. An undo
         // entry for a dismissal that never reached disk would put back rows that never left.
         guard context.saveOrWarn(org: dateLabel, feedback: feedback) else { return }
@@ -664,8 +694,16 @@ enum ProspectMutations {
                                             rows: rows) {
             undo.record(entry)
         }
-        feedback.acknowledge(ActionAck.nightDismissed(count: rows.count, reason: reason,
-                                                      dateLabel: dateLabel))
+        // The count is the rows that ACTUALLY went, never the targets asked for (L12).
+        if keptWholeRuns > 0 || uncheckedRuns > 0 {
+            feedback.acknowledge(ActionAck.nightDismissedSomeKept(count: rows.count, kept: keptWholeRuns,
+                                                                  unchecked: uncheckedRuns,
+                                                                  reason: reason, dateLabel: dateLabel),
+                                 tone: .warning)
+        } else {
+            feedback.acknowledge(ActionAck.nightDismissed(count: rows.count, reason: reason,
+                                                          dateLabel: dateLabel))
+        }
     }
 
     // #924: dismiss for a reason, then, when that reason is about the calendar, OFFER to capture the date
@@ -692,8 +730,26 @@ enum ProspectMutations {
             let priorClearedConflict = model.conflictClearedKey
             // A card with no date at all ("date to be confirmed") has no night to drop, so it takes the
             // ordinary path below.
-            if let night = model.performanceDate,
-               case .moved = model.dropNight(night, reason: reason, now: now) {
+            //
+            // Asked ONCE and switched on. `dropNight` performs the drop, so a second call to read a
+            // second case of the same answer would be a second drop.
+            let night = model.performanceDate
+            let drop = night.map { model.dropNight($0, reason: reason, now: now, in: context) }
+            // #2754: this returns rather than falling through, and that is the point of it. Falling
+            // through would dismiss the whole run, which is precisely what #2691 exists to prevent, and
+            // it would do it in the one case where Dan can see no reason for it.
+            if case .cannotMove(let taken) = drop {
+                feedback.acknowledge(ActionAck.runNightKeyTaken(org: item.groupName, night: taken),
+                                     tone: .warning)
+                return
+            }
+            // A store that could not answer gets its own sentence, not the one naming a date: nothing was
+            // read, so there is no date to name (L11).
+            if case .cannotCheck = drop {
+                feedback.acknowledge(ActionAck.runNightCheckFailed(org: item.groupName), tone: .warning)
+                return
+            }
+            if let night, case .moved = drop {
                 // #2691 trap 5: the badge reports the earliest blocked night of the run, so dropping the
                 // blocked one has to re-ask. Through the shared sweep, so the badge after a drop and the
                 // badge after a day off edit cannot be computed two different ways (L16).

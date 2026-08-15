@@ -174,6 +174,44 @@ enum ActionAck {
             : "\(Plural.count(count, "show")) on \(dateLabel) are dismissed as \(reason.label)"
     }
 
+    // #2754: the night was NOT dropped, because the date the run would have moved to is a date this show
+    // already has its own separate card for, and one card cannot take another's identity.
+    //
+    // Names that date rather than saying the dismiss failed, because the date is the whole of what Dan
+    // needs: the show is still in his queue on it, on the other card, which is where he can act.
+    static func runNightKeyTaken(org: String, night: String) -> String {
+        let date = EasternDate.dayLabel(night) ?? night
+        return "\(org) already has a separate card for \(date), so this night was left alone"
+    }
+
+    // #2754: the store could not be read to check, so nothing was changed. Says only what was actually
+    // measured, which is nothing: naming a date would send Dan looking for a card nobody found (L11).
+    static func runNightCheckFailed(org: String) -> String {
+        "Nothing changed on \(org): Overture could not check whether that night is free. Try again."
+    }
+
+    // #2754: the same refusal inside a whole-night dismiss, where it is one row among several and the
+    // count Dan reads has to exclude it (L12).
+    static func nightDismissedSomeKept(count: Int, kept: Int, unchecked: Int, reason: ShowOutcome,
+                                       dateLabel: String) -> String {
+        // Two reasons a run was left behind, kept apart on purpose: one names a card that was found, the
+        // other admits nothing could be read (L11). Both can happen in one press, so both are said.
+        var sentences: [String] = []
+        if kept > 0 {
+            sentences.append(kept == 1
+                ? "1 run was left alone: it already has a separate card for a later night"
+                : "\(kept) runs were left alone: they already have separate cards for later nights")
+        }
+        if unchecked > 0 {
+            sentences.append(unchecked == 1
+                ? "1 run was left alone: Overture could not check whether its next night is free"
+                : "\(unchecked) runs were left alone: Overture could not check whether their next nights are free")
+        }
+        let tail = sentences.joined(separator: ". ")
+        guard count > 0 else { return tail }
+        return "\(nightDismissed(count: count, reason: reason, dateLabel: dateLabel)). \(tail)"
+    }
+
     // #1500: the same night, back in one press. Names the stage pill to go and look at, for the #1415
     // reason: since #1134 an undo restores rows into a stage Dan is usually not looking at, so the store
     // changes and the screen does not.
