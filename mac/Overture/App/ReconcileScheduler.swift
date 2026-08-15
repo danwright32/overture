@@ -148,6 +148,16 @@ final class ReconcileScheduler {
         // free tick retries and which #1912 is the right home for; a count of it here would be a number
         // with no action attached.
         let threadingRepair = await repairThreading(context)
+        // #2718: read the mailbox for a reply to a pitch Overture cannot watch, rank what it finds, and
+        // store at most one question per contact. Rides this same free tick for the reasons the two Gmail
+        // calls above do: it is read only, it is gated on the connection inside itself, and it spends no
+        // paid AI run. It is self limiting in three ways rather than one (a 30 day horizon per pitch, a
+        // high-water mark on the mailbox, and a per-tick message cap), because a sent pitch never ages off
+        // until Dan closes it out.
+        //
+        // Its failure gets its OWN field on the summary rather than the shared `saveFailed`: that flag's
+        // message is about a save, and a Gmail READ that failed is a different fact (L11, L53).
+        let proposals = await sweepReplyProposals(context, now)
         // #1158: keep the cached Gmail signature current so a signature Dan changes in Gmail is picked up
         // without a manual reconnect. Rides this safe, free tick (launch + periodic + export-change) but
         // self-throttles to at most one fetch per day, and can never clobber a good stored signature on a
@@ -183,7 +193,24 @@ final class ReconcileScheduler {
                                 newReplyKeys: newReplyKeys, newBookingKeys: newBookingKeys,
                                 saveFailed: bookingResult.saveFailed || replyCheckSaveFailed
                                     || retirement.saveFailed                       // #1566
-                                    || threadingRepair?.saveFailed == true)        // #2679
+                                    || threadingRepair?.saveFailed == true         // #2679
+                                    || proposals.saveFailed,                       // #2718
+                                replySearchFailure: proposals.failure)             // #2718
+    }
+
+    // #2718: the mailbox sweep, in its own function so the scheduler body stays readable and so a test can
+    // drive the tick without it. Returns the two facts the summary needs and nothing else: `.notConnected`
+    // and `.nothingInScope` are not failures and must not wake Dan for a tick that did nothing wrong (the
+    // same reading the threading repair's nil gets, two calls above).
+    func sweepReplyProposals(_ context: ModelContext, _ now: Date,
+                             sweep: @MainActor (ModelContext, Date) async -> ReplyProposalSweep.Outcome = {
+                                 await ReplyProposalSweep().run(in: $0, now: $1)
+                             }) async -> (saveFailed: Bool, failure: String?) {
+        switch await sweep(context, now) {
+        case .notConnected, .nothingInScope: return (false, nil)
+        case .failed(let reason): return (false, reason)
+        case .swept(_, let saveFailed): return (saveFailed, nil)
+        }
     }
 
     // #269: an AUTOMATIC tick (timer/watcher, i.e. while Dan is likely away) posts one coalesced
