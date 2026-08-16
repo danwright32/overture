@@ -317,6 +317,18 @@ final class WatchedSource {
         return SourceAttention.goneQuietLine(runs: emptyStreak, lastNonEmptyAt: lastNonEmptyAt, now: now)
     }
 
+    // #2496: what the row says when this source reads fine and has never once listed a show. Nil until
+    // the check count passes the threshold, so a calendar with nothing announced yet is left alone.
+    //
+    // Nil too on a source that has never READ, which already carries its own stronger sentence ending in
+    // the same instruction: two gold lines a line apart both telling Dan to check the link is the
+    // duplicated copy this sheet keeps being filed for (#843).
+    func neverListedAnythingNote(now: Date = Date()) -> String? {
+        guard isActive, !SourceAttention.hasNeverRead(self, now: now),
+              SourceAttention.hasNeverListedAnything(self) else { return nil }
+        return SourceAttention.neverListedAnythingLine(checks: successfulCheckCount)
+    }
+
     // #1759: what the row says when several runs in a row have come away without reading this page. Nil
     // until the streak passes the threshold, so a run that died before reaching a page keeps the honest
     // unqualified promise beside it (the next scout really will try it again) and only a source that has
