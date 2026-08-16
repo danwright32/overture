@@ -101,6 +101,10 @@ struct ProspectRowView: View {
     var replySendSince: (_ recipientId: String) -> Date? = { _ in nil }
     // #685: which contact, if any, to highlight inside this card's Contacts section.
     var highlightedRecipientId: String? = nil
+    // #2524: this show is in Scout only because it is a returning client's, so the card says so. Off by
+    // default, which is right for every surface that is not the dated queue: Archive rows are about what
+    // already happened, and a line about being offered EARLY has nothing to explain there.
+    var offeredEarlyAsAClient: Bool = false
     // #992: the "Too far" filter is engaged, so a revealed row shows WHY it was placed out of range.
     // Off by default (Archive and the normal queue never show this line).
     var showingTooFar: Bool = false
@@ -140,6 +144,7 @@ struct ProspectRowView: View {
                 VStack(alignment: .leading, spacing: OVSpacing.xs) {
                     header
                     showSummaryNote
+                    offeredEarlyNote
                     tooFarReasonNote
                     feedStatusFlag
                     if !item.fitReason.isEmpty && !item.classificationOverriddenByDan {
@@ -467,6 +472,23 @@ struct ProspectRowView: View {
     // #992: shown only while the "Too far" filter is engaged, and only on a row the gate positively
     // placed out of range. Sits right under the location line it explains. The sentence is decided in
     // QueueModel (tested); this view only draws it.
+    // #2524: why this show is here so far ahead. Only on a row the client window actually reached for,
+    // which is a small minority: on every other card it would be a line saying nothing.
+    //
+    // Sits directly under the header, beside the date it is about, rather than down with the fit reason,
+    // because the fact it explains is the DATE and Dan reads the date first.
+    @ViewBuilder private var offeredEarlyNote: some View {
+        if offeredEarlyAsAClient {
+            HStack(spacing: 5) {
+                Image(systemName: "calendar.badge.clock")
+                Text(QueueModel.offeredEarlyAsAClientLine)
+            }
+            .font(OVType.tag)
+            .foregroundStyle(OVColor.inkSoft)
+            .padding(.top, 2)
+        }
+    }
+
     @ViewBuilder private var tooFarReasonNote: some View {
         if showingTooFar, let reason = item.tooFarReason(userExcludedTowns: userExcludedTowns,
                                                          allowedSeedTowns: allowedSeedTowns) {

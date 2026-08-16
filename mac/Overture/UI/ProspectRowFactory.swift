@@ -35,7 +35,10 @@ enum ProspectRowFactory {
                     // confirm before it runs (like onSend), so the caller can supply it here.
                     // Omitted (ArchiveView), it falls back to the direct ProspectMutations call.
                     onReprep: ((ReprepMode) -> Void)? = nil,
-                    onRestore: (() -> Void)? = nil, showingTooFar: Bool = false,
+                    onRestore: (() -> Void)? = nil,
+                    // #2524: default OFF, so the only surface that says it is the one that asked to.
+                    offeredEarlyAsAClient: Bool = false,
+                    showingTooFar: Bool = false,
                     userExcludedTowns: Set<String> = [],
                     allowedSeedTowns: Set<String> = []) -> some View {
         let row = ProspectRowView(
@@ -166,6 +169,7 @@ enum ProspectRowFactory {
             outboundSendSince: outboundSendSince,
             replySendSince: replySendSince,
             highlightedRecipientId: highlightedRecipientId,
+            offeredEarlyAsAClient: offeredEarlyAsAClient,
             showingTooFar: showingTooFar,
             userExcludedTowns: userExcludedTowns,
             allowedSeedTowns: allowedSeedTowns,

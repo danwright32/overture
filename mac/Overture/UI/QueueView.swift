@@ -1376,6 +1376,9 @@ struct QueueView: View {
                                           replySendSince: replySince,
                                           onSend: { requestSend(item) }, onSendReply: { rid in sendReply(item, rid) },
                                           onReprep: { mode in requestReprep(item, mode) },
+                                          // #2524: why a date ten months out is sitting here. Decided in
+                                          // the queue build, read here.
+                                          offeredEarlyAsAClient: item.offeredEarlyAsAClient,
                                           showingTooFar: false,
                                           userExcludedTowns: userExcludedTowns,
                                           allowedSeedTowns: allowedSeedTowns)

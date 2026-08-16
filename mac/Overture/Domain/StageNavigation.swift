@@ -189,13 +189,18 @@ enum StageNavigation {
         // year ahead and the scout already READS their calendar that far. Without this arm Overture
         // fetched a client's next-season date, stored it, and then declined to offer it for triage for
         // nine months. Measured on the live store that day: 36 of the 124 shows past the ordinary edge.
-        if context.clients.isPastClientShow(p) {
-            return QueueModel.isWithin(months: QueueModel.clientLeadTimeWindowMonths,
-                                       performanceDate: p.performanceDate, today: context.today)
+        //
+        // #2524: expressed as the ordinary window OR the client reach, rather than as a client branch that
+        // restates the whole rule, because the card now SAYS which of the two kept a row. Written the old
+        // way the sentence would be a second predicate agreeing with this one by inspection, and the two
+        // could drift silently (L16). Same verdicts, in the same order: a client's show inside 90 days is
+        // ordinary rather than early, which is exactly what the card must not claim.
+        if QueueModel.isWithinOrdinaryLeadTime(performanceDate: p.performanceDate, today: context.today) {
+            return true
         }
-        guard let days = QueueModel.daysUntil(performanceDate: p.performanceDate, today: context.today)
-        else { return true }
-        return days <= QueueModel.leadTimeWindowDays
+        return QueueModel.isOfferedEarlyAsAClient(performanceDate: p.performanceDate,
+                                                  isPastClient: context.clients.isPastClientShow(p),
+                                                  today: context.today)
     }
 
     private static func matches(_ focus: StageFocus, _ p: Prospect, context: StageContext) -> Bool {

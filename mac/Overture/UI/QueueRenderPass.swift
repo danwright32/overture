@@ -90,7 +90,10 @@ enum QueueRenderPass {
         // computed property that wants a row.
         let items = QueueModel.items(from: i.prospects.all, answers: i.orgAnswers,
                                      corpus: i.allProspects.all, overrides: i.overrides,
-                                     sources: i.sources, refusals: i.refusals, now: context.now)
+                                     sources: i.sources, refusals: i.refusals,
+                                     // #2524: the same window the stage rule applies, so the card's
+                                     // sentence and the stage's decision come from one answer.
+                                     clients: context.clients, now: context.now, today: context.today)
         #if DEBUG
         QueueRenderCounter.recordDerivation(inputs: i.trace, rows: items)
         #endif

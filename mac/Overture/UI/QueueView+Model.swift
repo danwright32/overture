@@ -56,6 +56,12 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // row, because deciding it needs the whole store and a card must not carry that cost. nil is the
     // common case: no answer, or an organisation the producer gate refuses.
     var inheritedReachability: OrgAnswerLedger.Inherited? = nil
+    // #2524: Scout is holding this show ONLY because it is a returning client's, so the card says so.
+    // Resolved once per queue build for the same reason `inheritedReachability` is: deciding it needs the
+    // watched sources and Dan's client roster, and a card must not carry a whole-store lookup per row
+    // (#1429). Defaulted so existing memberwise-init call sites are unaffected, and false is the honest
+    // answer for a caller with no client window, which is Archive.
+    var offeredEarlyAsAClient: Bool = false
     // #970: the page's own words for where the show is, unresolved. The geo verdict is derived from
     // this and the discipline, never stored, so a rule change re-decides every row at once.
     var location: String? = nil
@@ -1292,6 +1298,50 @@ enum QueueModel {
     // Lifted out of `PrepQueueBuilder.defaultsIncludedInPrepRun`, which #2365 deleted along with every
     // other date rule on the Prep side. The arithmetic is unchanged; it simply now serves the one surface
     // Dan said may apply a window.
+    // #2524: is this show in Scout ONLY because it is a returning client's?
+    //
+    // Since #2365 a past client's show is offered up to 11 months ahead while everything else is held to
+    // 90 days, so a date ten months out sits beside next week's with nothing saying why. Without a word on
+    // the card it reads as a mistake rather than a deliberate reach, and it hides the fact that makes it
+    // worth acting on: Dan has worked with these people before, which is the warmest opener the product
+    // has.
+    //
+    // Built from the SAME two rules `StageNavigation.isWithinLeadTime` applies, in the same order, so the
+    // line can never appear on a row the window did not actually reach for, nor be missing from one it
+    // did (L16). Past the ordinary edge AND inside the client one is exactly "here early because of the
+    // client rule".
+    //
+    // False for a show inside the ordinary window, which is most of them: the line exists to explain an
+    // unusual row and would be noise on every card.
+    // #2524: the card's own sentence, explaining the DATE and nothing else.
+    //
+    // It went through the cold read as "Here early: you've worked with them before", and that wording was
+    // wrong twice over. The card already carries `historyFlag`'s "Worked together before" pill on a booked
+    // row, so on the commonest arm it was the same sentence twice on one card, which is #843 exactly. And
+    // on the arm where there is no pill it was a claim nothing measured: `isPastClientShow` is true of a
+    // show that merely came off a returning client's CALENDAR, and the act performing on it that night is
+    // routinely a stranger (L11).
+    //
+    // So it names the RULE, which is true of every arm, and leaves the relationship to the pill beside it,
+    // which is the only thing that has actually established one. It quotes no arithmetic: "11 months"
+    // means nothing to anybody reading a card.
+    static let offeredEarlyAsAClientLine = "Here early: returning clients are shown further ahead"
+
+    static func isOfferedEarlyAsAClient(performanceDate: String?, isPastClient: Bool, today: String) -> Bool {
+        guard isPastClient else { return false }
+        guard !isWithinOrdinaryLeadTime(performanceDate: performanceDate, today: today) else { return false }
+        return isWithin(months: clientLeadTimeWindowMonths, performanceDate: performanceDate, today: today)
+    }
+
+    // The ordinary arm of the same rule, named so `StageNavigation.isWithinLeadTime` and the sentence
+    // above are two readings of ONE predicate rather than two spellings of it (L16). An undated show is
+    // IN here, which is why the sentence never appears on one: nothing has measured it as far out, so
+    // there is nothing to explain.
+    static func isWithinOrdinaryLeadTime(performanceDate: String?, today: String) -> Bool {
+        guard let days = daysUntil(performanceDate: performanceDate, today: today) else { return true }
+        return days <= leadTimeWindowDays
+    }
+
     static func isWithin(months: Int, performanceDate: String?, today: String) -> Bool {
         guard let performanceDate, let showDay = EasternDate.date(from: performanceDate) else { return true }
         guard let todayStart = EasternDate.date(from: today),
@@ -2171,7 +2221,18 @@ enum QueueModel {
                       // #2392: the addresses Dan has struck, read once by the caller and handed in.
                       // Defaulted empty so every call site that only wants rows is unaffected.
                       refusals: ContactRefusal.Ledger = .none,
-                      now: Date = Date()) -> [QueueItem] {
+                      // #2524: which watched calendars are a returning client's, so each row can carry
+                      // whether the client reach is what is keeping it in Scout. Defaulted to `.none`,
+                      // which answers false for every row: right for Archive, where a line about a show
+                      // being offered EARLY has nothing to explain, and right for a test that is not
+                      // asking about the window.
+                      clients: ClientWindow = .none,
+                      now: Date = Date(),
+                      // Overture's day. Optional and last for the same reason `StageContext`'s is: the
+                      // ordinary spelling derives it, and pinning one is what a test goes out of its way
+                      // to do.
+                      today: String? = nil) -> [QueueItem] {
+        let day = today ?? EasternDate.today(now)
         let linked = EngagementLink.group(prospects.map(EngagementLink.Row.init))
         let inherited = inheritedAnswers(answers, corpus: corpus ?? prospects,
                                          overrides: overrides, refusals: refusals, now: now)
@@ -2193,6 +2254,10 @@ enum QueueModel {
             uniquingKeysWith: { first, _ in first })
         return prospects.map {
             var item = QueueItem($0)
+            // #2524: inside the sweep that was already happening. Asked as its own pass over the store it
+            // was a ninth whole-store sweep per render, which `QueueRenderPassCostTests` refused.
+            item.offeredEarlyAsAClient = isOfferedEarlyAsAClient(
+                performanceDate: $0.performanceDate, isPastClient: clients.isPastClientShow($0), today: day)
             item.sourceCalendarURLs = $0.sourceIds.compactMap { calendarBySourceId[$0] }
             item.linkedEngagementMembers = linked[$0.naturalKey] ?? []
             item.inheritedReachability = inherited[$0.naturalKey]
