@@ -262,6 +262,36 @@ chmod +x "${TOOL_CACHE}"
 run_shell_fixtures "${TOOL_CACHE}" >/dev/null 2>&1
 assert_equals "a node or tsx cache is not counted against the fixture" "0" "$?"
 
+# #2541: a fixture that asserted NOTHING is not a passing fixture. Exit 0 with no assertions is what a
+# fixture looks like when its body silently did not run: an early return, a loop over an empty list, a
+# guard that skipped everything. Finding zero subjects is its own outcome and must never read as "all
+# subjects passed" (L98), and that reading is most believable exactly when the work has not happened.
+SILENT="${TMP_DIR}/silent.test.sh"
+printf '#!/usr/bin/env bash\nexit 0\n' > "${SILENT}"
+chmod +x "${SILENT}"
+
+run_shell_fixtures "${SILENT}" >/dev/null 2>&1
+assert_equals "a fixture that asserted nothing is not a pass" "1" "$?"
+
+SILENT_OUTPUT="$(run_shell_fixtures "${SILENT}" 2>&1)"
+case "${SILENT_OUTPUT}" in
+  *"asserted nothing"*) echo "ok - the harness says why, rather than only failing" ;;
+  *) echo "FAIL - the harness did not say the fixture asserted nothing"; echo "  ${SILENT_OUTPUT}"
+     FAILURES=$((FAILURES + 1)) ;;
+esac
+
+# And the other half, because a rule that counts lines is one typo away from failing every fixture: a
+# fixture that DID assert is still a pass, whichever of the two spellings this repo uses for "ok".
+DASH_OK="${TMP_DIR}/dash-ok.test.sh"
+printf '#!/usr/bin/env bash\necho "ok - it did a thing"\nexit 0\n' > "${DASH_OK}"
+chmod +x "${DASH_OK}"
+COLON_OK="${TMP_DIR}/colon-ok.test.sh"
+printf '#!/usr/bin/env bash\necho "  ok: it did a thing"\nexit 0\n' > "${COLON_OK}"
+chmod +x "${COLON_OK}"
+
+run_shell_fixtures "${DASH_OK}" "${COLON_OK}" >/dev/null 2>&1
+assert_equals "both spellings of a passing assertion still count" "0" "$?"
+
 echo
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All run-shell-fixtures.sh fixtures passed."

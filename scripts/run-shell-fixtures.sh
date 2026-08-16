@@ -77,6 +77,33 @@ unresolved_commands_are_all_declared() {
   return 1
 }
 
+# #2541: did this fixture actually assert anything?
+#
+# `mac/scripts/run-tests-locked.sh` already refuses to call a run that executed nothing a pass (#2317).
+# No other test entry point here had that rule, and three false signals appeared in one session on
+# 2026-08-11 for want of it. This is the shell half.
+#
+# A fixture that exits 0 having printed no passing assertion is not a fixture that passed: it is what a
+# fixture looks like when its body did not run. An early return, a loop over a list that came back empty,
+# a guard that skipped every case. Finding zero subjects has to be its own non-success outcome, because
+# the empty result arrives exactly when the work has not happened, which is when a green verdict is most
+# likely to be believed (L98).
+#
+# Every spelling of a passing assertion this repo prints is counted: `ok - <desc>` from the shared
+# vocabulary, the `ok: <desc>` a few older files use, and a bare `ok`. The word boundary is what keeps it
+# honest, so a line beginning "okay" or "ok_count" is not mistaken for an assertion.
+#
+# Deliberately generous about the SHAPE and strict about the ABSENCE. Pinning one spelling would fail
+# every fixture that uses another, which is how a guard gets edited until it is quiet (L93); the defect
+# being caught is a fixture that printed nothing at all.
+#
+# Measured 2026-08-15 across all 61 fixtures: every one prints at least one, so this rule costs nothing
+# today and only ever fires on a fixture that stopped doing its work.
+fixture_asserted_something() {
+  local log="$1"
+  grep -qE '^[[:space:]]*ok\b' "${log}"
+}
+
 # fixture_temp_allowed_names <uid>: the names a fixture may leave in its private temp directory without
 # being called a leak, because it did not create them. node and tsx write these caches wherever TMPDIR
 # points, on any run that shells out to either.
@@ -181,7 +208,18 @@ WRAPPER
       echo "FAIL - ${fixture}"
       failures=$((failures + 1))
     else
+      # The unresolved-command check goes FIRST, and the order is load-bearing rather than arbitrary. A
+      # fixture whose assertions are all typos prints no passing line either, so it trips both rules, and
+      # naming the helper it could not find is the message that tells somebody what to do. Asked the other
+      # way round, the specific diagnosis is hidden behind the generic one.
       if ! FIXTURE_PATH_FOR_REPORT="${fixture}" unresolved_commands_are_all_declared "${scratch}/log-${i}"; then
+        failures=$((failures + 1))
+      elif ! fixture_asserted_something "${scratch}/log-${i}"; then
+        echo "FAIL - ${fixture} exited 0 but asserted nothing"
+        echo "  No passing assertion was printed, so this fixture examined no subjects. A run that"
+        echo "  found nothing to check is not a run that found everything correct: exit 0 here means"
+        echo "  the body did not do what it looks like it does (an early return, an empty loop, a"
+        echo "  guard that skipped every case)."
         failures=$((failures + 1))
       elif ! FIXTURE_PATH_FOR_REPORT="${fixture}" fixture_left_temp_files "${scratch}/tmp-${i}"; then
         failures=$((failures + 1))

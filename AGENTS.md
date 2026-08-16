@@ -235,6 +235,25 @@ already drifting from the Swift version it mirrored.
   check a suspiciously fast run against what a full one costs: an understated number weakens the
   very warning it was there to support (#2532, L32). Every run ends with its own `Suite shape:`
   line giving the wall clock it actually took, so read that.
+- **Which test entry points refuse to call an empty run a pass, and which cannot (#2541).** Zero subjects
+  examined is its own outcome and must never read as "everything passed", because the empty result
+  arrives exactly when the work has not started (L98). Where each entry point stands, measured
+  2026-08-15:
+  - `mac/scripts/run-tests-locked.sh`: GATED since #2317. A run that reported success while executing no
+    tests fails with `NOTHING RAN`, naming the scope as the likely cause.
+  - `pnpm test` (vitest): GATED already, by vitest itself. A filter matching nothing prints
+    `No test files found, exiting with code 1` and exits 1. Nothing was added here; it was checked.
+  - `scripts/run-shell-fixtures.sh`: GATED since #2541. A fixture that exits 0 having printed no passing
+    assertion fails, because that is what a fixture looks like when its body did not run (an early
+    return, a loop over an empty list, a guard that skipped every case). All 61 fixtures print at least
+    one, so the rule costs nothing and only fires on a fixture that stopped working.
+  - **A raw `xcodebuild`: NOT GATED, and cannot be.** It has no wrapper to hold the rule, which is the
+    reason to scope through `mac/scripts/run-tests-locked.sh` rather than around it. A raw run also exits
+    0 on a `-only-testing:` path that matches nothing.
+  - **A hand-written wait loop watching a log: NOT GATED, and the trap is specific.** One on 2026-08-11
+    treated ordinary CoreData `Error:` noise as the suite finishing and reported a suite that was still
+    running. Wait on the run's own end marker, never on a substring that routine noise can produce.
+
 - **Judging whether a script succeeded: capture its status directly, never through a pipe.**
   `some-script.sh | tail -5` reports `tail`'s exit status, not the script's, so a script that died
   instantly on an unbound variable and printed nothing at all reads as a clean pass. That happened
