@@ -39,8 +39,32 @@ enum CopyInventory {
         let words = bare.split { !$0.isLetter }.filter { $0.count >= 2 }
         guard words.count >= 2 else { return false }
 
-        guard !isMarkup(bare), !isAddress(bare) else { return false }
+        guard !isMarkup(bare), !isAddress(bare), !isAlternation(bare) else { return false }
         return true
+    }
+
+    // #2578: a pipe-separated list of short phrases is a search pattern, never a sentence Overture says.
+    // `DraftGreeting`'s "hi|hello|hey|dear|good morning|..." is the measured instance: it was listed as
+    // copy, and silenced with a marker, which is the wrong direction of defence because a marker is
+    // opt-in and the next one nobody remembers stays in.
+    //
+    // Narrow deliberately, and the narrowness is measured rather than hoped for: 0 of the 1358 entries in
+    // the checked-in inventory contain a pipe at all (2026-08-15), so this can cost no sentence that
+    // exists, and `CopyInventoryAlternationTests` re-measures that over the whole list every run rather
+    // than trusting the number here to stay true (L104: test the filter against what it must PRESERVE).
+    //
+    // Three parts, not two, because "Sent | not sent" style copy is imaginable and two halves are not yet
+    // a pattern. Each part short and free of sentence punctuation, so a real sentence that happens to
+    // contain a pipe is not swept up with it.
+    private static func isAlternation(_ text: String) -> Bool {
+        let parts = text.split(separator: "|", omittingEmptySubsequences: false)
+        guard parts.count >= 3 else { return false }
+        return parts.allSatisfy { part in
+            let trimmed = part.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty, trimmed.split(separator: " ").count <= 3 else { return false }
+            return !trimmed.contains(".") && !trimmed.contains(",") && !trimmed.contains("!")
+                && !trimmed.contains("?") && !trimmed.contains(":")
+        }
     }
 
     private static func isMarkup(_ text: String) -> Bool {
