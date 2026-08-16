@@ -149,20 +149,13 @@ struct AttachedConversationReadersTests {
         #expect(r.nudgeSendClaimedAt == nil)
     }
 
-    // The closing note is the sharp one, and the reason the refusal exists at all. It guards only on the
-    // address and on `sentAt`, both of which an attached form pitch has, so without a rule of its own it
-    // would compose and send a real email onto a conversation Overture never started.
-    @Test func aClosingNoteRefusesAConversationOvertureNeverSentOn() async throws {
-        let ctx = ModelContext(try container())
-        let (p, r) = attachedFormPitch(ctx, replied: false)
-        let sender = RecordingSender()
-
-        let sent = await SendService.sendClosingNote(r, of: p, now: now, sender: sender)
-
-        #expect(!sent)
-        #expect(sender.sent.isEmpty)
-        #expect(r.nudgeSendClaimedAt == nil)
-    }
+    // #2710: a test stood here proving the refusal covered the CLOSING NOTE, which was the sharp case
+    // and the reason #2717's rule existed: the note guarded only on the address and on `sentAt`, both of
+    // which an attached form pitch has, so without a rule of its own it would have composed a real email
+    // onto a conversation Overture never started.
+    //
+    // There is no closing note now, so that path cannot be reached from any direction. The refusal is
+    // still asserted above, on the follow-up, which is the send that remains.
 
     // The refusal must not reach an ordinary email contact whose stored id was merely LOST (a send whose
     // read back failed, #2647). That conversation is Overture's own and the nudge is legitimate; blocking

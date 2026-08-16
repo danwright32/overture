@@ -18,13 +18,8 @@ struct OutboundSignatureConsolidationTests {
         }
     }
 
-    // #2397: the per-state re-touch bodies went with the states that chose their wording, so the closing
-    // note is the only conversation-track email left to check.
-    @Test func theClosingNoteEndsAtItsLastSentence() {
-        let closing = PostEventPrompt.closingNudgeBody(contactName: "Sam", performanceDate: "2026-11-16",
-                                                       venue: "Merkin Hall")
-        #expect(!hasSignoff(closing))
-    }
+    // #2710: the closing note's own version of this stood here and went with the email. The follow-up
+    // above is now the only outbound body Overture composes, so it is the whole of what this can check.
 
     // The one source still holds the plain-text fallback, so the sign-off didn't vanish, it moved.
     @Test func theSignoffStillExistsInItsOneSharedSource() {

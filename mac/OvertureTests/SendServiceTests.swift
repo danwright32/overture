@@ -949,62 +949,13 @@ struct SendServiceTests {
                                                sender: FakeSender()) == true)
     }
 
-    @Test func aSecondConversationNudgeSendAttemptWhileTheFirstIsInFlightIsRefused() async throws {
-        let ctx = ModelContext(try container())
-        let (p, r) = sentContact(ctx, group: "A")
-        let sender = GatedSender()
+    // #2710: three tests stood here on the CONVERSATION nudge, which was the closing note: a second send
+    // while one was in flight, a failed send releasing its claim, and a reply draft in flight not blocking
+    // it. All three went with the email.
+    //
+    // The claim machinery they exercised is not untested: `nudgeSendClaimedAt` is shared with the
+    // follow-up, whose own versions of the first two sit directly above.
 
-        let firstTask = Task {
-            await SendService.sendClosingNote(r, of: p,
-                                                     now: Date(timeIntervalSince1970: 10), sender: sender)
-        }
-        await waitUntil("the send to reach the sender") { sender.callCount > 0 }
-
-        let secondResult = await SendService.sendClosingNote(r, of: p,
-                                                                    now: Date(timeIntervalSince1970: 20), sender: sender)
-        #expect(secondResult == false)
-        #expect(sender.callCount == 1)
-
-        sender.release()
-        #expect(await firstTask.value == true)
-    }
-
-    @Test func aFailedConversationNudgeSendReleasesTheClaimSoARetryCanGoThrough() async throws {
-        let ctx = ModelContext(try container())
-        let (p, r) = sentContact(ctx, group: "A")
-
-        #expect(await SendService.sendClosingNote(r, of: p,
-                                                         now: Date(), sender: AlwaysFailSender()) == false)
-        #expect(r.nudgeSendClaimedAt == nil)
-
-        #expect(await SendService.sendClosingNote(r, of: p,
-                                                         now: Date(), sender: FakeSender()) == true)
-    }
-
-    // sendFollowUp and sendConversationNudge share ONE claim field (they're mutually exclusive by
-    // domain state: setConversationState always pairs with outcomeSourceRaw = .manual, which
-    // isAwaitingFollowUp requires be unset). A reply-draft send is kept on its OWN field instead,
-    // because a replied recipient CAN legitimately be due for a conversation nudge at the same
-    // time (two different open surfaces), so sharing there would cause spurious refusals.
-    @Test func aReplyDraftSendInFlightDoesNotBlockAConversationNudgeSendOnTheSameRecipient() async throws {
-        let ctx = ModelContext(try container())
-        let (p, r) = sentContact(ctx, group: "A")
-        r.replied = true
-        r.replyDraftBody = "Glad to help."
-        let replySender = GatedSender()
-
-        let replyTask = Task { await SendService.sendReplyDraft(r, of: p, now: Date(timeIntervalSince1970: 10), sender: replySender) }
-        await waitUntil("the reply to reach the sender") { replySender.callCount > 0 }
-
-        let nudgeResult = await SendService.sendClosingNote(r, of: p,
-                                                                   now: Date(timeIntervalSince1970: 20), sender: CapturingSender())
-        #expect(nudgeResult == true)
-
-        replySender.release()
-        #expect(await replyTask.value == true)
-    }
-
-    // Copy-out path: Dan sent the reply from Gmail himself; consume the draft + re-anchor, no send.
     @Test func recordAnswerSentConsumesTheDraftWithoutSending() {
         let r = Recipient(id: "a@act.example", email: "a@act.example", provenance: .act)
         r.replyDraftSubject = "Re"; r.replyDraftBody = "a draft"

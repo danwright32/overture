@@ -119,16 +119,21 @@ struct AttachedConversationChannelTests {
         attach(r, repliedAt: now.addingTimeInterval(-3_600), from: "caseen.gaines@gmail.example")
 
         #expect(ReachedOutQueue.isDueNow(for: r, of: p, now: now))
-        #expect(ReachedOutQueue.timingLabel(for: r, of: p, now: now, today: today) == "Reach out now")
+        // #2710: the slot reads as due, and now says WHAT is due rather than "Reach out now". This row
+        // has no send on it at all (a form pitch carries no address), so the old wording was an
+        // instruction it could not carry out. The show has not passed, so it is asked what happened
+        // rather than how it ended.
+        #expect(ReachedOutQueue.timingLabel(for: r, of: p, now: now, today: today) == ReachedOutQueue.decisionLabel)
     }
 
-    // And after the show, the same row must not read "3 days ago" beside an unanswered reply.
+    // And after the show, the same row must not read "3 days ago" beside an unanswered reply. #2710: it
+    // is past the show now, so the words are the ending ones.
     @Test func anAttachedReplyAfterTheShowStillReadsAsDue() throws {
         let ctx = ModelContext(try container())
         let (p, r) = formPitched(ctx, day: "2026-08-12")
         attach(r, repliedAt: EasternDate.date(from: "2026-08-13")!, from: "caseen.gaines@gmail.example")
 
-        #expect(ReachedOutQueue.timingLabel(for: r, of: p, now: now, today: today) == "Reach out now")
+        #expect(ReachedOutQueue.timingLabel(for: r, of: p, now: now, today: today) == ReachedOutQueue.endingLabel)
     }
 
     // The decide clock is what asks "say what happened", and it asks because Overture cannot see a reply.
@@ -186,17 +191,20 @@ struct AttachedConversationChannelTests {
         #expect(ReachedOutAction.of(r, in: p, now: now, today: today) == .sayHowItEnded)
     }
 
-    // The sharp end of reaching that track. The closing note is a real email that threads off
-    // `gmailMessageId`, which an attached conversation never has by design, so offering "Send a closing
-    // note" here would put a button on the row that can only refuse (L109, and #2717's send-path sweep).
-    // Dan records the ending instead.
-    @Test func anAttachedConversationIsNeverOfferedAnUnsendableClosingNote() throws {
+    // #2710: this used to be the sharp end of reaching that track. The closing note threaded off
+    // `gmailMessageId`, which an attached conversation never has by design, so #2716 gave this one row a
+    // carve-out to stop it being offered a button that could only refuse (L109).
+    //
+    // With no closing note at all, the carve-out is gone and this row is no longer special: EVERY passed
+    // show now asks Dan how it ended. Kept as a test because the row reaching that answer for the right
+    // reason still matters, and because a future send arriving here would put the refusing button back.
+    @Test func anAttachedConversationIsAskedHowItEndedLikeEveryOtherPassedShow() throws {
         let ctx = ModelContext(try container())
         let (p, r) = formPitched(ctx, day: "2026-08-12")
         attach(r)   // attached, nobody has written back, the show has passed
 
         let action = ReachedOutAction.of(r, in: p, now: now, today: today)
-        #expect(action == .sayWhatHappened)
+        #expect(action == .sayHowItEnded)
         #expect(!action.sendsAnEmail)
     }
 

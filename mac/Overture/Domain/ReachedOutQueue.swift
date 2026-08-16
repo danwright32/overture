@@ -166,7 +166,14 @@ enum ReachedOutQueue {
         guard let next = nextActionableMoment(for: r, of: p, now: now, followUpConfig: followUpConfig) else {
             return heldOpenLabel
         }
-        return timingLabel(next: next, now: now, awaitingDecision: r.isUnwatchedFormPitch)
+        // #2710: "Reach out now" is an INSTRUCTION, and it may only appear where a control can carry it
+        // out. Since the closing note went, a passed show's row has no send at all: its action is
+        // `.sayHowItEnded`. Asked of the ACTION rather than re-derived here, so the slot and the control
+        // beside it cannot disagree about whether this row can send (L16), which is the shape #2207 is
+        // about and what `theSlotNeverInstructsWhereTheRowCannotAct` caught the moment the email left.
+        let action = ReachedOutAction.of(r, in: p, now: now, today: today, followUpConfig: followUpConfig)
+        return timingLabel(next: next, now: now, awaitingDecision: !action.sendsAnEmail,
+                           decisionLabel: action == .sayHowItEnded ? endingLabel : decisionLabel)
     }
 
     // #2550: the row is open, nothing is owed, and the floor is what is keeping it on the stage. Says what
@@ -193,9 +200,17 @@ enum ReachedOutQueue {
     // `awaitingDecision` is the one thing left for the caller to decide: whether this is a pitch Overture
     // can neither send on nor watch, whose due label therefore asks for a decision rather than offering a
     // reach-out that cannot happen. The waiting text is identical either way, since a wait is a wait.
-    static func timingLabel(next: Date, now: Date, awaitingDecision: Bool = false) -> String {
+    // #2710: the words a row gets when the thing it is due is a DECISION rather than a send, and there
+    // are two because the two decisions are different. A form pitch Overture cannot watch is asked what
+    // happened at all; a show that has passed is asked how it ENDED, which is the close-out it now raises
+    // in place of the closing note.
+    static let decisionLabel = "Say what happened"
+    static let endingLabel = "Say how it ended"
+
+    static func timingLabel(next: Date, now: Date, awaitingDecision: Bool = false,
+                            decisionLabel: String = decisionLabel) -> String {
         let seconds = next.timeIntervalSince(now)
-        if seconds <= 0 { return awaitingDecision ? "Say what happened" : "Reach out now" }
+        if seconds <= 0 { return awaitingDecision ? decisionLabel : "Reach out now" }
         return daysAhead(Int((seconds / 86_400).rounded(.up)))
     }
 

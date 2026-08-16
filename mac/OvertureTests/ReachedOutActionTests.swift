@@ -59,14 +59,15 @@ struct ReachedOutActionTests {
         #expect(ReachedOutAction.of(r, in: p, now: now, today: today) == .none)
     }
 
-    // The show has passed and NOBODY wrote back, so the sendable thing is the closing note rather than a
-    // nudge about a date gone by.
-    @Test func aPassedShowNobodyAnsweredEarnsAClosingNote() throws {
+    // #2710: the show has passed and NOBODY wrote back. There is no email left to send after the show, so
+    // the row asks Dan to say how it ended, exactly as a replied-to show does. It used to earn a closing
+    // note here.
+    @Test func aPassedShowNobodyAnsweredEarnsSayingHowItEnded() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx, event: EasternDate.dayString(from: daysAgo(10)))
         _ = contact(p, sentAt: daysAgo(30))
         let only = try #require(p.recipients.first)
-        #expect(ReachedOutAction.of(only, in: p, now: now, today: today) == .sendClosingNote)
+        #expect(ReachedOutAction.of(only, in: p, now: now, today: today) == .sayHowItEnded)
     }
 
     // #2397: the show has passed and somebody DID write back. The closing note would assert nobody
@@ -108,7 +109,6 @@ struct ReachedOutActionTests {
 
     @Test func everyActionHasItsOwnLabel() {
         #expect(ReachedOutAction.sendNudge.label == "Send a follow-up")
-        #expect(ReachedOutAction.sendClosingNote.label == "Send a closing note")
         // #2397: no button of its own. The close-out menu beside this slot is how Dan records an ending,
         // and a second control with the same purpose is the duplicate-copy trap (#843).
         #expect(ReachedOutAction.sayHowItEnded.label == nil)
@@ -122,7 +122,6 @@ struct ReachedOutActionTests {
     // one that does not must not be worded as though it will.
     @Test func onlyTheEmailActionsClaimToSend() {
         #expect(ReachedOutAction.sendNudge.sendsAnEmail)
-        #expect(ReachedOutAction.sendClosingNote.sendsAnEmail)
         #expect(!ReachedOutAction.sayHowItEnded.sendsAnEmail)
         #expect(!ReachedOutAction.sayWhatHappened.sendsAnEmail)
         #expect(!ReachedOutAction.none.sendsAnEmail)

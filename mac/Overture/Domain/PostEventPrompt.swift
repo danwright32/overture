@@ -28,11 +28,25 @@ enum ReminderAccent: Equatable, Sendable {
 }
 
 enum PostEventPrompt {
+    // #2710: NEITHER of these is an email any more.
+    //
+    // Dan's call, 2026-08-14, after reading both emails rendered as a recipient meets them: "I don't want
+    // two closing notes. I think I actually want to make it so nudge 2 of 2 is the last email and I don't
+    // do a closing note after the show." Reconfirmed 2026-08-16 against the alternative of keeping it
+    // wherever an address exists.
+    //
+    // So the final follow-up is the last thing Overture ever emails a contact who has not written back,
+    // and it already reads as a goodbye. What remains after the show is a request to RECORD how it ended,
+    // which is a fact only Dan has.
+    //
+    // Two cases rather than one, because the sentence differs and a message may claim only what its check
+    // measured (L11): telling Dan "they replied" on a show nobody answered would be false.
     enum Kind: Equatable, Sendable {
-        // A real email Dan reviews and sends.
-        case closingNote
-        // Not an email. A request to record what he already knows.
+        // Somebody wrote back. Dan knows how it ended.
         case closeOut
+        // Nobody wrote back. The likely answer is "never heard back", and it is still his to choose: it
+        // may have ended some other way he knows about and Overture does not.
+        case closeOutUnanswered
     }
 
     struct Prompt: Equatable, Sendable {
@@ -42,26 +56,27 @@ enum PostEventPrompt {
 
     static func reason(for kind: Kind) -> String {
         switch kind {
-        case .closingNote: return "Event passed, send a closing note"
         case .closeOut: return "Event passed, they replied, say how it ended"
+        case .closeOutUnanswered: return "Event passed, nobody replied, say how it ended"
         }
     }
 
+    // #2710: both are `.attention` now, where the closing note used to be `.neutral`. That was right for
+    // an optional email that kept a door open; it is wrong for the last thing standing between a finished
+    // pitch and the reporting. Both are now the same kind of work, and only Dan can do either.
     static func accent(for kind: Kind) -> ReminderAccent {
         switch kind {
-        // Winding down: a note that keeps a door open costs nothing and is not urgent.
-        case .closingNote: return .neutral
-        // Dan is the one holding this up, and it is the only thing standing between a finished pitch and
-        // the reporting, so it reads as something to act on.
-        case .closeOut: return .attention
+        case .closeOut, .closeOutUnanswered: return .attention
         }
     }
 
     // A close-out is the more useful of the two to Dan (it is a fact only he has), so it leads.
+    // A show somebody replied to leads: the answer is richer, and it is the one where a lead may still be
+    // live. An unanswered one is bookkeeping, and it is almost always the same answer.
     static func urgencyRank(_ kind: Kind) -> Int {
         switch kind {
         case .closeOut: return 0
-        case .closingNote: return 1
+        case .closeOutUnanswered: return 1
         }
     }
 
@@ -116,9 +131,6 @@ enum PostEventPrompt {
         // could be the one that does, was rejected: that goodbye has already been SENT to everybody
         // currently at two nudges, so rewording it would help only future contacts and leave every
         // existing one still getting two.
-        if kind(for: r, of: p) == .closingNote, r.followUpCount >= FollowUpConfig().maxFollowUps {
-            return nil
-        }
         return dayAfter
     }
 
@@ -129,7 +141,7 @@ enum PostEventPrompt {
     // contact, because a colleague's answer is an answer about the event, and offering a note that says
     // "never heard back" on a show somebody replied to would be false whoever replied.
     static func kind(for r: Recipient, of p: Prospect) -> Kind {
-        p.recipients.contains { $0.replied } ? .closeOut : .closingNote
+        p.recipients.contains { $0.replied } ? .closeOut : .closeOutUnanswered
     }
 
     static func prompt(for r: Recipient, of p: Prospect, now: Date) -> Prompt? {
@@ -165,60 +177,8 @@ enum PostEventPrompt {
         }
     }
 
-    // #948: the exact subject and body the closing note will send, in ONE place, shared by the branded
-    // confirmation sheet and the sender, so what Dan confirms cannot differ from what goes out.
-    //
-    // Returns nil for `.closeOut`, which is not a sendable email at all but a request to record a decision.
-    // Nil rather than an empty body, so a caller that forgets the distinction fails loudly.
-    struct NudgeContent: Equatable, Sendable { let subject: String; let body: String; let isClosing: Bool }
-
-    static func nudgeContent(kind: Kind, originalSubject: String?, groupName: String, isMerged: Bool = false,
-                             contactName: String?, performanceDate: String?, venue: String?) -> NudgeContent? {
-        guard kind == .closingNote else { return nil }
-        // #1276/#1273: sanitize the merged-concert name and the venue ONCE here, at the shared chokepoint,
-        // so a conductor list never reaches a recipient and a legitimate semicolon title keeps its name.
-        // The body no longer interpolates the name at all (#2615), but the subject's fallback still does.
-        let name = FollowUp.safeDisplayName(groupName, isMerged: isMerged)
-        let body = closingNudgeBody(contactName: contactName, performanceDate: performanceDate,
-                                    venue: FollowUp.safeVenue(venue))
-        return NudgeContent(subject: FollowUp.replySubject(originalSubject: originalSubject, groupName: name),
-                            body: body, isClosing: true)
-    }
-
-    // copy-inventory:ignore-start  outbound-email: a recipient reads this, not Dan (#915, #2650)
-
-    // The gracious post-event close: a kind "perhaps another time" that keeps the relationship warm for a
-    // future season. #2397: sending it records `ShowOutcome.neverHeardBack`, which is what it has always
-    // MEANT and what the send path did not say. It used to resolve the lead to a soft decline in every case,
-    // claiming somebody turned Dan down when nobody had written back.
-    //
-    // #2615: the sentence describes the SHOW, never the group name. `groupName` is whatever the source
-    // listed, and for a large share of Overture's prospects that is a solo performer's own name, so
-    // "I know <groupName> has come and gone" told a person, in Dan's voice, that they had come and gone.
-    // The show is named by its date and room instead, which needs to know nothing about what kind of
-    // thing the group name is, and which the thread's own subject already spells out.
-    static func closingNudgeBody(contactName: String?, performanceDate: String?, venue: String?) -> String {
-        let greeting = Salutation.greeting(for: contactName)
-        // An unparseable or missing date drops to a plain "your show", never to a half-built clause or a
-        // date string a scrape happened to leave behind.
-        let dayClause = performanceDate.flatMap { EasternDate.longDayLabel($0) }.map { "\($0) " } ?? ""
-        let show = "your \(dayClause)show" + ((venue?.isEmpty == false) ? " at \(venue!)" : "")
-        // #2643: the two sentences this used to end on asserted a conversation that by construction never
-        // happened. This note is offered ONLY when nobody on the show has written back (see `prompt(for:)`,
-        // which picks `.closeOut` the moment anybody has), and sending it records
-        // `ShowOutcome.neverHeardBack`. So "the timing didn't line up this round" reported a decision the
-        // recipient never communicated, and "it was good to be in touch" claimed a completed exchange when
-        // there had been one message in one direction. Dan read both in the send sheet on 2026-08-13.
-        //
-        // What replaces them says only what is true of silence: the show has passed, the offer stands, and
-        // no reply is wanted. It holds a door open without inventing a relationship to hold it open on, and
-        // without guilting anybody for not answering.
-        //
-        // #1144: the signature is appended once at the send layer, so this ends at its last sentence.
-        return greeting + "\n\nI know \(show) has come and gone, and I hope it went well. If there's a "
-            + "future performance you'd like documented, I'd be glad to help then. No need to reply to "
-            + "this one."
-    }
-
-    // copy-inventory:ignore-end
+    // #2710: `nudgeContent`, `closingNudgeBody` and their outbound-email ignore region stood here, and
+    // they are gone with the email itself. Nothing composes a post-show message any more: the last thing
+    // Overture sends a silent contact is the final follow-up, which already says goodbye. Git remembers
+    // the words; keeping them would be a body with no sender (L29).
 }

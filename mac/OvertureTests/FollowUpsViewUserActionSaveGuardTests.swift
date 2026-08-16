@@ -12,7 +12,9 @@ struct FollowUpsViewUserActionSaveGuardTests {
 
     // #2397: `remindLater`, `setState` and `confirm` went with the conversation-state track. These are the
     // user actions left on this sheet, and each must still surface a save failure rather than swallow it.
-    private static let guardedFunctions = ["standDown", "pushOut", "closeOut"]
+    // #2710: `closeOut` stood here. It was the closing note's "not sent but also done" action, and it
+    // went with the note: there is nothing to decline to send any more.
+    private static let guardedFunctions = ["standDown", "pushOut"]
     private static let forbidden = "try? context.save()"
 
     @Test func userActionHandlersNeverRevertToSilentSave() throws {

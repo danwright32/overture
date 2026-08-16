@@ -1286,31 +1286,7 @@ enum ProspectMutations {
         }
     }
 
-    // #2397: the closing note is the only conversation-track email left, so this no longer chooses between
-    // two kinds. `isClosing` stays on the acknowledgment wording, which the caller still needs.
-    // #2575: `body` is Dan's edit, as on sendFollowUp above.
-    static func sendClosingNote(_ naturalKey: String, _ recipientId: String,
-                                prospects: [Prospect], context: ModelContext, feedback: ActionFeedback,
-                                sender: MailSender = liveSender(), body: String? = nil,
-                                markSending: @escaping (String) -> Void, clearSending: @escaping (String) -> Void) {
-        guard let model = prospects.first(where: { $0.naturalKey == naturalKey }),
-              let recipient = model.recipients.first(where: { $0.id == recipientId }) else { return }
-        let org = model.groupName
-        let isClosing = true
-        markSending(recipientId)
-        Task {
-            await GmailSignatureService.refreshBeforeSend()   // #1208
-            let sent = await SendService.sendClosingNote(recipient, of: model, now: Date(), sender: sender,
-                                                         body: body)
-            let saved = context.saveOrWarnSendNotConfirmed(org: org, feedback: feedback)
-            clearSending(recipientId)
-            // #285: same async-in-a-sheet acknowledgment, with closing-note vs nudge wording.
-            if saved {
-                feedback.acknowledge(ActionAck.conversationNudge(org: org, closing: isClosing, success: sent),
-                                     tone: sent ? .info : .warning)
-            }
-        }
-    }
+    // #2710: `sendClosingNote` stood here and is gone with the email. Nothing sends after the show.
 }
 
 // The one email awaiting Dan's explicit confirm before it sends (#49), shared by QueueView and

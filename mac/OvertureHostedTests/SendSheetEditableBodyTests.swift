@@ -41,10 +41,12 @@ struct SendSheetEditableBodyTests {
         try view.inspect().findAll(ViewType.TextEditor.self).count
     }
 
-    // The closing note, the exact sheet Dan was looking at.
-    @Test func theclosingNoteSheetCarriesATextBox() throws {
+    // #2710: driven through the FOLLOW-UP confirmation now. This was written against the closing
+    // note, the exact sheet Dan was looking at when he asked for an editable box, and that email is
+    // gone. The sheet is the same one, and the follow-up is what still opens it.
+    @Test func theSendSheetCarriesATextBox() throws {
         let (p, r) = try passedShow()
-        let confirmation = try #require(SendConfirmation(closingNoteFor: r, of: p))
+        let confirmation = try #require(SendConfirmation(followUpFor: r, of: p))
 
         let editable = SendConfirmSheet(confirmation: confirmation, onSend: {}, onCancel: {},
                                         onSendEdited: { _ in })
@@ -67,7 +69,7 @@ struct SendSheetEditableBodyTests {
     // confirmation for them, so the cold pitch does not acquire a second place to write the same email.
     @Test func asheetWithNoEditCallbackHasNoBox() throws {
         let (p, r) = try passedShow()
-        let confirmation = try #require(SendConfirmation(closingNoteFor: r, of: p))
+        let confirmation = try #require(SendConfirmation(followUpFor: r, of: p))
 
         let readOnly = SendConfirmSheet(confirmation: confirmation, onSend: {}, onCancel: {})
 
@@ -78,7 +80,7 @@ struct SendSheetEditableBodyTests {
     // describe itself as a preview.
     @Test func thecaptionSaysTheBoxIsWhatWillSend() throws {
         let (p, r) = try passedShow()
-        let confirmation = try #require(SendConfirmation(closingNoteFor: r, of: p))
+        let confirmation = try #require(SendConfirmation(followUpFor: r, of: p))
         let editable = SendConfirmSheet(confirmation: confirmation, onSend: {}, onCancel: {},
                                         onSendEdited: { _ in })
 

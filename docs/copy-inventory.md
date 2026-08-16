@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1364 sentences**.
+Every sentence Overture can say to Dan: **1355 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -41,7 +41,6 @@ What is not, and why:
 - `Domain/NaturalKeyVenueMigration.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Domain/OrgReachabilityAnswer.swift`: a diagnostic log line, not a sentence Overture says on screen
 - `Domain/OutboundSignature.swift`: outbound-email: the sign-off a recipient reads, not Overture's own voice to Dan (#915, #2650)
-- `Domain/PostEventPrompt.swift`: outbound-email: a recipient reads this, not Dan (#915, #2650)
 - `Domain/ProducerGate.swift`: Words matched inside an organisation's own name, never said to Dan (#1749)
 - `Domain/ProducerShapedName.swift`: parser tokens matched against a ticketing feed, never Overture's voice
 - `Domain/ProducerShapedName.swift`: parser tokens matched against a listing page, never Overture's voice
@@ -599,8 +598,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Closed (not now)"
     `Domain/PerformanceStatus.swift`
     `UI/QueueView+Model.swift`
-"Closing note sent to \(org)"
-    `App/ActionFeedback.swift`
 "Cold-contacted before, no booking"
     `UI/QueueView+Model.swift`
 "Confirm booking"
@@ -660,11 +657,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "Couldn't save what happened sending to \(org): check Gmail to see if it went out."
     `App/ActionFeedback.swift`
-"Couldn't send the closing note to \(org)"
-    `App/ActionFeedback.swift`
 "Couldn't send the follow-up to \(org)"
-    `App/ActionFeedback.swift`
-"Couldn't send the nudge to \(org)"
     `App/ActionFeedback.swift`
 "Couldn't start the reader."
     `UI/LeadIntakeModel.swift`
@@ -754,7 +747,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ExperimentReportView.swift`
 "Event (optional)"
     `UI/InquiryIntakeSheet.swift`
-"Event passed, send a closing note"
+"Event passed, nobody replied, say how it ended"
     `Domain/PostEventPrompt.swift`
 "Event passed, they replied, say how it ended"
     `Domain/PostEventPrompt.swift`
@@ -1268,8 +1261,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ShowOutcome.swift`
 "Notifications allowed."
     `Domain/OnboardingState.swift`
-"Nudge sent to \(org)"
-    `App/ActionFeedback.swift`
 "Nudges due on shows you've already reached out to."
     `Domain/AgentRoster.swift`
 "Offers a discount or free/complimentary work"
@@ -1679,6 +1670,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SourcesView.swift`
 "Saving what this run found"
     `Domain/ScoutSweepStep.swift`
+"Say how it ended"
+    `Domain/ReachedOutQueue.swift`
 "Say what happened"
     `Domain/ReachedOutQueue.swift`
 "Say where \(room) is"
@@ -1711,14 +1704,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/EventClassifier.swift`
 "Send Anyway"
     `UI/DraftReviewView.swift`
-"Send a closing note"
-    `Domain/ReachedOutAction.swift`
 "Send a follow-up"
     `Domain/ReachedOutAction.swift`
 "Send anyway?"
     `UI/DraftReviewView.swift`
-"Send closing note"
-    `UI/FollowUpsView.swift`
 "Send failed: \(raw)"
     `Domain/SendFailureLine.swift`
 "Send issues"
@@ -1733,8 +1722,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Send this email now?"
     `UI/SendConfirmSheet.swift`
 "Send this follow-up now?"
-    `UI/SendConfirmSheet.swift`
-"Send this note now?"
     `UI/SendConfirmSheet.swift`
 "Send this reply now?"
     `UI/SendConfirmSheet.swift`
@@ -2115,10 +2102,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "This sends one email right now, to this recipient only. Nothing else goes out."
     `UI/SendConfirmSheet.swift`
 "This sends one follow-up right now, to this recipient only. Nothing else goes out."
-    `UI/SendConfirmSheet.swift`
-"This sends one message right now, to this recipient only."
-    `UI/SendConfirmSheet.swift`
-"This sends one message right now, to this recipient only. It also closes the lead out (kept warm for next time)."
     `UI/SendConfirmSheet.swift`
 "This should be their events or season page, not one show. A single show's page never changes again, so watching it would watch nothing."
     `UI/AddLeadSheet.swift`
@@ -2624,8 +2607,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "\(org) has already been sent to; re-prepping to find new contacts only"
     `App/ActionFeedback.swift`
 "\(org) is back in \(undoStageWord(for: priorStatus))"
-    `App/ActionFeedback.swift`
-"\(org) is closed out. No closing note was sent"
     `App/ActionFeedback.swift`
 "\(org) is drafted and ready for you to review"
     `App/ActionFeedback.swift`

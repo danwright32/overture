@@ -1612,11 +1612,6 @@ struct QueueView: View {
                                                   confirmation: confirmation, isClosing: false,
                                                   isConversation: false)
             }
-        case .sendClosingNote:
-            guard let confirmation = SendConfirmation(closingNoteFor: r, of: p) else { return }
-            pendingRowNudge = PendingRowNudge(naturalKey: p.naturalKey, recipientId: r.id,
-                                              confirmation: confirmation, isClosing: true,
-                                              isConversation: true)
         case .sayHowItEnded, .sayWhatHappened, .none:
             break   // no control is drawn for these
         }
@@ -1626,19 +1621,13 @@ struct QueueView: View {
     // not edit. Passed straight through; nothing recomposes it on the way.
     private func performRowNudge(_ pending: PendingRowNudge, body: String?) {
         pendingRowNudge = nil
-        if pending.isConversation {
-            ProspectMutations.sendClosingNote(pending.naturalKey, pending.recipientId,
-                                              prospects: prospects, context: context, feedback: feedback,
-                                              body: body,
-                                              markSending: { sendState.markSending($0) },
-                                              clearSending: { sendState.clearSending($0) })
-        } else {
-            ProspectMutations.sendFollowUp(pending.naturalKey, pending.recipientId,
-                                           prospects: prospects, context: context, feedback: feedback,
-                                           body: body,
-                                           markSending: { sendState.markSending($0) },
-                                           clearSending: { sendState.clearSending($0) })
-        }
+        // #2710: one branch now. The conversation track's only email was the closing note, which is gone,
+        // so a row nudge is a follow-up and nothing else.
+        ProspectMutations.sendFollowUp(pending.naturalKey, pending.recipientId,
+                                       prospects: prospects, context: context, feedback: feedback,
+                                       body: body,
+                                       markSending: { sendState.markSending($0) },
+                                       clearSending: { sendState.clearSending($0) })
     }
 
     private func sendReply(_ item: QueueItem, _ recipientId: String) {

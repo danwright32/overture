@@ -122,17 +122,7 @@ struct FollowUpCopyTests {
                                       venue: "Weill Recital Hall", attempt: 1))
     }
 
-    // The closing note does a SECOND thing (it records the show as never heard back), so its content is
-    // marked closing. #2397: the close-out prompt is not a sendable email at all, and asking for its body
-    // returns nothing rather than an empty message.
-    @Test func aClosingNoteIsMarkedClosingAndTheCloseOutPromptHasNoSendableContent() {
-        let closing = PostEventPrompt.nudgeContent(kind: .closingNote, originalSubject: "S",
-                                                   groupName: "G", contactName: "A",
-                                                   performanceDate: "2026-03-01", venue: "V")
-        #expect(closing?.isClosing == true)
-
-        #expect(PostEventPrompt.nudgeContent(kind: .closeOut, originalSubject: "S",
-                                             groupName: "G", contactName: "A",
-                                             performanceDate: "2026-03-01", venue: "V") == nil)
-    }
+    // #2710: a test stood here on `nudgeContent`, which composed the closing note's subject and body
+    // and answered nil for the close-out prompt. Both the function and the email are gone: after the show
+    // there is nothing to compose, so there is no content to be marked closing or refused.
 }

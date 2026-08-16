@@ -180,26 +180,7 @@ struct SendConfirmation: Equatable {
         reassurance = SendConfirmCopy.followUpReassurance
     }
 
-    // #948/#2397: the post-event closing note to one contact. Nil when there is nothing sendable, which is
-    // every kind but this one. It carries the extra reassurance clause, because sending it does a second
-    // thing Dan must be told about: it records the show as never heard back.
-    @MainActor
-    init?(closingNoteFor recipient: Recipient, of prospect: Prospect,
-          signature: OutboundSignature = GmailSignatureStore.currentSignature()) {
-        guard let email = recipient.email, !email.isEmpty,
-              let content = PostEventPrompt.nudgeContent(kind: .closingNote, originalSubject: prospect.draftSubject,
-                                                        groupName: prospect.groupName,
-                                                        isMerged: prospect.isMergedConcert,
-                                                        contactName: recipient.name,
-                                                        performanceDate: prospect.performanceDate,
-                                                        venue: prospect.venue)
-        else { return nil }
-        from = .danWright
-        self.recipient = email
-        subject = content.subject
-        bodyBeforeSignOff = content.body                                       // #2029, #2053
-        self.signature = signature
-        title = SendConfirmCopy.noteTitle
-        reassurance = content.isClosing ? SendConfirmCopy.noteReassuranceClosing : SendConfirmCopy.noteReassurance
-    }
+    // #2710: `init?(closingNoteFor:of:signature:)` stood here and is gone with the email it confirmed.
+    // The last thing Overture sends a contact who has not written back is the final follow-up; after the
+    // show there is nothing to approve, only an ending for Dan to record.
 }

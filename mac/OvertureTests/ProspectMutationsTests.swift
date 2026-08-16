@@ -372,30 +372,10 @@ struct ProspectMutationsTests {
         #expect(r.followUpCount == 1)
     }
 
-    @Test func sendConversationNudgeMarksSendingImmediatelyAndClearsAfterTheSendCompletes() async throws {
-        let ctx = ModelContext(try container())
-        let p = makeProspect(ctx)
-        let r = Recipient(id: "r1", email: "act@example.com", provenance: .act)
-        r.sendState = .sent; r.sentAt = Date(timeIntervalSince1970: 100)
-        p.recipients = [r]
-        try? ctx.save()
-        let feedback = ActionFeedback()
-        let sender = RecordingSender()
-        var marked: [String] = []
-        var cleared: [String] = []
+    // #2710: a test stood here on `sendClosingNote`'s in-flight marking. It went with the email. The
+    // follow-up's own version of it, above, covers the same markSending/clearSending contract on the send
+    // that remains.
 
-        ProspectMutations.sendClosingNote("k", "r1", prospects: [p], context: ctx, feedback: feedback,
-                                          sender: sender,
-                                          markSending: { marked.append($0) }, clearSending: { cleared.append($0) })
-
-        #expect(marked == ["r1"])
-        #expect(cleared.isEmpty)
-
-        await waitUntil("the sending flag to clear") { !cleared.isEmpty }
-        #expect(cleared == ["r1"])
-        #expect(sender.sent.count == 1)
-        #expect(r.conversationRemindedAt != nil)
-    }
 
     // #2545: overriding the greeting hold records the EXACT outgoing text of each HELD, still PENDING
     // recipient, so a later edit to different text silently reinstates the hold. Written per recipient

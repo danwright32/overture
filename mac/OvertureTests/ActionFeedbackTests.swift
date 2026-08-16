@@ -165,17 +165,8 @@ struct ActionAckTests {
                 == "Couldn't send the follow-up to City Brass")
     }
 
-    @Test("a conversation nudge distinguishes a closing note and a plain nudge, success or not")
-    func conversationNudge() {
-        #expect(ActionAck.conversationNudge(org: "Old Town Opera", closing: false, success: true)
-                == "Nudge sent to Old Town Opera")
-        #expect(ActionAck.conversationNudge(org: "Old Town Opera", closing: true, success: true)
-                == "Closing note sent to Old Town Opera")
-        #expect(ActionAck.conversationNudge(org: "Old Town Opera", closing: false, success: false)
-                == "Couldn't send the nudge to Old Town Opera")
-        #expect(ActionAck.conversationNudge(org: "Old Town Opera", closing: true, success: false)
-                == "Couldn't send the closing note to Old Town Opera")
-    }
+    // #2710: `conversationNudge`'s wording test stood here. The acknowledgement went with the closing
+    // note, which was the only thing that used it.
 
     @Test("remind-me-later disambiguates a snooze from a send")
     func remindLater() {

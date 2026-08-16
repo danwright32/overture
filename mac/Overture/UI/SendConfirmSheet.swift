@@ -37,9 +37,8 @@ enum SendConfirmCopy {
     static let replyTitle = "Send this reply now?"
     static let followUpTitle = "Send this follow-up now?"
     static let followUpReassurance = "This sends one follow-up right now, to this recipient only. Nothing else goes out."
-    static let noteTitle = "Send this note now?"
-    static let noteReassurance = "This sends one message right now, to this recipient only."
-    static let noteReassuranceClosing = "This sends one message right now, to this recipient only. It also closes the lead out (kept warm for next time)."
+    // #2710: `noteTitle`, `noteReassurance` and `noteReassuranceClosing` stood here. All three belonged
+    // to the closing note's confirmation sheet, which went with the email.
     static let fromLabel = "From"
     static let toLabel = "To"
     static let subjectLabel = "Subject"

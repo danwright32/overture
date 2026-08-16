@@ -43,28 +43,7 @@ struct FollowUpsViewSendStateTests {
         #expect(texts.contains { $0.hasPrefix("Sending") })
     }
 
-    // #2397: the post-event closing note is the conversation track's only remaining send, so this is the
-    // row whose in-flight state has to be visible.
-    @Test func aClosingNoteRowWithNoInFlightSendShowsTheSendButton() throws {
-        let (p, r) = prospectAndRecipient()
-        let view = FollowUpsView()
-        let prompt = PostEventPrompt.Prompt(kind: .closingNote,
-                                           reason: PostEventPrompt.reason(for: .closingNote))
-        let d = PostEventPrompt.DueRecipient(prospect: p, recipient: r, prompt: prompt)
-
-        _ = try view.postEventRow(d, since: nil).inspect().find(button: "Send closing note")
-    }
-
-    @Test func aClosingNoteRowWithAnInFlightSendShowsTheLiveLabelInsteadOfTheButton() throws {
-        let (p, r) = prospectAndRecipient()
-        let view = FollowUpsView()
-        let prompt = PostEventPrompt.Prompt(kind: .closingNote,
-                                           reason: PostEventPrompt.reason(for: .closingNote))
-        let d = PostEventPrompt.DueRecipient(prospect: p, recipient: r, prompt: prompt)
-        let since = Date(timeIntervalSince1970: 1000)
-
-        #expect((try? view.postEventRow(d, since: since).inspect().find(button: "Send closing note")) == nil)
-        let texts = try view.postEventRow(d, since: since).inspect().findAll(ViewType.Text.self).map { try $0.string() }
-        #expect(texts.contains { $0.hasPrefix("Sending") })
-    }
+    // #2710: two tests stood here, covering the closing-note row's send button and its in-flight label.
+    // Both are gone with the email: after the show there is no send, only a close-out menu, which
+    // `NoClosingNoteAfterTheShowTests` covers at the level the decision lives at.
 }

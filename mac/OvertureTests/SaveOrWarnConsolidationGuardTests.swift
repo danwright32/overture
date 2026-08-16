@@ -22,7 +22,8 @@ struct SaveOrWarnConsolidationGuardTests {
         "remindRecipientLater", "confirmBooking",
         "dismissBookingSuggestion", "rejectBooking", "setLostReason",
     ]
-    private static let followUpsViewFunctions = ["standDown", "pushOut", "closeOut"]
+    // #2710: `closeOut` went with the closing note it declined to send.
+    private static let followUpsViewFunctions = ["standDown", "pushOut"]
     private static let dismissedViewFunctions = ["restore"]
 
     private func assertHandlersUseSaveOrWarn(
