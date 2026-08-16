@@ -117,6 +117,12 @@ RUN_STATUS=$?
 sed 's/^/  | /' "${RUN_LOG}" | tail -n 25
 echo
 
+# How much actually ran, quoted back on a SURVIVED. A scope naming a suite that exists but does not hold
+# the guard under test runs a real suite, passes, and reads as a surviving guard, and no gate can see it:
+# something did run. The count is the one thing that makes it visible to a person. Found by making that
+# exact mistake with this script (a test in ProbePaceWiringGuardTests, scoped to ProbeDurationHistoryTests).
+SHAPE="$(grep -oE "Test run with [0-9]+ tests? in [0-9]+ suites?" "${RUN_LOG}" | tail -n 1 || true)"
+
 # A run that executed nothing is its own outcome. It is the one most likely to be believed, because it
 # arrives looking exactly like a suite with no complaints (L98), and here it would be read as a guard
 # that survived, which is the opposite of what happened.
@@ -147,4 +153,14 @@ fi
 
 echo "SURVIVED - the suite stayed green with the code broken, so nothing is guarding this."
 echo "  A guard that cannot go red is protecting nothing, and reads exactly like one that works (L1)."
+if [[ -n "${SHAPE}" ]]; then
+  echo "  ${SHAPE}"
+fi
+if [[ $# -gt 0 ]]; then
+  echo
+  echo "  Before believing it: was the scope the right one? A scope naming a suite that EXISTS but does"
+  echo "  not hold the guard you are testing runs happily and reports exactly this. NOTHING RAN cannot"
+  echo "  catch that, because something did run. Check the count above against what you expected."
+  echo "  Scope: $*"
+fi
 exit 1

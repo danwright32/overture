@@ -43,9 +43,15 @@ struct OrgDoNotContactPromptTests {
     // dangerous one by accident. "Just this show" is the status quo, and must do nothing at all.
     @Test func theSafeReadingIsOfferedAndDoesNothing() {
         let src = Self.draftReviewSource
-        #expect(src.contains("""
-        Button("Just this show") { }
-        """),
+        // #2543: the two halves of the rule, matched over normalised code.
+        //
+        // The button EXISTS, and its body is EMPTY. Asserted as a pattern rather than as one rendering,
+        // because collapsing whitespace is not enough on its own here: `{ }` and `{}` are different token
+        // sequences, so even the normalised form of the old assertion went red on a pure reformat, which
+        // is the exact failure this issue is about. Measured, not assumed: changing `{ }` to `{}` turned
+        // it red before this was written this way.
+        let code = SourceGuardHelper.normalizedCode(src)
+        #expect(code.range(of: #"Button\("Just this show"\) \{ ?\}"#, options: .regularExpression) != nil,
                 "The safe reading must be offered explicitly, and must be a no-op (#769).")
     }
 
