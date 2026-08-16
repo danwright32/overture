@@ -63,6 +63,11 @@ merge_branch_into_worktree() {
 # over a conflicted or half-merged tree: such a run judges a state that will never exist, and it can
 # come back green just as easily as red, which is the reading that would send the broken combination to
 # main. So the refusal names the branch that would not go in and says nothing was verified.
+#
+# What is NOT a conflict, and used to be refused as one (#2812): the post-merge hook regenerating the
+# project file after each merge and leaving it STAGED. The next merge then dies on "Your local changes
+# would be overwritten", which carries no decision at all, so commit_merge_regeneration settles it
+# between combines. See its comment for why that is not the blind regeneration of #1368.
 combine_branches() {
   local dir="$1"
   shift
@@ -75,6 +80,11 @@ combine_branches() {
       echo "a state that will never exist." >&2
       echo "Resolve it on ${branch} (regenerate mac/Overture.xcodeproj/project.pbxproj if that is the" >&2
       echo "conflict), push, then rerun. Or rerun this without ${branch} to land the rest." >&2
+      return 1
+    fi
+    if ! commit_merge_regeneration "${dir}"; then
+      echo "Nothing was verified and nothing was merged: the verify worktree was left in a state after" >&2
+      echo "merging ${branch} that this script will not commit on top of." >&2
       return 1
     fi
   done
@@ -167,6 +177,15 @@ verify_and_merge_batch() {
   # The base is current origin/main, so the combined tree IS what will exist after all of them land
   # (#2353, L85). Nothing else needs to bring main in.
   setup_worktree "main"
+
+  # BEFORE any merge and before the post-merge hook regenerates anything (#2812). Each ref's own project
+  # file is judged exactly as its author committed it, which is the version that reaches main, so the
+  # regeneration committed between combines below can only ever be about the combination.
+  if ! gate_branch_project_freshness "${WORKTREE_DIR}" "main" "${branches[@]}"; then
+    release_verify_slot
+    echo "Nothing was verified and nothing was merged." >&2
+    return 1
+  fi
 
   if ! combine_branches "${WORKTREE_DIR}" "${branches[@]}"; then
     release_verify_slot
