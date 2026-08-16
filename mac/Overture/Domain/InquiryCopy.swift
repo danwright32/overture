@@ -63,6 +63,24 @@ enum InquiryCopy {
         }
     }
 
+    // #2712: Overture found this inquiry's conversation in Gmail rather than starting it with a send of
+    // its own, and has begun watching it. Said on the row because Overture changed what this inquiry is on
+    // the strength of something it read in his mailbox, and nothing else on the row carries that: the
+    // state line says whether he has answered, never how Overture came to know.
+    //
+    // Nil until there is a conversation to say it about, so an ordinary inquiry gains no line it does not
+    // need (#843). The badge is the fact and the help is the consequence, the same split the two send
+    // problems below it use.
+    static func foundInGmailBadge(attachedAt: Date?) -> String? {
+        attachedAt == nil ? nil : "Found in Gmail"
+    }
+
+    // Says only what the stamp actually measures. "Overture didn't email them" was in an earlier draft
+    // and is not true of every row this fires on: a send whose thread id Gmail never returned
+    // (`replyTrackingLostBadge`) is recovered by the same pass, and Overture very much did email that one.
+    static let foundInGmailHelp =
+        "Overture found this conversation in your Gmail, from the address you logged, and is watching it for replies."
+
     // The one-line lifecycle state shown on the row.
     static func rowState(sentAt: Date?, replied: Bool) -> String {
         if sentAt == nil { return "Awaiting your first reply" }

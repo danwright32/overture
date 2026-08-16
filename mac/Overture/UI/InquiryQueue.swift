@@ -26,6 +26,10 @@ struct InquiryRow: Identifiable, Equatable, Sendable {
     var threadIdDegraded: Bool = false
     var threadingDegraded: Bool = false
     var sendError: String? = nil
+    // #2712: when Overture FOUND this conversation in Gmail rather than sending it. Carried as the stamp
+    // rather than a Bool so the row asks `InquiryCopy.foundInGmailBadge` the same question the store
+    // answers, instead of a second reading of it that could drift.
+    var conversationAttachedAt: Date? = nil
 }
 
 // One row of the unified daily list: a scouted show to pitch, or a hire inquiry. The queue groups and

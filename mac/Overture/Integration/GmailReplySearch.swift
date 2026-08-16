@@ -198,7 +198,12 @@ struct GmailReplySearch {
         fetch: (URLRequest) async throws -> (Data, URLResponse) = { try await GmailNetworking.session.data(for: $0) }
     ) async -> Outcome {
         let prospects = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-        let targets = ReplySearchScope.targets(in: prospects, now: now)
+        // #2712: a hire inquiry Dan answered in his own Gmail is in exactly the position a form pitch is,
+        // so it rides this same one-search-per-tick read rather than a second pass beside it (L30). `try?`
+        // keeps a container that predates Inquiry (an older test harness) working: it yields none, the
+        // same allowance `GmailReplyChecker` makes for the same reason.
+        let inquiries = (try? context.fetch(FetchDescriptor<Inquiry>())) ?? []
+        let targets = ReplySearchScope.targets(in: prospects, inquiries: inquiries, now: now)
         guard !targets.isEmpty,
               let windowStart = ReplySearchScope.windowStart(
                 for: targets, searchedThrough: ReplySearchHighWater.searchedThrough(from: defaults), now: now)

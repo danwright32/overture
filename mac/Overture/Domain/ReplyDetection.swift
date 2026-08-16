@@ -112,6 +112,29 @@ enum ReplyDetection {
         return nil
     }
 
+    // #2712: WHEN Dan last wrote on this thread himself, which is what dates an inquiry he answered in
+    // Gmail rather than from inside Overture.
+    //
+    // Read from the message's own `internalDate`, never from the clock. Stamping the moment Overture
+    // NOTICED would restart the follow-up nudge days after the answer actually went, which is a record
+    // about the past taking a value from the present (L37).
+    //
+    // Nil when the thread carries nothing of his, which is a person who wrote twice before he ever
+    // answered, and a state the caller must be able to tell apart from an answered one.
+    static func latestSentMessageSentAt(threadJSON data: Data, selfEmail: String) -> Date? {
+        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let messages = obj["messages"] as? [[String: Any]] else { return nil }
+        let me = email(from: selfEmail)
+        guard !me.isEmpty else { return nil }
+        for m in newestFirst(messages) {
+            guard email(from: headerValue("from", of: m)) == me else { continue }
+            let millis = internalDateMillis(m)
+            guard millis > 0 else { return nil }
+            return Date(timeIntervalSince1970: TimeInterval(millis) / 1000)
+        }
+        return nil
+    }
+
     // #2715: is the NEWEST message on this thread one Dan sent?
     //
     // Deliberately not the mirror of `latestReplyMessage`, which SKIPS his own messages and so can never
