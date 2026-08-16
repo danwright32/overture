@@ -22,6 +22,16 @@ struct ReconcileSummary: Equatable, Sendable {
     // message may claim only what its check measured (L11), and two independent checks sharing one
     // status field means a pass from either erases the other's failure (L53).
     var replySearchFailure: String?
+    // #2741: this tick could not READ Gmail for the threads it watches, on EVERY thread it tried.
+    //
+    // Its own field for the same reason `replySearchFailure` is: a read that failed is not a save that
+    // failed, and two independent checks sharing one status field means a pass from either erases the
+    // other's failure (L53). It is also a different path from that one, which is about the search for a
+    // reply to a hand-sent pitch; this is the watcher over threads Overture sent itself.
+    //
+    // Set on the RATE, never on a count: one unreadable thread is ordinary contention, and an alert that
+    // fires on it is an alert Dan learns to ignore (L77). `GmailReplyChecker.Outcome` decides.
+    var replyWatchUnreadable: Bool = false
 
     // #308: every new lead's key this tick (replies then bookings, aligned with the name arrays), so a
     // coalesced multi-lead away alert can carry the whole set and a tap can filter the queue to exactly
@@ -44,6 +54,13 @@ struct ReconcileSummary: Equatable, Sendable {
         // The reason comes from the search itself, so it names what actually went wrong rather than
         // being flattened into one apologetic line (L11).
         if let replySearchFailure { return replySearchFailure }
+        // #2741: above the ordinary report for the same reason, and said in its own words. A tick that
+        // could not read a single thread it watches has not established that nobody replied, and the
+        // sentence has to say that rather than let silence stand for it.
+        if replyWatchUnreadable {
+            return "Reconcile ran but couldn't read Gmail for any of the conversations it watches, so it "
+                + "can't tell whether anyone replied. Check the Gmail connection."
+        }
         var parts: [String] = []
         // #287 / #297: a reply or booking found this pass is the headline event, so lead with it and name
         // the org (Dan works by name). Both go through OutreachEventPhrasing so the manual ack and the

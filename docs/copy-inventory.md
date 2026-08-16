@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1362 sentences**.
+Every sentence Overture can say to Dan: **1364 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1569,6 +1569,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReconcileSummary.swift`
 "Reconcile complete: nothing was due."
     `Domain/ReconcileSummary.swift`
+"Reconcile ran but couldn't read Gmail for any of the conversations it watches, so it "
+    `Domain/ReconcileSummary.swift`
 "Reconcile ran but couldn't save its results. Try again; if this keeps happening, something's wrong with the local store."
     `Domain/ReconcileSummary.swift`
 "Reconnect Gmail"
@@ -2854,6 +2856,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SendConfirmSheet.swift`
 "but not read anything."
     `Domain/ScoutStartGate.swift`
+"can't tell whether anyone replied. Check the Gmail connection."
+    `Domain/ReconcileSummary.swift`
 "changed. Check that file before reopening Overture."
     `App/StoreSchemaGuard.swift`
 "come through it before, "
