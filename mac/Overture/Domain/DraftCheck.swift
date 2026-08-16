@@ -17,6 +17,7 @@ enum DraftIssue: Equatable, Hashable, Sendable, CaseIterable {
     case galleryPathLink          // deep-links one gallery instead of the site itself (#1832)
     case venueHistoryCount        // states how MANY times Dan has shot the room (#1887)
     case hedgedEffectClaim        // weakens the claim that the audience doesn't notice him (#2722)
+    case asksForNothing           // admires the show and requests nothing (#1889, #2531)
 
     var label: String {
         switch self {
@@ -32,6 +33,7 @@ enum DraftIssue: Equatable, Hashable, Sendable, CaseIterable {
         case .galleryPathLink: return "Links one gallery instead of the portfolio itself"
         case .venueHistoryCount: return "Says how many times Dan has shot the venue"
         case .hedgedEffectClaim: return "Hedges the claim that the audience doesn't notice Dan"
+        case .asksForNothing: return "Asks for nothing: no request about their photography plans"
         }
     }
 
@@ -59,9 +61,12 @@ enum DraftIssue: Equatable, Hashable, Sendable, CaseIterable {
         // text, which is the bar #789 set for a blocker, and it reads a hedge from a word
         // sitting in the same sentence as the claim, so a body can pair them innocently. The
         // cost of a wrong block is Dan's time on a draft that reads perfectly.
+        // #2531: advisory for the same reason. Whether a sentence ASKS for something is a judgment about
+        // wording, and the runbook instructs the run to reword the ask every time, so the phrasing this
+        // rule has never seen is the ordinary case rather than the exception.
         case .performativeEnthusiasm, .emDash, .presumesBooking, .coldHedge,
              .asksForKnownFact, .concessionLanguage, .nonCanonicalRate,
-             .hedgedEffectClaim: return false
+             .hedgedEffectClaim, .asksForNothing: return false
         }
     }
 
@@ -127,8 +132,18 @@ enum DraftCheck {
     // `knownsDate`/`knownsVenue` opt the caller into the #456 known-fact check: the flag fires ONLY
     // when Overture actually holds that fact, since asking is legitimate when it doesn't. Defaulting
     // both to false keeps every existing single-argument call site byte-for-byte unchanged.
+    // #2531: `isColdPitch` opts the caller into the ask check, and it is opt-IN for the same reason
+    // `knowns*` are. The rule is a COLD pitch rule: the runbook's CTA section is about opening a
+    // conversation with a stranger. A warm or returning-client note is a different register and the eval
+    // gates the identical check behind its own `wordingRules` flag.
+    //
+    // Not theoretical. `DraftCheckTests.passesTheVersionDanActuallySent` holds a real email Dan sent to a
+    // returning client ("If you'd like me to photograph this year's event as well, just say the word"),
+    // which asks for nothing by this rule and is exactly right for who it went to. The first version of
+    // this check applied to every body and flagged it, and that test is what caught it.
     static func findings(in body: String, title: String? = nil,
-                         knownsDate: Bool = false, knownsVenue: Bool = false) -> [DraftIssue] {
+                         knownsDate: Bool = false, knownsVenue: Bool = false,
+                         isColdPitch: Bool = false) -> [DraftIssue] {
         let text = body.lowercased()
         var issues: [DraftIssue] = []
         if body.contains(Typography.emDash) { issues.append(.emDash) }
@@ -152,8 +167,43 @@ enum DraftCheck {
         if hasGalleryPathLink(body) { issues.append(.galleryPathLink) }
         if hasVenueHistoryCount(body) { issues.append(.venueHistoryCount) }
         if hasHedgedEffectClaim(text) { issues.append(.hedgedEffectClaim) }
+        if isColdPitch, !asksAboutPhotographyPlans(body) { issues.append(.asksForNothing) }
         return issues
     }
+
+    // #2531: does the body actually REQUEST something, and does the request presuppose they have
+    // photography plans for this show?
+    //
+    // #1889 put this rule behind the eval, which scores PRODUCED output only, so a draft Dan writes or
+    // edits by hand never met it: a pitch that admires the show and asks for nothing could be sent. The
+    // draft warnings already read his own text rather than exempting it, so it belongs here.
+    //
+    // ADVISORY, not blocking. #789's bar for a blocker is a FACT about the text rather than a judgment
+    // about its wording, and this is a judgment: the runbook tells the run to reword the ask every time,
+    // so an unusual but perfectly good phrasing is exactly the thing a wording rule gets wrong. The cost
+    // of a wrong block is Dan's time on the draft he actually wants to send.
+    //
+    // ONE judgment shared with the TypeScript eval (`prepEval.asksAboutPhotographyPlans`), through the
+    // corpus at `fixtures/draft-ask/cases.json` that both sides are tested against (L26). The patterns
+    // below are the same three, and `DraftAskCasesTests` is what stops them drifting: 34 of its cases are
+    // real compliant drafts, which word the ask nine different ways, because the accept side is the half
+    // that protects a good draft (L104).
+    //
+    // Sentence-scoped, so naming their plans somewhere and asking something somewhere else is not an ask.
+    static func asksAboutPhotographyPlans(_ body: String) -> Bool {
+        for sentence in body.split(whereSeparator: { ".!?\n".contains($0) }) {
+            let s = String(sentence)
+            if s.range(of: photographyPlans, options: [.regularExpression, .caseInsensitive]) != nil,
+               s.range(of: askCue, options: [.regularExpression, .caseInsensitive]) != nil {
+                return true
+            }
+        }
+        return false
+    }
+
+    private static let photographyPlans =
+        #"\b(?:photography|photo|picture)\s+plans\b|\bplan(?:s|ned|ning)\s+for\s+(?:photography|photos|pictures|coverage)\b|\bphotograph(?:y|s)\s+(?:is\s+|already\s+)?(?:sorted|arranged|planned|booked)\b"#
+    private static let askCue = #"\b(?:talk|speak|discuss|hear|ask|asking|tell me|chat|learn|know)\b"#
 
     // #789: only the findings that BLOCK the send. Deliberately takes no `knowns*` context: a
     // blocker must be judgeable from the text alone, so this is safe to call anywhere the body is

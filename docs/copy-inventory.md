@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1361 sentences**.
+Every sentence Overture can say to Dan: **1362 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -506,6 +506,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/BuildFreshnessPanel.swift`
 "Asking macOS for OmniFocus permission…"
     `UI/OnboardingView.swift`
+"Asks for nothing: no request about their photography plans"
+    `Domain/DraftCheck.swift`
 "Asks for the date or venue Overture already knows"
     `Domain/DraftCheck.swift`
 "Authorize your photography Gmail so you can send approved emails"
