@@ -99,7 +99,7 @@ struct GmailReplyCheckerTests {
     // #617: a real save() failure (not just the source-scan guard in GmailReplyCheckerSaveGuardTests),
     // via ImmutableStoreFixture.
     @Test func markRepliesReturnsTrueOnAGenuineSaveFailure() async throws {
-        let saveFailed = try await ImmutableStoreFixture.withFailingSave(
+        let outcome = try await ImmutableStoreFixture.withFailingSave(
             schema: Schema([Prospect.self, Recipient.self]),
             seed: { _ = self.sentProspect($0, group: "Bach Society", threadId: "t1") },
             body: { ctx in
@@ -108,7 +108,8 @@ struct GmailReplyCheckerTests {
                                                  fetch: self.threadFetch(from: "manager@bachsociety.org"))
             })
 
-        #expect(saveFailed)
+        // #2741: the same fact, now on a field of its own rather than as the one thing a Bool could say.
+        #expect(outcome.saveFailed)
     }
 
     private func bounceThreadFetch(from: String, subject: String) -> (URLRequest) async throws -> (Data, URLResponse) {

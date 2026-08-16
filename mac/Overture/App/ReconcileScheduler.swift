@@ -121,7 +121,10 @@ final class ReconcileScheduler {
         // will not pitch just because the app has not been relaunched since it opened.
         let retirement = retireShowsThatOpened(now: now)
         // Reply detection: gated on a live Gmail connection inside checkReplies; best-effort.
-        let replyCheckSaveFailed = await GmailReplyChecker().checkReplies(in: context)
+        // #2741: the whole outcome, not a Bool that meant "a save failed" and was shared by three other
+        // states. `everyThreadUnreadable` is the one that reaches Dan, and only on the rate.
+        let replyCheck = await GmailReplyChecker().checkReplies(in: context)
+        let replyCheckSaveFailed = replyCheck.saveFailed
         // #2649: repair the stored Message-ID on conversations that are still live, where Overture wrote
         // the id it minted and Gmail discarded (#2647 fixed this from the next send onward and could not
         // touch what was already stored). Rides this same free tick for the same reasons the two Gmail
@@ -195,7 +198,8 @@ final class ReconcileScheduler {
                                     || retirement.saveFailed                       // #1566
                                     || threadingRepair?.saveFailed == true         // #2679
                                     || proposals.saveFailed,                       // #2718
-                                replySearchFailure: proposals.failure)             // #2718
+                                replySearchFailure: proposals.failure,             // #2718
+                                replyWatchUnreadable: replyCheck.everyThreadUnreadable)  // #2741
     }
 
     // #2718: the mailbox sweep, in its own function so the scheduler body stays readable and so a test can
