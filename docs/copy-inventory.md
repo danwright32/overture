@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1359 sentences**.
+Every sentence Overture can say to Dan: **1361 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -571,6 +571,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/Reachability.swift`
 "Check the rest"
     `Domain/AppNotice.swift`
+"Check who it is addressed to."
+    `Domain/DraftReviewNotes.swift`
 "Checked \(ago)"
     `Domain/SourceReadState.swift`
 "Checking reachability"
@@ -2065,6 +2067,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "This draft won't send: \(what.isEmpty ? "a blocking issue" : what)."
     `Domain/DraftCheck.swift`
 "This draft won't send: it doesn't open with a greeting. Edit it to add one."
+    `Domain/DraftReviewNotes.swift`
+"This draft won't send: it opens \"Hi \(greeted)\" but this contact is \(contact). "
     `Domain/DraftReviewNotes.swift`
 "This draft won't send: the greeting names one person but this email goes to "
     `Domain/DraftReviewNotes.swift`
