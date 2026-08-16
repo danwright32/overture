@@ -79,6 +79,7 @@ struct InquiryOnTheSharedReplyScreenTests {
         var c = composition(i, ctx)
         c = ReplyComposition(title: c.title, subtitle: c.subtitle, contact: c.contact,
                              editableSubject: "  ", aiDraft: nil, audienceControls: nil,
+                             cannotContinue: c.cannotContinue,
                              confirmation: c.confirmation, send: c.send)
         #expect(c.refusal(body: "Thursday works.", gmailConnected: true) == .noSubject)
     }

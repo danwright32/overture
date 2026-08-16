@@ -30,6 +30,15 @@ struct ReplyComposition {
     let audienceControls: AudienceControls?
     // What Dan is about to approve, and the send itself. Both take the body (and, for an entity that has
     // one, the subject) as they stand NOW, so what he approves cannot differ from what goes out (L64).
+    // #2796: why this conversation cannot be continued at all, or nil when it can. A closure for the
+    // same reason everything live here is one: the parent it looks for is written by reply detection,
+    // which lands on the contact while this screen is open, so a value captured when the composition was
+    // built would go on refusing after the reason had gone.
+    //
+    // It belongs to the COMPOSITION rather than to `ReplyPanel.refusal`, which is deliberately a pure
+    // function over the body, the subject and the audience and knows nothing of entities. Each entity
+    // names itself, which is what lets one sentence say WHICH conversation is meant (L80).
+    let cannotContinue: @MainActor () -> String?
     let confirmation: @MainActor (_ body: String, _ subject: String?) -> SendConfirmation?
     let send: @MainActor (_ body: String, _ subject: String?) async -> Bool
 
@@ -40,8 +49,12 @@ struct ReplyComposition {
     // The one refusal rule, asked with this composition's own subject. A show passes nil and can never be
     // refused for a subject; an inquiry passes what Dan typed (L16, one predicate both go through).
     func refusal(body: String, gmailConnected: Bool) -> ReplyPanel.SendRefusal? {
-        ReplyPanel.refusal(body: body, subject: editableSubject, audience: audience,
-                           gmailConnected: gmailConnected, writer: writer)
+        // #2796: first, because it is the only one of these Dan can do nothing about from this screen.
+        // Connecting Gmail, fixing the audience or typing something all leave it exactly where it was, so
+        // reporting either of those instead would name a step that changes nothing (L111).
+        if let reason = cannotContinue() { return .cannotContinue(reason) }
+        return ReplyPanel.refusal(body: body, subject: editableSubject, audience: audience,
+                                  gmailConnected: gmailConnected, writer: writer)
     }
 
     // The drafter, for an entity that has one. An inquiry has no draft fields at all, so it passes nil
@@ -78,6 +91,11 @@ extension ReplyComposition {
             editableSubject: InquiryCopy.replySubjectDefault,
             aiDraft: nil,
             audienceControls: nil,
+            // #2796: an inquiry names itself, so the sentence says which conversation is meant.
+            cannotContinue: {
+                AttachedConversation.refusalToContinue(inquiry,
+                                                       displayName: inquiry.replyWatchDisplayName)
+            },
             confirmation: { body, subject in
                 // The subject he TYPED, never the default it started at, or the sheet would show one
                 // subject while another shipped (L64).
@@ -133,6 +151,12 @@ extension ReplyComposition {
                     guard context.saveOrWarn(org: prospect.groupName, feedback: feedback) else { return }
                     feedback.acknowledge(ReplyPanelCopy.savedWriter(address))
                 }),
+            // #2796: the show is what Dan knows this conversation by, so that is what the sentence names,
+            // not the contact the row happens to stand on.
+            cannotContinue: {
+                AttachedConversation.refusalToContinue(recipient,
+                                                       displayName: prospect.replyWatchDisplayName)
+            },
             confirmation: { body, _ in
                 SendConfirmation(replyFor: recipient, of: prospect, body: body)
             },

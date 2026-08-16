@@ -20,6 +20,18 @@ enum InquiryReplySender {
     static func sendReply(_ inquiry: Inquiry, subject: String, body: String, now: Date,
                           sender: MailSender) async -> Bool {
         guard let to = inquiry.inquirerEmail, !to.isEmpty else { return false }
+        // #2796: the same refusal the prospect reply path carries, on the entity #2795 gave a second
+        // writer of `gmailThreadId`. An inquiry whose conversation was ATTACHED (#2712) has no message of
+        // Overture's, so when detection also read no `Message-ID` of theirs there is nothing for this
+        // answer to hang off and it would arrive unparented in a conversation Overture never sent on.
+        // Every other attached inquiry is answered exactly as before, which is what #2712 is for.
+        //
+        // A guard of its own rather than a shared call site: this is not `SendService`, deliberately (see
+        // the note above), so a refusal written there says nothing about this path. It is stated on the
+        // panel too, from the same function, so the Send button and the reason cannot disagree (L109).
+        guard AttachedConversation.refusalToContinue(inquiry,
+                                                     displayName: inquiry.replyWatchDisplayName) == nil
+        else { return false }
         // #2063: addressed the way the reply being answered was addressed, falling back to the inquirer
         // alone when there is nothing to mirror. Through the same helper as the prospect reply path, so the
         // two cannot answer "who does this reach" differently.

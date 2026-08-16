@@ -322,10 +322,23 @@ enum SendService {
     // parity false. The block on answering is the address guard on the next line and nothing else: the
     // plan draft cited `Reachability.swift:180` for it, which is a doc comment about a SHOW's probe result
     // and says nothing about a contact.
+    //
+    // #2796: that holds for an attached conversation whose reply Overture can point at, which is every
+    // ordinary one, and it left ONE state unguarded. `ReplyThreading.inReplyTo` falls back to OUR last
+    // message, which an attached conversation never has, so a reply detected off a message with no
+    // `Message-ID` header leaves the answer nothing to hang off and this would post an unparented message
+    // into a stranger's conversation. `AttachedConversation` refuses exactly that state and permits the
+    // rest, so parity is untouched. The refusal is stated on the panel too, from the same function, so
+    // the Send button cannot be disabled beside a line claiming everything is fine (L109).
     static func sendReplyDraft(_ recipient: Recipient, of prospect: Prospect,
                                now: Date, sender: MailSender) async -> Bool {
         guard let email = recipient.email, !email.isEmpty,
               let body = recipient.replyDraftBody, !body.isEmpty else { return false }
+        // Here as well as at the button, so a caller reaching this another way cannot do what the control
+        // is disabled to prevent, on the `ReplyPanel.removing` precedent.
+        guard AttachedConversation.refusalToContinue(recipient,
+                                                     displayName: prospect.replyWatchDisplayName) == nil
+        else { return false }
         // #2063: addressed the way the reply being answered was addressed, which is what any mail client
         // does. #2033 sent this to everyone who received the ORIGINAL email instead, on the reasoning that
         // replying to one person on a shared thread goes behind the others' backs. That is true when the

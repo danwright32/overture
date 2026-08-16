@@ -22,8 +22,32 @@ enum AttachedConversationCopy {
 
 enum AttachedConversation {
     // Nil when Overture may continue the conversation, a sentence saying why not when it may not.
+    //
+    // #2796: BOTH halves, because for a year this asked only the first and had no caller at all. #2717
+    // wrote it for three send paths and none of them could use it: the closing note went with #2710, the
+    // follow-up cannot reach an attached row (`isAwaitingFollowUp` demands `outreachChannel == .email`
+    // and an attached conversation only ever sits on a `.contactForm` one), and both reply paths were
+    // exempted on the grounds that an answer threads onto THEIR message, which is the whole point of
+    // attaching a conversation and is Dan's stated promise of full parity once one is attached.
+    //
+    // That exemption is right in the ordinary case and wrong in one, which is the case this now refuses.
+    // `ReplyThreading.inReplyTo` prefers their message and falls back to OURS, and an attached
+    // conversation never has one of ours, so a row that replied off a message carrying no `Message-ID`
+    // header (the Gmail resource `id` that detection keys the reply on is always present; the header is
+    // not) leaves the answer with nothing at all to hang off. Overture would then drop an unparented
+    // message into a conversation it never sent on, which is #2647, #2649 and #2653's defect arriving by
+    // exactly the new route #2717 was filed to close.
+    //
+    // Asked through `ReplyThreading` rather than by reading the two fields here, so the guard and the
+    // send cannot disagree about what the message would have hung off (L16, L70).
+    //
+    // It heals by itself, twice over: the next detection pass that reads a message of theirs carrying a
+    // header lifts it, and so does Overture's own first send on the thread. A refusal keyed on the attach
+    // alone would go on refusing long after its reason had gone (L68).
     static func refusalToContinue(_ r: any ReplyWatchableRecipient, displayName: String) -> String? {
         guard r.replyWatchConversationIsAttached else { return nil }
+        let parent = ReplyThreading.inReplyTo(for: r)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard parent?.isEmpty ?? true else { return nil }
         return AttachedConversationCopy.cannotContinue(groupName: displayName)
     }
 }

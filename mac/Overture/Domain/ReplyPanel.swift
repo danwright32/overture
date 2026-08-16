@@ -220,6 +220,11 @@ enum ReplyPanel {
     // one decision asked once, so they cannot drift into a dead button sitting next to a line claiming
     // everything is fine (L16, L70).
     enum SendRefusal: Equatable {
+        // #2796: the conversation was LINKED by hand and Overture has nothing to hang a message off, so
+        // anything it sent would arrive in a stranger's thread with no parent. It carries its sentence
+        // rather than being spelled again here, because the sentence and the predicate come from one
+        // function in `AttachedConversation` and naming the show is what makes it actionable (L80, L109).
+        case cannotContinue(String)
         case gmailDisconnected
         case noAudience
         // The address that wrote, and the addresses the answer would actually reach, carried together
@@ -502,6 +507,11 @@ enum ReplyPanelCopy {
         // field is on screen directly above, and he is looking at it.
         case nil, .nothingTyped, .noAudience, .noSubject:
             return nil
+        // #2796: said on screen, because this is the one refusal on this panel Dan cannot work out by
+        // looking at it. Nothing about a linked conversation is visible from the compose box, and the
+        // remedy is somewhere else entirely, so a silent disabled button would leave him pressing it.
+        case .cannotContinue(let reason):
+            return reason
         case .gmailDisconnected:
             // Said on screen and not only in the button's tooltip, which is invisible at rest (L49).
             return GmailCopy.notConnected
