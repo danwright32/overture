@@ -168,7 +168,12 @@ struct BlockedCalendar: Equatable, Sendable {
         // Dan's own days first, so a booked shoot lands on top of one where they collide. One entry per
         // date: two of his own ranges overlapping is one decision of his, and both ranges are listed in
         // full on the sheet from the stored rows, so nothing here is the only record of either.
-        for range in daysOff {
+        //
+        // Sorted for the same reason the bookings below are: where two of his ranges cover one date, the
+        // last one written decides which note the stored key quotes, and a key that moved with the order
+        // the rows came back in would re-block a night he had already waved through.
+        for range in daysOff.sorted(by: { ($0.startDate, $0.endDate, $0.note ?? "")
+                                          < ($1.startDate, $1.endDate, $1.note ?? "") }) {
             for date in EasternDate.days(from: range.startDate, through: range.endDate) {
                 cal.byDate[date] = [Day(date: date, kind: .dayOff, name: range.note)]
             }

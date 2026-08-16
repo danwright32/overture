@@ -293,6 +293,21 @@ struct BlockedCalendarTests {
         #expect(clash?.reason == "You're already shooting God Lives in Glass on May 30.")
     }
 
+    // The same question asked of Dan's own half, which is where the identical defect could sit: two of
+    // his ranges can overlap, one entry per date keeps one of their notes, and the stored key carries that
+    // note. Both ranges are listed in full on the sheet from the stored rows, so nothing is hidden the way
+    // a lost booking was, but WHICH note the key quotes must still not depend on the order the rows came
+    // back in, or the same re-block happens for no change he made.
+    @Test func theDayOffKeyDoesNotMoveWhenTwoOverlappingRangesArriveInADifferentOrder() {
+        let early = dayOff("2026-11-10", "2026-11-16", note: "Vacation")
+        let late = dayOff("2026-11-14", "2026-11-22", note: "Away for a wedding")
+        let one = BlockedCalendar.build(bookings: [], exportedBlockedDates: [], daysOff: [early, late])
+        let other = BlockedCalendar.build(bookings: [], exportedBlockedDates: [], daysOff: [late, early])
+
+        #expect(one.conflict(performanceDate: "2026-11-14", runEndDate: nil)?.key
+                == other.conflict(performanceDate: "2026-11-14", runEndDate: nil)?.key)
+    }
+
     // Precedence is unchanged where a booked shoot lands on a day off, and the day off does not turn up in
     // the sheet's booked list beside the shoots that outranked it.
     @Test func aDayOffUnderTwoBookedShootsIsNotListedAtAll() {
