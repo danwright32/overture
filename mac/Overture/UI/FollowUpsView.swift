@@ -11,7 +11,6 @@ struct FollowUpsView: View {
     @Environment(ActionFeedback.self) private var feedback   // #285
     @Query private var prospects: [Prospect]
     @State private var pending: PendingNudge?
-    @State private var pendingConversation: PendingConversation?
     // #686: neither row here carries the reply text, AI reply drafter, or Mark… menu (the same
     // gap #683/#684 found and fixed on the Reached Out row); this jumps to the full card that
     // still has them, dismissing this sheet first since Archive opens as a sibling sheet on the
@@ -41,13 +40,6 @@ struct FollowUpsView: View {
     private struct PendingNudge: Identifiable {
         let id: String        // prospect naturalKey
         let recipientId: String   // which contact on the show (#418 D)
-        let confirmation: SendConfirmation
-    }
-
-    private struct PendingConversation: Identifiable {
-        let id: String        // prospect naturalKey
-        let recipientId: String   // which contact on the show (#652)
-        let isClosing: Bool
         let confirmation: SendConfirmation
     }
 
@@ -133,12 +125,6 @@ struct FollowUpsView: View {
                              // #2575: the words in the box are the words that send.
                              onSendEdited: { performNudge(p.id, p.recipientId, body: $0) })
         }
-        .sheet(item: $pendingConversation) { p in
-            SendConfirmSheet(confirmation: p.confirmation,
-                             onSend: { performClosingNote(p.id, p.recipientId, body: nil) },
-                             onCancel: { pendingConversation = nil },
-                             onSendEdited: { performClosingNote(p.id, p.recipientId, body: $0) })
-        }
         .actionFeedbackBanner()
     }
 
@@ -205,21 +191,13 @@ struct FollowUpsView: View {
                     LiveRunLabel(base: "Sending", since: since, timeout: RunTimeouts.send,
                                  font: OVType.meta, color: OVColor.inkSoft)
                 } else {
-                    switch d.prompt.kind {
-                    case .closingNote:
-                        sendButton("Send closing note", hasAddress: SendGate.hasAddress(r.email)) {
-                            requestClosingNote(d)
-                        }
-                        // #1740: Dan may well not want to send a closing note, and this was the same gap
-                        // as the nudge row: a send button and nothing else.
-                        closingNoteMenu(prospect: p, recipient: r)
-                    case .closeOut:
-                        // #2397: somebody replied, so there is nothing to send. Dan already knows how it
-                        // ended; this is the one control that records it, from the row he is standing on.
-                        CloseOutMenu(outcomes: ShowOutcome.menu(wasPitched: p.wasPitched)) { outcome in
-                            ProspectMutations.recordOutcome(QueueItem(p), outcome, prospects: prospects,
-                                                            context: context, feedback: feedback)
-                        }
+                    // #2710: both kinds land here now. Neither is an email: the final follow-up is the
+                    // last thing Overture sends a silent contact, so what is left after the show is Dan
+                    // recording how it ended, from the row he is standing on. The two differ only in the
+                    // sentence beside them, which `PostEventPrompt.reason` decides.
+                    CloseOutMenu(outcomes: ShowOutcome.menu(wasPitched: p.wasPitched)) { outcome in
+                        ProspectMutations.recordOutcome(QueueItem(p), outcome, prospects: prospects,
+                                                        context: context, feedback: feedback)
                     }
                 }
                 // #686: reply text, AI reply drafter, and Mark… only exist on the full card in Archive.
@@ -273,14 +251,6 @@ struct FollowUpsView: View {
         pending = PendingNudge(id: d.prospect.naturalKey, recipientId: d.recipient.id, confirmation: confirmation)
     }
 
-    private func requestClosingNote(_ d: PostEventPrompt.DueRecipient) {
-        let p = d.prospect, r = d.recipient
-        // Nil would mean this kind is not a sendable email at all, which the row's own branch already
-        // rules out; guarded rather than force-unwrapped so a future kind cannot send an empty message.
-        guard let confirmation = SendConfirmation(closingNoteFor: r, of: p) else { return }
-        pendingConversation = PendingConversation(id: p.naturalKey, recipientId: r.id,
-                                                  isClosing: true, confirmation: confirmation)
-    }
 
     // #468 (SUP-006): routed through ProspectMutations so this sheet's send gets the same
     // in-flight LiveRunLabel every other send surface already shows, instead of a bare Task with
@@ -293,14 +263,6 @@ struct FollowUpsView: View {
                                        clearSending: { sending[$0] = nil })
     }
 
-    private func performClosingNote(_ naturalKey: String, _ recipientId: String, body: String?) {
-        pendingConversation = nil
-        ProspectMutations.sendClosingNote(naturalKey, recipientId,
-                                          prospects: prospects, context: context, feedback: feedback,
-                                          body: body,
-                                          markSending: { sending[$0] = Date() },
-                                          clearSending: { sending[$0] = nil })
-    }
 
     // #1740: Dan's way of saying "I'm not going to action this". Both futures are offered because he
     // asked to choose each time (2026-07-30): standing the contact down for good, or pushing it out one
@@ -321,16 +283,6 @@ struct FollowUpsView: View {
 
     // The closing-note row's version, and it is a different decision: this note is about the NEXT event,
     // so declining it is not declining the show. "Not sent but also done" (Dan, 2026-07-30).
-    @ViewBuilder private func closingNoteMenu(prospect: Prospect, recipient: Recipient) -> some View {
-        Menu(StandDownCopy.menu) {
-            Button(StandDownCopy.closeOut) { closeOut(prospect: prospect, recipient: recipient) }
-            Button(StandDownCopy.pushOut()) {
-                pushOut(prospect: prospect, recipient: recipient, track: .conversation)
-            }
-        }
-        .menuStyle(.borderlessButton).fixedSize()
-        .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
-    }
 
     private func standDown(prospect: Prospect, recipient: Recipient, scope: StandDownScope) {
         ProspectMutations.standDown(prospect: prospect, recipient: recipient, scope: scope, now: Date())
@@ -346,15 +298,6 @@ struct FollowUpsView: View {
                              })
     }
 
-    private func closeOut(prospect: Prospect, recipient: Recipient) {
-        recipient.standDownClosingNote(now: Date())
-        guard context.saveOrWarn(org: prospect.groupName, feedback: feedback) else { return }
-        feedback.acknowledge(ActionAck.closingNoteClosedOut(org: prospect.groupName),
-                             action: .init(label: "Undo") {
-                                 recipient.resumeClosingNote()
-                                 context.saveOrWarn(org: prospect.groupName, feedback: feedback)
-                             })
-    }
 
     private func pushOut(prospect: Prospect, recipient: Recipient, track: StandDownTrack) {
         let now = Date()

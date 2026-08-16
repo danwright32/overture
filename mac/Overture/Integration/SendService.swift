@@ -280,75 +280,14 @@ enum SendService {
         }
     }
 
-    // Sends ONE conversation re-touch or closing note for a specific recipient's ACTIVE conversation
-    // (#651/#652), not the lead-level rollup: threads on recipient.gmailMessageId/gmailThreadId (that
-    // contact's own conversation), same as sendReplyDraft, so a multi-recipient show's nudge lands on
-    // the RIGHT contact instead of whichever recipient sent first. The closing variant resolves ONLY
-    // this recipient (markOutcomeManually, mirroring what resolveEngagedContacts does per engaged
-    // contact) with no cascade to a sibling recipient or the show's own outcome (Dan's 2026-07-08
-    // decision, already locked in on Recipient.setConversationState). Re-anchors this recipient's own
-    // reminder clock. One click = one nudge, never autonomous.
-    @discardableResult
-    // #2575: `body` is Dan's edit, as above. It replaces the composed body only.
-    static func sendClosingNote(_ recipient: Recipient, of prospect: Prospect,
-                                now: Date, sender: MailSender, body: String? = nil) async -> Bool {
-        guard let email = recipient.email, !email.isEmpty, recipient.sentAt != nil else { return false }
-        // #2717: the same refusal as the follow-up above, for the same reason. The closing note is the one
-        // of the two an attached row can actually come due for (nobody wrote back, the show passed), so
-        // this is the live half rather than the theoretical one.
-        if let refusal = AttachedConversation.refusalToContinue(recipient, displayName: prospect.groupName) {
-            AgentLog.problem(refusal)
-            return false
-        }
-        // #2033: the note lands on a thread the whole group is reading, so it is addressed to all of them.
-        let group = SendGroup.peers(of: recipient, in: prospect)
-        let addresses = group.compactMap(\.email).filter { !$0.isEmpty }
-        // #948: subject and body from the one shared helper the confirmation sheet also reads. It returns
-        // nil for a kind that is a prompt, not a sendable email, exactly the .needsState/.suggested case.
-        //
-        // #2030: both refusals now happen BEFORE the claim, so neither can leave it held on a note that
-        // was never sent. That is what the explicit claim release here used to be for.
-        guard let content = PostEventPrompt.nudgeContent(kind: .closingNote, originalSubject: prospect.draftSubject,
-                                                        groupName: prospect.groupName,
-                                                        isMerged: prospect.isMergedConcert,
-                                                        contactName: recipient.name,
-                                                        performanceDate: prospect.performanceDate,
-                                                        venue: prospect.venue),
-              let outgoing = editedOrComposed(body, composed: content.body),
-              let mail = OutgoingMail(
-                to: addresses,
-                subject: content.subject,
-                body: outgoing,
-                inReplyTo: recipient.gmailMessageId,
-                references: MailThreading.references(parentReferences: recipient.gmailReferences,
-                                                     parentMessageID: recipient.gmailMessageId),
-                threadId: recipient.gmailThreadId) else { return false }
-        // #468: shared with sendFollowUp's claim above. #2033: over the whole group.
-        guard claimSecondarySend(group, \.nudgeSendClaimedAt, now: now) else { return false }
-        do {
-            _ = try await sender.send(mail)
-            for r in group {
-                r.conversationRemindedAt = now   // re-anchor so it steps forward, not nags
-                r.sendError = nil
-                r.nudgeSendClaimedAt = nil
-            }
-            // #2397: sending the closing note records the SHOW as never heard back, which is what the note
-            // has always MEANT and what this path did not say. It resolved the lead to a soft decline in
-            // every case, claiming somebody had turned Dan down when nobody had written back at all.
-            //
-            // At the show level, not on the contact, because that is where an ending lives now (#2394) and
-            // because the note is only ever offered when NOBODY on the show replied: there is no per-person
-            // judgement here to keep apart, which is what Dan's 2026-07-08 decision was protecting.
-            prospect.showOutcome = .neverHeardBack
-            return true
-        } catch {
-            for r in group {
-                r.sendError = error.localizedDescription
-                r.nudgeSendClaimedAt = nil   // retryable, never stuck claimed
-            }
-            return false
-        }
-    }
+    // #2710: `sendClosingNote` stood here and is gone with the email itself. It was also the only
+    // AUTOMATIC writer of `ShowOutcome.neverHeardBack`, which is why this issue could not simply delete a
+    // send: the write is what took a silent row off Reached out.
+    //
+    // It is not lost, it has moved to Dan. `ShowOutcome.pitched` includes `.neverHeardBack`, so the
+    // close-out menu has always offered it, and a silent show that has passed now RAISES that prompt
+    // (`PostEventPrompt.Kind.closeOutUnanswered`) instead of composing an email. His call, 2026-08-16, over
+    // recording it automatically: it may have ended some other way he knows about and Overture does not.
 
     // Sends Dan's approved AI-drafted reply to ONE recipient, on THAT recipient's own Gmail thread
     // (#421): threads on recipient.gmailMessageId/gmailThreadId, NOT the lead rollup (the rollup is the

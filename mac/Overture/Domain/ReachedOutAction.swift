@@ -15,7 +15,6 @@ import Foundation
 // button stand for six different things in the first place.
 enum ReachedOutAction: String, Equatable, Sendable, CaseIterable {
     case sendNudge           // a silent contact, due a gentle prod
-    case sendClosingNote     // the show has passed: the gracious note that keeps the relationship warm
     case sayHowItEnded       // #2397: the show has passed and somebody replied, so Dan records the ending
     case sayWhatHappened     // a form pitch Overture can neither send nor detect a reply to
     case none
@@ -25,7 +24,6 @@ enum ReachedOutAction: String, Equatable, Sendable, CaseIterable {
     var label: String? {
         switch self {
         case .sendNudge: return "Send a follow-up"
-        case .sendClosingNote: return "Send a closing note"
         // #2397: no button here. The close-out menu beside this slot is how Dan records an ending, and a
         // second control with the same purpose is the duplicate-copy trap #843 exists for. The case stays,
         // because it is still what the row is waiting for.
@@ -42,7 +40,7 @@ enum ReachedOutAction: String, Equatable, Sendable, CaseIterable {
     // tested against each other, so a label that says Send cannot come to mean something that does not.
     var sendsAnEmail: Bool {
         switch self {
-        case .sendNudge, .sendClosingNote: return true
+        case .sendNudge: return true
         case .sayHowItEnded, .sayWhatHappened, .none: return false
         }
     }
@@ -65,22 +63,16 @@ enum ReachedOutAction: String, Equatable, Sendable, CaseIterable {
             return .sayWhatHappened
         }
 
-        // #2397: the post-event track, which is the closing note and the close-out prompt.
-        if let prompt = PostEventPrompt.prompt(for: recipient, of: prospect, now: now) {
-            switch prompt.kind {
-            case .closingNote:
-                // #2716: the closing note is a real email that threads off `gmailMessageId`, and an
-                // attached conversation never carries one by design (Overture sent nothing on it). So on
-                // that one row the send is impossible and offering it would put a button there that can
-                // only refuse (L109); Dan records the ending instead, exactly as he does for an
-                // unwatched form pitch. #2717 makes the send path itself refuse, which is the other half.
-                //
-                // Reachable ONLY from an attached form or DM pitch: every emailed contact in this queue
-                // has passed `hasProvenOutreach`, which demands a message id, so this cannot quietly
-                // swallow the closing note on an ordinary row.
-                return recipient.gmailMessageId == nil ? .sayWhatHappened : .sendClosingNote
-            case .closeOut: return .sayHowItEnded
-            }
+        // #2710: the post-event track, which is now TWO close-out prompts and no email at all. Neither
+        // asks Overture to send anything, so both land on the same slot: Dan records how it ended, from
+        // the close-out menu beside this one.
+        //
+        // The `.sayWhatHappened` carve-out #2716 needed here is gone with the send it protected. It
+        // existed because the closing note threads off `gmailMessageId`, which an attached form or DM
+        // pitch never carries, so the button could only refuse. With nothing to send, every post-event
+        // row is the same row.
+        if PostEventPrompt.prompt(for: recipient, of: prospect, now: now) != nil {
+            return .sayHowItEnded
         }
 
         // The silent-nudge sequence.

@@ -123,18 +123,9 @@ struct ConfirmationShowsTheStyledSignatureTests {
         #expect(shown.contains(try #require(sig.html)))
     }
 
-    @Test func aconversationNoteConfirmationCarriesTheStyledSignatureToo() throws {
-        let ctx = ModelContext(try container())
-        let (p, r) = show(ctx)
-        r.sentAt = Date()
-        r.sendState = .sent
-
-        let c = try #require(SendConfirmation(closingNoteFor: r, of: p, signature: sig))
-        let shown = try #require(GmailMessage.previewCardHTML(body: c.bodyBeforeSignOff,
-                                                              signature: c.signature))
-
-        #expect(shown.contains(try #require(sig.html)))
-    }
+    // #2710: a second test stood here, asserting the closing note's confirmation carried the styled
+    // signature too. It went with the email. The follow-up confirmation above exercises the same code
+    // path, so nothing about the signature is now unasserted.
 
     // The guard and its wiring are two claims (#887). Everything above passes with the sheet still
     // drawing the plain text string, which is exactly how the suite stayed green through this defect.

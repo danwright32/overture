@@ -66,18 +66,8 @@ struct EditAFollowUpBeforeItSendsTests {
         #expect(sender.last?.body.contains("I wanted to follow up on my earlier note") == false)
     }
 
-    @Test func aclosingNoteSendsTheEditedWordsNotTheComposedOnes() async throws {
-        let ctx = try context()
-        let (p, r) = show(ctx, passed: true)
-        let sender = CapturingSender()
-
-        let sent = await SendService.sendClosingNote(r, of: p, now: Date(), sender: sender,
-                                                     body: "Ryan, sorry the timing didn't work out.")
-
-        #expect(sent)
-        #expect(sender.last?.body.contains("Ryan, sorry the timing didn't work out.") == true)
-        #expect(sender.last?.body.contains("has come and gone") == false)
-    }
+    // #2710: the closing note's own edited-body test stood here and went with the email. The
+    // follow-up's, above, covers the same rule on the send that remains.
 
     // Untouched, both paths compose exactly what they composed before, so an unedited send is unchanged.
     @Test func anuneditedSendStillSendsTheComposedMessage() async throws {
@@ -116,18 +106,9 @@ struct EditAFollowUpBeforeItSendsTests {
         #expect(sender.last == nil)
     }
 
-    @Test func anemptiedClosingNoteSendsNothingAndClosesNothingOut() async throws {
-        let ctx = try context()
-        let (p, r) = show(ctx, passed: true)
-        let sender = CapturingSender()
-
-        let sent = await SendService.sendClosingNote(r, of: p, now: Date(), sender: sender, body: "")
-
-        #expect(!sent)
-        #expect(sender.last == nil)
-        // The note's second act must not happen either: an unsent note has not closed anything out.
-        #expect(p.showOutcome == nil)
-    }
+    // #2710: the emptied closing note's test stood here, including the assertion that an unsent note
+    // closed nothing out. Both went with the email. Nothing writes an outcome on a send any more: the
+    // ending is Dan's to record, from the close-out prompt the show now raises.
 }
 
 // #2575: the sheet itself. The rule is Dan's from #2010, "whatever is in the text box that I see is what's

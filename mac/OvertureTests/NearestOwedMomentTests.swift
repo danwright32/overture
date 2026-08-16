@@ -62,7 +62,7 @@ struct NearestOwedMomentTests {
         #expect(PostEventPrompt.prompt(for: r, of: p, now: day("2026-08-13")) == nil)
 
         // And once it arrives, it is due.
-        #expect(PostEventPrompt.prompt(for: r, of: p, now: day("2026-08-14"))?.kind == .closingNote)
+        #expect(PostEventPrompt.prompt(for: r, of: p, now: day("2026-08-14"))?.kind == .closeOutUnanswered)
     }
 
     // Everything that is genuinely "there is no prompt at all" must keep answering nil, or this fix

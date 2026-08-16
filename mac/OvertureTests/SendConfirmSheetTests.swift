@@ -35,17 +35,14 @@ struct SendConfirmSheetTests {
                 "The plain system send-confirm alert must be gone once the branded sheet replaces it (#360).")
     }
 
-    // #948: the follow-up and conversation-note confirmations now carry their own heading and
-    // reassurance through the same sheet. Each says the true thing: only the draft and the follow-up
-    // can claim "nothing else goes out"; a closing note names the second thing it does.
-    @Test func theFollowUpAndNoteCopyIsStable() {
+    // #948: the follow-up confirmation carries its own heading and reassurance through the shared sheet.
+    //
+    // #2710: the note's three strings went with the closing note. Only the draft and the follow-up can
+    // claim "nothing else goes out", and after this change they are the only two that claim anything.
+    @Test func theFollowUpCopyIsStable() {
         #expect(SendConfirmCopy.followUpTitle == "Send this follow-up now?")
         #expect(SendConfirmCopy.followUpReassurance
                 == "This sends one follow-up right now, to this recipient only. Nothing else goes out.")
-        #expect(SendConfirmCopy.noteTitle == "Send this note now?")
-        #expect(SendConfirmCopy.noteReassurance == "This sends one message right now, to this recipient only.")
-        #expect(SendConfirmCopy.noteReassuranceClosing
-                == "This sends one message right now, to this recipient only. It also closes the lead out (kept warm for next time).")
     }
 
     // #948 wiring: the follow-up and note sends must present the branded SendConfirmSheet, not the stock
@@ -69,6 +66,6 @@ struct SendConfirmSheetTests {
         let source = SourceGuardHelper.source("Overture/Integration/SendService.swift")
         #expect(!source.isEmpty)
         #expect(source.contains("FollowUp.nudgeContent("))
-        #expect(source.contains("PostEventPrompt.nudgeContent("))
+        // #2710: `PostEventPrompt.nudgeContent(` stood here. There is one composed outbound body left.
     }
 }

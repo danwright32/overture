@@ -11,7 +11,8 @@ import Foundation
 @Suite("FollowUps send receipt save guard")
 struct FollowUpsSendReceiptGuardTests {
 
-    private static let guardedFunctions = ["performNudge", "performClosingNote"]
+    // #2710: `performClosingNote` stood beside `performNudge` here and went with the email it sent.
+    private static let guardedFunctions = ["performNudge"]
     private static let forbidden = "try? context.save()"
 
     @Test func performNudgeAndPerformClosingNoteNeverRevertToSilentSave() throws {

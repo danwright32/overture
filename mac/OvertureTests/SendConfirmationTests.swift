@@ -186,18 +186,8 @@ struct SendConfirmationTests {
             #expect(c.body.hasSuffix(sig.plainText))
         }
 
-        @Test func aconversationNoteConfirmationCarriesTheSignOff() throws {
-            let ctx = ModelContext(try container())
-            let p = show(ctx)
-            let r = contact(ctx, on: p, email: "marcus@org.org", name: "Marcus Hale")
-            r.sentAt = Date()
-            r.sendState = .sent
-
-            let c = try #require(SendConfirmation(closingNoteFor: r, of: p,
-                                                  signature: sig))
-
-            #expect(c.body.hasSuffix(sig.plainText))
-        }
+        // #2710: the closing note's own sign-off test stood here and went with the email. The follow-up
+        // above exercises the same append.
     }
 
     @Test func buildsRecipientAndSubjectFromAnApprovedProspect() throws {
@@ -302,19 +292,7 @@ struct SendConfirmationTests {
                                                  contactName: "Marcus", venue: "V", followUpCount: 0).body)
     }
 
-    // #948: a closing note's reassurance names the SECOND thing it does (it closes the lead out); an
-    // active note's does not. A prompt kind is not sendable, so it yields no confirmation.
-    @Test func aConversationNoteConfirmationSaysWhatAClosingNoteAlsoDoes() throws {
-        let ctx = ModelContext(try container())
-        let p = make(ctx, subject: "Photographs for G")
-        let r = p.recipients.first!
-
-        // #2397: there is one note left, and it ALWAYS does the second thing, so it always carries the
-        // clause that says so. The plain reassurance belonged to the per-state re-touch email, which is
-        // retired along with the states that chose its wording.
-        let closing = SendConfirmation(closingNoteFor: r, of: p)
-        #expect(closing?.title == "Send this note now?")
-        #expect(closing?.reassurance
-                == "This sends one message right now, to this recipient only. It also closes the lead out (kept warm for next time).")
-    }
+    // #2710: and the test for the closing note's extra reassurance clause ("It also closes the lead
+    // out"), which described a send that no longer exists. Nothing closes a lead out on a send now: the
+    // ending is Dan's to record from the close-out prompt.
 }

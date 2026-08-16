@@ -91,8 +91,11 @@ struct ReferencesChainTests {
         #expect(sender.sent.last?.references == ChainSpy.id(1))   // the pitch alone
         #expect(sender.sent.last?.inReplyTo == ChainSpy.id(1))
 
-        let closedAt = nudgedAt.addingTimeInterval(60 * 60 * 24 * 7)
-        #expect(await SendService.sendClosingNote(r, of: p, now: closedAt, sender: sender) == true)
+        // #2710: the third leg was the closing note until that email was retired. A SECOND follow-up is
+        // the third message a contact can now receive, and it is the leg this test actually needs: two
+        // ancestors in References is the accumulation being asserted, and one would not show it.
+        let nudgedAgainAt = nudgedAt.addingTimeInterval(60 * 60 * 24 * 7)
+        #expect(await SendService.sendFollowUp(r, of: p, now: nudgedAgainAt, sender: sender) == true)
 
         let third = try #require(sender.sent.last)
         #expect(third.references == "\(ChainSpy.id(1)) \(ChainSpy.id(2))")

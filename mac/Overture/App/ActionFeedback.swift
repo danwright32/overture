@@ -260,11 +260,6 @@ enum ActionAck {
         success ? "Follow-up sent to \(org)" : "Couldn't send the follow-up to \(org)"
     }
 
-    static func conversationNudge(org: String, closing: Bool, success: Bool) -> String {
-        if success { return closing ? "Closing note sent to \(org)" : "Nudge sent to \(org)" }
-        return closing ? "Couldn't send the closing note to \(org)" : "Couldn't send the nudge to \(org)"
-    }
-
     static func remindLater(org: String) -> String {
         "Snoozed \(org). I'll remind you later."
     }
@@ -333,12 +328,6 @@ enum ActionAck {
         case .contact: return "Nothing more will be sent to this contact at \(org). No email went out"
         case .show: return "Nothing more will be sent about this \(org) show. No email went out"
         }
-    }
-
-    // The closing note closed out by hand. It has to say both halves, because "done" and "sent" are
-    // exactly the two things it must not be confused between (Dan, 2026-07-30).
-    static func closingNoteClosedOut(org: String) -> String {
-        "\(org) is closed out. No closing note was sent"
     }
 
     static func nudgePushedOut(org: String, days: Int) -> String {
