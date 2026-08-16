@@ -40,7 +40,7 @@ struct PrepReplyCancelServiceTests {
     @Test func prepRequestCancelWritesTheSentinelTheRunnerReads() throws {
         let cancel = try tempDir().appendingPathComponent("prep-cancel")
         #expect(!FileManager.default.fileExists(atPath: cancel.path))
-        PrepQueueService.requestCancel(cancelURL: cancel)
+        PrepQueueService.requestCancel(slot: .prep, cancelURL: cancel)
         #expect(FileManager.default.fileExists(atPath: cancel.path))
     }
 

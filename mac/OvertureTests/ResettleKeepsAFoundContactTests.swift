@@ -81,14 +81,14 @@ struct ResettleKeepsAFoundContactTests {
         try writeResults(resultsURL, foundResults(key))
 
         try ReachabilityProbeMarker.write(ReachabilityProbeMarker(keys: [key], startedAt: "s"), to: markerURL)
-        PrepQueueService.settleReachabilityProbe(markerURL: markerURL, resultsURL: resultsURL,
+        PrepQueueService.settleReachabilityProbe(slot: .check, markerURL: markerURL, resultsURL: resultsURL,
                                                  into: ctx, now: first, defaults: defaults)
         #expect(try row(ctx, key)?.reachabilityResult == .emailFound)
 
         // The same run settled again: the marker is rewritten (a relaunch finds it), the results file is
         // byte-identical, so the ingest refuses it as already consumed.
         try ReachabilityProbeMarker.write(ReachabilityProbeMarker(keys: [key], startedAt: "s"), to: markerURL)
-        PrepQueueService.settleReachabilityProbe(markerURL: markerURL, resultsURL: resultsURL, into: ctx,
+        PrepQueueService.settleReachabilityProbe(slot: .check, markerURL: markerURL, resultsURL: resultsURL, into: ctx,
                                                  now: first.addingTimeInterval(3600), defaults: defaults)
 
         #expect(try row(ctx, key)?.reachabilityResult == .emailFound)
@@ -109,10 +109,10 @@ struct ResettleKeepsAFoundContactTests {
         try writeResults(resultsURL, foundResults(key))
 
         try ReachabilityProbeMarker.write(ReachabilityProbeMarker(keys: [key], startedAt: "s"), to: markerURL)
-        PrepQueueService.settleReachabilityProbe(markerURL: markerURL, resultsURL: resultsURL,
+        PrepQueueService.settleReachabilityProbe(slot: .check, markerURL: markerURL, resultsURL: resultsURL,
                                                  into: ctx, now: first, defaults: defaults)
         try ReachabilityProbeMarker.write(ReachabilityProbeMarker(keys: [key], startedAt: "s"), to: markerURL)
-        PrepQueueService.settleReachabilityProbe(markerURL: markerURL, resultsURL: resultsURL, into: ctx,
+        PrepQueueService.settleReachabilityProbe(slot: .check, markerURL: markerURL, resultsURL: resultsURL, into: ctx,
                                                  now: first.addingTimeInterval(86_400), defaults: defaults)
 
         #expect(try row(ctx, key)?.reachabilityProbedAt == first)
@@ -132,7 +132,7 @@ struct ResettleKeepsAFoundContactTests {
 
         try writeResults(resultsURL, foundResults(key))
         try ReachabilityProbeMarker.write(ReachabilityProbeMarker(keys: [key], startedAt: "s"), to: markerURL)
-        PrepQueueService.settleReachabilityProbe(markerURL: markerURL, resultsURL: resultsURL,
+        PrepQueueService.settleReachabilityProbe(slot: .check, markerURL: markerURL, resultsURL: resultsURL,
                                                  into: ctx, now: first, defaults: defaults)
         #expect(try row(ctx, key)?.reachabilityResult == .emailFound)
 
@@ -142,7 +142,7 @@ struct ResettleKeepsAFoundContactTests {
             PrepResult(naturalKey: key, contacts: nil, draft: nil, emptyReason: "nothing_published")
         ]))
         try ReachabilityProbeMarker.write(ReachabilityProbeMarker(keys: [key], startedAt: "s2"), to: markerURL)
-        PrepQueueService.settleReachabilityProbe(markerURL: markerURL, resultsURL: resultsURL, into: ctx,
+        PrepQueueService.settleReachabilityProbe(slot: .check, markerURL: markerURL, resultsURL: resultsURL, into: ctx,
                                                  now: first.addingTimeInterval(86_400), defaults: defaults)
 
         #expect(try row(ctx, key)?.reachabilityResult == .noEmailFound)
@@ -166,11 +166,11 @@ struct ResettleKeepsAFoundContactTests {
         try writeResults(resultsURL, PrepResults(version: 2, generatedAt: "now", results: [
             PrepResult(naturalKey: key, contacts: nil, draft: nil, emptyReason: "nothing_published")
         ]))
-        PrepImporter.consumeIfNew(at: resultsURL, into: ctx, defaults: defaults)
+        PrepImporter.consumeIfNew(slot: .prep, at: resultsURL, into: ctx, defaults: defaults)
         #expect(try row(ctx, key)?.reachabilityProbedAt == nil)
 
         try ReachabilityProbeMarker.write(ReachabilityProbeMarker(keys: [key], startedAt: "s"), to: markerURL)
-        PrepQueueService.settleReachabilityProbe(markerURL: markerURL, resultsURL: resultsURL,
+        PrepQueueService.settleReachabilityProbe(slot: .check, markerURL: markerURL, resultsURL: resultsURL,
                                                  into: ctx, now: now, defaults: defaults)
 
         #expect(try row(ctx, key)?.reachabilityProbedAt == now)

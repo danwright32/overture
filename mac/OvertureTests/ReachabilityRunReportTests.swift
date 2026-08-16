@@ -132,7 +132,7 @@ struct ReachabilityProbeReportWiringTests {
     // of his actual August shows inside `missingKeys`.
     private func settle(_ d: URL, marker: URL, results: URL, ctx: ModelContext, now: Date,
                         defaults: UserDefaults) -> ReachabilityRunReport? {
-        PrepQueueService.settleReachabilityProbe(
+        PrepQueueService.settleReachabilityProbe(slot: .check, 
             markerURL: marker, resultsURL: results,
             queueURL: d.appendingPathComponent("no-queue.json"),
             downbeatURL: d.appendingPathComponent("no-downbeat.json"),

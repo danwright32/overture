@@ -58,7 +58,7 @@ struct UnfinishedCheckTests {
         let ctx = ModelContext(try container())
         let a = newProspect(ctx, group: "Aurora Strings")
         let d = dir()
-        let markerURL = d.appendingPathComponent("probe-run.json")
+        let markerURL = PrepQueueService.probeRunURL(in: d)
         let resultsURL = d.appendingPathComponent("results.json")
         let now = Date(timeIntervalSince1970: 1_780_000_000)
         try ReachabilityProbeMarker.write(ReachabilityProbeMarker(keys: [a], startedAt: "s"), to: markerURL)
@@ -70,7 +70,7 @@ struct UnfinishedCheckTests {
                                                              provenance: "act")], draft: nil),
         ]))
 
-        let report = PrepQueueService.settleOrphanedProbe(
+        let report = PrepQueueService.settleOrphanedProbe(slot: .check, 
             markerURL: markerURL, resultsURL: resultsURL,
             queueURL: d.appendingPathComponent("no-queue.json"),
             downbeatURL: d.appendingPathComponent("no-downbeat.json"),
@@ -91,12 +91,13 @@ struct UnfinishedCheckTests {
         let ctx = ModelContext(try container())
         let a = newProspect(ctx, group: "Aurora Strings")
         let d = dir()
-        let markerURL = d.appendingPathComponent("probe-run.json")
+        let markerURL = PrepQueueService.probeRunURL(in: d)
         // The orphan, from a check that was never settled.
         try ReachabilityProbeMarker.write(ReachabilityProbeMarker(keys: [a], startedAt: "old"), to: markerURL)
 
         // Starting a Prep run must leave no check marker behind for the completion path to find.
-        PrepQueueService.settleAnyCheckBefore(prepRunIn: ctx, now: Date(), probeRunURL: markerURL)
+        PrepQueueService.settleAnyCheckBefore(prepRunIn: ctx, now: Date(), support: d,
+                                             defaults: freshDefaults())
 
         #expect(try ReachabilityProbeMarker.read(from: markerURL) == nil,
                 "a Prep run must not be mistakable for a check")
@@ -110,12 +111,13 @@ struct UnfinishedCheckTests {
         let ctx = ModelContext(try container())
         let a = newProspect(ctx, group: "Aurora Strings")
         let d = dir()
-        let markerURL = d.appendingPathComponent("probe-run.json")
+        let markerURL = PrepQueueService.probeRunURL(in: d)
         try ReachabilityProbeMarker.write(ReachabilityProbeMarker(keys: [a], startedAt: "old"), to: markerURL)
 
         // Even when the settle cannot land anything (no results file at all), the marker must not survive
         // to relabel the Prep run that is about to start.
-        PrepQueueService.settleAnyCheckBefore(prepRunIn: ctx, now: Date(), probeRunURL: markerURL)
+        PrepQueueService.settleAnyCheckBefore(prepRunIn: ctx, now: Date(), support: d,
+                                             defaults: freshDefaults())
 
         #expect(try ReachabilityProbeMarker.read(from: markerURL) == nil)
     }
@@ -126,7 +128,7 @@ struct UnfinishedCheckTests {
         let ctx = ModelContext(try container())
         let a = newProspect(ctx, group: "Aurora Strings")
         let d = dir()
-        let markerURL = d.appendingPathComponent("probe-run.json")
+        let markerURL = PrepQueueService.probeRunURL(in: d)
         let resultsURL = d.appendingPathComponent("results.json")
         let now = Date(timeIntervalSince1970: 1_780_000_000)
         try ReachabilityProbeMarker.write(ReachabilityProbeMarker(keys: [a], startedAt: "old"), to: markerURL)
@@ -134,7 +136,7 @@ struct UnfinishedCheckTests {
             PrepResult(naturalKey: a, contacts: [], draft: nil),
         ]))
 
-        _ = PrepQueueService.settleOrphanedProbe(
+        _ = PrepQueueService.settleOrphanedProbe(slot: .check, 
             markerURL: markerURL, resultsURL: resultsURL,
             queueURL: d.appendingPathComponent("no-queue.json"),
             downbeatURL: d.appendingPathComponent("no-downbeat.json"),
@@ -149,7 +151,7 @@ struct UnfinishedCheckTests {
     @Test func noLeftoverCheckMeansNothingToSettle() throws {
         let ctx = ModelContext(try container())
         let d = dir()
-        #expect(PrepQueueService.settleOrphanedProbe(
+        #expect(PrepQueueService.settleOrphanedProbe(slot: .check, 
             markerURL: d.appendingPathComponent("absent.json"),
             resultsURL: d.appendingPathComponent("results.json"),
             queueURL: d.appendingPathComponent("no-queue.json"),
@@ -213,7 +215,7 @@ struct FailedAnswerSaveTests {
     @Test func aStampThatCannotBeSavedIsReportedAndDoesNotClearTheMarker() async throws {
         var key = ""
         let d = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-        let markerURL = d.appendingPathComponent("probe-run.json")
+        let markerURL = PrepQueueService.probeRunURL(in: d)
         let resultsURL = d.appendingPathComponent("results.json")
 
         let report = try await ImmutableStoreFixture.withFailingSave(
@@ -226,7 +228,7 @@ struct FailedAnswerSaveTests {
                 try JSONEncoder().encode(PrepResults(version: 2, generatedAt: "now", results: [
                     PrepResult(naturalKey: key, contacts: [], draft: nil),
                 ])).write(to: resultsURL)
-                return PrepQueueService.settleReachabilityProbe(
+                return PrepQueueService.settleReachabilityProbe(slot: .check, 
                     markerURL: markerURL, resultsURL: resultsURL,
                     queueURL: d.appendingPathComponent("no-queue.json"),
                     downbeatURL: d.appendingPathComponent("no-downbeat.json"),
@@ -252,7 +254,7 @@ struct FailedAnswerSaveTests {
     @Test func theRetryGivesUpAfterTheLastAttemptAndSaysSo() async throws {
         var key = ""
         let d = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-        let markerURL = d.appendingPathComponent("probe-run.json")
+        let markerURL = PrepQueueService.probeRunURL(in: d)
         let resultsURL = d.appendingPathComponent("results.json")
 
         let report = try await ImmutableStoreFixture.withFailingSave(
@@ -268,7 +270,7 @@ struct FailedAnswerSaveTests {
                 try JSONEncoder().encode(PrepResults(version: 2, generatedAt: "now", results: [
                     PrepResult(naturalKey: key, contacts: [], draft: nil),
                 ])).write(to: resultsURL)
-                return PrepQueueService.settleReachabilityProbe(
+                return PrepQueueService.settleReachabilityProbe(slot: .check, 
                     markerURL: markerURL, resultsURL: resultsURL,
                     queueURL: d.appendingPathComponent("no-queue.json"),
                     downbeatURL: d.appendingPathComponent("no-downbeat.json"),

@@ -406,7 +406,29 @@ enum PrepQueueBuilder {
         return try encoder.encode(queue)
     }
 
-    static var defaultURL: URL {
-        RunSlot.prep.queueURL(in: StoreLocation.handoffDirectory)
+    static func queueURL(for slot: RunSlot) -> URL {
+        slot.queueURL(in: StoreLocation.handoffDirectory)
+    }
+
+    static var defaultURL: URL { queueURL(for: .prep) }
+}
+
+extension PrepQueue {
+    // #2760: which shows a run was given, read off the run's own work-list.
+    //
+    // It exists so `ReprepRelease.releaseAfterRun` can be scoped to the ending run rather than to the whole
+    // store: a check finishing empty must not give back the re-prep requests the prep slot is carrying.
+    //
+    // A file that cannot be read or decoded answers with the EMPTY set, and the caller treats that as
+    // "release nothing". Both halves are deliberate: an unreadable work-list cannot be shown to name any
+    // show, and guessing in the other direction would pull a show back into Review in the middle of being
+    // drafted, which nothing can undo (L5).
+    //
+    // Decoded through the versioned type it already is, so a queue that gains a field is read here for
+    // free, and a queue whose shape this build cannot read names nobody rather than half of them.
+    static func keys(inQueueAt url: URL) -> Set<String> {
+        guard let data = try? Data(contentsOf: url),
+              let queue = try? JSONDecoder().decode(PrepQueue.self, from: data) else { return [] }
+        return Set(queue.items.map(\.naturalKey))
     }
 }

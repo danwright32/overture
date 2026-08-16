@@ -15,9 +15,13 @@ enum PrepProgressDecoder {
         try JSONDecoder().decode(PrepProgress.self, from: data)
     }
 
-    static var defaultURL: URL {
-        RunSlot.prep.progressURL(in: StoreLocation.handoffDirectory)
+    // #2760: per slot, so the check's takeover counts the check's own N of M rather than whatever the
+    // prep run last wrote.
+    static func progressURL(for slot: RunSlot) -> URL {
+        slot.progressURL(in: StoreLocation.handoffDirectory)
     }
+
+    static var defaultURL: URL { progressURL(for: .prep) }
 
     // Best-effort read for the toolbar: a missing, malformed, or mid-write file (the workflow may
     // be writing it at the exact moment this is called) reads as "nothing to show", never a thrown

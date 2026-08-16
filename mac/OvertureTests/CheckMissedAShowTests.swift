@@ -80,7 +80,7 @@ struct CheckMissedAShowTests {
         try ReachabilityProbeMarker.write(ReachabilityProbeMarker(keys: [a, b], startedAt: "s"), to: markerURL)
         try writeResults(resultsURL, PrepResults(version: 2, generatedAt: "now", results: [answer(a)]))
 
-        _ = PrepQueueService.settleReachabilityProbe(markerURL: markerURL, resultsURL: resultsURL,
+        _ = PrepQueueService.settleReachabilityProbe(slot: .check, markerURL: markerURL, resultsURL: resultsURL,
                                                      into: ctx, now: now, defaults: freshDefaults())
 
         let pb = try fetch(ctx, b)
@@ -106,7 +106,7 @@ struct CheckMissedAShowTests {
         try ReachabilityProbeMarker.write(ReachabilityProbeMarker(keys: [b], startedAt: "s"), to: markerURL)
         try writeResults(resultsURL, PrepResults(version: 2, generatedAt: "now", results: []))
 
-        _ = PrepQueueService.settleReachabilityProbe(markerURL: markerURL, resultsURL: resultsURL,
+        _ = PrepQueueService.settleReachabilityProbe(slot: .check, markerURL: markerURL, resultsURL: resultsURL,
                                                      into: ctx, now: now, defaults: freshDefaults())
 
         let item = QueueItem(try #require(try fetch(ctx, b)))
@@ -128,7 +128,7 @@ struct CheckMissedAShowTests {
         let firstResults = d.appendingPathComponent("results-1.json")
         try ReachabilityProbeMarker.write(ReachabilityProbeMarker(keys: [b], startedAt: "s1"), to: firstMarker)
         try writeResults(firstResults, PrepResults(version: 2, generatedAt: "now", results: []))
-        _ = PrepQueueService.settleReachabilityProbe(markerURL: firstMarker, resultsURL: firstResults,
+        _ = PrepQueueService.settleReachabilityProbe(slot: .check, markerURL: firstMarker, resultsURL: firstResults,
                                                      into: ctx, now: now, defaults: freshDefaults())
         #expect(try fetch(ctx, b)?.reachabilityUnansweredAt == now, "precondition: the first check missed it")
 
@@ -136,7 +136,7 @@ struct CheckMissedAShowTests {
         let secondResults = d.appendingPathComponent("results-2.json")
         try ReachabilityProbeMarker.write(ReachabilityProbeMarker(keys: [b], startedAt: "s2"), to: secondMarker)
         try writeResults(secondResults, PrepResults(version: 2, generatedAt: "now", results: [answer(b)]))
-        _ = PrepQueueService.settleReachabilityProbe(markerURL: secondMarker, resultsURL: secondResults,
+        _ = PrepQueueService.settleReachabilityProbe(slot: .check, markerURL: secondMarker, resultsURL: secondResults,
                                                      into: ctx, now: later, defaults: freshDefaults())
 
         let pb = try fetch(ctx, b)
@@ -161,7 +161,7 @@ struct CheckMissedAShowTests {
         try writeResults(resultsURL, PrepResults(version: 2, generatedAt: "now", results: [answer(a)]))
 
         try ReachabilityProbeMarker.write(ReachabilityProbeMarker(keys: [a, b], startedAt: "s"), to: markerURL)
-        _ = PrepQueueService.settleReachabilityProbe(markerURL: markerURL, resultsURL: resultsURL,
+        _ = PrepQueueService.settleReachabilityProbe(slot: .check, markerURL: markerURL, resultsURL: resultsURL,
                                                      into: ctx, now: now, defaults: defaults)
         // Wipe the record, so the re-settle below has to write it itself rather than inheriting it.
         try fetch(ctx, b)?.reachabilityUnansweredAt = nil
@@ -169,7 +169,7 @@ struct CheckMissedAShowTests {
 
         let again = now.addingTimeInterval(7200)
         try ReachabilityProbeMarker.write(ReachabilityProbeMarker(keys: [a, b], startedAt: "s"), to: markerURL)
-        let report = PrepQueueService.settleReachabilityProbe(markerURL: markerURL, resultsURL: resultsURL,
+        let report = PrepQueueService.settleReachabilityProbe(slot: .check, markerURL: markerURL, resultsURL: resultsURL,
                                                              into: ctx, now: again, defaults: defaults)
 
         #expect(report?.outcome == nil, "precondition: the results file was already consumed, so no ingest ran")
@@ -192,7 +192,7 @@ struct CheckMissedAShowTests {
         try ReachabilityProbeMarker.write(ReachabilityProbeMarker(keys: [a, b, c], startedAt: "s"), to: markerURL)
         try writeResults(resultsURL, PrepResults(version: 2, generatedAt: "now", results: [answer(a)]))
 
-        let report = PrepQueueService.settleReachabilityProbe(markerURL: markerURL, resultsURL: resultsURL,
+        let report = PrepQueueService.settleReachabilityProbe(slot: .check, markerURL: markerURL, resultsURL: resultsURL,
                                                              into: ctx, now: now, defaults: freshDefaults())
 
         let marked = try ctx.fetch(FetchDescriptor<Prospect>()).filter { $0.reachabilityUnansweredAt != nil }

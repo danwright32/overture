@@ -276,7 +276,7 @@ struct ProbePaceWiringGuardTests {
     @Test func theRunsSizeIsReadBeforeTheSettleClearsIt() throws {
         let root = source("Overture/App/RootView.swift")
         let read = try #require(root.range(of: "let checkLookups = ((try? ReachabilityProbeMarker.read"))
-        let settle = try #require(root.range(of: "PrepQueueService.settleReachabilityProbe(into: context"))
+        let settle = try #require(root.range(of: "PrepQueueService.settleReachabilityProbe(slot: slot, into: context"))
         #expect(read.lowerBound < settle.lowerBound)
     }
 

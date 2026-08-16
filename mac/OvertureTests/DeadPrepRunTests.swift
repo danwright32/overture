@@ -77,7 +77,7 @@ struct DeadPrepRunTests {
         try Data().write(to: cancel)
 
         let ctx = ModelContext(try container())
-        let outcome = PrepQueueService.clearDeadRun(markerURL: marker, cancelURL: cancel,
+        let outcome = PrepQueueService.clearDeadRun(slot: .prep, markerURL: marker, cancelURL: cancel,
                                                     probeRunURL: probe, into: ctx, now: now)
 
         #expect(outcome != nil, "a stale marker is a dead run and must be swept")
@@ -97,7 +97,7 @@ struct DeadPrepRunTests {
                                               ofItemAtPath: marker.path)
 
         let ctx = ModelContext(try container())
-        #expect(PrepQueueService.clearDeadRun(markerURL: marker,
+        #expect(PrepQueueService.clearDeadRun(slot: .prep, markerURL: marker,
                                               cancelURL: dir.appendingPathComponent("prep-cancel"),
                                               probeRunURL: dir.appendingPathComponent("probe.json"),
                                               into: ctx, now: now) == nil)
@@ -111,7 +111,7 @@ struct DeadPrepRunTests {
         defer { try? FileManager.default.removeItem(at: dir) }
         let ctx = ModelContext(try container())
         // No marker at all: the runner removed its own on the way out.
-        #expect(PrepQueueService.clearDeadRun(markerURL: dir.appendingPathComponent("prep-running"),
+        #expect(PrepQueueService.clearDeadRun(slot: .prep, markerURL: dir.appendingPathComponent("prep-running"),
                                               cancelURL: dir.appendingPathComponent("prep-cancel"),
                                               probeRunURL: dir.appendingPathComponent("probe.json"),
                                               into: ctx, now: now) == nil)
@@ -134,7 +134,7 @@ struct DeadPrepRunTests {
             to: probe)
 
         let ctx = ModelContext(try container())
-        let outcome = try #require(PrepQueueService.clearDeadRun(
+        let outcome = try #require(PrepQueueService.clearDeadRun(slot: .prep, 
             markerURL: marker, cancelURL: dir.appendingPathComponent("prep-cancel"),
             probeRunURL: probe, into: ctx, now: now))
 
@@ -165,9 +165,9 @@ struct DeadPrepRunTests {
             ofItemAtPath: marker.path)
 
         let ctx = ModelContext(try container())
-        #expect(PrepQueueService.clearDeadRun(markerURL: marker, cancelURL: cancel, probeRunURL: probe,
+        #expect(PrepQueueService.clearDeadRun(slot: .prep, markerURL: marker, cancelURL: cancel, probeRunURL: probe,
                                               into: ctx, now: now) != nil)
-        #expect(PrepQueueService.clearDeadRun(markerURL: marker, cancelURL: cancel, probeRunURL: probe,
+        #expect(PrepQueueService.clearDeadRun(slot: .prep, markerURL: marker, cancelURL: cancel, probeRunURL: probe,
                                               into: ctx, now: now) == nil)
     }
 
@@ -187,11 +187,11 @@ struct DeadPrepRunTests {
     @Test func theSweepRunsWhenARunEndsAndAgainAtLaunch() {
         let root = SourceGuardHelper.source("Overture/App/RootView.swift")
         // When a watched run stops being live.
-        let settle = SourceGuardHelper.propertyBody("private func settleFinishedPrepRun() async {", in: root)
-        #expect(settle?.contains("sweptADeadPrepRun()") == true,
+        let settle = SourceGuardHelper.propertyBody("private func settleFinishedRun(slot: RunSlot) async {", in: root)
+        #expect(settle?.contains("sweptADeadRun(slot: slot)") == true,
                 "a run that ends must be checked for having died rather than finished")
         // And at launch, for a run that died while Overture was closed and so was never watched at all.
-        #expect(root.contains("} else if sweptADeadPrepRun() {"),
+        #expect(root.contains("} else if sweptADeadRun(slot: slot) {"),
                 "launch must sweep a run that died while the app was shut")
     }
 
@@ -199,8 +199,8 @@ struct DeadPrepRunTests {
     // reported twice: the sweep performs that settle itself.
     @Test func theLaunchSweepComesBeforeTheOrphanSettle() throws {
         let root = SourceGuardHelper.source("Overture/App/RootView.swift")
-        let sweep = try #require(root.range(of: "} else if sweptADeadPrepRun() {"))
-        let orphan = try #require(root.range(of: "PrepQueueService.settleOrphanedProbe(into: context"))
+        let sweep = try #require(root.range(of: "} else if sweptADeadRun(slot: slot) {"))
+        let orphan = try #require(root.range(of: "PrepQueueService.settleOrphanedProbe(slot: slot, into: context"))
         #expect(sweep.lowerBound < orphan.lowerBound)
     }
 }

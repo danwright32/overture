@@ -67,7 +67,7 @@ struct PrepResultsConsumedOnceTests {
         keptProspect(ctx, key: key)
         let url = try writeResults(subject: "Photographing your performance")
 
-        let outcome = PrepImporter.consumeIfNew(at: url, into: ctx, defaults: defaults())
+        let outcome = PrepImporter.consumeIfNew(slot: .prep, at: url, into: ctx, defaults: defaults())
 
         #expect(outcome?.drafted == 1)
     }
@@ -83,11 +83,11 @@ struct PrepResultsConsumedOnceTests {
         let url = try writeResults(subject: "Photographing your performance")
         let store = defaults()
 
-        PrepImporter.consumeIfNew(at: url, into: ctx, defaults: store)   // the run lands
+        PrepImporter.consumeIfNew(slot: .prep, at: url, into: ctx, defaults: store)   // the run lands
         p.status = .approved                                             // Dan approves it
         try ctx.save()
 
-        PrepImporter.consumeIfNew(at: url, into: ctx, defaults: store)   // he quits and reopens
+        PrepImporter.consumeIfNew(slot: .prep, at: url, into: ctx, defaults: store)   // he quits and reopens
 
         #expect(p.status == .approved)
     }
@@ -101,9 +101,9 @@ struct PrepResultsConsumedOnceTests {
         let url = try writeResults(subject: "Photographing your performance")
         let store = defaults()
 
-        PrepImporter.consumeIfNew(at: url, into: ctx, defaults: store)
+        PrepImporter.consumeIfNew(slot: .prep, at: url, into: ctx, defaults: store)
 
-        #expect(PrepImporter.consumeIfNew(at: url, into: ctx, defaults: store) == nil)
+        #expect(PrepImporter.consumeIfNew(slot: .prep, at: url, into: ctx, defaults: store) == nil)
     }
 
     // ...and the NEXT run still lands. Consuming once must not mean consuming never: a fresh results file
@@ -113,8 +113,8 @@ struct PrepResultsConsumedOnceTests {
         let p = keptProspect(ctx, key: key)
         let store = defaults()
 
-        PrepImporter.consumeIfNew(at: try writeResults(subject: "First try"), into: ctx, defaults: store)
-        let second = PrepImporter.consumeIfNew(
+        PrepImporter.consumeIfNew(slot: .prep, at: try writeResults(subject: "First try"), into: ctx, defaults: store)
+        let second = PrepImporter.consumeIfNew(slot: .prep, 
             at: try writeResults(subject: "A better subject line", generatedAt: "2026-07-14T10:00:00Z"),
             into: ctx, defaults: store)
 
@@ -133,12 +133,12 @@ struct PrepResultsConsumedOnceTests {
 
         var outcome = PrepImporter.Outcome()
         outcome.saveFailed = true
-        let failed = PrepImporter.consumeIfNew(at: url, into: ctx, defaults: store,
+        let failed = PrepImporter.consumeIfNew(slot: .prep, at: url, into: ctx, defaults: store,
                                                ingest: { _, _ in outcome })
         #expect(failed?.saveFailed == true)
 
         // The real importer, on the next launch. It must still get its turn.
-        #expect(PrepImporter.consumeIfNew(at: url, into: ctx, defaults: store)?.drafted == 1)
+        #expect(PrepImporter.consumeIfNew(slot: .prep, at: url, into: ctx, defaults: store)?.drafted == 1)
     }
 
     // No results file at all (a fresh install, or a run that never wrote one). Silent, and no crash.
@@ -146,7 +146,7 @@ struct PrepResultsConsumedOnceTests {
         let missing = FileManager.default.temporaryDirectory
             .appendingPathComponent("prep-results-\(UUID().uuidString).json")
 
-        #expect(PrepImporter.consumeIfNew(at: missing, into: try context(), defaults: defaults()) == nil)
+        #expect(PrepImporter.consumeIfNew(slot: .prep, at: missing, into: try context(), defaults: defaults()) == nil)
     }
 
     // THE WIRE, which is a separate claim from the guard above.
@@ -165,7 +165,7 @@ struct PrepResultsConsumedOnceTests {
             return
         }
         let fn = rootView[body.lowerBound...].prefix(900)
-        #expect(fn.contains("PrepImporter.consumeIfNew(into: context)"))
+        #expect(fn.contains("PrepImporter.consumeIfNew(slot: .prep, into: context)"))
         // The old, unguarded call. It re-read the results file on every launch, and it must not come back.
         #expect(!fn.contains("PrepImporter.ingestFile("))
     }

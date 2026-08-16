@@ -207,7 +207,10 @@ struct QueueView: View {
 
     // #1129: a Prep run is in flight. The discoverable Prep button hides while one runs (RootView's
     // canStartPrep gates the start too); read from the same source AgentInputs.from uses.
-    private var prepRunning: Bool { PrepQueueService.isRunning(now: Date()) }
+    // #2760: EITHER slot, because the exclusion between a prep and a check is still in force. Reading only
+    // the prep slot would offer the Prep button while a check holds the machine and every press would be
+    // refused. #2765 is what makes the two independent; #2761 is where the wording follows.
+    private var prepRunning: Bool { PrepQueueService.anyRunIsRunning(now: Date()) }
 
     // #1121: every heavy derived collection, built ONCE per render and threaded down, instead of a
     // half-dozen computed properties each re-running QueueModel.items(from:) (a full map that faults

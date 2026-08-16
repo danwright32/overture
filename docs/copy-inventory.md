@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1359 sentences**.
+Every sentence Overture can say to Dan: **1365 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -46,6 +46,7 @@ What is not, and why:
 - `Domain/ProducerShapedName.swift`: parser tokens matched against a listing page, never Overture's voice
 - `Domain/ProducerShapedName.swift`: parser tokens matched against a listing page, never Overture's voice
 - `Domain/ReplyCandidateMatch.swift`: the reasons behind a score, for diagnosing a wrong proposal.
+- `Domain/RunBoundaryViolations.swift`: a filename and a phrase MATCHED in a log, not sentences Overture says
 - `Domain/SameNightTitleVariantMerge.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Domain/SendIdentity.swift`: an RFC822 sender identity (name + address), not the app's own voice
 - `Domain/ShowOutcomeBackfill.swift`: agent log, not a sentence Overture says to Dan (#915)
@@ -92,6 +93,7 @@ What is not, and why:
 - `Integration/OperaAmericaCalendar.swift`: an outbound API request body, not the app's voice (#915)
 - `Integration/OvationTixCalendar.swift`: synthesized source HTML the extractor reads, not the app's voice (#915)
 - `Integration/OvationTixCalendar.swift`: an outbound API request scoped by a header, not the app's voice (#915)
+- `Integration/PrepQueueService.swift`: a diagnostic log line, not a sentence Overture says on screen
 - `Integration/PrepQueueService.swift`: a diagnostic log line, not a sentence Overture says on screen
 - `Integration/PrepQueueService.swift`: a diagnostic log line, not a sentence Overture says on screen
 - `Integration/ReplyProposalSweep.swift`: developer diagnostic log, not the app's own voice (#915)
@@ -364,6 +366,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/Reachability.swift`
 "A check worked out who is putting this on and found no way to reach any of them, so it kept none of them. The listing still names them, and a search by name often turns up an address the check missed."
     `Domain/Reachability.swift`
+"A contact check is already going. Wait for it to finish."
+    `Integration/PrepQueueService.swift`
 "A contact on this show is held back by a check (a venue guess, a press address, a duplicate, the salutation, or the draft lint). Look at it below: dismissing the check releases the email."
     `UI/DraftReviewView.swift`
 "A later night of this run is out: you blocked \(day) (\(name))."
@@ -396,6 +400,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/ReplyClassifyService.swift`
 "A run is already in progress. This will be available once it finishes."
     `Domain/Reachability.swift`
+"A run wrote into another run's results file, so answers you already paid for may have been overwritten."
+    `Domain/RunBoundaryViolations.swift`
 "A scout-extract run is already in progress. Wait for it to finish."
     `Integration/ScoutExtractService.swift`
 "A separate email each"
@@ -1947,12 +1953,16 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/Reachability.swift`
 "The city and state it's in"
     `UI/SourcesView.swift`
+"The contact check finished but didn't produce any results. It may have hit an error, so no show was marked as checked."
+    `Domain/DetachedRunOutcome.swift`
 "The date is known"
     `UI/InquiryIntakeSheet.swift`
 "The days Overture won't pitch you for."
     `UI/DaysOffView.swift`
 "The days Overture won't pitch you for: your booked shoots, and the days you block."
     `Domain/DaysOffAttention.swift`
+"The details are in run-boundary-violation.log, in the same folder as the store."
+    `Domain/RunBoundaryViolations.swift`
 "The email that will send"
     `UI/SendConfirmSheet.swift`
 "The email that will send, edit it here"
@@ -2494,6 +2504,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/BulkDismiss.swift`
 "\(first) and \(rest) other\(rest == 1 ? "" : "s")"
     `Domain/SelfBookingConflict.swift`
+"\(found) times"
+    `Domain/RunBoundaryViolations.swift`
 "\(i.followUpsDue) due"
     `Domain/AgentRoster.swift`
 "\(i.keptToPrep) ready to prep"
@@ -2518,6 +2530,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/EasternDate.swift`
 "\(label)… \(elapsed)"
     `Domain/RunProgress.swift`
+"\(lead) It has happened \(howMany). \(evidence)"
+    `Domain/RunBoundaryViolations.swift`
 "\(list(runs)) run past \(dateLabel), so dismissing them takes their later nights too."
     `Domain/BulkDismiss.swift`
 "\(list) has listed shows before and came back with nothing this run. Its page format may have changed."

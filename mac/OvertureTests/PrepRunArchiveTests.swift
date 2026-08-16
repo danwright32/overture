@@ -38,30 +38,30 @@ struct PrepRunArchiveTests {
     @discardableResult
     private func writeLiveQueue(in handoff: URL) throws -> Data {
         let data = try fixture("fixtures/prep-queue/v11.json")
-        try data.write(to: handoff.appendingPathComponent(PrepRunArchive.queueFilename))
+        try data.write(to: handoff.appendingPathComponent(PrepRunArchive.queueFilename(for: .prep)))
         return data
     }
 
     @discardableResult
     private func writeLiveResults(in handoff: URL) throws -> Data {
         let data = try fixture("fixtures/prep-results/run-metadata-complete-v8.json")
-        try data.write(to: handoff.appendingPathComponent(PrepRunArchive.resultsFilename))
+        try data.write(to: handoff.appendingPathComponent(PrepRunArchive.resultsFilename(for: .prep)))
         return data
     }
 
     private func queueURL(_ handoff: URL) -> URL {
-        handoff.appendingPathComponent(PrepRunArchive.queueFilename)
+        handoff.appendingPathComponent(PrepRunArchive.queueFilename(for: .prep))
     }
 
     private func resultsURL(_ handoff: URL) -> URL {
-        handoff.appendingPathComponent(PrepRunArchive.resultsFilename)
+        handoff.appendingPathComponent(PrepRunArchive.resultsFilename(for: .prep))
     }
 
     @discardableResult
     private func archive(in handoff: URL, now: Date = Date(timeIntervalSince1970: 1_800_000_000),
-                         keep: Int = PrepRunArchive.keep,
+                         keep: Int = PrepRunArchive.keep(for: .prep),
                          problems: ((String) -> Void)? = nil) -> PrepRunArchive.Outcome {
-        PrepRunArchive.archiveFinishedRun(queueURL: queueURL(handoff), resultsURL: resultsURL(handoff),
+        PrepRunArchive.archiveFinishedRun(slot: .prep, handoffDirectory: handoff,
                                           now: now, keep: keep,
                                           reportProblem: problems ?? { _ in })
     }
@@ -82,7 +82,7 @@ struct PrepRunArchiveTests {
     @Test func theArchiveSitsBesideTheLiveFilesInItsOwnFolder() {
         let handoff = URL(fileURLWithPath: "/tmp/some-handoff-dir")
 
-        #expect(PrepRunArchive.archivesDirectory(handoffDirectory: handoff)
+        #expect(PrepRunArchive.archivesDirectory(slot: .prep, handoffDirectory: handoff)
                 == handoff.appendingPathComponent("prep-run-archives", isDirectory: true))
     }
 
@@ -101,15 +101,15 @@ struct PrepRunArchiveTests {
             return
         }
         #expect(missing.isEmpty)
-        #expect(copied.sorted() == [PrepRunArchive.queueFilename, PrepRunArchive.resultsFilename].sorted())
+        #expect(copied.sorted() == [PrepRunArchive.queueFilename(for: .prep), PrepRunArchive.resultsFilename(for: .prep)].sorted())
         // Byte-identical copies under their live names, so anything that reads a live handoff file can be
         // pointed straight at an archived run with nothing to translate.
-        #expect(try Data(contentsOf: folder.appendingPathComponent(PrepRunArchive.queueFilename)) == queue)
-        #expect(try Data(contentsOf: folder.appendingPathComponent(PrepRunArchive.resultsFilename)) == results)
+        #expect(try Data(contentsOf: folder.appendingPathComponent(PrepRunArchive.queueFilename(for: .prep))) == queue)
+        #expect(try Data(contentsOf: folder.appendingPathComponent(PrepRunArchive.resultsFilename(for: .prep))) == results)
         // A COPY. The live pair is what the app is still reading, and archiving must never move it.
         #expect(FileManager.default.fileExists(atPath: queueURL(handoff).path))
         #expect(FileManager.default.fileExists(atPath: resultsURL(handoff).path))
-        #expect(log(in: PrepRunArchive.archivesDirectory(handoffDirectory: handoff)).contains("success"))
+        #expect(log(in: PrepRunArchive.archivesDirectory(slot: .prep, handoffDirectory: handoff)).contains("success"))
     }
 
     // The folder is named for the RUN, read from the queue's own `generatedAt`, not for the moment the
@@ -153,10 +153,10 @@ struct PrepRunArchiveTests {
             return
         }
         #expect(second == .alreadyArchived(folder: folder))
-        let archives = PrepRunArchive.archivesDirectory(handoffDirectory: handoff)
+        let archives = PrepRunArchive.archivesDirectory(slot: .prep, handoffDirectory: handoff)
         #expect(folders(in: archives) == [folder.lastPathComponent])
         // And the copy that was already there is untouched, rather than half-rewritten by the second pass.
-        #expect(try Data(contentsOf: folder.appendingPathComponent(PrepRunArchive.resultsFilename)) == results)
+        #expect(try Data(contentsOf: folder.appendingPathComponent(PrepRunArchive.resultsFilename(for: .prep))) == results)
     }
 
     @Test func nothingIsArchivedWhenNoRunHasEverWrittenAnything() throws {
@@ -166,7 +166,7 @@ struct PrepRunArchiveTests {
         #expect(archive(in: handoff) == .noRunOnDisk)
         // No run means no failure either: an empty folder must not start reporting a problem every launch.
         #expect(!FileManager.default.fileExists(
-            atPath: PrepRunArchive.archivesDirectory(handoffDirectory: handoff).path))
+            atPath: PrepRunArchive.archivesDirectory(slot: .prep, handoffDirectory: handoff).path))
     }
 
     // MARK: - Rotation
@@ -174,7 +174,7 @@ struct PrepRunArchiveTests {
     @Test func onlyTheMostRecentRunsAreKept() throws {
         let handoff = try sandbox()
         defer { try? FileManager.default.removeItem(at: handoff) }
-        let archives = PrepRunArchive.archivesDirectory(handoffDirectory: handoff)
+        let archives = PrepRunArchive.archivesDirectory(slot: .prep, handoffDirectory: handoff)
         try FileManager.default.createDirectory(at: archives, withIntermediateDirectories: true)
         for stamp in ["20260101-010101", "20260102-010101", "20260103-010101"] {
             try FileManager.default.createDirectory(at: archives.appendingPathComponent(stamp),
@@ -195,7 +195,7 @@ struct PrepRunArchiveTests {
     @Test func aFolderOutsideTheDatedShapeIsNeitherCountedNorDeleted() throws {
         let handoff = try sandbox()
         defer { try? FileManager.default.removeItem(at: handoff) }
-        let archives = PrepRunArchive.archivesDirectory(handoffDirectory: handoff)
+        let archives = PrepRunArchive.archivesDirectory(slot: .prep, handoffDirectory: handoff)
         try FileManager.default.createDirectory(at: archives, withIntermediateDirectories: true)
         let odd = archives.appendingPathComponent("20260101-010101.kept-by-hand")
         try FileManager.default.createDirectory(at: odd, withIntermediateDirectories: true)
@@ -230,14 +230,14 @@ struct PrepRunArchiveTests {
             Issue.record("expected the incomplete run to be archived anyway, got \(outcome)")
             return
         }
-        #expect(copied == [PrepRunArchive.queueFilename])
-        #expect(missing == [PrepRunArchive.resultsFilename])
-        #expect(try Data(contentsOf: folder.appendingPathComponent(PrepRunArchive.queueFilename)) == queue)
+        #expect(copied == [PrepRunArchive.queueFilename(for: .prep)])
+        #expect(missing == [PrepRunArchive.resultsFilename(for: .prep)])
+        #expect(try Data(contentsOf: folder.appendingPathComponent(PrepRunArchive.queueFilename(for: .prep))) == queue)
         // Said out loud, and it says WHICH half is missing: an archive holding one file is otherwise
         // indistinguishable from one whose copy half failed.
-        let logged = log(in: PrepRunArchive.archivesDirectory(handoffDirectory: handoff))
+        let logged = log(in: PrepRunArchive.archivesDirectory(slot: .prep, handoffDirectory: handoff))
         #expect(logged.contains("incomplete"))
-        #expect(logged.contains(PrepRunArchive.resultsFilename))
+        #expect(logged.contains(PrepRunArchive.resultsFilename(for: .prep)))
     }
 
     // Fail loud, not silent, and never at the cost of the run itself: the results ARE the product, the
@@ -250,7 +250,7 @@ struct PrepRunArchiveTests {
         let results = try writeLiveResults(in: handoff)
         // A plain file sitting where the archives directory belongs: every write below it fails.
         try Data("not a directory".utf8)
-            .write(to: PrepRunArchive.archivesDirectory(handoffDirectory: handoff))
+            .write(to: PrepRunArchive.archivesDirectory(slot: .prep, handoffDirectory: handoff))
 
         var problems: [String] = []
         let outcome = archive(in: handoff, problems: { problems.append($0) })
@@ -276,12 +276,12 @@ struct PrepRunArchiveTests {
     @Test func aHalfWrittenArchiveIsNeverReadableAsAFinishedOne() throws {
         let handoff = try sandbox()
         defer { try? FileManager.default.removeItem(at: handoff) }
-        let archives = PrepRunArchive.archivesDirectory(handoffDirectory: handoff)
+        let archives = PrepRunArchive.archivesDirectory(slot: .prep, handoffDirectory: handoff)
         try FileManager.default.createDirectory(at: archives, withIntermediateDirectories: true)
         // What a crash between the first copy and the rename leaves behind.
         let halfWritten = archives.appendingPathComponent("20260624-000000\(PrepRunArchive.incomingSuffix)abc")
         try FileManager.default.createDirectory(at: halfWritten, withIntermediateDirectories: true)
-        try Data("half".utf8).write(to: halfWritten.appendingPathComponent(PrepRunArchive.queueFilename))
+        try Data("half".utf8).write(to: halfWritten.appendingPathComponent(PrepRunArchive.queueFilename(for: .prep)))
         try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: 1_000_000)],
                                               ofItemAtPath: halfWritten.path)
         try writeLiveQueue(in: handoff)
@@ -300,9 +300,9 @@ struct PrepRunArchiveTests {
     // Named here because a later reader (a report, a backfill of #1616's learner, Dan in Finder) has to
     // be able to find these without reading this file. docs/contracts.md states the same names.
     @Test func theArchiveKeepsTheContractsOwnFilenames() {
-        #expect(PrepRunArchive.folderName == "prep-run-archives")
-        #expect(PrepRunArchive.queueFilename == "overture-prep-queue.json")
-        #expect(PrepRunArchive.resultsFilename == "overture-prep-results.json")
+        #expect(PrepRunArchive.folderName(for: .prep) == "prep-run-archives")
+        #expect(PrepRunArchive.queueFilename(for: .prep) == "overture-prep-queue.json")
+        #expect(PrepRunArchive.resultsFilename(for: .prep) == "overture-prep-results.json")
     }
 
     // Thirty runs of about 14 KB is under half a megabyte, and at one or two paid runs a night it is
@@ -310,7 +310,7 @@ struct PrepRunArchiveTests {
     // question about last week's run to still be answerable. Deliberately larger than the store backup's
     // ten, because each of those is the whole SwiftData store.
     @Test func thirtyRunsAreKept() {
-        #expect(PrepRunArchive.keep == 30)
+        #expect(PrepRunArchive.keep(for: .prep) == 30)
     }
 
     // MARK: - Wiring
@@ -321,37 +321,43 @@ struct PrepRunArchiveTests {
     private var rootView: String { SourceGuardHelper.source("Overture/App/RootView.swift") }
 
     @Test func settlingAFinishedRunArchivesItFirst() throws {
-        guard let body = SourceGuardHelper.propertyBody("private func settleFinishedPrepRun() async {",
+        guard let body = SourceGuardHelper.propertyBody("private func settleFinishedRun(slot: RunSlot) async {",
                                                         in: rootView) else {
-            Issue.record("settleFinishedPrepRun not found in RootView")
+            Issue.record("settleFinishedRun not found in RootView")
             return
         }
-        #expect(body.contains("archiveFinishedPrepRun()"))
+        #expect(body.contains("archiveFinishedRun(slot: slot)"))
         // Before the dead-run sweep, which RETURNS: a run that died is a run whose evidence matters most,
         // and archiving after that early return would skip exactly those.
-        let archiveAt = body.range(of: "archiveFinishedPrepRun()")
-        let sweepAt = body.range(of: "if sweptADeadPrepRun() { return }")
+        let archiveAt = body.range(of: "archiveFinishedRun(slot: slot)")
+        let sweepAt = body.range(of: "if sweptADeadRun(slot: slot) { return }")
         #expect(archiveAt != nil && sweepAt != nil)
         if let archiveAt, let sweepAt { #expect(archiveAt.lowerBound < sweepAt.lowerBound) }
     }
 
     // The launch path, for a run that finished while Overture was closed. Without it that run's pair is
     // still on disk with nobody to archive it, and the next run overwrites both.
+    // #2760: EVERY slot, and no run live in either. A check that touched a prep-slot file is precisely
+    // what the boundary record reports, so a live check is as good a reason not to copy the prep pair as
+    // a live prep is.
     @Test func launchArchivesARunThatEndedWhileOvertureWasClosed() {
-        #expect(rootView.contains("if !PrepQueueService.isRunning(now: Date()) { archiveFinishedPrepRun() }"))
+        #expect(rootView.contains("if !PrepQueueService.anyRunIsRunning(now: Date()) {"))
+        #expect(rootView.contains("for slot in RunSlot.allCases { archiveFinishedRun(slot: slot) }"))
     }
 
     // And never over a LIVE run: its results file is mid-write, and archiving it under that run's own
     // name would claim the run's slot with a half-finished copy that the real settle then declines to
     // replace.
     @Test func theArchiveIsWiredToTheLiveHandoffPairAndNothingElse() throws {
-        guard let body = SourceGuardHelper.propertyBody("private func archiveFinishedPrepRun() {",
+        guard let body = SourceGuardHelper.propertyBody("private func archiveFinishedRun(slot: RunSlot) {",
                                                         in: rootView) else {
-            Issue.record("archiveFinishedPrepRun not found in RootView")
+            Issue.record("archiveFinishedRun not found in RootView")
             return
         }
         #expect(body.contains("PrepRunArchive.archiveFinishedRun"))
-        #expect(body.contains("PrepQueueBuilder.defaultURL"))
-        #expect(body.contains("PrepImporter.defaultURL"))
+        // #2760: the pair is derived from the SLOT inside the archive, so the view hands over the live
+        // handoff directory and the slot rather than two URLs it could mismatch.
+        #expect(body.contains("slot: slot"))
+        #expect(body.contains("handoffDirectory: StoreLocation.handoffDirectory"))
     }
 }

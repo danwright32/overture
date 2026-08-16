@@ -213,7 +213,7 @@ struct PrepReplyRunnerWiringGuardTests {
         // rewritten for every kind of run (L103).
         #expect(rootView.contains("kind.cancelLabel"))                  // the control exists
         #expect(RunKind.prep.cancelLabel == "Cancel prep")              // and still says this for a prep
-        #expect(rootView.contains("PrepQueueService.requestCancel()"))  // and it asks the run to stop
+        #expect(rootView.contains("PrepQueueService.requestCancel(slot: slot)"))  // and it asks the run to stop
     }
 
     @Test func theReplyDrafterCancelWritesTheSentinel() {
