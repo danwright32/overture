@@ -37,10 +37,31 @@ final class DetachedRunActivity {
     static let replyClassify = DetachedRunActivity(
         liveness: { ReplyClassifyService.isRunning(now: $0) })
 
-    // #1938: the Prep run, and the reachability check that shares its runner and its marker. The scout's
-    // detached read still polls its own; this type is not reply-specific, so it can move here the same way.
+    // #1938: the Prep run. The scout's detached read still polls its own; this type is not reply-specific,
+    // so it can move here the same way.
+    //
+    // #2760: ONE INSTANCE PER RUN SLOT, and that is the whole of a real defect rather than tidiness. This
+    // was a single object wired as the default `announce:` of BOTH launches, and `runStarted()` opens with
+    // `guard !isRunning else { return }`. A check started while a prep was live therefore woke no listener
+    // at all: `watchPrepRuns` never got a second iteration, so the check was never followed and never
+    // settled, and its paid answers landed only at the next launch via `settleOrphanedProbe`. Two
+    // independent things cannot share one status field, because a live reading from one erases the other
+    // (L53). `liveness` was already a parameter, so an instance per slot costs a stat at launch and nothing
+    // else.
     static let prep = DetachedRunActivity(
-        liveness: { PrepQueueService.isRunning(now: $0) })
+        liveness: { PrepQueueService.isRunning(slot: .prep, now: $0) })
+
+    static let check = DetachedRunActivity(
+        liveness: { PrepQueueService.isRunning(slot: .check, now: $0) })
+
+    // Derived from the slot rather than chosen at each call site, so a launch and the watcher that follows
+    // it cannot end up holding different objects.
+    static func forSlot(_ slot: RunSlot) -> DetachedRunActivity {
+        switch slot {
+        case .prep: return prep
+        case .check: return check
+        }
+    }
 
     private let liveness: @MainActor (Date) -> Bool
     private let sleep: @MainActor (TimeInterval) async -> Void

@@ -20,8 +20,8 @@ struct PrepRunWatchGuardTests {
     @Test func aContinuousTaskWatchesEveryPrepRun() {
         #expect(!rootView.isEmpty)
         // The `.task` hands off to the continuous watcher, and the watcher exists.
-        #expect(rootView.contains("await watchPrepRuns()"))
-        #expect(rootView.contains("private func watchPrepRuns() async"))
+        #expect(rootView.contains("watchRuns(slot: .prep)"))
+        #expect(rootView.contains("private func watchRuns(slot: RunSlot) async"))
     }
 
     // #1938: the same rule, now that the watcher is TOLD a run has started rather than asking every three
@@ -30,16 +30,18 @@ struct PrepRunWatchGuardTests {
     @Test func theWatcherOnlyEntersOnAGenuinelyLiveRunAndReopensTheTakeover() {
         // Isolate the watcher's own body so these assertions cannot be satisfied by the identical wiring
         // elsewhere in the file (the idle toolbar label, canStartPrep, and so on all read isRunning too).
-        guard let body = SourceGuardHelper.propertyBody("private func watchPrepRuns() async {",
+        guard let body = SourceGuardHelper.propertyBody("private func watchRuns(slot: RunSlot) async {",
                                                         in: rootView) else {
-            Issue.record("watchPrepRuns body not found"); return
+            Issue.record("watchRuns body not found"); return
         }
         // Only when a run genuinely starts, which includes one a previous launch left in flight (that is
         // the one stat the activity makes when it is built), so an old failed run never re-nags (#48),
-        #expect(body.contains("DetachedRunActivity.prep"))
+        // #2760: the activity belonging to THIS slot, not the one shared object whose
+        // `guard !isRunning else { return }` swallowed a check started during a live prep.
+        #expect(body.contains("DetachedRunActivity.forSlot(slot)"))
         #expect(body.contains("runStarts()"))
         // it reopens the takeover on its own so a re-prep launched from a row is never invisible,
-        #expect(body.contains("prepSheetShown = true"))
+        #expect(body.contains("takeover.show(slot)"))
         // and follows the run to completion.
         #expect(body.contains("followUntilFinished()"))
         // #1938's defect itself: a sleep here is one an idle window pays for the life of the session.
@@ -50,8 +52,8 @@ struct PrepRunWatchGuardTests {
     @Test func theWatcherFollowsTheRunToCompletion() {
         // It still ingests what the run produced (or reports a run that finished empty) via the same
         // settle path an explicit "Prep kept" run uses, so a re-prepped run is not a dead end.
-        #expect(rootView.contains("await settleFinishedPrepRun()"))
-        #expect(rootView.contains("private func settleFinishedPrepRun() async"))
+        #expect(rootView.contains("await settleFinishedRun(slot: slot)"))
+        #expect(rootView.contains("private func settleFinishedRun(slot: RunSlot) async"))
     }
 
     // The data path the watcher gates on, exercised directly: isRunning must tell a genuinely-live run
@@ -62,13 +64,13 @@ struct PrepRunWatchGuardTests {
             .appendingPathComponent("prep-running-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: marker) }
 
-        #expect(PrepQueueService.isRunning(markerURL: marker, now: Date()) == false)   // absent: not running
+        #expect(PrepQueueService.isRunning(slot: .prep, markerURL: marker, now: Date()) == false)   // absent: not running
 
         let written = Date(timeIntervalSince1970: 1_000_000)
         try Data().write(to: marker)
         try FileManager.default.setAttributes([.modificationDate: written], ofItemAtPath: marker.path)
         let window = PrepQueueService.markerStaleAfter
-        #expect(PrepQueueService.isRunning(markerURL: marker, now: written.addingTimeInterval(window - 1)) == true)   // fresh: live
-        #expect(PrepQueueService.isRunning(markerURL: marker, now: written.addingTimeInterval(window + 1)) == false)  // stale: dead
+        #expect(PrepQueueService.isRunning(slot: .prep, markerURL: marker, now: written.addingTimeInterval(window - 1)) == true)   // fresh: live
+        #expect(PrepQueueService.isRunning(slot: .prep, markerURL: marker, now: written.addingTimeInterval(window + 1)) == false)  // stale: dead
     }
 }

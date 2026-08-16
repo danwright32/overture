@@ -132,11 +132,12 @@ struct RootView: View {
     // #1435/#1436: the "Log an inquiry" intake sheet, opened from the same grouped menu as "Add a lead".
     @State private var showInquiryIntake = false
     @State private var showPrepSelection = false   // #953: the per-run "which kept shows to prep" picker
-    @State private var prepSheetShown = false      // #1130: the Prep run's takeover progress screen
-    // #1824: the app's own listing-page read, which runs before the detached Prep run launches. Non-nil
-    // only while that phase is in flight, which is also what routes the takeover to it.
-    @State private var listingReadProgress: RunProgressView.Snapshot?
-    @State private var listingReadStartedAt: Date?
+    // #1130: the detached run's takeover progress screen, and #1824's in-app listing-page read that runs
+    // before the run launches. #2760: PER SLOT, in one value, because these were three single `@State`
+    // values shared by both launches: the first run to finish dismissed the takeover out from under the
+    // second, and one launch's `defer` wiped the other's live listing count while it was still advancing.
+    // The rules live in RunTakeover, where a test can reach them (#863).
+    @State private var takeover = RunTakeover()
     @State private var showSources = false
     @State private var showDaysOff = false      // #901
     @State private var showExcludedTowns = false   // #1118: review and un-exclude skipped towns
@@ -373,11 +374,14 @@ struct RootView: View {
             "scoutReadAsk": "\(scoutReadAsk != nil)",
             "cancelledScoutRead": "\(cancelledScoutRead ?? -1)",
             "scoutSnapshot": snapshotFingerprint(scoutNativeSnapshot),
-            "listingRead": snapshotFingerprint(listingReadProgress),
-            "listingReadStarted": "\(listingReadStartedAt != nil)",
+            "listingRead": snapshotFingerprint(takeover.listingProgress(.prep)),
+            "listingReadStarted": "\(takeover.listingStartedAt(.prep) != nil)",
+            "checkListingRead": snapshotFingerprint(takeover.listingProgress(.check)),
+            "checkListingReadStarted": "\(takeover.listingStartedAt(.check) != nil)",
             "readingStarted": "\(readingStartedAt != nil)",
             "readingSourceCount": "\(readingSourceCount)",
-            "prepSheetShown": "\(prepSheetShown)",
+            "prepSheetShown": "\(takeover.isShown(.prep))",
+            "checkSheetShown": "\(takeover.isShown(.check))",
             "showPrepSelection": "\(showPrepSelection)",
             "autoScoutEnabled": "\(autoScoutEnabled)",
             "omniFocusEnabled": "\(omniFocusEnabled)",
@@ -577,7 +581,9 @@ struct RootView: View {
                             // manual run, which the modal owns.
                             LiveRunLabel(base: RunProgressCopy.title(.scouting), since: scoutStartedAt,
                                          timeout: RunTimeouts.scout, compact: true)
-                        } else if PrepQueueService.isRunning(now: Date()) {
+                        } else if PrepQueueService.anyRunIsRunning(now: Date()) {
+                            // #2760: either slot. Reading only the prep slot would leave a live check with
+                            // no toolbar label at all, which is the state the label exists to prevent.
                             prepToolbarLabel
                         } else {
                             // #994: the idle tooltip belongs HERE rather than on the Menu. A live run's
@@ -795,23 +801,7 @@ struct RootView: View {
                 // own .toolbar block (rather than the main one above) because the new global search
                 // field pushed the main block past SwiftUI's toolbar item limit.
                 ToolbarItem(placement: .secondaryAction) {
-                    Menu {
-                        Button("Seed dev data from live") { debugSeedFromLive() }
-                        Button("Connect Gmail from live") { debugSeedGmailFromLive() }
-                        Button("Clear dev data") { debugClearDevData() }
-                        Button("Mark first as sent") { debugStageFirstAsSent() }
-                        Button("Stage reminder-due lead") { debugStageReminderLead() }
-                        Button("Stage self-send test lead") { debugStageSelfSendLead() }
-                        Button("Stage multi-recipient self-send lead") { debugStageMultiRecipientSelfSendLead() }
-                        Button("Stage visual-QA scenario (draft + signature + double-booking)") { debugStageVisualQAScenario() }
-                        Button("Stage warm-register returning-client draft") { debugStageWarmRegisterDraft() }
-                        Button("Stage re-prep-queued draft") { debugStageReprepQueuedDraft() }
-                        Button("Stage reachability competition (best-contact highlight)") { debugStageReachabilityCompetition() }
-                        Button("Stage form-pitch shows (copy-and-confirm, and one already recorded)") { debugStageFormPitchScenario() }
-                        Button("Clear debug leads") { debugClearDebugLeads() }
-                    } label: {
-                        Label("DEBUG", systemImage: "ladybug")
-                    }
+                    Menu { debugMenuItems } label: { Label("DEBUG", systemImage: "ladybug") }
                 }
                 #endif
             }
@@ -831,31 +821,23 @@ struct RootView: View {
                 // below, and only when no run is live: a live run's results file is still being written,
                 // and a copy of it taken now would claim that run's own folder with a half-finished
                 // version the real settle would then decline to replace.
-                if !PrepQueueService.isRunning(now: Date()) { archiveFinishedPrepRun() }
-                // If a run is in flight at launch, watch it to completion; otherwise just ingest any
-                // results already on disk, without nagging about an old failed run (#48).
-                if PrepQueueService.isRunning(now: Date()) {
-                    // #1130: a detached Prep run outlives the app, so one can still be going at launch.
-                    // Reopen the takeover so a live run is never invisible; the continuous watchPrepRuns
-                    // task (below) follows it to completion, so this no longer awaits here (which also
-                    // stops an in-flight Prep from blocking the scout reattach that follows).
-                    prepSheetShown = true
-                } else if sweptADeadPrepRun() {
-                    // #1613: a run that DIED while Overture was closed leaves its marker standing, because
-                    // the runner never reached the exit that removes it. Swept here, before the orphan
-                    // settle below, because the sweep performs that settle itself and reports the death as
-                    // well: the two must not both run and report the same check twice.
-                } else if let report = PrepQueueService.settleOrphanedProbe(into: context, now: Date()) {
-                    // #1809: a check that finished while Overture was CLOSED. The run watcher below only
-                    // settles a run it is watching, and the detached runner removes its own marker on
-                    // exit, so without this the check is never settled at all: its paid answers never
-                    // land, and the marker it leaves behind makes the next Prep run read as a check and
-                    // discard every draft it wrote. #1765 is what made that likely, since a check is no
-                    // longer capped at about eleven minutes.
-                    reportReachabilityRun(report)
-                } else {
-                    ingestPrep()
+                // #2760: per slot, each with its own archive. A live run in EITHER slot still blocks the
+                // archive of either, because a check that touched a prep-slot file is precisely what the
+                // boundary record below reports, and a copy taken mid-write would claim the run's folder
+                // with a half-finished version the real settle would then decline to replace.
+                if !PrepQueueService.anyRunIsRunning(now: Date()) {
+                    for slot in RunSlot.allCases { archiveFinishedRun(slot: slot) }
                 }
+                // #2760: and each slot is reattached, swept and settled on its own terms. Sharing one pass
+                // was what made a check started during a prep unwatched and unsettled.
+                for slot in RunSlot.allCases {
+                    reattachOrSettle(slot: slot)
+                }
+                // #2760 (carrying #2764's requirement): the runner records a run that wrote another run's
+                // results file, and until now nothing in the app read that record. From here two runs can
+                // be on disk at once, so a file nobody surfaces is the account of one run destroying
+                // another's paid work with no reason for Dan ever to open it (L46, L142).
+                reportAnyBoundaryViolation()
                 // #1035: the same reattach, for the scout's detached read. A scout-extract run outlives
                 // the app, so one can still be going at launch (a relaunch over a live run, or the window
                 // scene torn down and rebuilt mid-read). Reopen the takeover and follow it to completion
@@ -895,7 +877,18 @@ struct RootView: View {
                 // launches a Prep run straight from ProspectMutations, with no RootView startPrep call
                 // to open the takeover or ingest its results, so without this a re-prepped show's drafts
                 // would only surface on the next launch and its progress would be invisible mid-session.
-                await watchPrepRuns()
+                // #2760: ONE WATCHER PER SLOT, side by side in this one task. A single watcher over a
+                // single activity is what left a check started during a live prep followed by nobody: it
+                // woke no listener, so its paid answers landed only at the next launch, via
+                // settleOrphanedProbe.
+                //
+                // `async let` rather than a task group (whose `addTask` closure is `@Sendable` and cannot
+                // inherit the main actor) and rather than an unstructured `Task {}` (which the window's
+                // teardown would not cancel, leaving a watcher outliving the view that owns it). Both
+                // children are cancelled with this task. `everySlotHasAWatcher` keeps the pair complete.
+                async let prepWatch: Void = watchRuns(slot: .prep)
+                async let checkWatch: Void = watchRuns(slot: .check)
+                _ = await (prepWatch, checkWatch)
             }
             .task {
                 guard AppEnvironment.shouldStartBackgroundServices else { return }
@@ -990,7 +983,9 @@ struct RootView: View {
             // minutes, so it gets the same prominent working/still-alive/stalled screen instead of only a
             // subtle toolbar label. Shown while the run is in flight (set by startPrep and on launch-reattach)
             // and cleared by the run watcher when the run ends; Hide keeps the run going, Cancel stops it.
-            .sheet(isPresented: $prepSheetShown) { prepProgressModal }
+            // #2760: which slot the one sheet is showing is RunTakeover's decision, and dismissing it
+            // closes only that run's takeover.
+            .sheet(isPresented: runTakeoverBinding) { prepProgressModal }
             .sheet(isPresented: $showSources) { SourcesView(readOne: { runScout(only: [$0.sourceId]) }) }
             .sheet(isPresented: $showDaysOff) { DaysOffView() }
             .sheet(isPresented: $showOmniFocusSettings) { OmniFocusSettingsView() }
@@ -1270,20 +1265,19 @@ struct RootView: View {
         // #1856: a check over shows that name no producer renders each of their listing pages first, which
         // is seconds of real work. Same treatment as startPrep's: the takeover goes up BEFORE the launch
         // and carries a live count, or that whole phase happens behind a button that looks inert.
-        prepSheetShown = true
-        listingReadProgress = .init(completed: 0, total: 0, advancedAt: Date())
-        listingReadStartedAt = Date()
+        takeover.show(.check)
+        takeover.startListingRead(.check, at: Date())
         Task { @MainActor in
-            defer { listingReadProgress = nil }
+            defer { takeover.finishListingRead(.check) }
             do {
                 _ = try await PrepQueueService.startReachabilityProbe(
                     keys: keys, from: context, now: Date(),
                     onListingProgress: { done, total in
-                        listingReadProgress = .init(completed: done, total: total, advancedAt: Date())
+                        takeover.recordListingProgress(.check, completed: done, total: total, at: Date())
                     })
             } catch {
                 // The check never started, so the takeover must not sit there implying it did.
-                prepSheetShown = false
+                takeover.hide(.check)
                 reportError(error.localizedDescription)
             }
         }
@@ -1295,11 +1289,10 @@ struct RootView: View {
         // #1824: raised to BEFORE the launch, because the launch now renders each kept show's listing page
         // first (seconds of real work). Left where it was, that whole phase happened behind a button that
         // looked like it had done nothing.
-        prepSheetShown = true
-        listingReadProgress = .init(completed: 0, total: 0, advancedAt: Date())
-        listingReadStartedAt = Date()
+        takeover.show(.prep)
+        takeover.startListingRead(.prep, at: Date())
         Task { @MainActor in
-            defer { listingReadProgress = nil }
+            defer { takeover.finishListingRead(.prep) }
             do {
                 // #1809: the orphan settle lives in PrepQueueService.startPrep, so every way a Prep run
                 // begins is covered (a per-row Re-prep never reaches this function). This only supplies
@@ -1315,11 +1308,11 @@ struct RootView: View {
                     onListingProgress: { done, total in
                         // A fresh stamp on every step: it is what tells the takeover this phase is still
                         // alive, since an in-process read has no marker file to heartbeat.
-                        listingReadProgress = .init(completed: done, total: total, advancedAt: Date())
+                        takeover.recordListingProgress(.prep, completed: done, total: total, at: Date())
                     })
             } catch {
                 // The run never started, so the takeover must not sit there implying it did.
-                prepSheetShown = false
+                takeover.hide(.prep)
                 reportError(error.localizedDescription)
             }
         }
@@ -1329,8 +1322,11 @@ struct RootView: View {
     // writes the sentinel the runner checks on its heartbeat; the runner stops the claude process it
     // recorded and exits at the next tick (never mid-write, so no draft is corrupted). The run watcher
     // notices the marker clear and ingests whatever the run had already written.
+    // #2760: the run on screen, not "the run". Cancel on the check's takeover has to reach the check's own
+    // sentinel, or it would stop the prep run beside it while the check carried on spending.
     private func cancelPrep() {
-        PrepQueueService.requestCancel()
+        guard let slot = takeover.presented else { return }
+        PrepQueueService.requestCancel(slot: slot)
     }
 
     // Report what a finished run produced. Reached only once a run that was genuinely live has ended, so
@@ -1338,25 +1334,27 @@ struct RootView: View {
     //
     // #1938: the waiting itself moved to DetachedRunActivity.followUntilFinished, which polls only while a
     // run is in flight. What is left here is the settling, which is what this always really was.
-    private func settleFinishedPrepRun() async {
+    private func settleFinishedRun(slot: RunSlot) async {
         // #1878: keep this run's work-list and results before anything else. FIRST, and above the dead-run
         // sweep in particular, because that sweep RETURNS: a run that died is the one whose evidence is
         // worth the most, and archiving after it would be archiving every run except those.
-        archiveFinishedPrepRun()
+        archiveFinishedRun(slot: slot)
         // #1130: the run has ended (the marker cleared). Close the takeover so it does not sit showing a
         // finished run; the outcome surfaces below via ingest / the empty-run notice.
-        prepSheetShown = false
+        // #2760: THIS slot's takeover only. One `prepSheetShown = false` dismissed whichever screen was up,
+        // which meant the first run to finish took the other's takeover with it.
+        takeover.hide(slot)
         // #1613: a run can end two ways and they deserve opposite treatment. The runner removes its own
         // marker on the way out, so a marker STILL THERE at the moment the run stopped being live means it
         // died somewhere it never reached that exit. Nothing more is coming, so the panel must not sit
         // offering Cancel (which writes a sentinel only a live runner reads, and so could never do
         // anything). Swept and reported instead; the normal settle below is for a run that finished.
-        if sweptADeadPrepRun() { return }
-        let started = PrepQueueService.lastRunStartedAt
+        if sweptADeadRun(slot: slot) { return }
+        let started = PrepQueueService.lastRunStartedAt(slot: slot)
         // #2105: through the shared read, which drops Foundation's per-URL cache. Safe here only by
         // accident before (the default URL is a computed property), and this decides whether a finished
         // run produced results at all.
-        let resultsMod = FileTimestamp.modifiedAt(PrepImporter.defaultURL)
+        let resultsMod = FileTimestamp.modifiedAt(PrepImporter.resultsURL(for: slot))
         // #1308 Layer 2: a probe and a real Prep share this one runner and results file, so route by the
         // probe-run marker first. settleReachabilityProbe returns a report only when the finished run was a
         // probe (marking every probed show, ingesting probe-safely, clearing the marker); a probe that
@@ -1372,7 +1370,7 @@ struct RootView: View {
                             ?? nil)?.lookups
         switch DetachedRunOutcome.phase(runStartedAt: started, resultsModifiedAt: resultsMod ?? nil) {
         case .producedResults:
-            if let report = PrepQueueService.settleReachabilityProbe(into: context, now: Date()) {
+            if let report = PrepQueueService.settleReachabilityProbe(slot: slot, into: context, now: Date()) {
                 recordCheckPace(lookups: checkLookups, cancelled: report.cancelled)
                 reportReachabilityRun(report)
             } else {
@@ -1382,16 +1380,29 @@ struct RootView: View {
             // #1940: the case that made the release necessary. The run ended having written nothing, so
             // PrepImporter never sees this run at all and nothing else would ever clear the re-prep flags
             // it was carrying, leaving a readable draft out of the Review count indefinitely (L45).
-            ReprepRelease.releaseAfterRun(in: context)
-            if let report = PrepQueueService.settleReachabilityProbe(into: context, now: Date()) {
+            // #2760: scoped to the shows THIS run was carrying. Over the whole store, a check finishing
+            // empty gives back the re-prep requests the prep slot is holding, and a show goes back to
+            // Review in the middle of being drafted.
+            ReprepRelease.releaseAfterRun(in: context, carrying: keysCarriedBy(slot))
+            if let report = PrepQueueService.settleReachabilityProbe(slot: slot, into: context, now: Date()) {
                 reportReachabilityRun(report)
             } else {
                 reportError(DetachedRunOutcome.finishedEmptyMessage(
-                    .prep, tail: RunLog.tail(8, from: RunLog.prepURL)))
+                    slot == .check ? .reachabilityCheck : .prep,
+                    tail: RunLog.tail(8, from: RunLog.url(for: slot))))
             }
         case .idle:
             break
         }
+        // #2760 (carrying #2764's requirement): a settle is the other moment the record can have grown,
+        // and the moment Dan is looking at what a run produced.
+        reportAnyBoundaryViolation()
+    }
+
+    // #2760: which shows the run that has just ended was given, read off its own work-list. That is the
+    // scope of the re-prep release: over the whole store it reaches shows another live run is carrying.
+    private func keysCarriedBy(_ slot: RunSlot) -> Set<String> {
+        PrepQueue.keys(inQueueAt: PrepQueueBuilder.queueURL(for: slot))
     }
 
     // #1878: keep the finished run's work-list and results, since the next run overwrites both. One
@@ -1401,9 +1412,9 @@ struct RootView: View {
     // Best effort by construction: archiveFinishedRun never throws, reports its own failure to the
     // problem ledger, and returns an outcome nothing here depends on. The results are the thing Dan paid
     // for; this is a copy of them, and insurance must never be able to cost what it insures.
-    private func archiveFinishedPrepRun() {
-        PrepRunArchive.archiveFinishedRun(queueURL: PrepQueueBuilder.defaultURL,
-                                          resultsURL: PrepImporter.defaultURL,
+    private func archiveFinishedRun(slot: RunSlot) {
+        PrepRunArchive.archiveFinishedRun(slot: slot,
+                                          handoffDirectory: StoreLocation.handoffDirectory,
                                           now: Date())
     }
 
@@ -1416,18 +1427,28 @@ struct RootView: View {
     // waiting for a click meant waiting forever. The check it was running is settled on the way through
     // (the sweep does that), so a death never silently discards answers already paid for.
     @discardableResult
-    private func sweptADeadPrepRun() -> Bool {
+    private func sweptADeadRun(slot: RunSlot) -> Bool {
         // Read WHICH kind of run it was before the sweep clears the marker that says so.
         // #1810: the same rule the rest of the app uses, so a died run cannot be named one thing here and
         // another everywhere else.
-        let marker = (try? ReachabilityProbeMarker.read(from: PrepQueueService.defaultProbeRunURL)) ?? nil
-        let wasProbe = RunKind.of(runStartedAt: PrepQueueService.lastRunStartedAt,
-                                  probeMarkerStartedAt: marker?.startedAt) == .reachabilityCheck
-        guard let outcome = PrepQueueService.clearDeadRun(into: context, now: Date()) else { return false }
+        // #2760: the check slot holds nothing but checks, so only the prep slot has anything to infer, and
+        // that inference is the legacy branch (an upgrade window check still in the old slot).
+        let wasProbe: Bool
+        if slot == .check {
+            wasProbe = true
+        } else {
+            let marker = (try? ReachabilityProbeMarker.read(from: PrepQueueService.defaultProbeRunURL)) ?? nil
+            wasProbe = PrepQueueService.prepSlotRunKind(
+                runStartedAt: PrepQueueService.lastRunStartedAt(slot: .prep),
+                probeMarkerStartedAt: marker?.startedAt) == .reachabilityCheck
+        }
+        guard let outcome = PrepQueueService.clearDeadRun(slot: slot, into: context,
+                                                          now: Date()) else { return false }
         // #1940: a run that died is a run that ended, so the re-prep requests it was carrying come back
         // here too. Without this the one way a run can end that produces nothing AND says so is the one
         // way a show never returns to Review.
-        ReprepRelease.releaseAfterRun(in: context)
+        // #2760: this run's own shows, for the same reason the empty-run path is scoped.
+        ReprepRelease.releaseAfterRun(in: context, carrying: keysCarriedBy(slot))
         if let report = outcome.probeReport { reportReachabilityRun(report) }
         // .warning, not .info: an .info write can be silently overwritten by a later routine receipt, and
         // a run Dan was waiting on having died is the one thing about it he has to see.
@@ -1476,14 +1497,54 @@ struct RootView: View {
     // launch left in flight is caught by the one stat DetachedRunActivity makes when it is first built, so
     // an idle window pays nothing at all. The poll survives inside followUntilFinished, where a run really
     // is in flight, because a detached run ends without telling anyone.
-    private func watchPrepRuns() async {
-        let activity = DetachedRunActivity.prep
+    // #2760: one watcher per slot, each holding its OWN DetachedRunActivity. The single activity was wired
+    // as the default `announce:` of both launches and opens `runStarted()` with
+    // `guard !isRunning else { return }`, so a check launched during a live prep woke nothing at all.
+    private func watchRuns(slot: RunSlot) async {
+        let activity = DetachedRunActivity.forSlot(slot)
         for await _ in activity.runStarts() {
-            prepSheetShown = true
+            takeover.show(slot)
             if await activity.followUntilFinished() {
-                await settleFinishedPrepRun()
+                await settleFinishedRun(slot: slot)
             }
         }
+    }
+
+    // #2760: what a launch finds already on disk for one slot. Its own function so the two slots cannot
+    // drift, and so the prep slot's legacy branch is the only place `RunKind.of` still decides anything.
+    private func reattachOrSettle(slot: RunSlot) {
+        if PrepQueueService.isRunning(slot: slot, now: Date()) {
+            // #1130: a detached run outlives the app, so one can still be going at launch. Reopen the
+            // takeover so a live run is never invisible; the continuous watcher above follows it to
+            // completion, so this no longer awaits here (which also stops an in-flight run from blocking
+            // the scout reattach that follows).
+            takeover.show(slot)
+        } else if sweptADeadRun(slot: slot) {
+            // #1613: a run that DIED while Overture was closed leaves its marker standing, because the
+            // runner never reached the exit that removes it. Swept here, before the orphan settle below,
+            // because the sweep performs that settle itself and reports the death as well: the two must
+            // not both run and report the same check twice.
+        } else if let report = PrepQueueService.settleOrphanedProbe(slot: slot, into: context,
+                                                                    now: Date()) {
+            // #1809: a check that finished while Overture was CLOSED. The run watcher only settles a run
+            // it is watching, and the detached runner removes its own marker on exit, so without this the
+            // check is never settled at all: its paid answers never land, and the marker it leaves behind
+            // makes the next Prep run read as a check and discard every draft it wrote. #1765 is what made
+            // that likely, since a check is no longer capped at about eleven minutes.
+            reportReachabilityRun(report)
+        } else if slot == .prep {
+            ingestPrep()
+        }
+    }
+
+    // #2760 (carrying #2764's requirement). `.warning`, and for the reason the dead-run notice is: an
+    // `.info` write can be silently overwritten by a later routine receipt, and this is the record of paid
+    // work having been destroyed.
+    private func reportAnyBoundaryViolation() {
+        guard let message = RunBoundaryViolations.newlyReported(in: StoreLocation.handoffDirectory) else {
+            return
+        }
+        status.set(message, priority: .warning)
     }
 
     // #802: the scout's reading half. The extract run is detached, so without this the pages it read
@@ -1651,7 +1712,8 @@ struct RootView: View {
         showFollowUps = false
         showVoiceGuidance = false
         showPrepSelection = false
-        prepSheetShown = false
+        // #2760: every slot's takeover, since this is the close-everything path.
+        for slot in RunSlot.allCases { takeover.hide(slot) }
         showSources = false
         showDaysOff = false
         showExcludedTowns = false
@@ -2025,10 +2087,15 @@ struct RootView: View {
     // #1822: lifted out of the toolbar's `label:` builder, which the added arguments pushed past the Swift
     // type-checker's limit for one expression. Nothing about the label changed in the move.
     private var prepToolbarLabel: some View {
-        let isProbe = PrepQueueService.isProbeRunning(now: Date())
+        // #2760: the run really in flight, whichever slot holds it. `runInFlight` asks both, so the label
+        // names a check whether it is in the check slot or (during the upgrade window) still in the prep
+        // slot. The exclusion means at most one of them is live, so there is one label to draw.
+        let kind = PrepQueueService.runInFlight(now: Date()) ?? .prep
+        let isProbe = kind == .reachabilityCheck
+        let slot: RunSlot = PrepQueueService.isRunning(slot: .check, now: Date()) ? .check : .prep
         return LiveRunLabel(
             base: RunProgressCopy.title(isProbe ? .probing : .prepping),
-            since: PrepQueueService.lastRunStartedAt,
+            since: PrepQueueService.lastRunStartedAt(slot: slot),
             // #1822: a probe gets its OWN ten-minute window, as the takeover already gives it. Judged
             // against Prep's three minutes, every probe past three minutes was called stuck while it was
             // running perfectly well.
@@ -2039,8 +2106,11 @@ struct RootView: View {
             // condition for the whole remainder of every long run.
             // #1003: closures, so both this and the count are re-read every tick rather than captured
             // whenever RootView last happened to re-render.
-            progressDetail: { PrepProgressDecoder.label(for: PrepProgressDecoder.loadCurrent()) },
-            heartbeat: { PrepQueueService.heartbeat(now: Date()) },
+            progressDetail: {
+                PrepProgressDecoder.label(for: PrepProgressDecoder.loadCurrent(
+                    from: PrepProgressDecoder.progressURL(for: slot)))
+            },
+            heartbeat: { PrepQueueService.heartbeat(slot: slot, now: Date()) },
             compact: true)
     }
 
@@ -2128,30 +2198,67 @@ struct RootView: View {
     // "looks stuck". Hide keeps the run going (the toolbar "Prepping" label remains the indicator); Cancel
     // stops it cooperatively. No Retry: a Prep run needs a which-shows selection, so restarting goes back
     // through the picker rather than a one-click retry.
+    #if DEBUG
+    // Lifted out of the toolbar's `Menu` builder (#2760's edits pushed that whole modifier chain past the
+    // Swift type-checker's limit for one expression, the same move #1822 made for `prepToolbarLabel`).
+    // Nothing about the menu changed in the move.
+    @ViewBuilder
+    private var debugMenuItems: some View {
+        Button("Seed dev data from live") { debugSeedFromLive() }
+        Button("Connect Gmail from live") { debugSeedGmailFromLive() }
+        Button("Clear dev data") { debugClearDevData() }
+        Button("Mark first as sent") { debugStageFirstAsSent() }
+        Button("Stage reminder-due lead") { debugStageReminderLead() }
+        Button("Stage self-send test lead") { debugStageSelfSendLead() }
+        Button("Stage multi-recipient self-send lead") { debugStageMultiRecipientSelfSendLead() }
+        Button("Stage visual-QA scenario (draft + signature + double-booking)") { debugStageVisualQAScenario() }
+        Button("Stage warm-register returning-client draft") { debugStageWarmRegisterDraft() }
+        Button("Stage re-prep-queued draft") { debugStageReprepQueuedDraft() }
+        Button("Stage reachability competition (best-contact highlight)") { debugStageReachabilityCompetition() }
+        Button("Stage form-pitch shows (copy-and-confirm, and one already recorded)") { debugStageFormPitchScenario() }
+        Button("Clear debug leads") { debugClearDebugLeads() }
+    }
+    #endif
+
+    // #2760: one sheet over per-slot state. It is up while ANY slot has a takeover, and dismissing it
+    // closes only the one on screen, so a run still going keeps its own.
+    private var runTakeoverBinding: Binding<Bool> {
+        Binding(get: { takeover.presented != nil },
+                set: { shown in if !shown { takeover.hidePresented() } })
+    }
+
     private var prepProgressModal: some View {
         VStack {
             Spacer(minLength: 0)
             // #1824: the launch's own first phase, the app rendering each kept show's listing page. It has
             // no marker file (it runs in process), so its still-alive evidence is the same as the scout
             // sweep's: a count that keeps advancing.
-            if let reading = listingReadProgress {
+            // #2760: everything below is about the slot on screen, so a check's takeover reads the check's
+            // own count, its own marker and its own start.
+            let slot = takeover.presented ?? .prep
+            if let reading = takeover.listingProgress(slot) {
                 RunProgressView(phase: .readingListings,
-                                since: listingReadStartedAt,
+                                since: takeover.listingStartedAt(slot),
                                 snapshot: { reading },
-                                onHide: { prepSheetShown = false })
+                                onHide: { takeover.hide(slot) })
             } else {
                 RunProgressView(
                     // #1322: a probe reuses this same takeover, so it labels itself "Checking reachability"
-                    // instead of "Prepping" when the in-flight run is a probe (its marker is present).
-                    phase: PrepQueueService.isProbeRunning(now: Date()) ? .probing : .prepping,
-                    since: PrepQueueService.lastRunStartedAt,
-                    snapshot: { RunProgressView.Snapshot.livePrepping() },
-                    heartbeat: { PrepQueueService.heartbeat(now: Date()) },
-                    onHide: { prepSheetShown = false },
+                    // instead of "Prepping". #2760: the slot says which it is, except in the upgrade window
+                    // where a legacy check sits in the prep slot, which is what isProbeRunning still asks.
+                    phase: slot == .check || PrepQueueService.isProbeRunning(now: Date())
+                        ? .probing : .prepping,
+                    since: PrepQueueService.lastRunStartedAt(slot: slot),
+                    snapshot: {
+                        RunProgressView.Snapshot.livePrepping(
+                            progressURL: PrepProgressDecoder.progressURL(for: slot))
+                    },
+                    heartbeat: { PrepQueueService.heartbeat(slot: slot, now: Date()) },
+                    onHide: { takeover.hide(slot) },
                     onCancel: { cancelPrep() },
                     // #1684: the panel acknowledges the click the instant the sentinel lands, rather than
                     // sitting on a spinner identical to a working run until the marker goes stale.
-                    cancelRequested: { PrepQueueService.cancelRequested() })
+                    cancelRequested: { PrepQueueService.cancelRequested(slot: slot) })
             }
             Spacer(minLength: 0)
         }
@@ -2201,14 +2308,16 @@ struct RootView: View {
         // single launch, which re-announced an old run's shortfall ("2 didn't come back") days after the
         // fact, re-announced its drafts, and (the real damage) knocked an approved-but-unsent draft back
         // to "needs review", silently undoing Dan's own approval. Nothing to consume, nothing to say.
-        let outcome = PrepImporter.consumeIfNew(into: context)
+        let outcome = PrepImporter.consumeIfNew(slot: .prep, into: context)
         // #1940: give back every re-prep this run was carrying and did not serve, so a show whose queued
         // re-prep took it out of the Review count returns to it. AFTER the importer, never before: the
         // importer reads the same two flags to decide which half of a result is in scope, so clearing them
         // first would let a contacts-only re-prep's run overwrite the draft it was told to leave alone.
         // Outside the guard below for the same reason it exists at all: a run that produced nothing new
         // still ended, and the request it was carrying still has to come back.
-        ReprepRelease.releaseAfterRun(in: context)
+        // #2760: the prep run's own shows. Over the whole store this reaches shows the check slot is
+        // carrying, which is the same defect as the empty-run path's.
+        ReprepRelease.releaseAfterRun(in: context, carrying: keysCarriedBy(.prep))
         guard let outcome else { return }
         // #876: every sentence derived from the run's own outcome now lives in PrepRunSummary, where a
         // test can read it. Built here in the view body, this copy was unreachable by any test, which is

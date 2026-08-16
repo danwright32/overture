@@ -675,24 +675,34 @@ enum PrepImporter {
     // An unreadable file reads as nothing to come, which is the fail-safe direction: the settle then
     // preserves whatever the row already holds instead of overwriting it on the strength of a file it
     // could not read.
-    static func hasUnconsumedResults(at url: URL = defaultURL, defaults: UserDefaults = .standard) -> Bool {
+    // #2760: the fingerprint is stored PER SLOT, and the slot is a required argument rather than a
+    // defaulted one. Two slots ping-ponging one key makes it describe the wrong file, and the consequence
+    // is not a re-read: `anIngestIsStillToCome` is what it decides, and a wrong answer there writes the
+    // `.noEmailFound` floor OVER a real address with a 90 day freshness stamp locking the show out of a
+    // re-check (#1623). The URL follows the slot when it is not given, so a caller cannot name one slot
+    // and read the other's file by omission (which is the trap #2763 named in its own defaults).
+    static func hasUnconsumedResults(slot: RunSlot, at url: URL? = nil,
+                                     defaults: UserDefaults = .standard) -> Bool {
+        let url = url ?? resultsURL(for: slot)
         guard let data = try? Data(contentsOf: url) else { return false }
-        return Self.fingerprint(data) != defaults.string(forKey: consumedKey)
+        return Self.fingerprint(data) != defaults.string(forKey: slot.resultsConsumedKey)
     }
 
     @MainActor
     @discardableResult
-    static func consumeIfNew(at url: URL = defaultURL,
+    static func consumeIfNew(slot: RunSlot,
+                             at url: URL? = nil,
                              into context: ModelContext,
                              defaults: UserDefaults = .standard,
                              ingest: (URL, ModelContext) throws -> Outcome = {
                                  try ingestFile(at: $0, into: $1)
                              }) -> Outcome? {
+        let url = url ?? resultsURL(for: slot)
         guard let data = try? Data(contentsOf: url) else { return nil }
         let fingerprint = Self.fingerprint(data)
-        guard fingerprint != defaults.string(forKey: consumedKey) else { return nil }
+        guard fingerprint != defaults.string(forKey: slot.resultsConsumedKey) else { return nil }
         guard let outcome = try? ingest(url, context) else { return nil }
-        if !outcome.saveFailed { defaults.set(fingerprint, forKey: consumedKey) }
+        if !outcome.saveFailed { defaults.set(fingerprint, forKey: slot.resultsConsumedKey) }
         return outcome
     }
 
@@ -700,9 +710,9 @@ enum PrepImporter {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
-    private static let consumedKey = "prep.consumedResultsFingerprint"
-
-    static var defaultURL: URL {
-        RunSlot.prep.resultsURL(in: StoreLocation.handoffDirectory)
+    static func resultsURL(for slot: RunSlot) -> URL {
+        slot.resultsURL(in: StoreLocation.handoffDirectory)
     }
+
+    static var defaultURL: URL { resultsURL(for: .prep) }
 }

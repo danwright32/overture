@@ -36,13 +36,19 @@ enum DetachedRunOutcome {
     // indistinguishable from a quiet calendar, an inbox with no replies, or a Prep run with nothing to
     // do, which is why each sentence says something different and true about ITS OWN work rather than
     // sharing a generic one.
-    enum Kind: Equatable, Sendable { case prep, scoutExtract, replyClassify }
+    // #2760: the reachability check is its own kind. It used to borrow the Prep sentence, which was
+    // harmless while a check that finished empty always had a marker to settle from, and is wrong the
+    // moment the check has its own slot: the sentence would name a run Dan never started and quote the
+    // wrong log.
+    enum Kind: Equatable, Sendable { case prep, reachabilityCheck, scoutExtract, replyClassify }
 
     static func finishedEmptyMessage(_ kind: Kind, tail: String) -> String {
         let lead: String
         switch kind {
         case .prep:
             lead = "The Prep run finished but didn't produce any results. It may have hit an error or found no contacts."
+        case .reachabilityCheck:
+            lead = "The contact check finished but didn't produce any results. It may have hit an error, so no show was marked as checked."
         case .scoutExtract:
             // NOT "the calendars are quiet". Those pages were never read, and saying so is the whole
             // point: a broken read and an empty calendar must never look alike.
@@ -61,8 +67,10 @@ enum DetachedRunOutcome {
 // guessing. Shared by every detached run (#435); each one writes its own log file. Pure string slice;
 // the file read is a thin wrapper.
 enum RunLog {
-    static var prepURL: URL {
-        RunSlot.prep.runLogURL(in: StoreLocation.handoffDirectory)
+    // #2760: per slot, so a check that finished empty quotes its OWN log. Sharing `prep-run.log` shows Dan
+    // the tail of whatever ran last, which is precisely what the tail was added to stop (#885).
+    static func url(for slot: RunSlot) -> URL {
+        slot.runLogURL(in: StoreLocation.handoffDirectory)
     }
 
     static var replyClassifyURL: URL {

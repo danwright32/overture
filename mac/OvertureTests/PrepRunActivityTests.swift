@@ -169,9 +169,13 @@ struct PrepRunAnnounceWiringTests {
     // Both start paths announce, at the service rather than at their call sites, so no surface that can
     // launch a run is able to leave it unwatched. A per-row Re-prep reaches the service with no view call
     // at all, which is exactly the call site that would have been missed.
+    // #2760: each announces to its OWN slot's activity. One shared object opened `runStarted()` with
+    // `guard !isRunning else { return }`, so a check launched during a live prep announced to nobody and
+    // was never followed or settled.
     @Test func bothStartPathsAnnounceFromTheServiceItself() {
         #expect(!service.isEmpty)
-        #expect(service.components(separatedBy: "announce: @MainActor () -> Void = { DetachedRunActivity.prep.runStarted() }").count - 1 == 2)
+        #expect(service.contains("announce: @MainActor () -> Void = { DetachedRunActivity.prep.runStarted() }"))
+        #expect(service.contains("announce: @MainActor () -> Void = { DetachedRunActivity.check.runStarted() }"))
         #expect(service.components(separatedBy: "announce()").count - 1 >= 2)
     }
 
@@ -179,6 +183,9 @@ struct PrepRunAnnounceWiringTests {
     // would have to read a live answer about this Mac.
     @Test func theSharedActivityIsBuiltOnThePrepMarker() {
         #expect(activity.contains("static let prep = DetachedRunActivity("))
-        #expect(activity.contains("liveness: { PrepQueueService.isRunning(now: $0) }"))
+        #expect(activity.contains("liveness: { PrepQueueService.isRunning(slot: .prep, now: $0) }"))
+        // #2760: and the check's own, on the check slot's marker.
+        #expect(activity.contains("static let check = DetachedRunActivity("))
+        #expect(activity.contains("liveness: { PrepQueueService.isRunning(slot: .check, now: $0) }"))
     }
 }

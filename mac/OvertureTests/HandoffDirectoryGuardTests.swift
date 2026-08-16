@@ -31,7 +31,7 @@ struct HandoffDirectoryGuardTests {
             ("voice-guidance", VoiceGuidanceGuard.defaultURL),
             ("voice-guidance-store", VoiceGuidanceStore.defaultURL),
             ("voice-guidance-backup", VoiceNotesProtector.defaultBackupURL),
-            ("prep-run-log", RunLog.prepURL),
+            ("prep-run-log", RunLog.url(for: .prep)),
             ("reply-classify-run-log", RunLog.replyClassifyURL),
             ("prep-running-marker", PrepQueueService.defaultMarkerURL),
             ("reply-classify-running-marker", ReplyClassifyService.defaultMarkerURL),

@@ -83,7 +83,7 @@ struct PrepWebCallCountTests {
         """.write(to: url, atomically: true, encoding: .utf8)
         defer { try? FileManager.default.removeItem(at: url) }
 
-        let outcome = PrepImporter.consumeIfNew(
+        let outcome = PrepImporter.consumeIfNew(slot: .prep, 
             at: url, into: ctx,
             defaults: UserDefaults(suiteName: "PrepWebCalls-\(UUID().uuidString)")!)
 
@@ -216,7 +216,7 @@ struct PrepWebCallCountTests {
         """.write(to: url, atomically: true, encoding: .utf8)
         defer { try? FileManager.default.removeItem(at: url) }
 
-        let outcome = PrepImporter.consumeIfNew(
+        let outcome = PrepImporter.consumeIfNew(slot: .prep, 
             at: url, into: ctx,
             defaults: UserDefaults(suiteName: "PrepWebCalls-\(UUID().uuidString)")!)
 

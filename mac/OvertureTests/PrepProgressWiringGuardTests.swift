@@ -24,8 +24,10 @@ struct PrepProgressWiringGuardTests {
         // this label, unlike the shared RunProgressCopy.title base), then look back at the base that feeds
         // it: now RunProgressCopy.title of the prepping-or-probing phase, so a probe reusing this run slot
         // reads "Checking reachability" instead of "Prepping".
+        // #2760: the progress file is the SLOT's, so a live check counts its own N of M instead of
+        // whatever the prep run last wrote.
         guard let detailRange = rootView.range(
-            of: "progressDetail: { PrepProgressDecoder.label(for: PrepProgressDecoder.loadCurrent()) }") else {
+            of: "PrepProgressDecoder.progressURL(for: slot)") else {
             Issue.record("Prep LiveRunLabel progressDetail not found")
             return
         }
@@ -34,7 +36,10 @@ struct PrepProgressWiringGuardTests {
         let nearby = rootView[windowStart..<detailRange.lowerBound]
         #expect(nearby.contains("LiveRunLabel("))
         #expect(nearby.contains("RunProgressCopy.title(isProbe ? .probing : .prepping)"))
-        #expect(nearby.contains("PrepQueueService.isProbeRunning(now: Date())"))
+        // #2760: which run is in flight comes from `runInFlight`, which asks BOTH slots, so a check is
+        // named a check whether it is in the check slot or (during the upgrade window) the prep slot.
+        #expect(nearby.contains("PrepQueueService.runInFlight(now: Date())"))
+        #expect(nearby.contains("PrepProgressDecoder.label(for: PrepProgressDecoder.loadCurrent("))
     }
 
     // #1822: the two facts this label was missing. It rendered inside a branch that only runs BECAUSE
@@ -49,7 +54,7 @@ struct PrepProgressWiringGuardTests {
             Issue.record("RootView no longer builds the toolbar's Prep label in `prepToolbarLabel`")
             return
         }
-        #expect(body.contains("heartbeat: { PrepQueueService.heartbeat(now: Date()) }"),
+        #expect(body.contains("heartbeat: { PrepQueueService.heartbeat(slot: slot, now: Date()) }"),
                 "the toolbar label judges liveness with no heartbeat, so a healthy run reads as stuck")
         #expect(body.contains("RunTimeouts.reachabilityProbe"),
                 "a probe is judged against Prep's window instead of its own")

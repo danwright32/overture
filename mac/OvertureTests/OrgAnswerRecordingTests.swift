@@ -172,7 +172,7 @@ struct OrgAnswerRecordingTests {
                                               formUrl: nil, provenance: "act")], draft: nil)
         ])).write(to: resultsURL)
 
-        _ = PrepQueueService.settleReachabilityProbe(markerURL: markerURL, resultsURL: resultsURL,
+        _ = PrepQueueService.settleReachabilityProbe(slot: .check, markerURL: markerURL, resultsURL: resultsURL,
                                                      into: ctx, now: now, defaults: freshDefaults())
 
         let stored = try #require(try answers(ctx).first)

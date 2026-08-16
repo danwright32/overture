@@ -167,30 +167,40 @@ struct PrepQueueTests {
         }
     }
 
-    // #1322: a probe and a normal Prep share the single run lock, so isRunning alone can't tell them
-    // apart. The probe-run marker's presence during a live run is what identifies the in-flight run as a
-    // probe, so the takeover and toolbar can label it "Checking reachability" instead of "Prepping".
-    @Test func isProbeRunningIsTrueOnlyWhenARunIsLiveAndTheProbeMarkerIsPresent() throws {
-        let runLock = FileManager.default.temporaryDirectory
-            .appendingPathComponent("prep-lock-\(UUID().uuidString)")
-        let probeMarker = FileManager.default.temporaryDirectory
-            .appendingPathComponent("probe-run-\(UUID().uuidString).json")
-        defer { try? FileManager.default.removeItem(at: runLock); try? FileManager.default.removeItem(at: probeMarker) }
+    // #1322: a probe and a normal Prep used to share the single run lock, so isRunning alone could not
+    // tell them apart, and the probe-run marker's presence during a live run identified the in-flight run
+    // as a probe. #2760 gives the check its own slot, so a live CHECK slot says so outright; what remains
+    // of the old rule is the upgrade window, in which a check launched by an older build is still in the
+    // PREP slot with its marker beside it. Both are exercised here.
+    @Test func isProbeRunningIsTrueForALiveCheckAndForALegacyCheckInThePrepSlot() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("probe-live-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let d = UserDefaults(suiteName: "IsProbeRunning-\(UUID().uuidString)")!
 
         // No run at all.
-        #expect(PrepQueueService.isProbeRunning(probeRunURL: probeMarker, markerURL: runLock, now: Date()) == false)
+        #expect(PrepQueueService.isProbeRunning(now: Date(), support: dir, defaults: d) == false)
 
-        // A live run with no probe marker: a normal Prep, not a probe.
-        try Data().write(to: runLock)
-        #expect(PrepQueueService.isProbeRunning(probeRunURL: probeMarker, markerURL: runLock, now: Date()) == false)
+        // A live PREP with no probe marker: a normal Prep, not a check.
+        try Data().write(to: RunSlot.prep.markerURL(in: dir))
+        #expect(PrepQueueService.isProbeRunning(now: Date(), support: dir, defaults: d) == false)
 
-        // A live run WITH the probe marker: a probe.
-        try ReachabilityProbeMarker.write(ReachabilityProbeMarker(keys: ["a", "b"], startedAt: "x"), to: probeMarker)
-        #expect(PrepQueueService.isProbeRunning(probeRunURL: probeMarker, markerURL: runLock, now: Date()) == true)
+        // The upgrade window: a live prep slot WITH the probe marker is a legacy check.
+        try ReachabilityProbeMarker.write(ReachabilityProbeMarker(keys: ["a", "b"], startedAt: "x"),
+                                          to: PrepQueueService.probeRunURL(in: dir))
+        #expect(PrepQueueService.isProbeRunning(now: Date(), support: dir, defaults: d) == true)
 
-        // Marker present but the run lock has gone stale (crashed): no longer a live probe.
+        // Marker present but the run lock has gone stale (crashed): no longer a live check.
         let stale = Date().addingTimeInterval(PrepQueueService.markerStaleAfter + 60)
-        #expect(PrepQueueService.isProbeRunning(probeRunURL: probeMarker, markerURL: runLock, now: stale) == false)
+        #expect(PrepQueueService.isProbeRunning(now: stale, support: dir, defaults: d) == false)
+
+        // And the ordinary case after #2760: the CHECK slot is live, and no marker comparison is needed
+        // to know what is in it.
+        try FileManager.default.removeItem(at: RunSlot.prep.markerURL(in: dir))
+        ReachabilityProbeMarker.clear(at: PrepQueueService.probeRunURL(in: dir))
+        try Data().write(to: RunSlot.check.markerURL(in: dir))
+        #expect(PrepQueueService.isProbeRunning(now: Date(), support: dir, defaults: d) == true)
     }
 
     @Test func isRunningReflectsAFreshMarkerButIgnoresAStaleOne() throws {
@@ -198,15 +208,15 @@ struct PrepQueueTests {
             .appendingPathComponent("prep-running-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: marker) }
 
-        #expect(PrepQueueService.isRunning(markerURL: marker, now: Date()) == false)  // absent
+        #expect(PrepQueueService.isRunning(slot: .prep, markerURL: marker, now: Date()) == false)  // absent
 
         try Data().write(to: marker)
         let written = (try marker.resourceValues(forKeys: [.contentModificationDateKey])).contentModificationDate!
         // The runner heartbeats the marker (#47), so "fresh" means touched within the
         // staleness window; only a marker untouched past the window reads as crashed.
         let window = PrepQueueService.markerStaleAfter
-        #expect(PrepQueueService.isRunning(markerURL: marker, now: written.addingTimeInterval(window - 1)) == true)
-        #expect(PrepQueueService.isRunning(markerURL: marker, now: written.addingTimeInterval(window + 1)) == false)
+        #expect(PrepQueueService.isRunning(slot: .prep, markerURL: marker, now: written.addingTimeInterval(window - 1)) == true)
+        #expect(PrepQueueService.isRunning(slot: .prep, markerURL: marker, now: written.addingTimeInterval(window + 1)) == false)
     }
 
     @Test func startPrepRefusesWhileARunIsInFlight() async throws {

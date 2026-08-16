@@ -172,7 +172,7 @@ struct DeadRunSweepTests {
     // three drift and this issue comes back for whichever was missed.
     @Test func prepsSweepUsesTheSharedImplementation() {
         let service = SourceGuardHelper.source("Overture/Integration/PrepQueueService.swift")
-        let body = SourceGuardHelper.propertyBody("into context: ModelContext, now: Date) -> DeadRunOutcome? {",
+        let body = SourceGuardHelper.propertyBody("defaults: UserDefaults = .standard) -> DeadRunOutcome? {",
                                                   in: service)
         #expect(body?.contains("DetachedRunner.sweepDeadRun") == true,
                 "Prep must sweep through the shared implementation, not its own copy")

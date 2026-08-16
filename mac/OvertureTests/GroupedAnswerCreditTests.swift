@@ -200,7 +200,7 @@ struct GroupedAnswerCreditTests {
         // The terse run: ONE entry for a group of three.
         try writeResults(resultsURL, [PrepResult(naturalKey: lead, contacts: [jane()])])
 
-        let report = PrepQueueService.settleReachabilityProbe(
+        let report = PrepQueueService.settleReachabilityProbe(slot: .check, 
             markerURL: markerURL, resultsURL: resultsURL, queueURL: queueURL,
             into: ctx, now: now, defaults: freshDefaults())
 
@@ -230,7 +230,7 @@ struct GroupedAnswerCreditTests {
         try writeQueue(queueURL, generatedAt: "2026-07-31T10:00:00Z", group: [covered1, covered2])
         try writeResults(resultsURL, [])
 
-        let report = PrepQueueService.settleReachabilityProbe(
+        let report = PrepQueueService.settleReachabilityProbe(slot: .check, 
             markerURL: markerURL, resultsURL: resultsURL, queueURL: queueURL,
             into: ctx, now: now, defaults: freshDefaults())
 

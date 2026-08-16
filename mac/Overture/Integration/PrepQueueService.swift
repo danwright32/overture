@@ -172,11 +172,19 @@ enum PrepQueueService {
         return PrepQueueBuilder.build(from: items, generatedAt: generatedAt, houses: houses(from: context))
     }
 
-    // #1308 Layer 2: the probe-run side marker (which shows a live probe is researching). Lives beside the
-    // shared prep marker; its presence is how the completion path tells a probe from a normal prep run.
-    static var defaultProbeRunURL: URL {
-        StoreLocation.handoffDirectory.appendingPathComponent("reachability-probe-run.json")
+    // #1308 Layer 2: the probe-run side marker (which shows a live probe is researching). It carries the
+    // keys the check covers, its lookup count and its settle attempts.
+    //
+    // #2760: still ONE file rather than one per slot, deliberately. Only one check can be alive at a time
+    // (the launch refuses a second, including the upgrade case where a legacy check holds the prep slot),
+    // so a second marker would be a file nothing could ever write. Its OTHER job, telling a finished prep
+    // run apart from a finished check, is now needed only for the prep slot's legacy branch: the check slot
+    // holds nothing but checks.
+    static func probeRunURL(in support: URL) -> URL {
+        support.appendingPathComponent("reachability-probe-run.json")
     }
+
+    static var defaultProbeRunURL: URL { probeRunURL(in: StoreLocation.handoffDirectory) }
 
     // Launch a reachability probe over Dan's hand-picked keys. Mirrors startPrep's lock dance exactly
     // (atomic marker acquire, so a probe and a prep can never both hold the single runner slot), but builds
@@ -184,18 +192,35 @@ enum PrepQueueService {
     // path. A probe never drafts, so it skips the voice/openers handoffs startPrep refreshes.
     @discardableResult
     static func startReachabilityProbe(keys: Set<String>, from context: ModelContext, now: Date,
-                                       queueURL: URL = PrepQueueBuilder.defaultURL,
-                                       markerURL: URL = defaultMarkerURL,
-                                       probeRunURL: URL = defaultProbeRunURL,
-                                       cancelURL: URL = defaultCancelURL,
+                                       support: URL = StoreLocation.handoffDirectory,
+                                       defaults: UserDefaults = .standard,
+                                       queueURL: URL? = nil,
+                                       markerURL: URL? = nil,
+                                       probeRunURL: URL? = nil,
+                                       cancelURL: URL? = nil,
                                        // #1856: how a show's own listing page is loaded, for the shows
                                        // where the check has no target until it reads one. Same seam and
                                        // same test-refusing default as startPrep.
                                        render: @escaping ShowListingReader.Render = ShowListingReader.liveRender,
                                        onListingProgress: @MainActor (Int, Int) -> Void = { _, _ in },
-                                       announce: @MainActor () -> Void = { DetachedRunActivity.prep.runStarted() },
-                                       launch: @MainActor () throws -> Void = launchRunner) async throws -> Int {
-        guard !isRunning(markerURL: markerURL, now: now) else { throw PrepLaunchError.alreadyRunning }
+                                       announce: @MainActor () -> Void = { DetachedRunActivity.check.runStarted() },
+                                       launch: @MainActor () throws -> Void = { try launchRunner(slot: .check) })
+        async throws -> Int {
+        // #2760: the check has its OWN slot now, so every path below is `.check`'s. An injected marker
+        // decides the support directory for everything else, including the exclusion below: a guard that
+        // read the live folder while the lock dance read a temp one would be asking about a different
+        // machine than the one it is protecting.
+        let support = markerURL?.deletingLastPathComponent() ?? support
+        let queueURL = queueURL ?? RunSlot.check.queueURL(in: support)
+        let markerURL = markerURL ?? RunSlot.check.markerURL(in: support)
+        let cancelURL = cancelURL ?? RunSlot.check.cancelURL(in: support)
+        let probeRunURL = probeRunURL ?? Self.probeRunURL(in: support)
+        // #2760: the exclusion is STILL IN FORCE, and it now has to be stated rather than falling out of
+        // the two runs sharing one marker. It asks about both slots, and it names which run is in the way,
+        // including the upgrade case where a check started by an older build holds the PREP slot and the
+        // check slot is empty (without this, that window is the one place two checks could run at once).
+        if let refusal = runInFlightRefusal(now: now, support: support, checkMarkerURL: markerURL,
+                                            defaults: defaults) { throw refusal }
 
         let stamp = ISO8601DateFormatter().string(from: now)
         let queue = buildProbeQueue(from: context, generatedAt: stamp, keys: keys)
@@ -248,8 +273,10 @@ enum PrepQueueService {
                     lookups: queue.items.count),
                 to: probeRunURL)
             try launch()
-            UserDefaults.standard.set(now, forKey: lastRunKey)
-            announce()     // #1938: same runner, same marker, same watcher: a check announces itself too
+            recordRunStarted(slot: .check, at: now, defaults: defaults)
+            // #1938: a check announces itself too. #2760: to its OWN activity, which is what makes it
+            // followed and settled when it starts while a prep is live.
+            announce()
         } catch {
             try? FileManager.default.removeItem(at: markerURL)   // release the lock if we never launched
             ReachabilityProbeMarker.clear(at: probeRunURL)
@@ -410,20 +437,32 @@ enum PrepQueueService {
     // already were. Left at their defaults a test reached Dan's LIVE prep queue and his real Downbeat
     // export, so the Outcome it examined depended on what happened to be on this Mac (L2). No caller in
     // the app passes them; they exist so a test cannot.
+    //
+    // #2760: `slot` is a REQUIRED first parameter and every path below follows it. It used to take six
+    // URLs, each defaulted to a prep-slot path, so a check-slot caller that passed `markerURL:` and forgot
+    // `resultsURL:` would compile and silently ingest the PREP run's results with `isProbe: true`, short
+    // circuiting before draft handling and discarding every draft that run wrote. That is #1809 through a
+    // new door, and it is the exact hazard this phase creates by putting a second run on disk.
     @discardableResult
-    static func settleReachabilityProbe(markerURL: URL = defaultProbeRunURL,
-                                        resultsURL: URL = PrepImporter.defaultURL,
-                                        queueURL: URL = PrepQueueBuilder.defaultURL,
+    static func settleReachabilityProbe(slot: RunSlot,
+                                        support: URL = StoreLocation.handoffDirectory,
+                                        markerURL: URL? = nil,
+                                        resultsURL: URL? = nil,
+                                        queueURL: URL? = nil,
                                         downbeatURL: URL = DownbeatBridge.defaultURL,
                                         historyURL: URL = LocalHistory.importedURL,
-                                        cancelURL: URL = defaultCancelURL,
+                                        cancelURL: URL? = nil,
                                         into context: ModelContext, now: Date,
                                         defaults: UserDefaults = .standard) -> ReachabilityRunReport? {
+        let markerURL = markerURL ?? probeRunURL(in: support)
+        let resultsURL = resultsURL ?? slot.resultsURL(in: support)
+        let queueURL = queueURL ?? slot.queueURL(in: support)
+        let cancelURL = cancelURL ?? slot.cancelURL(in: support)
         guard let marker = (try? ReachabilityProbeMarker.read(from: markerURL)) ?? nil else { return nil }
         var stampSaveFailed = false
         // #1623: asked BEFORE the ingest below consumes the file, because afterwards the answer is always
         // "already consumed" and the floor would never overwrite anything again.
-        let ingestToCome = PrepImporter.hasUnconsumedResults(at: resultsURL, defaults: defaults)
+        let ingestToCome = PrepImporter.hasUnconsumedResults(slot: slot, at: resultsURL, defaults: defaults)
         let answered = markProbed(keys: marker.keys, answeredIn: resultsURL, in: context, now: now,
                                   anIngestIsStillToCome: ingestToCome,
                                   saveFailed: &stampSaveFailed, queueURL: queueURL)
@@ -434,7 +473,7 @@ enum PrepQueueService {
         // exactly why the shortfall is derived from `marker` against `answered` and never from here: those
         // two are on disk either way.
         let outcome = PrepImporter.consumeIfNew(
-            at: resultsURL, into: context, defaults: defaults,
+            slot: slot, at: resultsURL, into: context, defaults: defaults,
             ingest: { try PrepImporter.ingestFile(at: $0, into: $1, downbeatURL: downbeatURL,
                                                   historyURL: historyURL, queueURL: queueURL,
                                                   isProbe: true, now: now) })
@@ -505,15 +544,19 @@ enum PrepQueueService {
     //
     // Returns nil when there is nothing left over, which is the normal case and must stay cheap.
     @discardableResult
-    static func settleOrphanedProbe(markerURL: URL = defaultProbeRunURL,
-                                    resultsURL: URL = PrepImporter.defaultURL,
-                                    queueURL: URL = PrepQueueBuilder.defaultURL,
+    static func settleOrphanedProbe(slot: RunSlot,
+                                    support: URL = StoreLocation.handoffDirectory,
+                                    markerURL: URL? = nil,
+                                    resultsURL: URL? = nil,
+                                    queueURL: URL? = nil,
                                     downbeatURL: URL = DownbeatBridge.defaultURL,
                                     historyURL: URL = LocalHistory.importedURL,
                                     into context: ModelContext, now: Date,
                                     defaults: UserDefaults = .standard) -> ReachabilityRunReport? {
+        let markerURL = markerURL ?? probeRunURL(in: support)
         guard ((try? ReachabilityProbeMarker.read(from: markerURL)) ?? nil) != nil else { return nil }
-        return settleReachabilityProbe(markerURL: markerURL, resultsURL: resultsURL, queueURL: queueURL,
+        return settleReachabilityProbe(slot: slot, support: support, markerURL: markerURL,
+                                       resultsURL: resultsURL, queueURL: queueURL,
                                        downbeatURL: downbeatURL, historyURL: historyURL,
                                        into: context, now: now, defaults: defaults)
     }
@@ -536,20 +579,28 @@ enum PrepQueueService {
     // answers away. Settled FIRST, then the marker is released, in that order, for the same reason
     // settleAnyCheckBefore does it that way.
     @discardableResult
-    static func clearDeadRun(markerURL: URL = defaultMarkerURL,
-                             cancelURL: URL = defaultCancelURL,
-                             probeRunURL: URL = defaultProbeRunURL,
-                             into context: ModelContext, now: Date) -> DeadRunOutcome? {
+    static func clearDeadRun(slot: RunSlot,
+                             support: URL = StoreLocation.handoffDirectory,
+                             markerURL: URL? = nil,
+                             cancelURL: URL? = nil,
+                             probeRunURL: URL? = nil,
+                             into context: ModelContext, now: Date,
+                             defaults: UserDefaults = .standard) -> DeadRunOutcome? {
+        let markerURL = markerURL ?? slot.markerURL(in: support)
+        let cancelURL = cancelURL ?? slot.cancelURL(in: support)
+        let probeRunURL = probeRunURL ?? Self.probeRunURL(in: support)
         // The death is established FIRST and separately from the sweep below. It has to be: the settle
         // between them costs real work and, on a check, writes paid answers into the store, so running it
         // before knowing the run is dead would settle a check that is still going.
-        guard DetachedRunEnding.of(heartbeat: heartbeat(markerURL: markerURL, now: now)) == .died else {
+        guard DetachedRunEnding.of(heartbeat: heartbeat(slot: slot, markerURL: markerURL,
+                                                        now: now)) == .died else {
             return nil
         }
         // Settled BEFORE the marker is released: dropping it first would leave a window where the run
         // reads as finished while answers Dan paid for are still unaccounted for. Same ordering, and the
         // same reason, as settleAnyCheckBefore.
-        let report = settleOrphanedProbe(markerURL: probeRunURL, into: context, now: now)
+        let report = settleOrphanedProbe(slot: slot, support: support, markerURL: probeRunURL,
+                                         into: context, now: now, defaults: defaults)
         ReachabilityProbeMarker.clear(at: probeRunURL)
         // #2104: the marker and sentinel half is DetachedRunner's, shared with the scout read and the
         // reply run so the three cannot drift. The check settle above is the only Prep-specific part.
@@ -569,12 +620,19 @@ enum PrepQueueService {
     // RootView.startPrep it covered only two of the three ways a Prep run begins: a per-row Re-prep goes
     // straight to the service from ProspectMutations with no RootView call at all, so that path would have
     // kept the exact bug this issue is about.
+    //
+    // #2760: it settles the CHECK slot's files. A leftover marker from a check now names a run whose
+    // results and work-list are the check slot's, so reading the prep slot's here would settle a check
+    // against the prep run's own answers.
     @discardableResult
     static func settleAnyCheckBefore(prepRunIn context: ModelContext, now: Date,
-                                     probeRunURL: URL = defaultProbeRunURL,
+                                     support: URL = StoreLocation.handoffDirectory,
+                                     defaults: UserDefaults = .standard,
                                      onOrphanSettled: (ReachabilityRunReport) -> Void = { _ in })
         -> ReachabilityRunReport? {
-        let report = settleOrphanedProbe(markerURL: probeRunURL, into: context, now: now)
+        let probeRunURL = Self.probeRunURL(in: support)
+        let report = settleOrphanedProbe(slot: .check, support: support, markerURL: probeRunURL,
+                                         into: context, now: now, defaults: defaults)
         if let report { onOrphanSettled(report) }
         // Belt and braces: a settle that kept the marker (its save failed, #1677) must still not leave a
         // check marker standing in front of a Prep run. The answers are retried on the settle's own terms;
@@ -583,11 +641,16 @@ enum PrepQueueService {
         return report
     }
 
-    enum PrepLaunchError: LocalizedError {
+    enum PrepLaunchError: LocalizedError, Equatable {
         case nothingToPrep
         case nothingToCheck
         case runnerUnavailable
         case alreadyRunning
+        // #2760: a check is what is in the way, which `alreadyRunning` cannot say. Two launches share this
+        // vocabulary and both can meet either run, including the upgrade case where a check started by an
+        // older build holds the prep slot. Naming a Prep run there sends Dan looking for a run he never
+        // started.
+        case checkAlreadyRunning
 
         var errorDescription: String? {
             switch self {
@@ -599,6 +662,8 @@ enum PrepQueueService {
                 return "Couldn't find the Prep runner. Make sure Claude Code is installed and the Overture project is set up."
             case .alreadyRunning:
                 return "A Prep run is already in progress. Wait for it to finish."
+            case .checkAlreadyRunning:
+                return "A contact check is already going. Wait for it to finish."
             }
         }
     }
@@ -613,24 +678,31 @@ enum PrepQueueService {
     // double-run guard mid-batch.
     static let markerStaleAfter: TimeInterval = RunTimeouts.prep
 
-    // #2763: the name is RunSlot's to know, not this file's. Still the prep slot on every path today;
-    // #2760 is what moves the check onto its own.
-    static var defaultMarkerURL: URL {
-        RunSlot.prep.markerURL(in: StoreLocation.handoffDirectory)
+    // #2763: the name is RunSlot's to know, not this file's. #2760: and WHICH slot is now an argument on
+    // every one of these, because the check is on its own.
+    static func markerURL(for slot: RunSlot) -> URL {
+        slot.markerURL(in: StoreLocation.handoffDirectory)
     }
+
+    static func cancelURL(for slot: RunSlot) -> URL {
+        slot.cancelURL(in: StoreLocation.handoffDirectory)
+    }
+
+    static var defaultMarkerURL: URL { markerURL(for: .prep) }
 
     // #1038: the cooperative-cancel sentinel. Prep is launched through the same DetachedRunner as scout,
     // so its run has no trackable PID (backgrounded via `sh -c '... &'` with no handle) and a hard kill is
     // impossible; instead the app writes this file and the runner checks for it on each heartbeat tick and
     // stops cleanly. Same pattern and same predicates (`lib/scout-cancel.sh`) as ScoutExtractService.
-    static var defaultCancelURL: URL {
-        RunSlot.prep.cancelURL(in: StoreLocation.handoffDirectory)
-    }
+    static var defaultCancelURL: URL { cancelURL(for: .prep) }
 
     // Ask a running Prep run to stop. Writing the sentinel IS the request; the runner reads only its
     // presence, never its contents. Best-effort: if the run has already finished, the next startPrep
     // clears the file so it can never affect a later run.
-    static func requestCancel(cancelURL: URL = defaultCancelURL) {
+    //
+    // #2760: per slot, so Cancel on the check's takeover stops the check and not the prep run beside it.
+    static func requestCancel(slot: RunSlot, cancelURL: URL? = nil) {
+        let cancelURL = cancelURL ?? Self.cancelURL(for: slot)
         try? FileManager.default.createDirectory(at: cancelURL.deletingLastPathComponent(),
                                                  withIntermediateDirectories: true)
         try? Data().write(to: cancelURL)
@@ -640,18 +712,27 @@ enum PrepQueueService {
     // at once instead of leaving Dan looking at a screen identical to a working run. The sentinel is the
     // same file the runner obeys, so the two can never disagree; `startPrep` clears it before launching,
     // so it can only ever describe the run in flight.
-    static func cancelRequested(cancelURL: URL = defaultCancelURL) -> Bool {
-        FileManager.default.fileExists(atPath: cancelURL.path)
+    static func cancelRequested(slot: RunSlot, cancelURL: URL? = nil) -> Bool {
+        FileManager.default.fileExists(atPath: (cancelURL ?? Self.cancelURL(for: slot)).path)
     }
 
-    static func isRunning(markerURL: URL = defaultMarkerURL, now: Date) -> Bool {
-        DetachedRunner.isRunning(markerURL: markerURL, now: now, staleAfter: markerStaleAfter)
+    static func isRunning(slot: RunSlot, markerURL: URL? = nil, now: Date) -> Bool {
+        DetachedRunner.isRunning(markerURL: markerURL ?? Self.markerURL(for: slot), now: now,
+                                 staleAfter: markerStaleAfter)
+    }
+
+    // #2760: is ANY run alive, in either slot. The exclusion between a prep and a check is still in force
+    // (this phase makes concurrency safe; #2765 is what turns it on), so this is the question the launch
+    // guard and the launch-time archive both really ask.
+    static func anyRunIsRunning(now: Date, support: URL = StoreLocation.handoffDirectory) -> Bool {
+        RunSlot.allCases.contains { isRunning(slot: $0, markerURL: $0.markerURL(in: support), now: now) }
     }
 
     // #1822: the same marker, read for whether it is beating, stale, or gone. A progress screen needs
     // the difference between the last two; `isRunning` cannot carry it.
-    static func heartbeat(markerURL: URL = defaultMarkerURL, now: Date) -> RunHeartbeat {
-        DetachedRunner.heartbeat(markerURL: markerURL, now: now, staleAfter: markerStaleAfter)
+    static func heartbeat(slot: RunSlot, markerURL: URL? = nil, now: Date) -> RunHeartbeat {
+        DetachedRunner.heartbeat(markerURL: markerURL ?? Self.markerURL(for: slot), now: now,
+                                 staleAfter: markerStaleAfter)
     }
 
     // #1322: whether the in-flight detached run is a reachability probe (its marker is present) rather than
@@ -663,37 +744,93 @@ enum PrepQueueService {
     // as a check, short-circuited before any draft handling, and every draft it wrote was discarded with
     // nothing on screen saying why. The decision is RunKind's, in one place, so every caller of this gets
     // the same answer and the class is closed rather than the two paths #1809 traced (L30).
-    static func isProbeRunning(probeRunURL: URL = defaultProbeRunURL,
-                               markerURL: URL = defaultMarkerURL, now: Date,
-                               runStartedAt: Date? = lastRunStartedAt) -> Bool {
-        guard isRunning(markerURL: markerURL, now: now) else { return false }
-        let marker = (try? ReachabilityProbeMarker.read(from: probeRunURL)) ?? nil
-        return RunKind.of(runStartedAt: runStartedAt,
-                          probeMarkerStartedAt: marker?.startedAt) == .reachabilityCheck
+    static func isProbeRunning(now: Date, support: URL = StoreLocation.handoffDirectory,
+                               defaults: UserDefaults = .standard) -> Bool {
+        runInFlight(now: now, support: support, defaults: defaults) == .reachabilityCheck
     }
 
-    // #2614: WHICH run holds the single slot, or nil for none, in one call. Every surface that NAMES the
-    // run reads this rather than pairing `isRunning` with `isProbeRunning` itself: two booleans read
-    // separately is a state space with a corner the app can never be in (a probe running while Prep is
-    // not), and three surfaces were reading only the first of them and so called every check a prep run.
-    static func runInFlight(probeRunURL: URL = defaultProbeRunURL,
-                            markerURL: URL = defaultMarkerURL, now: Date,
-                            runStartedAt: Date? = lastRunStartedAt) -> RunKind? {
-        guard isRunning(markerURL: markerURL, now: now) else { return nil }
-        return isProbeRunning(probeRunURL: probeRunURL, markerURL: markerURL, now: now,
-                              runStartedAt: runStartedAt) ? .reachabilityCheck : .prep
+    // #2760: what a finished run IN THE PREP SLOT was.
+    //
+    // `RunKind.of` survives only here, and that is what makes the upgrade safe: a check launched by the OLD
+    // app is in flight in the prep slot with its marker beside it, and settles exactly as it does today.
+    // The check slot needs no such inference, because nothing but a check is ever in it. The rule was
+    // always fragile (it deduces identity by comparing two stamps, and #1809 is what it cost when it got it
+    // wrong); it is kept for the upgrade window and nothing else.
+    //
+    // It LOGS when the branch is genuinely taken, so the issue that deletes it (#2800) can be closed on
+    // evidence rather than on a guess about who has updated (L65). Nothing is said on the ordinary path: a
+    // line on every prep run is a line nobody reads.
+    static func prepSlotRunKind(runStartedAt: Date?, probeMarkerStartedAt: String?,
+                                log: (String) -> Void = { AgentLog.note($0) }) -> RunKind {
+        let kind = RunKind.of(runStartedAt: runStartedAt, probeMarkerStartedAt: probeMarkerStartedAt)
+        if kind == .reachabilityCheck {
+            // copy-inventory:ignore-start  a diagnostic log line, not a sentence Overture says on screen
+            log("a reachability check is in the prep slot: it was started by a build older than #2760. Settled as a check. #2800 deletes this branch once this line stops appearing.")
+            // copy-inventory:ignore-end
+        }
+        return kind
+    }
+
+    // #2614: WHICH run is in flight, or nil for none, in one call. Every surface that NAMES the run reads
+    // this rather than pairing `isRunning` with `isProbeRunning` itself: two booleans read separately is a
+    // state space with a corner the app can never be in, and three surfaces were reading only the first of
+    // them and so called every check a prep run.
+    //
+    // #2760: it asks BOTH slots. The check slot answers `.reachabilityCheck` outright, because only checks
+    // are in it. The prep slot goes through the legacy rule above.
+    //
+    // The two marker URLs are injectable together rather than derived from `support` alone, because the
+    // launch that asks this has already resolved its OWN marker and must be judged against that exact
+    // file. A guard reading a path the lock dance is not using would be asking about a different machine
+    // than the one it is protecting.
+    static func runInFlight(now: Date, support: URL = StoreLocation.handoffDirectory,
+                            prepMarkerURL: URL? = nil, checkMarkerURL: URL? = nil,
+                            defaults: UserDefaults = .standard) -> RunKind? {
+        if isRunning(slot: .prep, markerURL: prepMarkerURL ?? RunSlot.prep.markerURL(in: support),
+                     now: now) {
+            let marker = (try? ReachabilityProbeMarker.read(from: probeRunURL(in: support))) ?? nil
+            return prepSlotRunKind(runStartedAt: lastRunStartedAt(slot: .prep, defaults: defaults),
+                                   probeMarkerStartedAt: marker?.startedAt)
+        }
+        if isRunning(slot: .check, markerURL: checkMarkerURL ?? RunSlot.check.markerURL(in: support),
+                     now: now) {
+            return .reachabilityCheck
+        }
+        return nil
+    }
+
+    // #2760: the exclusion, in ONE place, spoken by both launches.
+    //
+    // It is STILL IN FORCE after this phase, deliberately. Making the state per slot is what makes running
+    // the two at once SAFE; #2765 is what turns it on, because it owns the one genuine domain conflict (a
+    // draft written against a contact a check is midway through replacing).
+    //
+    // The refusal names WHICH run is in the way. `alreadyRunning` names a Prep run, so it is wrong for
+    // every case where a check is what holds the slot, including the upgrade window in which a legacy check
+    // sits in the prep slot and a new check would otherwise find the check slot empty and start a second.
+    static func runInFlightRefusal(now: Date, support: URL = StoreLocation.handoffDirectory,
+                                   prepMarkerURL: URL? = nil, checkMarkerURL: URL? = nil,
+                                   defaults: UserDefaults = .standard) -> PrepLaunchError? {
+        switch runInFlight(now: now, support: support, prepMarkerURL: prepMarkerURL,
+                           checkMarkerURL: checkMarkerURL, defaults: defaults) {
+        case .none: return nil
+        case .prep: return .alreadyRunning
+        case .reachabilityCheck: return .checkAlreadyRunning
+        }
     }
 
     // Writes the work-list and launches the detached run. Returns the count queued.
     // URLs are injectable for testing; production uses the default locations.
     @discardableResult
     static func startPrep(from context: ModelContext, now: Date,
+                          support: URL = StoreLocation.handoffDirectory,
+                          defaults: UserDefaults = .standard,
                           includedKeys: Set<String>? = nil,
-                          queueURL: URL = PrepQueueBuilder.defaultURL,
-                          markerURL: URL = defaultMarkerURL,
+                          queueURL: URL? = nil,
+                          markerURL: URL? = nil,
                           voiceFeedbackURL: URL = VoiceFeedbackBuilder.defaultURL,
                           recentOpenersURL: URL = RecentOpenersBuilder.defaultURL,
-                          cancelURL: URL = defaultCancelURL,
+                          cancelURL: URL? = nil,
                           onOrphanSettled: (ReachabilityRunReport) -> Void = { _ in },
                           // #1824: how a show's own listing page is loaded, so the run is handed what the
                           // show IS instead of drafting blind. Injected for tests; the production default
@@ -709,13 +846,26 @@ enum PrepQueueService {
                           // unwatched: no takeover, and no ingest when it finished. Fires only once the
                           // launch has actually succeeded.
                           announce: @MainActor () -> Void = { DetachedRunActivity.prep.runStarted() },
-                          launch: @MainActor () async throws -> Void = launchRunner) async throws -> Int {
-        guard !isRunning(markerURL: markerURL, now: now) else { throw PrepLaunchError.alreadyRunning }
+                          launch: @MainActor () async throws -> Void = { try launchRunner(slot: .prep) })
+        async throws -> Int {
+        // An injected marker decides the support directory for everything else, the exclusion included:
+        // a guard that read the live folder while the lock dance read a temp one would be asking about a
+        // different machine than the one it is protecting.
+        let support = markerURL?.deletingLastPathComponent() ?? support
+        let queueURL = queueURL ?? RunSlot.prep.queueURL(in: support)
+        let markerURL = markerURL ?? RunSlot.prep.markerURL(in: support)
+        let cancelURL = cancelURL ?? RunSlot.prep.cancelURL(in: support)
+        // #2760: the exclusion, still in force and now stated once for both launches. It names a CHECK when
+        // a check is what is in the way, which the old `alreadyRunning` could not: that sentence names a
+        // Prep run, and Dan would have gone looking for one that was not there.
+        if let refusal = runInFlightRefusal(now: now, support: support, prepMarkerURL: markerURL,
+                                            defaults: defaults) { throw refusal }
         // #1809: every Prep run passes through here, whichever surface started it, so this is the one place
         // that can guarantee no leftover check marker survives to relabel this run and discard its drafts.
         // A per-row Re-prep reaches the service directly with no RootView call, so doing this in the view
         // covered only two of the three ways a Prep run can begin.
-        settleAnyCheckBefore(prepRunIn: context, now: now, onOrphanSettled: onOrphanSettled)
+        settleAnyCheckBefore(prepRunIn: context, now: now, support: support, defaults: defaults,
+                             onOrphanSettled: onOrphanSettled)
 
         let stamp = ISO8601DateFormatter().string(from: now)
         // #5 Phase 1: stamp an A/B arm onto each eligible prospect under the active experiment (sticky,
@@ -774,7 +924,7 @@ enum PrepQueueService {
                                        backupURL: VoiceNotesProtector.defaultBackupURL)
 
             try await launch()
-            UserDefaults.standard.set(now, forKey: lastRunKey)
+            recordRunStarted(slot: .prep, at: now, defaults: defaults)
             announce()     // #1938: the run is real and launched; tell the app rather than making it look
             // #1940: record which re-prep requests this run is carrying, now that it is genuinely under
             // way. A queued re-prep takes a show out of the Review count, so when the run ends without
@@ -813,7 +963,11 @@ enum PrepQueueService {
         try? context.save()
     }
 
-    static let lastRunKey = "prepLastRunStartedAt"
+    // #2760: per slot. Shared, a check launched after a prep moved the prep's own start stamp, and the
+    // prep's finished run was then judged (by `RunKind.of` and by `DetachedRunOutcome.phase`) against a
+    // moment belonging to a run it knows nothing about. `.prep` keeps today's key, so an upgrade does not
+    // forget when the last prep ran.
+    static let lastRunKey = RunSlot.prep.lastRunStartedAtKey
 
     // Prep could not have run before Overture existed, so any persisted timestamp older than this
     // floor is a sentinel/epoch artifact (e.g. a fresh Debug store) and means "never ran".
@@ -826,23 +980,28 @@ enum PrepQueueService {
         return stored
     }
 
-    static var lastRunStartedAt: Date? {
-        sanitizedLastRun(UserDefaults.standard.object(forKey: lastRunKey) as? Date)
+    static func lastRunStartedAt(slot: RunSlot, defaults: UserDefaults = .standard) -> Date? {
+        sanitizedLastRun(defaults.object(forKey: slot.lastRunStartedAtKey) as? Date)
     }
+
+    static func recordRunStarted(slot: RunSlot, at now: Date, defaults: UserDefaults = .standard) {
+        defaults.set(now, forKey: slot.lastRunStartedAtKey)
+    }
+
+    static var lastRunStartedAt: Date? { lastRunStartedAt(slot: .prep) }
 
     // Launches the Prep runner script detached. The script (docs/prep-runbook) drives
     // a Claude Code run that reads the queue and writes overture-prep-results.json.
     // Resolved from a known location so the app never blocks on it.
-    private static func launchRunner() throws {
+    private static func launchRunner(slot: RunSlot) throws {
         guard let script = runnerScriptURL(), FileManager.default.isExecutableFile(atPath: script.path) else {
             throw PrepLaunchError.runnerUnavailable
         }
-        // #2763: the slot is stated rather than left to the runner's default. Both are `.prep` today, and
-        // saying so is what makes the check's move onto its own slot (#2760) a one-line change here rather
-        // than a search for who relies on the default.
+        // #2763: the slot is stated rather than left to the runner's default. #2760: and it is now the
+        // caller's, so a check tells the runner to open the check slot's files.
         try DetachedRunner.launch(scriptPath: script.path,   // detached; never waits
                                   supportDirectory: StoreLocation.handoffDirectory,
-                                  extra: RunSlot.environment(base: [:], slot: .prep))
+                                  extra: RunSlot.environment(base: [:], slot: slot))
     }
 
     // The runner script (mac/scripts/prep-run.sh in the repo). Path is configured once via a string

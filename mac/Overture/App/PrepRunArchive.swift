@@ -28,17 +28,31 @@ import Foundation
 //   A run that went wrong is archived too. A check that died leaves a work-list and no results at all, and
 //   that is precisely the run somebody will want to read later (L47), so what is present is kept and the
 //   log names what was missing rather than the whole thing being skipped as not worth having.
+//
+// #2760: PER SLOT. One `prep-run-archives` with one `keep` had two separate defects in it. A busy night of
+// checks evicts the prep archives #1616's learner reads, because they share a rotation. And the folder is
+// named for the RUN, so two runs whose `generatedAt` lands in the same second collide on the name, at which
+// point the second reads as `alreadyArchived` (a true answer for a retry, a lie for a different run) and
+// its evidence is silently dropped. Two folders make both impossible rather than unlikely.
 enum PrepRunArchive {
-    static let folderName = "prep-run-archives"
-    static let queueFilename = "overture-prep-queue.json"
-    static let resultsFilename = "overture-prep-results.json"
+    static func folderName(for slot: RunSlot) -> String { slot.archiveFolderName }
+
+    // The names the files keep INSIDE the archive, which are the slot's own: a check's archive holding a
+    // file called `overture-prep-queue.json` would be unreadable evidence, and nothing later could tell
+    // which run it came from.
+    static func queueFilename(for slot: RunSlot) -> String { slot.queueFileName }
+    static func resultsFilename(for slot: RunSlot) -> String { slot.resultsFileName }
+
     static let logFilename = "archive.log"
 
     // Thirty runs of about 14 KB is under half a megabyte, and at the one or two paid runs a night Dan
     // actually does it is roughly a month of history: enough for #1616's learner to hold real samples,
     // and enough that a question about last week's run is still answerable. Deliberately larger than the
     // store backup's ten, because each of those is a copy of the entire SwiftData store.
-    static let keep = 30
+    //
+    // #2760: the number is the SLOT's, so one rotation can be retuned without silently changing how much of
+    // the other's history survives.
+    static func keep(for slot: RunSlot) -> Int { slot.archiveKeep }
 
     // The working folder's marker. Outside the plain `yyyyMMdd-HHmmss` shape on purpose, so rotation
     // neither counts nor deletes one, exactly as #1410 keeps a refusal snapshot out of the rotation.
@@ -51,8 +65,8 @@ enum PrepRunArchive {
 
     static let maxLogBytes = 256 * 1_024
 
-    static func archivesDirectory(handoffDirectory: URL) -> URL {
-        handoffDirectory.appendingPathComponent(folderName, isDirectory: true)
+    static func archivesDirectory(slot: RunSlot, handoffDirectory: URL) -> URL {
+        slot.archivesDirectory(in: handoffDirectory)
     }
 
     // A finished archive, as opposed to a working folder or anything else that lands in here.
@@ -90,16 +104,19 @@ enum PrepRunArchive {
     // run's own output, and the output matters more than the copy of it, so a failure here is reported and
     // then got out of the way of whatever the caller was really doing.
     @discardableResult
-    static func archiveFinishedRun(queueURL: URL, resultsURL: URL, now: Date,
-                                   keep: Int = keep,
+    static func archiveFinishedRun(slot: RunSlot, handoffDirectory: URL, now: Date,
+                                   keep: Int? = nil,
                                    fileManager: FileManager = .default,
                                    reportProblem: (String) -> Void = { AgentLog.problem($0) }) -> Outcome {
-        let sources = [(queueFilename, queueURL), (resultsFilename, resultsURL)]
+        let keep = keep ?? Self.keep(for: slot)
+        let queueURL = slot.queueURL(in: handoffDirectory)
+        let resultsURL = slot.resultsURL(in: handoffDirectory)
+        let sources = [(queueFilename(for: slot), queueURL), (resultsFilename(for: slot), resultsURL)]
         let present = sources.filter { fileManager.fileExists(atPath: $0.1.path) }
         guard !present.isEmpty else { return .noRunOnDisk }
         let missing = sources.map(\.0).filter { name in !present.contains { $0.0 == name } }
 
-        let archives = archivesDirectory(handoffDirectory: queueURL.deletingLastPathComponent())
+        let archives = archivesDirectory(slot: slot, handoffDirectory: handoffDirectory)
         let stamp = runStamp(queueURL: queueURL, resultsURL: resultsURL, now: now, fileManager: fileManager)
         let destination = archives.appendingPathComponent(stamp, isDirectory: true)
 

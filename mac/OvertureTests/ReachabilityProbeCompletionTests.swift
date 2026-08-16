@@ -49,7 +49,7 @@ struct ReachabilityProbeCompletionTests {
                                                              formUrl: nil, provenance: "act")], draft: nil)
         ]))
 
-        let report = PrepQueueService.settleReachabilityProbe(
+        let report = PrepQueueService.settleReachabilityProbe(slot: .check, 
             markerURL: markerURL, resultsURL: resultsURL, into: ctx, now: now, defaults: freshDefaults())
 
         #expect(report != nil)
@@ -83,7 +83,7 @@ struct ReachabilityProbeCompletionTests {
             PrepResult(naturalKey: a, contacts: [], draft: nil)
         ]))
 
-        _ = PrepQueueService.settleReachabilityProbe(
+        _ = PrepQueueService.settleReachabilityProbe(slot: .check, 
             markerURL: markerURL, resultsURL: resultsURL, into: ctx, now: now, defaults: freshDefaults())
 
         let pa = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == a })).first
@@ -99,7 +99,7 @@ struct ReachabilityProbeCompletionTests {
         let now = Date(timeIntervalSince1970: 1_780_000_000)
         try ReachabilityProbeMarker.write(ReachabilityProbeMarker(keys: [a], startedAt: "s"), to: markerURL)
 
-        let report = PrepQueueService.settleReachabilityProbe(
+        let report = PrepQueueService.settleReachabilityProbe(slot: .check, 
             markerURL: markerURL, resultsURL: resultsURL, into: ctx, now: now, defaults: freshDefaults())
 
         #expect(report != nil)   // still a probe, and the marker still clears
@@ -127,7 +127,7 @@ struct ReachabilityProbeCompletionTests {
             PrepResult(naturalKey: keys[1], contacts: [], draft: nil),
         ]))
 
-        _ = PrepQueueService.settleReachabilityProbe(
+        _ = PrepQueueService.settleReachabilityProbe(slot: .check, 
             markerURL: markerURL, resultsURL: resultsURL, into: ctx, now: now, defaults: freshDefaults())
 
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
@@ -156,12 +156,12 @@ struct ReachabilityProbeCompletionTests {
         ]))
         // First settle consumes the file.
         try ReachabilityProbeMarker.write(ReachabilityProbeMarker(keys: [a, b], startedAt: "s"), to: markerURL)
-        _ = PrepQueueService.settleReachabilityProbe(markerURL: markerURL, resultsURL: resultsURL,
+        _ = PrepQueueService.settleReachabilityProbe(slot: .check, markerURL: markerURL, resultsURL: resultsURL,
                                                      into: ctx, now: now, defaults: defaults)
         // The marker is written again, as a relaunch mid-settle would leave it.
         try ReachabilityProbeMarker.write(ReachabilityProbeMarker(keys: [a, b], startedAt: "s"), to: markerURL)
         let later = now.addingTimeInterval(60)
-        _ = PrepQueueService.settleReachabilityProbe(markerURL: markerURL, resultsURL: resultsURL,
+        _ = PrepQueueService.settleReachabilityProbe(slot: .check, markerURL: markerURL, resultsURL: resultsURL,
                                                      into: ctx, now: later, defaults: defaults)
 
         let pa = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == a })).first
@@ -174,7 +174,7 @@ struct ReachabilityProbeCompletionTests {
         let ctx = ModelContext(try container())
         _ = newProspect(ctx, group: "Aurora Strings")
         let d = dir()
-        let report = PrepQueueService.settleReachabilityProbe(
+        let report = PrepQueueService.settleReachabilityProbe(slot: .check, 
             markerURL: d.appendingPathComponent("absent.json"),
             resultsURL: d.appendingPathComponent("results.json"),
             into: ctx, now: Date(), defaults: freshDefaults())
@@ -206,7 +206,7 @@ struct ReachabilityProbeCompletionTests {
             PrepResult(naturalKey: a, contacts: [], draft: nil)
         ]))
 
-        _ = PrepQueueService.settleReachabilityProbe(
+        _ = PrepQueueService.settleReachabilityProbe(slot: .check, 
             markerURL: markerURL, resultsURL: resultsURL, into: ctx, now: now, defaults: freshDefaults())
 
         let after = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == a })).first
@@ -226,7 +226,7 @@ struct ReachabilityProbeCompletionTests {
             PrepResult(naturalKey: a, contacts: [], draft: nil)
         ]))
 
-        _ = PrepQueueService.settleReachabilityProbe(
+        _ = PrepQueueService.settleReachabilityProbe(slot: .check, 
             markerURL: markerURL, resultsURL: resultsURL, into: ctx, now: now, defaults: freshDefaults())
 
         let after = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == a })).first
@@ -249,7 +249,7 @@ struct ReachabilityProbeCompletionTests {
                                                              provenance: "act")], draft: nil)
         ]))
 
-        _ = PrepQueueService.settleReachabilityProbe(
+        _ = PrepQueueService.settleReachabilityProbe(slot: .check, 
             markerURL: markerURL, resultsURL: resultsURL, into: ctx, now: now, defaults: freshDefaults())
 
         let after = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == a })).first
@@ -283,7 +283,7 @@ struct ReachabilityProbeCompletionTests {
                                                              provenance: "act")], draft: nil)
         ]))
 
-        _ = PrepQueueService.settleReachabilityProbe(
+        _ = PrepQueueService.settleReachabilityProbe(slot: .check, 
             markerURL: markerURL, resultsURL: resultsURL, into: ctx, now: now, defaults: freshDefaults())
 
         let after = try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == a })).first

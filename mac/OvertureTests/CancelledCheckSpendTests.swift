@@ -122,7 +122,7 @@ struct CancelledCheckSpendTests {
             .write(to: resultsURL)
         try Data().write(to: cancelURL)
 
-        let report = try #require(PrepQueueService.settleReachabilityProbe(
+        let report = try #require(PrepQueueService.settleReachabilityProbe(slot: .check, 
             markerURL: markerURL, resultsURL: resultsURL,
             queueURL: dir.appendingPathComponent("queue.json"),
             downbeatURL: dir.appendingPathComponent("downbeat.json"),
@@ -164,7 +164,7 @@ struct CancelledCheckSpendTests {
         try JSONEncoder().encode(PrepResults(version: 2, generatedAt: "now", results: []))
             .write(to: resultsURL)
 
-        let report = try #require(PrepQueueService.settleReachabilityProbe(
+        let report = try #require(PrepQueueService.settleReachabilityProbe(slot: .check, 
             markerURL: markerURL, resultsURL: resultsURL,
             queueURL: dir.appendingPathComponent("queue.json"),
             downbeatURL: dir.appendingPathComponent("downbeat.json"),

@@ -98,11 +98,13 @@ struct PrepTakeoverWiringGuardTests {
     @Test func rootViewPresentsThePrepTakeoverInThePreppingPhase() {
         let rootView = source("Overture/App/RootView.swift")
         #expect(!rootView.isEmpty)
-        // The takeover sheet is bound to the prep-running flag and renders the shared progress view in the
-        // prepping phase.
-        #expect(rootView.contains(".sheet(isPresented: $prepSheetShown)"))
-        // #1322: the phase is prepping for a Prep, probing for a reachability probe (its marker present).
-        #expect(rootView.contains("PrepQueueService.isProbeRunning(now: Date()) ? .probing : .prepping"))
-        #expect(rootView.contains("Snapshot.livePrepping()"))
+        // #2760: the takeover sheet is bound to the per-slot takeover state and renders the shared
+        // progress view in the prepping phase. One `prepSheetShown` flag was what let the first run to
+        // finish dismiss the screen out from under the second.
+        #expect(rootView.contains(".sheet(isPresented: runTakeoverBinding) { prepProgressModal }"))
+        // #1322: the phase is prepping for a Prep, probing for a reachability check. #2760: the slot says
+        // which, except in the upgrade window where a legacy check still sits in the prep slot.
+        #expect(rootView.contains("slot == .check || PrepQueueService.isProbeRunning(now: Date())"))
+        #expect(rootView.contains("Snapshot.livePrepping("))
     }
 }

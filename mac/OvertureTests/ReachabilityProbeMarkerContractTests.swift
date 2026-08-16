@@ -225,7 +225,7 @@ struct UnreadableCheckMarkerTests {
         try Data(#"{"keys":["aurora-strings|2026-"#.utf8).write(to: markerURL)
         try writeResults(resultsURL, resultsWithADraft(for: key))
 
-        let report = PrepQueueService.settleReachabilityProbe(
+        let report = PrepQueueService.settleReachabilityProbe(slot: .check, 
             markerURL: markerURL, resultsURL: resultsURL, into: ctx, now: now, defaults: defaults)
 
         // Not a check: the settle declines, which is what sends RootView down the Prep ingest.
@@ -234,10 +234,10 @@ struct UnreadableCheckMarkerTests {
         #expect(after?.reachabilityProbedAt == nil, "an unreadable marker must not stamp any show probed")
         // And, the point of the whole issue: the results file is untouched, so the Prep ingest that
         // follows still has the run's work to read.
-        #expect(PrepImporter.hasUnconsumedResults(at: resultsURL, defaults: defaults))
+        #expect(PrepImporter.hasUnconsumedResults(slot: .prep, at: resultsURL, defaults: defaults))
 
         // The rest of the shipping completion path, exactly as `ingestPrep()` performs it.
-        let outcome = PrepImporter.consumeIfNew(
+        let outcome = PrepImporter.consumeIfNew(slot: .prep, 
             at: resultsURL, into: ctx, defaults: defaults,
             ingest: { try PrepImporter.ingestFile(at: $0, into: $1, isProbe: false, now: now) })
         #expect(outcome?.drafted == 1, "the draft the run wrote must land, not be discarded")
@@ -257,7 +257,7 @@ struct UnreadableCheckMarkerTests {
         try ReachabilityProbeMarker.write(ReachabilityProbeMarker(keys: [key], startedAt: "s"), to: markerURL)
         try writeResults(resultsURL, resultsWithADraft(for: key))
 
-        let report = PrepQueueService.settleReachabilityProbe(
+        let report = PrepQueueService.settleReachabilityProbe(slot: .check, 
             markerURL: markerURL, resultsURL: resultsURL, into: ctx, now: now, defaults: freshDefaults())
 
         #expect(report != nil)
@@ -273,10 +273,12 @@ struct UnreadableCheckMarkerTests {
         let rootView = SourceGuardHelper.source("Overture/App/RootView.swift")
         #expect(!rootView.isEmpty)
 
-        let body = try SourceGuard.functionBody(named: "settleFinishedPrepRun", in: rootView)
+        let body = try SourceGuard.functionBody(named: "settleFinishedRun", in: rootView)
         // The nil answer is what falls through to the Prep ingest. Both halves are asserted: the routing
         // reads the settle's result, and the else arm is the ordinary ingest.
-        #expect(body.contains("if let report = PrepQueueService.settleReachabilityProbe(into: context, now: Date())"))
+        // #2760: the settle is the ENDING RUN's slot, not a fixed one, so a check settles the check slot's
+        // results and a prep run falls through to the ingest below.
+        #expect(body.contains("if let report = PrepQueueService.settleReachabilityProbe(slot: slot, into: context, now: Date())"))
         #expect(body.contains("ingestPrep()"))
     }
 }

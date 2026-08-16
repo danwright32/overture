@@ -292,7 +292,7 @@ struct ReachabilityRecheckSettleTests {
         try ReachabilityProbeMarker.write(ReachabilityProbeMarker(keys: [a], startedAt: "s"), to: markerURL)
         try writeResults(resultsURL, PrepResults(version: 2, generatedAt: "now", results: [answer(a)]))
 
-        _ = PrepQueueService.settleReachabilityProbe(markerURL: markerURL, resultsURL: resultsURL,
+        _ = PrepQueueService.settleReachabilityProbe(slot: .check, markerURL: markerURL, resultsURL: resultsURL,
                                                      into: ctx, now: now, defaults: freshDefaults())
 
         #expect(try fetch(ctx, a)?.reachabilityRecheckRequestedAt == nil,
@@ -315,7 +315,7 @@ struct ReachabilityRecheckSettleTests {
                                           to: markerURL)
         try writeResults(resultsURL, PrepResults(version: 2, generatedAt: "now", results: [answer(a)]))
 
-        _ = PrepQueueService.settleReachabilityProbe(markerURL: markerURL, resultsURL: resultsURL,
+        _ = PrepQueueService.settleReachabilityProbe(slot: .check, markerURL: markerURL, resultsURL: resultsURL,
                                                      into: ctx, now: now, defaults: freshDefaults())
 
         #expect(try fetch(ctx, b)?.reachabilityRecheckRequestedAt == requestedAt,

@@ -17,11 +17,12 @@ import Foundation
 // `.prep` returns today's exact filenames. Nothing on disk moves and no run in flight at an update is
 // orphaned.
 //
-// SHIPPED WITH ONE LIVE USER. In this phase the app hands every run the `.prep` slot, so `.check`'s paths
-// exist and nothing writes them yet: the check keeps sharing the prep slot's files, and the exclusion
-// between the two is unchanged. #2760 is what moves the check onto its own slot, and #2765 is what lets
-// the two run at once. Named here rather than left to be rediscovered, because a deliberately inactive
-// half is indistinguishable from a forgotten one (L65).
+// #2760 moved the reachability check onto `.check`: its files, its announce, its results fingerprint, its
+// last-run stamp, its archive, its watcher and its takeover are all its own. The EXCLUSION between the two
+// is deliberately unchanged and still in force, because #2765 owns the one genuine domain conflict (a
+// draft written against a contact a check is midway through replacing). So this phase makes concurrency
+// SAFE; #2765 is what turns it on. Named here rather than left to be rediscovered, because a deliberately
+// inactive half is indistinguishable from a forgotten one (L65).
 enum RunSlot: String, CaseIterable, Sendable {
     case prep
     case check
@@ -52,6 +53,55 @@ enum RunSlot: String, CaseIterable, Sendable {
         support.appendingPathComponent("\(rawValue)-events-chunk-\(chunk).fifo")
     }
 
+    // The bare NAMES, for the one caller that needs a name rather than a path: the archive copies these
+    // files into a folder of its own. Derived from the same builders above against a neutral base, so a
+    // rename cannot reach the path and miss the name.
+    private static let nameBase = URL(fileURLWithPath: "/")
+    var queueFileName: String { queueURL(in: Self.nameBase).lastPathComponent }
+    var resultsFileName: String { resultsURL(in: Self.nameBase).lastPathComponent }
+    var archiveFolderName: String { archivesDirectory(in: Self.nameBase).lastPathComponent }
+
+    // MARK: - The archive
+
+    // #1878 keeps each paid run's work-list and results in a dated folder. #2760 gives each slot its own,
+    // for two reasons that are separate defects. One folder with one `keep` means a busy night of checks
+    // evicts the prep archives #1616's learner reads. And the folder is named for the RUN (from its own
+    // `generatedAt`), so two runs stamped in the same second land on one name, at which point the second
+    // reads as `alreadyArchived` and its evidence is silently dropped. Separate folders make both
+    // impossible rather than unlikely.
+    func archivesDirectory(in support: URL) -> URL {
+        support.appendingPathComponent("\(rawValue)-run-archives", isDirectory: true)
+    }
+
+    // How many of this slot's runs are kept. Its own value rather than a shared constant, so one rotation
+    // can be retuned without silently changing how much of the other's history survives. Both are 30
+    // today, which is what `prep-run-archives` has held since #1878.
+    var archiveKeep: Int { 30 }
+
+    // MARK: - The stored state
+
+    // #2760: the keys are per slot for the same reason the files are. `prep.consumedResultsFingerprint`
+    // decides `anIngestIsStillToCome`, which chooses between filling blanks and writing the `.noEmailFound`
+    // FLOOR over a real answer with a 90 day freshness stamp locking the show out of a re-check (#1623).
+    // Two slots ping-ponging one key makes it describe the wrong file.
+    //
+    // `.prep` reproduces today's exact key, so an upgrade does not re-ingest the last run on first launch.
+    var resultsConsumedKey: String { "\(rawValue).consumedResultsFingerprint" }
+
+    // Half of `RunKind.of` and half of `DetachedRunOutcome.phase`. Shared, a check launched after a prep
+    // moves the prep's own start stamp, and the prep's finished run is then judged against a moment that
+    // belongs to a run it knows nothing about. `.prep` keeps today's key for the same upgrade reason.
+    var lastRunStartedAtKey: String { "\(rawValue)LastRunStartedAt" }
+
+    // Every stored key this slot owns, labelled, on the same reasoning as `allPaths`: a collision check
+    // written out beside the list it is checking only ever checks the entries somebody remembered (L96).
+    func allDefaultsKeys() -> [String: String] {
+        [
+            "resultsConsumed": resultsConsumedKey,
+            "lastRunStartedAt": lastRunStartedAtKey,
+        ]
+    }
+
     // Every path this slot owns, labelled. Exists so the collision check can be DERIVED rather than
     // written out beside the list it is checking: a hand-written registry only ever checks the entries
     // somebody remembered, and the entries you remembered are the ones already safe (L96).
@@ -74,6 +124,7 @@ enum RunSlot: String, CaseIterable, Sendable {
             "chunkLog": chunkLogURL(chunk: 0, in: support),
             "chunkEvents": chunkEventsURL(chunk: 0, in: support),
             "chunkEventsFIFO": chunkEventsFIFOURL(chunk: 0, in: support),
+            "archives": archivesDirectory(in: support),
         ]
     }
 

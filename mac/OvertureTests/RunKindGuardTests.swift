@@ -81,8 +81,9 @@ struct StaleMarkerNeverClaimsAPrepRunTests {
     // that ended an hour ago left its marker behind. The run must read as a Prep run.
     @Test func aPrepRunWithAnHourOldCheckMarkerIsNotAProbe() throws {
         let d = dir()
-        let runMarker = d.appendingPathComponent("prep-run.json")
-        let probeMarker = d.appendingPathComponent("probe-run.json")
+        let runMarker = RunSlot.prep.markerURL(in: d)
+        let probeMarker = PrepQueueService.probeRunURL(in: d)
+        let defaults = UserDefaults(suiteName: "RunKindGuard-\(UUID().uuidString)")!
         let now = Date(timeIntervalSince1970: 1_780_000_000)
         try liveRunMarker(at: runMarker, startedAt: now)
         try ReachabilityProbeMarker.write(
@@ -90,22 +91,23 @@ struct StaleMarkerNeverClaimsAPrepRunTests {
                                     startedAt: ISO8601DateFormatter().string(from: now.addingTimeInterval(-3600))),
             to: probeMarker)
 
-        #expect(PrepQueueService.isProbeRunning(probeRunURL: probeMarker, markerURL: runMarker,
-                                                now: now, runStartedAt: now) == false)
+        defaults.set(now, forKey: RunSlot.prep.lastRunStartedAtKey)
+        #expect(PrepQueueService.isProbeRunning(now: now, support: d, defaults: defaults) == false)
     }
 
     // And a check really in flight still reads as one, so closing the hole does not close the feature.
     @Test func aCheckStartedWithThisRunIsAProbe() throws {
         let d = dir()
-        let runMarker = d.appendingPathComponent("prep-run.json")
-        let probeMarker = d.appendingPathComponent("probe-run.json")
+        let runMarker = RunSlot.prep.markerURL(in: d)
+        let probeMarker = PrepQueueService.probeRunURL(in: d)
+        let defaults = UserDefaults(suiteName: "RunKindGuard-\(UUID().uuidString)")!
         let now = Date(timeIntervalSince1970: 1_780_000_000)
         try liveRunMarker(at: runMarker, startedAt: now)
         try ReachabilityProbeMarker.write(
             ReachabilityProbeMarker(keys: ["k"], startedAt: ISO8601DateFormatter().string(from: now)),
             to: probeMarker)
 
-        #expect(PrepQueueService.isProbeRunning(probeRunURL: probeMarker, markerURL: runMarker,
-                                                now: now, runStartedAt: now))
+        defaults.set(now, forKey: RunSlot.prep.lastRunStartedAtKey)
+        #expect(PrepQueueService.isProbeRunning(now: now, support: d, defaults: defaults))
     }
 }

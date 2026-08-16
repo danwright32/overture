@@ -33,6 +33,7 @@ the workflow's runbook is its spec.
 | `prep-run-archives/<yyyyMMdd-HHmmss>/` | App (`PrepRunArchive.archiveFinishedRun`, #1878: on every run completion, and at launch for a run that ended while Overture was closed) | By hand today (the evidence for "did the run do what the runbook told it to"), and the intended source of history for #1616's wait estimate | n/a: the folder holds byte copies of the two files above under their live names, so each keeps its own version | `fixtures/prep-queue/`, `fixtures/prep-results/` (the same fixtures, read by the archive's own tests) | `PrepRunArchiveTests.swift` |
 | `prep-cancel` | App (`PrepQueueService.requestCancel`) writes it to ask a running Prep run to stop; App (`startPrep`) clears any stale one before a fresh run | `prep-run.sh` (`lib/scout-cancel.sh`'s `cancel_requested`, on each heartbeat tick; `clear_cancel` on exit) | n/a (empty sentinel; presence IS the request, contents never read) | none | `PrepReplyCancelServiceTests.swift`, `lib/scout-cancel.test.sh`, `PrepReplyRunnerWiringGuardTests.swift` |
 | `reachability-probe-run.json` | App (`PrepQueueService.startReachabilityProbe`, via `ReachabilityProbeMarker.write`), rewritten by `settleReachabilityProbe` when a settle could not save, removed when it settles | App (`ReachabilityProbeMarker.read`, from `settleReachabilityProbe` / `settleOrphanedProbe` / `isProbeRunning`); `prep-run.sh` reads its PRESENCE only, to chunk the run and pick the cheaper model | none (two fields; `settleAttempts` added additively and optionally in #1809) | `fixtures/reachability-probe-run/` | `ReachabilityProbeMarkerContractTests.swift`, `UnfinishedCheckTests.swift`, `RunKindGuardTests.swift`, `prep-run-chunking.test.sh` |
+| `run-boundary-violation.log` | `prep-run.sh` (`lib/run-slot.sh`'s `slot_check_foreign_results`, #2764: appends one entry when a run's EXIT trap finds another slot's results file changed while it ran) | App (`RunBoundaryViolations.newlyReported`, #2760: counted at launch and at each settle, and said out loud once per violation as a `.warning`) | n/a (a plain log; the app counts lines carrying `BOUNDARY VIOLATION` and stores the count under `runBoundaryViolationsReported`) | none | `RunBoundaryViolationTests.swift`, `lib/run-slot.test.sh` |
 | `overture-reply-classify-queue.json` | App (`ReplyClassifyQueueBuilder.encode`) | Classify+drafter run (workflow) | 1, 2, 3 | `fixtures/reply-classify/` | `ReplyClassifyContractTests.swift` |
 | `overture-reply-classify-results.json` | Classify+drafter run (workflow, rewrites it after every item, not only once at the end; #1081) | App (`ReplyClassifyResultsDecoder`) | 1, 2, 3 | `fixtures/reply-classify/` | `ReplyClassifyContractTests.swift` |
 | `overture-reply-classify-progress.json` | `reply-classify-run.sh` **only**: seeds it, then derives every update from `overture-reply-classify-results.json` itself (`lib/progress-watcher.sh`'s `update_progress_from_results`, the same helper prep and scout use). #1081: the workflow never writes this file; it rewrites the results file incrementally and the script counts its entries, so a run that forgets to self-report can no longer leave the count wrong. | App (`ReplyClassifyProgressDecoder`) | 1 | `fixtures/reply-classify-progress/` | `ReplyClassifyProgressContractTests.swift`, `lib/progress-watcher.test.sh` |
@@ -267,9 +268,23 @@ app bundle, and `update-overture.sh` fast-forwards the checkout before the rebui
 routinely meets an app that names no slot. An UNKNOWN value is refused, and the refusal is written to
 `runner-launch.log`, which is slot-independent because the slot is what names every other log.
 
-A second slot, `check`, exists and nothing writes it yet: the reachability check still shares the prep
-slot's files, and the exclusion between the two is unchanged. #2760 moves the check onto its own slot and
-#2765 lets the two run at once. Until then there are no `overture-check-*` files on disk.
+The second slot, `check`, is LIVE as of #2760: the reachability check writes `overture-check-queue.json`,
+`overture-check-results.json`, `overture-check-progress.json`, `check-running`, `check-cancel`,
+`check-chunks/`, `check-run.log`, `check-run-events.jsonl` and `check-run-archives/`, every one of them
+built by `RunSlot` from the same declarations as the prep slot's. The stored state moved with it:
+`check.consumedResultsFingerprint` and `checkLastRunStartedAt` in UserDefaults, and a
+`DetachedRunActivity` per slot inside the app.
+
+The EXCLUSION between the two is unchanged and still in force. #2760 makes running them at once SAFE;
+#2765 is what turns it on, because it owns the one genuine domain conflict (a draft written against a
+contact a check is midway through replacing). Both launches go through
+`PrepQueueService.runInFlightRefusal`, which asks both slots and names which run is in the way.
+
+One file is deliberately NOT per slot: `reachability-probe-run.json`, which carries the keys a check
+covers. Only one check can be alive at a time, so a second marker would be a file nothing could write.
+Its OTHER job, telling a finished prep run apart from a finished check, is now needed only for the prep
+slot's upgrade-window branch (a check launched by a build older than #2760, still in the prep slot);
+#2800 deletes that branch on the evidence of the log line it writes when it is genuinely taken.
 
 The app's round trip with the Prep run. The app writes `prep-queue.json` (the kept-undrafted
 prospects that need a contact and a draft, plus, since #367, any prospect Dan explicitly flagged
@@ -282,7 +297,11 @@ automated test, so `fixtures/prep-queue/` and `fixtures/prep-results/` are its s
 
 Both files are OVERWRITTEN by the next run, so #1878 keeps each finished run's pair in
 `prep-run-archives/<yyyyMMdd-HHmmss>/` beside the live ones, the last 30, through the same rotation the
-store backups use (`DatedFolderRotation`). The folder is named for the RUN, from its own `generatedAt`
+store backups use (`DatedFolderRotation`). #2760: PER SLOT, so a check's pair lands in
+`check-run-archives/` with its own rotation. Sharing one folder had two defects in it: a busy night of
+checks aged out the prep archives #1616's learner reads, and two runs whose `generatedAt` fell in the
+same second collided on the folder name, at which point the second read as already archived and its
+evidence was dropped. The folder is named for the RUN, from its own `generatedAt`
 rendered in UTC, so the name and the timestamp inside it are the same moment and archiving one run twice
 (the app archives at launch and again when it settles a run it watched) lands on the one folder rather
 than minting a second copy. The files keep their live names, so anything that can read a live handoff

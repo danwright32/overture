@@ -35,13 +35,24 @@ enum ReprepRelease {
         return released
     }
 
-    // The same thing over the whole store, which is what a finished run has in front of it. Saving is part
-    // of it: a release that is not persisted leaves the show out of Review until something else happens to
-    // save, which is the defect this exists to prevent.
+    // The same thing over the shows the ENDING RUN was carrying. Saving is part of it: a release that is
+    // not persisted leaves the show out of Review until something else happens to save, which is the defect
+    // this exists to prevent.
+    //
+    // #2760: `carrying` is the scope, and it is new. This used to fetch the whole store, and the header
+    // said why that was fine: "what a finished run has in front of it". That held while only one run could
+    // exist. With a check on its own slot, a check finishing empty would release the re-prep requests the
+    // LIVE prep is carrying, sending a show back to Review while it is being drafted.
+    //
+    // The keys come from the ending run's OWN work-list (`PrepQueue.keys(inQueueAt:)`), which is the app's
+    // record of what it handed that run. An EMPTY set releases nothing, which is the fail-safe direction: a
+    // request left standing keeps the show under Prep until the next run serves it, where a blanket release
+    // pulls a show back into Review mid-draft and there is nothing to put it back.
     @discardableResult
-    static func releaseAfterRun(in context: ModelContext) -> [String] {
+    static func releaseAfterRun(in context: ModelContext, carrying keys: Set<String>) -> [String] {
+        guard !keys.isEmpty else { return [] }
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-        let released = release(in: all)
+        let released = release(in: all.filter { keys.contains($0.naturalKey) })
         guard !released.isEmpty else { return released }
         try? context.save()
         return released

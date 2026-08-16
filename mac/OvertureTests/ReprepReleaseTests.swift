@@ -111,7 +111,7 @@ struct ReprepReleaseTests {
         p.reprepHandedToRun = true
         try ctx.save()
 
-        let released = ReprepRelease.releaseAfterRun(in: ctx)
+        let released = ReprepRelease.releaseAfterRun(in: ctx, carrying: ["reprep"])
 
         #expect(released == ["reprep"])
         #expect(!ctx.hasChanges)
@@ -127,12 +127,12 @@ struct ReprepReleaseTests {
         p.reprepDraftRequested = true
         p.reprepHandedToRun = true
         try ctx.save()
-        ReprepRelease.releaseAfterRun(in: ctx)
+        ReprepRelease.releaseAfterRun(in: ctx, carrying: ["reprep"])
 
         // Dan asks for another re-prep before anything else runs.
         p.reprepDraftRequested = true
         try ctx.save()
-        let second = ReprepRelease.releaseAfterRun(in: ctx)
+        let second = ReprepRelease.releaseAfterRun(in: ctx, carrying: ["reprep"])
 
         #expect(second.isEmpty)
         #expect(p.isReprepQueued, "a fresh request must survive a settle for a run that never carried it")
@@ -217,20 +217,27 @@ struct ReprepHandOverTests {
         let root = SourceGuardHelper.source("Overture/App/RootView.swift")
         #expect(!root.isEmpty)
 
+        // #2760: every one of them releases the ENDING RUN's own shows (`keysCarriedBy`), never the whole
+        // store. Over the store a check finishing gives back the re-prep requests the prep slot is
+        // carrying, and the show goes back to Review in the middle of being drafted.
+        let scoped = "ReprepRelease.releaseAfterRun(in: context, carrying: keysCarriedBy("
+
         // The run produced results (the ingest path), and the launch-time ingest of a run that finished
         // while Overture was closed, both go through ingestPrep.
         let ingest = SourceGuardHelper.propertyBody("private func ingestPrep() {", in: root)
-        #expect(ingest?.contains("ReprepRelease.releaseAfterRun(in: context)") == true,
+        #expect(ingest?.contains(scoped) == true,
                 "a run that produced results must give back the requests it did not serve")
 
         // The run finished having produced nothing at all: the case #1940 exists for.
-        let settle = SourceGuardHelper.propertyBody("private func settleFinishedPrepRun() async {", in: root)
-        #expect(settle?.contains("ReprepRelease.releaseAfterRun(in: context)") == true,
+        let settle = SourceGuardHelper.propertyBody("private func settleFinishedRun(slot: RunSlot) async {",
+                                                    in: root)
+        #expect(settle?.contains(scoped) == true,
                 "a run that finished empty must give back every request it was carrying")
 
         // The run died rather than finished.
-        let swept = SourceGuardHelper.propertyBody("private func sweptADeadPrepRun() -> Bool {", in: root)
-        #expect(swept?.contains("ReprepRelease.releaseAfterRun(in: context)") == true,
+        let swept = SourceGuardHelper.propertyBody("private func sweptADeadRun(slot: RunSlot) -> Bool {",
+                                                   in: root)
+        #expect(swept?.contains(scoped) == true,
                 "a run that died must give back every request it was carrying")
     }
 }
