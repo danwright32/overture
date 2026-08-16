@@ -213,7 +213,7 @@ final class ReconcileScheduler {
         switch await sweep(context, now) {
         case .notConnected, .nothingInScope: return (false, nil)
         case .failed(let reason): return (false, reason)
-        case .swept(_, let saveFailed): return (saveFailed, nil)
+        case .swept(_, _, let saveFailed): return (saveFailed, nil)
         }
     }
 

@@ -14,12 +14,25 @@ extension Inquiry: ReplyWatchableRecipient {
     // rides that rather than restating it. `isOpen` is false for booked and for either lost close, which
     // is the same "nothing left to watch" the prospect side means.
     var replyWatchConversationIsOpen: Bool { isOpen }
-    // #2717: never, and the reason is structural rather than a convenience. An inquiry's `gmailThreadId`
-    // is written in exactly one place, `InquiryReplySender` stamping it from the receipt after Dan's
-    // answer has actually gone (`InquiryReplySender.swift:50`), so an inquiry that holds a thread is by
-    // construction one Overture has sent on. There is no attach path here and nothing that could make one
-    // without also writing that id.
-    var replyWatchConversationIsAttached: Bool { false }
+    // #2717 said never, on the grounds that `InquiryReplySender` was the only writer of `gmailThreadId`,
+    // so an inquiry holding a thread was by construction one Overture had sent on. #2712 is exactly the
+    // defect that reasoning produced: an inquiry Dan answered in his own Gmail could never hold a thread
+    // at all, so it was never watched, and their next message was invisible. There is a second writer
+    // now (`InquiryConversationAttach`), and this has to answer for it.
+    //
+    // Self-healing rather than a permanent brand, on the same reasoning as `Recipient`'s: the moment
+    // Overture's own reply lands on the conversation, `InquiryReplySender` stores the id Gmail assigned
+    // it, and from then on there IS a message of Overture's to thread off. A rule keyed on how the
+    // conversation arrived alone would go on refusing long after its reason had gone (L68).
+    var replyWatchConversationIsAttached: Bool {
+        conversationAttachedAt != nil && hasWatchableConversation && gmailMessageId == nil
+    }
+
+    // The same question `Recipient.hasWatchableConversation` answers, asked of an inquiry's single thread:
+    // is there a conversation for the reply watcher to fetch at all?
+    var hasWatchableConversation: Bool {
+        !(gmailThreadId?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+    }
 }
 
 extension Inquiry: ReplyWatchable {

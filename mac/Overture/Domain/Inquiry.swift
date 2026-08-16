@@ -73,6 +73,22 @@ final class Inquiry {
     // #2647: the Message-ID read back off the sent reply could not be read, so a later message on this
     // inquiry's thread cannot reference it. The Recipient side carries the same flag for the same reason.
     var threadingDegraded: Bool = false
+    // #2712: when the conversation on this inquiry was FOUND in Gmail rather than started by a send from
+    // inside Overture. Its readers are `replyWatchConversationIsAttached` (which stops the threading
+    // repair claiming Dan's own hand-sent message as Overture's, and stops a bounce on the thread being
+    // blamed on the inquirer) and the row's own badge, which says where the conversation came from.
+    //
+    // A separate fact from the predicate rather than inferred from it, for the same reason
+    // `Recipient.conversationAttachedAt` is: the predicate is deliberately self-healing and stops being
+    // true the moment Overture's own reply lands on the thread, while the fact that Overture found this
+    // conversation rather than starting it is permanent.
+    var conversationAttachedAt: Date?
+    // #2712: when the mailbox was last read for a message from this inquirer. The mirror of
+    // `Recipient.replyCandidateSearchedAt` and read by the same `ReplySearchScope.windowStart`: the shared
+    // high-water mark says how far the MAILBOX has been read, which is only an answer for an inquiry that
+    // was in scope when it was read, so one logged since then needs its own window back to when Dan
+    // logged it.
+    var replyCandidateSearchedAt: Date?
     // #2675: WHY the last reply failed to go out. Its reader is the inquiry's own row, added in the same
     // change (L46). Before this the sender returned `false` and stored nothing, so the reason lived only
     // in a notice that clears, while the inquiry stayed on screen looking unsent with nothing saying why

@@ -14,6 +14,51 @@ import Foundation
 //
 // One search per TICK instead: take the oldest window any contact in scope needs, read it once, and
 // score every contact against the same message set.
+// #2712: what this pass reads the mailbox FOR, whichever kind of thing it is.
+//
+// A form pitch and a hire inquiry are in the same position: something Overture cannot watch, because it
+// never sent the email that would have given it a thread. They differ only in the two facts below, so
+// widening the scope over one seam is what stops a second mailbox pass being built beside this one (L30).
+//
+// It refines `ReplyWatchableRecipient` rather than restating its three guards, so what counts as a live
+// conversation is answered once for the watcher and the search alike.
+protocol ReplySearchSubject: ReplyWatchableRecipient {
+    // The instant a reply to this could first exist, and therefore the oldest mail worth reading for it:
+    // for a form pitch the moment it was sent, for an inquiry the moment Dan logged it.
+    //
+    // Nil means there is nothing to read for at all, which is deliberately different from reading and
+    // finding nothing (L98). A pitch Dan opened and never confirmed sending, and an inquiry carrying no
+    // address to match on, are both nil for that reason.
+    var replySearchAnchor: Date? { get }
+    // Whether there is already a conversation here, which is the whole point: this pass exists for the
+    // things the reply watcher has nothing to fetch for.
+    var replySearchHasConversation: Bool { get }
+    // When this subject was last read for. Its own fact, separate from the shared high-water mark, so a
+    // subject that has never been read for widens the window back to its own anchor.
+    var replyCandidateSearchedAt: Date? { get set }
+}
+
+extension Recipient: ReplySearchSubject {
+    var replySearchAnchor: Date? { formOutreachRecordedAt }
+    var replySearchHasConversation: Bool { hasWatchableConversation }
+}
+
+extension Inquiry: ReplySearchSubject {
+    // #2712: when Dan logged it. An inquiry has no send of Overture's to date from, and its conversation
+    // can only be one that already existed in his mailbox, so the moment he recorded it is the earliest
+    // instant a message could be about it.
+    //
+    // Nil with no address, because the address IS the match key here: without one there is nothing this
+    // pass could ever do for the row, and saying so in the scope keeps "nothing to read for" apart from
+    // "read and found nothing" (L98).
+    var replySearchAnchor: Date? {
+        guard let email = inquirerEmail?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !email.isEmpty else { return nil }
+        return createdAt
+    }
+    var replySearchHasConversation: Bool { hasWatchableConversation }
+}
+
 enum ReplySearchScope {
 
     // How long after a pitch Overture keeps reading for an answer to it.
@@ -36,22 +81,30 @@ enum ReplySearchScope {
     //
     // Dan's scope, stated in the plan: contacts with NO stored conversation. A show that WAS emailed
     // is deliberately out, because that contact already holds a conversation and the field holds one.
-    static func targets(in prospects: [Prospect], now: Date) -> [Recipient] {
-        prospects.flatMap { p -> [Recipient] in
+    // #2712: inquiries ride the same read. They default to none so every existing caller is unchanged,
+    // and because a container predating Inquiry legitimately has none to give.
+    static func targets(in prospects: [Prospect], inquiries: [Inquiry] = [],
+                        now: Date) -> [any ReplySearchSubject] {
+        let contacts: [any ReplySearchSubject] = prospects.flatMap { p -> [Recipient] in
             // A show Dan hand-resolved or booked is closed; stop reading for all of its contacts, the
             // same two guards `GmailReplyChecker.threadsToCheck` applies at this level.
             guard !p.replyWatchManualOutcome, !p.replyWatchIsBooked else { return [] }
             return p.recipients.filter { inScope($0, now: now) }
         }
+        // An inquiry is its own lead as well as its own thread, so the lead-level guards above are the
+        // same two `inScope` already applies to it. There is no second level to check.
+        return contacts + inquiries.filter { inScope($0, now: now) }
     }
 
-    static func inScope(_ r: Recipient, now: Date) -> Bool {
-        // A pitch that actually went out. `formOutreachStartedAt` alone is Dan having opened the form
-        // and not yet said whether he sent it, and reading the mailbox for an answer to something that
-        // may never have been asked would propose a stranger's mail against a pitch that never happened.
-        guard let pitchedAt = r.formOutreachRecordedAt else { return false }
+    static func inScope(_ r: any ReplySearchSubject, now: Date) -> Bool {
+        // Something that can actually be answered. For a form pitch that is a pitch that went out:
+        // `formOutreachStartedAt` alone is Dan having opened the form and not yet said whether he sent
+        // it, and reading the mailbox for an answer to something that may never have been asked would
+        // propose a stranger's mail against a pitch that never happened. For an inquiry it is one
+        // carrying the address the match is made on.
+        guard let pitchedAt = r.replySearchAnchor else { return false }
         // The whole point: there is nothing here for the reply watcher to fetch.
-        guard !r.hasWatchableConversation else { return false }
+        guard !r.replySearchHasConversation else { return false }
         // Deliberately the same bound the reply watcher uses (`replyWatchConversationIsOpen`), so a
         // conversation that could still put itself in front of Dan is exactly the one still being read
         // for, and the two cannot disagree about which those are.
@@ -69,9 +122,10 @@ enum ReplySearchScope {
     // permanently skip the reply that arrived before it joined the scope. That is the whole reason
     // `Recipient.replyCandidateSearchedAt` exists as a separate fact from the shared mark, and reading
     // it is what this function does with it.
-    static func windowStart(for targets: [Recipient], searchedThrough: Date?, now: Date) -> Date? {
+    static func windowStart(for targets: [any ReplySearchSubject], searchedThrough: Date?,
+                            now: Date) -> Date? {
         targets.compactMap { r -> Date? in
-            guard let pitchedAt = r.formOutreachRecordedAt else { return nil }
+            guard let pitchedAt = r.replySearchAnchor else { return nil }
             guard r.replyCandidateSearchedAt != nil, let mark = searchedThrough else { return pitchedAt }
             // Never earlier than the pitch: a contact added after the mark was set would otherwise drag
             // the window back over mail that cannot be an answer to it.

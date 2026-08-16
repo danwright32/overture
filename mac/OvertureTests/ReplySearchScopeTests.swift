@@ -60,7 +60,10 @@ struct ReplySearchScopeTests {
 
         let targets = ReplySearchScope.targets(in: [p], now: now)
 
-        #expect(targets.map(\.id) == [r.id])
+        // #2712: the scope now answers with `any ReplySearchSubject`, since an inquiry rides the same
+        // read, so the contact is identified by object rather than by a member only `Recipient` has.
+        #expect(targets.count == 1)
+        #expect(targets.first.map { $0 === r } == true)
     }
 
     // Dan's scope, stated in the plan: the off-thread reply on a show that WAS emailed is deliberately

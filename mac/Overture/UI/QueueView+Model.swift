@@ -1762,7 +1762,8 @@ enum QueueModel {
                 shouldSuggestClosing: inquiry.shouldSuggestClosing(now: now),
                 threadIdDegraded: inquiry.threadIdDegraded,
                 threadingDegraded: inquiry.threadingDegraded,
-                sendError: inquiry.sendError
+                sendError: inquiry.sendError,
+                conversationAttachedAt: inquiry.conversationAttachedAt
             )
         }
     }

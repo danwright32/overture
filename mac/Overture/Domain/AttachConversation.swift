@@ -178,4 +178,63 @@ enum AttachConversation {
 
         return .attached(repliesDetected: detected, alreadyAnswered: alreadyAnswered)
     }
+
+    // #2712: the same write for a hire inquiry, which is in the same position as a form pitch and gets the
+    // same one-write treatment rather than a stamp now and detection half an hour later.
+    //
+    // What it does NOT carry over is deliberate rather than overlooked. There is no refusal ledger here
+    // (an inquiry has no contact record to strike, and its address is one Dan typed himself), no paused
+    // contacts (an inquiry has no other contacts to hold back) and no draft baselines (an inquiry's reply
+    // draft is what he types in the panel). What is shared is what is actually the same: the empty-thread
+    // and already-linked guards, and detection over the thread already in hand.
+    //
+    // It never stamps `gmailMessageId`, for the same reason the pitch attach does not: Overture has sent
+    // nothing here. That is what keeps `replyWatchConversationIsAttached` true, which is what stops the
+    // threading repair finding Dan's own hand-sent message on the thread and filing it as Overture's.
+    @discardableResult
+    static func attach(threadId: String,
+                       threadJSON: Data,
+                       fullThreadJSON: Data? = nil,
+                       to inquiry: Inquiry,
+                       selfEmail: String,
+                       now: Date) -> Outcome {
+        let thread = threadId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !thread.isEmpty else { return .refused(reason: AttachConversationWriteCopy.noThread) }
+        // Assume it runs twice. A second attach is refused rather than quietly overwriting the first,
+        // because the field holds ONE conversation and replacing it would strand everything detection
+        // wrote about the other one.
+        guard !inquiry.hasWatchableConversation else {
+            return .refused(reason: AttachConversationWriteCopy.alreadyLinked)
+        }
+
+        inquiry.gmailThreadId = thread
+        inquiry.conversationAttachedAt = now
+
+        // WHEN Dan answered, taken from his own message on the thread rather than from the clock. Without
+        // it the row goes on reading "Awaiting your first reply" on a conversation he answered days ago,
+        // and the follow-up nudge, the closing suggestion and the date this groups under all hang off
+        // `sentAt` (L37). Left alone when the thread carries nothing of his, which is a person who wrote
+        // twice before he ever answered and is genuinely still waiting on him.
+        if inquiry.sentAt == nil,
+           let his = ReplyDetection.latestSentMessageSentAt(threadJSON: threadJSON, selfEmail: selfEmail) {
+            inquiry.sentAt = his
+        }
+
+        let detected = ReplyService.detectReplies(in: [inquiry], selfEmail: selfEmail, now: now,
+                                                  fetchThread: { $0 == thread ? threadJSON : nil },
+                                                  fetchFullThread: { $0 == thread ? fullThreadJSON : nil })
+
+        // Dan found the conversation in Gmail, and the ordinary thing to do there is answer it. An inquiry
+        // records that the way its own send path does, by dismissing the reply it has already been
+        // answered: leave it and the row asserts somebody is waiting on him on a conversation he closed
+        // days ago.
+        let alreadyAnswered = ReplyDetection.newestMessageIsSelf(threadJSON: threadJSON,
+                                                                 selfEmail: selfEmail)
+        if alreadyAnswered, inquiry.replied {
+            inquiry.dismissedReplyId = inquiry.lastReplyId
+            inquiry.replied = false
+        }
+
+        return .attached(repliesDetected: detected, alreadyAnswered: alreadyAnswered)
+    }
 }

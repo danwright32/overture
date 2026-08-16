@@ -58,6 +58,11 @@ struct InquiryRowView: View {
             if row.bookingSuggested { badge("Looks booked?", OVColor.gold) }
             if row.followUpNudgeDue { badge("Follow up", OVColor.rust) }
             if row.shouldSuggestClosing { badge("Consider closing", OVColor.inkFaint) }
+            // #2712: where this conversation came from. Quiet ink rather than gold, because it is
+            // something Overture did rather than something Dan has to act on.
+            if let found = InquiryCopy.foundInGmailBadge(attachedAt: row.conversationAttachedAt) {
+                badge(found, OVColor.inkFaint).help(InquiryCopy.foundInGmailHelp)
+            }
             Text(stateText).font(OVType.meta).foregroundStyle(OVColor.inkFaint)
         }
         sendProblems

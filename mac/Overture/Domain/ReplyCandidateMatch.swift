@@ -62,6 +62,25 @@ enum ReplyCandidateMatch {
     // proposal look ambiguous.
     static func refusal(for m: GmailReplySearch.InboundMessage, venue: String?,
                         selfEmail: String) -> Refusal? {
+        if let refusal = messageRefusal(for: m, selfEmail: selfEmail) { return refusal }
+        // The two guards that already gate `usableContactFormURLs`, asked here so this new route cannot
+        // reach a contact the rest of the product has always refused (#368, #635).
+        if VenueContactGuard.looksLikeVenue(email: m.fromAddress, venue: venue) { return .theRoomsOwn }
+        if PressContactGuard.looksLikePressContact(email: m.fromAddress, role: nil) { return .aPressDesk }
+        return nil
+    }
+
+    // #2712: the refusals that are about the MESSAGE, split out from the two above that are about who
+    // Overture is allowed to pick as a contact.
+    //
+    // The split is the point. A form pitch is scored, so the product must refuse to CHOOSE the room's own
+    // address or a press desk. An inquiry is matched on the address Dan himself recorded, so asking those
+    // two of it would refuse the very address he typed in: `PressContactGuard` fires on an `info@` local
+    // part, and a private individual reaching out through a company account is an ordinary inquiry. A
+    // guard written for a rare ambiguity that turns out to be true of the common case makes its fallback
+    // the only live path (L93). These three are true of any route: Dan's own mail is not a reply to
+    // himself, a mailer-daemon is not a person, and a newsletter is not a conversation.
+    static func messageRefusal(for m: GmailReplySearch.InboundMessage, selfEmail: String) -> Refusal? {
         if m.fromAddress == ReplyDetection.email(from: selfEmail) { return .dansOwn }
         if ReplyDetection.isAutomated(m.fromAddress) { return .automated }
         // Bulk mail, told by the header bulk senders set rather than by guessing at words. This is what
@@ -73,11 +92,35 @@ enum ReplyCandidateMatch {
         // widening a guard four other callers depend on is not a rider on this change.
         if let unsubscribe = m.listUnsubscribe?.trimmingCharacters(in: .whitespacesAndNewlines),
            !unsubscribe.isEmpty { return .bulkMail }
-        // The two guards that already gate `usableContactFormURLs`, asked here so this new route cannot
-        // reach a contact the rest of the product has always refused (#368, #635).
-        if VenueContactGuard.looksLikeVenue(email: m.fromAddress, venue: venue) { return .theRoomsOwn }
-        if PressContactGuard.looksLikePressContact(email: m.fromAddress, role: nil) { return .aPressDesk }
         return nil
+    }
+
+    // MARK: an inquiry, where there is nothing to guess at
+
+    // #2712: which of the messages this tick found is the inquirer writing.
+    //
+    // Deliberately NOT the scoring above, and that is the whole reason an inquiry needs no question put to
+    // Dan. A form pitch has no address to search on, so it is ranked on name and title words and the top
+    // candidate is offered as a proposal he confirms; confirming writes that address onto the contact and
+    // every future email on the show goes there, which is why it asks. An inquiry already carries the
+    // address it arrived from, so this is identity rather than a guess: there is no score, no runner-up
+    // and no margin, and nothing for him to adjudicate.
+    //
+    // The EARLIEST match, not the best: two messages from the same person in the window are two threads,
+    // and the older one is the conversation the inquiry is on. Taking the newest would attach an unrelated
+    // later thread and hide the answer this exists to find.
+    static func inquiryMatch(_ candidates: [GmailReplySearch.InboundMessage], for inquiry: Inquiry,
+                             selfEmail: String) -> GmailReplySearch.InboundMessage? {
+        guard let address = inquiry.inquirerEmail?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !address.isEmpty else { return nil }
+        return candidates
+            .filter { messageRefusal(for: $0, selfEmail: selfEmail) == nil }
+            // Compared the way reply detection compares, so a difference in casing or a display name
+            // around the address cannot unmatch the one person this identifies.
+            .filter { ReplyDetection.isSameAddress($0.fromAddress, address) }
+            // Oldest first, then by message id so a run is reproducible and two messages sharing an
+            // instant do not change places between ticks.
+            .min { $0.sentAt != $1.sentAt ? $0.sentAt < $1.sentAt : $0.messageId < $1.messageId }
     }
 
     // MARK: the tokens a message is compared against

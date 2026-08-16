@@ -21,7 +21,12 @@ struct ReplyProposalSweep {
         // `proposed` counts questions this tick RAISED, not questions standing: a tick that re-found the
         // same message reports zero, because nothing new happened and a count that said otherwise would
         // make every tick look like fresh work.
-        case swept(proposed: Int, saveFailed: Bool)
+        //
+        // #2712: `attached` is the same measure for the inquiry half, and it is a SEPARATE number rather
+        // than added into `proposed`. The two are different acts: a proposal is a question waiting on Dan,
+        // an attach is a conversation Overture has already started watching, and one count covering both
+        // would promise rows that do not exist on the Due pill (L16).
+        case swept(proposed: Int, attached: Int, saveFailed: Bool)
     }
 
     var fromEmail: String = SendIdentity.danWright.email
@@ -30,11 +35,16 @@ struct ReplyProposalSweep {
     // no network and so the save-failure branch is reachable at all (a SwiftData in-memory container
     // cannot be made to fail its save on demand).
     @discardableResult
+    // #2712: `attach` is the inquiry half, injected for the same reason `search` is: it makes two Gmail
+    // calls per matched inquiry, and without a seam neither the attach nor its unreadable-thread branch
+    // could be driven from a test at all (L2, L3).
     func run(in context: ModelContext,
              now: Date = Date(),
              defaults: UserDefaults = .standard,
              save: (() throws -> Void)? = nil,
-             search: (() async -> GmailReplySearch.Outcome)? = nil) async -> Outcome {
+             search: (() async -> GmailReplySearch.Outcome)? = nil,
+             attach: (@MainActor (_ inquiries: [Inquiry], _ candidates: [GmailReplySearch.InboundMessage])
+                        async -> InquiryConversationAttach.Outcome)? = nil) async -> Outcome {
         let outcome: GmailReplySearch.Outcome
         if let search {
             outcome = await search()
@@ -85,7 +95,19 @@ struct ReplyProposalSweep {
             }
         }
 
-        if proposed > 0 {
+        // #2712: the inquiry half of the same read. A hire inquiry Dan answered in his own Gmail is in
+        // exactly the position a form pitch is, so it rides these same candidates rather than a second
+        // mailbox pass. `try?` keeps a container that predates Inquiry working: it yields none.
+        let inquiries = (try? context.fetch(FetchDescriptor<Inquiry>())) ?? []
+        let attachOutcome: InquiryConversationAttach.Outcome
+        if let attach {
+            attachOutcome = await attach(inquiries, candidates)
+        } else {
+            attachOutcome = await InquiryConversationAttach(fromEmail: fromEmail)
+                .run(inquiries: inquiries, candidates: candidates, now: now)
+        }
+
+        if proposed > 0 || attachOutcome.attached > 0 {
             do {
                 if let save { try save() } else { try context.save() }
             } catch {
@@ -95,6 +117,6 @@ struct ReplyProposalSweep {
                 // copy-inventory:ignore-end
             }
         }
-        return .swept(proposed: proposed, saveFailed: saveFailed)
+        return .swept(proposed: proposed, attached: attachOutcome.attached, saveFailed: saveFailed)
     }
 }

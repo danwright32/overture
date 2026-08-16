@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1357 sentences**.
+Every sentence Overture can say to Dan: **1359 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -86,6 +86,7 @@ What is not, and why:
 - `Integration/GmailSignatureStore.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Integration/GmailThreadingRepair.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Integration/GmailThreadingRepair.swift`: a Google API URL and an HTTP header, not sentences Overture says (#915)
+- `Integration/InquiryConversationAttach.swift`: an HTTP header, not a sentence (#915)
 - `Integration/LoopbackListener.swift`: developer diagnostic log, not the app's voice (#915)
 - `Integration/OperaAmericaCalendar.swift`: synthesized source HTML the
 - `Integration/OperaAmericaCalendar.swift`: an outbound API request body, not the app's voice (#915)
@@ -804,6 +805,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/LeadIntakeModel.swift`
 "Found by Overture for this show, never written to"
     `Domain/ManualPrepPrefill.swift`
+"Found in Gmail"
+    `Domain/InquiryCopy.swift`
 "Freshly found events waiting for you to keep or dismiss."
     `Domain/AgentRoster.swift`
 "From Downbeat"
@@ -1367,6 +1370,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReplyPanel.swift`
 "Overture didn't email \(groupName), so it can't add a message to the conversation you linked. Write to them in Gmail instead."
     `Domain/AttachedConversation.swift`
+"Overture found this conversation in your Gmail, from the address you logged, and is watching it for replies."
+    `Domain/InquiryCopy.swift`
 "Overture gave up waiting for Gmail while looking for replies to the pitches you sent through a form or a DM."
     `Integration/GmailReplySearch.swift`
 "Overture has not checked for replies or bookings in \(PrepStatus.duration(seconds: seconds))"

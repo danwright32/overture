@@ -67,7 +67,7 @@ struct ReplyProposalSweepTests {
             .run(in: ctx, now: now, search: { .searched(candidates: found, searchedThrough: now,
                                                         saveFailed: false) })
 
-        #expect(outcome == .swept(proposed: 1, saveFailed: false))
+        #expect(outcome == .swept(proposed: 1, attached: 0, saveFailed: false))
         #expect(ProposedConversation.stored(on: r)?.messageId == "m1")
     }
 
@@ -84,7 +84,7 @@ struct ReplyProposalSweepTests {
             .run(in: ctx, now: now, search: { .searched(candidates: found, searchedThrough: now,
                                                         saveFailed: false) })
 
-        #expect(outcome == .swept(proposed: 0, saveFailed: false))
+        #expect(outcome == .swept(proposed: 0, attached: 0, saveFailed: false))
         #expect(ProposedConversation.stored(on: r) == nil)
     }
 
@@ -137,7 +137,7 @@ struct ReplyProposalSweepTests {
             .run(in: ctx, now: now, save: { throw Nope() },
                  search: { .searched(candidates: found, searchedThrough: now, saveFailed: false) })
 
-        #expect(outcome == .swept(proposed: 1, saveFailed: true))
+        #expect(outcome == .swept(proposed: 1, attached: 0, saveFailed: true))
     }
 
     // The search's OWN save failure (the searched stamps, #2713) must not be lost just because the
@@ -152,7 +152,7 @@ struct ReplyProposalSweepTests {
             .run(in: ctx, now: now, search: { .searched(candidates: [], searchedThrough: now,
                                                         saveFailed: true) })
 
-        #expect(outcome == .swept(proposed: 0, saveFailed: true))
+        #expect(outcome == .swept(proposed: 0, attached: 0, saveFailed: true))
     }
 
     // The tick runs every thirty minutes for as long as a pitch is open, so a question already standing
@@ -171,7 +171,7 @@ struct ReplyProposalSweepTests {
                                      search: { .searched(candidates: found, searchedThrough: now,
                                                          saveFailed: false) })
 
-        #expect(second == .swept(proposed: 0, saveFailed: false), "nothing new was proposed")
+        #expect(second == .swept(proposed: 0, attached: 0, saveFailed: false), "nothing new was proposed")
         #expect(r.replyProposedAt == now, "the standing question was not re-stamped")
     }
 
