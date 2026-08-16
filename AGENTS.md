@@ -235,6 +235,17 @@ already drifting from the Swift version it mirrored.
   check a suspiciously fast run against what a full one costs: an understated number weakens the
   very warning it was there to support (#2532, L32). Every run ends with its own `Suite shape:`
   line giving the wall clock it actually took, so read that.
+- **Seeing a guard fail, which every guard here is supposed to have been (L1): `scripts/mutate.sh`
+  (#2755).** `scripts/mutate.sh <file> <perl-expression> [test-scope ...]` breaks the code on purpose,
+  runs the suite, restores the file through a trap, and reports which tests went red. Roughly 1600 of the
+  suite's declarations are source-text guards, so this is done constantly, and it was hand-rolled every
+  time. Use it rather than a fresh one-liner, for the two reasons the hand-rolled version has already
+  lied: a substitution that matched NOTHING leaves the suite green for the ordinary reason and reads as a
+  surviving guard, and a run piped through anything reports the PIPE's status. It keeps four outcomes
+  apart, and the last two are refusals rather than results: CAUGHT, SURVIVED, NOT APPLIED, and NOTHING
+  RAN. `OVERTURE_MUTATE_RUNNER` swaps the runner, which is how to drive the shell fixtures or vitest
+  instead of the Swift suite.
+
 - **Which test entry points refuse to call an empty run a pass, and which cannot (#2541).** Zero subjects
   examined is its own outcome and must never read as "everything passed", because the empty result
   arrives exactly when the work has not started (L98). Where each entry point stands, measured
