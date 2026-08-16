@@ -188,6 +188,8 @@ struct ProducerCreditIsOneRuleGuardTests {
               why: "re-reads a presenter already STORED on a row, never a feed's credit line"),
         .init(path: "Overture/Domain/ActIsThePartyRealignment.swift",
               why: "re-reads a presenter already STORED on a row, never a feed's credit line (#2504)"),
+        .init(path: "Overture/Domain/FragmentMatchCorrection.swift",
+              why: "re-reads a presenter already STORED on a row, never a feed's credit line (#2565)"),
         .init(path: "Overture/Domain/ScoutExtractResults.swift",
               why: "the paid AI-read boundary: the run reports the presenter it read off the page")
     ]
