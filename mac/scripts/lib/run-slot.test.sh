@@ -46,6 +46,9 @@ run_resolver() {
     echo "CHUNKEVENTS=$(slot_chunk_events 3)"
     echo "CHUNKFIFO=$(slot_chunk_fifo 3)"
     echo "LOGPREFIX=$(slot_chunk_log_prefix)"
+    echo "VOICEFEEDBACK=${SHARED_VOICE_FEEDBACK}"
+    echo "VOICEGUIDANCE=${SHARED_VOICE_GUIDANCE}"
+    echo "RECENTOPENERS=${SHARED_RECENT_OPENERS}"
   )
 }
 
@@ -82,6 +85,14 @@ assert_contains "the check results are its own" "${OUT}" "RESULTS=overture-check
 assert_contains "the check marker is its own" "${OUT}" "MARKER=check-running"
 assert_contains "the check chunk dir is its own" "${OUT}" "CHUNKDIR=check-chunks"
 assert_not_contains "the check slot takes no prep path" "${OUT}" "prep-"
+
+# --- the voice artifacts are shared on purpose, and are the same file whichever slot asks ---------
+# #2764. One drafting run at a time is what makes them safe to share, and a check never drafts. Slotting
+# them would be the wrong fix and would silently give a check its own empty voice history.
+PREP_VOICE="$(unset OVERTURE_RUN_SLOT; run_resolver | grep '^VOICEGUIDANCE=')"
+CHECK_VOICE="$(OVERTURE_RUN_SLOT=check run_resolver | grep '^VOICEGUIDANCE=')"
+assert_equals "the voice guidance is one file for both slots" "${PREP_VOICE}" "${CHECK_VOICE}"
+assert_contains "and it sits in this run's own support dir, not a written-out one" "${PREP_VOICE}" "${SUPPORT_DIR}/overture-voice-guidance.md"
 
 # --- an unknown slot is refused, and says so where somebody can read it -------------------------
 # The refusal has to be legible somewhere. Until open_run_log runs, this script's whole output goes to
@@ -129,6 +140,69 @@ assert_equals "and left the other slot's chunk events alone" "present" \
 assert_equals "the wipe took this slot's whole chunk directory" "absent" \
   "$([ -e "${SUPPORT_DIR}/prep-chunks" ] && echo present || echo absent)"
 rm -f "${SUPPORT_DIR}/check-run.chunk-1.log" "${SUPPORT_DIR}/check-run-events.chunk-1.jsonl"
+
+# --- the run proves it stayed in its own lane (#2764) --------------------------------------------
+# The runbook no longer states a path and the prompt says its own paths win, but both are instructions to
+# a model (L27). This is the deterministic half.
+boundary_run() {
+  (
+    SUPPORT="${SUPPORT_DIR}"
+    . "${HERE}/run-slot.sh"
+    OVERTURE_RUN_SLOT="$1" resolve_run_slot
+    slot_record_foreign_results
+    # what the run "did" to the other slot's file
+    eval "$2"
+    slot_check_foreign_results
+    echo "STATUS=$?"
+  )
+}
+
+rm -f "${SUPPORT_DIR}"/overture-*-results.json "${SUPPORT_DIR}/run-boundary-violation.log"
+
+# 1. Nothing to compare against is its OWN answer, never success (L98).
+OUT="$(boundary_run prep ":")"
+assert_contains "no other results file is reported as nothing compared" "${OUT}" "nothing was compared"
+assert_not_contains "and is not dressed up as staying in its lane" "${OUT}" "stayed in its own lane"
+
+# 2. The other slot's file exists and is untouched.
+printf '{"results":[]}' > "${SUPPORT_DIR}/overture-check-results.json"
+OUT="$(boundary_run prep ":")"
+assert_contains "an untouched foreign results file passes" "${OUT}" "stayed in its own lane"
+assert_contains "and says how many it compared" "${OUT}" "1 other slot"
+assert_equals "with a zero status" "STATUS=0" "$(printf '%s' "${OUT}" | grep '^STATUS=')"
+
+# 3. The run writes the OTHER slot's results file, which is the whole defect.
+OUT="$(boundary_run prep "printf '{\"results\":[{\"naturalKey\":\"x\"}]}' > \"${SUPPORT_DIR}/overture-check-results.json\"")"
+assert_contains "a changed foreign results file is a violation" "${OUT}" "BOUNDARY VIOLATION"
+assert_contains "the violation names the slot that was written" "${OUT}" "check"
+assert_equals "and it is a non-zero status" "STATUS=1" "$(printf '%s' "${OUT}" | grep '^STATUS=')"
+assert_contains "the violation is written somewhere durable, not only to a log that scrolls" \
+  "$(cat "${SUPPORT_DIR}/run-boundary-violation.log" 2>/dev/null || echo MISSING)" "BOUNDARY VIOLATION"
+
+# 4. A foreign file APPEARING mid-run counts too: absent to present is a change.
+rm -f "${SUPPORT_DIR}"/overture-*-results.json "${SUPPORT_DIR}/run-boundary-violation.log"
+OUT="$(boundary_run prep "printf '{}' > \"${SUPPORT_DIR}/overture-check-results.json\"")"
+assert_contains "a foreign results file that appears mid-run is a violation" "${OUT}" "BOUNDARY VIOLATION"
+
+# 5. Content, not size and time: same length, different bytes.
+rm -f "${SUPPORT_DIR}"/overture-*-results.json "${SUPPORT_DIR}/run-boundary-violation.log"
+printf 'AAAA' > "${SUPPORT_DIR}/overture-check-results.json"
+OUT="$(boundary_run prep "printf 'BBBB' > \"${SUPPORT_DIR}/overture-check-results.json\"")"
+assert_contains "a same-length rewrite is still a violation" "${OUT}" "BOUNDARY VIOLATION"
+
+# 6. This run's OWN results file is not foreign to it: writing it is the job.
+rm -f "${SUPPORT_DIR}"/overture-*-results.json "${SUPPORT_DIR}/run-boundary-violation.log"
+OUT="$(boundary_run prep "printf '{}' > \"${SUPPORT_DIR}/overture-prep-results.json\"")"
+assert_not_contains "writing its own results is never a violation" "${OUT}" "BOUNDARY VIOLATION"
+rm -f "${SUPPORT_DIR}"/overture-*-results.json "${SUPPORT_DIR}/run-boundary-violation.log"
+
+# And it is WIRED, which is a separate claim from working (L3). It has to be in the EXIT trap: the script
+# ends in `exit "$CLAUDE_STATUS"`, so a call placed after that is dead code, which is where the first
+# version of this went.
+TRAP_LINE="$(grep -n "^trap " "${HERE}/../prep-run.sh")"
+assert_contains "the boundary check runs on every exit path" "${TRAP_LINE}" "slot_check_foreign_results"
+assert_contains "and the fingerprint is taken before the run" \
+  "$(grep -c 'slot_record_foreign_results' "${HERE}/../prep-run.sh")" "1"
 
 # --- and the runner does not name one behind the resolver's back -------------------------------
 # The resolver is only worth having if it is the ONLY place these names are built. A literal left in the

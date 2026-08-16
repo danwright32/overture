@@ -62,6 +62,11 @@ QUEUE="$SLOT_QUEUE"
 RESULTS="$SLOT_RESULTS"
 PROGRESS="$SLOT_PROGRESS"
 RUNBOOK="$PROJECT_DIR/docs/prep-runbook.md"
+# #2764: the voice artifacts, from the resolver like everything else, so this script names no handoff
+# path itself. Deliberately shared rather than slot-scoped: see run-slot.sh.
+VOICE_FEEDBACK="$SHARED_VOICE_FEEDBACK"
+RECENT_OPENERS="$SHARED_RECENT_OPENERS"
+VOICE_GUIDANCE="$SHARED_VOICE_GUIDANCE"
 # #1593: the raw stream-json events, kept beside the run log so the cost can be read after the run. The
 # log stays human-readable; this file is the machine copy nobody reads by hand.
 EVENTS="$SLOT_EVENTS"
@@ -208,7 +213,10 @@ SLEEP_GUARD_PID="$(arm_sleep_guard)"
 # #1038: clear the cancel sentinel and the pid file on exit too, so a stopped run never leaves a sentinel
 # that would instantly kill the next run.
 # #1009: stop_sleep_guard releases the power assertion on every exit path (finish, cancel, crash-via-set-e).
-trap 'kill "$HEARTBEAT_PID" 2>/dev/null; [ -n "$CLAUDE_PID" ] && kill "$CLAUDE_PID" 2>/dev/null; stop_sleep_guard "$SLEEP_GUARD_PID"; rm -f "$MARKER"; clear_cancel "$CANCEL"; rm -f "$CLAUDE_PID_FILE"; rm -f "$STALL_STATE"' EXIT
+# #2764: `slot_check_foreign_results` is in the TRAP, not at the end of the script, because the script
+# ends with `exit "$CLAUDE_STATUS"` and a line after that is dead code. The trap is the only place that
+# runs on every exit path there is: finished, cancelled, stalled out, killed with the app.
+trap 'kill "$HEARTBEAT_PID" 2>/dev/null; [ -n "$CLAUDE_PID" ] && kill "$CLAUDE_PID" 2>/dev/null; stop_sleep_guard "$SLEEP_GUARD_PID"; rm -f "$MARKER"; clear_cancel "$CANCEL"; rm -f "$CLAUDE_PID_FILE"; rm -f "$STALL_STATE"; slot_check_foreign_results || true' EXIT
 
 # #1013: the last run's results are spent, and leaving them here lets them masquerade as this run's.
 # scout-extract-run.sh learned this in #1011 (a run that wrote nothing inherited the previous run's
@@ -216,10 +224,21 @@ trap 'kill "$HEARTBEAT_PID" 2>/dev/null; [ -n "$CLAUDE_PID" ] && kill "$CLAUDE_P
 # carries real contacts and drafted email text.
 discard_previous_results "$RESULTS"
 
-PROMPT="You are the Overture Prep run. Follow $RUNBOOK exactly. FIRST, once per run, do the
-'Learn from Dan's recent edits' step: read overture-voice-feedback.json if present and update
-the anonymized auto-generated section of overture-voice-guidance.md (strip all org/venue/contact
-specifics; never carry them into other drafts). Then read the work-list at $QUEUE, and for every
+# #2764: fingerprint the other slot's results BEFORE the run starts, so the check at the end has
+# something to compare against. See slot_check_foreign_results in lib/run-slot.sh.
+slot_record_foreign_results
+
+# #2764: the paths in this prompt are the ONLY ones. The runbook is a prompt too, and Write is a granted
+# tool, so a path written in prose there competes with these. It no longer states any, and this line is
+# what settles it if one ever comes back.
+PATHS_RULE="The file paths in THIS prompt are the only ones. Ignore any literal path written anywhere
+else, including in the runbook: read and write exactly the paths given here and no others."
+
+PROMPT="You are the Overture Prep run. Follow $RUNBOOK exactly. $PATHS_RULE FIRST, once per run, do the
+'Learn from Dan's recent edits' step: read $VOICE_FEEDBACK if present and update
+the anonymized auto-generated section of $VOICE_GUIDANCE (strip all org/venue/contact
+specifics; never carry them into other drafts). The cross-run openers to avoid reusing are in
+$RECENT_OPENERS, when it is present. Then read the work-list at $QUEUE, and for every
 item find the contact (waterfall, strict verification) and draft the email in Dan's voice (invoke
 the dan-wright-brand-voice skill; apply the voice guidance only as secondary nudges, the skill
 wins). Copy each item's naturalKey verbatim. Immediately after finishing EACH item, rewrite $RESULTS
@@ -236,7 +255,7 @@ decide and record the decision in the result. Do the web research needed to find
 # because up to ten concurrent chunks each rewriting overture-voice-guidance.md would race on one file.
 # Removing the step removes the race, rather than trying to coordinate ten writers around it.
 PROBE_PROMPT="You are the Overture reachability check. Follow $RUNBOOK exactly, the contact-finding
-half only. Read the work-list at $QUEUE and for every item find the contact (waterfall, strict
+half only. $PATHS_RULE Read the work-list at $QUEUE and for every item find the contact (waterfall, strict
 verification). Do NOT draft any email and do NOT emit a draft field on any result: every item is
 contacts_only. Copy each item's naturalKey verbatim. If an item carries alsoAnswersFor, research its
 contact ONCE and write that same contacts list into a separate result entry for the item's own

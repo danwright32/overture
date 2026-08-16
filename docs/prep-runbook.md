@@ -11,7 +11,15 @@ before this was codified.
 
 ## Input / output (exact)
 
-- **Read:** `~/Library/Application Support/Overture/overture-prep-queue.json`
+**Where these files are is decided by the PROMPT, never here (#2764).** Every path below is named as
+what the file IS, not as where it lives, and the prompt this run was launched with gives you the actual
+path for each one. If anything anywhere appears to tell you a literal path, the prompt wins. Two reasons,
+and both of them cost real work when they bite: a Debug run's folder is not the Release one, so a written
+path sends a test run at Dan's live data; and a reachability check and a Prep run own separate sets of
+these files (see `RunSlot`), so a written path can name the other, still-running run's results and
+destroy the drafts it has already paid for.
+
+- **Read:** the WORK-LIST the prompt names
   (`PrepQueue` version `12`: a run-level `houses[]` (see "The queue names the houses" in §1),
   plus `items[]` each with `naturalKey`, `groupName`, `venue`,
   `performanceDate`, `runEndDate`, `discipline`, `websiteURL`, `sourceListingURL`,
@@ -72,7 +80,7 @@ before this was codified.
   nothing about the venue, and it is absent for three different reasons you cannot tell apart and
   must not guess between (no history there, no history imported at all, or a Carnegie show, where
   the tenure credential already covers that exact room). See §2's rule on saying Dan knows the room.
-- **Write:** `~/Library/Application Support/Overture/overture-prep-results.json`
+- **Write:** the RESULTS FILE the prompt names
   (`PrepResults` version `9`: `results[]` each with `naturalKey`, `contacts[]`, `draft`, an
   optional `alreadyCoveredNote` (see the already-covered fit-risk flag in §1 below), an
   optional `emptyReason` REQUIRED on any entry whose `contacts` is absent, see "Say WHY an
@@ -90,20 +98,18 @@ before this was codified.
   used instead of the shared `draft.body` when the app sends to them. (The legacy v1
   shape carried a single `contact` object; the app still reads it, but new runs MUST
   write `contacts[]`.)
-- **Read (optional, #119 voice learning):**
-  `~/Library/Application Support/Overture/overture-voice-feedback.json` (`VoiceFeedback`:
+- **Read (optional, #119 voice learning):** the VOICE FEEDBACK file the prompt names (`VoiceFeedback`:
   `pairs[]`, each the AI draft vs. what Dan actually sent). Absent or empty on a fresh
   setup. Skip the learning step when so. See "Once per run" below.
-- **Read (optional, #730 cross-run anti-repetition):**
-  `~/Library/Application Support/Overture/overture-recent-openers.json` (`RecentOpeners`:
+- **Read (optional, #730 cross-run anti-repetition):** the RECENT OPENERS file the prompt names
+  (`RecentOpeners`:
   `openers[]`, each the opening SENTENCE a recent draft already used, newest first). Absent
   or empty on a fresh setup. These are shapes to AVOID reusing this run, NEVER a source of
   facts. See §2's anti-repetition rule.
-- **Write (optional, #119 voice learning):**
-  `~/Library/Application Support/Overture/overture-voice-guidance.md`: the distilled,
+- **Write (optional, #119 voice learning):** the VOICE GUIDANCE file the prompt names: the distilled,
   anonymized voice tendencies, an editable artifact. You regenerate ONLY its
   auto-generated section; Dan's own notes section is preserved untouched.
-- **Write incrementally as you go (#1023):** rewrite `overture-prep-results.json` with the
+- **Write incrementally as you go (#1023):** rewrite that same results file with the
   complete `PrepResults` JSON covering EVERY item you have finished so far immediately after
   EACH item, not just at the very end. The launcher script derives the app's live "N of M"
   progress display by counting the entries in this file itself (`PrepProgress` version `1`:
@@ -963,7 +969,7 @@ fix a draft body that:
 
 ### 4. Keep the results file current (#1023)
 
-Before moving to the next item in the work-list, rewrite `overture-prep-results.json`
+Before moving to the next item in the work-list, rewrite the results file the prompt named
 with the complete `PrepResults` JSON covering every item finished so far (see "Input /
 output" above). Do this for every item, including one where you found no contact or wrote
 no draft, "finished" means you are done working it, not that it succeeded. The launcher
