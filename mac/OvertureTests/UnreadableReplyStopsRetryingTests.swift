@@ -154,18 +154,44 @@ struct UnreadableReplyStopsRetryingTests {
     // The two places that ask this question have to ask it the same way. GmailReplyChecker decides which
     // THREADS to fetch and ReplyService decides which ROWS to fill, and if they disagree the checker
     // fetches threads nothing will use (the loop this issue is about) or starves a row that needs one.
+    //
+    // #2815: the fill's gap is no longer the ONLY reason to collect a thread, so this asserts what it
+    // always meant rather than what it happened to say. The conversation here is CLOSED, which is the
+    // state in which the gap is the last reason left; with it still open the checker keeps the thread on
+    // purpose, because a new message could arrive on it (asserted below, and in
+    // `ASecondMessageIsFetchedTests`). Written the old way this test passed on the defect: it read as the
+    // checker correctly giving up, when what it had given up on was Dan's live conversation.
     @Test func theThreadCollectionAndTheFillAskOneQuestion() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx)
         let r = repliedRow(p, "nicole@everyvoicechoirs.org")
+        r.resolution = .declinedHard          // closed out: nothing new can arrive here
         let json = unreadableThread(from: "Nicole <nicole@everyvoicechoirs.org>")
 
-        #expect(GmailReplyChecker.threadsToCheck(in: [p]) == ["t"])
+        #expect(GmailReplyChecker.threadsToCheck(in: [p]) == ["t"],
+                "still collected, because the fill has a gap it could make progress on")
         _ = ReplyService.backfillResponders(in: [p], selfEmail: me,
                                             now: Date(timeIntervalSince1970: 9_999),
                                             fetchThread: { _ in json }, fetchFullThread: { _ in json })
         #expect(GmailReplyChecker.threadsToCheck(in: [p]).isEmpty,
                 "the checker must stop collecting a thread the fill has given up on")
+    }
+
+    // And the half that is NOT the fill's business. The same row with its conversation still open stays
+    // collected after the fill has given up, because the reason to read it is no longer the gap (#2815).
+    @Test func anOpenConversationIsStillCollectedAfterTheFillGivesUp() throws {
+        let ctx = ModelContext(try container())
+        let p = show(ctx)
+        let r = repliedRow(p, "nicole@everyvoicechoirs.org")
+        let json = unreadableThread(from: "Nicole <nicole@everyvoicechoirs.org>")
+
+        _ = ReplyService.backfillResponders(in: [p], selfEmail: me,
+                                            now: Date(timeIntervalSince1970: 9_999),
+                                            fetchThread: { _ in json }, fetchFullThread: { _ in json })
+
+        #expect(!ReplyGap.needsFilling(r), "the repair pass is done with this row for ever")
+        #expect(GmailReplyChecker.threadsToCheck(in: [p]) == ["t"],
+                "and it is still watched, because she can still write again")
     }
 
     // What Dan reads. "Overture didn't capture what they wrote" is true of a reply nothing was tried on;
