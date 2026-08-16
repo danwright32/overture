@@ -33,6 +33,51 @@ struct EventLocationFillPrecedenceTests {
         let e = ExtractedEvent(title: "Songmaking 2026", venue: "Weill Recital Hall", location: "   ")
         #expect(EventLocationFill.location(for: e) == "New York, NY")
     }
+
+    // #2566: rule 1 had no floor under it. This location is verbatim from the live store, and it is the
+    // page's whole description of its room: two clauses of directions, a cross street, and a park. The
+    // gate reads the "in" that opens the last clause as the state code IN, so this show was in Indiana,
+    // and music outside the five boroughs is HIDDEN.
+    //
+    // A published location that carries a street clause it cannot read a city out of says nothing about
+    // where the show is, so it falls through to the rules below rather than being stored.
+    @Test func aPublishedLocationThatIsReallyAVenueDescriptionIsRefused() {
+        let described = "The Soldiers' and Sailors' Monument, on the North Patio, behind the monument. "
+            + "W. 89th St. & Riverside Drive, in Riverside Park"
+        #expect(EventLocationFill.location(title: "The Dancing Men: A Sherlock Holmes Mystery",
+                                           venue: described, published: described) == nil)
+    }
+
+    // The refusal that must NOT happen, and the reason the rule is not simply "refuse an address".
+    // Measured 2026-08-16 over every distinct stored location in the live store: 15 of 57 carry a street
+    // clause, and 13 of them name their city perfectly well, covering 279 of the 892 placed rows. A rule
+    // that refused an address outright would unplace all of them (L93).
+    @Test func anAddressShapedPublishedLocationThatNamesItsCityIsKeptVerbatim() {
+        for published in ["570 10th Ave, New York, NY 10036",
+                          "129 West 67th Street, New York, NY 10023",
+                          "315 Columbia St, Brooklyn, New York",
+                          "460 Main Street, Chatham NJ",
+                          "2 W 64th St, New York, NY, United States",
+                          "312 West 36th Street, Floor 4, New York, NY, 10018 United States"] {
+            #expect(EventLocationFill.location(title: "A Show", venue: "Weill Recital Hall",
+                                               published: published) == published, "\(published)")
+        }
+    }
+
+    // The other live refusal, which names no state at all rather than the wrong one, and where falling
+    // through costs nothing: the card already refuses to print it as a city line (#1030).
+    @Test func aPublishedLocationThatIsAVenueNameAndAStreetIsRefused() {
+        let described = "The Sanctuary of Brick Presbyterian Church, 1144 Park Avenue"
+        #expect(EventLocationFill.location(title: "Cantata Cantata",
+                                           venue: described, published: described) == nil)
+    }
+
+    // A refused published location must not take the rules below down with it: the fall-through is the
+    // whole point of refusing rather than storing.
+    @Test func aRefusedPublishedLocationFallsThroughToTheRulesBelow() {
+        #expect(EventLocationFill.location(title: "A Show", venue: "Weill Recital Hall",
+                                           published: "1144 Park Avenue") == "New York, NY")
+    }
 }
 
 @Suite("Filling a show's location: reading the venue's own address (#1744)")
@@ -89,6 +134,37 @@ struct EventLocationFillVenueAddressTests {
     @Test func aStreetClauseAloneIsNotACity() {
         #expect(EventLocationFill.cityFromVenue("115 MacDougal St #3c") == nil)
         #expect(EventLocationFill.cityFromVenue("312 W 36th St") == nil)
+    }
+
+    // #2568. THE ROOM'S NAME IS NOT A STATEMENT ABOUT WHERE THE ROOM IS.
+    //
+    // The first string is verbatim from the live store and is the row the issue was filed on. Nothing in
+    // "Canada", "BC" or "Vancouver" anchors a place, so the scan used to reach the first clause and read
+    // its last word as a US state, putting a Vancouver show in Georgia. The rest are the same shape with
+    // other state words, and they are constructed rather than measured: the live store holds exactly one
+    // string of this shape, so a fixture set drawn only from it would pin the one word "Georgia".
+    @Test func theVenuesOwnNameNeverNamesAPlace() {
+        for venue in ["Rosewood Hotel Georgia, Vancouver, BC, Canada",
+                      "Hotel Washington, Vancouver, BC, Canada",
+                      "The Indiana, Toronto, ON, Canada",
+                      "Hotel Nevada, Havana, Cuba"] {
+            #expect(EventLocationFill.cityFromVenue(venue) == nil, "\(venue)")
+        }
+    }
+
+    // And the consequence, which is the half Dan sees: with the venue string no longer answering wrongly,
+    // the curated table gets to answer at all. It has had this room right the whole time.
+    @Test func theCuratedTableAnswersARoomTheVenueStringUsedToMisplace() {
+        #expect(EventLocationFill.location(title: "Cocktail Hour: The Show",
+                                           venue: "Rosewood Hotel Georgia, Vancouver, BC, Canada",
+                                           published: nil) == "Vancouver, BC, Canada")
+    }
+
+    // The refusal is only of the NAME clause standing alone. A name that is the CITY, with the state
+    // written after it, is a shape the store is full of and still reads.
+    @Test func aFirstClauseIsStillTheCityWhenALaterClauseNamesTheState() {
+        #expect(EventLocationFill.cityFromVenue("New York, NY 10018") == "New York, NY")
+        #expect(EventLocationFill.cityFromVenue("Brooklyn, NY") == "Brooklyn, NY")
     }
 }
 

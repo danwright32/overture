@@ -46,7 +46,8 @@ enum EventLocationFill {
     static func location(title: String, venue: String?, published: String?,
                          singleVenueSourceAddress: String? = nil,
                          roomAnswer: String? = nil) -> String? {
-        if let own = published?.trimmingCharacters(in: .whitespacesAndNewlines), !own.isEmpty {
+        if let own = published?.trimmingCharacters(in: .whitespacesAndNewlines), !own.isEmpty,
+           namesAPlaceRatherThanARoom(own) {
             return own
         }
         if let fromVenue = cityFromVenue(venue) { return fromVenue }
@@ -72,6 +73,36 @@ enum EventLocationFill {
         return (typed?.isEmpty == false) ? typed : nil
     }
 
+    // MARK: - Rule 1's floor
+
+    // #2566: is this published text a statement about WHERE the show is, or a description of the ROOM?
+    //
+    // Rule 1 is right in principle and had no floor under it: a page's own words went into the field
+    // whatever they said. One live row's `location` is its whole venue description, ending "...in
+    // Riverside Park", and `EventPlace` reads the "in" that opens that last clause as the state code IN.
+    // So the geography gate had that show in Indiana, and music outside the five boroughs is HIDDEN,
+    // which is the one failure in this area that can remove a real show from the queue.
+    //
+    // The test is deliberately NOT "does this carry a street address". Measured 2026-08-16 over every
+    // distinct stored location in the live store: 15 of 57 carry a street clause, and 13 of those name
+    // their city perfectly well ("570 10th Ave, New York, NY 10036" and 12 more), covering 279 of the 892
+    // placed rows. A rule that refused an address outright would fire on the common case and unplace a
+    // third of the queue, which is the shape of guard that gets switched off within a day (L93).
+    //
+    // So a published location carrying a street clause has to ALSO read as a city and state, through the
+    // same clause discipline rule 2 applies to a venue string. That is exactly the discipline this text
+    // was missing: `cityFromVenue` already refuses the Riverside Park string, because the clause before
+    // its false state is a street it cannot read a town out of, while rule 1 stored it unread.
+    //
+    // A refusal here stores NOTHING and falls through to the rules below. It can never hide a show: an
+    // unplaced show is kept and flagged (#970), which is the safe direction, and the wrong place it
+    // withdraws was hiding one.
+    private static func namesAPlaceRatherThanARoom(_ published: String) -> Bool {
+        let clauses = published.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+        guard clauses.contains(where: { StreetClause.isAddress($0) }) else { return true }
+        return cityFromVenue(published) != nil
+    }
+
     // MARK: - Rule 2: the address a page baked into the venue field
 
     // The city and state out of a venue string that carries its own address, or nil.
@@ -87,11 +118,21 @@ enum EventLocationFill {
 
         // From the END, so a leading city that shares a state's name ("New York, ... , NY") is read as
         // the city and the trailing code as the state, the same direction EventPlace scans.
-        for i in clauses.indices.reversed() {
+        //
+        // #2568: and never as far as clause 0, which is the ROOM'S NAME. Every clause after it is where a
+        // source writes an address or a town; the name is the one clause that cannot be a statement about
+        // where the room is. `Rosewood Hotel Georgia, Vancouver, BC, Canada` is the live row this was
+        // filed on: nothing in "Canada", "BC" or "Vancouver" anchors a place, so the scan reached the
+        // name, read its last word as a US state, and put a Vancouver show in Georgia. The curated table
+        // had the room right all along and never got to answer, because the venue string is rule 2 and
+        // the table is rule 4.
+        //
+        // The name is still read as the CITY when a LATER clause names the state ("New York, NY 10018"),
+        // which is a shape the store is full of. What it may no longer do is answer on its own.
+        for i in (1..<clauses.count).reversed() {
             // "Brooklyn, NY 11217": the state stands alone in its own clause, and the city is the one
             // before it. An address clause ("262 Ashland Place") is not a city and ends the read.
             if let state = EventPlace.stateInClause(clauses[i]) {
-                guard i > 0 else { return nil }
                 let city = clauses[i - 1]
                 guard !city.isEmpty else { return nil }
                 // #2378: the clause before the state is a STREET, so the town it might still name is
