@@ -133,6 +133,112 @@ combine_with_main() {
   fi
 }
 
+# The generated file this repo's post-merge hook regenerates and STAGES after a merge
+# (scripts/hooks/post-merge). Held as a list rather than inlined so commit_merge_regeneration can refuse
+# anything else instead of committing whatever it happens to find in the index, and so
+# verify-and-merge-branch.test.sh can check it against the hook's own source rather than repeating it.
+MERGE_REGENERATION_PATHS=("mac/Overture.xcodeproj/project.pbxproj")
+
+# gate_branch_project_freshness <dir> <ref>...: judges each ref's OWN committed project file, on its own
+# tip, BEFORE anything is merged into the worktree and before anything here regenerates.
+#
+# This is what stops commit_merge_regeneration below handing the tree a free pass, and the two together
+# are the whole of #2812. check-pbxproj-fresh.sh is the gate that keeps a stale committed project file
+# off main (#1368), and it can only answer honestly about a file nothing has rewritten. Asking it here,
+# about each ref exactly as its author committed it, means any disagreement the post-merge hook then
+# finds belongs to the COMBINATION: both parents were fresh for their own trees, so the merged tree is a
+# third tree that neither of them could have carried a correct file for.
+#
+# A ref that cannot be JUDGED (exit 2, a xcodegen version mismatch or no xcodegen at all) is refused with
+# its own message rather than reported as stale, because the two are different facts and only one of them
+# is somebody's mistake (L11).
+#
+# It leaves the worktree on the commit it found it on, so a caller keeps the checkout it set up.
+gate_branch_project_freshness() {
+  local dir="$1"
+  shift
+  local start_head ref status rc=0
+  start_head="$(git -C "${dir}" rev-parse HEAD)"
+  for ref in "$@"; do
+    if ! git -C "${REPO_ROOT}" fetch --quiet origin "${ref}"; then
+      echo "Could not fetch ${ref} to judge its own project file." >&2
+      rc=1
+      break
+    fi
+    if ! git -C "${dir}" checkout --force --detach "origin/${ref}" >/dev/null 2>&1; then
+      echo "Could not check out ${ref} in the verify worktree to judge its own project file." >&2
+      rc=1
+      break
+    fi
+    status=0
+    "${dir}/scripts/check-pbxproj-fresh.sh" "${dir}" || status=$?
+    if [[ "${status}" -ne 0 ]]; then
+      if [[ "${status}" -eq 2 ]]; then
+        echo "Cannot judge ${ref}'s own ${MERGE_REGENERATION_PATHS[0]} (the reason is above), so this run" >&2
+        echo "  must not regenerate anything on top of it." >&2
+      else
+        echo "${ref} carries a stale ${MERGE_REGENERATION_PATHS[0]} on its own tip." >&2
+        echo "  That file is what lands on main, and regenerating it in this worktree would only hide it (#1368)." >&2
+        echo "  Regenerate and commit it on ${ref}, push, then rerun." >&2
+      fi
+      rc=1
+      break
+    fi
+  done
+  git -C "${dir}" checkout --force --detach "${start_head}" >/dev/null 2>&1 || rc=1
+  return "${rc}"
+}
+
+# commit_merge_regeneration <dir>: commits what the post-merge hook staged after a merge into the verify
+# worktree, so the NEXT merge into that worktree is not refused over a change nobody decided.
+#
+# WHY (#2812). scripts/hooks/post-merge regenerates a stale mac/Overture.xcodeproj/project.pbxproj after
+# a merge and leaves it STAGED. Combining a second branch then dies with "Your local changes to the
+# following files would be overwritten by merge", and the combine refuses, verifying nothing and merging
+# nothing. Two branches that each add a Swift file is the ordinary case, so the batch path gave up
+# exactly where one suite run instead of several is worth the most. Note the .gitattributes merge driver
+# never gets a chance at it: this is an uncommitted change blocking the merge, not a content conflict.
+#
+# WHY THIS IS NOT THE BLIND REGENERATION OF #1368, which is the distinction the change turns on. That one
+# ran `xcodegen generate` on the tree AS CHECKED OUT, before any merge and before the gate looked, so it
+# silently corrected staleness the BRANCH carried and would land on main, and check-pbxproj-fresh.sh then
+# compared the file against a version of itself that had already been fixed. This can only ever record a
+# regeneration OF A MERGE RESULT: the hook fires only after a merge, only when the merged tree's project
+# file disagrees with a fresh regen of that tree, and every ref going into the tree has already been
+# judged unmodified on its own tip by gate_branch_project_freshness above. So what is committed here is
+# the one version of that file no author could have committed, for a tree that exists only inside the
+# verify worktree and is pushed nowhere. The gate keeps its teeth: a stale branch is still refused, and
+# it is refused BEFORE this ever runs.
+#
+# It REFUSES a staged path outside that list rather than committing it, for merge-generated.sh's reason:
+# something else writing to the index means the worktree is in a state nobody here created, and a blind
+# commit would record it while looking exactly like a correct one.
+commit_merge_regeneration() {
+  local dir="$1"
+  local staged
+  staged="$(git -C "${dir}" diff --cached --name-only)"
+  [[ -n "${staged}" ]] || return 0
+
+  local path owned matched
+  while IFS= read -r path; do
+    [[ -n "${path}" ]] || continue
+    matched=""
+    for owned in "${MERGE_REGENERATION_PATHS[@]}"; do
+      [[ "${path}" == "${owned}" ]] && matched="yes"
+    done
+    if [[ -z "${matched}" ]]; then
+      echo "The merge left ${path} staged in the verify worktree, and that is not a generated file the" >&2
+      echo "  post-merge hook owns (it owns: ${MERGE_REGENERATION_PATHS[*]})." >&2
+      echo "  Refusing to commit it: something other than the hook wrote to the index, and committing that" >&2
+      echo "  blind would record a change nobody asked for." >&2
+      return 1
+    fi
+  done <<< "${staged}"
+
+  git -C "${dir}" -c user.name="Overture verify" -c user.email="verify@localhost" \
+    commit -q -m "Regenerate the project file for the combined tree (verify worktree only)"
+}
+
 # Runs the full local suite in the given worktree. #1368: it used to run `xcodegen generate` FIRST, which
 # silently rewrote a STALE committed .pbxproj in the verify worktree so the staleness passed here and
 # then landed on main anyway. Instead, check freshness BEFORE anything regenerates the project:
@@ -191,9 +297,27 @@ verify_and_merge() {
   echo "Verifying PR #${PR_NUMBER} (${PR_BRANCH}) in the verify worktree..."
   setup_worktree "${PR_BRANCH}"
 
+  # #2812: judge each side's OWN project file before anything is merged or regenerated. The same gap
+  # exists here as on the batch path, because the post-merge hook fires on this merge too and the
+  # combined tree's regeneration would otherwise be the only thing the freshness check ever sees.
+  if ! gate_branch_project_freshness "${WORKTREE_DIR}" "${PR_BRANCH}" "main"; then
+    release_verify_slot
+    echo "Not merging PR #${PR_NUMBER} (${PR_BRANCH})." >&2
+    return 1
+  fi
+
   # #2353: combine BEFORE the suite, and stop here if it cannot be done. The slot still gets
   # released, because a slot left locked blocks every verification after it.
   if ! combine_with_main "${WORKTREE_DIR}"; then
+    release_verify_slot
+    echo "Not merging PR #${PR_NUMBER} (${PR_BRANCH})." >&2
+    return 1
+  fi
+
+  # #2812: the hook stages its regeneration here too. Nothing after this merges again, so nothing is
+  # blocked by it, but committing it keeps the two merge paths in one state rather than two, and leaves
+  # the suite judging a tree whose HEAD says what its working files say.
+  if ! commit_merge_regeneration "${WORKTREE_DIR}"; then
     release_verify_slot
     echo "Not merging PR #${PR_NUMBER} (${PR_BRANCH})." >&2
     return 1

@@ -62,6 +62,13 @@ reset_stubs() {
   COMBINE_CALLED=""
   SUITE_RAN=""
   LOCAL_BRANCH_DELETED=""
+  GATED_REFS=""
+  GATE_RESULT=0
+  COMMIT_REGEN_RESULT=0
+  # #2812's two new steps, stubbed here rather than in every case: unstubbed, the gate would fetch from
+  # the REAL origin and run xcodegen against a worktree path these cases invented.
+  gate_branch_project_freshness() { shift; GATED_REFS="$*"; return "${GATE_RESULT}"; }
+  commit_merge_regeneration() { return "${COMMIT_REGEN_RESULT}"; }
 }
 
 # --- happy path: a clean suite merges the resolved PR and releases the verify slot ---
@@ -114,6 +121,56 @@ assert_equals "a branch that will not combine with main is never judged by the s
 assert_equals "the verify slot is released after a failed combine" "yes" "${RELEASE_CALLED}"
 assert_equals "a failed combine reports failure to the caller" "1" "${combine_exit}"
 
+# --- #2812: the branch's own project file is judged BEFORE anything is merged or regenerated ---
+# These cases assert the DECISION on this path. gate_branch_project_freshness and
+# commit_merge_regeneration are defined in verify-and-merge-branch.sh but driven for REAL, against
+# throwaway repos carrying the merge driver and a miniature post-merge hook, in
+# scripts/verify-and-merge-batch.test.sh, because the state they exist for takes two merges to reach.
+#
+# The single-branch path merges too, so the post-merge hook fires here as well and the combined tree's
+# regeneration would otherwise be the only thing the freshness check ever saw. A stale branch must be
+# refused before that, or committing the regeneration is a free pass on exactly what #1368 exists to
+# catch: the stale file is what lands on main, whatever this worktree ends up holding.
+reset_stubs
+resolve_pr() { PR_NUMBER="49"; PR_BRANCH="feature-stale-project"; PR_MERGEABLE="MERGEABLE"; PR_BODY="${COMPLETE_PR_BODY}"; }
+setup_worktree() { SETUP_CALLED="$1"; WORKTREE_DIR="/fake/worktree-7"; }
+combine_with_main() { COMBINE_CALLED="$1"; return 0; }
+run_full_suite() { SUITE_RAN="yes"; return 0; }
+release_verify_slot() { RELEASE_CALLED="yes"; }
+merge_pr() { MERGE_CALLED="$1"; }
+
+verify_and_merge "49" >/dev/null 2>&1
+assert_equals "both sides going into the tree are judged, not just the branch" \
+  "feature-stale-project main" "${GATED_REFS}"
+
+# The same case again with the gate refusing. Everything the first run recorded is cleared first, so
+# what is asserted below is this run's doing rather than the previous one's leftovers.
+MERGE_CALLED=""
+COMBINE_CALLED=""
+SUITE_RAN=""
+RELEASE_CALLED=""
+GATE_RESULT=1
+verify_and_merge "49" >/dev/null 2>&1
+assert_equals "a branch with a stale project file is never combined with main" "" "${COMBINE_CALLED}"
+assert_equals "a branch with a stale project file is never judged by the suite" "" "${SUITE_RAN}"
+assert_equals "a branch with a stale project file is never merged" "" "${MERGE_CALLED}"
+assert_equals "the verify slot is released when the freshness gate refuses" "yes" "${RELEASE_CALLED}"
+
+# --- #2812: a verify worktree left in a state this script will not commit is never merged ---
+reset_stubs
+COMMIT_REGEN_RESULT=1
+resolve_pr() { PR_NUMBER="50"; PR_BRANCH="feature-odd-index"; PR_MERGEABLE="MERGEABLE"; PR_BODY="${COMPLETE_PR_BODY}"; }
+setup_worktree() { SETUP_CALLED="$1"; WORKTREE_DIR="/fake/worktree-8"; }
+combine_with_main() { COMBINE_CALLED="$1"; return 0; }
+run_full_suite() { SUITE_RAN="yes"; return 0; }
+release_verify_slot() { RELEASE_CALLED="yes"; }
+merge_pr() { MERGE_CALLED="$1"; }
+
+verify_and_merge "50" >/dev/null 2>&1
+assert_equals "an index this script will not commit is never judged by the suite" "" "${SUITE_RAN}"
+assert_equals "an index this script will not commit is never merged" "" "${MERGE_CALLED}"
+assert_equals "the verify slot is released then too" "yes" "${RELEASE_CALLED}"
+
 # --- a merge-conflicted PR is never verified (no worktree) or merged ---
 reset_stubs
 resolve_pr() { PR_NUMBER="44"; PR_BRANCH="feature-z"; PR_MERGEABLE="CONFLICTING"; PR_BODY="${COMPLETE_PR_BODY}"; }
@@ -150,6 +207,10 @@ source "${SCRIPT_DIR}/verify-and-merge-branch.sh"
 # and the next failing command would end this run silently, part way through, with no summary. That
 # reads as an ordinary pass to anything checking the exit code of the last thing printed.
 set +e
+# Re-sourcing restored the REAL gate and the real commit step too, and both would reach for a worktree
+# path and an origin that do not exist here, so they are stubbed again alongside the rest (#2812).
+gate_branch_project_freshness() { shift; GATED_REFS="$*"; return "${GATE_RESULT}"; }
+commit_merge_regeneration() { return "${COMMIT_REGEN_RESULT}"; }
 resolve_pr() { PR_NUMBER="45"; PR_BRANCH="feature-tidy"; PR_MERGEABLE="MERGEABLE"; PR_BODY="${COMPLETE_PR_BODY}"; }
 setup_worktree() { SETUP_CALLED="$1"; WORKTREE_DIR="/fake/worktree-4"; }
 combine_with_main() { COMBINE_CALLED="$1"; return 0; }

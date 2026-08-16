@@ -495,6 +495,25 @@ already drifting from the Swift version it mirrored.
   the merges themselves happen one at a time on GitHub, so one can be refused after the others land;
   it attempts all of them and its summary says which merged and which did not, rather than stopping at
   the first refusal and leaving the rest unreported.
+  **Both merge paths now judge each side's project file BEFORE merging, and COMMIT the regeneration the
+  post-merge hook makes afterwards (#2812).** Read the pair together, because either half alone is
+  wrong. The hook regenerates a stale `mac/Overture.xcodeproj/project.pbxproj` after a merge and leaves
+  it STAGED, so the batch's SECOND combine used to die on `Your local changes to the following files
+  would be overwritten by merge` and the script refused, verifying nothing and merging nothing. Measured
+  2026-08-16 combining #2809 and #2810. Two branches that each add a Swift file is the ordinary case, so
+  the batch gave up exactly where one suite run instead of several is worth the most, and the
+  `.gitattributes` merge driver never got a chance at it, because an uncommitted change blocking a merge
+  is not a content conflict. What makes committing that regeneration DIFFERENT from the blind
+  `xcodegen generate` of #1368, which is the whole distinction: #1368 regenerated the tree AS CHECKED
+  OUT, before any merge and before the gate looked, so it corrected staleness the BRANCH carried and
+  would land on main, and `check-pbxproj-fresh.sh` then compared the file to a version of itself that
+  had already been fixed. This commit can only ever record a regeneration OF A MERGE RESULT, for a tree
+  that exists nowhere but the verify worktree and is pushed nowhere, and every ref going into it
+  (`main` and each branch) has already had its OWN committed file judged, unmodified, on its own tip.
+  So the gate keeps its teeth: a branch carrying a stale project file is still refused, and it is
+  refused before anything regenerates, naming the branch rather than letting the failure surface later
+  as a stale file on main. A genuine content conflict still refuses exactly as before. The commit is
+  also refused, rather than made, if anything OTHER than the file the hook owns is staged.
   **A merge is confirmed with GitHub, never assumed, and that is one shared implementation**
   (`scripts/lib/pr-merge.sh`, used by all three merge paths). Both halves of that come from the same
   incident, on the batch script's first real run, 2026-08-13: `gh pr merge 2609` exited 1 with
