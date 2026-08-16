@@ -1337,6 +1337,22 @@ enum QueueModel {
     // above are two readings of ONE predicate rather than two spellings of it (L16). An undated show is
     // IN here, which is why the sentence never appears on one: nothing has measured it as far out, so
     // there is nothing to explain.
+    // #2524: does THIS surface say it? Dan's call, 2026-08-16, on reading that the first version said it
+    // everywhere.
+    //
+    // The far reach applies to ONE list. `StageNavigation.isWithinLeadTime` is asked for `.scout` and
+    // nowhere else, deliberately, because a show Dan has kept, prepped, drafted, approved or pitched is
+    // work in flight and keeps its place whatever its date. So once he keeps a far-out client's show, the
+    // client rule is no longer what is holding it on screen: his own decision is. A card still saying
+    // "here early" there explains a decision that is not the one keeping the row, which is the quiet kind
+    // of wrong that reads as correct until somebody asks what the line is for (#1547's shape).
+    //
+    // A function rather than a test written into the view's body, because a membership rule stated in a
+    // SwiftUI body is one no test can reach (#863).
+    static func saysOfferedEarlyAsAClient(_ item: QueueItem, stage: StageFocus?) -> Bool {
+        stage == .scout && item.offeredEarlyAsAClient
+    }
+
     static func isWithinOrdinaryLeadTime(performanceDate: String?, today: String) -> Bool {
         guard let days = daysUntil(performanceDate: performanceDate, today: today) else { return true }
         return days <= leadTimeWindowDays
