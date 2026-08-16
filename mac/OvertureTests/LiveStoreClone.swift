@@ -54,16 +54,48 @@ enum LiveStoreClone {
     /// thing that moved is HOW the copy is taken.
     static func makeClone(in dir: URL) throws -> URL? {
         guard let live = liveStoreURL else { return nil }
+        return try clone(live, in: dir, named: "Overture.store")
+    }
 
-        let clone = dir.appendingPathComponent("Overture.store")
+    // #2565: the dated LAUNCH backups of the live store, newest first.
+    //
+    // A migration rehearsed only against the store as it stands today is rehearsed against a store that
+    // may already have healed: the rows #2508 lifted were corrected by an ordinary re-scout four days
+    // after the issue was filed, so the live store no longer holds a single one of them, and a pass that
+    // moves nothing there is indistinguishable from a pass that cannot move anything at all (L98). The
+    // launch backups are the same real data on the days it was still wrong, and they are also the exact
+    // state a restore puts back, which is the case the corrective pass exists for.
+    //
+    // Only the plain `yyyyMMdd-HHmmss` shape. A `.foreign` or `.unreadable` folder is NOT Dan's data
+    // (#1410) and must never be read as though it were.
+    static var launchBackupStores: [URL] {
+        guard let live = liveStoreURL else { return [] }
+        let dir = StoreBackup.backupsDirectory(dataDirectory: live.deletingLastPathComponent())
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []
+        return names
+            .filter { $0.range(of: #"^\d{8}-\d{6}$"#, options: .regularExpression) != nil }
+            .sorted(by: >)
+            .map { dir.appendingPathComponent($0).appendingPathComponent(StoreLocation.storeFilename) }
+            .filter { FileManager.default.fileExists(atPath: $0.path) }
+    }
+
+    /// A consistent clone of one of those backups inside `dir`, taken exactly as the live one is.
+    static func makeClone(ofBackupAt backup: URL, in dir: URL) throws -> URL {
+        try clone(backup, in: dir, named: backup.deletingLastPathComponent().lastPathComponent + ".store")
+    }
+
+    private static func clone(_ source: URL, in dir: URL, named name: String) throws -> URL {
+        let clone = dir.appendingPathComponent(name)
         // The refusal, before anything opens anything. It can only fire if the directory handed in
-        // resolves to the live store's own, which is exactly when a guard is worth having: the cost of
-        // being wrong here is a test writing to the only copy of Dan's queue (L2).
-        guard clone.standardizedFileURL.path != live.standardizedFileURL.path else {
-            throw Refusal.wouldHaveHandedOverTheLiveStore(live.path)
+        // resolves to the source's own, which is exactly when a guard is worth having: the cost of being
+        // wrong here is a test writing over the only copy of Dan's queue, or over the backup of it (L2).
+        let forbidden = [source.standardizedFileURL.path,
+                         liveStoreURL?.standardizedFileURL.path].compactMap { $0 }
+        guard !forbidden.contains(clone.standardizedFileURL.path) else {
+            throw Refusal.wouldHaveHandedOverTheLiveStore(source.path)
         }
 
-        try backUp(live, to: clone)
+        try backUp(source, to: clone)
         return clone
     }
 

@@ -151,6 +151,20 @@ enum LaunchMigrations {
         // another launch. Only ever lifts (an agency row keeps its penalty), never touches the genre or
         // the fit reason, and is idempotent by construction.
         ActIsThePartyRealignment.run(in: context)
+        // LIVE-STORE-CLAIM verified=2026-08-16 measure="prospect rows whose stored producer axes the pre-#2508 fragment match explains and the current classifier refuses"
+        // #2565: take back what the OLD fragment-matching classifier gave a row. #2508 stopped the signal
+        // lists firing inside longer words ("opera" inside Operation Mincemeat, "band" inside Sam Gelband,
+        // "school" inside Let's Get Schooled!), and that reaches a row only when the scout next re-reads
+        // its page, which for an unchanged page can be weeks. Two of those rows were competing for Dan's
+        // attention at a fit score of 6 on a signal that was never real.
+        //
+        // Deliberately AFTER the pass above, which is the one that only ever LIFTS. This is the opposite
+        // direction and the two can never fight over one row: this lowers only a value the CURRENT rules
+        // refuse, and that pass lifts only to a value they produce. It is narrower than a re-read on
+        // purpose (a stored row's axes can come from inputs the row no longer holds), never touches an
+        // agency verdict, the genre or the fit reason, and is idempotent by construction. It moved 0 rows
+        // when rehearsed on 2026-08-16; see FragmentMatchCorrection's own note for why it ships anyway.
+        FragmentMatchCorrection.run(in: context)
         // LIVE-STORE-CLAIM verified=2026-07-28 measure="prospect rows carrying a possible-match flag, and how many of those name one record"
         // #1693: re-run the possible-match verdict over the rows that already carry one (21 on the live
         // store, 18 of them naming the same wrong record). The flag is STORED and only rewritten when the
