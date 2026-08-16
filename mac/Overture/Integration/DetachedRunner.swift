@@ -85,12 +85,19 @@ enum DetachedRunner {
     // Launches the script detached via /bin/sh; never waits. The run writes its results file when done.
     // `supportDirectory` is THIS build's handoff dir (StoreLocation.handoffDirectory), passed through so
     // the script keys its queue/results/marker off the same folder the app wrote them to.
-    static func launch(scriptPath: String, supportDirectory: URL) throws {
+    // #2763: `extra` is how a run says WHICH set of files it owns (`OVERTURE_RUN_SLOT`). It goes in the
+    // environment rather than in the argument list because there is no argument list: the run is
+    // backgrounded through `sh -c`, and every existing caller passes none. Defaulted to empty, so the two
+    // runners that have no slot (scout-extract, reply-classify) are unchanged.
+    static func launch(scriptPath: String, supportDirectory: URL,
+                       extra: [String: String] = [:]) throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
         process.arguments = ["-c", "'\(scriptPath)' >/dev/null 2>&1 &"]
-        process.environment = runnerEnvironment(base: ProcessInfo.processInfo.environment,
-                                                supportDirectory: supportDirectory)
+        var env = runnerEnvironment(base: ProcessInfo.processInfo.environment,
+                                    supportDirectory: supportDirectory)
+        for (key, value) in extra { env[key] = value }
+        process.environment = env
         try process.run()
     }
 }

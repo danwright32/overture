@@ -613,9 +613,10 @@ enum PrepQueueService {
     // double-run guard mid-batch.
     static let markerStaleAfter: TimeInterval = RunTimeouts.prep
 
+    // #2763: the name is RunSlot's to know, not this file's. Still the prep slot on every path today;
+    // #2760 is what moves the check onto its own.
     static var defaultMarkerURL: URL {
-        StoreLocation.handoffDirectory
-            .appendingPathComponent("prep-running")
+        RunSlot.prep.markerURL(in: StoreLocation.handoffDirectory)
     }
 
     // #1038: the cooperative-cancel sentinel. Prep is launched through the same DetachedRunner as scout,
@@ -623,7 +624,7 @@ enum PrepQueueService {
     // impossible; instead the app writes this file and the runner checks for it on each heartbeat tick and
     // stops cleanly. Same pattern and same predicates (`lib/scout-cancel.sh`) as ScoutExtractService.
     static var defaultCancelURL: URL {
-        StoreLocation.handoffDirectory.appendingPathComponent("prep-cancel")
+        RunSlot.prep.cancelURL(in: StoreLocation.handoffDirectory)
     }
 
     // Ask a running Prep run to stop. Writing the sentinel IS the request; the runner reads only its
@@ -836,8 +837,12 @@ enum PrepQueueService {
         guard let script = runnerScriptURL(), FileManager.default.isExecutableFile(atPath: script.path) else {
             throw PrepLaunchError.runnerUnavailable
         }
+        // #2763: the slot is stated rather than left to the runner's default. Both are `.prep` today, and
+        // saying so is what makes the check's move onto its own slot (#2760) a one-line change here rather
+        // than a search for who relies on the default.
         try DetachedRunner.launch(scriptPath: script.path,   // detached; never waits
-                                  supportDirectory: StoreLocation.handoffDirectory)
+                                  supportDirectory: StoreLocation.handoffDirectory,
+                                  extra: RunSlot.environment(base: [:], slot: .prep))
     }
 
     // The runner script (mac/scripts/prep-run.sh in the repo). Path is configured once via a string

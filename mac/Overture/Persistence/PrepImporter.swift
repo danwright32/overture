@@ -703,7 +703,6 @@ enum PrepImporter {
     private static let consumedKey = "prep.consumedResultsFingerprint"
 
     static var defaultURL: URL {
-        StoreLocation.handoffDirectory
-            .appendingPathComponent("overture-prep-results.json")
+        RunSlot.prep.resultsURL(in: StoreLocation.handoffDirectory)
     }
 }

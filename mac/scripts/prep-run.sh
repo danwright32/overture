@@ -14,6 +14,11 @@ PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)/.."   # the Overture repo root
 # See lib/runner-setup.sh (#552): shared support-dir resolution, log redirection, and early-guard
 # structure with reply-classify-run.sh.
 . "$(dirname "$0")/lib/runner-setup.sh"
+# #2763: which set of files this run owns. Sourced immediately after runner-setup, which is what defines
+# SUPPORT, and BEFORE open_run_log, whose own filename comes from the slot. An absent slot means prep, so
+# an older app that names none launches exactly the run it always did.
+. "$(dirname "$0")/lib/run-slot.sh"
+resolve_run_slot
 # #804: which model this run uses, and the helper that records it. One place, so a model choice
 # cannot be right in two runners and wrong in the third.
 . "$(dirname "$0")/lib/models.sh"
@@ -48,19 +53,19 @@ PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)/.."   # the Overture repo root
 # functions scout-extract has used since #1028, parameterised for this queue's `naturalKey` and results
 # version rather than copied, so a fix to either one lands in both runners.
 . "$(dirname "$0")/lib/scout-parallel.sh"
-open_run_log "prep-run.log"
+open_run_log "$SLOT_LOG_NAME"
 
 # See lib/resolve-node.sh (#636): puts a real node on PATH before claude (and its hooks) launch.
 . "$(dirname "$0")/lib/resolve-node.sh"
 
-QUEUE="$SUPPORT/overture-prep-queue.json"
-RESULTS="$SUPPORT/overture-prep-results.json"
-PROGRESS="$SUPPORT/overture-prep-progress.json"
+QUEUE="$SLOT_QUEUE"
+RESULTS="$SLOT_RESULTS"
+PROGRESS="$SLOT_PROGRESS"
 RUNBOOK="$PROJECT_DIR/docs/prep-runbook.md"
 # #1593: the raw stream-json events, kept beside the run log so the cost can be read after the run. The
 # log stays human-readable; this file is the machine copy nobody reads by hand.
-EVENTS="$SUPPORT/prep-run-events.jsonl"
-MARKER="$SUPPORT/prep-running"
+EVENTS="$SLOT_EVENTS"
+MARKER="$SLOT_MARKER"
 
 # #1597: a reachability CHECK is chunked; a normal Prep run is not, and the difference is not a
 # performance preference. The prompt's once-per-run voice-learning step rewrites
@@ -70,14 +75,21 @@ MARKER="$SUPPORT/prep-running"
 #
 # The probe marker is the app's own authoritative "this run is a check" signal (the same file
 # settleReachabilityProbe reads), so the two can never disagree about which kind of run this is.
+# #2763: NOT slot-derived, deliberately, and the only run file that is not. This marker is how the app
+# and this script agree that the run is a check, and moving run identity onto the slot is #2760's job, not
+# this phase's. Deriving IS_PROBE from the slot here while the app still launches every run as `prep`
+# would make a check run unchunked on the drafting model, which is the opposite of behaviour unchanged.
 PROBE_MARKER="$SUPPORT/reachability-probe-run.json"
 IS_PROBE=0
 [ -f "$PROBE_MARKER" ] && IS_PROBE=1
-CHUNKDIR="$SUPPORT/prep-chunks"
+CHUNKDIR="$SLOT_CHUNKDIR"
 # Wipe before anything reads it: a leftover chunk-results file from a previous, larger check must never
 # be merged into this run as if it were this run's work. Assume-it-runs-twice.
 rm -rf "$CHUNKDIR" 2>/dev/null || true
-rm -f "$SUPPORT"/prep-run.chunk-*.log "$SUPPORT"/prep-run-events.chunk-*.jsonl 2>/dev/null || true
+# #2763: the wipe is slot-scoped too. Unscoped, a starting check would delete a live prep's chunk logs,
+# and `rm -rf "$CHUNKDIR"` above would destroy its in-flight chunk results, which merge_chunk_results
+# folds into the app's results file on every heartbeat tick.
+rm -f $(slot_chunk_log_glob) $(slot_chunk_events_glob) 2>/dev/null || true
 MAX_PARALLEL="${OVERTURE_PREP_MAX_PARALLEL:-10}"
 # #1597: a CHECK finds contacts and never drafts, so it runs on the cheaper model the eval measured as
 # rule-clean. A normal Prep run writes emails in Dan's voice and stays on the pinned drafting model.
@@ -91,8 +103,8 @@ fi
 # reads to know which claude process to stop when it sees the sentinel. The heartbeat is forked before
 # claude launches, so it cannot see CLAUDE_PID directly; claude writes its PID here for it (mirrors
 # scout-extract-run.sh's CHUNK_PIDS_FILE).
-CANCEL="$SUPPORT/prep-cancel"
-CLAUDE_PID_FILE="$SUPPORT/prep-claude-pid"
+CANCEL="$SLOT_CANCEL"
+CLAUDE_PID_FILE="$SLOT_CLAUDE_PID"
 # A sentinel or PID left over from a previous cancelled run must never stop THIS one before it starts.
 # Overture clears the sentinel too, before launching; this is defence in depth (assume-it-runs-twice).
 clear_cancel "$CANCEL"
@@ -106,7 +118,7 @@ rm -f "$CLAUDE_PID_FILE" 2>/dev/null || true
 # 7m51s for THREE shows (about 2m40s per show), and a Prep run lands a result per show as it goes, so on a
 # healthy run something new lands every few minutes at worst. Dan-tunable, and an unset or mistyped value
 # disables the ceiling rather than shortening it.
-STALL_STATE="$SUPPORT/prep-stall-state"
+STALL_STATE="$SLOT_STALL_STATE"
 STALL_LIMIT="${PREP_STALL_LIMIT_SECONDS:-1200}"
 rm -f "$STALL_STATE" 2>/dev/null || true
 
@@ -306,7 +318,7 @@ reap_one_claude() {
   rm -f "$3"
 }
 
-EVENTS_FIFO="$SUPPORT/prep-run-events.fifo"
+EVENTS_FIFO="$SLOT_EVENTS_FIFO"
 
 if [ "$IS_PROBE" = "1" ]; then
   # #1597: a reachability check runs as up to MAX_PARALLEL concurrent claudes, one per chunk of the
@@ -339,14 +351,14 @@ if [ "${CHUNK_COUNT:-0}" -ge 1 ]; then
   set --
   k=1
   while [ "$k" -le "$CHUNK_COUNT" ]; do
-    CHUNK_LOG="$SUPPORT/prep-run.chunk-$k.log"
-    CHUNK_EVENTS="$SUPPORT/prep-run-events.chunk-$k.jsonl"
+    CHUNK_LOG="$(slot_chunk_log "$k")"
+    CHUNK_EVENTS="$(slot_chunk_events "$k")"
     : > "$CHUNK_LOG"
     # Only the two paths change per chunk: each claude reads its own slice and writes its own results
     # file, never a shared one, which concurrent incremental rewrites would clobber.
     CHUNK_PROMPT="${PROBE_PROMPT//$QUEUE/$CHUNKDIR/chunk-queue-$k.json}"
     CHUNK_PROMPT="${CHUNK_PROMPT//$RESULTS/$CHUNKDIR/chunk-results-$k.json}"
-    run_one_claude "$CHUNK_PROMPT" "$CHUNK_EVENTS" "$SUPPORT/prep-events-chunk-$k.fifo" "$CHUNK_LOG"
+    run_one_claude "$CHUNK_PROMPT" "$CHUNK_EVENTS" "$(slot_chunk_fifo "$k")" "$CHUNK_LOG"
     CHUNK_PIDS="$CHUNK_PIDS $CLAUDE_ONE_PID"
     CHUNK_TEE_PIDS="$CHUNK_TEE_PIDS $CLAUDE_ONE_TEE_PID"
     set -- "$@" "$CHUNK_EVENTS"
@@ -372,7 +384,7 @@ if [ "${CHUNK_COUNT:-0}" -ge 1 ]; then
   # behind for each chunk. The PID lists above are safe as strings only because a PID has no spaces.
   k=1
   while [ "$k" -le "$CHUNK_COUNT" ]; do
-    rm -f "$SUPPORT/prep-events-chunk-$k.fifo"
+    rm -f "$(slot_chunk_fifo "$k")"
     k=$((k + 1))
   done
   CLAUDE_PID=""   # all reaped; nothing left for the trap to kill
@@ -381,7 +393,7 @@ if [ "${CHUNK_COUNT:-0}" -ge 1 ]; then
   k=1
   while [ "$k" -le "$CHUNK_COUNT" ]; do
     echo "--- chunk $k log tail ---"
-    tail -n 4 "$SUPPORT/prep-run.chunk-$k.log" 2>/dev/null || true
+    tail -n 4 "$(slot_chunk_log "$k")" 2>/dev/null || true
     k=$((k + 1))
   done
 
