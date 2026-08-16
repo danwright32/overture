@@ -14,10 +14,10 @@ import Foundation
 // Same judgment, inverted consequence, so keeping the pattern keeps every draft classified as it was.
 enum DraftGreeting {
 
-    // copy-inventory:ignore-start  Search terms and regex fragments, not anything Overture says to Dan.
-    // Without this the opener alternation is listed in docs/copy-inventory.md as a sentence the app can
-    // say, which is exactly the noise that inventory exists to keep out (it is the same reason the draft
-    // lint's own search terms are marked).
+    // #2578: this file used to open an inventory ignore region here, purely so the opener alternation
+    // below was not listed as a sentence Overture can say. The generator now recognises an
+    // alternation itself, so the marker is gone: a marker is opt-in, and the next pattern nobody
+    // remembers to mark is the one that lands in the list a person is supposed to read carefully.
 
     // Words that appear in a greeting WITHOUT being somebody's name. They are capitalised at the start
     // of a line by convention, not because they identify a person, so a capitalised word outside this set
@@ -59,7 +59,6 @@ enum DraftGreeting {
     private static var namedPattern: String {
         #"^\s*("# + openers + #")\s+([^,!\n]{1,40})[,!]"#
     }
-    // copy-inventory:ignore-end
 
     static func opensWithAGreeting(_ body: String?) -> Bool {
         guard let body, !body.isEmpty else { return false }
