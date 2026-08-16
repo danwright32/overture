@@ -56,6 +56,32 @@ enum SourceAttention {
         source.failedReadStreak >= failedReadStreakThreshold
     }
 
+    // #2496: a source that reads FINE and has never once had anything on it.
+    //
+    // The cold-start hole none of the three above can see. `emptyStreak` only counts once
+    // `baselineFeedCount > 0`, and a source that was empty the first time it was read never earns a
+    // baseline, so the streak stays 0 forever and `hasGoneQuiet` can never fire. `hasNeverRead` cannot
+    // catch it either, because an empty read is a SUCCESSFUL read. A check that compares now against
+    // remembered state is structurally unable to fire on a Mac where the fault was already happening when
+    // it first ran, and silence there is indistinguishable from health.
+    //
+    // The case in the world: a source mis-pointed from the day it was added. Its page loads, the scout
+    // reads it, and nothing is on it, ever.
+    //
+    // Judged on successful CHECKS rather than on a streak, because there is no streak: the row's whole
+    // history is the evidence. The threshold is deliberately higher than the streak one, because this is a
+    // weaker signal than a source that used to list shows and stopped, and a legitimately quiet new
+    // calendar must be allowed a few runs before it is called broken (#1428, #1498, and the reason
+    // `neverReadGrace` exists).
+    static let neverListedAnythingThreshold = 5
+
+    static func hasNeverListedAnything(_ source: WatchedSource) -> Bool {
+        source.successfulCheckCount >= neverListedAnythingThreshold
+            && source.lastNonEmptyAt == nil
+            && source.baselineFeedCount == 0
+            && !source.hasEverPlaced
+    }
+
     static func hasNeverRead(_ source: WatchedSource, now: Date) -> Bool {
         guard source.successfulCheckCount == 0, source.lastSucceededAt == nil else { return false }
         return now.timeIntervalSince(source.addedAt) > neverReadGrace
@@ -70,6 +96,8 @@ enum SourceAttention {
         if SourceGrade(source) == .failing { return true }
         if hasNeverRead(source, now: now) { return true }
         if hasGoneQuiet(source) { return true }
+        // #2496: and the one that has never had anything to be quiet about.
+        if hasNeverListedAnything(source) { return true }
         // #1759: and the state none of the others can see. A source whose page fetches fine and cannot be
         // READ has its failing display wiped by the next morning's watch-only fetch (SourceCheck.decide
         // clears health and lastFailure on every successful fetch), so it grades as perfectly healthy
@@ -142,6 +170,13 @@ enum SourceAttention {
         let days = max(1, Int(now.timeIntervalSince(lastNonEmptyAt) / 86_400))
         let dayWord = days == 1 ? "day" : "days"
         return "Came back empty \(runs) \(runWord) in a row, and hasn't listed a show for \(days) \(dayWord). Check the link."
+    }
+
+    // #2496: the row's own sentence. It names the number of reads rather than a streak, because the
+    // point is that the page has ALWAYS been empty rather than that it lately went quiet, and it ends in
+    // the same instruction as its neighbours because the fix is the same one.
+    static func neverListedAnythingLine(checks: Int) -> String {
+        "Read \(checks) times and has never listed a show. Check the link."
     }
 
     // #1759: the row's own sentence for a source several runs in a row have failed to read. It names
