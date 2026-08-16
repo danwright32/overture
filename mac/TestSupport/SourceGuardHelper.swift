@@ -104,4 +104,40 @@ enum SourceGuardHelper {
         }
         return nil
     }
+
+    // #2543: does this source contain that CODE, whatever layout it happens to be written in?
+    //
+    // A guard that pins the exact rendering of the code it watches fails the first time that code is
+    // legitimately reformatted, and says nothing about whether the rule it exists for still holds (L103).
+    // #1900 hit it for real: the masthead guard pinned a call as one exact two-line rendering, so adding
+    // a third argument re-wrapped it and turned the guard red for formatting.
+    //
+    // The corrosive half is not the red one. A guard that goes red for the wrong reason teaches the next
+    // person to edit it until it is quiet, which is how a guard becomes decoration. And a NEGATIVE
+    // assertion pinned to a rendering ("this swallowing catch must not come back") fails the other way:
+    // reformat the offending code and the guard passes with the defect present.
+    //
+    // Collapses every run of whitespace, in both the source and the needle, so what is compared is the
+    // sequence of tokens. It cannot see indentation, line breaks, or how a call is wrapped, which is the
+    // point: none of those is ever the rule.
+    //
+    // COMMENTS ARE STRIPPED FIRST, and that is not a nicety. The first conversion of a pinned guard to
+    // this helper immediately tripped on `// #1601: this used to be an inline `catch { return false }``,
+    // a comment recording the very code the guard forbids. Prose about a rule is where a rule is most
+    // often written down, so a code matcher that reads comments is a code matcher that fires on its own
+    // documentation (L103).
+    static func normalizedCode(_ source: String) -> String {
+        SwiftSource.scannableLines(in: source, skipping: [])
+            .map(\.code)
+            .joined(separator: " ")
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
+    }
+
+    // The needle is normalised as WRITTEN, never through the comment stripper: a needle is a fragment,
+    // not a file, and running it through a line-based scanner would drop a fragment that happens to open
+    // with a slash.
+    static func containsCode(_ needle: String, in source: String) -> Bool {
+        normalizedCode(source).contains(needle.split(whereSeparator: \.isWhitespace).joined(separator: " "))
+    }
 }

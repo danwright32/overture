@@ -290,7 +290,12 @@ struct ProbePaceWiringGuardTests {
         #expect(source("Overture/UI/ProbeSelectionBar.swift")
             .contains("secondsPerRound: ProbeSelection.liveSecondsPerRound()"))
         let queue = source("Overture/UI/QueueView.swift")
-        #expect(queue.contains("summarizeShowsACheckMissed(\n            count: keys.count, secondsPerRound: ProbeSelection.liveSecondsPerRound())"))
+        // #2543: the call as CODE, not as the two lines it is currently wrapped into. This is the exact
+        // shape #1900 hit, where adding an argument re-wrapped a call and turned its guard red for
+        // formatting while nothing was unwired.
+        #expect(SourceGuardHelper.containsCode(
+            "summarizeShowsACheckMissed( count: keys.count, secondsPerRound: ProbeSelection.liveSecondsPerRound())",
+            in: queue))
         #expect(queue.contains("secondsPerRound: ProbeSelection.liveSecondsPerRound())"))
     }
 }

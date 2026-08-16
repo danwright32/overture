@@ -160,9 +160,8 @@ struct ProbeMultiDateSelectionTests {
         #expect(queue.contains(".overlay(alignment: .top) { probeSelectionBar(data) }"),
                 "the bar must be an overlay: as a sibling above the scroll it changes the scroll's height and the page jumps when it appears")
         // And the thing it replaced must be gone, or both could coexist and the jump would return.
-        #expect(!queue.contains("""
-            probeSelectionBar(data)
-            queueScroll(data)
-        """))
+        // #2543: as CODE. Pinned to its indentation, this negative assertion passed the moment the
+        // sibling pair was re-indented, which is the direction that ships the defect.
+        #expect(!SourceGuardHelper.containsCode("probeSelectionBar(data) queueScroll(data)", in: queue))
     }
 }

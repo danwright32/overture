@@ -70,7 +70,10 @@ struct LaunchMigrationsFailureTests {
             .appendingPathComponent("Overture/Domain/LaunchMigrations.swift"), encoding: .utf8)
         #expect(source.contains("persist(context.save, report: { reportSaveFailure($0) })"),
                 "the launch save's failure path must reach the reporter")
-        #expect(!source.contains("catch {\n            return false\n        }"),
+        // #2543: matched as CODE, not as one exact rendering. Pinned to its twelve spaces of
+        // indentation, this negative assertion failed in the dangerous direction: reformat the swallowing
+        // catch, or write it at any other depth, and the guard passes with the defect present (L103).
+        #expect(!SourceGuardHelper.containsCode("catch { return false }", in: source),
                 "the swallowing catch this issue removed must not come back")
     }
 }
