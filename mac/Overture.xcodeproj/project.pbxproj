@@ -1051,6 +1051,7 @@
 		9B0A678FEDCC1D0F5FE8EBC1 /* PrepRunSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 033395ACA366F9374B71972C /* PrepRunSummary.swift */; };
 		9B1B83395711D52E33DB299F /* PrepListingHandoffTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5D534252A6F37159BA37D7F /* PrepListingHandoffTests.swift */; };
 		9B286D4759A2B641194398DC /* SourceFetcherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B174D89887AB01BB0F278F3F /* SourceFetcherTests.swift */; };
+		9BB86E9B8E8BD9A81CBB6D83 /* OfferedEarlyAsAClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F708898C2983F3A4EDFDC409 /* OfferedEarlyAsAClientTests.swift */; };
 		9BC8B26C7451D6540EAA0A8F /* CheckTriesTheActTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6E54548D0462450E5D56751 /* CheckTriesTheActTests.swift */; };
 		9BD77342E6E4BADDC647856D /* WatchlistMutations.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B9B1E5A2DDF4B4DD4861BC1 /* WatchlistMutations.swift */; };
 		9C1C55B249A553949952573B /* SameDateVenueMerge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BB9F65D06CF95AF6C0261CD /* SameDateVenueMerge.swift */; };
@@ -2974,6 +2975,7 @@
 		F6295038AB115F90569DD1B5 /* ExtractedEventGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtractedEventGuardTests.swift; sourceTree = "<group>"; };
 		F64E89E297E958F6ECE450FA /* BulkDismissMutationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BulkDismissMutationTests.swift; sourceTree = "<group>"; };
 		F69BA241B9F9C54D2242D796 /* SameDateVenueMergeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SameDateVenueMergeTests.swift; sourceTree = "<group>"; };
+		F708898C2983F3A4EDFDC409 /* OfferedEarlyAsAClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfferedEarlyAsAClientTests.swift; sourceTree = "<group>"; };
 		F71E842020A75AAB31ED0420 /* BlockedCalendar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlockedCalendar.swift; sourceTree = "<group>"; };
 		F7220671ACEC38ADD2DD0A29 /* ControlRefusalOnScreenTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlRefusalOnScreenTests.swift; sourceTree = "<group>"; };
 		F75CC79C7F80741EE8E0D33C /* ReachedOutClose.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReachedOutClose.swift; sourceTree = "<group>"; };
@@ -3469,6 +3471,7 @@
 				C10AA74775D09ADD6707F71F /* NotificationServiceTests.swift */,
 				BC9EE2DE6E6C1A9F23F59229 /* NoWayToReachThemOutcomeTests.swift */,
 				D3305BFEC786F4A350D758E4 /* NudgesStopWhenTheShowDoesTests.swift */,
+				F708898C2983F3A4EDFDC409 /* OfferedEarlyAsAClientTests.swift */,
 				9F17F7263541A45DD564327A /* OmniFocusAutomationPermissionTests.swift */,
 				777EF8190E77DC68B752E3F2 /* OmniFocusSyncLivenessGuardTests.swift */,
 				976998798673F1D7648B4B8A /* OmniFocusSyncRunnerTests.swift */,
@@ -5552,6 +5555,7 @@
 				60B402225610622311D63E4F /* OVPill.swift in Sources */,
 				5A4BEA1E95144947860D54D2 /* OVPillTests.swift in Sources */,
 				90E8DB3B6250783B011184EE /* OVSearchField.swift in Sources */,
+				9BB86E9B8E8BD9A81CBB6D83 /* OfferedEarlyAsAClientTests.swift in Sources */,
 				CD3A71A2A115D2D4BEB9A39C /* OmniFocusAutomationPermission.swift in Sources */,
 				10E81F68130C8EB21253842E /* OmniFocusAutomationPermissionTests.swift in Sources */,
 				AD4A36CDCEAD731F0249A7F3 /* OmniFocusSettingsView.swift in Sources */,

@@ -147,9 +147,12 @@ struct ListingLinkLabelWiringTests {
 
     @Test func theQueueBuilderResolvesEachRowsSourceCalendars() {
         let model = SourceGuardHelper.source("Overture/UI/QueueView+Model.swift")
-        guard let body = SourceGuardHelper.propertyBody("now: Date = Date()) -> [QueueItem] {", in: model)
-        else {
-            Issue.record("QueueModel.items(from:) no longer has the signature this guard scopes to")
+        // #2524: found by NAME rather than by the signature's last line. Pinned to the closing line it
+        // broke the moment a parameter was added after `now:`, and a marker that stops matching returns
+        // nil, which every `contains` below is quietly false against (#2192). The name is the thing this
+        // guard is actually about.
+        guard let body = SourceGuardHelper.bodyOfFunction(named: "items", in: model) else {
+            Issue.record("QueueModel.items(from:) is gone, so this guard is asking nothing")
             return
         }
         #expect(body.contains("item.sourceCalendarURLs"))
