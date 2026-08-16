@@ -55,6 +55,16 @@ resolve_run_slot() {
   SLOT_EVENTS_FIFO="${SUPPORT}/${RUN_SLOT}-run-events.fifo"
   # open_run_log takes a NAME rather than a path, so this one is not absolute.
   SLOT_LOG_NAME="${RUN_SLOT}-run.log"
+
+  # #2764: the voice artifacts, which are deliberately NOT slot-scoped and must not become so. One
+  # drafting run at a time is exactly what makes them safe to share, and a check never touches them
+  # (it does not draft). They are named here anyway, with everything else, so that no runner has to
+  # spell out a handoff path itself and the Debug folder is honoured for free: the runbook used to
+  # state them as ~/Library/Application Support/Overture/..., which is the Release folder, so a Debug
+  # run following it read and wrote Dan's live voice files.
+  SHARED_VOICE_FEEDBACK="${SUPPORT}/overture-voice-feedback.json"
+  SHARED_RECENT_OPENERS="${SUPPORT}/overture-recent-openers.json"
+  SHARED_VOICE_GUIDANCE="${SUPPORT}/overture-voice-guidance.md"
 }
 
 # The per-chunk family. Functions rather than variables because the index is not known until the queue is
@@ -80,4 +90,71 @@ slot_chunk_events_prefix() { echo "${SUPPORT}/${RUN_SLOT}-run-events.chunk-"; }
 slot_wipe_chunk_files() {
   rm -rf "${SLOT_CHUNKDIR}" 2>/dev/null || true
   rm -f "$(slot_chunk_log_prefix)"*.log "$(slot_chunk_events_prefix)"*.jsonl 2>/dev/null || true
+}
+
+# #2764: did this run stay in its own lane?
+#
+# The runbook no longer states a path and the prompt says its own paths win, but both of those are
+# instructions to a model, and a rule that lives only in a prompt is a hope (L27). This is the
+# deterministic half: fingerprint every OTHER slot's results file before the run, and check it again
+# after. A change means something followed a path it was not given and wrote another run's answers.
+#
+# Content, not size-and-time: a stand-in that happens to match keeps the stale reading (L40). `cksum` is
+# POSIX and reads the bytes.
+slot_results_fingerprint() {
+  if [ -f "$1" ]; then cksum < "$1"; else echo "absent"; fi
+}
+
+# The slots that are not this one. Listed here rather than at the call site so adding a third slot
+# cannot leave a run unchecked against it.
+slot_others() {
+  for candidate in prep check; do
+    [ "${candidate}" = "${RUN_SLOT}" ] || echo "${candidate}"
+  done
+}
+
+slot_record_foreign_results() {
+  FOREIGN_RESULTS_BEFORE=""
+  for other in $(slot_others); do
+    fp="$(slot_results_fingerprint "${SUPPORT}/overture-${other}-results.json")"
+    FOREIGN_RESULTS_BEFORE="${FOREIGN_RESULTS_BEFORE}${other}|${fp}
+"
+  done
+}
+
+# Reports one of three outcomes, never two. "Nothing to compare" is its own answer and is NOT success:
+# finding no subject is exactly what a check that never ran looks like (L98).
+slot_check_foreign_results() {
+  checked=0
+  violated=0
+  for other in $(slot_others); do
+    before="$(printf '%s' "${FOREIGN_RESULTS_BEFORE}" | grep "^${other}|" | cut -d'|' -f2-)"
+    after="$(slot_results_fingerprint "${SUPPORT}/overture-${other}-results.json")"
+    if [ "${before}" = "absent" ] && [ "${after}" = "absent" ]; then
+      continue
+    fi
+    checked=$((checked + 1))
+    if [ "${before}" != "${after}" ]; then
+      violated=$((violated + 1))
+      {
+        echo "$(date -u '+%Y-%m-%dT%H:%M:%SZ') run-slot: BOUNDARY VIOLATION."
+        echo "  This run is the '${RUN_SLOT}' slot, and the '${other}' slot's results file CHANGED while"
+        echo "  it was running: ${SUPPORT}/overture-${other}-results.json"
+        echo "  before: ${before}"
+        echo "  after:  ${after}"
+        echo "  Something followed a path it was not given. Another run's answers may have been"
+        echo "  overwritten, and that run cannot tell."
+      } | tee -a "${SUPPORT}/run-boundary-violation.log"
+    fi
+  done
+  if [ "${violated}" -gt 0 ]; then
+    echo "prep: ${violated} boundary violation(s). See ${SUPPORT}/run-boundary-violation.log"
+    return 1
+  fi
+  if [ "${checked}" -eq 0 ]; then
+    echo "prep: no other slot had a results file to check against (nothing was compared)."
+    return 0
+  fi
+  echo "prep: stayed in its own lane (${checked} other slot results file(s) unchanged)."
+  return 0
 }
