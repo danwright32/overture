@@ -43,11 +43,25 @@ struct MastheadGuardTests {
     // #377: a live app and a Debug build can be open side by side showing different data; the
     // masthead must carry a marker that only compiles into Debug builds, so it can never leak
     // into what Dan sees running live.
-    @Test func debugMarkerIsGatedOnDebugFlag() {  // #377
+    //
+    // #2726: the two halves are asserted TOGETHER, inside the same region, which is the only form of this
+    // claim that means anything. The file-wide version asked whether `#if DEBUG` appears anywhere and
+    // whether `"Debug"` appears anywhere, and `QueueView.swift` carries three unrelated `#if DEBUG`
+    // blocks, so the marker could sit entirely OUTSIDE any of them and both assertions would still pass
+    // (L135). That is the leak this guard exists to prevent, and the guard could not see it.
+    @Test func debugMarkerIsGatedOnDebugFlag() throws {  // #377
         let queueView = source("Overture/UI/QueueView.swift")
         #expect(!queueView.isEmpty)
-        #expect(queueView.contains("#if DEBUG"))
-        #expect(queueView.contains("\"Debug\""))
+
+        // The masthead's own gate, found from the wordmark beside it rather than from whichever
+        // `#if DEBUG` comes first in the file.
+        let masthead = try #require(SourceGuardHelper.between("Text(\"Overture\").font(OVType.wordmark)",
+                                                              and: "#endif", in: queueView),
+                                    "expected to find the masthead's wordmark and the gate under it")
+        #expect(masthead.contains("#if DEBUG"),
+                "the Debug marker must sit under a compile-time gate, or it ships in the build Dan runs")
+        #expect(masthead.contains("Text(\"Debug\")"),
+                "and the marker itself must be inside that gate, which is the whole claim")
     }
 
     // #1131: the masthead status line now shows ONLY "Scouted X ago". The prep/review/approved counts and

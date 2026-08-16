@@ -206,9 +206,24 @@ struct ShowSummaryWiringTests {
         #expect(row.contains("ShowSummaryCopy.line("))
     }
 
-    @Test func theQueueModelCarriesItToTheRow() {
+    // #2726: scoped to the initialiser that BUILDS the card, not to the file.
+    //
+    // The file-wide version of this was vacuous, and measured so rather than reasoned about: deleting
+    // `showSummary: p.showSummary,` from the QueueItem initialiser left it green, because
+    // `QueueView+Model.swift` names `showSummary` seven times and one of them is the property's own
+    // declaration. The guard said "carries it to the row" and asked "is this word in the file" (L135).
+    //
+    // It compiles with the line gone, too, because the property is defaulted, so the only sign would have
+    // been the sentence quietly missing from every card.
+    @Test func theQueueModelCarriesItToTheRow() throws {
         let model = SourceGuardHelper.source("Overture/UI/QueueView+Model.swift")
-        #expect(model.contains("showSummary"))
+        let builder = try #require(SourceGuardHelper.between("init(_ p: Prospect, sendGroups:",
+                                                             and: "\n    }", in: model),
+                                   "expected to find the QueueItem initialiser that builds a card")
+        #expect(builder.contains("showSummary: p.showSummary"),
+                "the card's initialiser must carry the show summary, or the line vanishes from every row")
+        #expect(builder.contains("showSummaryAbsence: p.showSummaryAbsence"),
+                "and the reason there is none, or a row cannot tell an empty summary from an unasked one")
     }
 
     // Only the runbook can produce either field, so a runbook that stops asking silently empties the line

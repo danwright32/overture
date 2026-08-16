@@ -185,7 +185,11 @@ struct ProducerCorrectionControlTests {
     @Test func theRowAndFactoryReallyOfferTheControl() {
         let row = SourceGuardHelper.source("Overture/UI/ProspectRowView.swift")
         let factory = SourceGuardHelper.source("Overture/UI/ProspectRowFactory.swift")
-        #expect(row.contains("onCorrectProducer"))
+        // #2726: the CALL, not the name. `onCorrectProducer` without a paren is satisfied by the row's
+        // own property declaration (`var onCorrectProducer: (...) -> Void = { _ in }`), which is present
+        // whether anything calls it or not, so the guard said "wired in" and asked "does this word exist"
+        // (L135).
+        #expect(row.contains("onCorrectProducer("))
         #expect(row.contains("QueueModel.producerCorrectionLabel"))
         #expect(factory.contains("ProspectMutations.correctProducer"))
     }
