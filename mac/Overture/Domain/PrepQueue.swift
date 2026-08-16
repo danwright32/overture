@@ -407,7 +407,6 @@ enum PrepQueueBuilder {
     }
 
     static var defaultURL: URL {
-        StoreLocation.handoffDirectory
-            .appendingPathComponent("overture-prep-queue.json")
+        RunSlot.prep.queueURL(in: StoreLocation.handoffDirectory)
     }
 }

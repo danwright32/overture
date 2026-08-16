@@ -16,7 +16,7 @@ enum PrepProgressDecoder {
     }
 
     static var defaultURL: URL {
-        StoreLocation.handoffDirectory.appendingPathComponent("overture-prep-progress.json")
+        RunSlot.prep.progressURL(in: StoreLocation.handoffDirectory)
     }
 
     // Best-effort read for the toolbar: a missing, malformed, or mid-write file (the workflow may

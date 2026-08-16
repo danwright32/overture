@@ -253,6 +253,24 @@ about is not something Dan researches). What survives is the by-hand genre corre
 
 ### `overture-prep-queue.json` and `overture-prep-results.json`
 
+**Where these names come from, since #2763.** Every file a prep-style run touches (this queue, its
+results, the N of M counter, the marker, the cancel sentinel, the chunk directory, the logs, the events
+files and their FIFOs, the pid file, the stall state) is named by `RunSlot`, in two halves that must
+agree: `mac/Overture/Domain/RunSlot.swift` for the app and `mac/scripts/lib/run-slot.sh` for the runner.
+The names above are what the `prep` slot produces, unchanged, and two guards keep it that way: a Swift
+one refusing any `appendingPathComponent("prep...")` outside `RunSlot`, and a shell one refusing any
+`$SUPPORT/` literal in `prep-run.sh` outside its resolver.
+
+The slot reaches the runner as `OVERTURE_RUN_SLOT`, and an ABSENT value means `prep`. That is a
+compatibility contract, not a convenience: the runner script lives in the git checkout rather than the
+app bundle, and `update-overture.sh` fast-forwards the checkout before the rebuild, so a new script
+routinely meets an app that names no slot. An UNKNOWN value is refused, and the refusal is written to
+`runner-launch.log`, which is slot-independent because the slot is what names every other log.
+
+A second slot, `check`, exists and nothing writes it yet: the reachability check still shares the prep
+slot's files, and the exclusion between the two is unchanged. #2760 moves the check onto its own slot and
+#2765 lets the two run at once. Until then there are no `overture-check-*` files on disk.
+
 The app's round trip with the Prep run. The app writes `prep-queue.json` (the kept-undrafted
 prospects that need a contact and a draft, plus, since #367, any prospect Dan explicitly flagged
 for re-prep even though it already has one, via `PrepQueueBuilder.encode`); the Prep run reads it,

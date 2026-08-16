@@ -62,7 +62,7 @@ enum DetachedRunOutcome {
 // the file read is a thin wrapper.
 enum RunLog {
     static var prepURL: URL {
-        StoreLocation.handoffDirectory.appendingPathComponent("prep-run.log")
+        RunSlot.prep.runLogURL(in: StoreLocation.handoffDirectory)
     }
 
     static var replyClassifyURL: URL {
