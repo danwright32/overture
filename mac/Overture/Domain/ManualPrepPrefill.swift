@@ -198,6 +198,26 @@ enum ManualPrepEditing {
     static func canSave(email: String, subject: String, body: String) -> Bool {
         refusalKind(email: email, subject: subject, body: body) == nil
     }
+
+    // #2574: the note beside the body while it does not open with a greeting. Nil when there is nothing
+    // to say.
+    //
+    // NOT a refusal, and deliberately not added to `Refusal` above. Since #2545 a body with no greeting is
+    // held at SEND (`Recipient.isBlockedByGreeting`), and that hold carries an override. A sheet that
+    // refused what the send gate merely holds would be stricter than the rule it describes, which blocks
+    // Dan by a rule nothing states (L99, and the reason `refusalKind` does not mention greetings).
+    //
+    // The judgment is `DraftGreeting.opensWithAGreeting`, the SAME call the hold makes, so the sheet and
+    // the gate cannot disagree about what a greeting is. Two definitions of that is how a hint tells him
+    // he is fine and the send then holds anyway (L16).
+    //
+    // Silent on an EMPTY body, because `needsBody` is already refusing there and saying both would be two
+    // sentences about one box (#843). It appears the moment there is something to greet with.
+    static func greetingHint(body: String) -> String? {
+        guard !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        guard !DraftGreeting.opensWithAGreeting(body) else { return nil }
+        return ActionAck.manualPrepGreetingHint
+    }
 }
 
 // The sentences the manual-prep editor says about the address, kept out of the view so the copy Dan
