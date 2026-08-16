@@ -370,6 +370,17 @@ already drifting from the Swift version it mirrored.
   bare name is silently ignored. Copy that is NOT the app's own voice (an outbound email body, an RFC822 header,
   AppleScript, the draft lint's search terms) is marked at the source with
   `// copy-inventory:ignore-start  <why>`, and every such region is listed in the inventory itself.
+  **The outbound email half of that has its own document and its own cold read (#2650):
+  `docs/outbound-copy.md`**, generated the same way and kept fresh by the same suite, from the ignore
+  regions tagged `outbound-email:`. It exists because an exclusion that is CORRECT still leaves its
+  content with no reviewer unless one is named (L129): the inventory is rightly the app's voice to Dan,
+  which left the sentences going to strangers under his name as the only copy in the product nobody read
+  cold. #2643 is the proof, a closing note telling people who had never replied that it was good to be in
+  touch, which survived a rewrite of the sentence beside it three days earlier. Read its diff in the same
+  pass as the inventory's, and ask the question that list exists for, which is NOT the inventory's
+  question: what state is this sentence ONLY ever sent in, and is every clause true of that state? A
+  region that reads like outbound email and carries no tag fails `OutboundCopyTests`, so a new one cannot
+  quietly arrive without a reader.
   Before opening a PR that adds or changes any of these sentences, read the new and changed ones
   COLD (#843/#844): open `git diff docs/copy-inventory.md`, read each added or reworded line in the
   order a person meets it on screen (the row title before its subtitle, the section heading before

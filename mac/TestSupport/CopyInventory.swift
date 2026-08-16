@@ -241,23 +241,27 @@ enum CopyInventory {
     // So a stale file is REPORTED by default and rewritten only on request. Reporting still names what
     // moved, because "the inventory is stale" alone leaves the reader unable to tell their own copy
     // change from an accident of the run, which is the distinction that matters here.
+    // #2650: `documentPath` names the file in every sentence below, defaulted so no existing caller
+    // changes. There are two generated copy documents now, the app's own voice and what it sends out,
+    // and a message naming the wrong one sends the reader to `git diff` a file that did not move.
     static func checkCheckedIn(existing: String, generated: String,
-                               regenerate: Bool) -> CheckedInOutcome {
+                               regenerate: Bool,
+                               documentPath: String = "docs/copy-inventory.md") -> CheckedInOutcome {
         guard existing != generated else { return .upToDate }
 
         if regenerate {
             return .regenerated(contents: generated, message: """
-                docs/copy-inventory.md was out of date and has been regenerated, because this run \
+                \(documentPath) was out of date and has been regenerated, because this run \
                 asked for it.
 
-                Read the diff (`git diff docs/copy-inventory.md`): it is every sentence this branch \
-                adds, removes or rewords, in the words Dan will actually read. If it says what you \
+                Read the diff (`git diff \(documentPath)`): it is every sentence this branch \
+                adds, removes or rewords, in the words a person will actually read. If it says what you \
                 meant it to say, commit it.
                 """)
         }
 
         return .stale(message: """
-            docs/copy-inventory.md is out of date. NOTHING has been written: a run that was not asked \
+            \(documentPath) is out of date. NOTHING has been written: a run that was not asked \
             to change the repo does not change it.
 
             \(differenceReport(existing: existing, generated: generated))

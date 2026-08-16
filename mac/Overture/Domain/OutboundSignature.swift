@@ -24,7 +24,7 @@ struct OutboundSignature: Equatable, Sendable {
     // byte-for-byte unchanged. The real send path always passes a populated signature.
     static let none = OutboundSignature(html: nil, plainText: "")
 
-    // copy-inventory:ignore-start  outbound email sign-off, not Overture's own voice to Dan (#915)
+    // copy-inventory:ignore-start  outbound-email: the sign-off a recipient reads, not Overture's own voice to Dan (#915, #2650)
     // The plain-text fallback Overture appends when it has no HTML signature (the fetch failed, or it has
     // not fetched yet). One definition, replacing the literal that was copied across FollowUp and
     // ConversationReminder.
