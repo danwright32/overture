@@ -378,6 +378,16 @@ enum ActionAck {
     static let manualPrepNeedsBodyReason = "Write the email before saving it"
     static let manualPrepNeedsSubjectReason = "Add a subject line"
 
+    // #2574: a HINT, not a refusal. The body not opening with a greeting does not stop the draft saving;
+    // it stops it SENDING, and that hold carries the override Dan asked for. A sheet stricter than the
+    // gate behind it blocks input the app would accept, by a rule nothing states (L99).
+    //
+    // Says what happens next rather than what is wrong, because nothing is wrong yet: he is mid-sentence.
+    // Deliberately not the draft card's wording ("This draft won't send: it doesn't open with a greeting.
+    // Edit it to add one."), which is a verdict on a finished draft and would read as a scolding on a box
+    // he is still typing into. The two share the JUDGMENT, which is the half that must not drift.
+    static let manualPrepGreetingHint = "Emails are held at send unless the body opens with a greeting"
+
     static let manualPrepNeedsRecipient = "Add an address to send to. Nothing was saved"
     static let manualPrepNeedsBody = "Write the email before saving it. Nothing was saved"
     static let manualPrepNeedsSubject = "Add a subject line. Nothing was saved"

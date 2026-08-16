@@ -108,6 +108,15 @@ struct ManualPrepSheet: View {
                 .font(OVType.body)
                 .frame(minHeight: 180)
                 .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(OVColor.line))
+            // #2574: under the field it is about, unlike the Save refusal, which sits beside the button
+            // for the #843 reason given below. This one names the BODY, so anywhere else would make him
+            // look for which box it meant. It never disables anything: the send hold is the rule, and it
+            // has an override.
+            if let hint = ManualPrepEditing.greetingHint(body: emailBody) {
+                Text(hint)
+                    .font(OVType.tag)
+                    .foregroundStyle(OVColor.inkSoft)
+            }
         }
     }
 
