@@ -346,7 +346,11 @@ struct DraftReviewView: View {
             issueFlags(DraftCheck.findings(in: body,
                                            title: item.groupName,   // #1141: don't flag the title's own "!"
                                            knownsDate: item.performanceDate != nil,
-                                           knownsVenue: item.venue != nil)
+                                           knownsVenue: item.venue != nil,
+                                           // #2531: the ask rule is a COLD pitch rule. A returning client
+                                           // reads a different register, and the real email Dan sent one
+                                           // asks for nothing by this rule and is right not to.
+                                           isColdPitch: item.priorRelationship == "none")
                 .filter { !$0.isBlocking })
         }
     }

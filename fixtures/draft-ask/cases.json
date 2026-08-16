@@ -1,0 +1,266 @@
+{
+  "version": 1,
+  "purpose": "One shared calibration corpus for the rule that a drafted pitch must actually ASK for something (#1889, #2531). Two implementations judge it, the TypeScript eval (src/lib/prepEval.asksAboutPhotographyPlans) and the Swift draft lint (DraftCheck), and twin implementations in two languages consume one shared committed fixture rather than each carrying its own idea of the rule (L26).",
+  "acceptsMatterMost": "The accept side is the half that protects a good draft. Every accepting body here is a REAL compliant draft from fixtures/prep-eval, which words the ask nine different ways because the runbook tells the run to reword it every time. A rule pinned to one spelling would fail exactly the drafts it exists to protect (L104).",
+  "rejectsAreDerived": "Every rejecting body is a real body with its ask sentence removed, or a real body plus one of the rewrites the runbook names. None is invented, so none can describe a draft the run cannot produce (L48).",
+  "cases": [
+    {
+      "name": "agency-inbox-is-not-the-performers-contact/0/contacts/0/overrideBody",
+      "from": "fixtures/prep-eval/agency-inbox-is-not-the-performers-contact.json/sampleCompliantOutput/results/0/contacts/0/overrideBody",
+      "asks": true,
+      "body": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to your August 12 show at The Basement Room. I shoot unobtrusive, no-flash documentary coverage, so the audience doesn't notice me and the performance isn't disturbed. I've been photographing at Carnegie Hall for nearly ten years, with work at Lincoln Center and Radio City Music Hall as well, and you can see my portfolio at danwrightphotography.com. I'd be glad to talk about your photography plans for the night, if you don't have someone on it already. I look forward to hearing from you."
+    },
+    {
+      "name": "agency-inbox-is-not-the-performers-contact/0/contacts/1/overrideBody",
+      "from": "fixtures/prep-eval/agency-inbox-is-not-the-performers-contact.json/sampleCompliantOutput/results/0/contacts/1/overrideBody",
+      "asks": true,
+      "body": "I'm Dan Wright, a documentary photographer here in New York City. I'm writing in regard to your August 12 show at The Basement Room. My coverage is unobtrusive and shot without flash, so the audience stays with the performance rather than noticing a photographer working. Nearly ten years of that has been at Carnegie Hall, along with Lincoln Center and Radio City Music Hall, and you can see my portfolio at danwrightphotography.com. I'd be glad to talk through your photography plans for the show, if you don't have someone on it already. I look forward to hearing from you."
+    },
+    {
+      "name": "agency-inbox-is-not-the-performers-contact/0/draft/body",
+      "from": "fixtures/prep-eval/agency-inbox-is-not-the-performers-contact.json/sampleCompliantOutput/results/0/draft/body",
+      "asks": true,
+      "body": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to the August 12 performance of Classic Rock Songbook Vol. 2 at The Basement Room. I shoot unobtrusive, no-flash documentary coverage, so the audience doesn't notice me and the performance isn't disturbed. I've been photographing at Carnegie Hall for nearly ten years, with work at Lincoln Center and Radio City Music Hall as well, and you can see my portfolio at danwrightphotography.com. I'd be glad to talk about the photography plans for this one, if you don't have someone on it already. I look forward to hearing from you."
+    },
+    {
+      "name": "already-covered-photographer/0/draft/body",
+      "from": "fixtures/prep-eval/already-covered-photographer.json/sampleCompliantOutput/results/0/draft/body",
+      "asks": true,
+      "body": "My name is Dan Wright and I'm a professional arts photographer here in NYC. I'm writing in regard to your June 4 concert at Metro Concert Hall. I shoot unobtrusive, no-flash documentary coverage, so the audience doesn't notice me and the playing isn't disturbed. I've been photographing at Carnegie Hall for close to ten years, and you can see my portfolio at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about your photography plans for the performance. I look forward to hearing from you."
+    },
+    {
+      "name": "carnegie-citywide-press-inbox/0/draft/body",
+      "from": "fixtures/prep-eval/carnegie-citywide-press-inbox.json/sampleCompliantOutput/results/0/draft/body",
+      "asks": true,
+      "body": "My name is Dan Wright and I'm a professional arts photographer here in NYC. I'm writing in regard to Solaris Quartet's April 2 performance at Carnegie Hall. I shoot quiet, no-flash documentary coverage, so the audience doesn't notice me and the playing isn't disturbed. I've been photographing at Carnegie Hall for close to ten years, and you can see my portfolio at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about your photography plans for the performance. I look forward to hearing from you."
+    },
+    {
+      "name": "five-named-performers-none-dropped/0/contacts/0/overrideBody",
+      "from": "fixtures/prep-eval/five-named-performers-none-dropped.json/sampleCompliantOutput/results/0/contacts/0/overrideBody",
+      "asks": true,
+      "body": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to your August 3 show at The Example Room. I shoot unobtrusive, no-flash documentary coverage, so the audience doesn't notice me and the performance isn't disturbed. I've been photographing at Carnegie Hall for nearly ten years, with work at Lincoln Center and Radio City Music Hall as well, and you can see my portfolio at danwrightphotography.com. I'd be glad to talk about your photography plans for the night, if you don't have someone on it already. I look forward to hearing from you."
+    },
+    {
+      "name": "five-named-performers-none-dropped/0/contacts/1/overrideBody",
+      "from": "fixtures/prep-eval/five-named-performers-none-dropped.json/sampleCompliantOutput/results/0/contacts/1/overrideBody",
+      "asks": true,
+      "body": "I'm Dan Wright, a documentary photographer here in New York City. I'm writing in regard to your August 3 show at The Example Room. My coverage is unobtrusive and shot without flash, so the audience stays with the performance rather than noticing a photographer working. Nearly ten years of that has been at Carnegie Hall, along with Lincoln Center and Radio City Music Hall, and you can see my portfolio at danwrightphotography.com. I'd be glad to talk through your photography plans for the show, if you don't have someone on it already. I look forward to hearing from you."
+    },
+    {
+      "name": "five-named-performers-none-dropped/0/contacts/2/overrideBody",
+      "from": "fixtures/prep-eval/five-named-performers-none-dropped.json/sampleCompliantOutput/results/0/contacts/2/overrideBody",
+      "asks": true,
+      "body": "My name is Dan, and I'm a performing arts photographer based in New York City. I'm writing about your August 3 show at The Example Room. I work as a documentary photographer, no flash and no interruption, so nobody in the room has to think about me. I've spent close to ten years photographing at Carnegie Hall, plus dates at Radio City Music Hall and Lincoln Center, and my portfolio is at danwrightphotography.com. I'd be glad to hear what your photography plans are for the night, if you don't have someone on it already. I look forward to hearing from you."
+    },
+    {
+      "name": "five-named-performers-none-dropped/0/contacts/3/overrideBody",
+      "from": "fixtures/prep-eval/five-named-performers-none-dropped.json/sampleCompliantOutput/results/0/contacts/3/overrideBody",
+      "asks": true,
+      "body": "I'm Dan Wright, an arts photographer working here in NYC. I'm writing in regard to your August 3 show at The Example Room. I shoot quiet documentary coverage without flash, so the performance isn't disturbed and the audience doesn't clock me. Nearly a decade of that work has been at Carnegie Hall, alongside Lincoln Center and Radio City Music Hall, and you can see my portfolio at danwrightphotography.com. I'd be glad to talk about your photography plans for the show, if you haven't got someone on it already. I look forward to hearing from you."
+    },
+    {
+      "name": "five-named-performers-none-dropped/0/contacts/4/overrideBody",
+      "from": "fixtures/prep-eval/five-named-performers-none-dropped.json/sampleCompliantOutput/results/0/contacts/4/overrideBody",
+      "asks": true,
+      "body": "My name is Dan Wright and I'm a documentary arts photographer here in New York City. I'm writing about your August 3 show at The Example Room. I work without flash and stay out of the way, so the night runs as it would if I weren't there. I've photographed at Carnegie Hall for nearly ten years, with work at Radio City Music Hall and Lincoln Center too, and you can see my portfolio at danwrightphotography.com. I'd be glad to talk about your photography plans for the performance, if you don't have someone on it already. I look forward to hearing from you."
+    },
+    {
+      "name": "five-named-performers-none-dropped/0/draft/body",
+      "from": "fixtures/prep-eval/five-named-performers-none-dropped.json/sampleCompliantOutput/results/0/draft/body",
+      "asks": true,
+      "body": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to the August 3 performance of Feminine Fury at The Example Room. I shoot unobtrusive, no-flash documentary coverage, so the audience doesn't notice me and the performance isn't disturbed. I've been photographing at Carnegie Hall for nearly ten years, with work at Lincoln Center and Radio City Music Hall as well, and you can see my portfolio at danwrightphotography.com. I'd be glad to talk about the photography plans for this one, if you don't have someone on it already. I look forward to hearing from you."
+    },
+    {
+      "name": "host-venue-not-target/0/draft/body",
+      "from": "fixtures/prep-eval/host-venue-not-target.json/sampleCompliantOutput/results/0/draft/body",
+      "asks": true,
+      "body": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to your March 10 concert at Metro Concert Hall. I work in an unobtrusive documentary style, without flash, so the audience stays with the music and the players aren't pulled out of the performance. I've been photographing at Carnegie Hall for close to ten years, and you can see my portfolio at danwrightphotography.com. I'd be glad to photograph the concert, and if you don't have someone on it already, I'd like to talk about your photography plans for the night. I look forward to hearing from you."
+    },
+    {
+      "name": "listed-house-is-refused/0/draft/body",
+      "from": "fixtures/prep-eval/listed-house-is-refused.json/sampleCompliantOutput/results/0/draft/body",
+      "asks": true,
+      "body": "My name is Dan Wright and I'm a professional arts photographer here in NYC. I'm writing in regard to Lumen Quartet's April 18 performance at the Bergen Room. My coverage is unobtrusive and shot without flash, so the audience stays with the music and the players aren't working around a photographer. I've spent close to ten years photographing at Carnegie Hall, with other work at Lincoln Center and Radio City Music Hall, and you can see my portfolio at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about your photography plans for the performance. I look forward to hearing from you."
+    },
+    {
+      "name": "listing-credits-an-individual-producer/0/contacts/1/overrideBody",
+      "from": "fixtures/prep-eval/listing-credits-an-individual-producer.json/sampleCompliantOutput/results/0/contacts/1/overrideBody",
+      "asks": true,
+      "body": "My name is Dan and I'm a professional arts photographer here in New York City. I'm writing in regard to Ten Years of Tuesdays at The Example Room on August 17. I shoot unobtrusive, no-flash documentary coverage, so the audience doesn't notice me and the performance isn't disturbed. I've been photographing at Carnegie Hall for close to ten years, and you can see my portfolio at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about your photography plans for the night. I look forward to hearing from you."
+    },
+    {
+      "name": "listing-credits-an-individual-producer/0/contacts/2/overrideBody",
+      "from": "fixtures/prep-eval/listing-credits-an-individual-producer.json/sampleCompliantOutput/results/0/contacts/2/overrideBody",
+      "asks": true,
+      "body": "My name is Dan, I'm an arts photographer based in New York City. I'm writing about Ten Years of Tuesdays at The Example Room on August 17. I work in a documentary style, no flash and nothing intrusive, so the room stays as it is and the performance isn't interrupted. I've been shooting at Carnegie Hall for nearly ten years, and my portfolio is at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about your photography plans for that night. I look forward to hearing from you."
+    },
+    {
+      "name": "listing-credits-the-producing-company/0/contacts/1/overrideBody",
+      "from": "fixtures/prep-eval/listing-credits-the-producing-company.json/sampleCompliantOutput/results/0/contacts/1/overrideBody",
+      "asks": true,
+      "body": "My name is Dan and I'm a professional arts photographer here in New York City. I'm writing in regard to Summer Sessions at The Example Room on August 11. I shoot unobtrusive, no-flash documentary coverage, so the audience doesn't notice me and the performance isn't disturbed. I've been photographing at Carnegie Hall for close to ten years, and you can see my portfolio at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about your photography plans for the night. I look forward to hearing from you."
+    },
+    {
+      "name": "listing-credits-the-producing-company/0/contacts/2/overrideBody",
+      "from": "fixtures/prep-eval/listing-credits-the-producing-company.json/sampleCompliantOutput/results/0/contacts/2/overrideBody",
+      "asks": true,
+      "body": "My name is Dan, I'm an arts photographer based in New York City. I'm writing about Summer Sessions at The Example Room on August 11. I work in a documentary style, no flash and nothing intrusive, so the room stays as it is and the performance isn't interrupted. I've been shooting at Carnegie Hall for nearly ten years, and my portfolio is at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about your photography plans for that night. I look forward to hearing from you."
+    },
+    {
+      "name": "no-organiser-named-act-pursued/0/contacts/0/overrideBody",
+      "from": "fixtures/prep-eval/no-organiser-named-act-pursued.json/sampleCompliantOutput/results/0/contacts/0/overrideBody",
+      "asks": true,
+      "body": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to Broadway's Bad Guys!, which you're hosting with Miggie Snyder at The Example Room on August 14. I shoot unobtrusive, no-flash documentary coverage, so the audience doesn't notice me and the performance isn't disturbed. I've been photographing at Carnegie Hall for close to ten years, and you can see my portfolio at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about your photography plans for the night. I look forward to hearing from you."
+    },
+    {
+      "name": "no-organiser-named-act-pursued/0/contacts/1/overrideBody",
+      "from": "fixtures/prep-eval/no-organiser-named-act-pursued.json/sampleCompliantOutput/results/0/contacts/1/overrideBody",
+      "asks": true,
+      "body": "My name is Dan, I'm an arts photographer based in New York City. I'm writing about Broadway's Bad Guys!, which you're doing with Delaney Brown at The Example Room on August 14. I work in a documentary style, no flash and nothing intrusive, so the room stays as it is and the performance isn't interrupted. I've been shooting at Carnegie Hall for nearly ten years, and my portfolio is at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about your photography plans for that night. I look forward to hearing from you."
+    },
+    {
+      "name": "no-organiser-named-act-pursued/0/draft/body",
+      "from": "fixtures/prep-eval/no-organiser-named-act-pursued.json/sampleCompliantOutput/results/0/draft/body",
+      "asks": true,
+      "body": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to Broadway's Bad Guys! at The Example Room on August 14. I shoot unobtrusive, no-flash documentary coverage, so the audience doesn't notice me and the performance isn't disturbed. I've been photographing at Carnegie Hall for close to ten years, and you can see my portfolio at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about your photography plans for the night. I look forward to hearing from you."
+    },
+    {
+      "name": "presenter-not-venue/0/draft/body",
+      "from": "fixtures/prep-eval/presenter-not-venue.json/sampleCompliantOutput/results/0/draft/body",
+      "asks": true,
+      "body": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to your March 12 performance at the Grand Theatre. I work in an unobtrusive documentary style, no flash and no interruption, so the audience stays with the performance rather than noticing a photographer. I've been photographing at Carnegie Hall for close to ten years, and you can see my portfolio at danwrightphotography.com. I think that coverage would suit this night, and if you don't have someone on it already, I'd be glad to talk through your photography plans for the performance. I look forward to hearing from you."
+    },
+    {
+      "name": "returning-client-booked/0/draft/body",
+      "from": "fixtures/prep-eval/returning-client-booked.json/sampleCompliantOutput/results/0/draft/body",
+      "asks": true,
+      "body": "I saw Aurora Strings has a June 4 date at Metro Concert Hall coming up, and I'm writing to ask whether you've got photography sorted for that night. You know how I work by now: no flash, unobtrusive documentary coverage that neither the players nor the audience notice. I'd be glad to talk through your photography plans for the performance, and if you've already got someone on it, that's no trouble. I look forward to hearing from you."
+    },
+    {
+      "name": "returning-client-warm-lead/0/draft/body",
+      "from": "fixtures/prep-eval/returning-client-warm-lead.json/sampleCompliantOutput/results/0/draft/body",
+      "asks": true,
+      "body": "I'm writing about Boreal Quartet's July 12 performance at Metro Concert Hall. I shoot unobtrusive, no-flash documentary coverage of live performance, working quietly enough that the audience doesn't notice me and nothing on stage gets disturbed. I've been photographing at Carnegie Hall for close to ten years, and you can see my portfolio at danwrightphotography.com. I'd be glad to cover the July 12 date if you don't have someone on it already. Either way, it would be good to talk through your photography plans for the performance. I look forward to hearing from you."
+    },
+    {
+      "name": "season-calendar-describes-no-show/0/draft/body",
+      "from": "fixtures/prep-eval/season-calendar-describes-no-show.json/sampleCompliantOutput/results/0/draft/body",
+      "asks": true,
+      "body": "My name is Dan Wright and I'm a professional arts photographer here in NYC. I'm writing in regard to your April 2 Spring Program at The Example Room. I shoot unobtrusive, no-flash documentary coverage, so the audience doesn't notice me and the playing isn't disturbed. I've been photographing at Carnegie Hall for nearly ten years, with work at Lincoln Center and Radio City Music Hall as well, and you can see my portfolio at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about your photography plans for the night. I look forward to hearing from you."
+    },
+    {
+      "name": "self-produced-duo-both-performers/0/contacts/0/overrideBody",
+      "from": "fixtures/prep-eval/self-produced-duo-both-performers.json/sampleCompliantOutput/results/0/contacts/0/overrideBody",
+      "asks": true,
+      "body": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to your March 10 recital with Anna Pierre at Carnegie Hall. I work in an unobtrusive documentary style, no flash, so the audience doesn't notice me and nothing on stage is disturbed. I've been photographing at Carnegie Hall for nearly ten years, and you can see my portfolio at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about your photography plans for the recital. I look forward to hearing from you."
+    },
+    {
+      "name": "self-produced-duo-both-performers/0/contacts/1/overrideBody",
+      "from": "fixtures/prep-eval/self-produced-duo-both-performers.json/sampleCompliantOutput/results/0/contacts/1/overrideBody",
+      "asks": true,
+      "body": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to your March 10 recital with Virgile Roche at Carnegie Hall. I work in an unobtrusive documentary style, no flash, so the audience doesn't notice me and nothing on stage is disturbed. I've been photographing at Carnegie Hall for nearly ten years, and you can see my portfolio at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about your photography plans for the recital. I look forward to hearing from you."
+    },
+    {
+      "name": "self-produced-duo-both-performers/0/draft/body",
+      "from": "fixtures/prep-eval/self-produced-duo-both-performers.json/sampleCompliantOutput/results/0/draft/body",
+      "asks": true,
+      "body": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to the Roche and Pierre Duo's March 10 recital at Carnegie Hall. I work in an unobtrusive documentary style, no flash, so the audience doesn't notice me and nothing on stage is disturbed. I've been photographing at Carnegie Hall for nearly ten years, and you can see my portfolio at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about the photography plans for the recital. I look forward to hearing from you."
+    },
+    {
+      "name": "social-profile-is-not-the-destination/0/draft/body",
+      "from": "fixtures/prep-eval/social-profile-is-not-the-destination.json/sampleCompliantOutput/results/0/draft/body",
+      "asks": true,
+      "body": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to An Evening of Songs at The Supper Room on August 11. I shoot unobtrusive, no-flash documentary coverage, so the audience doesn't notice me and the performance isn't disturbed. I've been photographing at Carnegie Hall for close to ten years, and you can see my portfolio at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about your photography plans for the night. I look forward to hearing from you."
+    },
+    {
+      "name": "solo-artist-cabaret-not-an-organisation/0/contacts/0/overrideBody",
+      "from": "fixtures/prep-eval/solo-artist-cabaret-not-an-organisation.json/sampleCompliantOutput/results/0/contacts/0/overrideBody",
+      "asks": true,
+      "body": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to your August 3 show at The Example Room. I shoot documentary coverage without flash, staying out of the way, so the performance isn't disturbed and the audience doesn't notice anyone working. I've photographed at Carnegie Hall for nearly ten years, along with work at Lincoln Center and Radio City Music Hall, and you can see my portfolio at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about your photography plans for the night. I look forward to hearing from you!"
+    },
+    {
+      "name": "solo-artist-cabaret-not-an-organisation/0/draft/body",
+      "from": "fixtures/prep-eval/solo-artist-cabaret-not-an-organisation.json/sampleCompliantOutput/results/0/draft/body",
+      "asks": true,
+      "body": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to Alex Example's August 3 show at The Example Room. I shoot documentary coverage without flash, staying out of the way, so the performance isn't disturbed and the audience doesn't notice anyone working. I've photographed at Carnegie Hall for nearly ten years, along with work at Lincoln Center and Radio City Music Hall, and you can see my portfolio at danwrightphotography.com. If there isn't someone on it already, I'd be glad to talk about the photography plans for the night. I look forward to hearing from you!"
+    },
+    {
+      "name": "stale-site-misnamed-co-performer/0/contacts/0/overrideBody",
+      "from": "fixtures/prep-eval/stale-site-misnamed-co-performer.json/sampleCompliantOutput/results/0/contacts/0/overrideBody",
+      "asks": true,
+      "body": "My name is Dan Wright and I'm a professional arts photographer here in NYC. I'm writing in regard to your May 18 concert with Anna Pierre at Carnegie Hall. I shoot unobtrusive, no-flash documentary coverage, so the audience doesn't notice me and the performance isn't disturbed. I've been photographing at Carnegie Hall for close to ten years now, and you can see my portfolio at danwrightphotography.com. I'd be glad to talk about your photography plans for the performance, if you don't have someone on it already. I look forward to hearing from you!"
+    },
+    {
+      "name": "stale-site-misnamed-co-performer/0/contacts/1/overrideBody",
+      "from": "fixtures/prep-eval/stale-site-misnamed-co-performer.json/sampleCompliantOutput/results/0/contacts/1/overrideBody",
+      "asks": true,
+      "body": "I'm Dan Wright, a documentary photographer here in New York City working in the performing arts. I'm writing about your May 18 concert with Virgile Roche at Carnegie Hall. I work without flash and stay out of the way, so nothing about the night changes because I'm in the room. My work at Carnegie Hall goes back close to ten years, and my portfolio is at danwrightphotography.com. I'd be glad to talk through your photography plans for this performance, if you don't have it covered already. I look forward to hearing from you."
+    },
+    {
+      "name": "stale-site-misnamed-co-performer/0/draft/body",
+      "from": "fixtures/prep-eval/stale-site-misnamed-co-performer.json/sampleCompliantOutput/results/0/draft/body",
+      "asks": true,
+      "body": "My name is Dan Wright and I'm a professional arts photographer here in NYC. I'm writing in regard to the Roche and Pierre Duo's May 18 concert at Carnegie Hall. I shoot unobtrusive, no-flash documentary coverage, so the audience doesn't notice me and the performance isn't disturbed. I've been photographing at Carnegie Hall for close to ten years now, and you can see my portfolio at danwrightphotography.com. I'd be glad to talk about the photography plans for the performance, if there isn't someone on it already. I look forward to hearing from you!"
+    },
+    {
+      "name": "venue-history-band-says-he-knows-the-room/0/draft/body",
+      "from": "fixtures/prep-eval/venue-history-band-says-he-knows-the-room.json/sampleCompliantOutput/results/0/draft/body",
+      "asks": true,
+      "body": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to Sable Trio's September 18 concert at Harborlight Hall. I shoot documentary coverage without flash, staying out of the way, so the performance isn't disturbed and the audience doesn't notice anyone working. I've photographed at Harborlight Hall a few times, so I'm familiar with the room. I've photographed at Carnegie Hall for nearly ten years, along with work at Lincoln Center and Radio City Music Hall, and you can see my portfolio at danwrightphotography.com. If there isn't someone on it already, I'd be glad to talk about the photography plans for the night. I look forward to hearing from you!"
+    },
+    {
+      "name": "agency-inbox-is-not-the-performers-contact/0/contacts/0/overrideBody with its ask sentence removed",
+      "from": "fixtures/prep-eval/agency-inbox-is-not-the-performers-contact.json/sampleCompliantOutput/results/0/contacts/0/overrideBody (ask sentence removed)",
+      "asks": false,
+      "body": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to your August 12 show at The Basement Room. I shoot unobtrusive, no-flash documentary coverage, so the audience doesn't notice me and the performance isn't disturbed. I've been photographing at Carnegie Hall for nearly ten years, with work at Lincoln Center and Radio City Music Hall as well, and you can see my portfolio at danwrightphotography.com. I look forward to hearing from you."
+    },
+    {
+      "name": "agency-inbox-is-not-the-performers-contact/0/contacts/1/overrideBody with its ask sentence removed",
+      "from": "fixtures/prep-eval/agency-inbox-is-not-the-performers-contact.json/sampleCompliantOutput/results/0/contacts/1/overrideBody (ask sentence removed)",
+      "asks": false,
+      "body": "I'm Dan Wright, a documentary photographer here in New York City. I'm writing in regard to your August 12 show at The Basement Room. My coverage is unobtrusive and shot without flash, so the audience stays with the performance rather than noticing a photographer working. Nearly ten years of that has been at Carnegie Hall, along with Lincoln Center and Radio City Music Hall, and you can see my portfolio at danwrightphotography.com. I look forward to hearing from you."
+    },
+    {
+      "name": "agency-inbox-is-not-the-performers-contact/0/draft/body with its ask sentence removed",
+      "from": "fixtures/prep-eval/agency-inbox-is-not-the-performers-contact.json/sampleCompliantOutput/results/0/draft/body (ask sentence removed)",
+      "asks": false,
+      "body": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to the August 12 performance of Classic Rock Songbook Vol. 2 at The Basement Room. I shoot unobtrusive, no-flash documentary coverage, so the audience doesn't notice me and the performance isn't disturbed. I've been photographing at Carnegie Hall for nearly ten years, with work at Lincoln Center and Radio City Music Hall as well, and you can see my portfolio at danwrightphotography.com. I look forward to hearing from you."
+    },
+    {
+      "name": "already-covered-photographer/0/draft/body with its ask sentence removed",
+      "from": "fixtures/prep-eval/already-covered-photographer.json/sampleCompliantOutput/results/0/draft/body (ask sentence removed)",
+      "asks": false,
+      "body": "My name is Dan Wright and I'm a professional arts photographer here in NYC. I'm writing in regard to your June 4 concert at Metro Concert Hall. I shoot unobtrusive, no-flash documentary coverage, so the audience doesn't notice me and the playing isn't disturbed. I've been photographing at Carnegie Hall for close to ten years, and you can see my portfolio at danwrightphotography.com. I look forward to hearing from you."
+    },
+    {
+      "name": "carnegie-citywide-press-inbox/0/draft/body with its ask sentence removed",
+      "from": "fixtures/prep-eval/carnegie-citywide-press-inbox.json/sampleCompliantOutput/results/0/draft/body (ask sentence removed)",
+      "asks": false,
+      "body": "My name is Dan Wright and I'm a professional arts photographer here in NYC. I'm writing in regard to Solaris Quartet's April 2 performance at Carnegie Hall. I shoot quiet, no-flash documentary coverage, so the audience doesn't notice me and the playing isn't disturbed. I've been photographing at Carnegie Hall for close to ten years, and you can see my portfolio at danwrightphotography.com. I look forward to hearing from you."
+    },
+    {
+      "name": "five-named-performers-none-dropped/0/contacts/0/overrideBody with its ask sentence removed",
+      "from": "fixtures/prep-eval/five-named-performers-none-dropped.json/sampleCompliantOutput/results/0/contacts/0/overrideBody (ask sentence removed)",
+      "asks": false,
+      "body": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to your August 3 show at The Example Room. I shoot unobtrusive, no-flash documentary coverage, so the audience doesn't notice me and the performance isn't disturbed. I've been photographing at Carnegie Hall for nearly ten years, with work at Lincoln Center and Radio City Music Hall as well, and you can see my portfolio at danwrightphotography.com. I look forward to hearing from you."
+    },
+    {
+      "name": "a yes/no offer instead of an ask",
+      "from": "fixtures/prep-eval/agency-inbox-is-not-the-performers-contact.json/sampleCompliantOutput/results/0/contacts/0/overrideBody (ask sentence removed) plus the rewrite named in the runbook",
+      "asks": false,
+      "body": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to your August 12 show at The Basement Room. I shoot unobtrusive, no-flash documentary coverage, so the audience doesn't notice me and the performance isn't disturbed. I've been photographing at Carnegie Hall for nearly ten years, with work at Lincoln Center and Radio City Music Hall as well, and you can see my portfolio at danwrightphotography.com. I look forward to hearing from you. Would you like coverage of the evening?"
+    },
+    {
+      "name": "an interest test instead of an ask",
+      "from": "fixtures/prep-eval/agency-inbox-is-not-the-performers-contact.json/sampleCompliantOutput/results/0/contacts/0/overrideBody (ask sentence removed) plus the rewrite named in the runbook",
+      "asks": false,
+      "body": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to your August 12 show at The Basement Room. I shoot unobtrusive, no-flash documentary coverage, so the audience doesn't notice me and the performance isn't disturbed. I've been photographing at Carnegie Hall for nearly ten years, with work at Lincoln Center and Radio City Music Hall as well, and you can see my portfolio at danwrightphotography.com. I look forward to hearing from you. Let me know if you're interested."
+    },
+    {
+      "name": "an invitation to ask questions, which leaves the next step with them",
+      "from": "fixtures/prep-eval/agency-inbox-is-not-the-performers-contact.json/sampleCompliantOutput/results/0/contacts/0/overrideBody (ask sentence removed) plus the rewrite named in the runbook",
+      "asks": false,
+      "body": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to your August 12 show at The Basement Room. I shoot unobtrusive, no-flash documentary coverage, so the audience doesn't notice me and the performance isn't disturbed. I've been photographing at Carnegie Hall for nearly ten years, with work at Lincoln Center and Radio City Music Hall as well, and you can see my portfolio at danwrightphotography.com. I look forward to hearing from you. Happy to answer any questions you have."
+    }
+  ]
+}
