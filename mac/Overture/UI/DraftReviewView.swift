@@ -411,7 +411,10 @@ struct DraftReviewView: View {
         if let note = DraftReviewNotes.greeting(missing: item.draftMissingGreeting,
                                                 misaddressed: item.draftGreetingMisaddressed,
                                                 audience: item.greetingAudienceSize,
-                                                overridden: item.greetingOverridden) {
+                                                overridden: item.greetingOverridden,
+                                                namesSomeoneElse: item.draftGreetingNamesSomeoneElse,
+                                                contactName: item.draftGreetedContactName,
+                                                greetedName: item.draftGreetedName) {
             Text(note).font(.system(size: 10)).foregroundStyle(OVColor.rust)
                 .fixedSize(horizontal: false, vertical: true)
             if !item.greetingOverridden {
@@ -571,7 +574,10 @@ struct DraftReviewView: View {
         } message: {
             Text(DraftReviewNotes.greetingOverrideConfirm(missing: item.draftMissingGreeting,
                                                           misaddressed: item.draftGreetingMisaddressed,
-                                                          audience: item.greetingAudienceSize))
+                                                          audience: item.greetingAudienceSize,
+                                                          namesSomeoneElse: item.draftGreetingNamesSomeoneElse,
+                                                          contactName: item.draftGreetedContactName,
+                                                          greetedName: item.draftGreetedName))
         }
         // #789: the draft lint's own override, deliberately a separate confirm from the greeting one
         // above, so the reason Dan is waving something through is never ambiguous.

@@ -687,6 +687,22 @@ final class Recipient {
         return prospect.greetingAudienceSize > 1 && DraftGreeting.namesSomeone(effectiveBody)
     }
 
+    // #2579: the greeting names somebody who is clearly not this contact.
+    //
+    // The one safety property the #2545 move gave up. Before it, the greeting was composed from this very
+    // row, so it could not name anyone else; now the drafter writes it and nothing compared the two.
+    //
+    // A different question from `greetingMisaddressed` above, which is about a named greeting reaching
+    // SEVERAL people. This one is about the single-contact case that guard cannot see: one contact, Tom,
+    // and a body opening "Hi Emma,".
+    //
+    // The performer carve-out is deliberately NOT repeated here. A performer's own second-person letter
+    // goes to them alone, which makes a name in it right by construction for the audience question, and
+    // makes it exactly as wrong as any other if it is the wrong name.
+    var greetingNamesSomeoneElse: Bool {
+        DraftGreeting.namesSomeoneElse(greeting: effectiveBody, contactName: name)
+    }
+
     // #2545: Dan's deliberate override of the two greeting holds, pinned to the EXACT text he took it
     // on, the same shape as `lintOverriddenBody` above. Editing the body afterwards re-arms the hold
     // rather than carrying an approval forward onto words nobody has read.
@@ -697,7 +713,11 @@ final class Recipient {
     }
 
     var isBlockedByGreeting: Bool {
-        (draftIsMissingGreeting || greetingMisaddressed) && !isGreetingOverridden
+        // #2579 joins this disjunction rather than standing beside it, so it inherits the override Dan
+        // already has for a greeting hold. A third hold with no way past it would be the one that made
+        // him stop trusting the other two.
+        (draftIsMissingGreeting || greetingMisaddressed || greetingNamesSomeoneElse)
+            && !isGreetingOverridden
     }
 
     // RETAINED STORAGE, read by nothing (#2545). This held Dan's own opening for THIS contact, back when

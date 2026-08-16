@@ -17,25 +17,42 @@ enum DraftReviewNotes {
     //
     // Same shape as the lint below, including the audit trail: an overridden warning TONES DOWN rather
     // than disappearing, so a send that went out despite it can still be seen to have.
-    static func greeting(missing: Bool, misaddressed: Bool, audience: Int, overridden: Bool) -> String? {
-        guard missing || misaddressed else { return nil }
+    static func greeting(missing: Bool, misaddressed: Bool, audience: Int, overridden: Bool,
+                         namesSomeoneElse: Bool = false, contactName: String? = nil,
+                         greetedName: String? = nil) -> String? {
+        guard missing || misaddressed || namesSomeoneElse else { return nil }
         guard !overridden else { return "Sending despite the greeting warning you confirmed." }
-        return greetingBlockMessage(missing: missing, misaddressed: misaddressed, audience: audience)
+        return greetingBlockMessage(missing: missing, misaddressed: misaddressed, audience: audience,
+                                    namesSomeoneElse: namesSomeoneElse, contactName: contactName,
+                                    greetedName: greetedName)
     }
 
     // #718's two-step confirm: it repeats WHAT is wrong before asking him to send anyway, so the confirm
     // is never a bare "are you sure" about a fact he has already scrolled past. Built from the same
     // sentence the note shows, so the warning and the confirm cannot describe different problems.
-    static func greetingOverrideConfirm(missing: Bool, misaddressed: Bool, audience: Int) -> String {
-        greetingBlockMessage(missing: missing, misaddressed: misaddressed, audience: audience)
+    static func greetingOverrideConfirm(missing: Bool, misaddressed: Bool, audience: Int,
+                                        namesSomeoneElse: Bool = false, contactName: String? = nil,
+                                        greetedName: String? = nil) -> String {
+        greetingBlockMessage(missing: missing, misaddressed: misaddressed, audience: audience,
+                             namesSomeoneElse: namesSomeoneElse, contactName: contactName,
+                             greetedName: greetedName)
             + " Confirm you've checked it and it's fine to send as-is."
     }
 
     // A headless body cannot also carry a name, so the two are mutually exclusive in practice; missing
     // is answered first anyway rather than left to depend on that.
-    private static func greetingBlockMessage(missing: Bool, misaddressed: Bool, audience: Int) -> String {
+    private static func greetingBlockMessage(missing: Bool, misaddressed: Bool, audience: Int,
+                                             namesSomeoneElse: Bool = false, contactName: String? = nil,
+                                             greetedName: String? = nil) -> String {
         if missing {
             return "This draft won't send: it doesn't open with a greeting. Edit it to add one."
+        }
+        // #2579: BOTH names, because the whole content of this warning is which two disagree. "The
+        // greeting names the wrong person" leaves Dan to work out who it thinks it is addressing, on the
+        // one warning where the answer is the point.
+        if namesSomeoneElse, let greeted = greetedName, let contact = contactName {
+            return "This draft won't send: it opens \"Hi \(greeted)\" but this contact is \(contact). "
+                + "Check who it is addressed to."
         }
         return "This draft won't send: the greeting names one person but this email goes to "
             + "\(audience). Open it \"Hello,\" instead."

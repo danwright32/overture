@@ -86,6 +86,83 @@ enum DraftGreeting {
             }
     }
 
+    // #2579: WHO the greeting names, when it names exactly one person and names them clearly.
+    //
+    // Before #2545 the greeting was composed from the contact record, so it could not name the wrong
+    // person: the name came from the same row the email was addressed to. The drafter writes it now, and
+    // nothing compared the two, so a draft opening "Hi Emma," on a show whose only contact is Tom sent
+    // without complaint. `namesSomeone` already knew a greeting names SOMEBODY; this is who.
+    //
+    // Nil rather than a guess in every case it cannot read confidently, because the consequence of a
+    // wrong answer here is holding a good send:
+    //   - two people ("Hi Sarah and Tom,"), which is a greeting this cannot attribute
+    //   - the shape form ("Marcus, hello again,"), whose name is not where `namedToken` looks
+    //   - a filler ("Hi there,"), which names nobody
+    //   - anything carrying a character a name does not
+    static func greetedName(_ body: String?) -> String? {
+        guard let body, !body.isEmpty else { return nil }
+        let text = withoutAttnBlock(body)
+        guard let range = greetingRange(in: text) else { return nil }
+        let line = String(text[range]).split(separator: "\n").first.map(String.init) ?? ""
+        let token = namedToken(in: line)
+        guard !token.isEmpty, !isFiller(token) else { return nil }
+        let words = token.split(separator: " ").map(String.init)
+        guard words.count == 1, let only = words.first,
+              only.allSatisfy({ $0.isLetter || $0 == "'" || $0 == "-" }) else { return nil }
+        return only
+    }
+
+    // #2579: does the greeting name somebody who is clearly NOT this contact?
+    //
+    // Narrow on purpose, and every tolerance below exists to avoid holding a good send. It answers false
+    // whenever it is not sure:
+    //   - either half unknown (no readable greeting, or a contact with no name on record)
+    //   - the greeted word matches ANY token of the contact's name, so a surname-first greeting
+    //     ("Hi Wright,") and a middle name are fine
+    //   - a prefix in EITHER direction, so Tom/Thomas, Dan/Daniel, Kate/Katherine and an initial
+    //     ("Hi E,") all pass
+    //   - accents and case folded, so "Hi Jose," reaches José
+    //
+    //   - a familiar form of the name, from the list below, because the commonest of those are not
+    //     prefixes at all: Tom is not a prefix of Thomas (t-o-m against t-h-o), and neither is Bob of
+    //     Robert. The first version of this rule relied on the prefix test alone and held "Hi Tom," to
+    //     Thomas Fletcher, which its own test caught.
+    //
+    // The list only ever WIDENS tolerance, which is why it is safe to be incomplete: a pair nobody
+    // thought of costs a hold Dan can wave through, never a wrong send. It is not a claim to cover every
+    // name, and it is deliberately English-only, because a guessed equivalence in a language nobody here
+    // reads would be the opposite trade.
+    static func namesSomeoneElse(greeting body: String?, contactName: String?) -> Bool {
+        guard let greeted = greetedName(body)?.folded(), let contactName else { return false }
+        let known = contactName
+            .split(whereSeparator: { !$0.isLetter && $0 != "'" && $0 != "-" })
+            .map { String($0).folded() }
+            .filter { !$0.isEmpty }
+        guard !known.isEmpty, !greeted.isEmpty else { return false }
+        return !known.contains { couldBeTheSamePerson($0, greeted) }
+    }
+
+    private static func couldBeTheSamePerson(_ known: String, _ greeted: String) -> Bool {
+        if known == greeted || known.hasPrefix(greeted) || greeted.hasPrefix(known) { return true }
+        return familiarForms[known]?.contains(greeted) == true
+            || familiarForms[greeted]?.contains(known) == true
+    }
+
+    // Familiar forms that the prefix test cannot see. Keyed both ways round by the lookup above, so each
+    // pair is written once.
+    private static let familiarForms: [String: Set<String>] = [
+        "thomas": ["tom", "tommy"], "robert": ["bob", "bobby", "rob"], "william": ["bill", "billy", "will"],
+        "richard": ["dick", "rick", "rich"], "james": ["jim", "jimmy"], "john": ["jack", "johnny"],
+        "henry": ["harry", "hank"], "margaret": ["peggy", "maggie", "meg"], "elizabeth": ["betty", "liz", "beth", "eliza"],
+        "susan": ["sue", "suzy"], "edward": ["ted", "ned", "eddie"], "anthony": ["tony"],
+        "michael": ["mike", "mick"], "david": ["dave"], "stephen": ["steve"], "steven": ["steve"],
+        "nicholas": ["nick"], "gregory": ["greg"], "joseph": ["joe", "joey"], "charles": ["chuck", "charlie"],
+        "katherine": ["kate", "kathy", "katie"], "catherine": ["kate", "cathy", "katie"],
+        "mary": ["molly", "polly"], "sarah": ["sally"], "ann": ["nancy"], "christina": ["tina"],
+        "patricia": ["pat", "patty", "trish"], "frances": ["fanny"], "francis": ["frank"],
+        "lawrence": ["larry"], "eleanor": ["nell", "ellie"], "barbara": ["barb", "babs"],
+    ]
+
     // Everything before the first real sentence: the `Attn:` block if there is one, then the greeting.
     // Leaves a body alone when it opens with neither, so it is safe to run over any text.
     static func withoutLeadingOpening(_ body: String) -> String {
@@ -123,5 +200,13 @@ enum DraftGreeting {
     private static func isFiller(_ token: String) -> Bool {
         let words = token.split(separator: " ").map(String.init)
         return words.count == 1 && notNames.contains(words[0].lowercased())
+    }
+}
+
+private extension String {
+    // #2579: case and accents removed, so a greeting and a stored name are compared as the same word
+    // whichever way each was typed.
+    func folded() -> String {
+        folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil)
     }
 }

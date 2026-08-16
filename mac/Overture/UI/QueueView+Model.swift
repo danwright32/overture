@@ -189,6 +189,11 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // the button can say. `greetingOverridden` is Dan's confirmed override, for that exact text.
     var draftMissingGreeting: Bool = false
     var draftGreetingMisaddressed: Bool = false
+    // #2579: the third way, and the two names it needs to say which are in disagreement. Carried rather
+    // than re-derived on the card, so the sentence Dan reads names the same pair the hold judged.
+    var draftGreetingNamesSomeoneElse: Bool = false
+    var draftGreetedName: String? = nil
+    var draftGreetedContactName: String? = nil
     var greetingAudienceSize: Int = 1
     var greetingOverridden: Bool = false
     // #789: blocking lint findings in the text a still-pending recipient would actually receive
@@ -2385,6 +2390,12 @@ extension QueueItem {
             // lint below is, so what the card says holds the send is what `isSendablePending` holds it on.
             draftMissingGreeting: p.recipients.contains { $0.sendState == .pending && $0.draftIsMissingGreeting },
             draftGreetingMisaddressed: p.recipients.contains { $0.sendState == .pending && $0.greetingMisaddressed },
+            // #2579: the first pending recipient the greeting misnames, and the pair of names from THAT
+            // recipient, so the card cannot show one contact's name beside another's greeting.
+            draftGreetingNamesSomeoneElse: p.recipients.contains { $0.sendState == .pending && $0.greetingNamesSomeoneElse },
+            draftGreetedName: p.recipients.first { $0.sendState == .pending && $0.greetingNamesSomeoneElse }
+                .flatMap { DraftGreeting.greetedName($0.effectiveBody) },
+            draftGreetedContactName: p.recipients.first { $0.sendState == .pending && $0.greetingNamesSomeoneElse }?.name,
             greetingAudienceSize: p.greetingAudienceSize,
             // "nothing is held any more", NOT "somebody has an override", and the difference is the whole
             // safety of it: this flag both tones the warning down and REMOVES the Override button, so
