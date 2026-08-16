@@ -76,4 +76,32 @@ struct ClearConflictMutationTests {
         #expect(p.conflictClearedKey == nil)
         #expect(feedback.message == nil)                              // and it says nothing happened
     }
+
+    // #2693: the night holds TWO booked shoots, which the calendar now keeps both of. A cleared conflict
+    // is Dan's answer to that night, and the next scout must not put the question back to him because
+    // Downbeat listed the same two bookings the other way round. Nothing about his calendar changed, so
+    // nothing about the key may change either.
+    @Test func aClearedConflictSurvivesTheExportReorderingTwoShootsOnOneNight() throws {
+        let ctx = try context()
+        let one = OvertureBooking(id: "b1", clientId: "c1", clientDisplayName: "A Client",
+                                  shootName: "Sorenson and DiOrio", startDate: "2026-11-14",
+                                  endDate: "2026-11-14", venueId: nil, venueName: "Somewhere")
+        let other = OvertureBooking(id: "b2", clientId: "c1", clientDisplayName: "A Client",
+                                    shootName: "God Lives in Glass", startDate: "2026-11-14",
+                                    endDate: "2026-11-14", venueId: nil, venueName: "Somewhere")
+        func key(_ bookings: [OvertureBooking]) -> String? {
+            BlockedCalendar.build(bookings: bookings, exportedBlockedDates: [], daysOff: [])
+                .conflict(performanceDate: "2026-11-14", runEndDate: nil)?.key
+        }
+
+        let p = conflicted(ctx)
+        p.setScoutConflict(key([one, other]))
+        ProspectMutations.clearConflict(QueueItem(p), prospects: [p], context: ctx,
+                                        feedback: ActionFeedback())
+        #expect(p.hasUnclearedConflict == false)
+
+        p.setScoutConflict(key([other, one]))                         // the next scout, same two shoots
+
+        #expect(p.hasUnclearedConflict == false)
+    }
 }

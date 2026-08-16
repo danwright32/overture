@@ -7,8 +7,9 @@ import Foundation
 @Suite("Blocked calendar")
 struct BlockedCalendarTests {
 
-    private func booking(_ shoot: String, _ start: String, _ end: String? = nil) -> OvertureBooking {
-        OvertureBooking(id: "b-\(shoot)", clientId: "c1", clientDisplayName: "A Client",
+    private func booking(_ shoot: String, _ start: String, _ end: String? = nil,
+                         id: String? = nil) -> OvertureBooking {
+        OvertureBooking(id: id ?? "b-\(shoot)", clientId: "c1", clientDisplayName: "A Client",
                         shootName: shoot, startDate: start, endDate: end ?? start,
                         venueId: nil, venueName: "Somewhere")
     }
@@ -189,5 +190,134 @@ struct BlockedCalendarTests {
                                         exportedBlockedDates: [], daysOff: [])
 
         #expect(cal.hasUpcomingBookedShoot(today: ScoutTestClock.farFuture) == true)
+    }
+
+    // MARK: - Two shoots on one night (#2693)
+
+    // The defect: the store was one entry per DATE, so the second booking on a night overwrote the first
+    // and was invisible everywhere. The days off sheet, whose whole job is telling Dan what he already has
+    // on, under-reported it with nothing saying anything was missing.
+    @Test func bothShootsOnOneNightAreListed() {
+        let cal = BlockedCalendar.build(
+            bookings: [booking("Firebird Pops Orchestra", "2027-02-14"),
+                       booking("Feb14 Show - Potentially not happening - confirm", "2027-02-14")],
+            exportedBlockedDates: [], daysOff: [])
+
+        #expect(cal.days.filter { $0.kind == .bookedShoot }.map(\.name)
+                == ["Feb14 Show - Potentially not happening - confirm", "Firebird Pops Orchestra"])
+    }
+
+    // Dan's real export, measured 2026-08-15: fifteen bookings across thirteen dates, two of those dates
+    // carrying two shoots, and every future booking date ALSO present in `blockedDates`. That last part is
+    // what makes a naive "list them all" wrong: it would double every one of them.
+    private static let liveBookings: [(name: String, date: String)] = [
+        ("Battery Dance Festival", "2026-08-14"),
+        ("Spirit of Freedom", "2026-11-16"),
+        ("Total Vocal", "2026-11-24"),
+        ("A Gospel of Gratitude", "2026-11-28"),
+        ("Sorenson and Rutter", "2026-12-01"),
+        ("Barnwell, LaBarr, and Pederson", "2027-01-17"),
+        ("The Music of Sir Karl Jenkins", "2027-01-18"),
+        ("Feb14 Show - Potentially not happening - confirm", "2027-02-14"),
+        ("Firebird Pops Orchestra", "2027-02-14"),
+        ("The Music of Jennifer Lucy Cook", "2027-04-03"),
+        ("April20 Show - Potentially not happening - confirm", "2027-04-20"),
+        ("May1 Show - Potentially not happening - confirm", "2027-05-01"),
+        ("Sorenson and DiOrio", "2027-05-30"),
+        ("God Lives in Glass", "2027-05-30"),
+        ("Requiem for the Living", "2027-06-13"),
+    ]
+
+    private static let liveBlockedDates = ["2026-11-16", "2026-11-24", "2026-11-28", "2026-12-01",
+                                           "2027-01-17", "2027-01-18", "2027-02-14", "2027-04-03",
+                                           "2027-04-20", "2027-05-01", "2027-05-30", "2027-06-13"]
+
+    @Test func theLiveExportsFifteenBookingsAllReachTheSheet() {
+        let cal = BlockedCalendar.build(
+            bookings: Self.liveBookings.map { booking($0.name, $0.date) },
+            exportedBlockedDates: Self.liveBlockedDates, daysOff: [])
+
+        let booked = cal.days.filter { $0.kind == .bookedShoot }
+        #expect(booked.count == 15)                                   // it showed 13
+        #expect(booked.filter { $0.date == "2027-02-14" }.map(\.name)
+                == ["Feb14 Show - Potentially not happening - confirm", "Firebird Pops Orchestra"])
+        #expect(booked.filter { $0.date == "2027-05-30" }.map(\.name)
+                == ["God Lives in Glass", "Sorenson and DiOrio"])
+    }
+
+    // The other half of that: an exported date is a booking's date on the live export, so it must not sit
+    // beside the booking as a second, unnamed row.
+    @Test func anExportedBlockedDateAddsNoRowToANightABookingAlreadyNames() {
+        let cal = BlockedCalendar.build(bookings: [booking("Smith Recital", "2026-11-14")],
+                                        exportedBlockedDates: ["2026-11-14"], daysOff: [])
+
+        #expect(cal.days.map(\.name) == ["Smith Recital"])
+    }
+
+    // Two bookings identical in name and date are ONE fact to everything downstream: the same key, the
+    // same sentence, the same row. Keeping both would hand the sheet two rows sharing an id.
+    @Test func twoBookingsAlikeInNameAndDateAreOneRow() {
+        let cal = BlockedCalendar.build(
+            bookings: [booking("Total Vocal", "2026-11-24", id: "one"),
+                       booking("Total Vocal", "2026-11-24", id: "two")],
+            exportedBlockedDates: [], daysOff: [])
+
+        #expect(cal.days.count == 1)
+    }
+
+    // WHICH of two shoots the stored key names must not depend on the order Downbeat happened to list
+    // them in. The key is Dan's acceptance ("I can shoot this anyway"), so a reordered export that moves
+    // it re-blocks a night he has already waved through, for no change in his calendar at all.
+    @Test func theConflictKeyDoesNotMoveWhenTheExportListsTheSameTwoBookingsTheOtherWayRound() {
+        let one = booking("Sorenson and DiOrio", "2027-05-30")
+        let other = booking("God Lives in Glass", "2027-05-30")
+        let asExported = BlockedCalendar.build(bookings: [one, other],
+                                               exportedBlockedDates: [], daysOff: [])
+        let reordered = BlockedCalendar.build(bookings: [other, one],
+                                              exportedBlockedDates: [], daysOff: [])
+
+        #expect(asExported.conflict(performanceDate: "2027-05-30", runEndDate: nil)?.key
+                == reordered.conflict(performanceDate: "2027-05-30", runEndDate: nil)?.key)
+    }
+
+    // A night holding two shoots still answers the one question a conflict asks with ONE day, because the
+    // prospect stores one key. Which one is settled here (by name) rather than by the export.
+    @Test func aNightWithTwoShootsStillReportsASingleNamedConflict() {
+        let cal = BlockedCalendar.build(
+            bookings: [booking("Sorenson and DiOrio", "2027-05-30"),
+                       booking("God Lives in Glass", "2027-05-30")],
+            exportedBlockedDates: [], daysOff: [])
+        let clash = cal.conflict(performanceDate: "2027-05-30", runEndDate: nil)
+
+        #expect(clash?.name == "God Lives in Glass")
+        #expect(clash?.reason == "You're already shooting God Lives in Glass on May 30.")
+    }
+
+    // The same question asked of Dan's own half, which is where the identical defect could sit: two of
+    // his ranges can overlap, one entry per date keeps one of their notes, and the stored key carries that
+    // note. Both ranges are listed in full on the sheet from the stored rows, so nothing is hidden the way
+    // a lost booking was, but WHICH note the key quotes must still not depend on the order the rows came
+    // back in, or the same re-block happens for no change he made.
+    @Test func theDayOffKeyDoesNotMoveWhenTwoOverlappingRangesArriveInADifferentOrder() {
+        let early = dayOff("2026-11-10", "2026-11-16", note: "Vacation")
+        let late = dayOff("2026-11-14", "2026-11-22", note: "Away for a wedding")
+        let one = BlockedCalendar.build(bookings: [], exportedBlockedDates: [], daysOff: [early, late])
+        let other = BlockedCalendar.build(bookings: [], exportedBlockedDates: [], daysOff: [late, early])
+
+        #expect(one.conflict(performanceDate: "2026-11-14", runEndDate: nil)?.key
+                == other.conflict(performanceDate: "2026-11-14", runEndDate: nil)?.key)
+    }
+
+    // Precedence is unchanged where a booked shoot lands on a day off, and the day off does not turn up in
+    // the sheet's booked list beside the shoots that outranked it.
+    @Test func aDayOffUnderTwoBookedShootsIsNotListedAtAll() {
+        let cal = BlockedCalendar.build(
+            bookings: [booking("Sorenson and DiOrio", "2027-05-30"),
+                       booking("God Lives in Glass", "2027-05-30")],
+            exportedBlockedDates: [],
+            daysOff: [dayOff("2027-05-30", "2027-05-30", note: "Vacation")])
+
+        #expect(cal.days.allSatisfy { $0.kind == .bookedShoot })
+        #expect(cal.days.count == 2)
     }
 }
