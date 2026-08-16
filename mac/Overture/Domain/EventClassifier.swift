@@ -190,10 +190,26 @@ enum EventClassifier {
         return .other
     }
 
+    // #2565: the two strings the signal lists above are matched against for a given row, and WHICH of them
+    // is the party, in one place.
+    //
+    // Exposed because the corrective pass for the rows #2508 already lifted has to ask what the OLD
+    // pattern would have said about THIS row, and the only honest way to ask that is against the same
+    // strings the classifier itself reads. A second spelling of "who is the party here" beside this one is
+    // how the two come to disagree about the same row (L41), and the answer moves every time the party
+    // rule does.
+    static func signalStrings(for event: ExtractedEvent) -> (party: String, haystack: String) {
+        let presenter = event.presenter ?? ""
+        let actIsTheParty = OrganiserNaming.onlyTheActIsNamed(presenter: event.presenter)
+            && !titleNamesTheRoom(event.title, venue: event.venue ?? "")
+        return (actIsTheParty ? event.title : presenter, "\(event.title) \(presenter)")
+    }
+
     static func classify(_ event: ExtractedEvent) -> EventClassification {
         let presenter = event.presenter ?? ""
         let venue = event.venue ?? ""
-        let haystack = "\(event.title) \(presenter)"
+        let strings = signalStrings(for: event)
+        let haystack = strings.haystack
         // #1658: the SHOW decides its own genre, and the organisation's name is only consulted when the
         // show's own title says nothing. Read together, the presenter's name outranked the show on 11 live
         // rows: "The 2026 Brooklyn Folk Festival" at Jalopy Theatre read as theater, "Headquarters Comedy"
@@ -240,7 +256,7 @@ enum EventClassifier {
         // should not have.
         let actIsTheParty = OrganiserNaming.onlyTheActIsNamed(presenter: event.presenter)
             && !titleNamesTheRoom(event.title, venue: venue)
-        let party = actIsTheParty ? event.title : presenter
+        let party = strings.party
 
         let isAgency = hasAgencySignal(haystack)
         let namesAnOrganisation = Self.namesAnOrganisation(party) && !isAgency

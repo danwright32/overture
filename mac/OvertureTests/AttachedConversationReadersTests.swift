@@ -86,14 +86,27 @@ struct AttachedConversationReadersTests {
 
     // One predicate and one sentence, from one function, so a refusal and its reason cannot disagree
     // (L109). Nil means Overture may continue the conversation.
-    @Test func onlyAConversationOvertureNeverSentOnIsRefused() throws {
+    //
+    // #2796 narrowed WHICH attached conversations are refused, and the reason belongs here rather than
+    // only at the call sites. Refusing every attached row was what left this function with no caller for
+    // its whole life: the send that would post onto one is the reply, and an ordinary attached reply is
+    // exactly what a person attached the conversation in order to answer. What must be refused is the
+    // one state where the answer would carry NO parent, since `ReplyThreading` falls back to Overture's
+    // own last message and an attached conversation never has one.
+    @Test func onlyAConversationOvertureCannotThreadOntoIsRefused() throws {
         let ctx = ModelContext(try container())
-        let (_, attached) = attachedFormPitch(ctx)
+        let (_, nothingToThreadOff) = attachedFormPitch(ctx, replied: false)
+        let (_, theirMessageKnown) = attachedFormPitch(ctx)
         let (_, emailed) = emailedContact(ctx)
 
-        #expect(attached.replyWatchConversationIsAttached)
-        #expect(AttachedConversation.refusalToContinue(attached, displayName: "54 Sings Shuffle Along")
+        #expect(nothingToThreadOff.replyWatchConversationIsAttached)
+        #expect(AttachedConversation.refusalToContinue(nothingToThreadOff,
+                                                       displayName: "54 Sings Shuffle Along")
                 == AttachedConversationCopy.cannotContinue(groupName: "54 Sings Shuffle Along"))
+        // Attached just the same, and answerable, which is the promise the milestone is built on.
+        #expect(theirMessageKnown.replyWatchConversationIsAttached)
+        #expect(AttachedConversation.refusalToContinue(theirMessageKnown,
+                                                       displayName: "54 Sings Shuffle Along") == nil)
         #expect(!emailed.replyWatchConversationIsAttached)
         #expect(AttachedConversation.refusalToContinue(emailed, displayName: "Aurora Strings") == nil)
     }

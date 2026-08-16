@@ -370,8 +370,13 @@ struct InquiryConversationAttachTests {
     // MARK: what Overture may then do with the conversation
 
     // #2717's rule, on the entity whose comment said it could never apply here. Overture sent nothing on
-    // this thread, so nothing may add a message of its own to it, and the threading repair must not find
-    // Dan's own hand-sent message and store it as Overture's.
+    // this thread, so the threading repair must not find Dan's own hand-sent message and store it as
+    // Overture's.
+    //
+    // #2796: and what Overture may then SEND here. This conversation is answerable, because detection
+    // read their message off the thread and an answer threads under it, which is the whole reason for
+    // attaching one. The refusal is for the state where there is no such message, asserted below and
+    // driven through the send itself in `AttachedConversationContinuationTests`.
     @Test("a found conversation is one Overture never sent on")
     func aFoundConversationIsAttachedNotSent() async throws {
         let ctx = ModelContext(try container())
@@ -381,7 +386,29 @@ struct InquiryConversationAttachTests {
                  now: now, token: "tok", fetch: gmail(answeredInGmail()))
 
         #expect(i.replyWatchConversationIsAttached)
-        #expect(AttachedConversation.refusalToContinue(i, displayName: "Priya Raman") != nil)
+        #expect(i.inboundReplyMessageId == "<second@mail.gmail.com>")
+        #expect(AttachedConversation.refusalToContinue(i, displayName: "Priya Raman") == nil)
+    }
+
+    // #2796: the same sweep over a thread whose newest inbound message carries no `Message-ID` header.
+    // Detection keys the reply on the Gmail resource `id`, which is always there, so the row still says
+    // somebody is waiting on Dan, while `inboundReplyMessageId` stays nil and there is nothing for an
+    // answer of Overture's to hang off. That is the one state the refusal exists for.
+    @Test("a found conversation with no readable message of theirs cannot be continued")
+    func aFoundConversationWithNoParentIsRefused() async throws {
+        let ctx = ModelContext(try container())
+        let i = inquiry(ctx)
+        let headerless = threadJSON([(from: "Priya Raman <\(them)>", secondsAgo: 3600,
+                                      subject: "Photography for our spring gala", messageId: nil)])
+
+        await InquiryConversationAttach(fromEmail: me)
+            .run(inquiries: [i], candidates: [message("m2", from: them, subject: "Re: spring gala")],
+                 now: now, token: "tok", fetch: gmail(headerless))
+
+        #expect(i.replied)
+        #expect(i.inboundReplyMessageId == nil)
+        #expect(AttachedConversation.refusalToContinue(i, displayName: "Priya Raman")
+                == AttachedConversationCopy.cannotContinue(groupName: "Priya Raman"))
     }
 
     // Self-healing, exactly as the Recipient side is: the moment Overture's own reply lands on the thread
