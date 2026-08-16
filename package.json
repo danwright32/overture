@@ -9,7 +9,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "import-history": "tsx scripts/import-history.ts",
-    "import-shoot-history": "tsx scripts/import-shoot-history.ts"
+    "import-shoot-history": "tsx scripts/import-shoot-history.ts",
+    "find-vacuous-guards": "tsx scripts/find-vacuous-guards.ts"
   },
   "dependencies": {
     "csv-parse": "^7.0.2"
