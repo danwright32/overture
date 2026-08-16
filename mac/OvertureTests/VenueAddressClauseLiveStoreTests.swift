@@ -29,7 +29,9 @@ import SwiftData
 //
 // These tests assert the RULES, not those counts: the counts move with every scout, the rules do not.
 // Reads a copy of the live store and writes nothing anywhere.
-@Suite("Address clauses in venue strings, measured on the real store (#2378, #1852)")
+// #2568 and #2566 measure the same way and about the same two text fields, so they live here rather
+// than in a second suite that would take its own clone of the same store.
+@Suite("Address clauses in venue and location strings, measured on the real store (#2378, #1852, #2568, #2566)")
 struct VenueAddressClauseLiveStoreTests {
     private static var liveStoreExists: Bool {
         FileManager.default.fileExists(atPath:
@@ -37,6 +39,15 @@ struct VenueAddressClauseLiveStoreTests {
     }
 
     private func liveVenues() throws -> [String] {
+        try liveRows { $0.compactMap(\.venue) }
+    }
+
+    // #2566 reads the other text field the same way, so both come off one clone rather than two.
+    private func liveLocations() throws -> [String] {
+        try liveRows { $0.compactMap(\.location) }
+    }
+
+    private func liveRows(_ pick: ([Prospect]) -> [String]) throws -> [String] {
         let fm = FileManager.default
         let dir = fm.temporaryDirectory.appendingPathComponent("venue-address-\(UUID().uuidString)",
                                                                isDirectory: true)
@@ -50,7 +61,8 @@ struct VenueAddressClauseLiveStoreTests {
             for: schema,
             configurations: [ModelConfiguration(schema: schema, url: url, cloudKitDatabase: .none)]))
         let rows = try context.fetch(FetchDescriptor<Prospect>())
-        return Array(Set(rows.compactMap(\.venue).filter { !$0.isEmpty })).sorted()
+        return Array(Set(pick(rows).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty })).sorted()
     }
 
     // LIVE-STORE-CLAIM verified=2026-08-12 measure="distinct venue strings whose card still carries an address clause, and whose city the string itself names"
@@ -120,6 +132,116 @@ struct VenueAddressClauseLiveStoreTests {
         }
         #expect(checked > 0,
                 "none of the rooms #2378 was filed on are in the store any more, so this checked nothing")
+        await RealStoreTestLock.shared.release()
+        } catch {
+            await RealStoreTestLock.shared.release()
+            throw error
+        }
+    }
+
+    // #2568, as a RULE rather than as the one word it was found on: a room's own NAME is never a
+    // statement about where the room is, so replacing it must not move the show. Asserted by rewriting
+    // the first clause of every live venue string and re-reading it, which is the only way to tell a
+    // place read out of the address from one read out of the name.
+    //
+    // LIVE-STORE-CLAIM verified=2026-08-16 measure="distinct venue strings whose place changes when the room's own name clause is replaced"
+    // Measured before the fix over all 144 distinct venue strings: exactly ONE moved, and it is the row
+    // the issue was filed on. `Rosewood Hotel Georgia, Vancouver, BC, Canada` answered `Rosewood Hotel,
+    // Georgia` and answered nothing at all once renamed.
+    @Test(.enabled(if: liveStoreExists, "no live store on this machine"))
+    func replacingARoomsOwnNameNeverMovesTheRoom() async throws {
+        await RealStoreTestLock.shared.acquire()
+        do {
+        let venues = try liveVenues()
+        #expect(venues.count > 50, "the live store still holds a real spread of venues to measure")
+
+        var moved: [String] = []
+        var readable = 0
+        for venue in venues {
+            guard let comma = venue.firstIndex(of: ",") else { continue }
+            let renamed = "A Room" + String(venue[comma...])
+            let asWritten = EventLocationFill.cityFromVenue(venue)
+            if asWritten != nil { readable += 1 }
+            if asWritten != EventLocationFill.cityFromVenue(renamed) {
+                moved.append("\(venue) -> \(asWritten ?? "nothing"), "
+                    + "renamed -> \(EventLocationFill.cityFromVenue(renamed) ?? "nothing")")
+            }
+        }
+        // Zero strings read as a place would satisfy the check above while proving nothing (L98), and
+        // the whole rule is about strings this DOES read.
+        #expect(readable > 10, "only \(readable) live venue strings named a place, so this checked little")
+        #expect(moved.isEmpty, "these rooms are placed by their own NAME: \(moved)")
+        await RealStoreTestLock.shared.release()
+        } catch {
+            await RealStoreTestLock.shared.release()
+            throw error
+        }
+    }
+
+    // #2566's blast radius, as a rule. Refusing a published location is only safe while the refusal
+    // leaves alone the locations that already place a show, and most of the store's addresses do place
+    // one: 13 of the 15 distinct address-carrying locations name their city perfectly well, and they
+    // cover 279 of the 892 placed rows. A refusal that fired on those would unplace a third of the queue
+    // (L93), and it would look exactly like a careful fix while doing it.
+    //
+    // LIVE-STORE-CLAIM verified=2026-08-16 measure="distinct stored locations the geography gate places IN range, and whether the fill still stores each one"
+    @Test(.enabled(if: liveStoreExists, "no live store on this machine"))
+    func refusingAPublishedLocationNeverThrowsAwayOneThatPlacesAShow() async throws {
+        await RealStoreTestLock.shared.acquire()
+        do {
+        let locations = try liveLocations()
+        #expect(locations.count > 20, "the live store still holds a real spread of locations to measure")
+
+        var dropped: [String] = []
+        var placed = 0
+        for location in locations
+        where EventPlace.resolve(location: location, discipline: .theater).verdict == .inRange {
+            placed += 1
+            if EventLocationFill.location(title: "A Show", venue: nil, published: location) != location {
+                dropped.append(location)
+            }
+        }
+        #expect(placed > 10, "only \(placed) live locations placed a show, so this checked little")
+        #expect(dropped.isEmpty, "these locations place a show and are no longer stored: \(dropped)")
+        await RealStoreTestLock.shared.release()
+        } catch {
+            await RealStoreTestLock.shared.release()
+            throw error
+        }
+    }
+
+    // The rows #2568 and #2566 were filed on, named individually for the same reason the suite above
+    // names #2378's: each is a string Dan has been looking at. Skipped, not failed, when a row leaves
+    // the store, with the number actually checked asserted so this can never quietly check nothing.
+    // LIVE-STORE-CLAIM verified=2026-08-16 measure="the specific rows #2568 and #2566 were filed on, re-read through the shipping rule"
+    @Test(.enabled(if: liveStoreExists, "no live store on this machine"))
+    func theRowsTheseIssuesWereFiledOnAreNoLongerPlacedWrongly() async throws {
+        await RealStoreTestLock.shared.acquire()
+        do {
+        var checked = 0
+
+        // #2568: the venue string that named Georgia. The curated table has always had it right.
+        let vancouver = "Rosewood Hotel Georgia, Vancouver, BC, Canada"
+        if Set(try liveVenues()).contains(vancouver) {
+            #expect(EventLocationFill.location(title: "Cocktail Hour: The Show", venue: vancouver,
+                                               published: nil) == "Vancouver, BC, Canada")
+            checked += 1
+        }
+
+        // #2566: the two published locations that are really descriptions of a room. Both must now be
+        // refused, so the first stops reading as Indiana and the second stops standing in for a place.
+        let locations = Set(try liveLocations())
+        for described in [
+            "The Soldiers' and Sailors' Monument, on the North Patio, behind the monument. "
+                + "W. 89th St. & Riverside Drive, in Riverside Park",
+            "The Sanctuary of Brick Presbyterian Church, 1144 Park Avenue",
+        ] where locations.contains(described) {
+            #expect(EventLocationFill.location(title: "A Show", venue: described,
+                                               published: described) == nil, "\(described)")
+            checked += 1
+        }
+
+        #expect(checked > 0, "no row #2568 or #2566 was filed on is still in the store: checked nothing")
         await RealStoreTestLock.shared.release()
         } catch {
             await RealStoreTestLock.shared.release()
