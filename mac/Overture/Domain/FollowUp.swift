@@ -217,7 +217,7 @@ enum FollowUp {
                             venue: safeVenue(venue), attempt: attempt(after: followUpCount)))   // #1273
     }
 
-    // copy-inventory:ignore-start  outbound email: a recipient reads this, not Dan (#915)
+    // copy-inventory:ignore-start  outbound-email: a recipient reads this, not Dan (#915, #2650)
     //
     // Everything to the ignore-end below is what Dan SENDS, not what Overture SAYS to him, so it stays
     // out of the copy inventory, which is a list of the app's own voice. What goes to a stranger has its

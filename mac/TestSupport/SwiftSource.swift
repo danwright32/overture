@@ -64,6 +64,45 @@ enum SwiftSource {
         }
     }
 
+    // #2650: the INVERSE of the skip. The literals inside marked regions whose reason carries a given
+    // tag, which is how outbound email (deliberately kept out of the inventory, because the inventory is
+    // the app's own voice to Dan) gets a reader of its own.
+    //
+    // Matched on a leading TAG rather than on the prose after it. The prose is there for a person and is
+    // reworded freely; a match on it would quietly stop finding a region the day somebody improved the
+    // sentence (L103).
+    static func literalsInTaggedRegions(in source: String, tag: String) -> [Literal] {
+        let scan = tokenize(source)
+        var wanted: Set<Int> = []
+        var openedAt: Int?
+        var openedTagged = false
+        for comment in scan.comments {
+            if let range = comment.text.range(of: ignoreStart), openedAt == nil {
+                openedAt = comment.line
+                let reason = comment.text[range.upperBound...].trimmingCharacters(in: .whitespaces)
+                openedTagged = reason.hasPrefix(tag)
+            }
+            if comment.text.contains(ignoreEnd), let start = openedAt {
+                if openedTagged { for line in start...comment.line { wanted.insert(line) } }
+                openedAt = nil
+                openedTagged = false
+            }
+        }
+        // An unclosed region is NOT collected. `unclosedIgnoreRegion` already makes that state loud, and
+        // guessing at where it ends would put the rest of the file into a document about outbound email.
+        return scan.literals.filter { wanted.contains($0.line) }
+    }
+
+    // Every marked region's reason, with the line it opened on, so a guard can ask whether a region that
+    // reads like outbound email actually carries the tag that gives it a reader.
+    static func ignoredReasonsWithLines(in source: String) -> [(line: Int, reason: String)] {
+        tokenize(source).comments.compactMap { comment in
+            guard let range = comment.text.range(of: ignoreStart) else { return nil }
+            let reason = comment.text[range.upperBound...].trimmingCharacters(in: .whitespaces)
+            return reason.isEmpty ? nil : (line: comment.line, reason: reason)
+        }
+    }
+
     // An ignore region opened and never closed silently swallows the rest of a file's copy. That is the
     // exact failure the inventory exists to prevent, so callers can make it loud.
     static func unclosedIgnoreRegion(in source: String) -> Bool {

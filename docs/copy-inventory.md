@@ -36,13 +36,13 @@ What is not, and why:
 - `Domain/EventPlace.swift`: Place names the resolver MATCHES against, never says: Dan reads a verdict, not this data (#970)
 - `Domain/EventPlace.swift`: A location VALUE written into a data field, never a sentence Dan reads (#2378)
 - `Domain/FeedMovementLog.swift`: a machine-parsed diagnostic log line for #913, never shown to Dan
-- `Domain/FollowUp.swift`: outbound email: a recipient reads this, not Dan (#915)
+- `Domain/FollowUp.swift`: outbound-email: a recipient reads this, not Dan (#915, #2650)
 - `Domain/LaunchMigrations.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Domain/ListingOrganiser.swift`: parser tokens matched against ticketing pages, never Overture's voice
 - `Domain/NaturalKeyVenueMigration.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Domain/OrgReachabilityAnswer.swift`: a diagnostic log line, not a sentence Overture says on screen
-- `Domain/OutboundSignature.swift`: outbound email sign-off, not Overture's own voice to Dan (#915)
-- `Domain/PostEventPrompt.swift`: outbound email: a recipient reads this, not Dan (#915)
+- `Domain/OutboundSignature.swift`: outbound-email: the sign-off a recipient reads, not Overture's own voice to Dan (#915, #2650)
+- `Domain/PostEventPrompt.swift`: outbound-email: a recipient reads this, not Dan (#915, #2650)
 - `Domain/ProducerGate.swift`: Words matched inside an organisation's own name, never said to Dan (#1749)
 - `Domain/ProducerShapedName.swift`: parser tokens matched against a ticketing feed, never Overture's voice
 - `Domain/ProducerShapedName.swift`: parser tokens matched against a listing page, never Overture's voice

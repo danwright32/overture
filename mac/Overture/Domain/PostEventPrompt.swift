@@ -185,7 +185,7 @@ enum PostEventPrompt {
                             body: body, isClosing: true)
     }
 
-    // copy-inventory:ignore-start  outbound email: a recipient reads this, not Dan (#915)
+    // copy-inventory:ignore-start  outbound-email: a recipient reads this, not Dan (#915, #2650)
 
     // The gracious post-event close: a kind "perhaps another time" that keeps the relationship warm for a
     // future season. #2397: sending it records `ShowOutcome.neverHeardBack`, which is what it has always
