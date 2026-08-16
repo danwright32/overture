@@ -58,9 +58,26 @@ resolve_run_slot() {
 }
 
 # The per-chunk family. Functions rather than variables because the index is not known until the queue is
-# split, and a glob built from the slot is what the entry wipe needs.
+# split.
 slot_chunk_log() { echo "${SUPPORT}/${RUN_SLOT}-run.chunk-$1.log"; }
 slot_chunk_events() { echo "${SUPPORT}/${RUN_SLOT}-run-events.chunk-$1.jsonl"; }
 slot_chunk_fifo() { echo "${SUPPORT}/${RUN_SLOT}-events-chunk-$1.fifo"; }
-slot_chunk_log_glob() { echo "${SUPPORT}/${RUN_SLOT}-run.chunk-*.log"; }
-slot_chunk_events_glob() { echo "${SUPPORT}/${RUN_SLOT}-run-events.chunk-*.jsonl"; }
+
+# The entry wipe needs a GLOB, and a glob cannot come back from a function: the live support directory is
+# "~/Library/Application Support/Overture", so an unquoted `$(...)` expansion word-splits on that space
+# and the wipe removes nothing at all while looking exactly like it worked. These are prefixes instead,
+# quoted at the call site with the `*` outside the quotes, which is how the literal wipe was written
+# before the slot existed.
+slot_chunk_log_prefix() { echo "${SUPPORT}/${RUN_SLOT}-run.chunk-"; }
+slot_chunk_events_prefix() { echo "${SUPPORT}/${RUN_SLOT}-run-events.chunk-"; }
+
+# The entry wipe itself, so the runner and its fixture drive ONE implementation. Written out at the call
+# site instead, the fixture would only ever prove that its own copy of these two lines works (L52).
+#
+# What it protects: a leftover chunk-results file from a previous, larger run must never be merged into
+# this one as if it were this run's work. Slot-scoped, so a starting check cannot take a live prep's
+# chunk logs with it.
+slot_wipe_chunk_files() {
+  rm -rf "${SLOT_CHUNKDIR}" 2>/dev/null || true
+  rm -f "$(slot_chunk_log_prefix)"*.log "$(slot_chunk_events_prefix)"*.jsonl 2>/dev/null || true
+}

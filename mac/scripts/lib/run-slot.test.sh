@@ -17,7 +17,10 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../scripts/lib/shell
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORK="$(mktemp -d)"
 trap 'rm -rf "${WORK}"' EXIT
-SUPPORT_DIR="${WORK}/support"
+# A SPACE in the path, because the live one has one: "~/Library/Application Support/Overture". A fixture
+# on a tidy path cannot see the whole class of defect where an unquoted expansion word-splits, and the
+# wipe below is exactly that shape.
+SUPPORT_DIR="${WORK}/Application Support/Overture"
 mkdir -p "${SUPPORT_DIR}"
 
 # Sourced with SUPPORT already set, exactly as prep-run.sh sources it. In a subshell so a refusal's exit
@@ -42,6 +45,7 @@ run_resolver() {
     echo "CHUNKLOG=$(slot_chunk_log 3)"
     echo "CHUNKEVENTS=$(slot_chunk_events 3)"
     echo "CHUNKFIFO=$(slot_chunk_fifo 3)"
+    echo "LOGPREFIX=$(slot_chunk_log_prefix)"
   )
 }
 
@@ -99,6 +103,32 @@ fi
 rm -f "${SUPPORT_DIR}/runner-launch.log"
 OUT="$(OVERTURE_RUN_SLOT=Prep run_resolver 2>&1)"
 assert_not_contains "a miscased slot is refused rather than corrected" "${OUT}" "SLOT="
+
+# --- the entry wipe removes this slot's chunk files, on a path with a space in it ----------------
+# The wipe is what stops a previous, larger run's chunk results being merged into this one as if they
+# were its work. Driven here rather than asserted about, because the failure it is written against is
+# invisible in the source: an unquoted glob on a path containing a space removes nothing and reports
+# success. It must also leave the OTHER slot's files alone, which is the whole point of slotting it.
+(
+  SUPPORT="${SUPPORT_DIR}"
+  . "${HERE}/run-slot.sh"
+  OVERTURE_RUN_SLOT=prep resolve_run_slot
+  touch "${SUPPORT_DIR}/prep-run.chunk-1.log" "${SUPPORT_DIR}/prep-run-events.chunk-1.jsonl"
+  touch "${SUPPORT_DIR}/check-run.chunk-1.log" "${SUPPORT_DIR}/check-run-events.chunk-1.jsonl"
+  mkdir -p "${SLOT_CHUNKDIR}" && touch "${SLOT_CHUNKDIR}/chunk-results-1.json"
+  slot_wipe_chunk_files
+)
+assert_equals "the wipe removed this slot's chunk log" "absent" \
+  "$([ -e "${SUPPORT_DIR}/prep-run.chunk-1.log" ] && echo present || echo absent)"
+assert_equals "the wipe removed this slot's chunk events" "absent" \
+  "$([ -e "${SUPPORT_DIR}/prep-run-events.chunk-1.jsonl" ] && echo present || echo absent)"
+assert_equals "and left the other slot's chunk log alone" "present" \
+  "$([ -e "${SUPPORT_DIR}/check-run.chunk-1.log" ] && echo present || echo absent)"
+assert_equals "and left the other slot's chunk events alone" "present" \
+  "$([ -e "${SUPPORT_DIR}/check-run-events.chunk-1.jsonl" ] && echo present || echo absent)"
+assert_equals "the wipe took this slot's whole chunk directory" "absent" \
+  "$([ -e "${SUPPORT_DIR}/prep-chunks" ] && echo present || echo absent)"
+rm -f "${SUPPORT_DIR}/check-run.chunk-1.log" "${SUPPORT_DIR}/check-run-events.chunk-1.jsonl"
 
 # --- and the runner does not name one behind the resolver's back -------------------------------
 # The resolver is only worth having if it is the ONLY place these names are built. A literal left in the

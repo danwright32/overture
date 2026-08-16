@@ -85,11 +85,11 @@ IS_PROBE=0
 CHUNKDIR="$SLOT_CHUNKDIR"
 # Wipe before anything reads it: a leftover chunk-results file from a previous, larger check must never
 # be merged into this run as if it were this run's work. Assume-it-runs-twice.
-rm -rf "$CHUNKDIR" 2>/dev/null || true
-# #2763: the wipe is slot-scoped too. Unscoped, a starting check would delete a live prep's chunk logs,
-# and `rm -rf "$CHUNKDIR"` above would destroy its in-flight chunk results, which merge_chunk_results
-# folds into the app's results file on every heartbeat tick.
-rm -f $(slot_chunk_log_glob) $(slot_chunk_events_glob) 2>/dev/null || true
+#
+# #2763: through the shared helper, and slot-scoped. Unscoped, a starting check would delete a live
+# prep's chunk logs and destroy its in-flight chunk results, which merge_chunk_results folds into the
+# app's results file on every heartbeat tick.
+slot_wipe_chunk_files
 MAX_PARALLEL="${OVERTURE_PREP_MAX_PARALLEL:-10}"
 # #1597: a CHECK finds contacts and never drafts, so it runs on the cheaper model the eval measured as
 # rule-clean. A normal Prep run writes emails in Dan's voice and stays on the pinned drafting model.
