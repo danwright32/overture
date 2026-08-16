@@ -11,7 +11,9 @@ import Foundation
 //
 // So navigation is keyed by the focus, and the focus is chosen once, by AgentRoster, when it decides
 // what the pill says. One decision, one predicate, one destination.
-enum StageFocus: String, Equatable, Sendable {
+// #2524: CaseIterable so a rule about "every stage except one" can be DERIVED rather than written as the
+// list somebody remembered, which is the list that silently omits the stage added next (L96, L113).
+enum StageFocus: String, Equatable, Sendable, CaseIterable {
     case scout, prep, review
     // #1583/#1691: kept, undrafted, and held back by a date clash that landed AFTER the keep. Its own focus
     // rather than a fold into `.prep`, on the same reasoning as the five send focuses: the Prep RUN still

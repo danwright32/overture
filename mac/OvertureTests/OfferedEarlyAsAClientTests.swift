@@ -153,6 +153,45 @@ struct OfferedEarlyAsAClientTests {
         #expect(!saying.contains("stranger-\(nextWeek)"))
     }
 
+    // MARK: which list says it
+
+    // Dan's call, 2026-08-16. The far reach is applied to Scout and to no other stage, so once he keeps a
+    // far-out client's show it is his own decision holding it on screen, not the client rule, and a card
+    // still explaining the client rule there is explaining the wrong thing.
+    @Test("only the untriaged list says it")
+    func onlyScoutSaysIt() throws {
+        let ctx = ModelContext(try container())
+        let tagged = source(ctx, id: "tagged", tag: true)
+        let far = show(ctx, key: "far", on: "tagged", date: tenMonthsOut)
+        let row = try #require(QueueModel.items(from: [far],
+                                                clients: ClientWindow(sources: [tagged], clients: []),
+                                                today: today).first)
+        #expect(row.offeredEarlyAsAClient, "the row's own verdict is unchanged; only the saying is scoped")
+
+        #expect(QueueModel.saysOfferedEarlyAsAClient(row, stage: .scout))
+
+        // Every other stage, derived from the type rather than from the ones somebody remembered, so a
+        // stage added later cannot quietly start saying it (L96, L113).
+        for stage in StageFocus.allCases where stage != .scout {
+            #expect(!QueueModel.saysOfferedEarlyAsAClient(row, stage: stage),
+                    "\(stage) explains the client rule, but the client rule is not what keeps a row there")
+        }
+        #expect(!QueueModel.saysOfferedEarlyAsAClient(row, stage: nil))
+    }
+
+    // And Scout does not say it about an ordinary row, so the assertion above is the stage test doing its
+    // job rather than the row verdict being ignored (L104).
+    @Test("the untriaged list still stays silent about an ordinary row")
+    func scoutIsStillSilentAboutAnOrdinaryRow() throws {
+        let ctx = ModelContext(try container())
+        let tagged = source(ctx, id: "tagged", tag: true)
+        let near = show(ctx, key: "near", on: "tagged", date: nextWeek)
+        let row = try #require(QueueModel.items(from: [near],
+                                                clients: ClientWindow(sources: [tagged], clients: []),
+                                                today: today).first)
+        #expect(!QueueModel.saysOfferedEarlyAsAClient(row, stage: .scout))
+    }
+
     // MARK: what it says, and where
 
     @Test("the line explains the date and quotes no arithmetic")
@@ -249,9 +288,17 @@ struct OfferedEarlyAsAClientTests {
         let queueView = SourceGuardHelper.source("Overture/UI/QueueView.swift")
         let row = try #require(SourceGuardHelper.bodyOfFunction(named: "prospectRow", in: queueView))
 
+        // Two needles rather than one spanning the wrap. `containsCode` collapses runs of whitespace to a
+        // single space, so it can see past a line break but not past the space the break leaves behind.
         #expect(SourceGuardHelper.containsCode(
-            "offeredEarlyAsAClient: item.offeredEarlyAsAClient", in: row),
+            "offeredEarlyAsAClient: QueueModel.saysOfferedEarlyAsAClient(", in: row),
                 "the card can never say it, whatever the predicate decides")
+        #expect(SourceGuardHelper.containsCode("item, stage: focusedStage)", in: row),
+                "it is handed the row and this list, which is the whole of what it decides on")
+
+        // Through the function, never as a stage test written into the body: a membership rule stated in
+        // a SwiftUI body is one no test can reach (#863).
+        #expect(!SourceGuardHelper.containsCode("stage == .scout", in: row))
 
         // Read off the row, never re-derived here: deciding it per card needs the watched sources and
         // the client roster, which is the whole-store-per-card shape that froze a sheet in #1429 (L91),

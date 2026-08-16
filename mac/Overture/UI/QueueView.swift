@@ -1376,9 +1376,11 @@ struct QueueView: View {
                                           replySendSince: replySince,
                                           onSend: { requestSend(item) }, onSendReply: { rid in sendReply(item, rid) },
                                           onReprep: { mode in requestReprep(item, mode) },
-                                          // #2524: why a date ten months out is sitting here. Decided in
-                                          // the queue build, read here.
-                                          offeredEarlyAsAClient: item.offeredEarlyAsAClient,
+                                          // #2524: why a date ten months out is sitting here. The verdict
+                                          // is decided in the queue build; whether THIS list says it is
+                                          // decided in QueueModel, not in this body.
+                                          offeredEarlyAsAClient: QueueModel.saysOfferedEarlyAsAClient(
+                                              item, stage: focusedStage),
                                           showingTooFar: false,
                                           userExcludedTowns: userExcludedTowns,
                                           allowedSeedTowns: allowedSeedTowns)
