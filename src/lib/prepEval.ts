@@ -12,6 +12,7 @@
 // Reuses assertPrepResultsShape from fixtureShape.ts so shape validity and rule scoring share one source.
 
 import { assertPrepResultsShape } from "./fixtureShape";
+import { eventDateVerdict } from "./draftEventDate";
 
 export interface EvalSource {
   label: string;
@@ -671,8 +672,40 @@ function checkExpectation(entry: ResultEntry, allContacts: Contact[], exp: PrepE
  * body-level scans cover every result; entry-level checks use the first result (the eval fixtures are
  * single-item work-lists).
  */
+/**
+ * #2864: does each drafted pitch name the show's OWN night, in the subject or the body, and never a
+ * different one? Scored here as well as in the app because the rule was already in the runbook four
+ * times over, as an instruction to the model, and nothing read the produced draft to see whether it
+ * landed. A rule that lives only in a prompt is a hope (L27).
+ *
+ * Skipped entirely when the fixture declares no `performanceDate`: there is then nothing to check
+ * against, and inventing a verdict for a show with no date would score every undated fixture as a
+ * failure for a fact nobody holds.
+ *
+ * `today` is threaded from the caller, never read from the clock here, so a stored sample's verdict does
+ * not change as real time walks past the fixture's own dates (L130).
+ */
+function checkEventDate(entries: ResultEntry[], failures: string[],
+                        show: { performanceDate?: string; runEndDate?: string; today: string }): void {
+  if (!show.performanceDate) return;
+  entries.forEach((entry, i) => {
+    const draft = (entry as { draft?: { subject?: string; body?: string } }).draft;
+    if (!draft?.body) return;
+    const verdict = eventDateVerdict({
+      subject: draft.subject, body: draft.body,
+      performanceDate: show.performanceDate, runEndDate: show.runEndDate, today: show.today,
+    });
+    if (verdict === "missing") {
+      failures.push(`results[${i}].draft: names no date for this show in the subject or the body; it is ${show.performanceDate} (#2864)`);
+    } else if (verdict === "wrong") {
+      failures.push(`results[${i}].draft: names a date that is not this show's; it is ${show.performanceDate} (#2864)`);
+    }
+  });
+}
+
 export function evaluatePrepResult(produced: unknown, expected: PrepEvalExpectation,
-                                   ctx?: { name?: string; scope?: EvalScope }): EvalResult {
+                                   ctx?: { name?: string; scope?: EvalScope;
+                                           show?: { performanceDate?: string; runEndDate?: string; today: string } }): EvalResult {
   const name = ctx?.name ?? expected.description;
   const failures: string[] = [];
 
@@ -708,6 +741,10 @@ export function evaluatePrepResult(produced: unknown, expected: PrepEvalExpectat
   // #1909: NEVER narrowed by scope. This is the fixture's own declared rule, the single thing it
   // exists to prove, so a stored sample that stopped being scored against it would pass for free and
   // the whole always-on layer would become decoration.
+  // #2864: NEVER narrowed by scope, for the same reason the fixture's own rule is not. This is a fact
+  // about the show rather than a judgment about wording, so it does not go stale when Dan retunes how a
+  // draft should sound, and a stored sample that stopped being scored against it would pass for free.
+  if (ctx?.show) checkEventDate(entries, failures, ctx.show);
   checkExpectation(entries[0], allContacts, expected, failures);
 
   return { name, pass: failures.length === 0, failures };
@@ -715,8 +752,18 @@ export function evaluatePrepResult(produced: unknown, expected: PrepEvalExpectat
 
 /** Score a produced output against a fixture's own expectation, tagging the result with the fixture name. */
 export function evaluateFixture(fixture: PrepEvalFixture, produced: unknown,
-                                opts?: { scope?: EvalScope }): EvalResult {
-  return evaluatePrepResult(produced, fixture.expected, { name: fixture.name, scope: opts?.scope });
+                                opts?: { scope?: EvalScope; today?: string }): EvalResult {
+  // #2864: the show's own date comes off the fixture's INPUT, which is what the run was handed, so the
+  // check compares the draft against the same fact the drafter was given rather than against anything
+  // the output claims about itself. `today` defaults to the fixture's own performance date, which makes
+  // a stored sample's verdict independent of when it is scored (L130); a live run passes the real day.
+  const input = fixture.input as { performanceDate?: string; runEndDate?: string };
+  return evaluatePrepResult(produced, fixture.expected, {
+    name: fixture.name,
+    scope: opts?.scope,
+    show: { performanceDate: input.performanceDate, runEndDate: input.runEndDate,
+            today: opts?.today ?? input.performanceDate ?? "1970-01-01" },
+  });
 }
 
 /**

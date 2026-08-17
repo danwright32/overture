@@ -221,6 +221,21 @@ export const RUNBOOK_RULES: RunbookRule[] = [
   // next move to a stranger. Without the PRESUPPOSITION, a rewrite turns the ask into a yes/no offer
   // ("would you like coverage?") that invites the no: asking about their photography plans takes for
   // granted that plans exist, so a reader who has not thought about it now assumes they should have.
+  // #2864: the four lines that tell the drafter to NAME the show's date. The rule was in the runbook
+  // four times over and nothing read the produced draft to see whether the date landed, so 6 of 19 live
+  // drafts named none and one that was SENT named a night eight days off. `draftEventDate` is the check
+  // that now reads the output; these are what keep the instruction that produces it from being edited
+  // away, which is the pairing #591 exists for.
+  { name: "pitch-names-the-shows-date",
+    pattern: /NAME it, with its date and venue/i },
+  { name: "date-and-venue-are-evidence",
+    pattern: /The date and venue are EVIDENCE Dan looked/i },
+  { name: "reason-first-names-the-date",
+    pattern: /sentence two is the reason for writing, naming the show, its date and/i },
+  // The half that decides which night a run may be pitched, and the reason the check cannot simply
+  // accept the opening night: naming one that has gone reads as not having looked.
+  { name: "passed-opening-night-never-pitched",
+    pattern: /the opening night has already gone by while later dates remain: pitch only the remaining/i },
   { name: "ask-presupposes-photography-plans",
     pattern: /never whether they want photography\s+at all/i },
   // The close expects a reply. Inviting questions makes the reader invent one after the email has already

@@ -218,6 +218,22 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // date-group header must compare this against the group's date rather than assume the two are the same.
     var conflictBlockedDate: String? = nil
     var runEndDate: String? = nil
+
+    // #2864: whether the cold pitch names the show's own night, and never a different one. Advisory,
+    // and DELIBERATELY not suppressed on a draft Dan edited, which is the one combination this lint did
+    // not previously have. Advisory findings stand down on his own words (#2131, #459) on the grounds
+    // that when he writes a sentence he means it. That reasoning holds for a judgment about wording and
+    // fails for a contradicted fact: he cannot have meant July 18 for a July 25 show, and the sent draft
+    // that proved it had `draftEditedByDan` set.
+    //
+    // `today` is a parameter so a test pins both ends of the comparison rather than one (L130).
+    func eventDateWarning(today: String = EasternDate.today()) -> String? {
+        guard let body = draftBody else { return nil }
+        return EventDateInDraft.finding(subject: draftSubject, body: body,
+                                        performanceDate: performanceDate, runEndDate: runEndDate,
+                                        today: today)?.message
+    }
+
     // #1699: the curtain time(s) this card may state, and whether a run's nights disagree. Both come
     // straight off the stored show; the decision about what a RUN may claim was made at scout time
     // (RunStartTimes.across), never here, because the member nights no longer exist by now.
