@@ -101,21 +101,53 @@ classify_branch() {
   echo "unshipped"
 }
 
+# Whether an agent may still be WORKING in a worktree, from two facts neither of which is its branch
+# (#2842). Printed as yes or no.
+#
+# Every other question this file asks is about a BRANCH, and until #2842 that was the only thing
+# standing between a running agent's directory and `git worktree remove --force`. On 2026-08-16 the
+# scrub agent's worktree was kept, correctly, but only because its branch had not merged yet: reverse
+# that one fact, which is the ordinary shape of a multi-agent session (an agent still writing its PR
+# body while an earlier batch carrying its own branch merges), and the same run deletes a directory
+# somebody is mid-task in. The cost is uncommitted work destroyed with no trace, and the agent then
+# failing in a way that looks like an unrelated error, because its files simply vanish.
+#
+# LOCKED is git's own signal and the harness sets it, so it is evidence rather than inference. A
+# RECENT modification is a heuristic, and it is here because the lock is not guaranteed: an agent
+# between tool calls writes nothing, so a window has to be generous, and being wrong in this direction
+# only delays reclaiming a directory.
+#
+# UNKNOWN counts as live. This whole question is answered in the keep direction, the way every other
+# unanswerable question in this file is: a probe that could not read the directory is not evidence
+# that nobody is in it.
+worktree_liveness_verdict() {
+  local locked="$1" recently_touched="$2"
+  [[ "${locked}" == "yes" ]] && { echo "yes"; return 0; }
+  [[ "${recently_touched}" == "no" ]] || { echo "yes"; return 0; }
+  echo "no"
+}
+
 # The verdict for one registered worktree, printed as a single word:
 #   keep-main       this repo's own working copy
 #   prunable        registered against a directory that no longer exists (git worktree prune's job)
+#   keep-live       something may still be working in it, whatever its branch says (#2842)
 #   keep-dirty      holds uncommitted work
 #   keep-unshipped  clean, but its branch's work is not provably in main
-#   removable       clean, and its branch shipped
+#   removable       clean, idle, and its branch shipped
+#
+# Liveness is asked FIRST of the three keeps, so a worktree kept because an agent is in it is
+# distinguishable in the output from one kept because its branch has not landed, which is exactly the
+# distinction that was invisible when this was measured.
 #
 # Dirty is checked before containment deliberately. An agent worktree is only auto-removed when it
 # made NO changes, so the ones that survive are precisely the ones that did real work, and a shipped
 # branch says nothing about the uncommitted edits sitting on top of it.
 classify_worktree() {
-  local path_exists="$1" is_main="$2" dirty="$3" contained="$4"
+  local path_exists="$1" is_main="$2" dirty="$3" contained="$4" live="${5:-no}"
 
   [[ "${is_main}" == "yes" ]] && { echo "keep-main"; return 0; }
   [[ "${path_exists}" == "yes" ]] || { echo "prunable"; return 0; }
+  [[ "${live}" == "yes" ]] && { echo "keep-live"; return 0; }
   [[ "${dirty}" == "yes" ]] && { echo "keep-dirty"; return 0; }
   [[ "${contained}" == "yes" ]] || { echo "keep-unshipped"; return 0; }
   echo "removable"

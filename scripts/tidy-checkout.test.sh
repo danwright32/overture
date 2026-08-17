@@ -183,6 +183,69 @@ else
   assert "a dry run leaves dead build output alone too" "no"
 fi
 
+# --- #2842: a worktree something is still working in is kept, whatever its branch says ---
+#
+# Driven end to end, and in BOTH directions, because either half alone passes for the wrong reason: a
+# script that removed no worktree at all would keep the live one, and the version this replaces removed
+# both. Both worktrees below sit on SHIPPED branches, so by branch state alone both are removable and
+# the only thing that can separate them is whether something is working in them.
+#
+# The idle one is backdated with `touch`, rather than the live one being left to real time, so the test
+# does not depend on how long the rest of this fixture takes to run (L130).
+
+make_shipped_branch() {
+  local name="$1"
+  git -C "${REPO}" checkout -q -b "${name}" main
+  echo "${name} change" > "${REPO}/${name}.txt"
+  git -C "${REPO}" add "${name}.txt"
+  git -C "${REPO}" commit -qm "${name} change"
+  git -C "${REPO}" format-patch -1 --stdout > "${WORK}/${name}.patch"
+  git -C "${REPO}" checkout -q main
+  git -C "${REPO}" am -q < "${WORK}/${name}.patch"
+}
+
+make_shipped_branch "live-agent-work"
+make_shipped_branch "idle-agent-work"
+
+LIVE_WT="${WORK}/live-worktree"
+IDLE_WT="${WORK}/idle-worktree"
+git -C "${REPO}" worktree add -q "${LIVE_WT}" live-agent-work
+git -C "${REPO}" worktree add -q "${IDLE_WT}" idle-agent-work
+
+# Nothing has written in the idle one for a long time. `find -exec` rather than a single touch, since
+# the probe stops at the FIRST file newer than the cutoff and any one of them would answer for it.
+find "${IDLE_WT}" -exec touch -t 202601010000 {} \; 2>/dev/null
+touch "${LIVE_WT}/scratch.txt"
+
+WT_OUTPUT="$(PATH="${WORK}/bin:${PATH}" TIDY_CHECKOUT_REPO_ROOT="${REPO}" \
+  XCODE_DERIVED_DATA_ROOT="${DERIVED}" \
+  "${SCRIPT_DIR}/tidy-checkout.sh" --apply 2>&1)"
+
+if [[ -d "${LIVE_WT}" ]]; then
+  assert "a worktree written to moments ago SURVIVES, though its branch shipped" "yes"
+else
+  assert "a worktree written to moments ago SURVIVES, though its branch shipped" "no"
+  echo "  the driver deleted a directory something was working in, which is what #2842 is about"
+  echo "${WT_OUTPUT}" | sed 's/^/    /'
+fi
+
+if [[ -d "${IDLE_WT}" ]]; then
+  assert "an idle worktree on a shipped branch is still removed" "no"
+  echo "${WT_OUTPUT}" | sed 's/^/    /'
+else
+  assert "an idle worktree on a shipped branch is still removed" "yes"
+fi
+
+# And it says WHY it kept it, which is the distinction that was invisible when this was measured: a
+# worktree kept because an agent is in it reads identically to one kept because its branch has not
+# landed unless the output separates them.
+if grep -q "live: locked, or written to in the last" <<< "${WT_OUTPUT}"; then
+  assert "the run says the worktree was kept because something is working in it" "yes"
+else
+  assert "the run says the worktree was kept because something is working in it" "no"
+  echo "${WT_OUTPUT}" | sed 's/^/    /'
+fi
+
 echo
 if [[ ${FAILURES} -eq 0 ]]; then
   echo "All tidy-checkout.sh driver fixtures passed."

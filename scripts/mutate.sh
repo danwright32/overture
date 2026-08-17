@@ -15,7 +15,7 @@ set -uo pipefail
 #   2. A run was piped through a command that was not on PATH and exited 0 having tested nothing, so the
 #      pipe's status was read instead of the runner's (AGENTS.md's own warning, #2502).
 #
-# Six outcomes, kept apart on purpose, because collapsing any two of them is how this lies:
+# Seven outcomes, kept apart on purpose, because collapsing any two of them is how this lies:
 #
 #   CAUGHT            the mutation applied where it was aimed and the suite went red. The guard is real.
 #   SURVIVED          the mutation applied and the suite stayed green. The guard protects nothing.
@@ -23,6 +23,7 @@ set -uo pipefail
 #   NOTHING RAN       the run executed no tests. Also says nothing about any guard (L98).
 #   LANDED ELSEWHERE  the mutation applied somewhere other than where it was aimed (#2820).
 #   NOT PROOF         nearly everything in the run went red, so the instrument misfired (#2820).
+#   NO RUNNER         the runner is not something this shell can run, so nothing happened (#2846).
 #
 # The last two are #2820, and they are the ones that lied in the CAUGHT direction, which is the worse
 # one: roughly 1600 of the suite's declarations are source-text guards and CAUGHT is the verdict quoted
@@ -61,8 +62,9 @@ mutation was CAUGHT (the suite went red, so the guard is real) or SURVIVED (it s
 guard protects nothing).
 
 Refuses, rather than reporting a result, when the expression matched nothing, when it landed somewhere
-other than where it was aimed, when the run executed no tests, or when nearly everything in the run
-went red: every one of those looks like a result and means nothing about any guard.
+other than where it was aimed, when the run executed no tests, when nearly everything in the run went
+red, or when the runner is not something this shell can run: every one of those looks like a result and
+means nothing about any guard.
 
   --at <pattern>      an extended regex naming the lines the mutation is aimed at. Every line the
                       mutation touches must match it, or the run is refused as LANDED ELSEWHERE.
@@ -72,7 +74,10 @@ went red: every one of those looks like a result and means nothing about any gua
                       (e.g. -only-testing:OvertureTests/RunSlotTests)
 
   OVERTURE_MUTATE_RUNNER   the command to run instead of the Swift suite. The seam this script's own
-                           fixture uses; also how to drive the shell fixtures or vitest instead.
+                           fixture uses; also how to drive the shell fixtures or vitest instead. ONE
+                           command, carrying no arguments of its own: to drive something that needs
+                           them, point this at a small executable wrapper script. A value this shell
+                           cannot run refuses the run as NO RUNNER rather than reporting a verdict.
 USAGE
 }
 
@@ -110,6 +115,39 @@ fi
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUNNER="${OVERTURE_MUTATE_RUNNER:-${REPO_ROOT}/mac/scripts/run-tests-locked.sh}"
+
+# The runner has to be one command this shell can actually run, and that is proved BEFORE anything is
+# mutated (#2846).
+#
+# What went wrong: the runner is invoked as a single command word, so the seam this script's own usage
+# text advertises ("also how to drive the shell fixtures or vitest instead") cannot be given arguments.
+# Set it to `bash scripts/lib/some.test.sh`, which is the natural thing to reach for, and the shell
+# looks for a FILE of that whole name, does not find one, exits 127, and NOTHING RUNS. Measured
+# 2026-08-16 while proving the guards for #2818, where this then printed:
+#
+#   CAUGHT - the suite went red, so something really is guarding this.
+#
+# That is the same class as the two outcomes #2820 added, and the worst possible direction: CAUGHT is
+# the verdict quoted as proof for roughly 1,700 source-text guards in this suite. NOTHING RAN cannot
+# catch it either, because that is decided from a total the runner never printed. So it is caught here,
+# before the file is touched, and refused rather than reported as any verdict at all.
+#
+# It stays ONE WORD rather than being split into an argument list, which was tried first and is worse:
+# this repo's own default runner path contains a space (the checkout lives under "Photography Assets"),
+# so splitting on whitespace breaks the ordinary case outright. A runner needing arguments is a wrapper
+# script, which is what the message says.
+if ! command -v "${RUNNER}" >/dev/null 2>&1; then
+  echo "NO RUNNER - nothing was mutated and nothing was run."
+  echo "  The runner is ${RUNNER:-empty}, which is not one command this shell can run."
+  echo
+  echo "  It is passed as a single command, so it cannot carry arguments. To drive something that needs"
+  echo "  them (a shell fixture, vitest), point OVERTURE_MUTATE_RUNNER at a small executable wrapper"
+  echo "  script that runs it."
+  echo
+  echo "  Refused rather than reported, because a runner that cannot start exits non-zero having tested"
+  echo "  nothing, and this script would otherwise call that CAUGHT (#2846)."
+  exit 2
+fi
 
 # How many characters the expression's LAST match consumed, asked of perl itself on a COPY (#2820).
 # Prints the length, or "unknown" when it could not be measured.
