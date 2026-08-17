@@ -103,6 +103,14 @@ export const RUNBOOK_RULES: RunbookRule[] = [
   // stop looking at all.
   { name: "try-the-canonical-domain", pattern: /fetch the canonical guess directly/i },
   { name: "social-profile-is-a-pointer", pattern: /a social profile is a pointer, not a destination/i },
+  // #2892: the pointer rule above and the canonical-domain rule are both conditional on the run having
+  // ALREADY landed somewhere. Neither sends it looking, so for the show whose only route is a DM the
+  // route was the one thing the procedure could not reach, and the run reported a finished search.
+  // Two guards, and they fail in opposite directions. Dropping the first puts back a waterfall with no
+  // way to reach a handle at all. Dropping the second is worse: a search that emits on a name match is
+  // how a stranger's profile gets surfaced as the act, and Dan sends that DM by hand (#2147, L75).
+  { name: "search-the-platform-for-a-profile", pattern: /GO AND SEARCH the platform\s+for a profile/i },
+  { name: "a-name-match-alone-is-not-enough", pattern: /a name match alone is NOT enough/i },
   // #2269: and neither rule means anything if the run reports links it never received. Measured
   // 2026-08-07: it summarised a profile as carrying "and 2 more" links when the fetched page held one.
   { name: "only-what-the-fetch-returned", pattern: /only what the fetch actually returned counts/i },
