@@ -131,7 +131,7 @@ Rules:
   it either way now, so a file that happens to carry it still decodes.
 
 `fixtures/reply-classify/queue-v3.json` and `results-v3.json` are the authoritative spec for this shape,
-and `results-v3-as-written.json` is that same shape as a real run actually writes it.
+and `results-as-written-v3.json` is that same shape as a real run actually writes it.
 
 ## After classify: what the app does with the results (shipped)
 

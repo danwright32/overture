@@ -141,11 +141,11 @@ struct ReplyClassifyContractTests {
     // version: no generatedAt. Every other fixture in this directory carries that field, which is why
     // this suite was green for the whole time the app could not decode a single real results file.
     @Test func theFixtureMeasuredFromARealRunCarriesNoGeneratedAt() throws {
-        let raw = try JSONSerialization.jsonObject(with: try fixture("results-v3-as-written.json"))
+        let raw = try JSONSerialization.jsonObject(with: try fixture("results-as-written-v3.json"))
         let object = try #require(raw as? [String: Any])
         #expect(Set(object.keys) == ["model", "results", "version"])
 
-        let results = try ReplyClassifyResultsDecoder.decode(try fixture("results-v3-as-written.json"))
+        let results = try ReplyClassifyResultsDecoder.decode(try fixture("results-as-written-v3.json"))
         #expect(results.generatedAt == nil)
         #expect(results.version == 3)
         #expect(results.results.first?.draftBody?.isEmpty == false)

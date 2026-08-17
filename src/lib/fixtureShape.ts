@@ -382,7 +382,11 @@ export function assertReplyClassifyResultsShape(data: unknown, file: string, exp
   const root = requireObject(data, file, "(root)");
   const version = requireVersion(root.version, file, [1, 2, 3]);
   if (version !== expectedVersion) fail(file, `version ${version} does not match filename version ${expectedVersion}`);
-  requireString(root.generatedAt, file, "generatedAt");
+  // #2873: OPTIONAL, matching ReplyClassifyResults on the Swift side, because the live runner does not
+  // write it. This side required it too, so both definitions of the contract agreed with each other and
+  // neither agreed with the writer, which is how the app went months unable to decode a single real
+  // results file while every fixture and both guards stayed green.
+  optionalString(root.generatedAt, file, "generatedAt");
   const results = requireArray(root.results, file, "results");
   results.forEach((item, i) => {
     const o = requireObject(item, file, `results[${i}]`);

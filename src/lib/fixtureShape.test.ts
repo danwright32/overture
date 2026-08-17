@@ -333,10 +333,22 @@ describe("reply-classify fixture shapes", () => {
       "queue-v1.json",
       "queue-v2.json",
       "queue-v3.json",
+      "results-as-written-v3.json",
       "results-v1.json",
       "results-v2.json",
       "results-v3.json",
     ]);
+  });
+
+  // #2873: the one fixture measured from a real run rather than shaped to satisfy a reader. Both
+  // definitions of this contract, here and in Swift, required a generatedAt the runner does not write,
+  // so they agreed with each other while neither agreed with the writer, and every AI reply draft was
+  // discarded in silence. Asserting the ABSENCE, not just that the file passes, so re-adding the field
+  // to the fixture cannot quietly restore the state that hid the defect.
+  it("the as-written fixture carries no generatedAt, because the runner writes none", () => {
+    const raw = readJson("reply-classify", "results-as-written-v3.json") as Record<string, unknown>;
+    expect(Object.keys(raw).sort()).toEqual(["model", "results", "version"]);
+    expect(() => assertReplyClassifyResultsShape(raw, "results-as-written-v3.json", 3)).not.toThrow();
   });
 
   for (const file of files.filter((f) => f.startsWith("queue"))) {

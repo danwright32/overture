@@ -25,7 +25,7 @@ read as version 1 (#2340).
 right recipient on a multi-recipient show. It is additive, so the tolerant gate (1 through 2) decodes
 both; in the v1 files `recipientId` is simply absent (decodes to nil).
 
-`results-v3-as-written.json` is version 3 in the shape the runner ACTUALLY writes, and it exists because
+`results-as-written-v3.json` is version 3 in the shape the runner ACTUALLY writes, and it exists because
 every other file here was shaped to satisfy the reader rather than measured from a real run (L48, L52).
 Its top-level keys are exactly `model`, `results` and `version`, read off the live
 `overture-reply-classify-results.json` on 2026-08-17: no `generatedAt`. `ReplyClassifyResults` declared
