@@ -29,6 +29,9 @@ source "${SCRIPT_DIR}/lib/pr-completeness-guard.sh"
 # merge_pr, the one implementation of the merge and everything that must follow one, shared with
 # merge-when-green.sh for the same reason (#2602 found the two copies needing the same fix).
 source "${SCRIPT_DIR}/lib/pr-merge.sh"
+# gate_branch_project_freshness and judge_ref_project_freshness: the one implementation of "is this
+# ref's own committed project file fresh", shared with merge-when-green.sh (#2818).
+source "${SCRIPT_DIR}/lib/project-freshness.sh"
 
 usage() {
   echo "Usage: $(basename "$0") <pr-number-or-branch-name>" >&2
@@ -137,57 +140,14 @@ combine_with_main() {
 # (scripts/hooks/post-merge). Held as a list rather than inlined so commit_merge_regeneration can refuse
 # anything else instead of committing whatever it happens to find in the index, and so
 # verify-and-merge-branch.test.sh can check it against the hook's own source rather than repeating it.
-MERGE_REGENERATION_PATHS=("mac/Overture.xcodeproj/project.pbxproj")
+# Its one entry comes from the shared freshness lib rather than being spelled out a second time here:
+# the file the hook regenerates and the file the gate judges are the same file by construction.
+MERGE_REGENERATION_PATHS=("${PROJECT_FRESHNESS_PATH_REL}")
 
-# gate_branch_project_freshness <dir> <ref>...: judges each ref's OWN committed project file, on its own
-# tip, BEFORE anything is merged into the worktree and before anything here regenerates.
-#
-# This is what stops commit_merge_regeneration below handing the tree a free pass, and the two together
-# are the whole of #2812. check-pbxproj-fresh.sh is the gate that keeps a stale committed project file
-# off main (#1368), and it can only answer honestly about a file nothing has rewritten. Asking it here,
-# about each ref exactly as its author committed it, means any disagreement the post-merge hook then
-# finds belongs to the COMBINATION: both parents were fresh for their own trees, so the merged tree is a
-# third tree that neither of them could have carried a correct file for.
-#
-# A ref that cannot be JUDGED (exit 2, a xcodegen version mismatch or no xcodegen at all) is refused with
-# its own message rather than reported as stale, because the two are different facts and only one of them
-# is somebody's mistake (L11).
-#
-# It leaves the worktree on the commit it found it on, so a caller keeps the checkout it set up.
-gate_branch_project_freshness() {
-  local dir="$1"
-  shift
-  local start_head ref status rc=0
-  start_head="$(git -C "${dir}" rev-parse HEAD)"
-  for ref in "$@"; do
-    if ! git -C "${REPO_ROOT}" fetch --quiet origin "${ref}"; then
-      echo "Could not fetch ${ref} to judge its own project file." >&2
-      rc=1
-      break
-    fi
-    if ! git -C "${dir}" checkout --force --detach "origin/${ref}" >/dev/null 2>&1; then
-      echo "Could not check out ${ref} in the verify worktree to judge its own project file." >&2
-      rc=1
-      break
-    fi
-    status=0
-    "${dir}/scripts/check-pbxproj-fresh.sh" "${dir}" || status=$?
-    if [[ "${status}" -ne 0 ]]; then
-      if [[ "${status}" -eq 2 ]]; then
-        echo "Cannot judge ${ref}'s own ${MERGE_REGENERATION_PATHS[0]} (the reason is above), so this run" >&2
-        echo "  must not regenerate anything on top of it." >&2
-      else
-        echo "${ref} carries a stale ${MERGE_REGENERATION_PATHS[0]} on its own tip." >&2
-        echo "  That file is what lands on main, and regenerating it in this worktree would only hide it (#1368)." >&2
-        echo "  Regenerate and commit it on ${ref}, push, then rerun." >&2
-      fi
-      rc=1
-      break
-    fi
-  done
-  git -C "${dir}" checkout --force --detach "${start_head}" >/dev/null 2>&1 || rc=1
-  return "${rc}"
-}
+# gate_branch_project_freshness and judge_ref_project_freshness now live in scripts/lib/project-freshness.sh,
+# sourced above and shared with merge-when-green.sh (#2818). They used to be defined here, which left
+# merge-when-green.sh asking the same question through its own copy that could not tell a stale file from
+# an unjudgeable one.
 
 # commit_merge_regeneration <dir>: commits what the post-merge hook staged after a merge into the verify
 # worktree, so the NEXT merge into that worktree is not refused over a change nobody decided.
