@@ -117,12 +117,15 @@ struct GmailReplyChecker {
     }
 
     // Which Gmail threads this check pulls. Out of the method body and made testable in #2149, because the
-    // question it answers ("is anything still missing on this row") is the SAME one the fill asks, and the
-    // two drifting is what produced a permanent refetch loop: the checker went on pulling a thread the
-    // fill had already given up on. Both now go through ReplyGap.
+    // question it answers is the same one its readers ask, and the two drifting is what produced a
+    // permanent refetch loop: the checker went on pulling a thread the fill had already given up on.
     //
-    // A never-replied row is watched because a reply might arrive. A replied row is watched only while it
-    // still has a gap something could fill.
+    // #2815: it is TWO questions, and asking only the first is what left a second message on an answered
+    // conversation unfetched for ever. A never-replied row is watched because a reply might arrive. A
+    // replied row is watched while it still has a gap something could fill (`ReplyGap`) OR while its
+    // conversation is still open and could carry a new message (`ReplyWatchScope`). `detectReplies`
+    // decides the second half with the same predicate, so the fetcher and the detector cannot disagree
+    // about which conversations are live (L16, L70).
     //
     // #2717: an ATTACHED conversation (#2715) joins this list on exactly the same terms, and that is the
     // feature rather than an oversight: watching it is the whole reason Dan links it. Detection itself
@@ -135,7 +138,7 @@ struct GmailReplyChecker {
             for r in p.replyWatchRecipients {
                 guard let t = r.gmailThreadId, !t.isEmpty,
                       !r.replyWatchManualOutcome, !r.replyWatchIsBooked else { continue }
-                guard !r.replied || ReplyGap.needsFilling(r) else { continue }
+                guard ReplyWatchScope.isWatched(r) else { continue }
                 threadIds.insert(t)
             }
         }

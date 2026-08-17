@@ -6,6 +6,10 @@ import Foundation
 // from Gmail; ReplyService.backfillResponders decides which ROWS to fill from what came back. When the two
 // disagreed, the checker went on fetching a thread the fill had already given up on, which is a permanent
 // no-progress loop against Gmail that nothing in the app shows.
+//
+// #2815: this is NOT the same question as "could a new message still arrive here", and for a while it was
+// the only one the fetch scope asked. That other question lives in `ReplyWatchScope`, which is what
+// `GmailReplyChecker` reads now; this one stays exactly what it was, the repair pass's own bound.
 enum ReplyGap {
     // The gap is bounded by ATTEMPTS, not by success. A writer is recoverable whenever the thread names a
     // sender, so its absence is a fair thing to keep retrying. The message TEXT is not: a reply with no
