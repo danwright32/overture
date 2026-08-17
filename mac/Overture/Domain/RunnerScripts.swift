@@ -101,20 +101,28 @@ enum RunnerScripts {
     static func unavailableMessage(_ runner: Runner,
                                    configuredPath: String?,
                                    derivedPath: String?) -> String {
+        // Broken between lines only at a CLAUSE boundary, never mid-phrase. `docs/copy-inventory.md`
+        // records each string literal separately, so a concatenation split at "is not " / "set, and the"
+        // puts two fragments in the list that no cold read can make sense of, which is the one job that
+        // list has (#843, #2570).
         let name = runner.displayName
         if let configuredPath {
-            return "Couldn't find the \(name) runner. \(runner.defaultsKey) points at "
-                + "\(configuredPath), and there is no runnable script there. If the checkout moved, "
-                + "reinstall Overture from it (cd mac && ./build-install.sh) and that setting is "
-                + "rewritten for you."
+            return "Couldn't find the \(name) runner."
+                + " The stored setting \(runner.defaultsKey) points at \(configuredPath),"
+                + " and there is no runnable script there."
+                + " If the checkout moved, reinstall Overture from where it is now"
+                + " (cd mac && ./build-install.sh) and that setting is rewritten for you."
         }
         if let derivedPath {
-            return "Couldn't find the \(name) runner. \(runner.defaultsKey) is not set, and the "
-                + "checkout the installed build came from has no runnable script at \(derivedPath). "
-                + "Reinstall Overture from the checkout (cd mac && ./build-install.sh)."
+            return "Couldn't find the \(name) runner."
+                + " The stored setting \(runner.defaultsKey) is not set,"
+                + " and the checkout this build came from has no runnable script at \(derivedPath)."
+                + " Reinstall Overture from the checkout (cd mac && ./build-install.sh)."
         }
-        return "Couldn't find the \(name) runner. \(runner.defaultsKey) is not set and this copy of "
-            + "Overture has no record of which checkout it was built from, so there is nowhere to look. "
-            + "Install it with cd mac && ./build-install.sh."
+        return "Couldn't find the \(name) runner."
+            + " The stored setting \(runner.defaultsKey) is not set,"
+            + " and this copy of Overture has no record of which checkout it was built from,"
+            + " so there is nowhere else to look."
+            + " Install Overture from the checkout (cd mac && ./build-install.sh)."
     }
 }

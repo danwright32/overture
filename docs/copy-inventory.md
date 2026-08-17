@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1366 sentences**.
+Every sentence Overture can say to Dan: **1374 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -105,13 +105,16 @@ What is not, and why:
 - `UI/DraftSignaturePreview.swift`: renders the outbound email's own HTML (body + Gmail signature), not Overture's voice (#1203)
 - `UI/DraftSignaturePreview.swift`: browser-side measuring script, not a sentence Overture says to Dan (#915)
 
-## The same sentence, said in more than one place (50)
+## The same sentence, said in more than one place (52)
 
 Two copies of a sentence will drift. #843 owns fixing these.
 
 - " Confirm you've checked it and it's fine to send as-is."
   - `Domain/DraftReviewNotes.swift`
   - `Domain/DraftReviewNotes.swift`
+- " The stored setting \(runner.defaultsKey) is not set,"
+  - `Domain/RunnerScripts.swift`
+  - `Domain/RunnerScripts.swift`
 - " a one-off hunt."
   - `Domain/ProbeSelection.swift`
   - `Domain/ProbeSelection.swift`
@@ -142,6 +145,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
 - "Contact form"
   - `Domain/Inquiry.swift`
   - `UI/DraftReviewView.swift`
+- "Couldn't find the \(name) runner."
+  - `Domain/RunnerScripts.swift`
+  - `Domain/RunnerScripts.swift`
+  - `Domain/RunnerScripts.swift`
 - "Date to be confirmed"
   - `UI/QueueView+Model.swift`
   - `UI/QueueView+Model.swift`
@@ -281,14 +288,26 @@ Two copies of a sentence will drift. #843 owns fixing these.
 
 " (\(skippedCount) skipped: already pending or re-prepped recently)"
     `App/ActionFeedback.swift`
+" (cd mac && ./build-install.sh) and that setting is rewritten for you."
+    `Domain/RunnerScripts.swift`
 " Confirm you've checked it and it's fine to send as-is."
     `Domain/DraftReviewNotes.swift`
+" If the checkout moved, reinstall Overture from where it is now"
+    `Domain/RunnerScripts.swift`
+" Install Overture from the checkout (cd mac && ./build-install.sh)."
+    `Domain/RunnerScripts.swift`
 " It has about \(PrepStatus.duration(seconds: remaining)) left. "
     `Domain/ScoutStartGate.swift`
 " One other match is flagged the same way."
     `Domain/PossibleMatchFanOut.swift`
 " Press Run scout again once the reading finishes."
     `Domain/ScoutStartGate.swift`
+" Reinstall Overture from the checkout (cd mac && ./build-install.sh)."
+    `Domain/RunnerScripts.swift`
+" The stored setting \(runner.defaultsKey) is not set,"
+    `Domain/RunnerScripts.swift`
+" The stored setting \(runner.defaultsKey) points at \(configuredPath),"
+    `Domain/RunnerScripts.swift`
 " Their email matches the address on file."
     `Domain/HistoryMatch.swift`
 " Try again, and if it keeps happening the page may be one it can't make sense of."
@@ -299,8 +318,16 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ProbeSelection.swift`
 " and find new contacts"
     `App/ActionFeedback.swift`
+" and the checkout this build came from has no runnable script at \(derivedPath)."
+    `Domain/RunnerScripts.swift`
+" and there is no runnable script there."
+    `Domain/RunnerScripts.swift`
+" and this copy of Overture has no record of which checkout it was built from,"
+    `Domain/RunnerScripts.swift`
 " checked recently and are not looked up again."
     `Domain/ProbeSelection.swift`
+" so there is nowhere else to look."
+    `Domain/RunnerScripts.swift`
 " you picked."
     `Domain/ProbeSelection.swift`
 " · \(tally.booked) booked"
@@ -640,10 +667,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/RootView.swift`
 "Couldn't connect Gmail: \(reason)"
     `Domain/OnboardingState.swift`
-"Couldn't find the Prep runner. Make sure Claude Code is installed and the Overture project is set up."
-    `Integration/PrepQueueService.swift`
-"Couldn't find the reply-classify runner. Make sure Claude Code is installed and the Overture project is set up."
-    `Integration/ReplyClassifyService.swift`
+"Couldn't find the \(name) runner."
+    `Domain/RunnerScripts.swift`
 "Couldn't open Overture's data: \(error.localizedDescription)"
     `App/OvertureApp.swift`
 "Couldn't open the local login listener (timed out)."
@@ -2021,8 +2046,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ScoutWarningCopy.swift`
 "The scout started reading the calendars that changed, but the run finished without producing anything. Those pages have NOT been read, and it will try them again on the next scout."
     `Domain/DetachedRunOutcome.swift`
-"The scout-extract runner isn't set up yet. See docs/scout-extract-runbook.md: point Overture at scout-extract-run.sh and make it executable."
-    `Integration/ScoutExtractService.swift`
 "The shoot history file couldn't be read (it may be corrupted or a newer format), so pitches can't mention rooms you've photographed before. Re-run the shoot-history import."
     `Domain/ShootHistory.swift`
 "The show on \(dateLabel) is dismissed as \(reason.label)"
