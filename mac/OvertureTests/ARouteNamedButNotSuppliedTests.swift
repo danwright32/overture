@@ -58,6 +58,26 @@ struct ARouteNamedButNotSuppliedTests {
         #expect(!Reachability.declaredRouteIsMissing(contact(method: "carrier_pigeon")))
     }
 
+    // #2893: the value a run uses to say it found the person and no route. It promises nothing, so it
+    // can contradict nothing, and it is what a name-only performer entry carries.
+    //
+    // It exists because `method` is REQUIRED by the results contract, so "leave it out" was not
+    // available: the runbook's oldest rule in that section says a named performer is ALWAYS surfaced,
+    // and asking for a route-naming method on somebody with no route is what produced #2893 in the first
+    // place. Caught by the paid eval, which failed `five-named-performers-none-dropped` on the first
+    // attempt at this fix with "results[0].contacts[1].method must be a non-empty string".
+    @Test func noRouteFoundIsAnHonestAnswerRatherThanAContradiction() {
+        #expect(!Reachability.declaredRouteIsMissing(contact(method: "no_route_found")))
+        #expect(ContactMethod(rawValue: "no_route_found") == .noRouteFound)
+    }
+
+    // And a show whose only contacts say that reads as names with no route, which is the true finding.
+    @Test func aShowOfNameOnlyPerformersReadsAsNamesWithNoRoute() {
+        #expect(Reachability.emptyReason(afterIngesting: [contact(method: "no_route_found"),
+                                                          contact(method: "no_route_found")],
+                                         usableRecipients: 0) == .namedButNoRoute)
+    }
+
     // MARK: - What the show is left saying
 
     @Test func aRunThatNamedARouteAndSuppliedNoneGetsItsOwnReason() {

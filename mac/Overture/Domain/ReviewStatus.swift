@@ -19,6 +19,15 @@ enum ContactMethod: String, CaseIterable, Sendable {
     case namedDecisionMaker = "named_decision_maker"
     case genericInbox = "generic_inbox"
     case formOrDM = "form_or_dm"
+    // #2893: the run found this person and no way to reach them. A VALUE rather than an absent field,
+    // because absence cannot tell "I looked and there is nothing" from "I forgot to say" (L11), and
+    // because `method` is a required field in the results contract, so the alternative was forcing the
+    // run to name a route it had not found. That is exactly what the runbook used to ask for on a
+    // name-only performer entry, and what #2893 was filed about.
+    //
+    // It never reaches the store: a contact with no address and no form URL gets no recipient id, so it
+    // is discarded at ingest. Its whole job is to let a run say honestly what it established.
+    case noRouteFound = "no_route_found"
 }
 
 enum ContactConfidence: String, CaseIterable, Sendable {

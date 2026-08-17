@@ -287,6 +287,9 @@ enum Reachability {
         // the act's own site, where he can find the contact page in seconds. Refusing it would delete a
         // usable way in to enforce a tidier shape, which is a worse trade than keeping it (L116).
         case .formOrDM: return absent(contact.formUrl)
+        // #2893: promises nothing, so it can contradict nothing. This is the value a run uses to say it
+        // found the person and no route, which is a finished answer rather than a broken one.
+        case .noRouteFound: return false
         }
     }
 

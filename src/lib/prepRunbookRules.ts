@@ -118,6 +118,11 @@ export const RUNBOOK_RULES: RunbookRule[] = [
   // `Reachability.declaredRouteIsMissing` at the ingest boundary; this is the half that stops the run
   // producing the shape in the first place.
   { name: "a-method-names-a-route", pattern: /may never be emitted without one/i },
+  // The other half, and it fails in the opposite direction. Without it the rule above reads as "emit
+  // nothing", which collides with the oldest rule in this section (a named performer is ALWAYS
+  // surfaced) and drops the person instead of the false claim. That collision is not hypothetical: it
+  // is what the paid eval caught on `five-named-performers-none-dropped` the first time this shipped.
+  { name: "no-route-found-is-the-honest-method", pattern: /`no_route_found` says what is true/i },
   // #2269: and neither rule means anything if the run reports links it never received. Measured
   // 2026-08-07: it summarised a profile as carrying "and 2 more" links when the fetched page held one.
   { name: "only-what-the-fetch-returned", pattern: /only what the fetch actually returned counts/i },

@@ -239,12 +239,12 @@ item's `production` field first:
     her against this performance or find a contact for her: in that case still emit a
     contact for her, `provenance: "performer"`, her `name` and `confidence: "low"`, leaving
     `email` and `sourceUrl` absent when you have not verified one.
-    **Leave `method` ABSENT for a name-only entry (#2893).** A `method` names a route, so
-    stating one you have not found says the search finished when it did not. An entry with a
-    name and no method is exactly right here and the app reads it correctly: it reports the
-    show as having names and no way to reach them, which is the true finding. Until 2026-08-17
-    this asked for a method anyway ("e.g. `form_or_dm`"), and a run followed it to the letter
-    on two performers, which is what #2893 was filed about. Dropping a named
+    **Her `method` is `no_route_found` (#2893).** A `method` names a route, so stating one you
+    have not found ("e.g. `form_or_dm`", which is what this rule asked for until 2026-08-17)
+    says the search finished when it did not, and a run followed that to the letter on two
+    performers, which is what #2893 was filed about. `no_route_found` says what is true: you
+    found the person and no way to reach them. The app reads it and reports the show as having
+    names and no way to reach any of them. Dropping a named
     performer is the failure; a stale or misnaming secondary source is exactly the case the
     `low` flag exists for, so hold her at low confidence rather than over-trusting the site
     OR omitting her.
@@ -507,11 +507,11 @@ in order, stop at the first that works:
 
    **A `method` NAMES A ROUTE, so it may never be emitted without one (#2893).** `form_or_dm` with no
    `formUrl`, or `named_decision_maker` or `generic_inbox` with no `email`, promises a way in and
-   supplies none. LEAVE `method` OUT instead, keeping whatever you did establish: a contact with a name
-   and no method says honestly that you found the person and not a route, where one naming a route it
-   does not carry says the search finished when it did not, and the app cannot tell those apart from
-   the entry alone. This never means dropping somebody: a named performer is always surfaced, with no
-   method, per the performer rule above. The field being OPTIONAL in the app's own
+   supplies none. Use `method: "no_route_found"` instead, keeping whatever you did establish: that says
+   honestly that you found the person and not a route, where naming a route you do not carry says the
+   search finished when it did not, and the app cannot tell those apart from the entry alone. This
+   never means dropping somebody: a named performer is always surfaced, with `no_route_found`, per the
+   performer rule above. The field being OPTIONAL in the app's own
    Swift is not permission for that combination: `formUrl` is optional because the two other methods
    have no form, and `email` is optional because a `form_or_dm` contact has no address. On 2026-08-17 a
    run read that source mid-run, concluded "`formUrl` is optional, so a `form_or_dm` contact can carry
