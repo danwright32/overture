@@ -122,10 +122,10 @@ struct ScoutExtractServiceTests {
         let queueURL = dir.appendingPathComponent("queue.json")
         let markerURL = dir.appendingPathComponent("running")
 
-        #expect(throws: ScoutExtractService.ExtractLaunchError.runnerUnavailable) {
+        #expect(throws: ScoutExtractService.ExtractLaunchError.runnerUnavailable("no runner")) {
             try ScoutExtractService.startExtract(
                 items: [page("a")], now: Date(), queueURL: queueURL, markerURL: markerURL,
-                launch: { throw ScoutExtractService.ExtractLaunchError.runnerUnavailable })
+                launch: { throw ScoutExtractService.ExtractLaunchError.runnerUnavailable("no runner") })
         }
 
         #expect(!FileManager.default.fileExists(atPath: markerURL.path))   // lock released
@@ -140,10 +140,40 @@ struct ScoutExtractServiceTests {
     // "The runner isn't set up" must be a NAMED, actionable state. It is the first thing Dan will hit,
     // and the failure mode this replaces (DetachedRunner.scriptURL returns nil for an unset key) is a
     // feature that silently never runs.
+    //
+    // #2838: and it now says WHICH setting and WHAT it points at, because the interesting case stopped
+    // being "never configured" and became "configured, and the checkout moved". Driven through the same
+    // resolver the service uses, with every real resource injected, so this is the sentence Dan gets
+    // rather than a second one written beside it (L107).
     @Test func anUnconfiguredRunnerSaysSoInWordsDanCanActerOn() {
-        let error = ScoutExtractService.ExtractLaunchError.runnerUnavailable
+        let resolution = DetachedRunner.resolveRunner(.scoutExtract,
+                                                      configuredPath: "",
+                                                      installedRepoPath: nil,
+                                                      isRunnable: { _ in false })
+        guard case .unavailable(let configuredPath, let derivedPath) = resolution else {
+            Issue.record("an unconfigured runner must resolve to unavailable, got \(resolution)")
+            return
+        }
+        let error = ScoutExtractService.ExtractLaunchError.runnerUnavailable(
+            RunnerScripts.unavailableMessage(.scoutExtract, configuredPath: configuredPath,
+                                             derivedPath: derivedPath))
         let text = try! #require(error.errorDescription)
-        #expect(text.contains("scout-extract"))     // names WHICH runner
-        #expect(text.lowercased().contains("runbook") || text.lowercased().contains("set up"))
+        #expect(text.contains("scout-extract"))                  // names WHICH runner
+        #expect(text.contains("scoutExtractRunnerScriptPath"))   // and WHICH setting
+        #expect(text.contains("build-install.sh"))               // and what to do about it
+    }
+
+    // The other half, and the one the move actually produces: a setting that is still there and points at
+    // a script that is not. Every stored runner path is absolute and lives outside the repo, so this is
+    // what all six of them become the moment the checkout moves (#2838, L153).
+    @Test func aStaleSettingFallsBackToTheCheckoutTheBuildCameFrom() {
+        let moved = "/Users/dan/Apps/Overture"
+        let derived = RunnerScripts.derivedPath(for: .scoutExtract, repoPath: moved)
+        let resolution = DetachedRunner.resolveRunner(
+            .scoutExtract,
+            configuredPath: "/Users/dan/Photography Assets/Overture/mac/scripts/scout-extract-run.sh",
+            installedRepoPath: moved,
+            isRunnable: { $0 == derived })
+        #expect(resolution == .derivedFromInstalledRepo(URL(fileURLWithPath: derived)))
     }
 }

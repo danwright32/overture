@@ -113,7 +113,7 @@ struct LeadIntakeModelTests {
     // The runner not being configured is the first thing Dan hits. It must say so, in words, with
     // somewhere to go, rather than the feature quietly doing nothing.
     @Test func anUnconfiguredRunnerSaysSoRatherThanHanging() async {
-        let m = model(launch: { _ in throw ScoutExtractService.ExtractLaunchError.runnerUnavailable })
+        let m = model(launch: { _ in throw ScoutExtractService.ExtractLaunchError.runnerUnavailable("no runner") })
         m.urlText = "https://org.example/events"
         await m.start(into: scratch, now: Date(), today: ScoutTestClock.beforeAllFixtures)
 

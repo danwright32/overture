@@ -644,7 +644,8 @@ enum PrepQueueService {
     enum PrepLaunchError: LocalizedError, Equatable {
         case nothingToPrep
         case nothingToCheck
-        case runnerUnavailable
+        // #2838: carries its reason, so it can name the setting that is wrong and what it points at.
+        case runnerUnavailable(String)
         case alreadyRunning
         // #2760: a check is what is in the way, which `alreadyRunning` cannot say. Two launches share this
         // vocabulary and both can meet either run, including the upgrade case where a check started by an
@@ -658,8 +659,8 @@ enum PrepQueueService {
                 return "No kept prospects need prepping. Keep some prospects first."
             case .nothingToCheck:
                 return "Nothing on this date still needs a reachability check."
-            case .runnerUnavailable:
-                return "Couldn't find the Prep runner. Make sure Claude Code is installed and the Overture project is set up."
+            case .runnerUnavailable(let reason):
+                return reason
             case .alreadyRunning:
                 return "A Prep run is already in progress. Wait for it to finish."
             case .checkAlreadyRunning:
@@ -994,8 +995,15 @@ enum PrepQueueService {
     // a Claude Code run that reads the queue and writes overture-prep-results.json.
     // Resolved from a known location so the app never blocks on it.
     private static func launchRunner(slot: RunSlot) throws {
-        guard let script = runnerScriptURL(), FileManager.default.isExecutableFile(atPath: script.path) else {
-            throw PrepLaunchError.runnerUnavailable
+        // #2838: see ScoutExtractService.launchRunner. One rule for all three runs.
+        let script: URL
+        switch DetachedRunner.resolveRunner(.prep) {
+        case .configured(let url), .derivedFromInstalledRepo(let url):
+            script = url
+        case .unavailable(let configuredPath, let derivedPath):
+            throw PrepLaunchError.runnerUnavailable(
+                RunnerScripts.unavailableMessage(.prep, configuredPath: configuredPath,
+                                                 derivedPath: derivedPath))
         }
         // #2763: the slot is stated rather than left to the runner's default. #2760: and it is now the
         // caller's, so a check tells the runner to open the check slot's files.
@@ -1004,11 +1012,8 @@ enum PrepQueueService {
                                   extra: RunSlot.environment(base: [:], slot: slot))
     }
 
-    // The runner script (mac/scripts/prep-run.sh in the repo). Path is configured once via a string
-    // default so it is not hardcoded into the binary:
-    //   defaults write com.danwright.overture prepRunnerScriptPath "/abs/path/to/mac/scripts/prep-run.sh"
-    // Returns nil when unset, so startPrep fails gracefully with "runner unavailable".
-    static func runnerScriptURL() -> URL? {
-        DetachedRunner.scriptURL(defaultsKey: "prepRunnerScriptPath")
-    }
+    // Where the Prep runner script is: `DetachedRunner.resolveRunner(.prep)`, shared with the other two
+    // detached runs (#2838). The wrapper that used to sit here read one hardcoded defaults key and is
+    // gone, because a resolver each caller reaches through its own one-line copy is how three keys came
+    // to be maintained separately in the first place (L29, dead code is worse than deleted code).
 }

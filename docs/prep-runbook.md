@@ -982,23 +982,20 @@ If Overture is not installed yet, build and install the resident app first: `cd 
 && ./build-install.sh --launch` (builds Release, installs to `/Applications`, and
 starts it as a login agent).
 
-Point the app at the runner script (so the "Prep kept" button can launch it). The
-defaults domain depends on which build reads it: the resident Release app reads
-`com.danwright.overture`; a Debug build launched from Xcode reads its own
-`com.danwright.overture.debug` domain and never sees the Release one. Set whichever
-domain matches the app you are actually running (both, if you switch between them):
+**Pointing the app at the runner script is no longer a step (#2838).** `build-install.sh` above
+already did it: it writes `prepRunnerScriptPath` into the Release preferences domain from its own repo
+root and makes the script executable. `mac/scripts/run-debug.sh` does the same for
+`com.danwright.overture.debug` when it launches a Debug build, which is what the second command here
+used to be for: the two builds read different preferences domains, so one command could never
+configure both.
 
-```
-chmod +x mac/scripts/prep-run.sh
-# Resident Release app (installed via build-install.sh):
-defaults write com.danwright.overture prepRunnerScriptPath "$(pwd)/mac/scripts/prep-run.sh"
-# Debug build (run from Xcode):
-defaults write com.danwright.overture.debug prepRunnerScriptPath "$(pwd)/mac/scripts/prep-run.sh"
-```
+If the checkout MOVES, nothing needs correcting: a stored path naming nothing runnable falls back to
+the checkout recorded in `installed-build.json` (`RunnerScripts.resolve`). A stored path that still
+works is left alone, so pointing a build at another checkout's script by hand keeps working.
 
-Until this is set, the button writes the work-list and reports "couldn't find the
-Prep runner" (graceful, no crash). The first real run should be watched once to
-confirm the headless `claude -p` launch and the results file land.
+If no script is found either way, the button writes the work-list and reports that it could not find
+the Prep runner, naming the setting and what it points at (graceful, no crash). The first real run
+should be watched once to confirm the headless `claude -p` launch and the results file land.
 
 ## Notes
 

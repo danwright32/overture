@@ -146,10 +146,10 @@ struct PrepQueueTests {
         defer { try? FileManager.default.removeItem(at: marker) }
 
         // Launch throws (runner unavailable) — but the work-list must already be written.
-        await #expect(throws: PrepQueueService.PrepLaunchError.runnerUnavailable) {
+        await #expect(throws: PrepQueueService.PrepLaunchError.runnerUnavailable("no runner")) {
             try await PrepQueueService.startPrep(from: ctx, now: Date(timeIntervalSince1970: 0),
                                                  queueURL: tmp, markerURL: marker,
-                                                 launch: { throw PrepQueueService.PrepLaunchError.runnerUnavailable })
+                                                 launch: { throw PrepQueueService.PrepLaunchError.runnerUnavailable("no runner") })
         }
         let written = try Data(contentsOf: tmp)
         let decoded = try JSONDecoder().decode(PrepQueue.self, from: written)
@@ -340,11 +340,11 @@ struct PrepQueueTests {
         let marker = FileManager.default.temporaryDirectory.appendingPathComponent("m-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: tmp); try? FileManager.default.removeItem(at: marker) }
 
-        await #expect(throws: PrepQueueService.PrepLaunchError.runnerUnavailable) {
+        await #expect(throws: PrepQueueService.PrepLaunchError.runnerUnavailable("no runner")) {
             try await PrepQueueService.startPrep(from: ctx, now: Date(timeIntervalSince1970: 0),
                                                  includedKeys: [near.naturalKey],
                                                  queueURL: tmp, markerURL: marker,
-                                                 launch: { throw PrepQueueService.PrepLaunchError.runnerUnavailable })
+                                                 launch: { throw PrepQueueService.PrepLaunchError.runnerUnavailable("no runner") })
         }
         let decoded = try JSONDecoder().decode(PrepQueue.self, from: Data(contentsOf: tmp))
         #expect(decoded.items.map(\.groupName) == ["Near Show"])

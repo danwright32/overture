@@ -6,32 +6,33 @@ performances (#799). The app launches it; nobody supervises it.
 This run is a workflow, not Swift, so it has **no automated test**. This runbook plus
 `fixtures/scout-extract/` is its spec. `docs/contracts.md` catalogs the three files it exchanges.
 
-## Setup (one time)
+## Setup
 
-Overture finds this script through a stored setting. Until that is set, the feature is unavailable and
-says so in words ("The scout-extract runner isn't set up yet"), never silently.
-
-1. Make the script executable:
+**There is nothing to type (#2838).** Installing the app points it at the checkout it was built from:
 
 ```
-chmod +x "/Users/danielhankins-wright/Non-icloudDocuments/Photography Assets/Dan Wright Photography/Marketing/Outreach/Overture/mac/scripts/scout-extract-run.sh"
+cd mac && ./build-install.sh
 ```
 
-2. Point Overture at it:
+That writes `scoutExtractRunnerScriptPath` (and the other two runners' keys) into the Release
+preferences domain from its own repo root, and makes each script executable.
+`mac/scripts/run-debug.sh` does the same for the Debug domain when it launches a Debug build, which is
+why the Debug build needs no separate step any more: Debug and Release have different bundle
+identities, so `UserDefaults.standard` resolves to a DIFFERENT preferences domain in each, and one
+command was never able to configure both.
 
-```
-defaults write com.danwright.overture scoutExtractRunnerScriptPath "/Users/danielhankins-wright/Non-icloudDocuments/Photography Assets/Dan Wright Photography/Marketing/Outreach/Overture/mac/scripts/scout-extract-run.sh"
-```
+This used to be three `defaults write` commands holding an absolute path, written out here five times.
+Six entries (three scripts across two domains) each recorded where the checkout HAPPENED to be, living
+outside the repo where nothing here could notice one had gone stale, so moving the checkout broke all
+six at once (L153).
 
-3. **The Debug build needs its own copy of that setting.** Debug and Release have different bundle
-   identities, so `UserDefaults.standard` resolves to a DIFFERENT preferences domain in each, and the
-   command above configures the Release app only. Launch the Debug build (which is the only safe way to
-   try a change: `mac/scripts/run-debug.sh`) and the feature reports "the runner isn't set up", for no
-   visible reason. Nothing is broken; it is looking somewhere else.
+**A move needs no correction either.** When a stored path names nothing runnable, the app derives the
+script from `repoPath` in `installed-build.json`, which is the checkout `build-install.sh` recorded at
+the last install (`RunnerScripts.resolve`). A stored path that still works is left alone, so pointing a
+build at another checkout's scripts by hand keeps working exactly as before.
 
-```
-defaults write com.danwright.overture.debug scoutExtractRunnerScriptPath "/Users/danielhankins-wright/Non-icloudDocuments/Photography Assets/Dan Wright Photography/Marketing/Outreach/Overture/mac/scripts/scout-extract-run.sh"
-```
+If neither route finds a script, the feature is unavailable and says so in words, naming the setting
+and the path it points at, never silently.
 
 ## What the run does
 

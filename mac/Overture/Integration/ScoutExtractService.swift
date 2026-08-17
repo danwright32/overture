@@ -12,7 +12,11 @@ import Foundation
 @MainActor
 enum ScoutExtractService {
     enum ExtractLaunchError: LocalizedError, Equatable {
-        case nothingToExtract, runnerUnavailable, alreadyRunning
+        case nothingToExtract, alreadyRunning
+        // #2838: it CARRIES its reason. The setting it reads lives outside the repo and holds an absolute
+        // path, so the interesting question is always which setting is wrong and what it points at, and a
+        // fixed sentence cannot say either (L11, L80).
+        case runnerUnavailable(String)
         // #849: a test tried to launch a REAL detached Claude run. Refused, loudly.
         case refusedUnderTest
 
@@ -20,11 +24,12 @@ enum ScoutExtractService {
             switch self {
             case .nothingToExtract:
                 return "No sources need re-reading right now."
-            case .runnerUnavailable:
+            case .runnerUnavailable(let reason):
                 // Named and actionable, never silence. This is the FIRST thing Dan hits, before he has
                 // pointed the app at the script, and the failure it replaces (an unset defaults key
-                // making scriptURL nil) is a feature that quietly never runs.
-                return "The scout-extract runner isn't set up yet. See docs/scout-extract-runbook.md: point Overture at scout-extract-run.sh and make it executable."
+                // making scriptURL nil) is a feature that quietly never runs. #2838: the reason is built
+                // by RunnerScripts, which is what knows which of the routes failed and what each one was.
+                return reason
             case .alreadyRunning:
                 return "A scout-extract run is already in progress. Wait for it to finish."
             case .refusedUnderTest:
@@ -160,9 +165,17 @@ enum ScoutExtractService {
     // same bug.
     private static func launchRunner() throws {
         guard !AppEnvironment.isRunningUnderTests else { throw ExtractLaunchError.refusedUnderTest }
-        guard let script = DetachedRunner.scriptURL(defaultsKey: "scoutExtractRunnerScriptPath"),
-              FileManager.default.isExecutableFile(atPath: script.path) else {
-            throw ExtractLaunchError.runnerUnavailable
+        // #2838: the stored setting if it still names a runnable script, otherwise derived from the
+        // checkout the installed build recorded. The refusal carries what was tried, so it can name the
+        // setting and the path rather than saying only that something is missing.
+        let script: URL
+        switch DetachedRunner.resolveRunner(.scoutExtract) {
+        case .configured(let url), .derivedFromInstalledRepo(let url):
+            script = url
+        case .unavailable(let configuredPath, let derivedPath):
+            throw ExtractLaunchError.runnerUnavailable(
+                RunnerScripts.unavailableMessage(.scoutExtract, configuredPath: configuredPath,
+                                                 derivedPath: derivedPath))
         }
         try DetachedRunner.launch(scriptPath: script.path,
                                   supportDirectory: StoreLocation.handoffDirectory)
