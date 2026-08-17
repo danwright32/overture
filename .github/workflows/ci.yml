@@ -1,10 +1,32 @@
 name: CI
 
 on:
-  push:
-    branches:
-      - main
   pull_request:
+
+# There is deliberately NO push trigger, and `src/lib/ciWorkflow.test.ts` fails if one comes back.
+# Measured 2026-08-16: 440 runs in seven days, 209 of them push and 227 pull_request. GitHub bills a
+# whole minute minimum per run however short it is (these average 21 seconds), so that was about
+# 1,890 billed minutes a month against the 2,000 a private repo gets on a free personal plan, whose
+# default spending limit is zero: CI STOPS rather than bills, and a pull request just sits with no
+# checks. Roughly half of that spend was the second look at code that had already passed.
+#
+# What removing it costs, and why that cost is already paid elsewhere. A pull request run proves the
+# branch works beside the code it was CUT FROM, never beside what landed since, and the push run on
+# main was the backstop for that. The local merge scripts make a STRONGER version of the same check:
+# `verify-and-merge-branch.sh` and `verify-and-merge-batch.sh` both merge current `origin/main` into
+# the branch and run the FULL suite (Swift included, which this job cannot) before anything merges,
+# and going through one of them is mandatory. So the backstop is kept and the duplicate is dropped.
+#
+# Note also that a push to main can only ever BE a merge: `scripts/hooks/pre-push` refuses a push
+# whose destination is main, so nothing else could have triggered this job.
+#
+# A paths filter was considered instead and REJECTED as unsafe. This job looks like it only covers
+# the TypeScript importer, but its tests read `docs/prep-runbook.md`,
+# `docs/scout-extract-runbook.md`, `AGENTS.md`, `package.json` and `fixtures/scout-extract-corpus/`,
+# and `src/lib/docsCommands.test.ts` asserts that every path AGENTS.md mentions still EXISTS. So
+# renaming any script anywhere in the tree can turn this job red, its real input set is the whole
+# repository, and a filter would make it skip precisely the change that breaks it. A skipped job is
+# indistinguishable from a passing one (L88).
 
 # #1347: the Swift (Mac) tests no longer run in CI. They ran on a self-hosted runner on Dan's Mac
 # (the `swift-tests` job on a `[self-hosted, macOS, overture-mac]` label), which repeatedly went
