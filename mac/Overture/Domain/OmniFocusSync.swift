@@ -353,16 +353,20 @@ extension OmniFocusSync {
     // It NAMES the shows rather than counting them, because the only useful act is to go and look at
     // one, and a count tells him a reminder is missing without telling him whose (L80). Two names then
     // "and N more", so the sentence stays readable in the masthead when a whole run is refused.
-    static func partialFailureMessage(failures: [TaskFailure], attempted: Int) -> String {
+    // nil when nothing failed, so there is no sentence for a state that cannot happen: a fallback
+    // naming no show at all would be a line Dan could never be shown, and dead copy in the inventory
+    // reads exactly like live copy (L29, L132).
+    static func partialFailureMessage(failures: [TaskFailure], attempted: Int) -> String? {
         let names = failures.map { showName(fromNaturalKey: $0.naturalKey) }.reduce(into: [String]()) {
             if !$0.contains($1) { $0.append($1) }   // one show, not one per contact on it
         }
+        guard let first = names.first else { return nil }
         let updated = max(0, attempted - failures.count)
         let named: String
         switch names.count {
-        case 0, 1: named = names.first ?? "one show"
-        case 2: named = "\(names[0]) and \(names[1])"
-        default: named = "\(names[0]), \(names[1]) and \(names.count - 2) more"
+        case 1: named = first
+        case 2: named = "\(first) and \(names[1])"
+        default: named = "\(first), \(names[1]) and \(names.count - 2) more"
         }
         return "OmniFocus updated \(updated) of \(attempted) reminders. It could not update \(named)."
     }

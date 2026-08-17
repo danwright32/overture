@@ -54,9 +54,8 @@ enum OmniFocusSyncRunner {
             // failure, and it must not be recorded as either. Recorded as a failure so it stays on the
             // masthead until a clean run clears it, with a message naming WHICH shows were missed, since
             // the harm is a reminder that never arrives and Dan cannot see an absence.
-            guard r.failures.isEmpty else {
-                let message = OmniFocusSync.partialFailureMessage(failures: r.failures,
-                                                                  attempted: r.created + r.completed + r.failures.count)
+            if let message = OmniFocusSync.partialFailureMessage(
+                failures: r.failures, attempted: r.created + r.completed + r.failures.count) {
                 OmniFocusSyncStatus.recordFailure(message, at: now, into: defaults)
                 if !hadFailure { notifier.notifySyncFailed(message) }
                 return (r.created + r.completed, stamped)

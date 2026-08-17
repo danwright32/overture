@@ -120,14 +120,20 @@ struct OneFailingShowStopsOnlyItselfTests {
         #expect(message == "OmniFocus updated 11 of 12 reminders. It could not update the singalong.")
     }
 
-    @Test func severalMissedShowsAreNamedTwoThenCounted() {
+    @Test func severalMissedShowsAreNamedTwoThenCounted() throws {
         let failures = ["a show", "b show", "c show", "d show"].map {
             OmniFocusSync.TaskFailure(action: .create, naturalKey: "\($0)|2026-10-25|a park",
                                       recipientId: "x@example.invalid", reason: "Invalid index")
         }
-        let message = OmniFocusSync.partialFailureMessage(failures: failures, attempted: 10)
+        let message = try #require(OmniFocusSync.partialFailureMessage(failures: failures, attempted: 10))
         #expect(message.contains("a show, b show and 2 more"))
         #expect(message.contains("6 of 10"))
+    }
+
+    // Nothing failed has no sentence, rather than one naming no show: a line Dan can never be shown
+    // still sits in the copy inventory looking live (L132).
+    @Test func aRunWithNoFailuresHasNoSentence() {
+        #expect(OmniFocusSync.partialFailureMessage(failures: [], attempted: 4) == nil)
     }
 
     // Two contacts on one show is one show missed, not two, or the sentence over-reports the damage.

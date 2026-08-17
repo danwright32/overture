@@ -2341,10 +2341,9 @@ struct RootView: View {
                 // #2882: some tasks refused is neither a clean run nor a dead one. Recorded and shown the
                 // same way at both sync sites, through the same message builder, so the launch sync and
                 // the scheduled sync cannot describe one state two ways.
-                if !result.failures.isEmpty {
-                    let message = OmniFocusSync.partialFailureMessage(
-                        failures: result.failures,
-                        attempted: result.created + result.completed + result.failures.count)
+                if let message = OmniFocusSync.partialFailureMessage(
+                    failures: result.failures,
+                    attempted: result.created + result.completed + result.failures.count) {
                     OmniFocusSyncStatus.recordFailure(message, at: Date())
                     if force { reportError(message) }
                     omniFocusSyncStartedAt = nil
