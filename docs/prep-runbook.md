@@ -469,6 +469,34 @@ in order, stop at the first that works:
    reported a profile carrying "and 2 more" links when the page it was given held exactly one; that is
    a fabricated observation, and every rule above is worthless on top of one (#2269).
 
+   **(c) When neither an address nor the target's own site has turned up, GO AND SEARCH the platform
+   for a profile (#2892).** Every other social instruction here is conditional on having already landed
+   on a profile while reading somebody's site, and (b) only guesses at a domain. Nothing sends you
+   LOOKING for a handle, so for the show whose only route is a DM the route was the one thing this
+   procedure could not reach, and that is not a rare shape: it is every self-produced act with no
+   website.
+
+   Search the platform by name, scoped to the site: `site:instagram.com "<name>"` first, then the name
+   plus the show title or the venue. **At most two searches per target**, because the per-item web-call
+   cap is 15 and a two-performer show has usually spent most of it by the time it arrives here: on
+   2026-08-17 a run spent 12 searches and 3 fetches across two people and finished with nothing.
+
+   **Verify the profile is the right person before you emit it, and a name match alone is NOT enough.**
+   Two ordinary names plus a handle resembling neither is precisely the state where a wrong profile gets
+   emitted with confidence. The bio or a recent post must carry something tying the account to THIS
+   show: its title, the venue, the date, or another name credited on the bill. On a verified hit, emit
+   `method: "form_or_dm"` with the profile URL in `formUrl`. On anything less, emit nothing and let the
+   empty reason say so: a target you cannot identify is REFUSED, never replaced with the nearest
+   candidate (#2147). A wrong handle is worse than none, because Dan sends the DM by hand believing it
+   is the act.
+
+   A handle is rarely guessable and rarely searchable. On 2026-08-17 the two profiles for "A Time To Be"
+   at The Green Room 42 used a middle name the listing never states and a longer form of a first name,
+   so no `firstnamelastname` guess reached either and no plain web search surfaced them. The run
+   reported "no verifiable email, site, or social profile" after running the full waterfall, which read
+   as a finished search and was not one: the waterfall it ran had no platform search in it. Dan found
+   both himself, on the platform, in seconds.
+
 3. **The target's contact form / Instagram DM** when it publishes no email, and only after (a) and
    (b) above have come back with nothing. Record it as `method: "form_or_dm"` with the form URL in
    `formUrl` (the app surfaces it as a tappable link). This outranks any venue inbox.
