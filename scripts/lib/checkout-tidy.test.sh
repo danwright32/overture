@@ -191,6 +191,42 @@ assert_eq "a clean worktree whose work has shipped can go" \
   "$(classify_worktree "yes" "no" "no" "yes")" \
   "removable"
 
+# #2842: and only when nothing is still working in it. Until this, the ONLY thing standing between a
+# running agent's directory and `git worktree remove --force` was the state of its branch, which is a
+# fact about somebody else's work entirely.
+assert_eq "a live worktree is kept even though its branch shipped and it is clean" \
+  "$(classify_worktree "yes" "no" "no" "yes" "yes")" \
+  "keep-live"
+
+# Said in its own word rather than folded into keep-dirty, because kept-because-an-agent-is-in-it and
+# kept-because-its-branch-has-not-landed are the two the operator has to be able to tell apart.
+assert_eq "liveness is reported ahead of the branch reasons" \
+  "$(classify_worktree "yes" "no" "yes" "no" "yes")" \
+  "keep-live"
+
+# ---------------------------------------------------------------------------
+# worktree_liveness_verdict: is somebody still working in there (#2842)
+# ---------------------------------------------------------------------------
+# Arguments: locked, recently_touched (yes|no|unknown)
+
+assert_eq "git's own lock is enough on its own" \
+  "$(worktree_liveness_verdict "yes" "no")" \
+  "yes"
+
+assert_eq "so is a recent write, since the harness's lock is not guaranteed" \
+  "$(worktree_liveness_verdict "no" "yes")" \
+  "yes"
+
+assert_eq "an unlocked worktree nothing has written to is idle" \
+  "$(worktree_liveness_verdict "no" "no")" \
+  "no"
+
+# The keep direction, the same way every other unanswerable question in this file is answered. A
+# probe that could not read the directory is not evidence that nobody is in it.
+assert_eq "a probe that could not answer counts as live" \
+  "$(worktree_liveness_verdict "no" "unknown")" \
+  "yes"
+
 # ---------------------------------------------------------------------------
 # local_branch_deletable: the post-merge cleanup the merge scripts call
 # ---------------------------------------------------------------------------

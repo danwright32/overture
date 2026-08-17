@@ -67,6 +67,51 @@ worktree_branches() {
   worktree_rows | cut -f2 | grep -v '^$' || true
 }
 
+# The paths git itself reports as LOCKED, one per line (#2842). The agent harness locks a worktree it
+# is using, so this is a signal already present and, until now, unread.
+worktree_locked_paths() {
+  git -C "${REPO_ROOT}" worktree list --porcelain | awk '
+    /^worktree /  { path = substr($0, 10) }
+    /^locked/     { if (path != "") print path }
+  '
+}
+
+# How recently a file inside the worktree has to have been written for something to be presumed still
+# working in it. Generous on purpose: an agent between tool calls writes nothing, and erring long only
+# delays reclaiming a directory, where erring short destroys work in progress.
+TIDY_CHECKOUT_LIVE_MINUTES="${TIDY_CHECKOUT_LIVE_MINUTES:-60}"
+
+# An ISO timestamp TIDY_CHECKOUT_LIVE_MINUTES minutes ago, or nothing when neither date dialect on
+# this machine can produce one.
+#
+# Spelled out rather than handed to `find` as a relative "-60 minutes", which is the natural way to
+# write it and does not work here: `find` on this Mac is bfs, which refuses that form outright with
+# "Invalid timestamp". The probe below would then have answered UNKNOWN for every worktree forever,
+# which is the keep direction, so nothing would ever have been reclaimed again and the guard would
+# have looked exactly like one that works (L100). Measured 2026-08-16 while building #2842.
+cutoff_stamp() {
+  local minutes="$1"
+  date -v"-${minutes}M" +%Y-%m-%dT%H:%M:%S 2>/dev/null && return 0
+  date -d "-${minutes} minutes" +%Y-%m-%dT%H:%M:%S 2>/dev/null && return 0
+  return 1
+}
+
+# yes, no or unknown: has anything inside this worktree been written in the last
+# TIDY_CHECKOUT_LIVE_MINUTES minutes. Stops at the first hit, so it costs nothing on a busy worktree
+# and one directory walk on an idle one.
+#
+# It reads only files INSIDE the checkout. A linked worktree's real git directory lives under the main
+# repository's .git/worktrees, and `.git` here is a plain file pointing at it, so the `git status` this
+# script runs against the worktree cannot make it look live by touching its own index.
+recently_touched() {
+  local path="$1" hit stamp
+  [[ -d "${path}" ]] || { echo "unknown"; return 0; }
+  stamp="$(cutoff_stamp "${TIDY_CHECKOUT_LIVE_MINUTES}")" || { echo "unknown"; return 0; }
+  hit="$(find "${path}" -newermt "${stamp}" -print -quit 2>/dev/null)" || { echo "unknown"; return 0; }
+  [[ -n "${hit}" ]] && { echo "yes"; return 0; }
+  echo "no"
+}
+
 main() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -166,16 +211,26 @@ branch_verdict() {
 
 tidy_worktrees() {
   local current_branch="$1" merged_heads="$2" open_heads="$3" gh_ok="$4"
-  local main_worktree removed=0 kept=0 prunable=0
+  local main_worktree removed=0 kept=0 prunable=0 locked_paths
   main_worktree="$(git rev-parse --path-format=absolute --show-toplevel)"
+  locked_paths="$(worktree_locked_paths)"
 
   echo "== Worktrees =="
 
-  local path branch is_main path_exists dirty contained verdict
+  local path branch is_main path_exists dirty contained live verdict
   while IFS=$'\t' read -r path branch; do
     [[ -z "${path}" ]] && continue
     is_main="no"; [[ "${path}" == "${main_worktree}" ]] && is_main="yes"
     path_exists="no"; [[ -d "${path}" ]] && path_exists="yes"
+
+    # Liveness BEFORE the git status below, so nothing this script does can be what makes a worktree
+    # look recently written to.
+    live="no"
+    if [[ "${path_exists}" == "yes" && "${is_main}" == "no" ]]; then
+      local locked="no"
+      grep -Fxq "${path}" <<< "${locked_paths}" && locked="yes"
+      live="$(worktree_liveness_verdict "${locked}" "$(recently_touched "${path}")")"
+    fi
 
     dirty="no"
     if [[ "${path_exists}" == "yes" && "${is_main}" == "no" ]]; then
@@ -192,7 +247,7 @@ tidy_worktrees() {
       esac
     fi
 
-    verdict="$(classify_worktree "${path_exists}" "${is_main}" "${dirty}" "${contained}")"
+    verdict="$(classify_worktree "${path_exists}" "${is_main}" "${dirty}" "${contained}" "${live}")"
     case "${verdict}" in
       keep-main) ;;
       prunable)
@@ -205,6 +260,13 @@ tidy_worktrees() {
         if [[ "${APPLY}" == "yes" ]]; then
           git worktree remove --force "${path}" || echo "    could not remove ${path}" >&2
         fi
+        ;;
+      keep-live)
+        # Spelled out rather than left as the bare verdict word, because this is the one kept-for-a
+        # reason that is NOT about the branch, and telling it apart from kept-because-unshipped is
+        # half of what #2842 asked for.
+        kept=$((kept + 1))
+        echo "  keep       ${path} [${branch:-detached}] (live: locked, or written to in the last ${TIDY_CHECKOUT_LIVE_MINUTES} minutes)"
         ;;
       *)
         kept=$((kept + 1))

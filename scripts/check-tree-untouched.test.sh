@@ -110,6 +110,83 @@ echo "my own new file" > "${REPO}/scratch.txt"
 assert_equals "pre-existing uncommitted work passes" "0" "$?"
 rm -rf "${REPO}"
 
+# --- #2843: it says what it MEASURED, and never who did it ---
+#
+# The message used to assert "these edits were made by the suite, not by you" for every difference.
+# It knows the tree changed; it does not know who changed it. On 2026-08-16 somebody committed their
+# own work in another checkout sharing this repository mid-run, twenty modified paths went clean, and
+# that sentence sent an agent 26 minutes into a suite defect that did not exist.
+#
+# Three buckets, and each is asserted to carry ONLY its own wording, because folding any two of them
+# back together is the whole defect.
+
+assert_not_contains() {
+  local desc="$1" needle="$2" haystack="$3"
+  if [[ "${haystack}" != *"${needle}"* ]]; then
+    echo "ok - ${desc}"
+  else
+    echo "FAIL - ${desc}"
+    echo "  expected NOT to contain: ${needle}"
+    echo "  actual:                  ${haystack}"
+    FAILURES=$((FAILURES + 1))
+  fi
+}
+
+# clean -> changed: the one case the suite writing looks like, and the only one the opt-in advice is
+# true of.
+REPO="$(make_repo)"
+SNAPSHOT="${REPO}/.snapshot"
+"${CHECK}" record "${REPO}" "${SNAPSHOT}" >/dev/null 2>&1
+echo "rewritten by the run" > "${REPO}/tracked.txt"
+OUTPUT="$("${CHECK}" compare "${REPO}" "${SNAPSHOT}" 2>&1)"
+assert_contains "a file that went from clean to changed is named as exactly that" \
+  "WENT FROM CLEAN TO CHANGED" "${OUTPUT}"
+assert_contains "and it carries the opt-in advice" "opt-in" "${OUTPUT}"
+assert_not_contains "and it no longer asserts who made the edit" "not by you" "${OUTPUT}"
+rm -rf "${REPO}"
+
+# changed -> clean: what a commit, stash or checkout looks like, including one made in another
+# worktree sharing this repository. Reported, because a run CAN produce it by restoring a file over
+# uncommitted work, but never as the suite writing.
+REPO="$(make_repo)"
+SNAPSHOT="${REPO}/.snapshot"
+echo "my own work in progress" > "${REPO}/tracked.txt"
+"${CHECK}" record "${REPO}" "${SNAPSHOT}" >/dev/null 2>&1
+git -C "${REPO}" checkout -q -- tracked.txt
+OUTPUT="$("${CHECK}" compare "${REPO}" "${SNAPSHOT}" 2>&1)"
+EXIT=$?
+assert_equals "a path that went clean during the run still fails" "1" "${EXIT}"
+assert_contains "it is named as having gone clean" "ARE CLEAN NOW" "${OUTPUT}"
+assert_contains "and the first thing offered is the cause that is not the suite" \
+  "ANOTHER worktree sharing this repository" "${OUTPUT}"
+assert_not_contains "it is never called an edit the suite wrote" "WENT FROM CLEAN TO CHANGED" "${OUTPUT}"
+assert_not_contains "and it never offers the opt-in remedy, which changes nothing here" \
+  "opt-in" "${OUTPUT}"
+rm -rf "${REPO}"
+
+# changed -> changed: genuinely indistinguishable, so it says so rather than picking a reading.
+REPO="$(make_repo)"
+SNAPSHOT="${REPO}/.snapshot"
+echo "my own work in progress" > "${REPO}/tracked.txt"
+"${CHECK}" record "${REPO}" "${SNAPSHOT}" >/dev/null 2>&1
+echo "different again" > "${REPO}/tracked.txt"
+OUTPUT="$("${CHECK}" compare "${REPO}" "${SNAPSHOT}" 2>&1)"
+assert_contains "a path modified before and after says it cannot be told apart" \
+  "cannot tell whether the run wrote these or you did" "${OUTPUT}"
+assert_not_contains "and is not reported as the suite writing" "WENT FROM CLEAN TO CHANGED" "${OUTPUT}"
+rm -rf "${REPO}"
+
+# A path whose name holds a space is reported as one path, not two. It is the untracked scratch file
+# a run is most likely to leave behind, and the buckets are decided by reading the path back out of
+# each snapshot line.
+REPO="$(make_repo)"
+SNAPSHOT="${REPO}/.snapshot"
+"${CHECK}" record "${REPO}" "${SNAPSHOT}" >/dev/null 2>&1
+echo "left behind" > "${REPO}/a file with spaces.txt"
+OUTPUT="$("${CHECK}" compare "${REPO}" "${SNAPSHOT}" 2>&1)"
+assert_contains "a path with spaces is named whole" "a file with spaces.txt" "${OUTPUT}"
+rm -rf "${REPO}"
+
 # --- a missing snapshot is an error, never a pass ---
 # The compare step runs at the end of a long suite, which is exactly where a silently skipped check
 # would never be noticed. A snapshot that was never recorded means this measured nothing.

@@ -189,6 +189,43 @@ assert_contains "a scoped run going entirely red is still a catch" "${OUT}" "CAU
 assert_not_contains "and is not condemned" "${OUT}" "NOT PROOF"
 assert_equals "and exits 0" "0" "${STATUS}"
 
+# --- a runner this shell cannot run is refused, never reported as CAUGHT (#2846) ---------------------
+#
+# The worst of all of them, because it answers in the reassuring direction: a runner that cannot start
+# exits non-zero having tested nothing, which is byte for byte what a red suite looks like from here, and
+# CAUGHT is the verdict quoted as proof for roughly 1,700 source-text guards in this suite. NOTHING RAN
+# cannot catch it, because that is decided from a total the runner never printed.
+#
+# Measured 2026-08-16 while proving the guards for #2818, with the runner set to
+# `bash scripts/lib/project-freshness.test.sh`, which is the natural way to reach for a shell fixture and
+# is TWO WORDS: the shell looked for a file of that whole name, exited 127, and this said CAUGHT.
+write_subject
+OUT="$(OVERTURE_MUTATE_RUNNER="bash ${WORK}/some-fixture.test.sh" "${MUTATE}" "${SUBJECT}" 's/yes/no/' 2>&1)"
+STATUS=$?
+assert_contains "a runner carrying arguments is refused" "${OUT}" "NO RUNNER"
+# Asserted against the VERDICT LINE rather than against the whole output, because the refusal itself
+# names the verdict it is replacing ("would otherwise call that CAUGHT"), and a needle that a message
+# ABOUT the thing can satisfy is not a guard on the thing (L103).
+VERDICT="$(grep -E '^(CAUGHT|SURVIVED|NOT APPLIED|NOTHING RAN|LANDED ELSEWHERE|NOT PROOF|NO RUNNER)' <<< "${OUT}" | head -1)"
+assert_equals "and the verdict is the refusal, not a reading of any suite" \
+  "NO RUNNER - nothing was mutated and nothing was run." "${VERDICT}"
+assert_equals "and does not exit 0" "1" "$([ "${STATUS}" -ne 0 ] && echo 1 || echo 0)"
+assert_contains "it names the wrapper as the way to pass arguments" "${OUT}" "executable wrapper"
+# Nothing was mutated, which is the other half: the refusal happens before the file is touched, so there
+# is no restore to depend on.
+assert_contains "the subject is left exactly as it was" "$(cat "${SUBJECT}")" 'static let answer = "yes"'
+
+OUT="$(OVERTURE_MUTATE_RUNNER="${WORK}/no-such-runner.sh" "${MUTATE}" "${SUBJECT}" 's/yes/no/' 2>&1)"
+assert_contains "a runner that does not exist is refused too" "${OUT}" "NO RUNNER"
+assert_contains "and the refusal names the value it was given" "${OUT}" "no-such-runner.sh"
+
+# The runner is passed as ONE command and must stay that way: this repo's own default runner path holds
+# a space, because the checkout lives under "Photography Assets", so a version that split the runner on
+# whitespace to allow arguments broke every ordinary invocation. Asserted on the SOURCE, since a fixture
+# setting OVERTURE_MUTATE_RUNNER never exercises the default at all.
+SRC="$(cat "${MUTATE}")"
+assert_not_contains "the runner is never split into words" "${SRC}" "read -ra RUNNER"
+
 # --- it refuses what it cannot do --------------------------------------------------------------------
 OUT="$("${MUTATE}" "${WORK}/does-not-exist.swift" 's/a/b/' 2>&1)"
 assert_contains "a missing file is refused by name" "${OUT}" "does-not-exist.swift"

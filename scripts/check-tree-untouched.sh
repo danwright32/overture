@@ -49,10 +49,14 @@ tree_state() {
     # path in its own right and must not be read as the next entry.
     if [[ "${status}" == R* || "${status}" == C* ]]; then IFS= read -r -d '' _source; fi
     if [[ -n "${own}" && "${path}" == "${own}" ]]; then continue; fi
+    # TAB separated, so the PATH is one field however many spaces are in it. #2843 reads the path
+    # back out of these lines to say which of three things happened to it, and splitting on spaces
+    # would mis-read exactly the untracked file with a space in its name that a run is most likely
+    # to leave behind.
     if [[ -f "${dir}/${path}" ]]; then
-      echo "${status} ${path} $(shasum -a 256 "${dir}/${path}" | cut -d' ' -f1)"
+      printf '%s\t%s\t%s\n' "${status}" "${path}" "$(shasum -a 256 "${dir}/${path}" | cut -d' ' -f1)"
     else
-      echo "${status} ${path} (not a regular file)"
+      printf '%s\t%s\t%s\n' "${status}" "${path}" "(not a regular file)"
     fi
   done | sort
 }
@@ -60,6 +64,50 @@ tree_state() {
 record() {
   local dir="$1" snapshot="$2"
   tree_state "${dir}" "${snapshot}" > "${snapshot}"
+}
+
+# The three ways a snapshot line can differ, split apart so the failure can say what it MEASURED
+# instead of naming a culprit (#2843).
+#
+# It used to say "these edits were made by the suite, not by you" for every difference, which it has
+# no way of knowing. On 2026-08-16 a person committed their own work in another checkout sharing this
+# repository while a run was in flight: twenty modified paths became clean, the comparison saw the
+# tree change, and the message sent an agent 26 minutes into a suite defect that did not exist, with
+# a remedy (an opt-in variable) for a problem it did not have (L111). It fires precisely when several
+# things touch the repository at once, which is now the ordinary working mode here, so a false
+# accusation teaches people to disregard a check that is otherwise load-bearing (L36).
+#
+# Two of the three CAN be told apart, and the third genuinely cannot, which is itself worth saying:
+#   clean -> changed   the suite writing, and the only case the opt-in advice is true of
+#   changed -> clean   a commit, stash or checkout, or a run restoring a file over uncommitted work
+#   changed -> changed different content on an already-modified path, which both look identical in
+#
+# Every difference still FAILS. What changed is the claim, not the verdict: the tree not being as the
+# run found it is the measured fact, and each of the three is worth somebody looking at.
+#
+# Compared by PATH, the second TAB separated field of each line, so a status change with identical
+# content (staging an already-modified file) is a difference like any other.
+paths_of() {
+  awk -F'\t' 'NF { print $2 }' <<< "$1" | sort -u
+}
+
+line_for() {
+  awk -F'\t' -v want="$2" '$2 == want { print }' <<< "$1"
+}
+
+paths_only_in() {
+  comm -23 <(paths_of "$1") <(paths_of "$2")
+}
+
+paths_changed_in_both() {
+  local before="$1" after="$2" shared path
+  shared="$(comm -12 <(paths_of "${before}") <(paths_of "${after}"))"
+  while IFS= read -r path; do
+    [[ -n "${path}" ]] || continue
+    if [[ "$(line_for "${before}" "${path}")" != "$(line_for "${after}" "${path}")" ]]; then
+      echo "${path}"
+    fi
+  done <<< "${shared}"
 }
 
 compare() {
@@ -77,15 +125,48 @@ compare() {
   fi
 
   echo "" >&2
-  echo "check-tree-untouched: the test run CHANGED the working tree." >&2
-  echo "" >&2
-  echo "These edits were made by the suite, not by you, and they are indistinguishable from your own" >&2
-  echo "work: a git add -A would commit them. Look before you stage anything." >&2
+  echo "check-tree-untouched: the working tree is not as this run found it." >&2
+
+  local written cleaned ambiguous
+  written="$(paths_only_in "${after}" "$(cat "${snapshot}")")"
+  cleaned="$(paths_only_in "$(cat "${snapshot}")" "${after}")"
+  ambiguous="$(paths_changed_in_both "$(cat "${snapshot}")" "${after}")"
+
+  # Each bucket says what it MEASURED and no more, and only the first of the three is evidence the
+  # suite wrote anything, so only the first carries the opt-in advice (#2843, L11).
+  if [[ -n "${written}" ]]; then
+    echo "" >&2
+    echo "WENT FROM CLEAN TO CHANGED during the run, which is what the suite writing looks like:" >&2
+    sed 's/^/  /' <<< "${written}" >&2
+    echo "" >&2
+    echo "These are indistinguishable from your own work: a git add -A would commit them. Look before" >&2
+    echo "you stage anything. If a run is MEANT to rewrite a checked-in file, it needs its own opt-in" >&2
+    echo "variable and a line here saying the check was skipped, the way the copy inventory" >&2
+    echo "regeneration does." >&2
+  fi
+
+  if [[ -n "${cleaned}" ]]; then
+    echo "" >&2
+    echo "WERE UNCOMMITTED BEFORE THE RUN AND ARE CLEAN NOW:" >&2
+    sed 's/^/  /' <<< "${cleaned}" >&2
+    echo "" >&2
+    echo "The suite does not do this by writing. It is what a commit, a stash or a checkout looks like," >&2
+    echo "including one made in ANOTHER worktree sharing this repository while the run was going. Check" >&2
+    echo "there first. The one way a RUN produces it is a step restoring a file over your uncommitted" >&2
+    echo "work, so if nobody committed, that is what to look for." >&2
+  fi
+
+  if [[ -n "${ambiguous}" ]]; then
+    echo "" >&2
+    echo "WERE ALREADY UNCOMMITTED BEFORE THE RUN AND HAVE CHANGED AGAIN:" >&2
+    sed 's/^/  /' <<< "${ambiguous}" >&2
+    echo "" >&2
+    echo "This check cannot tell whether the run wrote these or you did: both leave a modified file" >&2
+    echo "modified. Compare them against what you meant to have there." >&2
+  fi
+
   echo "" >&2
   diff <(cat "${snapshot}") <(echo "${after}") | head -60 >&2
-  echo "" >&2
-  echo "If a run is MEANT to rewrite a checked-in file, it needs its own opt-in variable and a line" >&2
-  echo "here saying the check was skipped, the way the copy inventory regeneration does." >&2
   return 1
 }
 
