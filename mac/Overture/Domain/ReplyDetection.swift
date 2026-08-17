@@ -135,6 +135,50 @@ enum ReplyDetection {
         return nil
     }
 
+    // #2865: the newest message on this thread IF Dan sent it, with the two facts an UNATTENDED check
+    // needs about it and `newestMessageIsSelf` cannot give: when it went, and whether his mailbox sent it
+    // by itself.
+    //
+    // The second is the one that matters. `newestMessageIsSelf` is enough for the attach, where a person
+    // is standing there looking at the thread they just linked, and is not enough for a pass running
+    // every few minutes: an out of office autoresponder is a message from his own address, arriving on
+    // exactly the threads this runs over, and reading it as an answer would take a row that genuinely IS
+    // waiting on him off every surface that could say so (L42).
+    //
+    // `isAutomated` cannot help here: it matches the LOCAL PART of the sender's address, and an
+    // autoresponder from Dan's own mailbox carries Dan's own address. The evidence is in the headers the
+    // standards define for exactly this (RFC 3834's `Auto-Submitted`, and the `X-Autoreply` /
+    // `X-Autorespond` / `Precedence: auto_reply` conventions that predate it).
+    struct SentMessage: Equatable, Sendable {
+        var sentAt: Date
+        var isAutomated: Bool
+    }
+
+    static func newestMessageFromSelf(threadJSON data: Data, selfEmail: String) -> SentMessage? {
+        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let messages = obj["messages"] as? [[String: Any]],
+              let newest = newestFirst(messages).first else { return nil }
+        let me = email(from: selfEmail)
+        guard !me.isEmpty, email(from: headerValue("from", of: newest)) == me else { return nil }
+        let millis = internalDateMillis(newest)
+        guard millis > 0 else { return nil }
+        return SentMessage(sentAt: Date(timeIntervalSince1970: TimeInterval(millis) / 1000),
+                           isAutomated: isAutomatedSend(newest))
+    }
+
+    private static func isAutomatedSend(_ message: [String: Any]) -> Bool {
+        let autoSubmitted = headerValue("auto-submitted", of: message)
+            .trimmingCharacters(in: .whitespaces).lowercased()
+        // The standard's own value for a message a person really sent is "no", so anything else present
+        // (auto-replied, auto-generated, auto-notified) is an automated send.
+        if !autoSubmitted.isEmpty, autoSubmitted != "no" { return true }
+        if !headerValue("x-autoreply", of: message).isEmpty { return true }
+        if !headerValue("x-autorespond", of: message).isEmpty { return true }
+        if headerValue("precedence", of: message).trimmingCharacters(in: .whitespaces).lowercased()
+            == "auto_reply" { return true }
+        return false
+    }
+
     // #2715: is the NEWEST message on this thread one Dan sent?
     //
     // Deliberately not the mirror of `latestReplyMessage`, which SKIPS his own messages and so can never

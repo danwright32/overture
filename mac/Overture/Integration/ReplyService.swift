@@ -62,6 +62,27 @@ enum ReplyService {
                 // Dan dismissed this exact reply as not real (#219): skip it, but a newer reply
                 // (a different id) still flags. Per-recipient dismiss now.
                 if let replyId, replyId == r.dismissedReplyId { continue }
+                // #2865: did Dan answer this in his mail client? Asked HERE, with `data` already in hand
+                // and BEFORE the `alreadyReplied` guard below, because that guard is what these rows take:
+                // a contact who replied, was answered outside Overture, and has not written since has no
+                // new reply id, so it `continue`s on every pass. The check placed anywhere after it would
+                // never execute for the rows it exists for while passing every test that hands the
+                // function a thread with a new message on it (L3, the third time in this area: #2196,
+                // #2815, and this).
+                //
+                // It costs no extra Gmail call: the metadata thread it reads is the one already fetched.
+                if alreadyReplied, let answered = AnsweredElsewhere.answeredAt(
+                        threadJSON: data, selfEmail: selfEmail,
+                        theirMessageArrivedAt: r.replyArrivedAt) {
+                    // On the contact itself, with NO fan-out to peers, which is the one place this
+                    // differs from `AnsweredReply` and is deliberate. Every contact sharing the thread
+                    // passes through this loop on its own and records its own answer, which the colleague
+                    // test proves. And every peer this loop SKIPS is one that is not asking anyway: the
+                    // skips are `replyWatchConversationIsOpen` (resolution set, or bounced), a booked
+                    // contact and a hand-resolved one, and `hasUnhandledReply` reads those same facts
+                    // first. A fan-out here would be code nothing could reach (L29).
+                    r.recordAnsweredElsewhere(at: answered)
+                }
                 if alreadyReplied {
                     // The id decides it, so the same thread re-read on every check for the life of a
                     // conversation changes nothing. Nothing on it since the last look.

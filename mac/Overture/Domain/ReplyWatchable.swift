@@ -71,6 +71,16 @@ protocol ReplyWatchableRecipient: AnyObject {
     // A reply with no decodable body yields nothing every time, so without a record of the attempt the row
     // stays in the gap and its thread is refetched from Gmail forever with nothing changing (L47).
     var replyTextCheckedAt: Date? { get set }
+    // #2865: record that Dan answered this conversation from his mail client, dated by that message.
+    //
+    // A DEFAULTED no-op rather than a required member, which is the exception to this protocol's own rule
+    // about defaults (L129), so it names its reason and the issue that ends it. `Recipient` has an
+    // answered stamp and overrides this. `Inquiry` has none at all in the live schema, so a required
+    // member would have to invent one, and adding a stored field to that model is #2868's job: it is
+    // already open, on exactly that gap, and is where the decision about the inquiry half belongs. Until
+    // then an inquiry learns nothing from this check, which is what it does today.
+    func recordAnsweredElsewhere(at answeredAt: Date)
+
     var dismissedReplyId: String? { get }        // a reply Dan already dismissed as not real.
     var bounced: Bool { get set }
     var lastBounceId: String? { get set }
@@ -85,6 +95,9 @@ protocol ReplyWatchableRecipient: AnyObject {
 }
 
 extension ReplyWatchableRecipient {
+    // #2865: the default, for a conformer with no answered stamp of its own to write.
+    func recordAnsweredElsewhere(at answeredAt: Date) {}
+
     // The default is the plain recording, which is all a test double has to do. `Recipient` overrides it
     // to clear a stand-down as well.
     func reopenOnReply(at repliedAt: Date) {
