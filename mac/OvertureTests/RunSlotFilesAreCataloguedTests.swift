@@ -15,13 +15,28 @@ import Testing
 @Suite("Every run slot's files are in the contracts catalogue (#2805)")
 struct RunSlotFilesAreCataloguedTests {
 
-    private static var catalogue: String {
+    private static var document: String {
         let url = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()      // OvertureTests
             .deletingLastPathComponent()      // mac
             .deletingLastPathComponent()      // repo root
             .appendingPathComponent("docs/contracts.md")
         return (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+    }
+
+    // The CATALOGUE TABLE only, not the whole document, and that scoping is the guard (L135).
+    //
+    // Written first as a search over the whole file, and a mutation deleting `check-running` from the
+    // table SURVIVED it: the prose further down describes the same files in a paragraph, so the name was
+    // still present and the check passed while the table was wrong. That is precisely the defect #2805
+    // fixed, from the same direction: the prose section had been correct about the check slot all along
+    // and the catalogue had not, and the catalogue is what people are told to read.
+    private static var catalogue: String {
+        let text = document
+        guard let start = text.range(of: "\n## Catalog") else { return "" }
+        let rest = text[start.upperBound...]
+        guard let end = rest.range(of: "\n## ") else { return String(rest) }
+        return String(rest[..<end.lowerBound])
     }
 
     // Names built by asking RunSlot, against a neutral base, exactly as RunSlot's own `queueFileName`
@@ -43,7 +58,12 @@ struct RunSlotFilesAreCataloguedTests {
 
     @Test func theCatalogueNamesEveryFileEverySlotProduces() {
         let text = Self.catalogue
-        #expect(!text.isEmpty, "docs/contracts.md could not be read, so this checked nothing (L98)")
+        #expect(!text.isEmpty,
+                "the Catalog section of docs/contracts.md could not be read, so this checked nothing (L98)")
+        // The section really is the table, rather than an empty slice a renamed heading would leave. A
+        // scope that selects nothing passes every `contains` beneath it for the wrong reason.
+        #expect(text.contains("| File (in app-support dir) |"),
+                "the Catalog section no longer looks like the table this reads; the heading may have moved")
 
         for slot in RunSlot.allCases {
             for name in Self.fileNames(for: slot) {
