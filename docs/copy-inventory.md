@@ -185,7 +185,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
 - "Reached out"
   - `App/ActionFeedback.swift`
   - `Domain/AgentRoster.swift`
-  - `Domain/AgentRoster.swift`
 - "Redraft and find contacts"
   - `App/RootView.swift`
   - `UI/DraftReviewView.swift`
@@ -199,7 +198,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
   - `UI/DraftReviewView.swift`
   - `UI/DraftReviewView.swift`
 - "Send issues"
-  - `Domain/AgentRoster.swift`
   - `Domain/AgentRoster.swift`
   - `Domain/AgentRoster.swift`
   - `Domain/AgentRoster.swift`
@@ -2473,7 +2471,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/EventLocationFill.swift`
 "\(clauses[cityIndex]), \(code)"
     `Domain/VenueDisplay.swift`
-"\(conceptSummary(for: name)) \(detail)"
+"\(conceptSummary(for: focus)) \(detail)"
     `Domain/AgentRoster.swift`
 "\(contacts.count) contacts"
     `UI/QueueView+Model.swift`

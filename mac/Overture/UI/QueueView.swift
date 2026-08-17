@@ -1037,7 +1037,7 @@ struct QueueView: View {
         .buttonStyle(.plain)
         // #332: the concept sentence (what this pill IS) alongside the live detail (what's in it
         // right now), so hovering answers "what is this" the first time, not just "how many".
-        .help(AgentRoster.chipHelp(name: s.name, detail: s.detail))
+        .help(AgentRoster.chipHelp(focus: s.focus, detail: s.detail))
     }
 
     private func agentColor(_ state: AgentState) -> Color {
