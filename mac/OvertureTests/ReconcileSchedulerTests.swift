@@ -10,7 +10,7 @@ private final class CapturingOmniFocusClient: OmniFocusClient, @unchecked Sendab
     var created: [OmniFocusSync.DesiredTask] = []
     func existingOvertureTasks() throws -> [OmniFocusSync.ExistingTask] { [] }
     func create(_ task: OmniFocusSync.DesiredTask) throws { created.append(task) }
-    func complete(naturalKey: String, recipientId: String) throws {}
+    func complete(_ task: OmniFocusSync.ExistingTask) throws {}
 }
 
 private struct NoopNotifier: OmniFocusNotifier {

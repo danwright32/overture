@@ -35,7 +35,12 @@ struct OmniFocusSyncConfig: Sendable {
 protocol OmniFocusClient {
     func existingOvertureTasks() throws -> [OmniFocusSync.ExistingTask]   // incomplete Overture-marked tasks
     func create(_ task: OmniFocusSync.DesiredTask) throws
-    func complete(naturalKey: String, recipientId: String) throws
+    // #2885: takes the whole ExistingTask, so the instruction is addressed by the same three things
+    // reconcile decided over (naturalKey, recipientId, dueDate). Taking the first two named every
+    // open task for that show and contact, which is a family where the decision named one member.
+    // Not a defaulted due date, deliberately: a caller that forgot one would silently go back to
+    // completing the family, and the compiler is the only thing that can refuse that (L168).
+    func complete(_ task: OmniFocusSync.ExistingTask) throws
 }
 
 enum OmniFocusSync {
@@ -160,7 +165,7 @@ enum OmniFocusSync {
         let existing = try client.existingOvertureTasks()
         let plan = reconcile(desired: desired, existing: existing)
         for task in plan.toCreate { try client.create(task) }
-        for task in plan.toComplete { try client.complete(naturalKey: task.naturalKey, recipientId: task.recipientId) }
+        for task in plan.toComplete { try client.complete(task) }
         return (existing.count, plan.toCreate.count, plan.toComplete.count)
     }
 
