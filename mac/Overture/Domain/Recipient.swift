@@ -551,7 +551,14 @@ final class Recipient {
     // the same thread re-opens it. Without that the whole back half of a conversation would be
     // unanswerable from the queue. It is the same shape freezeSentReply already uses to decide whether
     // they have written again since the last capture.
+    // #2900: and the show it belongs to has no ending recorded. A close-out writes onto the SHOW and
+    // deliberately nothing onto the contacts (#2396, L83), so without this line no reader of this
+    // property could see an ending at all, and a show Dan had closed out went on minting an OmniFocus
+    // triage task for ever. Asked HERE rather than at each of the thirteen readers, and `!= true` so a
+    // contact with no show wired (every bare-Recipient unit test below) is unaffected rather than
+    // having its absent show read as an ending.
     var hasUnhandledReply: Bool {
+        guard prospect?.hasRecordedEnding != true else { return false }
         guard replied, resolution == nil, !bounced else { return false }
         guard let handled = replyHandledAt else { return true }
         guard let theirs = replyArrivedAt else { return false }
