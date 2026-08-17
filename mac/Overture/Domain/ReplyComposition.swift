@@ -64,6 +64,14 @@ struct ReplyComposition {
         let isRunning: @MainActor () -> Bool
         let requestedAt: @MainActor () -> Date?
         let request: @MainActor () -> Void
+        // #2177: whether the draft sitting here is Dan's own work rather than the drafter's. Closures for
+        // the same reason everything live here is one: he can write or edit while the screen is open, and a
+        // value captured when the composition was built would go on calling his words the model's. The two
+        // states are kept apart rather than folded into one flag because they are the Archive card's own
+        // two ("Written by you", "Edited"), and folding them here would make this the second place the app
+        // decides what those mean.
+        let writtenByDan: @MainActor () -> Bool
+        let editedByDan: @MainActor () -> Bool
     }
 
     // Taking an address off the reply, and saving an address that wrote but is on no contact. Both mean
@@ -134,7 +142,9 @@ extension ReplyComposition {
                     ProspectMutations.draftOneReply(prospect.naturalKey, recipient.id,
                                                     prospects: [prospect], context: context,
                                                     feedback: feedback)
-                }),
+                },
+                writtenByDan: { recipient.replyDraftWrittenByDan },
+                editedByDan: { recipient.replyDraftEditedByDan }),
             audienceControls: AudienceControls(
                 remove: { address in
                     let removal = ReplyPanel.removeFromReply(address, on: recipient, of: prospect)

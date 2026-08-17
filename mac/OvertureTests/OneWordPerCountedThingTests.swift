@@ -85,7 +85,9 @@ struct OneWordPerCountedThingTests {
 
     // And the small unit is never called a lookup, on any of the three sentences that count it.
     @Test func noSentenceCountingWebCallsCallsThemLookups() {
-        let counting = summaryNotes(total: 47, denied: 2) + summaryNotes(total: nil, denied: 1)
+        // #2362: the refused line now needs a complete count and a meaningful share to speak at all, so
+        // the fixtures here carry both. `total: nil` said nothing and left this asserting over one sentence.
+        let counting = summaryNotes(total: 47, denied: 2) + summaryNotes(total: 2, denied: 1)
         #expect(!counting.isEmpty, "the producer said nothing, so this asserts nothing")
         for note in counting {
             #expect(!note.contains("lookup"), "still calling a web call a lookup: \(note)")
@@ -97,10 +99,10 @@ struct OneWordPerCountedThingTests {
     // Singular and plural, because the refused line reads for one as well as several and "1 web calls"
     // is the kind of thing a rename produces.
     @Test func theRefusedLineReadsForOneAndForSeveral() {
-        #expect(summaryNotes(total: nil, denied: 1)
-            .contains("1 web call refused, that research never happened"))
-        #expect(summaryNotes(total: nil, denied: 2)
-            .contains("2 web calls refused, that research never happened"))
+        #expect(summaryNotes(total: 2, denied: 1)
+            .contains("1 web call refused: that research never happened"))
+        #expect(summaryNotes(total: 4, denied: 2)
+            .contains("2 web calls refused: that research never happened"))
     }
 
     // The measured run that prompted the issue: 18 calls for 1 show against an allowance of 15.

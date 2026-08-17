@@ -121,16 +121,54 @@ struct EveryAddressOnScreenTests {
 
     // The address must not be lost on the way: a contact with no name has nothing else identifying it, so
     // it still has to be readable on the card.
-    //
-    // Deliberately NOT a count. Measured while fixing #2549 (2026-08-12): with no name, the contact line's
-    // own identity IS the address, so the card still says it twice, and with two contacts the opening
-    // preview area says it a third time. Those two are #2560, and one of them sits inside the opening block
-    // #2545 is expected to remove outright. Asserting "exactly once" here would either lock in a number
-    // that is about to change or claim a fix this change does not make.
     @Test func anaddressWithNoNameIsStillReadable() throws {
         let rendered = view(item([contact("info@thevenue.example", nil)]))
 
         #expect(try allTexts(rendered).contains("info@thevenue.example"))
+    }
+
+    // #2560, the row of that table #2549 left standing. Measured 2026-08-12 by counting a rendered card:
+    // a contact with NO name had its address printed twice, because the contact line falls back to the
+    // address as the contact's identity and the Contacts block below prints it again as it must (#2015).
+    // The third occurrence, in the opening preview area, went with the block #2545 removed.
+    //
+    // Counted rather than pattern-matched on the source, because "how many times does this card say it" is
+    // the actual question and only a rendered view can answer it.
+    @Test func anamelessContactsAddressIsAlsoSaidExactlyOnce() throws {
+        let rendered = view(item([contact("info@thevenue.example", nil)]))
+        let texts = try allTexts(rendered)
+        let said = texts.filter { $0 == "info@thevenue.example" }.count
+
+        #expect(said == 1, "the address appears \(said) times: \(texts)")
+    }
+
+    // And the contact line does not become a person glyph over nothing. It stops being the address's second
+    // printing and says the thing the address cannot: nobody's name was found, which is what decides
+    // whether the greeting can name anyone (#2545).
+    @Test func thecontactLineSaysThereIsNoNameRatherThanRepeatingTheAddress() throws {
+        let rendered = view(item([contact("info@thevenue.example", nil)]))
+
+        #expect(try allTexts(rendered).contains("No name for this contact"))
+    }
+
+    // A contact WITH a name keeps its name on that line: this is the nameless case only.
+    @Test func anamedContactsLineIsUnchanged() throws {
+        let rendered = view(item([contact("sarah@company.example", "Sarah Chen")]))
+        let texts = try allTexts(rendered)
+
+        #expect(texts.contains("Sarah Chen"))
+        #expect(!texts.contains("No name for this contact"))
+    }
+
+    // Two contacts, the first nameless: the case the table measured at three. Each address is said once.
+    @Test func twocontactsOneNamelessSayEachAddressOnce() throws {
+        let rendered = view(item([contact("info@thevenue.example", nil),
+                                  contact("sarah@company.example", "Sarah Chen")]))
+        let texts = try allTexts(rendered)
+
+        #expect(texts.filter { $0 == "info@thevenue.example" }.count == 1,
+                "the nameless contact's address appears \(texts.filter { $0 == "info@thevenue.example" }.count) times")
+        #expect(texts.filter { $0 == "sarah@company.example" }.count == 1)
     }
 
     // Two contacts are two distinct addresses: removing a duplicate must not collapse separate recipients

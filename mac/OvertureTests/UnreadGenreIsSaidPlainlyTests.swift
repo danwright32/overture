@@ -52,11 +52,11 @@ struct UnreadGenreIsSaidPlainlyTests {
         let unread = EventClassifier.derived(discipline: .other, production: .selfProduced,
                                              profile: .strong, venue: nil).fitReason
         #expect(unread.contains("other") == false)
-        #expect(unread == "Self-produced group, a strong-fit target, likely without its own photographer.")
+        #expect(unread == "Self-produced group, a strong-fit target.")
 
         let read = EventClassifier.derived(discipline: .music, production: .selfProduced,
                                            profile: .strong, venue: nil).fitReason
-        #expect(read == "Self-produced music group, a strong-fit target, likely without its own photographer.")
+        #expect(read == "Self-produced music group, a strong-fit target.")
     }
 
     @Test func theWorthALookSentenceDropsTheWordToo() {
@@ -132,7 +132,7 @@ struct FitReasonRealignmentTests {
         ctx.insert(row)
 
         _ = FitReasonRealignment.run(in: ctx)
-        #expect(row.fitReason == "Self-produced music group, a strong-fit target, likely without its own photographer.")
+        #expect(row.fitReason == "Self-produced music group, a strong-fit target.")
     }
 
     // Idempotent BY CONSTRUCTION rather than by a flag: the condition is "the stored sentence differs from
@@ -168,6 +168,107 @@ struct FitReasonRealignmentTests {
         ctx.insert(row)
 
         ClassificationOverride.correct(row, discipline: .music, now: Date())
-        #expect(row.fitReason == "Self-produced music group, a strong-fit target, likely without its own photographer.")
+        #expect(row.fitReason == "Self-produced music group, a strong-fit target.")
+    }
+}
+
+// #2022. Dan, reading the card for "The Pumpkin Singalong at Sakura Park" (Every Voice Choirs, Oct 25
+// 2026): "I'm literally their photographer. We can see I've worked with them for years."
+//
+// The card said "Self-produced other group, a strong-fit target, likely without its own photographer." two
+// lines under "Pitch will say you've photographed a few shows here" and one line above a gold "Worked
+// together before" pill. Three things on one screen, one of them contradicting the other two.
+//
+// The clause is composed from three axes (production, profile, discipline) plus the coverage they imply,
+// and `derived` marks any Weill show or any self-produced strong-profile show as `likelyUncovered`, which
+// is exactly the shape a long-standing client of Dan's takes. So the group he has shot three times is the
+// group most likely to be told it has no photographer.
+//
+// Dan's call, 2026-08-16: DROP THE CLAUSE. It is a guess on every row, not only on the ones where it is
+// visibly wrong; the "Likely uncovered" pill beside it already carries the same claim, so the sentence was
+// also restating its neighbour (#843); and dropping it removes the whole class rather than the instance.
+// Losing the weak signal on groups he has no history with is the accepted trade.
+//
+// What deliberately does NOT change: `Coverage.likelyUncovered` itself. It feeds the fit SCORE and the
+// pill, and neither was what he read as a contradiction. Only the sentence stops saying it.
+@Suite("The fit reason does not guess at coverage (#2022)")
+struct FitReasonDropsTheCoverageGuessTests {
+
+    // The sentence Dan read, as it reads now. No stranded comma, no doubled space, still one full stop.
+    @Test func astrongSelfProducedGroupIsNotToldItHasNoPhotographer() {
+        let reason = EventClassifier.derived(discipline: .music, production: .selfProduced,
+                                             profile: .strong, venue: "Weill Recital Hall").fitReason
+        #expect(reason == "Self-produced music group, a strong-fit target.")
+    }
+
+    // The same sentence for the row whose genre was never read, which is more than half the queue: the
+    // clause used to be the only thing after "target" there too.
+    @Test func anunreadGenreGetsTheSameSentence() {
+        let reason = EventClassifier.derived(discipline: .other, production: .selfProduced,
+                                             profile: .strong, venue: "Weill Recital Hall").fitReason
+        #expect(reason == "Self-produced group, a strong-fit target.")
+    }
+
+    // The clause was appended on a coverage verdict, so the two branches it made are now one sentence.
+    // Asserted as equality between them rather than twice against a literal, because what this is really
+    // saying is that coverage no longer reaches the sentence at all.
+    @Test func thesentenceIsTheSameWhicheverCoverageWasDerived() {
+        let atWeill = EventClassifier.derived(discipline: .music, production: .selfProduced,
+                                              profile: .strong, venue: "Weill Recital Hall")
+        let elsewhere = EventClassifier.derived(discipline: .music, production: .selfProduced,
+                                                profile: .neutral, venue: "The Example Room")
+        #expect(atWeill.coverage == .likelyUncovered)
+        #expect(elsewhere.coverage == .unknown)
+        #expect(!atWeill.fitReason.contains("photographer"))
+        #expect(!elsewhere.fitReason.contains("photographer"))
+    }
+
+    // No sentence this classifier can produce says it, over every combination rather than the three the
+    // issue happened to name (L30: the class, not the instance).
+    @Test func nosentenceThisClassifierComposesMentionsAPhotographer() {
+        for discipline in Discipline.allCases {
+            for profile in [Profile.strong, .neutral, .weak] {
+                for production in [Production.selfProduced, .agency, .unknown] {
+                    for venue in ["Weill Recital Hall", "The Example Room", ""] {
+                        let reason = EventClassifier.derived(discipline: discipline, production: production,
+                                                             profile: profile, venue: venue).fitReason
+                        #expect(!reason.contains("photographer"), "still guessing at coverage: \(reason)")
+                        // And no sentence was left ending on its own comma by the removal.
+                        #expect(!reason.contains(", ."))
+                        #expect(!reason.contains("  "))
+                    }
+                }
+            }
+        }
+    }
+
+    // The pill stays. Dan's reasoning for dropping the clause was that the pill beside it already says
+    // this, so a change that quietly took both would leave the coverage guess with no surface at all.
+    @Test func thelikelyUncoveredPillIsUnchanged() {
+        #expect(QueueModel.coverageLabel("likely_uncovered") == "Likely uncovered")
+    }
+
+    // The 86 stored rows. `fitReason` is a snapshot and the scout is hash-gated, so changing the composer
+    // alone would leave the sentence on whichever rows nothing has re-emitted, for weeks. `FitReasonRealignment`
+    // already recomputes every stored reason from that row's own axes on every launch, so it sweeps these
+    // by construction rather than needing a migration of its own. Measured on the live store 2026-08-03:
+    // 86 rows carry the clause, 11 of them on groups whose prior relationship is already `booked`.
+    @MainActor
+    @Test func astoredRowCarryingTheClauseIsRewrittenAtLaunch() throws {
+        let container = try ModelContainer(for: Schema([Prospect.self]),
+                                           configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+        let ctx = ModelContext(container)
+        let row = Prospect(naturalKey: "sakura", groupName: "Every Voice Choirs", discipline: "music",
+                           venue: "Sakura Park", performanceDate: "2026-10-25", sourceListingURL: nil,
+                           websiteURL: nil, priorRelationship: "booked", production: "self",
+                           profile: "strong", coverage: "likely_uncovered", fitScore: 8, tier: "high",
+                           fitReason: "Self-produced music group, a strong-fit target, likely without its own photographer.",
+                           matchedClientName: "Every Voice Choirs", possibleMatchSource: nil,
+                           possibleMatchName: nil)
+        ctx.insert(row)
+
+        let changed = FitReasonRealignment.run(in: ctx)
+        #expect(changed == 1)
+        #expect(row.fitReason == "Self-produced music group, a strong-fit target.")
     }
 }

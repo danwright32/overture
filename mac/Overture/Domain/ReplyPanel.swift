@@ -95,6 +95,28 @@ enum ReplyPanel {
         return ComposeState(typed: draft, seeded: draft, offered: nil)
     }
 
+    // #2177: whose words are in the compose box, when saying so adds something.
+    //
+    // Since #2143 the panel opens on the draft already waiting on the contact. Pressing "Draft with AI"
+    // himself is unambiguous: he asked for it and here it is. A draft from the unattended classify run is
+    // not: he opens the panel and finds text in a box he left empty, with nothing saying who wrote it. The
+    // panel is where he decides what to send, and words he takes for his own get read differently from
+    // words he knows a model wrote, which is the whole reason the reply lint exists.
+    //
+    // Said in exactly ONE state, because the panel is already dense (audience rows, their reply, the box, a
+    // refusal line, a drafting line) and another always-on line is the restatement #843 was about. "Written
+    // by you" over words he just typed tells him nothing.
+    //
+    // `typed == seeded` is what makes it withdraw itself as he types: `seeded` is the last text the box was
+    // GIVEN, so the moment he changes anything the box is no longer holding the model's words.
+    static func draftAuthorNote(typed: String, seeded: String,
+                                writtenByDan: Bool, editedByDan: Bool) -> String? {
+        guard !writtenByDan, !editedByDan else { return nil }
+        guard !seeded.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        guard typed == seeded else { return nil }
+        return ReplyPanelCopy.aiWroteThisDraft
+    }
+
     static func arriving(draft: String?, typed: String, seeded: String) -> ArrivingDraft {
         guard let draft, !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return .ignore }
         guard draft != typed else { return .ignore }   // already what the box holds; nothing to say
@@ -426,6 +448,14 @@ enum ReplyPanelCopy {
     static let confirmGuess = "Confirm"
     static let changeGuess = "Change"
     static let draftWithAI = "Draft with AI"
+    // #2177: whose words are in the compose box, said only in the state where it adds something. The
+    // Archive card names the same three states through `RecipientSnapshot.replyAuthorLabel` ("Written by
+    // you", "Edited", and nothing at all for a draft straight from the drafter), and this is the third one
+    // said out loud, in that vocabulary rather than a second one. The card can stay silent on it because
+    // its drafting trace sits beside it; the panel is where Dan decides what to send, and a box he left
+    // empty that now holds text needs to say who filled it. The other two stay unsaid here: "Written by
+    // you" on words he just typed tells him nothing (#843).
+    static let aiWroteThisDraft = "Written by AI"
     // #2143: the run the button starts, named where Dan is watching for it. The same words the Archive
     // card's own drafting line uses, shared rather than spelled twice, so the two surfaces cannot drift.
     static let drafting = "Drafting a reply"

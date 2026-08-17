@@ -151,8 +151,17 @@ struct DraftReviewView: View {
             case let .person(name, role, _):
                 Text(name).fontWeight(.medium).foregroundStyle(OVColor.ink)
                 if let role { Text(role).foregroundStyle(OVColor.inkFaint) }
-            case let .email(email):
-                Text(email).foregroundStyle(OVColor.ink)
+            // #2560: NOT the address. A contact with no name falls back to its address as its identity, and
+            // the Contacts block below prints that same address again, as it must (#2015: "It should show
+            // me every email it's going to send to"). Counting a rendered card on 2026-08-12 found it twice
+            // on a nameless contact, which is the row of #2549's table that change did not reach.
+            //
+            // The line says what the address cannot instead of repeating it: nobody's name was found. That
+            // is worth its place beside the confidence pip, because it is what decides whether the body's
+            // greeting can name anyone (#2545), and it leaves the address said exactly once, in the block
+            // that carries its send state and its strike control.
+            case .email:
+                Text("No name for this contact").foregroundStyle(OVColor.inkFaint)
             case let .form(url):
                 Link(destination: url) { Label("Contact form", systemImage: "link") }
                     .foregroundStyle(OVColor.forestText)

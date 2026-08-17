@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1365 sentences**.
+Every sentence Overture can say to Dan: **1366 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -318,8 +318,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/DetachedRunner.swift`
 ", \(parties) people to find"
     `Domain/PrepRunSummary.swift`
-", likely without its own photographer"
-    `Domain/EventClassifier.swift`
 ", so a performer who is a past client may have read as cold"
     `Persistence/PrepImporter.swift`
 "1 client set aside"
@@ -1119,6 +1117,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ProspectRowView.swift`
 "No matches for \"\(query)\""
     `Domain/ShowSearch.swift`
+"No name for this contact"
+    `UI/DraftReviewView.swift`
 "No names look duplicated right now."
     `UI/OrganisationsView.swift`
 "No new shoots have come through from Downbeat in the last four weeks. If you simply haven't booked, nothing is wrong; if you have, check that Downbeat is still exporting to Overture."
@@ -1713,7 +1713,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ShowSearchField.swift`
 "Search the queue"
     `UI/QueueSearchBar.swift`
-"Self-produced\(genre) group, a strong-fit target\(where_)."
+"Self-produced\(genre) group, a strong-fit target."
     `Domain/EventClassifier.swift`
 "Self-produced\(genre); worth a look once the fit is confirmed."
     `Domain/EventClassifier.swift`
@@ -2298,6 +2298,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ProspectRowView.swift`
 "Writes from here"
     `UI/QueueView+Model.swift`
+"Written by AI"
+    `Domain/ReplyPanel.swift`
 "Written by you"
     `UI/QueueView+Model.swift`
 "Wrong match"
@@ -2434,7 +2436,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/RunProgress.swift`
 "\(base) looks stuck (\(elapsed))"
     `Domain/RunProgress.swift`
-"\(calls) refused, that research never happened"
+"\(calls) refused: that research never happened"
     `Domain/PrepRunSummary.swift`
 "\(city), \(state)"
     `Domain/EventLocationFill.swift`
