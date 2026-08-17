@@ -93,7 +93,7 @@ prompt_region() {
   # character class is locale-aware per character and rebuilds the string as it goes, which cost NINE
   # SECONDS per call on the 5KB scout prompt, and this helper is called three times per runner. It
   # was 27 of this fixture's 32 seconds (#2601); grep answers the same question in milliseconds.
-  if ! printf '%s' "${region}" | grep -q '[^[:space:]]'; then
+  if ! grep -q '[^[:space:]]' <<< "${region}"; then
     echo "no prompt region for \$$2 in $1: the range matched nothing, so every check standing on it would be reading an empty prompt and reporting it clean (#1710)" >&2
     return 1
   fi
@@ -230,7 +230,7 @@ assert_no_dashes() {
   # overture-voice-guidance.md byte for byte. Changing it here without changing his file would send the
   # run looking for a heading that does not exist, which is a real bug in place of a punctuation one.
   content="$(sed 's/## Dan.s notes (authoritative [^)]*)//' "${file}")"
-  if printf '%s' "${content}" | grep -q "${DASH_CLASS}"; then
+  if grep -q "${DASH_CLASS}" <<< "${content}"; then
     fail "${label} contains an em or en dash" \
          "$(printf '%s' "${content}" | grep -n "${DASH_CLASS}" | head -2)"
   else

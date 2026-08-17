@@ -292,6 +292,103 @@ chmod +x "${COLON_OK}"
 run_shell_fixtures "${DASH_OK}" "${COLON_OK}" >/dev/null 2>&1
 assert_equals "both spellings of a passing assertion still count" "0" "$?"
 
+# --- #2850: a broken pipe is a failure, not a result ---
+#
+# A fixture whose pipeline breaks reports an assertion failing about code that is perfectly correct,
+# because `set -o pipefail` makes the producer's SIGPIPE the pipeline's status. Both halves are driven
+# here: the RUNTIME one, which reads the shell's own write error out of a real fixture's output, and the
+# SOURCE one, which fires on every run rather than only when the race opens.
+
+# A fixture that really does break a pipe, rather than a log with the words pasted into it: the message
+# has to be the shell's, or this proves nothing about what the shell prints (L52).
+#
+# `yes` writes without end, so `grep -q` exiting on its first match is certain to leave it writing into a
+# closed pipe. Wrapped in a subshell whose output is captured, because the point is the message, not the
+# status. The producer is a BUILTIN (printf in a loop) so bash itself reports the write error; an
+# external command is killed by the signal silently.
+BROKEN_PIPE="${TMP_DIR}/broken-pipe.test.sh"
+cat > "${BROKEN_PIPE}" <<'PROBE'
+#!/usr/bin/env bash
+set -uo pipefail
+big=""
+for _ in $(seq 1 20000); do big+="match me and then keep going for a while yet "; done
+printf '%s' "${big}" | grep -q "match me"
+echo "ok - the probe asserted something"
+exit 0
+PROBE
+chmod +x "${BROKEN_PIPE}"
+
+BROKEN_OUTPUT="$(run_shell_fixtures "${BROKEN_PIPE}" 2>&1)"
+BROKEN_STATUS=$?
+case "${BROKEN_OUTPUT}" in
+  *"broke a pipe"*)
+    echo "ok - a fixture that broke a pipe is reported, not passed"
+    assert_equals "and the run is red" "1" "$([ "${BROKEN_STATUS}" -ne 0 ] && echo 1 || echo 0)" ;;
+  *"Broken pipe"*)
+    echo "FAIL - the shell reported a broken pipe and the harness did not name it"
+    FAILURES=$((FAILURES + 1)) ;;
+  *)
+    # Not a failure of the rule: this machine's bash did not lose the race, so there was nothing to
+    # catch. Said out loud rather than passing silently, because a probe that produced no broken pipe
+    # proves nothing either way and a quiet pass here would read as coverage (L98). The check itself is
+    # still exercised, deterministically, just below.
+    echo "NOTE - the probe did not break a pipe on this machine, so the end-to-end path was not raced" ;;
+esac
+
+# So the runtime check is ALSO driven directly, which does not depend on winning a race. The message is
+# the one bash really prints, measured from the incident this issue was filed on (2026-08-16, in a full
+# scripts/test-all.sh run against mac/scripts/lib/scout-tools.test.sh).
+DIRECT_LOG="${TMP_DIR}/broken.log"
+printf 'ok - something\nmac/scripts/lib/scout-tools.test.sh: line 170: printf: write error: Broken pipe\nok - more\n' > "${DIRECT_LOG}"
+DIRECT_OUTPUT="$(FIXTURE_PATH_FOR_REPORT="some.test.sh" fixture_pipeline_did_not_break "${DIRECT_LOG}" 2>&1)"
+DIRECT_STATUS=$?
+assert_equals "a log carrying the shell's own write error is a failure" "1" "${DIRECT_STATUS}"
+case "${DIRECT_OUTPUT}" in
+  *"broke a pipe"*) echo "ok - and it says a pipe broke rather than restating the assertion" ;;
+  *) echo "FAIL - the runtime check did not name the broken pipe"; echo "  ${DIRECT_OUTPUT}"
+     FAILURES=$((FAILURES + 1)) ;;
+esac
+case "${DIRECT_OUTPUT}" in
+  *"line 170"*) echo "ok - and quotes the line, so the offending pipeline can be found" ;;
+  *) echo "FAIL - the runtime check did not quote the offending line"; FAILURES=$((FAILURES + 1)) ;;
+esac
+
+# An ordinary log is untouched, or every fixture in the repo would fail on it.
+CLEAN_LOG="${TMP_DIR}/clean.log"
+printf 'ok - something\nok - more\n' > "${CLEAN_LOG}"
+FIXTURE_PATH_FOR_REPORT="some.test.sh" fixture_pipeline_did_not_break "${CLEAN_LOG}" >/dev/null 2>&1
+assert_equals "an ordinary log passes" "0" "$?"
+
+# The SOURCE half, which does not depend on any race. A fixture carrying the shape is named before
+# anything runs.
+RACED_SOURCE="${TMP_DIR}/raced.test.sh"
+printf '#!/usr/bin/env bash\nif printf "%%s" "${x:-a}" | grep -q a; then echo "ok - x"; fi\n' > "${RACED_SOURCE}"
+chmod +x "${RACED_SOURCE}"
+SOURCE_OUTPUT="$(fixture_sources_avoid_short_circuit_pipes "${RACED_SOURCE}" 2>&1)"
+SOURCE_STATUS=$?
+assert_equals "a fixture whose condition reads a short-circuiting pipe is refused" "1" "${SOURCE_STATUS}"
+case "${SOURCE_OUTPUT}" in
+  *"raced.test.sh"*) echo "ok - and the refusal names the file and line" ;;
+  *) echo "FAIL - the refusal did not name the offending fixture"; echo "  ${SOURCE_OUTPUT}"
+     FAILURES=$((FAILURES + 1)) ;;
+esac
+
+# And the other direction, which is what keeps the rule from being switched off: a pipeline whose STATUS
+# IS NEVER READ is left alone. Eight of those exist in this repo, all assignments inside $(...), and a
+# rule that condemned them would fire on the common case (L93).
+ASSIGNED="${TMP_DIR}/assigned.test.sh"
+printf '#!/usr/bin/env bash\nline="$(printf "%%s" "abc" | grep -n b | head -1)"\necho "ok - $line"\n' > "${ASSIGNED}"
+chmod +x "${ASSIGNED}"
+fixture_sources_avoid_short_circuit_pipes "${ASSIGNED}" >/dev/null 2>&1
+assert_equals "a pipeline whose status nobody reads is left alone" "0" "$?"
+
+# The herestring form every fix in #2850 used is accepted, or the rule would condemn its own remedy.
+FIXED="${TMP_DIR}/fixed.test.sh"
+printf '#!/usr/bin/env bash\nif grep -q a <<< "${x:-a}"; then echo "ok - x"; fi\n' > "${FIXED}"
+chmod +x "${FIXED}"
+fixture_sources_avoid_short_circuit_pipes "${FIXED}" >/dev/null 2>&1
+assert_equals "the herestring remedy is accepted" "0" "$?"
+
 echo
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All run-shell-fixtures.sh fixtures passed."

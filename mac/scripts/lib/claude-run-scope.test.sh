@@ -321,7 +321,7 @@ assert_runner_folds_through_scope() {
   assert_contains "${script} sources the shared tool scope" "${body}" "lib/claude-run-scope.sh"
   assert_contains "${script} builds its claude flags from ${scope_fn}" "${body}" "${scope_fn}"
 
-  if printf '%s' "${code}" | grep -q -- '--allowedTools'; then
+  if grep -q -- '--allowedTools' <<< "${code}"; then
     fail "${script} still hardcodes --allowedTools on a call site" \
          "every claude invocation must fold through ${scope_fn}, or a call site keeps the unrestricted flag"
   else
@@ -332,7 +332,7 @@ assert_runner_folds_through_scope() {
   # resolve that binary BEFORE it builds the scope and hand it over. Built is not wired: a runner that
   # still called its scope function with no argument would refuse and never start at all.
   local resolve_line scope_line
-  if printf '%s' "${code}" | grep -qF "${scope_fn} \"\$CLAUDE\""; then
+  if grep -qF "${scope_fn} \"\$CLAUDE\"" <<< "${code}"; then
     pass "${script} hands the resolved claude binary to ${scope_fn}"
   else
     fail "${script} must call ${scope_fn} \"\$CLAUDE\"" \

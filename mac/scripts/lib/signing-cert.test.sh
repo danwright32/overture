@@ -66,7 +66,7 @@ text="$(openssl x509 -in "${WORK}/cert.pem" -noout -text 2>/dev/null)"
 
 # THE bug. Without this extension macOS reports "Invalid Key Usage for policy" and codesign refuses the
 # identity outright, which is indistinguishable from it not existing.
-if grep -A1 "X509v3 Key Usage: critical" <<<"${text}" | grep -q "Digital Signature"; then
+if grep -q "Digital Signature" <<< "$(grep -A1 "X509v3 Key Usage: critical" <<<"${text}")"; then
   pass "carries a critical Digital Signature key usage (what codesign requires)"
 else
   fail "no critical Digital Signature key usage" \
@@ -75,7 +75,7 @@ fi
 
 # The working cert marks this critical too. Left un-critical, a verifier is free to ignore the one
 # extension that says what the certificate is FOR.
-if grep -A1 "X509v3 Extended Key Usage: critical" <<<"${text}" | grep -q "Code Signing"; then
+if grep -q "Code Signing" <<< "$(grep -A1 "X509v3 Extended Key Usage: critical" <<<"${text}")"; then
   pass "carries a critical Code Signing extended key usage"
 else
   fail "extended key usage is missing or not critical" \
@@ -83,7 +83,7 @@ else
 fi
 
 # Unchanged, and still required: a leaf certificate, never a CA.
-if grep -A1 "X509v3 Basic Constraints: critical" <<<"${text}" | grep -q "CA:FALSE"; then
+if grep -q "CA:FALSE" <<< "$(grep -A1 "X509v3 Basic Constraints: critical" <<<"${text}")"; then
   pass "is a leaf certificate, not a CA"
 else
   fail "basic constraints missing or not CA:FALSE"

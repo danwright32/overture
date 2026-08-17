@@ -396,7 +396,7 @@ if [[ -d "${FIX_ROOT}/slot" ]]; then
 else
   fail "the slot must survive a completed verification"
 fi
-if git -C "${CLONE}" worktree list --porcelain | grep -qF "worktree ${FIX_ROOT}/slot"; then
+if grep -qF "worktree ${FIX_ROOT}/slot" <<< "$(git -C "${CLONE}" worktree list --porcelain)"; then
   pass "the slot stays registered as a worktree"
 else
   fail "the slot must stay registered as a worktree"

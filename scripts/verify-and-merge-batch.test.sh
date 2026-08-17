@@ -336,7 +336,7 @@ assert_contains "the refusal names the branch that would not go in" "${CLASH_OUT
 assert_contains "and says nothing was verified" "${CLASH_OUTPUT}" "Nothing was verified"
 # A half-merged tree is the dangerous state: a suite run over it can come back green, and green is the
 # reading that sends a broken combination to main.
-if git -C "${WORK}" ls-files --unmerged | grep -q .; then
+if grep -q . <<< "$(git -C "${WORK}" ls-files --unmerged)"; then
   fail "the conflicted merge must be aborted, leaving no half-merged tree behind"
 else
   pass "the conflicted merge is aborted, so no suite can be run over a half-merged tree"
@@ -505,7 +505,7 @@ HOOK_CLASH_STATUS=$?
 assert_eq "a genuine content conflict is still refused with the hook installed" "1" "${HOOK_CLASH_STATUS}"
 assert_contains "the refusal names the branch that would not go in" "${HOOK_CLASH_OUTPUT}" "hook-clash-b"
 assert_contains "and says nothing was verified" "${HOOK_CLASH_OUTPUT}" "Nothing was verified"
-if git -C "${HOOK_WORK}" ls-files --unmerged | grep -q .; then
+if grep -q . <<< "$(git -C "${HOOK_WORK}" ls-files --unmerged)"; then
   fail "the conflicted merge must be aborted, leaving no half-merged tree behind"
 else
   pass "the conflicted merge is aborted, so no suite can be run over a half-merged tree"

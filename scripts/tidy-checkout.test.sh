@@ -171,7 +171,7 @@ PATH="${WORK}/bin:${PATH}" TIDY_CHECKOUT_REPO_ROOT="${REPO}" \
   XCODE_DERIVED_DATA_ROOT="${DERIVED}" \
   "${SCRIPT_DIR}/tidy-checkout.sh" >/dev/null 2>&1
 
-if git -C "${REPO}" for-each-ref --format='%(refname:short)' refs/heads/ | grep -qx "shipped-again"; then
+if grep -qx "shipped-again" <<< "$(git -C "${REPO}" for-each-ref --format='%(refname:short)' refs/heads/)"; then
   assert "a dry run deletes nothing, even a branch it would remove" "yes"
 else
   assert "a dry run deletes nothing, even a branch it would remove" "no"
