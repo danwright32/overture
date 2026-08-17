@@ -19,8 +19,15 @@ enum HandoffDecodeFailure {
 
     static func describe(_ error: any Error) -> String {
         guard let decoding = error as? DecodingError else {
-            // Any decoder's own refusal (an unsupported version, a failed shape check) states its own
-            // reason, so it is asked rather than re-worded here.
+            // #2879: a file the app could not OPEN at all (permissions, a path that is a directory, a
+            // volume that went away) arrives here too. Those carry a real sentence from the OS, so it is
+            // used. A native Swift error does not: its localizedDescription is the generic
+            // "The operation couldn't be completed", where its own description states the actual reason,
+            // which is why ReplyClassifyResultsError spells its version refusal out.
+            let ns = error as NSError
+            if ns.domain == NSCocoaErrorDomain || ns.domain == NSURLErrorDomain {
+                return ns.localizedDescription
+            }
             return String(describing: error)
         }
         switch decoding {

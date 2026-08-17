@@ -42,8 +42,11 @@ enum PrepGroupCredit {
     static func groups(queueURL: URL, resultsURL: URL) -> [String: [String]] {
         // Best-effort on purpose, matching HandoffShortfall: an unreadable queue means the app has no record
         // of what it grouped, and no record is never a licence to spread an answer.
-        guard let data = try? Data(contentsOf: queueURL),
-              let queue = try? JSONDecoder().decode(PrepQueue.self, from: data) else { return [:] }
+        // #2879: unchanged behaviour, recorded read. No record of what was grouped is still never a
+        // licence to spread an answer.
+        guard let queue = HandoffFile.read(at: queueURL,
+                                           decode: { try JSONDecoder().decode(PrepQueue.self, from: $0) }).value
+        else { return [:] }
         let modified = (try? FileManager.default.attributesOfItem(atPath: resultsURL.path))?[.modificationDate] as? Date
         return groups(in: queue, resultsModifiedAt: modified)
     }

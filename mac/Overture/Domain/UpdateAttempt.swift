@@ -70,8 +70,11 @@ enum UpdateAttempt {
     // records do: treating it as an outcome would be inventing one.
     static func record(in directory: URL) -> UpdateAttemptRecord? {
         let url = directory.appendingPathComponent(recordFilename)
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        return try? JSONDecoder().decode(UpdateAttemptRecord.self, from: data)
+        // #2879: an attempt record that is present and undecodable is recorded as unreadable rather
+        // than reading as no attempt at all, which is the state this file exists to distinguish (#2188).
+        return HandoffFile.read(at: url) {
+            try JSONDecoder().decode(UpdateAttemptRecord.self, from: $0)
+        }.value
     }
 
     // Only the two states worth interrupting him for. While the run is going the Terminal window is on

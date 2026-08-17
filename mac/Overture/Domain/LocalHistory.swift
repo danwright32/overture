@@ -113,15 +113,23 @@ enum LocalHistory {
     // client silently read as a cold lead with no symptom at all. Absent is a normal state; corrupt
     // is a fault, and the caller has to be able to say so.
     static func importedWithHealth(from url: URL = importedURL) -> (records: [HistoryRecord], unreadable: Bool) {
-        guard let data = try? Data(contentsOf: url) else { return ([], false) }
-        guard let history = try? JSONDecoder().decode([HistoryRecord].self, from: data) else {
-            return ([], true)
+        // #2879: through the shared reader. This already answered the right question, but only for a
+        // file it could OPEN: a file present and unopenable took the `Data(contentsOf:)` branch and read
+        // as absent, which is the exact conflation the health flag exists to prevent. Exempt from the
+        // register because `unreadable` here already has its own line (#754).
+        let file = HandoffFile.read(at: url, recorder: .reportedByItsOwnSurface) {
+            try JSONDecoder().decode([HistoryRecord].self, from: $0)
         }
-        // #1695: stamped explicitly rather than left to the type's default. This file IS the booking
-        // import, and a record that arrives here mislabelled would be described to Dan in the wrong words
-        // on a card, which is the whole defect. Saying it at the boundary means the default can be changed
-        // later without silently relabelling Dan's realest business.
-        return (history.map { var r = $0; r.origin = .bookingImport; return r }, false)
+        switch file {
+        case .absent: return ([], false)
+        case .unreadable: return ([], true)
+        case .read(let history):
+            // #1695: stamped explicitly rather than left to the type's default. This file IS the booking
+            // import, and a record that arrives here mislabelled would be described to Dan in the wrong
+            // words on a card, which is the whole defect. Saying it at the boundary means the default can
+            // be changed later without silently relabelling Dan's realest business.
+            return (history.map { var r = $0; r.origin = .bookingImport; return r }, false)
+        }
     }
 
     static func imported(from url: URL = importedURL) -> [HistoryRecord] {

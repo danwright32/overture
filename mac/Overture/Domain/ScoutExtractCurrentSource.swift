@@ -35,9 +35,13 @@ enum ScoutExtractCurrentSource {
     // (mirrors ScoutExtractProgressDecoder.loadCurrent).
     static func loadCurrentName(queueURL: URL = ScoutExtractQueueBuilder.defaultURL,
                                 resultsURL: URL = ScoutExtractResultsDecoder.defaultURL) -> String? {
-        guard let queueData = try? Data(contentsOf: queueURL),
-              let queue = try? JSONDecoder().decode(ScoutExtractQueue.self, from: queueData) else { return nil }
-        let results = (try? Data(contentsOf: resultsURL)).flatMap { try? ScoutExtractResultsDecoder.decode($0) }
+        // #2879: read WHILE the run is writing, for a live label, so it uses the exemption that does
+        // not report. The same files' ingest does report.
+        guard let queue = HandoffFile.read(at: queueURL, recorder: .readWhileBeingWritten,
+                                           decode: { try JSONDecoder().decode(ScoutExtractQueue.self, from: $0) }).value
+        else { return nil }
+        let results = HandoffFile.read(at: resultsURL, recorder: .readWhileBeingWritten,
+                                       decode: ScoutExtractResultsDecoder.decode).value
         return currentName(queue: queue, results: results)
     }
 }
@@ -76,9 +80,11 @@ enum ScoutReadInFlight {
                                          queueURL: URL = ScoutExtractQueueBuilder.defaultURL,
                                          resultsURL: URL = ScoutExtractResultsDecoder.defaultURL) -> Set<String> {
         guard isRunning else { return [] }
-        guard let queueData = try? Data(contentsOf: queueURL),
-              let queue = try? JSONDecoder().decode(ScoutExtractQueue.self, from: queueData) else { return [] }
-        let results = (try? Data(contentsOf: resultsURL)).flatMap { try? ScoutExtractResultsDecoder.decode($0) }
+        guard let queue = HandoffFile.read(at: queueURL, recorder: .readWhileBeingWritten,
+                                           decode: { try JSONDecoder().decode(ScoutExtractQueue.self, from: $0) }).value
+        else { return [] }
+        let results = HandoffFile.read(at: resultsURL, recorder: .readWhileBeingWritten,
+                                       decode: ScoutExtractResultsDecoder.decode).value
         return sourceIdsStillToRead(isRunning: true, queue: queue, results: results)
     }
 }

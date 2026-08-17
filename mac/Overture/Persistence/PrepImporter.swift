@@ -658,8 +658,12 @@ enum PrepImporter {
     // three that can drift. The queue is the app's own record of the grouping; a caller that has no queue
     // to offer (a test, a path with no work-list on disk) credits nothing and gets the old behaviour.
     static func answeredKeys(at url: URL, queueURL: URL? = nil) -> Set<String> {
-        guard let data = try? Data(contentsOf: url),
-              let decoded = try? JSONDecoder().decode(PrepResults.self, from: data) else { return [] }
+        // #2879: the empty set is still the honest reading of a file that cannot be read (nothing can be
+        // SHOWN to have been answered, so nothing is stamped), but the read is recorded now, so a results
+        // file this build cannot decode no longer passes for a run that answered nobody.
+        guard let decoded = HandoffFile.read(at: url,
+                                             decode: { try JSONDecoder().decode(PrepResults.self, from: $0) }).value
+        else { return [] }
         let groups = queueURL.map { PrepGroupCredit.groups(queueURL: $0, resultsURL: url) } ?? [:]
         return Set(PrepGroupCredit.credited(decoded.results, groups: groups).map(\.naturalKey))
     }
@@ -684,7 +688,9 @@ enum PrepImporter {
     static func hasUnconsumedResults(slot: RunSlot, at url: URL? = nil,
                                      defaults: UserDefaults = .standard) -> Bool {
         let url = url ?? resultsURL(for: slot)
-        guard let data = try? Data(contentsOf: url) else { return false }
+        // #2879: unreadable still reads as nothing to come, which is the fail-safe direction named above,
+        // and is now recorded instead of being indistinguishable from no results file at all.
+        guard let data = HandoffFile.data(at: url).value else { return false }
         return Self.fingerprint(data) != defaults.string(forKey: slot.resultsConsumedKey)
     }
 
@@ -698,10 +704,21 @@ enum PrepImporter {
                                  try ingestFile(at: $0, into: $1)
                              }) -> Outcome? {
         let url = url ?? resultsURL(for: slot)
-        guard let data = try? Data(contentsOf: url) else { return nil }
+        guard let data = HandoffFile.data(at: url).value else { return nil }
         let fingerprint = Self.fingerprint(data)
         guard fingerprint != defaults.string(forKey: slot.resultsConsumedKey) else { return nil }
-        guard let outcome = try? ingest(url, context) else { return nil }
+        // #2879: THE PREP SIBLING of #2873, and it was the identical line. `try? ingest(...) else { return
+        // nil }` made a results file the decoder refused indistinguishable from one already consumed, so
+        // an unreadable Prep or check run would have dropped every draft it produced in exactly the same
+        // silence. The answer to the CALLER is unchanged (nil: nothing was ingested, which is true), and
+        // the failure is now recorded against the file so it reaches the masthead.
+        let outcome: Outcome
+        do {
+            outcome = try ingest(url, context)
+        } catch {
+            HandoffFile.recordFailure(at: url, error: error)
+            return nil
+        }
         if !outcome.saveFailed { defaults.set(fingerprint, forKey: slot.resultsConsumedKey) }
         return outcome
     }

@@ -206,16 +206,45 @@ enum AppNotices {
         return AppNotice(text: text, tone: .warning, action: .recheckShootHistory)
     }
 
+    // #2879: files Overture is reading and cannot read. One line for all of them rather than one each,
+    // because they share a cause far more often than not (a run that wrote a shape this build does not
+    // know), and because most of these reads happen on a poll, so a line per file per tick would be the
+    // surface that gets ignored (L36).
+    //
+    // The line states what is LOST, not just that a read failed, since the filename alone means nothing
+    // to Dan. There is no action: nothing in the app can repair a file written by something else, and a
+    // button that cannot do its job is worse than none (L44). The help carries what he can actually look
+    // at, which is the file itself and the run log beside it.
+    static func couldNotRead(_ failures: [HandoffReadFailures.Failure]) -> AppNotice? {
+        guard let first = failures.first else { return nil }
+        let text: String
+        if failures.count == 1 {
+            text = "Overture couldn't read \(first.file), so whatever it held has not been used."
+        } else {
+            text = "Overture couldn't read \(failures.count) of the files it works from, so whatever "
+                + "they held has not been used."
+        }
+        let detail = failures.map { "\($0.file): \($0.reason)" }.joined(separator: "\n")
+        return AppNotice(
+            text: text,
+            tone: .warning,
+            help: "These are files written by something outside the app, a detached run or an install "
+                + "script, and they're still on disk in Overture's own folder. Nothing here can repair "
+                + "one. A line clears as soon as its file reads cleanly again.\n\n\(detail)")
+    }
+
     // `shootHistory` is OPTIONAL, and nil means nothing has looked yet rather than a clean bill of
     // health. A verdict is a measurement, and defaulting to `.ok` before the read would put the
     // reassuring answer on the one state nobody has checked (L11).
     static func current(omniFocusFailing isFailing: Bool,
                         bookingsVanished: DownbeatBookingFeed.Vanished? = nil,
                         shootHistory: ShootHistory.Health? = nil,
+                        unreadableFiles: [HandoffReadFailures.Failure] = [],
                         status: StatusLine) -> [AppNotice] {
         var notices: [AppNotice] = []
         if let bookingsVanished { notices.append(downbeatShootsVanished(bookingsVanished)) }
         if isFailing { notices.append(omniFocusFailing) }
+        if let notice = couldNotRead(unreadableFiles) { notices.append(notice) }
         if let shootHistory, let notice = shootHistoryWarning(shootHistory) { notices.append(notice) }
         if let text = status.text {
             notices.append(AppNotice(text: text,

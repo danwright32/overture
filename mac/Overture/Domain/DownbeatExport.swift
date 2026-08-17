@@ -140,8 +140,17 @@ enum DownbeatBridge {
     static func loadWithHealth(from url: URL = defaultURL, now: Date,
                                staleAfter: TimeInterval = defaultStaleAfter)
         -> (clients: [DownbeatClient], bookings: [OvertureBooking], blockedDates: [String], health: Health) {
-        guard let data = try? Data(contentsOf: url) else {
-            return ([], [], [], .missing)
+        // #2879: through the shared reader, exempt from the register because a broken export already
+        // has the loudest line on the masthead (AppNotices.downbeatShootsVanished and the health verdict
+        // below), and a second generic wording of it would be the same fault said twice (#843).
+        // A file present and unopenable now reads as a DECODE FAILURE rather than as missing: it used to
+        // take this branch and report `.missing`, which says the export was never made.
+        let read = HandoffFile.data(at: url, recorder: .reportedByItsOwnSurface)
+        if case .absent = read { return ([], [], [], .missing) }
+        guard let data = read.value else {
+            return ([], [], [], health(fileExists: true, decodeFailed: true,
+                                       modifiedAt: FileTimestamp.modifiedAt(url) ?? nil,
+                                       now: now, staleAfter: staleAfter))
         }
         // #2105: the shared read, and the one site here that was genuinely exposed rather than safe by
         // luck: `url` is a PARAMETER, so a caller holding one in a `let` and reading it twice would have
