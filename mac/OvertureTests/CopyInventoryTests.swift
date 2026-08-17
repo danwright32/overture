@@ -540,4 +540,69 @@ struct CopyInventoryTests {
 
         #expect(CopyInventory.relativePath(of: file, under: root) == "Domain/EmptyState.swift")
     }
+
+    // MARK: - #2570: an entry that is a line of code cannot be cold read
+
+    // The inventory exists so a change to what Overture SAYS shows up in the diff in the words Dan will
+    // read. An entry assembled around a helper call defeats that silently, because what lands in the file
+    // is the EXPRESSION rather than the sentence.
+    //
+    // Two instances, both real. #2548 routed five sentences through one naming helper and they appeared as
+    // `"\(verb(writtenByDan: writtenByDan, lastServedAt: lastServedAt)) queued"`. And this session
+    // produced `"\(calls) refused\(WebCallRefusals.routeClause(web.deniedByRoute)): "` while building
+    // #2387, caught by eye on the regenerated diff, with the suite perfectly happy.
+    //
+    // WHAT THIS RULE IS, AND WHAT IT DELIBERATELY IS NOT. #2570 proposed refusing any interpolation whose
+    // contents hold a bracket or a colon. That was MEASURED against the checked-in inventory before it was
+    // built, and it flags 478 of 1382 entries: `"\(Plural.count(count, "show")) to prep"`,
+    // `"Last checked \(formatter.string(from: last))"`, `"Hi \(firstName(name)),"`. A rule that condemns a
+    // third of the file is one somebody switches off in a day (L93), so it is not that rule.
+    //
+    // What IS refused is a call GLUED to the preceding word, with no space between: that is an
+    // interpolation producing part of a clause rather than a value dropped into a sentence, and it is
+    // what makes an entry unreadable. Measured the same way: it flags ZERO of the 1382 entries standing
+    // today and flags the #2387 entry exactly.
+    //
+    // The gap, stated rather than left to be discovered (no silent caps): a call-interpolation at the
+    // START of an entry is NOT caught, so #2548's own shape would still get through. It cannot be caught
+    // mechanically, because `"\(verb(...)) queued"` and `"Prep \(Plural.count(count, "show"))"` differ
+    // only in whether the helper is a known formatter, and deciding that needs a hand-written registry,
+    // which only ever contains what somebody remembered (L96). The cold read remains the reader for that
+    // half.
+    @Test func noEntryGluesAHelperCallOntoAWord() throws {
+        let inventory = try String(contentsOf: CopyInventory.inventoryURL, encoding: .utf8)
+        let entries = inventory.split(separator: "\n").map(String.init)
+            .filter { $0.hasPrefix("\"") && $0.hasSuffix("\"") }
+        #expect(entries.count > 500, "the inventory could not be read, so this checked nothing (L98)")
+
+        // A word character, then an interpolation opening straight into a function call.
+        let glued = try NSRegularExpression(pattern: #"\w\\\([A-Za-z_][\w.]*\("#)
+        for entry in entries {
+            let range = NSRange(entry.startIndex..., in: entry)
+            #expect(glued.firstMatch(in: entry, range: range) == nil,
+                    """
+                    docs/copy-inventory.md carries an entry that is part expression: \(entry). A helper \
+                    call glued to the preceding word produces a CLAUSE, so what is recorded here is a \
+                    line of Swift and the cold read this file exists for cannot be done on it. Write the \
+                    spellings out as literals instead (#2570, #2548, #915).
+                    """)
+        }
+    }
+
+    // The rule really does catch the shape, rather than passing because the inventory happens to be clean.
+    // A guard only ever watched not to fire is a guard nobody has seen work (L1).
+    @Test func theGluedCallRuleCatchesTheEntryThatPromptedIt() throws {
+        let glued = try NSRegularExpression(pattern: #"\w\\\([A-Za-z_][\w.]*\("#)
+        func flags(_ entry: String) -> Bool {
+            glued.firstMatch(in: entry, range: NSRange(entry.startIndex..., in: entry)) != nil
+        }
+        // The #2387 entry, exactly as it appeared in the regenerated file.
+        #expect(flags(#""\(calls) refused\(WebCallRefusals.routeClause(web.deniedByRoute)): ""#))
+        // And the ordinary copy it must leave alone, one of each shape the measurement found.
+        #expect(!flags(#""\(Plural.count(count, "show")) to prep""#))
+        #expect(!flags(#""Last checked \(formatter.string(from: last))""#))
+        #expect(!flags(#""Hi \(firstName(name)),""#))
+        #expect(!flags(#""Removed \(who) from \(org).""#))
+        #expect(!flags(#""2 web calls refused (browser): that research never happened""#))
+    }
 }
