@@ -19,7 +19,8 @@ struct ReplyPanelShowsItsDraftTests {
     }
 
     // Dan's real row (#2151): Every Voice Choirs, answered by the contact he pitched.
-    private func panel(draft: String? = nil, requestedAt: Date? = nil) throws -> ReplySheet {
+    private func panel(draft: String? = nil, requestedAt: Date? = nil,
+                       writtenByDan: Bool = false, editedByDan: Bool = false) throws -> ReplySheet {
         let ctx = ModelContext(try container())
         let p = Prospect(naturalKey: "k", groupName: "Every Voice Choirs", discipline: "choral",
                          venue: "Merkin Hall", performanceDate: "2026-10-31", sourceListingURL: nil,
@@ -39,6 +40,8 @@ struct ReplyPanelShowsItsDraftTests {
         r.replyAudience = ["nbecker@everyvoicechoirs.org"]
         r.replyDraftBody = draft
         r.replyDraftRequestedAt = requestedAt
+        r.replyDraftWrittenByDan = writtenByDan
+        r.replyDraftEditedByDan = editedByDan
         p.setRecipients([r])
         return ReplySheet(composition: .answering(r, of: p, context: ctx, feedback: ActionFeedback()),
                           gmailConnected: true)
@@ -77,5 +80,36 @@ struct ReplyPanelShowsItsDraftTests {
         #expect(throws: (any Error).self) {
             _ = try view.inspect().find(LiveRunLabel.self)
         }
+    }
+
+    // MARK: whose words are in the box (#2177)
+
+    private func texts(_ view: ReplySheet) throws -> [String] {
+        try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
+    }
+
+    // The rule reaching the screen, which is a separate claim from the rule being right (L3). A draft from
+    // the unattended classify run is text in a box Dan left empty, and until now nothing beside it said so.
+    @Test func anUnEditedAiDraftSaysSoOnScreen() throws {
+        let view = try panel(draft: "Tuesday suits me. I'll bring the 85mm.")
+        #expect(try texts(view).contains(ReplyPanelCopy.aiWroteThisDraft))
+    }
+
+    // A box holding his own words gains no line.
+    @Test func hisOwnDraftGainsNoLineOnScreen() throws {
+        let view = try panel(draft: "Tuesday works.", writtenByDan: true)
+        #expect(!(try texts(view).contains(ReplyPanelCopy.aiWroteThisDraft)))
+    }
+
+    // Nor does one he has already edited.
+    @Test func aneditedDraftGainsNoLineOnScreen() throws {
+        let view = try panel(draft: "Changed.", editedByDan: true)
+        #expect(!(try texts(view).contains(ReplyPanelCopy.aiWroteThisDraft)))
+    }
+
+    // Nor an empty box, which is the ordinary state: Dan writes these himself.
+    @Test func anemptyBoxGainsNoLineOnScreen() throws {
+        let view = try panel()
+        #expect(!(try texts(view).contains(ReplyPanelCopy.aiWroteThisDraft)))
     }
 }
