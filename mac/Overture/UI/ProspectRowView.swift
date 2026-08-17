@@ -1131,8 +1131,11 @@ struct ProspectRowView: View {
                     if let refusal = GenreGate.refusal(discipline: item.discipline) {
                         Section(refusal) { }
                     } else {
-                    // #864: `danCanChoose`, not `allCases`. "Went by" is Overture's own reason for a show
-                    // whose date passed untriaged; Dan cannot decide that a date has passed.
+                    // #2395: `ShowOutcome.menu(wasPitched:)`, which is the ONE place the choice of menu is
+                    // made, not `allCases`. "Went by" is Overture's own reason for a show whose date passed
+                    // untriaged; Dan cannot decide that a date has passed, so it is in neither half of it.
+                    // (#2685: this used to name `danCanChoose`, the list the menus read before #2395, which
+                    // has since been deleted.)
                     ForEach(ShowOutcome.menu(wasPitched: item.wasPitched), id: \.self) { reason in
                         Button(reason.label) { onDismiss(reason) }
                     }

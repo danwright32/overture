@@ -112,8 +112,11 @@ enum DismissReason: String, CaseIterable, Sendable {
     // having hired him: this reason now says "I had paid work" everywhere it appears.
     var label: String { asShowOutcome.label }
 
-    // The reasons Dan can pick himself. `wentBy` and `tooFar` are Overture's own, never offered as a
-    // choice: he cannot decide that a date has passed, and blocking a town is a separate action, not a
-    // per-show dismiss reason.
-    static var danCanChoose: [DismissReason] { allCases.filter { $0 != .wentBy && $0 != .tooFar } }
+    // #2685: `DismissReason.danCanChoose` is GONE. It was the menu every dismiss control read from until
+    // #2395 put those menus over `ShowOutcome` directly, and it then sat here with no caller at all while
+    // reading like the live rule to whoever found it first (L29).
+    //
+    // What replaced it, so nobody has to go looking: `ShowOutcome.menu(wasPitched:)` is the one place the
+    // choice of menu is made, and `ShowOutcome.danCanChoose` is the pair of halves it draws from.
+    // `InquiryEnding.danCanChoose` is the inquiry's own narrower list. Neither is this one.
 }

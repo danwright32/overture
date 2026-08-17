@@ -199,21 +199,28 @@ final class ReconcileScheduler {
                                     || threadingRepair?.saveFailed == true         // #2679
                                     || proposals.saveFailed,                       // #2718
                                 replySearchFailure: proposals.failure,             // #2718
-                                replyWatchUnreadable: replyCheck.everyThreadUnreadable)  // #2741
+                                replyWatchUnreadable: replyCheck.everyThreadUnreadable,  // #2741
+                                inquiryThreadsUnreadable: proposals.inquiryThreadsUnreadable,  // #2798
+                                inquiryGmailNotConnected: proposals.inquiryNotConnected)       // #2798
     }
 
     // #2718: the mailbox sweep, in its own function so the scheduler body stays readable and so a test can
     // drive the tick without it. Returns the two facts the summary needs and nothing else: `.notConnected`
     // and `.nothingInScope` are not failures and must not wake Dan for a tick that did nothing wrong (the
     // same reading the threading repair's nil gets, two calls above).
+    // #2798: it also returns the two facts the INQUIRY half of that sweep establishes, which had no
+    // reader at all before. Both are about a tick that could not read Gmail for the conversations a hire
+    // inquiry is on, and neither is "nothing arrived", so neither may be swallowed by the same silence.
     func sweepReplyProposals(_ context: ModelContext, _ now: Date,
                              sweep: @MainActor (ModelContext, Date) async -> ReplyProposalSweep.Outcome = {
                                  await ReplyProposalSweep().run(in: $0, now: $1)
-                             }) async -> (saveFailed: Bool, failure: String?) {
+                             }) async -> (saveFailed: Bool, failure: String?,
+                                          inquiryThreadsUnreadable: Bool, inquiryNotConnected: Bool) {
         switch await sweep(context, now) {
-        case .notConnected, .nothingInScope: return (false, nil)
-        case .failed(let reason): return (false, reason)
-        case .swept(_, _, let saveFailed): return (saveFailed, nil)
+        case .notConnected, .nothingInScope: return (false, nil, false, false)
+        case .failed(let reason): return (false, reason, false, false)
+        case .swept(_, _, let saveFailed, let threadsUnreadable, let notConnected):
+            return (saveFailed, nil, threadsUnreadable, notConnected)
         }
     }
 

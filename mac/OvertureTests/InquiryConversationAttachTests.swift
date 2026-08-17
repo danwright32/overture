@@ -307,6 +307,54 @@ struct InquiryConversationAttachTests {
         #expect(i.gmailThreadId == nil)
         #expect(i.conversationAttachedAt == nil)
         #expect(!i.replied)
+        // #2798: and the pass SAYS that every thread it tried was refused, which is the fact that has to
+        // travel. Until this, `unreadable` had no reader outside these tests, so a tick where Gmail
+        // refused every inquiry thread was silent and read exactly like a tick where nobody had written.
+        #expect(outcome.threadsTried == 1)
+        #expect(outcome.everyThreadUnreadable)
+    }
+
+    // #2798: a RATE, not a count, which is the same rule the thread watcher already applies (#2741). One
+    // refused thread beside one that attached is ordinary contention, and an alert that fires on it is one
+    // Dan learns to ignore by the time a real outage comes (L77).
+    @Test("one refused thread beside one that worked is not an outage")
+    func oneRefusedThreadIsNotEveryThread() async throws {
+        let ctx = ModelContext(try container())
+        let good = inquiry(ctx)
+        let bad = inquiry(ctx, email: "other@presenter.test")
+        var calls = 0
+        let outcome = await InquiryConversationAttach(fromEmail: me)
+            .run(inquiries: [good, bad],
+                 candidates: [message("m2", from: them, subject: "Re: spring gala"),
+                              message("m3", from: "other@presenter.test", subject: "Re: spring gala")],
+                 now: now, token: "tok",
+                 fetch: { req in
+                     calls += 1
+                     // The first inquiry's two reads (metadata, then the full thread) succeed; every
+                     // later one is refused, so exactly one of the two inquiries attaches.
+                     return try await self.gmail(self.answeredInGmail(),
+                                                 status: calls <= 2 ? 200 : 500)(req)
+                 })
+
+        #expect(outcome.threadsTried == 2)
+        #expect(outcome.unreadable >= 1)
+        #expect(!outcome.everyThreadUnreadable,
+                "some threads were read, so this tick did establish something about somebody's replies")
+    }
+
+    // And a pass with nothing to match is not an outage either: finding no subjects is its own outcome,
+    // never a failure and never a pass (L98). Without the `threadsTried > 0` half, an ordinary quiet tick
+    // would report Gmail as refusing everything.
+    @Test("a pass that matched nothing reports no outage")
+    func nothingMatchedIsNotAnOutage() async throws {
+        let ctx = ModelContext(try container())
+        let i = inquiry(ctx)
+        let outcome = await InquiryConversationAttach(fromEmail: me)
+            .run(inquiries: [i], candidates: [], now: now, token: "tok",
+                 fetch: gmail(answeredInGmail(), status: 500))
+
+        #expect(outcome.threadsTried == 0)
+        #expect(!outcome.everyThreadUnreadable)
     }
 
     // Assume it runs twice. A second pass over the same inquiry must not replace the conversation, which

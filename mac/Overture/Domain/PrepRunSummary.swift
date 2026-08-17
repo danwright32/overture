@@ -100,10 +100,16 @@ enum PrepRunSummary {
         // Needs a COMPLETE count, like the over-cap sentence above: a share cannot be computed from a
         // partial figure, and the incomplete path publishes `partialDenied` rather than `denied` anyway, so
         // nothing real is lost by requiring one.
+        //
+        // #2387: and it NAMES THE ROUTE, because the route is the whole of whether this is news. A
+        // refused browser call is `claude-run-scope.sh` doing its job, has no action, and is what both
+        // refusals on Dan's 2026-08-09 run were; a refused fetch or search is the run's ordinary research
+        // being blocked. One number could not tell those apart, which is what he asked about.
         if let web = outcome.webCalls, web.recorded, let denied = web.denied, denied > 0,
            let total = web.total, denied * refusalShareFloor >= denied + total {
             let calls = denied == 1 ? "1 web call" : "\(denied) web calls"
-            notes.append("\(calls) refused: that research never happened")
+            notes.append(WebCallRefusals.refusalSentence(calls: calls,
+                                                        deniedByRoute: web.deniedByRoute))
         }
         if !outcome.unmatchedKeys.isEmpty { notes.append("\(outcome.unmatchedKeys.count) didn't match") }
         // #876: shows the run was GIVEN and never answered. Left silent, they sit in "ready to prep" run

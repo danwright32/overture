@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1374 sentences**.
+Every sentence Overture can say to Dan: **1382 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1600,6 +1600,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReconcileSummary.swift`
 "Reconcile complete: nothing was due."
     `Domain/ReconcileSummary.swift`
+"Reconcile ran but Gmail refused every hire inquiry conversation it tried to read, so "
+    `Domain/ReconcileSummary.swift`
+"Reconcile ran but couldn't reach Gmail for the hire inquiries it watches, so it "
+    `Domain/ReconcileSummary.swift`
 "Reconcile ran but couldn't read Gmail for any of the conversations it watches, so it "
     `Domain/ReconcileSummary.swift`
 "Reconcile ran but couldn't save its results. Try again; if this keeps happening, something's wrong with the local store."
@@ -2411,6 +2415,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ShowOutcome.swift`
 "\($0) (\(hall))"
     `Domain/VenueDisplay.swift`
+"\($0.count) \($0.route)"
+    `Domain/WebCallRefusals.swift`
 "\($0.orgName): \($0.state.failureMessage ?? "couldn't be checked")"
     `Integration/ScoutService.swift`
 "\(-days) days ago"
@@ -2459,8 +2465,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/RunProgress.swift`
 "\(base) looks stuck (\(elapsed))"
     `Domain/RunProgress.swift`
+"\(calls) refused (\(list(named))): that research never happened"
+    `Domain/WebCallRefusals.swift`
 "\(calls) refused: that research never happened"
-    `Domain/PrepRunSummary.swift`
+    `Domain/WebCallRefusals.swift`
 "\(city), \(state)"
     `Domain/EventLocationFill.swift`
 "\(clauses[cityIndex]), \(code)"
@@ -2885,6 +2893,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SendConfirmSheet.swift`
 "but not read anything."
     `Domain/ScoutStartGate.swift`
+"can't tell whether anyone answered them. Check the Gmail connection."
+    `Domain/ReconcileSummary.swift`
 "can't tell whether anyone replied. Check the Gmail connection."
     `Domain/ReconcileSummary.swift`
 "changed. Check that file before reopening Overture."
@@ -2935,6 +2945,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView.swift`
 "is open."
     `Domain/ProposedConversation.swift`
+"it can't tell whether anyone answered them. Try again shortly."
+    `Domain/ReconcileSummary.swift`
 "just now"
     `Domain/PrepStatus.swift`
 "last prep \(Self.relative(from: last, to: now))"
@@ -2963,6 +2975,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreSchemaGuard.swift`
 "or a DM. Gmail refused the request (HTTP \(status))."
     `Integration/GmailReplySearch.swift`
+"page fetch"
+    `Domain/WebCallRefusals.swift`
 "permission. A successful sync clears it."
     `Domain/AppNotice.swift`
 "prep run"
@@ -3050,6 +3064,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ProbeSelection.swift`
 "voice guidance leaked a name, quarantined"
     `Domain/PrepRunSummary.swift`
+"web search"
+    `Domain/WebCallRefusals.swift`
 "which usually means the match is wrong."
     `Domain/PossibleMatchFanOut.swift`
 "would have read \(count) show\(count == 1 ? "" : "s") as \(discipline.label)"

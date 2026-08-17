@@ -77,7 +77,7 @@ enum GmailMessage {
     // is appended HERE, once, so no body producer carries its own.
     static func rfc822(fromName: String, fromEmail: String, to: [String], subject: String, body: String,
                        signature: OutboundSignature = .none, boundary: String? = nil,
-                       messageID: String? = nil, inReplyTo: String? = nil,
+                       inReplyTo: String? = nil,
                        references: String? = nil) -> String {
         let headerSubject = isASCII(subject) ? subject : encodedWord(subject)
         var headers = [
@@ -87,10 +87,13 @@ enum GmailMessage {
             "To: \(to.joined(separator: ", "))",
             "Subject: \(headerSubject)",
         ]
-        // #74: thread a follow-up onto the original. Message-ID stamps the first send so the
-        // nudge can point In-Reply-To/References at it, which is what makes mail clients (and
-        // Gmail's reply detection) treat the reply as part of the same conversation.
-        if let messageID { headers.append("Message-ID: \(messageID)") }
+        // #74: thread a follow-up onto the original, by pointing In-Reply-To/References at the id of the
+        // message being replied to, which is what makes mail clients (and Gmail's reply detection) treat
+        // the reply as part of the same conversation.
+        //
+        // #2672: no `Message-ID:` header is written here any more. Gmail discards a client-supplied one
+        // and stamps its own (#2647), so this header could only ever be a value nothing on the wire
+        // carried, and every id Overture stores is now read BACK off the send.
         if let inReplyTo { headers.append("In-Reply-To: \(inReplyTo)") }
         // #2648: References is the WHOLE ancestry, oldest first, not the parent restated. It used to be
         // written as the single `inReplyTo` value, so a third message on a conversation named only the
@@ -192,18 +195,18 @@ enum GmailMessage {
 
     static func rawField(fromName: String, fromEmail: String, to: [String], subject: String, body: String,
                          signature: OutboundSignature = .none,
-                         messageID: String? = nil, inReplyTo: String? = nil,
+                         inReplyTo: String? = nil,
                          references: String? = nil) -> String {
         base64url(Data(rfc822(fromName: fromName, fromEmail: fromEmail, to: to, subject: subject, body: body,
                               signature: signature,
-                              messageID: messageID, inReplyTo: inReplyTo,
+                              inReplyTo: inReplyTo,
                               references: references).utf8))
     }
 
-    // A fresh RFC 2822 Message-ID under the sender's domain, e.g. <UUID@danwrightphotography.com>.
-    static func newMessageID(senderEmail: String) -> String {
-        return "<\(UUID().uuidString)@\(messageIDDomain(senderEmail: senderEmail))>"
-    }
+    // #2672: `newMessageID` is GONE. It minted an id for the send path to stamp, and #2647 stopped that
+    // path stamping anything, leaving a generator with no caller outside its own test. It comes back only
+    // if a genuine NON-Gmail sender ever appears, which is the only kind of caller for which a
+    // self-minted id is a fact rather than a request (L127).
 
     // #2649: does this stored id look like one OVERTURE minted rather than one Gmail assigned? It is the
     // question the threading repair selects on, and it lives here, beside the minting above, so the test

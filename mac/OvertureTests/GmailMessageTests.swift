@@ -85,12 +85,19 @@ struct GmailMessageTests {
         #expect(decoded.contains("Body text"))
     }
 
-    @Test func messageIDHeaderIsIncludedWhenProvided() {
-        // #74: the first send stamps a Message-ID so a later follow-up can reference it.
+    // #2672: a sent message never carries a Message-ID Overture wrote. Gmail discards a client-supplied
+    // one and assigns its own (#2647), so a header written here could only ever be a value nothing on the
+    // wire carried, and every id the app stores is read BACK off the send. Asserted rather than dropped,
+    // because a header stops appearing silently and this is the one that made every In-Reply-To Overture
+    // later wrote a dangling reference.
+    @Test func noMessageIDHeaderIsEverWritten() {
         let msg = GmailMessage.rfc822(
             fromName: "Dan", fromEmail: "d@x.com", to: ["t@y.org"],
-            subject: "Hello", body: "b", messageID: "<abc@x.com>")
-        #expect(msg.contains("Message-ID: <abc@x.com>"))
+            subject: "Hello", body: "b", inReplyTo: "<orig@x.com>")
+        #expect(!msg.contains("Message-ID:"))
+        // ...while the headers that DO thread a reply are untouched, so this is not simply a message with
+        // no threading at all.
+        #expect(msg.contains("In-Reply-To: <orig@x.com>"))
     }
 
     @Test func replyHeadersThreadTheFollowUp() {
@@ -109,11 +116,9 @@ struct GmailMessageTests {
         #expect(!msg.contains("In-Reply-To:"))
     }
 
-    @Test func newMessageIDIsBracketedAndUsesTheSenderDomain() {
-        let id = GmailMessage.newMessageID(senderEmail: "dan@danwrightphotography.com")
-        #expect(id.hasPrefix("<"))
-        #expect(id.hasSuffix("@danwrightphotography.com>"))
-    }
+    // #2672: `newMessageID` is gone with the header above, and what recognises an id Overture minted in
+    // the PAST is `isLocallyMintedMessageID`, which the threading repair selects on. That is the half with
+    // a live reader, and it has its own coverage in GmailThreadingRepairTests.
 
     // MARK: - #1144: signature (multipart/alternative)
 
