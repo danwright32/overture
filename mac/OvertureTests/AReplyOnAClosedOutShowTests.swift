@@ -2,17 +2,21 @@ import Testing
 import Foundation
 import SwiftData
 
-// #2900: a show Dan has closed out went on minting an OmniFocus reply triage task for ever, because
-// nothing that reads "is this reply outstanding?" could see a show-level ending at all.
-// `Recipient.hasUnhandledReply` reads contact-level fields only, and `recordOutcome` deliberately
-// writes the ending onto the SHOW and nothing onto the contacts (#2396, L83). So the question was
-// answerable and unasked, except in `Prospect.hasUnhandledReply`, which answered it by hand for
-// exactly one ending (`performanceStatus != .booked`) at exactly one call site.
+// #2910, Dan's call on 2026-08-17 reading back what #2900 had shipped: an unanswered reply keeps
+// nagging until it is ANSWERED, whatever ending the show carries.
 //
-// Decided once now, in `Prospect.hasRecordedEnding`, and read by `Recipient.hasUnhandledReply`, so
-// every one of its thirteen readers inherits the answer instead of thirteen chances to forget it
-// (L16). Overture's OWN two endings do not count: `wentBy` is the calendar passing, not a decision,
-// and a person who writes after their show went by is still owed an answer.
+// Closing a show out records what happened to the SHOW. It does not mean Dan wrote back to the person
+// who took the trouble to reply, so it must not silence them. #2900 had made an ending close the reply
+// everywhere at once, which was right about one thing (a closed out show should stop being work) and
+// wrong about the person still waiting.
+//
+// What makes that safe is that clearing a reply no longer needs an ending to stand in for it. Four acts
+// retire one now, and #2899 added the one Dan actually performs when he is away from his desk:
+//
+//   - answering through Overture (`AnsweredReply.record`)
+//   - answering from his mail client, which detection reads back (`AnsweredElsewhere`, #2865)
+//   - ticking the triage task off in OmniFocus (#2899)
+//   - standing the contact or show down (`ProspectMutations.standDown`)
 @Suite("A reply on a closed out show")
 struct AReplyOnAClosedOutShowTests {
     private func container() throws -> ModelContainer {
@@ -31,7 +35,6 @@ struct AReplyOnAClosedOutShowTests {
         return p
     }
 
-    // A contact who was pitched and has written back, with nobody having answered them.
     @discardableResult
     private func repliedContact(_ ctx: ModelContext, on p: Prospect, now: Date) -> Recipient {
         let r = Recipient(id: "booking@example.invalid", email: "booking@example.invalid", provenance: .act)
@@ -39,109 +42,90 @@ struct AReplyOnAClosedOutShowTests {
         r.sendState = .sent
         r.gmailMessageId = "msg-1"
         r.replied = true
-        r.inboundReplySentAt = now.addingTimeInterval(-3_600)   // what `replyArrivedAt` derives from
+        r.lastReplyId = "reply-1"
+        r.inboundReplySentAt = now.addingTimeInterval(-3_600)
         r.prospect = p
         p.recipients.append(r)
         return r
     }
 
-    // MARK: - The predicate itself
-
-    @Test func aReplyIsOutstandingWhileTheShowHasNoEnding() throws {
-        let ctx = ModelContext(try container())
-        let now = Date(timeIntervalSince1970: 1_780_000_000)
-        let p = show(ctx)
-        let r = repliedContact(ctx, on: p, now: now)
-
-        #expect(r.hasUnhandledReply)
-        #expect(p.hasUnhandledReply)
-        #expect(!p.hasRecordedEnding)
-    }
-
-    // Every ending Dan can choose closes it, the never-pitched half included: they are all statements
-    // that this show is over. Exhaustive over the vocabulary rather than a sample, so an ending added
-    // later cannot quietly land on the wrong side of this rule.
-    @Test func everyEndingDanCanChooseClosesTheReply() throws {
-        for ending in ShowOutcome.danCanChoose {
+    // Exhaustive over the vocabulary rather than a sample, so an ending added later is judged by this
+    // rule rather than by whoever remembers it.
+    @Test func noEndingDanCanRecordSilencesAnUnansweredReply() throws {
+        for ending in ShowOutcome.danCanChoose where ending != .booked {
             let ctx = ModelContext(try container())
             let now = Date(timeIntervalSince1970: 1_780_000_000)
             let p = show(ctx)
             let r = repliedContact(ctx, on: p, now: now)
             p.showOutcome = ending
 
-            #expect(p.hasRecordedEnding, "\(ending.rawValue) should read as an ending Dan recorded")
-            #expect(!r.hasUnhandledReply, "\(ending.rawValue) should close the reply")
-            #expect(!p.hasUnhandledReply, "\(ending.rawValue) should close the reply")
+            #expect(r.hasUnhandledReply, "\(ending.rawValue) must not answer the person for him")
+            #expect(p.hasUnhandledReply, "\(ending.rawValue) must not answer the person for him")
         }
     }
 
-    // Overture's own two are not decisions. `wentBy` is the show's last night passing while the row sat
-    // untriaged, and somebody who wrote to Dan is still owed an answer whatever the calendar did.
-    @Test func overturesOwnEndingsLeaveTheReplyOutstanding() throws {
-        for ending in ShowOutcome.allCases where ending.isOverturesOwn {
-            let ctx = ModelContext(try container())
-            let now = Date(timeIntervalSince1970: 1_780_000_000)
-            let p = show(ctx)
-            let r = repliedContact(ctx, on: p, now: now)
-            p.showOutcome = ending
-
-            #expect(!p.hasRecordedEnding, "\(ending.rawValue) is Overture's own, not an ending Dan recorded")
-            #expect(r.hasUnhandledReply, "\(ending.rawValue) must not close a reply")
-        }
-    }
-
-    // A booking recorded on the CONTACT rather than on the show. This is the case
-    // `Prospect.hasUnhandledReply` used to carry by hand, at one call site; it now holds for every
-    // reader, which is the whole point of moving it.
-    @Test func aBookingRecordedOnTheContactClosesTheReplyForEveryReader() throws {
-        let ctx = ModelContext(try container())
-        let now = Date(timeIntervalSince1970: 1_780_000_000)
-        let p = show(ctx)
-        let r = repliedContact(ctx, on: p, now: now)
-        r.resolution = .booked
-        // A booked contact's own resolution already closes it; the show-level read is what changed.
-        #expect(p.isBooked)
-        #expect(p.hasRecordedEnding)
-        #expect(!p.hasUnhandledReply)
-    }
-
-    // Taking the ending back has to start it asking again. `reopenOutcome` clears `showOutcome`, and
-    // because this is derived rather than mirrored onto the contacts there is nothing else to undo.
-    @Test func reopeningTheShowMakesTheReplyOutstandingAgain() throws {
+    // The live shape of #2900, now deliberately the other way round: the triage task keeps coming, and
+    // ticking it off in OmniFocus (#2899) is what retires it.
+    @Test func aClosedOutShowStillMintsATriageTaskUntilTheReplyIsAnswered() throws {
         let ctx = ModelContext(try container())
         let now = Date(timeIntervalSince1970: 1_780_000_000)
         let p = show(ctx)
         let r = repliedContact(ctx, on: p, now: now)
         p.showOutcome = .theySaidNo
-        #expect(!r.hasUnhandledReply)
 
-        p.showOutcome = nil
-        #expect(r.hasUnhandledReply)
-        #expect(p.hasUnhandledReply)
+        let desired = OmniFocusSync.desired(from: [p], now: now, horizonDays: 14)
+        #expect(desired.count == 1)
+        #expect(desired.first?.kind == .replyTriage)
+
+        // Answering it is what stops it, wherever the answer happened.
+        AnsweredReply.recordHandled(on: r, in: p, now: now)
+        #expect(!r.hasUnhandledReply)
+        #expect(OmniFocusSync.desired(from: [p], now: now, horizonDays: 14).isEmpty)
     }
 
-    // A contact with no show wired at all (every bare-Recipient unit test) is unaffected: there is no
-    // ending to read, and reading the absence as an ending would close every one of them.
+    // A reply that arrives AFTER the ending is the case that most needs to be heard: "they said no,
+    // then wrote back a month later to say the date freed up" (this was #2908, which this closes).
+    @Test func aReplyArrivingAfterTheEndingIsStillHeard() throws {
+        let ctx = ModelContext(try container())
+        let now = Date(timeIntervalSince1970: 1_780_000_000)
+        let p = show(ctx)
+        let r = repliedContact(ctx, on: p, now: now)
+        p.showOutcome = .neverHeardBack
+        AnsweredReply.recordHandled(on: r, in: p, now: now)
+        #expect(!r.hasUnhandledReply)
+
+        // A month later they write again on the same thread.
+        let later = now.addingTimeInterval(86_400 * 30)
+        r.inboundReplySentAt = later
+        r.lastReplyId = "reply-2"
+
+        #expect(r.hasUnhandledReply)
+        #expect(OmniFocusSync.desired(from: [p], now: later, horizonDays: 14).count == 1)
+    }
+
+    // A booked show is the one long-standing exclusion, and it lives where it always has, on the
+    // prospect-level rollup. It is not an ending Dan recorded ABOUT the conversation, it is the
+    // conversation having succeeded.
+    //
+    // Exercised through the SHOW's own booking rather than through the replying contact's resolution: a
+    // contact carrying `resolution == .booked` is already not asking, so a test written that way passes
+    // whether this exclusion exists or not, and the mutation that deletes it survives (L1).
+    @Test func aBookedShowStillRollsUpAsNothingOutstanding() throws {
+        let ctx = ModelContext(try container())
+        let now = Date(timeIntervalSince1970: 1_780_000_000)
+        let p = show(ctx)
+        let r = repliedContact(ctx, on: p, now: now)
+        p.markOutcomeManually(.booked, now: now)
+
+        #expect(p.isBooked)
+        #expect(r.hasUnhandledReply, "the contact itself is still owed an answer")
+        #expect(!p.hasUnhandledReply, "but the show has nothing outstanding: it booked")
+    }
+
+    // A contact with no show wired at all (every bare-Recipient unit test) is unaffected.
     @Test func aContactWithNoShowIsUnaffected() {
         let r = Recipient(id: "a@example.invalid", email: "a@example.invalid", provenance: .act)
         r.replied = true
         #expect(r.hasUnhandledReply)
-    }
-
-    // MARK: - The reader this was filed from
-
-    // The live shape of #2900: close a pitched show out from the Mark menu and the OmniFocus sync goes
-    // on minting a triage task for a contact whose reply nobody answered, for ever, about a show that
-    // has an ending recorded against it.
-    @Test func aClosedOutShowMintsNoOmniFocusTriageTask() throws {
-        let ctx = ModelContext(try container())
-        let now = Date(timeIntervalSince1970: 1_780_000_000)
-        let p = show(ctx)
-        repliedContact(ctx, on: p, now: now)
-
-        #expect(OmniFocusSync.desired(from: [p], now: now, horizonDays: 14).count == 1)
-
-        p.showOutcome = .turnedThemDown
-        #expect(OmniFocusSync.desired(from: [p], now: now, horizonDays: 14).isEmpty)
     }
 }
