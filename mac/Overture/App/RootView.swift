@@ -2333,7 +2333,11 @@ struct RootView: View {
         // handful of Apple events, so the brief main-actor occupancy is acceptable.
         Task { @MainActor in
             do {
-                _ = try OmniFocusSync.apply(desired: desired, client: AppleScriptOmniFocusClient())
+                let result = try OmniFocusSync.apply(desired: desired, client: AppleScriptOmniFocusClient())
+                // #2899: carry back what Dan ticked off over there. On the main actor, where the model is.
+                if OmniFocusSync.recordCompletions(result.handled, in: all, now: Date()) > 0 {
+                    try? context.save()
+                }
                 OmniFocusSyncStatus.recordSuccess(at: Date())   // clears any prior failure warning (#239)
                 // Dan (2026-07-18): no routine "N due, N created" receipt here anymore. The OmniFocus toolbar menu
                 // already shows "last synced" when opened, and the only thing worth the shared status

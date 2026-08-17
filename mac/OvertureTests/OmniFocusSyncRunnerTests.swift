@@ -21,6 +21,7 @@ struct OmniFocusSyncRunnerTests {
             if throwOnExisting { throw NSError(domain: "of", code: 1) }
             return []
         }
+        func completedOvertureTasks() throws -> [OmniFocusSync.ExistingTask] { [] }
         func create(_ task: OmniFocusSync.DesiredTask) throws {}
         func complete(_ task: OmniFocusSync.ExistingTask) throws {}
     }

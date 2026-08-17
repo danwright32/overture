@@ -9,6 +9,7 @@ import SwiftData
 private final class CapturingOmniFocusClient: OmniFocusClient, @unchecked Sendable {
     var created: [OmniFocusSync.DesiredTask] = []
     func existingOvertureTasks() throws -> [OmniFocusSync.ExistingTask] { [] }
+    func completedOvertureTasks() throws -> [OmniFocusSync.ExistingTask] { [] }
     func create(_ task: OmniFocusSync.DesiredTask) throws { created.append(task) }
     func complete(_ task: OmniFocusSync.ExistingTask) throws {}
 }

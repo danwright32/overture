@@ -10,11 +10,22 @@ enum AnsweredReply {
         // The member facts first, on the one contact that actually sent: the frozen body, the send time,
         // the consumed draft. Those must not travel, or a colleague's record claims words they never sent.
         recipient.recordAnswerSent(now: now)
+        recordHandled(on: recipient, in: prospect, now: now)
+    }
 
-        // And the group fact. Keyed on the reply's own id rather than on the send group alone, because a
-        // colleague may have written something of their own on that group, and answering Nicole says
-        // nothing about it. No id recorded means nothing proves it is the same message, so it is left
-        // asking: a row that keeps asking costs Dan a glance, a row cleared wrongly hides a real reply.
+    // #2899: the HANDLED fact alone, for an answer whose words Overture never saw. Dan ticking a reply
+    // triage task off in OmniFocus says he dealt with that conversation; it supplies no message, so
+    // `sentReplyBody` and `replySentAt` must stay empty. Those two mean "the words Dan committed through
+    // Overture" and feed the voice pair (#463), so claiming them here would file words nothing ever saw.
+    // The same split `markReplyAnswered` already makes for a peer, and the same one `AnsweredElsewhere`
+    // (#2865) makes for an answer sent from his mail client.
+    //
+    // The group fact is keyed on the reply's own id rather than on the send group alone, because a
+    // colleague may have written something of their own on that group, and answering Nicole says
+    // nothing about it. No id recorded means nothing proves it is the same message, so it is left
+    // asking: a row that keeps asking costs Dan a glance, a row cleared wrongly hides a real reply.
+    static func recordHandled(on recipient: Recipient, in prospect: Prospect, now: Date) {
+        recipient.markReplyAnswered(now: now)
         guard let answered = recipient.lastReplyId, !answered.isEmpty else { return }
         for peer in SendGroup.peers(of: recipient, in: prospect)
         where peer.id != recipient.id && peer.lastReplyId == answered {

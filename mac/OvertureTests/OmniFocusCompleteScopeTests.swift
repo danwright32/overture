@@ -66,6 +66,7 @@ struct OmniFocusCompleteScopeTests {
         var completed: [OmniFocusSync.ExistingTask] = []
         init(existing: [OmniFocusSync.ExistingTask]) { self.existing = existing }
         func existingOvertureTasks() throws -> [OmniFocusSync.ExistingTask] { existing }
+        func completedOvertureTasks() throws -> [OmniFocusSync.ExistingTask] { [] }
         func create(_ task: OmniFocusSync.DesiredTask) throws {}
         func complete(_ task: OmniFocusSync.ExistingTask) throws { completed.append(task) }
     }
@@ -75,7 +76,7 @@ struct OmniFocusCompleteScopeTests {
     @Test func completingAStaleTaskCarriesItsOwnDueDateAndLeavesTodaysAlone() throws {
         let liveDue = easternDue("2026-08-17")
         let staleDue = easternDue("2026-08-19")
-        let desired = [OmniFocusSync.DesiredTask(naturalKey: key, recipientId: recipientId,
+        let desired = [OmniFocusSync.DesiredTask(kind: .replyTriage, naturalKey: key, recipientId: recipientId,
                                                  title: "t", note: "n",
                                                  deferDate: liveDue, dueDate: liveDue)]
         let client = RecordingClient(existing: [

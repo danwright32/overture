@@ -32,11 +32,23 @@ struct AppleScriptOmniFocusClient: OmniFocusClient {
     // contain newlines. A legacy 2-paragraph note (pre-#653) has no contact line; it's tagged with
     // legacyRecipientId instead of failing to parse.
     func existingOvertureTasks() throws -> [OmniFocusSync.ExistingTask] {
+        try overtureTasks(completed: false)
+    }
+
+    // #2899: the same read over the COMPLETED ones. A task Dan ticked off is the only evidence that he
+    // dealt with it, and it sat right there in OmniFocus being filtered out before reconcile could see
+    // it, so a completed task and a task that was never created were the same state and the sync
+    // resolved that by creating, every pass, for ever.
+    func completedOvertureTasks() throws -> [OmniFocusSync.ExistingTask] {
+        try overtureTasks(completed: true)
+    }
+
+    private func overtureTasks(completed: Bool) throws -> [OmniFocusSync.ExistingTask] {
         let src = """
         tell application "OmniFocus" to tell default document
           set ovt to first flattened tag whose name is "\(ownerTag)"
           set out to ""
-          repeat with t in (tasks of ovt whose completed is false)
+          repeat with t in (tasks of ovt whose completed is \(completed))
             set nt to note of t
             set pCount to count of paragraphs of nt
             if pCount >= 2 and (paragraph 1 of nt) starts with "\(esc(notePrefix))" then

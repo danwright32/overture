@@ -351,8 +351,16 @@ final class ReconcileScheduler {
         // Returns the number of OmniFocus tasks changed, for the manual-reconcile acknowledgment (#285).
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         let desired = OmniFocusSync.desired(from: all, now: now, horizonDays: horizonDays)
-        return OmniFocusSyncRunner.run(desired: desired, permission: permission, client: client,
-                                       notifier: notifier, now: now, defaults: statusDefaults)
+        let changed = OmniFocusSyncRunner.run(desired: desired, permission: permission, client: client,
+                                              notifier: notifier, now: now, defaults: statusDefaults,
+                                              // #2899: carry back what Dan ticked off in OmniFocus. Passed
+                                              // as a closure because the runner is pure over value types
+                                              // and the model lives here, on the main actor.
+                                              recordCompletions: { handled in
+                                                  OmniFocusSync.recordCompletions(handled, in: all, now: now)
+                                              })
+        if changed.stamped > 0 { try? context.save() }
+        return changed.tasks
     }
 
     // Last-modified time of the Downbeat export, to gate the live re-reconcile (#197) so a spurious
