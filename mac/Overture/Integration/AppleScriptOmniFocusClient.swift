@@ -108,20 +108,39 @@ struct AppleScriptOmniFocusClient: OmniFocusClient {
         _ = try run(src)
     }
 
-    // #653: scoped to the specific recipient's task, not every task on the show. A legacy (pre-#653)
+    // The AppleScript filter naming the ONE task to complete. #653 scoped it to the specific
+    // recipient rather than every task on the show; #2885 scoped it to that recipient's task at that
+    // DUE DATE, because reconcile decides per (naturalKey, recipientId, dueDate) and an instruction
+    // carrying fewer names a family where the decision named one member (L166). A legacy (pre-#653)
     // task carries no contact line at all; matched by its ABSENCE rather than a literal sentinel
     // string, since the sentinel never actually appears in a real note.
-    func complete(naturalKey: String, recipientId: String) throws {
-        let matchClause = recipientId == Self.legacyRecipientId
-            ? "note of t does not contain \"\(esc(contactPrefix))\""
-            : "note of t contains \"\(esc(contactPrefix + recipientId))\""
+    //
+    // Pure and static so the predicate has a unit test: the AppleScript boundary itself cannot have one.
+    static func completionMatchClause(naturalKey: String, recipientId: String, dueDate: Date) -> String {
+        let contactClause = recipientId == Self.legacyRecipientId
+            ? "note does not contain \"\(esc(OmniFocusSync.contactNotePrefix))\""
+            : "note contains \"\(esc(OmniFocusSync.contactNotePrefix + recipientId))\""
+        let dueDay = EasternDate.dayString(from: dueDate)
+        return "completed is false"
+            + " and note contains \"\(esc(OmniFocusSync.notePrefix + naturalKey))\""
+            + " and note contains \"\(esc(OmniFocusSync.dueNotePrefix + dueDay))\""
+            + " and \(contactClause)"
+    }
+
+    func complete(_ task: OmniFocusSync.ExistingTask) throws {
+        let clause = Self.completionMatchClause(naturalKey: task.naturalKey, recipientId: task.recipientId,
+                                                dueDate: task.dueDate)
+        // #2885 defect A: read the matching tasks' IDS out as plain values FIRST, then act on each by
+        // id. AppleScript does not snapshot a `whose` result; it re-asks OmniFocus for item 1, item 2
+        // on each turn of the loop. The filter carries `completed is false`, so marking the first
+        // match complete shrinks the list underneath the loop and the next index is refused
+        // ("Invalid index", live on 2026-08-17). A list of id strings cannot change under it.
         let src = """
         tell application "OmniFocus" to tell default document
           set ovt to first flattened tag whose name is "\(ownerTag)"
-          repeat with t in (tasks of ovt whose completed is false and note contains "\(esc(notePrefix + naturalKey))")
-            if \(matchClause) then
-              mark complete t
-            end if
+          set taskIds to id of (tasks of ovt whose \(clause))
+          repeat with taskId in taskIds
+            mark complete (first flattened task whose id is (taskId as string))
           end repeat
         end tell
         """
@@ -142,8 +161,12 @@ struct AppleScriptOmniFocusClient: OmniFocusClient {
         return result.stringValue ?? ""
     }
 
-    // Escape a string for embedding inside an AppleScript double-quoted literal.
-    private func esc(_ s: String) -> String {
+    // Escape a string for embedding inside an AppleScript double-quoted literal. Static, with an
+    // instance forwarder, so the pure clause builder above escapes by exactly the same rule the rest
+    // of the script does rather than growing a second one that can drift (L26).
+    private func esc(_ s: String) -> String { Self.esc(s) }
+
+    private static func esc(_ s: String) -> String {
         s.replacingOccurrences(of: "\\", with: "\\\\")
          .replacingOccurrences(of: "\"", with: "\\\"")
          .replacingOccurrences(of: "\n", with: " ")

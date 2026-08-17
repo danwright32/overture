@@ -198,11 +198,11 @@ struct OmniFocusSyncTests {
     final class FakeClient: OmniFocusClient {
         var existing: [OmniFocusSync.ExistingTask]
         var created: [OmniFocusSync.DesiredTask] = []
-        var completed: [(naturalKey: String, recipientId: String)] = []
+        var completed: [OmniFocusSync.ExistingTask] = []
         init(existing: [OmniFocusSync.ExistingTask]) { self.existing = existing }
         func existingOvertureTasks() throws -> [OmniFocusSync.ExistingTask] { existing }
         func create(_ task: OmniFocusSync.DesiredTask) throws { created.append(task) }
-        func complete(naturalKey: String, recipientId: String) throws { completed.append((naturalKey, recipientId)) }
+        func complete(_ task: OmniFocusSync.ExistingTask) throws { completed.append(task) }
     }
 
     @Test func runCreatesDesiredAndCompletesStaleViaTheClient() throws {
