@@ -342,6 +342,13 @@ struct DraftReviewView: View {
         if DraftReviewNotes.showsBlockingFlagsNearBody(lintBlocked: item.draftLintBlocked) {
             issueFlags(item.draftLintBlockers)
         }
+        // #2864: BEFORE, and OUTSIDE, the voice suppression below, deliberately. An advisory finding
+        // stands down on Dan's own text (#2131, #459) because when he writes a sentence he means it. That
+        // reasoning holds for a judgment about wording and fails for a contradicted fact: he cannot have
+        // meant July 18 for a July 25 show, and the sent draft that proved it had `draftEditedByDan` set.
+        if let dateWarning = item.eventDateWarning() {
+            DraftIssueFlags(findings: [], notes: [dateWarning])
+        }
         // #2007: and stand down on text he WROTE for the same reason they stand down on text he edited.
         // The decision is DraftReviewNotes', tested, not this view's.
         if DraftReviewNotes.showsVoiceFindings(editedByDan: item.draftEditedByDan,

@@ -170,19 +170,26 @@ struct ReplyConversationView: View {
 // the reply draft render them and only one of the two hosts could reach the private version.
 struct DraftIssueFlags: View {
     let findings: [DraftIssue]
+    // #2864: findings that carry their OWN sentence rather than a fixed label, because the sentence has
+    // to state the contradiction in words ("This draft says July 18. The show is July 25."). Rendered
+    // through this same view rather than a second row type beside it, so the two cannot drift apart.
+    var notes: [String] = []
 
     var body: some View {
-        if !findings.isEmpty {
+        if !findings.isEmpty || !notes.isEmpty {
             VStack(alignment: .leading, spacing: 2) {
-                ForEach(findings, id: \.self) { f in
-                    HStack(spacing: 5) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                        Text(f.label)
-                    }
-                    .font(OVType.tag).foregroundStyle(OVColor.rust)
-                }
+                ForEach(findings, id: \.self) { f in row(f.label) }
+                ForEach(notes, id: \.self) { row($0) }
             }
             .padding(.top, 2)
         }
+    }
+
+    private func row(_ text: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 5) {
+            Image(systemName: "exclamationmark.triangle.fill")
+            Text(text).fixedSize(horizontal: false, vertical: true)
+        }
+        .font(OVType.tag).foregroundStyle(OVColor.rust)
     }
 }

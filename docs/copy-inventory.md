@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1395 sentences**.
+Every sentence Overture can say to Dan: **1398 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -31,6 +31,7 @@ What is not, and why:
 - `Domain/DraftCheck.swift`: draft lint needles: phrases the linter HUNTS FOR, never words it says (#915)
 - `Domain/DraftCheck.swift`: Words MATCHED in a draft, never shown to Dan (#1887)
 - `Domain/DriftedRunMerge.swift`: developer diagnostic log, not the app's own voice (#915)
+- `Domain/EventDateInDraft.swift`: date-shape patterns: what the check HUNTS FOR, never words it says
 - `Domain/EventLocationFill.swift`: A location VALUE written into a data field, never a sentence Dan reads (#2378)
 - `Domain/EventPlace.swift`: Place names the resolver MATCHES against, never says: Dan reads a verdict, not this data (#970)
 - `Domain/EventPlace.swift`: A location VALUE written into a data field, never a sentence Dan reads (#2378)
@@ -1118,6 +1119,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/DraftReviewView.swift`
 "No contacts yet."
     `UI/DraftReviewView.swift`
+"No date for this show appears in the subject or the body. The show is \(show)."
+    `Domain/EventDateInDraft.swift`
 "No drafted or approved prospects to re-prep"
     `App/ActionFeedback.swift`
 "No email address for this contact"
@@ -2109,6 +2112,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/BuildFreshnessPanel.swift`
 "This copy is \(behindBy(installedAt: installedAt, shippedAt: shippedAt, now: now)) behind what has shipped, so anything fixed since then is not in front of you."
     `Domain/BuildFreshnessPanel.swift`
+"This draft says \(named). The show is \(show)."
+    `Domain/EventDateInDraft.swift`
 "This draft won't send: \(what.isEmpty ? "a blocking issue" : what)."
     `Domain/DraftCheck.swift`
 "This draft won't send: it doesn't open with a greeting. Edit it to add one."
@@ -2640,6 +2645,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "\(omniFocusChanged) follow-up\(omniFocusChanged == 1 ? "" : "s") updated"
     `Domain/ReconcileSummary.swift`
+"\(opening) to \(closing)"
+    `Domain/EventDateInDraft.swift`
 "\(org) already has a separate card for \(date), so this night was left alone"
     `App/ActionFeedback.swift`
 "\(org) already moved on, so there was nothing to undo"

@@ -763,6 +763,40 @@ describe("prep-eval fixtures", () => {
     expect(r.failures.join(" ")).toMatch(/says the show is something the listing does not/i);
   });
 
+  // #2864: the date rule, scored through a REAL fixture rather than through the engine directly, because
+  // the engine was reached by nothing when it was first wired: the mutation that broke its message
+  // SURVIVED the whole suite (L3, built is not wired and wired is not proven). Both cases are built by
+  // editing a recorded sample's own draft, never by a body shaped to make the rule fire.
+  it("flags a draft that names no date for the show", () => {
+    const fixture = fixtures.find((f) => f.name === "solo-artist-cabaret-not-an-organisation")!;
+    const r = evaluateFixture(fixture, withBody(fixture,
+      "Hi there,\n\nMy name is Dan Wright and I'm a professional arts photographer here in NYC. I saw "
+      + "your show at The Example Room. Recent work is at danwrightphotography.com. What are your "
+      + "photography plans for it?"));
+    expect(r.pass).toBe(false);
+    expect(r.failures.join(" ")).toMatch(/names no date for this show/i);
+  });
+
+  // The shape of the pitch that actually went out: a date, well formed, and not this show's.
+  it("flags a draft that names a date the show is not on", () => {
+    const fixture = fixtures.find((f) => f.name === "solo-artist-cabaret-not-an-organisation")!;
+    const r = evaluateFixture(fixture, withBody(fixture,
+      "Hi there,\n\nMy name is Dan Wright and I'm a professional arts photographer here in NYC. I saw "
+      + "your August 30 show at The Example Room. Recent work is at danwrightphotography.com. What are "
+      + "your photography plans for it?"));
+    expect(r.pass).toBe(false);
+    expect(r.failures.join(" ")).toMatch(/names a date that is not this show's/i);
+  });
+
+  // The accept side, and the control for the two above: every recorded sample already names its own
+  // show's date, so the rule cannot be passing them by not running.
+  it("every stored sample names its own show's date", () => {
+    for (const fixture of fixtures) {
+      const r = evaluateFixture(fixture, fixture.sampleCompliantOutput);
+      expect(r.failures.filter((f) => /#2864/.test(f)), fixture.name).toEqual([]);
+    }
+  });
+
   // #1889: the sixth rule from the 2026-07-31 review, and the only one that had no check behind it. The
   // regression is not an invented draft either: it is what two real drafts did that day, described the
   // whole offer and then asked for nothing, leaving the next step entirely with a stranger. Built by
