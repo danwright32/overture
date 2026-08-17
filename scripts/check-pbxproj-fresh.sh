@@ -16,6 +16,19 @@ set -euo pipefail
 # masquerade as staleness), so it emits its OWN "cannot verify" message and a distinct exit code (2),
 # never a false "stale".
 #
+# Freshness is judged against HEAD, never against the index (#2817). The bare `git diff` compares the
+# working tree to the INDEX, so a regeneration that was staged and not committed, which is exactly what
+# scripts/hooks/post-merge leaves behind, reported FRESH while the commit a merge would carry was stale.
+# That state was one of the BLOCK outcomes named above and was the one no test had ever built (L151).
+# It BLOCKS with its own message, because a staged regen is already in the index and only needs
+# committing, where an unstaged one still needs staging first.
+#
+# And it never destroys the caller's uncommitted work (#2355). It has to regenerate in order to compare,
+# which overwrites the working tree, so it snapshots mac/Overture.xcodeproj first and puts THAT back
+# afterwards. Restoring with `git checkout --` instead restores from the INDEX, which silently discarded a
+# deliberate uncommitted regeneration: measured 2026-08-09 during #1571, which left a new test file
+# outside the build for a full suite run that then passed green with those tests absent (L5).
+#
 # Usage: scripts/check-pbxproj-fresh.sh [repo-or-worktree-dir]   (defaults to this repo root)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -26,13 +39,14 @@ source "${SCRIPT_DIR}/ci-config.sh"
 PBXPROJ_REL="mac/Overture.xcodeproj/project.pbxproj"
 
 # Pure verdict over the facts the gate turns on: does the installed xcodegen match the pinned version,
-# (only when it does) is the committed .pbxproj byte-identical to a fresh regen, and (only when it is not)
-# did the working tree ALREADY hold that fresh regen before this check ran. Prints the operator message to
-# stderr and returns a distinct code per outcome, so a fixture can drive every branch without xcodegen:
-# 0 = fresh, 1 = BLOCK (stale commit, or a regen that was never committed), 2 = cannot verify (version
-# mismatch or xcodegen absent).
+# (only when it does) is the committed .pbxproj byte-identical to a fresh regen, (only when it is not)
+# did the working tree ALREADY hold that fresh regen before this check ran, and was that regen STAGED.
+# Prints the operator message to stderr and returns a distinct code per outcome, so a fixture can drive
+# every branch without xcodegen: 0 = fresh, 1 = BLOCK (stale commit, or a regen that was never
+# committed, staged or not), 2 = cannot verify (version mismatch or xcodegen absent).
 pbxproj_freshness_verdict() {
   local installed_version="$1" pinned_version="$2" regen_matches_committed="$3" worktree_held_regen="${4:-false}"
+  local regen_is_staged="${5:-false}"
   # Version gate first: under a different (or absent) xcodegen we cannot tell staleness from harmless
   # byte drift, so we refuse to judge and say so, rather than block on a false "stale".
   if [[ "${installed_version}" != "${pinned_version}" ]]; then
@@ -45,12 +59,21 @@ pbxproj_freshness_verdict() {
   fi
   # The committed file is behind mac/project.yml either way, so both cases BLOCK (exit 1). What differs is
   # what the operator should do next. When the working tree ALREADY held the fresh regen, they have done the
-  # regeneration; the problem is only that it is uncommitted, and this check restores the tree, so it has
-  # just reverted their regen. Telling them to "regenerate and commit" here is the loop #1480 hit: the regen
-  # they are sent to make is the one just thrown away. Name that instead of calling the file stale.
+  # regeneration and the problem is only that it is uncommitted, so telling them to "regenerate and commit"
+  # is the loop #1480 hit. Since #2355 the tree is put back from a snapshot rather than from git, so their
+  # regeneration is still in front of them and the instruction is simply to commit it.
   if [[ "${worktree_held_regen}" == "true" ]]; then
-    echo "check-pbxproj-fresh: BLOCK: ${PBXPROJ_REL} is regenerated but not committed. Your working tree already held the fresh 'xcodegen generate' output, so only the commit is behind mac/project.yml." >&2
-    echo "  This check restores the tree after regenerating, so it has just reverted your regen and nothing is staged. Redo it in one step: (cd mac && xcodegen generate) && git add ${PBXPROJ_REL} && git commit." >&2
+    # #2817: the STAGED case is its own message, not the one below. It is the state scripts/hooks/post-merge
+    # leaves behind, and telling that operator their regen was reverted and nothing is staged is false twice
+    # over: this check restores from the INDEX, so a staged regen survives it untouched, and sending them to
+    # redo a regeneration that is sitting in the index is the #1480 loop wearing a different hat (L11).
+    if [[ "${regen_is_staged}" == "true" ]]; then
+      echo "check-pbxproj-fresh: BLOCK: ${PBXPROJ_REL} is regenerated and STAGED but not committed. A merge carries the COMMIT, so HEAD is still behind mac/project.yml." >&2
+      echo "  Your staged regeneration is untouched. Commit it: git commit -m 'Regenerate project.pbxproj' -- ${PBXPROJ_REL}." >&2
+      return 1
+    fi
+    echo "check-pbxproj-fresh: BLOCK: ${PBXPROJ_REL} is regenerated but not committed. Your working tree already holds the fresh 'xcodegen generate' output, so only the commit is behind mac/project.yml." >&2
+    echo "  Your regeneration is untouched: this check puts the tree back exactly as it found it (#2355). Stage and commit it: git add ${PBXPROJ_REL} && git commit." >&2
     return 1
   fi
   echo "check-pbxproj-fresh: BLOCK: ${PBXPROJ_REL} is stale. A fresh 'xcodegen generate' changes it, so the committed project file does not match mac/project.yml." >&2
@@ -81,9 +104,39 @@ check_pbxproj_fresh() {
   if [[ -f "${dir}/${PBXPROJ_REL}" ]]; then
     before_hash="$(git -C "${dir}" hash-object "${PBXPROJ_REL}" 2>/dev/null || true)"
   fi
+  # Whether the operator has already STAGED a regeneration, read BEFORE anything regenerates so it is a
+  # fact about the tree as found. The index is the one place `git checkout --` restores FROM, so a staged
+  # regen is the one that survives this check, and the operator has to be told a different thing (#2817).
+  local regen_is_staged="false"
+  if ! git -C "${dir}" diff --cached --quiet HEAD -- "${PBXPROJ_REL}" 2>/dev/null; then
+    regen_is_staged="true"
+  fi
+  # #2355: a SNAPSHOT of the whole .xcodeproj, taken before anything regenerates, so the tree can be put
+  # back exactly as the caller left it. Restoring with `git checkout --` instead restores from the INDEX,
+  # which destroys any uncommitted change under this directory: measured 2026-08-09 during #1571, a
+  # regenerated project file was reverted that way and a new test file then sat outside the build for a
+  # full suite run that passed green with those tests absent. On a FRESH verdict nothing is even printed,
+  # so the loss left no trace anywhere (L5: never destroy good state).
+  #
+  # A snapshot that cannot be taken REFUSES rather than regenerating over work it could not put back. That
+  # is the same side the version gate falls on: a check that cannot verify must not pass, and here it must
+  # also not destroy.
+  local snapshot
+  snapshot="$(mktemp -d)"
+  if ! cp -R "${dir}/mac/Overture.xcodeproj" "${snapshot}/" 2>/dev/null; then
+    rm -rf "${snapshot}"
+    echo "check-pbxproj-fresh: cannot verify: could not snapshot ${dir}/mac/Overture.xcodeproj before regenerating." >&2
+    echo "  Refusing rather than regenerating over work that could not then be put back." >&2
+    return 2
+  fi
   ( cd "${dir}/mac" && xcodegen generate >/dev/null )
   local regen_matches="true" worktree_held_regen="false"
-  if ! git -C "${dir}" diff --quiet -- "${PBXPROJ_REL}"; then
+  # Against HEAD, never the bare `git diff` (#2817). The bare form compares the working tree to the INDEX,
+  # so a regeneration that was staged and not committed, which is exactly what scripts/hooks/post-merge
+  # leaves behind, read as FRESH and this gate returned 0 over a stale commit. What a merge carries is the
+  # COMMIT, so HEAD is the only thing worth comparing against. An unreadable HEAD (an unborn branch) makes
+  # this command fail, which lands on the BLOCK side: a gate that cannot verify must not pass.
+  if ! git -C "${dir}" diff --quiet HEAD -- "${PBXPROJ_REL}"; then
     # A fresh regen differs from the COMMITTED file, so HEAD is behind mac/project.yml. If the working-tree
     # file we hashed before already equalled that fresh regen, the operator had regenerated; only the commit
     # is behind, and the restore below is about to undo their regen.
@@ -94,10 +147,34 @@ check_pbxproj_fresh() {
       worktree_held_regen="true"
     fi
   fi
-  # Leave the tree as we found it: the regen above may have rewritten the committed file (and possibly
-  # the schemes alongside it). Restoring the whole .xcodeproj keeps a clean tree whether fresh or stale.
-  git -C "${dir}" checkout -- "mac/Overture.xcodeproj" 2>/dev/null || true
-  pbxproj_freshness_verdict "${installed}" "${XCODEGEN_PINNED_VERSION}" "${regen_matches}" "${worktree_held_regen}"
+  # Leave the tree as we found it: the regen above may have rewritten the committed file (and possibly the
+  # schemes alongside it). Restored from the SNAPSHOT rather than from git, so "as we found it" means the
+  # caller's own uncommitted work, not whatever the index happened to hold (#2355).
+  #
+  # Staged beside the target and swapped in by rename, never removed first. A `rm -rf` followed by a copy
+  # has a window in which the only surviving copy of the caller's work is a temp directory nobody knows to
+  # look in, and the copy is the step most likely to fail (L5: never destroy good state before its
+  # replacement is verified to exist). If the staging copy fails, nothing is destroyed at all and this
+  # says so rather than pressing on.
+  local staging="${dir}/mac/.Overture.xcodeproj.restore"
+  rm -rf "${staging}" 2>/dev/null
+  if ! cp -R "${snapshot}/Overture.xcodeproj" "${staging}" 2>/dev/null; then
+    rm -rf "${staging}" 2>/dev/null
+    echo "check-pbxproj-fresh: cannot verify: could not put ${dir}/mac/Overture.xcodeproj back as it was found." >&2
+    echo "  Nothing was removed. Your tree still holds the regenerated project file, and the copy taken before regenerating is at ${snapshot}." >&2
+    return 2
+  fi
+  # The swap is checked too, rather than assumed. A failed remove or rename leaves the caller's only
+  # copies in two temp directories and would otherwise be followed by a confident freshness verdict, so
+  # the copies are KEPT and named instead of cleaned up (L5, L11).
+  if rm -rf "${dir}/mac/Overture.xcodeproj" 2>/dev/null && mv "${staging}" "${dir}/mac/Overture.xcodeproj" 2>/dev/null; then
+    rm -rf "${snapshot}"
+  else
+    echo "check-pbxproj-fresh: cannot verify: could not put ${dir}/mac/Overture.xcodeproj back as it was found." >&2
+    echo "  Your work has NOT been thrown away: the copy taken before regenerating is at ${snapshot}, and a second copy is at ${staging}. Put either one back by hand." >&2
+    return 2
+  fi
+  pbxproj_freshness_verdict "${installed}" "${XCODEGEN_PINNED_VERSION}" "${regen_matches}" "${worktree_held_regen}" "${regen_is_staged}"
 }
 
 # Allow this file to be sourced (e.g. by a test fixture) without running the gate, so
