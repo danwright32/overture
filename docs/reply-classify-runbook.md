@@ -122,7 +122,16 @@ Rules:
   that left scout's counter stuck at 0 through a live run on 2026-07-16 (#1015), so the script owns it
   now. The only thing you must do for progress is keep this results file current after every single item.
 
-`fixtures/reply-classify/queue-v3.json` and `results-v3.json` are the authoritative spec for this shape.
+- **The TOP-LEVEL fields, which the enumeration above does not cover (#2873).** The object you write must
+  carry `version` (the integer `3`) and `results` (the array). Those two are required. Do NOT write
+  `generatedAt`: the runner script owns the run's metadata, and `model` is stamped by the script after the
+  run (`lib/models.sh record_model`), never by you. This is stated because it was not: the enumeration
+  listed only the per-result fields, `ReplyClassifyResults` required a `generatedAt` the runner does not
+  write, and every reply draft was discarded in silence for as long as that lasted. The app is tolerant of
+  it either way now, so a file that happens to carry it still decodes.
+
+`fixtures/reply-classify/queue-v3.json` and `results-v3.json` are the authoritative spec for this shape,
+and `results-v3-as-written.json` is that same shape as a real run actually writes it.
 
 ## After classify: what the app does with the results (shipped)
 

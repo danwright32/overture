@@ -1,0 +1,13 @@
+{
+  "model": "claude-sonnet-5",
+  "results": [
+    {
+      "naturalKey": "aurora-strings|2026-03-10|carnegie-hall",
+      "intent": "has_question",
+      "recipientId": "pres@presentingorg.example",
+      "draftSubject": "Re: Photographing Aurora Strings at Carnegie Hall",
+      "draftBody": "Thanks for coming back to me. My rate is $250 an hour plus tax with a one-hour minimum, and I deliver the edited gallery within two weeks. I'd be glad to cover your March 10 program at Carnegie Hall."
+    }
+  ],
+  "version": 3
+}

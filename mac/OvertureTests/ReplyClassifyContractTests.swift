@@ -136,6 +136,21 @@ struct ReplyClassifyContractTests {
         #expect(act?.draftBody?.isEmpty == false)
     }
 
+    // #2873: the shape the runner ACTUALLY writes, measured from the live handoff file on 2026-08-17
+    // rather than shaped to satisfy the reader (L48). Its top-level keys are exactly model, results and
+    // version: no generatedAt. Every other fixture in this directory carries that field, which is why
+    // this suite was green for the whole time the app could not decode a single real results file.
+    @Test func theFixtureMeasuredFromARealRunCarriesNoGeneratedAt() throws {
+        let raw = try JSONSerialization.jsonObject(with: try fixture("results-v3-as-written.json"))
+        let object = try #require(raw as? [String: Any])
+        #expect(Set(object.keys) == ["model", "results", "version"])
+
+        let results = try ReplyClassifyResultsDecoder.decode(try fixture("results-v3-as-written.json"))
+        #expect(results.generatedAt == nil)
+        #expect(results.version == 3)
+        #expect(results.results.first?.draftBody?.isEmpty == false)
+    }
+
     // The tolerant gate still accepts v1/v2 after the v3 bump (no draft fields decode to nil).
     @Test func olderResultsStillDecodeUnderTheV3Gate() throws {
         let v1 = try ReplyClassifyResultsDecoder.decode(try fixture("results-v1.json"))

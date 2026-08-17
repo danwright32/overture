@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1383 sentences**.
+Every sentence Overture can say to Dan: **1390 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -419,6 +419,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/Reachability.swift`
 "A reachability check on another \(organisation) show found this contact, so this show didn't need checking again."
     `Domain/Reachability.swift`
+"A reply drafting run finished, but Overture couldn't read what it wrote, so no draft was saved (\(reason)). The file it wrote is still on disk, as overture-reply-classify-results.json."
+    `Domain/ReplyClassifyRunSummary.swift`
 "A reply-classify run is already in progress. Wait for it to finish."
     `Integration/ReplyClassifyService.swift`
 "A run is already in progress. This will be available once it finishes."
@@ -2706,6 +2708,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OmniFocusSync.swift`
 "\(parts[0]), \(parts[1])"
     `Domain/EventLocationFill.swift`
+"\(path(context)) is not the expected type (\(type))"
+    `Domain/HandoffDecodeFailure.swift`
 "\(pending) calendars have new listings to read."
     `Domain/ScoutReadBudget.swift`
 "\(piece) is not an email address"
@@ -2834,6 +2838,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/PrepRunSummary.swift`
 "\(what) stopped before it finished. Overture has cleared it, so you can start again."
     `UI/RunProgressView.swift`
+"\(where_) could not be read"
+    `Domain/HandoffDecodeFailure.swift`
 "\(who) is already a recipient on \(org)."
     `App/ActionFeedback.swift`
 "\(worst.name) is flagged as a possible match on \(worst.count) shows, "
@@ -2847,6 +2853,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/VoiceGuidanceGuard.swift`
 "a past client"
     `UI/QueueView+Model.swift`
+"a required field is empty: \(path(context))"
+    `Domain/HandoffDecodeFailure.swift`
+"a required field is missing: \(path(context, adding: key))"
+    `Domain/HandoffDecodeFailure.swift`
 "a show that wrote back"
     `UI/QueueView+Model.swift`
 "a show you booked in Overture"
@@ -2947,6 +2957,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ProposedConversation.swift`
 "it can't tell whether anyone answered them. Try again shortly."
     `Domain/ReconcileSummary.swift`
+"it is not valid JSON"
+    `Domain/HandoffDecodeFailure.swift`
+"it is version \(v), which this build of Overture does not read"
+    `Domain/ReplyClassify.swift`
 "just now"
     `Domain/PrepStatus.swift`
 "last prep \(Self.relative(from: last, to: now))"
