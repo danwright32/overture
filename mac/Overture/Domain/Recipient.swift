@@ -1014,6 +1014,21 @@ final class Recipient {
         replyHandledAt = now
     }
 
+    // #2865: Dan answered this conversation in his mail client, and detection read it off the thread.
+    //
+    // The answered fact ONLY. `sentReplyBody` and `replySentAt` mean "these are the words Dan committed
+    // through Overture" and feed the voice pair (#463); a message sent from a mail client supplies
+    // neither, so claiming them would file words Overture never saw and teach the voice learner from a
+    // record it cannot read. Exactly the split `markReplyAnswered` already makes for a peer.
+    // Deliberately NO new stored field marking where the answer came from. That would be a schema
+    // addition to the live model, which this repo rehearses against a clone of the real store before
+    // shipping (#2284), and it buys nothing today: an answered row carrying no `sentReplyBody` already
+    // exists and is already handled, because that is exactly what a PEER on a joint reply looks like
+    // after `markReplyAnswered`. The surfaces treat this identically.
+    func recordAnsweredElsewhere(at answeredAt: Date) {
+        markReplyAnswered(now: answeredAt)
+    }
+
     // #2191: the GROUP half of an answer, for a peer that was on the same incoming reply but sent nothing
     // itself. Only the answered stamp, never the sent body or send time, which belong to whoever sent them.
     // Never moves backwards, so a later answer on the thread cannot be undone by an earlier one arriving
