@@ -33,13 +33,35 @@ struct DurationHistoryNotErasedTests {
         #expect(try String(contentsOf: url, encoding: .utf8) == "{ this is not json")
     }
 
+    // The run here has to be one the store would ACTUALLY record, or this asserts nothing: the first
+    // version used lookups 3 / streams 1, which `isComparable` refuses outright, so the file stayed
+    // untouched whatever the refusal did and the test survived deleting the code it exists to guard
+    // (L159, seen: the mutation SURVIVED). The control below builds the positive case from the same run.
     @Test func aProbeHistoryThatCannotBeReadIsLeftExactlyAsItIs() throws {
         let url = try temporaryFile("{ this is not json")
         defer { try? FileManager.default.removeItem(at: url) }
 
-        _ = ProbeDurationHistoryStore.record(.init(lookups: 3, streams: 1, seconds: 60), at: url)
+        _ = ProbeDurationHistoryStore.record(recordableRun, at: url)
 
         #expect(try String(contentsOf: url, encoding: .utf8) == "{ this is not json")
+    }
+
+    // The control for the test above: the same run, against a file that is simply not there, DOES get
+    // written. Without this the refusal could be a store that never writes at all.
+    @Test func anAbsentProbeHistoryIsStillWrittenFromTheSameRun() throws {
+        let url = absentFile()
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        _ = ProbeDurationHistoryStore.record(recordableRun, at: url)
+
+        #expect(FileManager.default.fileExists(atPath: url.path))
+        #expect(ProbeDurationHistoryStore.load(from: url) != ProbeDurationHistory())
+    }
+
+    // A run the store will genuinely keep: `isComparable` needs at least two lookups, at least two
+    // streams, and streams no greater than lookups.
+    private var recordableRun: ProbeDurationHistory.Run {
+        .init(lookups: 4, streams: 2, seconds: 60)
     }
 
     // The other half, and the reason the refusal above is not simply "never write": an ABSENT file is a

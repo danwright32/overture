@@ -217,20 +217,15 @@ enum AppNotices {
     // at, which is the file itself and the run log beside it.
     static func couldNotRead(_ failures: [HandoffReadFailures.Failure]) -> AppNotice? {
         guard let first = failures.first else { return nil }
-        let text: String
-        if failures.count == 1 {
-            text = "Overture couldn't read \(first.file), so whatever it held has not been used."
-        } else {
-            text = "Overture couldn't read \(failures.count) of the files it works from, so whatever "
-                + "they held has not been used."
-        }
+        // One literal per sentence, never a concatenation: the copy inventory lists each literal on its
+        // own, so a sentence built from two pieces reaches the cold read as two fragments and cannot be
+        // read as the thing Dan sees.
+        let text = failures.count == 1
+            ? "Overture couldn't read \(first.file), so whatever it held has not been used."
+            : "Overture couldn't read \(failures.count) of the files it works from, so whatever they held has not been used."
         let detail = failures.map { "\($0.file): \($0.reason)" }.joined(separator: "\n")
-        return AppNotice(
-            text: text,
-            tone: .warning,
-            help: "These are files written by something outside the app, a detached run or an install "
-                + "script, and they're still on disk in Overture's own folder. Nothing here can repair "
-                + "one. A line clears as soon as its file reads cleanly again.\n\n\(detail)")
+        let explanation = "These are files written by something outside the app, a detached run or an install script, and they're still on disk in Overture's own folder. Nothing here can repair one. A line clears as soon as its file reads cleanly again."
+        return AppNotice(text: text, tone: .warning, help: "\(explanation)\n\n\(detail)")
     }
 
     // `shootHistory` is OPTIONAL, and nil means nothing has looked yet rather than a clean bill of
