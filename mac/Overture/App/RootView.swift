@@ -1797,7 +1797,19 @@ struct RootView: View {
     // Ingest classifications a prior reply-classify run wrote (suggests states, auto). No-op if the
     // results file isn't there yet.
     private func ingestReplyClassifications() {
-        guard let outcome = try? ReplyClassifyImporter.ingestFile(at: ReplyClassifyImporter.defaultURL, into: context) else { return }
+        // #2873: this used to be `guard let outcome = try? ...ingestFile(...) else { return }`, which made
+        // a results file the decoder refused indistinguishable from no file at all. Every AI reply draft
+        // was dropped in silence, for months, while the reply sheet showed a spinner over the empty box.
+        let outcome: ReplyClassifyImporter.Outcome
+        switch ReplyClassifyImporter.read(at: ReplyClassifyImporter.defaultURL, into: context) {
+        case .nothingToRead:
+            return
+        case .unreadable(let reason):
+            status.set(ReplyClassifyRunSummary.unreadableMessage(reason: reason), priority: .warning)
+            return
+        case .ingested(let read):
+            outcome = read
+        }
         // #499: this run's intent hints/drafts were written in memory but never persisted. The save
         // failure is the actionable one, so it wins the single status line.
         //

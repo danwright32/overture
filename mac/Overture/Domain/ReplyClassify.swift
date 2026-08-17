@@ -53,7 +53,18 @@ enum ReplyClassifyQueueBuilder {
 // Written by the classify workflow, read by the app.
 struct ReplyClassifyResults: Codable, Equatable, Sendable {
     var version: Int
-    var generatedAt: String
+    // #2873: OPTIONAL, and this is the whole of that defect. Declared non-optional with no default, the
+    // synthesized decoder REQUIRED the key, and the live runner does not write it: measured 2026-08-17,
+    // a real results file carries exactly ["model", "results", "version"]. So decoding threw
+    // keyNotFound("generatedAt") on every real file, and every AI reply draft Overture produced was
+    // discarded. The runbook never required the field (a rule that lives only in a prompt is a hope,
+    // L27) and all six committed fixtures carried it, so the contract guard was green throughout.
+    //
+    // It is metadata, not Dan's work, and it has no reader anywhere: nothing in the app asks a results
+    // file when it was generated (the shortfall check reads the QUEUE's stamp, not this one). A gap in
+    // the record is never a reason to drop his draft, which is exactly the principle `model` below
+    // already states and applies.
+    var generatedAt: String? = nil
     var results: [ReplyClassifyResult]
     // #846: which model wrote these reply drafts. Stamped by the RUNNER SCRIPT after the run
     // (lib/models.sh record_model), never by the model itself: asking a model to write down which model
@@ -78,8 +89,18 @@ struct ReplyClassifyResult: Codable, Equatable, Sendable {
     var draftBody: String?     // v3 (#420): the AI-drafted reply body for this recipient (optional)
 }
 
-enum ReplyClassifyResultsError: Error, Equatable {
+enum ReplyClassifyResultsError: Error, Equatable, CustomStringConvertible {
     case unsupportedVersion(Int)
+
+    // #2873: the refusal states its own reason, in words, because HandoffDecodeFailure hands whatever it
+    // cannot recognise straight to Dan. Left to the default, a version refusal reads as
+    // "unsupportedVersion(99)" on the surface that has to explain why his draft was not saved.
+    var description: String {
+        switch self {
+        case .unsupportedVersion(let v):
+            return "it is version \(v), which this build of Overture does not read"
+        }
+    }
 }
 
 enum ReplyClassifyResultsDecoder {

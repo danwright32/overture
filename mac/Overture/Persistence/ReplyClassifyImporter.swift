@@ -97,5 +97,33 @@ enum ReplyClassifyImporter {
         return outcome
     }
 
+    // #2873: what a READ of the results file produced. Three outcomes, because an absent file and an
+    // unreadable one are different states (L11, L105) and used to be indistinguishable: the one call site
+    // read `guard let outcome = try? ingestFile(...) else { return }`, so a file the decoder refused was
+    // reported as nothing to do, and every AI reply draft Overture wrote was discarded in silence.
+    enum FileRead: Equatable, Sendable {
+        case nothingToRead                 // no file on disk: the ordinary idle state, and it says nothing
+        case ingested(Outcome)
+        case unreadable(reason: String)    // the file IS there and the decoder refused it
+    }
+
+    // The only way the app reads this file. `ingestFile` stays as the throwing core (the tests that drive
+    // the shortfall check use it directly), but nothing in the app may call it, because catching its throw
+    // is the whole point of this defect.
+    @MainActor
+    static func read(at url: URL, into context: ModelContext,
+                     queueURL: URL = ReplyClassifyQueueBuilder.defaultURL) -> FileRead {
+        guard FileManager.default.fileExists(atPath: url.path) else { return .nothingToRead }
+        do {
+            return .ingested(try ingestFile(at: url, into: context, queueURL: queueURL))
+        } catch {
+            // Gone between the check and the read: nothing was lost, so there is nothing to report.
+            // Resolved in the quiet direction on purpose, since the alternative is a warning nobody
+            // can act on for a file that no longer exists.
+            guard FileManager.default.fileExists(atPath: url.path) else { return .nothingToRead }
+            return .unreadable(reason: HandoffDecodeFailure.describe(error))
+        }
+    }
+
     static var defaultURL: URL { ReplyClassifyResultsDecoder.defaultURL }
 }

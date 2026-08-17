@@ -24,3 +24,13 @@ read as version 1 (#2340).
 `recipientId`, the opaque per-recipient token the workflow echoes back so a reply attaches to the
 right recipient on a multi-recipient show. It is additive, so the tolerant gate (1 through 2) decodes
 both; in the v1 files `recipientId` is simply absent (decodes to nil).
+
+`results-as-written-v3.json` is version 3 in the shape the runner ACTUALLY writes, and it exists because
+every other file here was shaped to satisfy the reader rather than measured from a real run (L48, L52).
+Its top-level keys are exactly `model`, `results` and `version`, read off the live
+`overture-reply-classify-results.json` on 2026-08-17: no `generatedAt`. `ReplyClassifyResults` declared
+that field non-optional, so the synthesized decoder required it, `ReplyClassifyResultsDecoder.decode`
+threw on every real file, the throw was discarded by a `try?`, and every AI reply draft Overture produced
+was dropped in silence (#2873). All six files here carried the field, so this suite stayed green
+throughout. Its CONTENT is invented, like every fixture in this repo: only the key shape is measured, and
+no real contact ever goes in a fixture.
