@@ -61,7 +61,7 @@ struct ReplyProposalSweepTests {
         let ctx = ModelContext(try container())
         let p = show(ctx)
         let r = formPitch(ctx, on: p)
-        let found = [message("m1", from: "Caseen Gaines <caseen.gaines@gmail.com>", subject: "Re: the show")]
+        let found = [message("m1", from: "Caseen Gaines <caseen.gaines@example.com>", subject: "Re: the show")]
 
         let outcome = await ReplyProposalSweep(fromEmail: me)
             .run(in: ctx, now: now, search: { .searched(candidates: found, searchedThrough: now,
@@ -131,7 +131,7 @@ struct ReplyProposalSweepTests {
         let ctx = ModelContext(try container())
         let p = show(ctx)
         formPitch(ctx, on: p)
-        let found = [message("m1", from: "Caseen Gaines <caseen.gaines@gmail.com>", subject: "Re: the show")]
+        let found = [message("m1", from: "Caseen Gaines <caseen.gaines@example.com>", subject: "Re: the show")]
 
         let outcome = await ReplyProposalSweep(fromEmail: me)
             .run(in: ctx, now: now, save: { throw Nope() },
@@ -163,7 +163,7 @@ struct ReplyProposalSweepTests {
         let p = show(ctx)
         let r = formPitch(ctx, on: p)
         let sweep = ReplyProposalSweep(fromEmail: me)
-        let found = [message("m1", from: "Caseen Gaines <caseen.gaines@gmail.com>", subject: "Re: the show")]
+        let found = [message("m1", from: "Caseen Gaines <caseen.gaines@example.com>", subject: "Re: the show")]
         _ = await sweep.run(in: ctx, now: now,
                             search: { .searched(candidates: found, searchedThrough: now, saveFailed: false) })
 
@@ -183,7 +183,7 @@ struct ReplyProposalSweepTests {
         let p = show(ctx)
         let r = formPitch(ctx, on: p)
         let sweep = ReplyProposalSweep(fromEmail: me)
-        let found = [message("m1", from: "Caseen Gaines <caseen.gaines@gmail.com>", subject: "Re: the show")]
+        let found = [message("m1", from: "Caseen Gaines <caseen.gaines@example.com>", subject: "Re: the show")]
         _ = await sweep.run(in: ctx, now: now,
                             search: { .searched(candidates: found, searchedThrough: now, saveFailed: false) })
         ProposedConversation.decline(on: r)

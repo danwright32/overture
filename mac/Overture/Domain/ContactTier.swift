@@ -2,10 +2,10 @@ import Foundation
 
 // #2622: WHO the check found, which until now every found email scored the same.
 //
-// The card for Pier Lamia Porter at The Green Room 42 read "Unverified email found" over
-// jasonwetzelmusic@gmail.com. Jason Wetzel is her musical director. An address for the person whose show
-// it is, an address for somebody performing on it, and an address for that person's manager are three
-// different findings, and Overture recorded one.
+// The mechanism, measured on a live card: a show billed to one performer read "Unverified email found"
+// over an address belonging to that performer's musical director, and nothing on the card said so. An
+// address for the person whose show it is, an address for somebody performing on it, and an address for
+// that person's manager are three different findings, and Overture recorded one.
 //
 // Dan's definition, 2026-08-13, chosen over billing order deliberately, because the billed name and the
 // person who books the photographer are routinely different people and it is the second one the score

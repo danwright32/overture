@@ -214,8 +214,9 @@ struct ReplyCandidateMatchTests {
         #expect(top.message.messageId == "m")
     }
 
-    // The live case this whole milestone came from: the form is on caseengaines.com and the answer
-    // arrived from a gmail.com address, so the DOMAIN says nothing and only the NAME identifies them.
+    // The live case this whole milestone came from: the form is on a personal-name domain and the answer
+    // arrived from an ordinary mail provider's address on an unrelated domain, so the DOMAIN says nothing
+    // and only the NAME identifies them. The address here is invented; the shape it stands for is not.
     @Test("the person answers from an unrelated mailbox and is still recognised by name")
     func theNameCarriesItWhenTheDomainSaysNothing() throws {
         let ctx = ModelContext(try container())
@@ -223,7 +224,7 @@ struct ReplyCandidateMatchTests {
                      venue: "54 Below")
         let r = pitch(ctx, on: p, contactName: "Caseen Gaines",
                       route: "https://www.caseengaines.com/contact")
-        let m = message("m", from: "Caseen Gaines <caseen.gaines@gmail.com>",
+        let m = message("m", from: "Caseen Gaines <caseen.gaines@example.com>",
                         subject: "Re: Photography for the anniversary celebration")
 
         let verdict = ReplyCandidateMatch.judge([m], for: r, on: p, selfEmail: me)
@@ -382,7 +383,7 @@ struct ReplyCandidateMatchTests {
                     reply: String)] = [
             ("54 Sings Shuffle Along, Or... A 10th Anniversary Celebration", "54 Below", nil,
              "Caseen Gaines", "https://www.caseengaines.com/contact",
-             "Caseen Gaines <caseen.gaines@gmail.com>"),
+             "Caseen Gaines <caseen.gaines@example.com>"),
             ("Song & Word", "The Green Room 42", "Vivace Arts Collective", "Vivace Arts Collective",
              "https://www.instagram.com/vivaceartscollective/",
              "Vivace Arts Collective <hello@vivaceartscollective.org>"),

@@ -25,7 +25,7 @@ import SwiftData
 struct AttachedConversationContinuationTests {
     private let now = Date(timeIntervalSince1970: 1_786_000_000)
     private let me = "dan@danwrightphotography.com"
-    private let them = "priya.raman@gmail.com"
+    private let them = "priya.raman@example.com"
 
     private func container() throws -> ModelContainer {
         try ModelContainer(for: Schema([Prospect.self, Recipient.self, Inquiry.self]),

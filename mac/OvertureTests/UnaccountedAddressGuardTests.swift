@@ -40,12 +40,12 @@ struct UnaccountedAddressGuardTests {
 
     // The measured show inbox: a local part that is the SHOW's name rather than a person's.
     @Test func anaddressInTheShowsOwnNameIsAccountedFor() {
-        #expect(!fires(email: "BwaySessions@gmail.com", name: "Ben Cameron",
+        #expect(!fires(email: "BwaySessions@example.com", name: "Ben Cameron",
                        groupName: "Broadway Sessions"))
     }
 
     @Test func anaddressInThePresentingOrganisationsNameIsAccountedFor() {
-        #expect(!fires(email: "vivace@gmail.com", name: "Mara Lin", groupName: "Song & Word",
+        #expect(!fires(email: "vivace@example.com", name: "Mara Lin", groupName: "Song & Word",
                        presenter: "Vivace Arts Collective"))
     }
 

@@ -36,11 +36,11 @@ struct ReplyDetectionTests {
     // #481: a token merely appearing inside a real local part (not as the whole address or a
     // bounded prefix/suffix) must not be treated as automated.
     @Test func aLocalPartThatMerelyContainsATokenIsNotAutomated() {
-        #expect(ReplyDetection.isAutomated("eleanoreply@gmail.com") == false)
-        #expect(ReplyDetection.isAutomated("bouncebackband@gmail.com") == false)
+        #expect(ReplyDetection.isAutomated("eleanoreply@example.com") == false)
+        #expect(ReplyDetection.isAutomated("bouncebackband@example.com") == false)
         #expect(ReplyDetection.isAutomated("postmasterclass@school.com") == false)
-        #expect(ReplyDetection.hasReply(fromAddresses: ["Eleanor <eleanoreply@gmail.com>"], selfEmail: me) == true)
-        #expect(ReplyDetection.hasReply(fromAddresses: ["Bounce Back Band <bouncebackband@gmail.com>"], selfEmail: me) == true)
+        #expect(ReplyDetection.hasReply(fromAddresses: ["Eleanor <eleanoreply@example.com>"], selfEmail: me) == true)
+        #expect(ReplyDetection.hasReply(fromAddresses: ["Bounce Back Band <bouncebackband@example.com>"], selfEmail: me) == true)
     }
 
     // #481: a token set off by a separator (a real automated address's usual shape) is still

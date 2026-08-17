@@ -303,8 +303,8 @@ struct DebugStagingTests {
     @Test func resolvesConfiguredSelfSendAddressOverDefault() {
         #expect(DebugStaging.resolvedSelfSendAddress(override: nil) == DebugStaging.defaultSelfSendAddress)
         #expect(DebugStaging.resolvedSelfSendAddress(override: "   ") == DebugStaging.defaultSelfSendAddress)
-        #expect(DebugStaging.resolvedSelfSendAddress(override: "daniel.wright33@icloud.com")
-                == "daniel.wright33@icloud.com")
+        #expect(DebugStaging.resolvedSelfSendAddress(override: "alternate.inbox@example.com")
+                == "alternate.inbox@example.com")
     }
 
     // #425: a self-addressed lead with TWO recipients (act + presenter), so the per-recipient send
