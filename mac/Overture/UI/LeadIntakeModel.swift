@@ -83,8 +83,11 @@ final class LeadIntakeModel {
              try ScoutExtractService.startExtract(items: items, now: Date())
          },
          readResults: @escaping (String) -> ScoutExtractResults? = { _ in
-             guard let data = try? Data(contentsOf: ScoutExtractResultsDecoder.defaultURL) else { return nil }
-             return try? ScoutExtractResultsDecoder.decode(data)
+             // #2879: read while the extract run is still writing it, so this uses the exemption that
+             // does not report. The same file's ingest DOES report.
+             return HandoffFile.read(at: ScoutExtractResultsDecoder.defaultURL,
+                                     recorder: .readWhileBeingWritten,
+                                     decode: ScoutExtractResultsDecoder.decode).value
          },
          isRunAlive: @escaping () -> Bool = { ScoutExtractService.isRunning(now: Date()) }) {
         self.defaults = defaults

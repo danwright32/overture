@@ -81,14 +81,26 @@ enum ShootHistory {
     static func loadWithHealth(from url: URL = defaultURL, now: Date,
                                staleAfter: TimeInterval = defaultStaleAfter)
         -> (shoots: [ShootRecord], health: Health) {
-        guard let data = try? Data(contentsOf: url) else {
+        // #2879: through the shared reader, which already separates absent from unreadable, exactly
+        // the distinction Health draws. It uses the exemption that does not report, because this file's
+        // read failure has its OWN masthead line (AppNotices.shootHistoryWarning), which says more than
+        // a generic one could and would otherwise be joined by a second wording of the same fault.
+        let file: ShootHistoryFile
+        let read = HandoffFile.read(at: url, recorder: .reportedByItsOwnSurface) {
+            try JSONDecoder().decode(ShootHistoryFile.self, from: $0)
+        }
+        switch read {
+        case .absent:
             return ([], health(fileExists: false, decodeFailed: false, generatedAt: nil,
                                now: now, staleAfter: staleAfter))
-        }
-        guard let file = try? JSONDecoder().decode(ShootHistoryFile.self, from: data),
-              file.version == currentVersion else {
+        case .unreadable:
             return ([], health(fileExists: true, decodeFailed: true, generatedAt: nil,
                                now: now, staleAfter: staleAfter))
+        case .read(let decoded) where decoded.version != currentVersion:
+            return ([], health(fileExists: true, decodeFailed: true, generatedAt: nil,
+                               now: now, staleAfter: staleAfter))
+        case .read(let decoded):
+            file = decoded
         }
         let stamp = parseTimestamp(file.generatedAt)
         let verdict = health(fileExists: true, decodeFailed: false, generatedAt: stamp,

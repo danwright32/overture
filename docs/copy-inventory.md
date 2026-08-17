@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1390 sentences**.
+Every sentence Overture can say to Dan: **1395 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1385,6 +1385,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/GmailReplySearch.swift`
 "Overture couldn't read Gmail while looking for replies to the pitches you sent through a form "
     `Integration/GmailReplySearch.swift`
+"Overture couldn't read \(failures.count) of the files it works from, so whatever they held has not been used."
+    `Domain/AppNotice.swift`
+"Overture couldn't read \(first.file), so whatever it held has not been used."
+    `Domain/AppNotice.swift`
 "Overture couldn't read this message, which usually means it's an image or an attachment. Open it in Gmail."
     `Domain/ReplyPanel.swift`
 "Overture couldn't save the link. Try again; if this keeps happening, something's wrong with the "
@@ -2075,6 +2079,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/OrganisationsView.swift`
 "There's no linked conversation on this pitch to unlink."
     `Domain/DetachConversation.swift`
+"These are files written by something outside the app, a detached run or an install script, and they're still on disk in Overture's own folder. Nothing here can repair one. A line clears as soon as its file reads cleanly again."
+    `Domain/AppNotice.swift`
 "These contacts have different drafts, so one shared email would send one of them to everyone. Send them separately, or make the drafts match"
     `App/ActionFeedback.swift`
 "These leads are no longer in your queue."
@@ -2419,6 +2425,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/VenueDisplay.swift`
 "\($0.count) \($0.route)"
     `Domain/WebCallRefusals.swift`
+"\($0.file): \($0.reason)"
+    `Domain/AppNotice.swift`
 "\($0.orgName): \($0.state.failureMessage ?? "couldn't be checked")"
     `Integration/ScoutService.swift`
 "\(-days) days ago"
@@ -2531,6 +2539,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreRelocation.swift`
 "\(event.title) \(presenter)"
     `Domain/EventClassifier.swift`
+"\(explanation)\n\n\(detail)"
+    `Domain/AppNotice.swift`
 "\(f.count) sources couldn't be checked. Open Sources to fix or confirm them."
     `Domain/ScoutWarnings.swift`
 "\(failed.count) sources couldn't be checked.\n\n"

@@ -83,9 +83,13 @@ enum BuildFreshness {
     // deliberate and is the same answer for the same reason: a record that cannot be decoded says nothing
     // about what is installed, so treating it as up to date would be inventing an answer.
     private static func decode<T: Decodable>(_ type: T.Type, at url: URL) -> T? {
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return try? decoder.decode(type, from: data)
+        // #2879: through the shared reader, so a record that is THERE and cannot be decoded is recorded
+        // as such rather than being indistinguishable from one that was never written. The ANSWER is
+        // unchanged, deliberately: nil still means "cannot tell", which is the honest reading either way.
+        return HandoffFile.read(at: url) { data in
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            return try decoder.decode(type, from: data)
+        }.value
     }
 }

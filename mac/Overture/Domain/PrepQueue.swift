@@ -427,8 +427,10 @@ extension PrepQueue {
     // Decoded through the versioned type it already is, so a queue that gains a field is read here for
     // free, and a queue whose shape this build cannot read names nobody rather than half of them.
     static func keys(inQueueAt url: URL) -> Set<String> {
-        guard let data = try? Data(contentsOf: url),
-              let queue = try? JSONDecoder().decode(PrepQueue.self, from: data) else { return [] }
+        // #2879: still names nobody when it cannot read the queue, which is the fail-safe direction here,
+        // but the fact that it could not read it is now recorded rather than lost.
+        guard let queue = HandoffFile.read(at: url, decode: { try JSONDecoder().decode(PrepQueue.self, from: $0) }).value
+        else { return [] }
         return Set(queue.items.map(\.naturalKey))
     }
 }

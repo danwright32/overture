@@ -43,7 +43,10 @@ struct ReachabilityProbeMarker: Codable, Equatable, Sendable {
     // nil when absent (no probe was launched) or unreadable, so the completion path falls back to the
     // normal prep ingest rather than guessing.
     static func read(from url: URL) throws -> ReachabilityProbeMarker? {
-        guard let data = try? Data(contentsOf: url) else { return nil }
+        // #2879: absent still means no probe was launched. A marker that is THERE and unopenable is
+        // recorded rather than passing for one, because the settle path decides what a paid check
+        // produced from this file's presence.
+        guard let data = HandoffFile.data(at: url).value else { return nil }
         return try JSONDecoder().decode(ReachabilityProbeMarker.self, from: data)
     }
 

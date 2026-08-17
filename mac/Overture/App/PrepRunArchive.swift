@@ -193,8 +193,12 @@ enum PrepRunArchive {
     private struct RunHeader: Decodable { let generatedAt: String? }
 
     private static func generatedAt(of url: URL) -> Date? {
-        guard let data = try? Data(contentsOf: url),
-              let header = try? JSONDecoder().decode(RunHeader.self, from: data),
+        // #2879: exempt from the register on purpose. This decodes a deliberately PARTIAL view of two
+        // versioned contracts to name an archive folder, and a shape it cannot read is a naming
+        // inconvenience, not lost work: the archive is copied either way. Recording it would put a
+        // warning on the masthead about a file the app has already safely kept.
+        guard let header = HandoffFile.read(at: url, recorder: .reportedByItsOwnSurface,
+                                            decode: { try JSONDecoder().decode(RunHeader.self, from: $0) }).value,
               let text = header.generatedAt else { return nil }
         // The app writes it with a plain ISO8601 formatter; the committed fixtures (and anything written
         // by a JavaScript `toISOString`) carry milliseconds, which the plain parser refuses outright.

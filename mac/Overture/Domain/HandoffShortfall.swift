@@ -65,8 +65,12 @@ enum HandoffShortfall {
     ) -> [Key] {
         // Best-effort on purpose: an unreadable queue means we have no record of what was asked, which is
         // a gap in the app's own bookkeeping and never a reason to invent a failure. Report nothing.
-        guard let queueData = try? Data(contentsOf: queueURL),
-              let queue = try? JSONDecoder().decode(queueType, from: queueData) else { return [] }
+        // #2879: unchanged behaviour (no record of what was asked is never a reason to invent a
+        // failure), but the read is recorded, so a queue file this build cannot decode is no longer
+        // indistinguishable from one that was never written.
+        guard let queue = HandoffFile.read(at: queueURL,
+                                           decode: { try JSONDecoder().decode(queueType, from: $0) }).value
+        else { return [] }
         return missingKeys(
             queuedKeys: queuedKeys(queue),
             answeredKeys: answeredKeys,

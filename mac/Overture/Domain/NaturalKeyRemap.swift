@@ -64,10 +64,12 @@ struct NaturalKeyRemap: Codable, Equatable, Sendable {
     // this, so a first launch, or a file a future version wrote differently, has to read as "no renames"
     // rather than as a failure that stops a settle from happening at all.
     static func read(from url: URL = defaultURL) throws -> NaturalKeyRemap {
-        guard let data = try? Data(contentsOf: url),
-              let decoded = try? JSONDecoder().decode(NaturalKeyRemap.self, from: data)
-        else { return NaturalKeyRemap(entries: []) }
-        return decoded
+        // #2879: the ANSWER is unchanged, deliberately (no renames, so a settle still happens), but the
+        // read no longer passes silently: an unreadable rename map means shows keyed under an old name
+        // will not be found, which is worth knowing about.
+        return HandoffFile.read(at: url) {
+            try JSONDecoder().decode(NaturalKeyRemap.self, from: $0)
+        }.value ?? NaturalKeyRemap(entries: [])
     }
 
     /// Adds renames to whatever is already recorded, dropping any that can no longer matter.

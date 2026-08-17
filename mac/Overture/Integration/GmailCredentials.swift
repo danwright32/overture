@@ -31,13 +31,14 @@ enum GmailCredentials {
     static var tokenURL: URL { supportDir.appendingPathComponent("gmail-tokens.json") }
 
     static func loadClient(from url: URL = clientConfigURL) -> GmailClient? {
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        return try? JSONDecoder().decode(GmailClient.self, from: data)
+        // #2879: an unreadable credentials file is not an absent one. Read as absent it says Gmail was
+        // never connected, which is a state Dan can act on; what it really means is that the connection
+        // he made is unusable, and nothing said so.
+        return HandoffFile.read(at: url) { try JSONDecoder().decode(GmailClient.self, from: $0) }.value
     }
 
     static func loadTokens(from url: URL = tokenURL) -> StoredTokens? {
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        return try? JSONDecoder().decode(StoredTokens.self, from: data)
+        return HandoffFile.read(at: url) { try JSONDecoder().decode(StoredTokens.self, from: $0) }.value
     }
 
     // Goes through SecureFileWrite (#524) so the file is never briefly world-default-readable the

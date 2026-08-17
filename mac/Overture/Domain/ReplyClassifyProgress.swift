@@ -30,8 +30,11 @@ enum ReplyClassifyProgressDecoder {
     // writing it at the exact moment this is called) reads as "nothing to show", never a thrown error
     // or a crash.
     static func loadCurrent(from url: URL = defaultURL) -> ReplyClassifyProgress? {
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        return try? decode(data)
+        // #2879: through the shared reader, so this read is an explicit decision rather than a `try?`
+        // that says nothing. It uses the exemption that does NOT report: the run rewrites this file
+        // after every item and this is polled for a live label, so meeting it half-written is the
+        // ordinary case.
+        HandoffFile.read(at: url, recorder: .readWhileBeingWritten, decode: decode).value
     }
 
     // A short "N of M" label for the reply drafter; nil when there's nothing meaningful yet. `completed`

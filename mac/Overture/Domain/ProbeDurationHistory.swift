@@ -119,19 +119,24 @@ enum ProbeDurationHistoryStore {
     }
 
     static func load(from url: URL = defaultURL) -> ProbeDurationHistory {
-        guard let data = try? Data(contentsOf: url),
-              let history = try? JSONDecoder().decode(ProbeDurationHistory.self, from: data) else {
-            return ProbeDurationHistory()
-        }
-        return history
+        read(from: url).value ?? ProbeDurationHistory()
+    }
+
+    // #2879: as RunDurationHistoryStore. `load` is right to flatten both empty answers for a reader; the
+    // writer must not, or it erases the file it could not read.
+    private static func read(from url: URL) -> HandoffRead<ProbeDurationHistory> {
+        HandoffFile.read(at: url) { try JSONDecoder().decode(ProbeDurationHistory.self, from: $0) }
     }
 
     // Takes an optional so the one call site can hand over whatever the finished run produced without a
     // decision of its own: nothing to record is a no-op here, and never a zero written into the file.
     @discardableResult
     static func record(_ run: ProbeDurationHistory.Run?, at url: URL = defaultURL) -> ProbeDurationHistory {
-        let existing = load(from: url)
+        let read = read(from: url)
+        let existing = read.value ?? ProbeDurationHistory()
         guard let run else { return existing }
+        // #2879: never write over a file that could not be read (L105). See RunDurationHistoryStore.
+        if case .unreadable = read { return ProbeDurationHistory() }
         let updated = existing.recording(lookups: run.lookups, streams: run.streams, seconds: run.seconds)
         guard updated != existing, let data = try? JSONEncoder().encode(updated) else { return existing }
         try? data.write(to: url, options: .atomic)
@@ -170,8 +175,16 @@ struct RecordedRunCost: Equatable, Sendable {
     // comparison or an average. It arrives as a number or it does not arrive, and the caller falls back to
     // the hand-set constant rather than to whichever side a failed parse happens to land on.
     static func complete(from data: Data) -> RecordedRunCost? {
-        guard let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
-              let cost = envelope.runCost,
+        guard let envelope = try? JSONDecoder().decode(Envelope.self, from: data) else { return nil }
+        return complete(envelope: envelope)
+    }
+
+    // #2879: the same rule with the JSON already decoded, so `complete(contentsOf:)` can tell malformed
+    // JSON (which it must report) apart from a well-formed file that simply recorded no cost (which is
+    // normal and silent). Split out rather than duplicated, so there is one definition of a usable
+    // reading rather than two that can drift.
+    private static func complete(envelope: Envelope) -> RecordedRunCost? {
+        guard let cost = envelope.runCost,
               cost.recorded == true,
               let durationMs = cost.durationMs, durationMs.isFinite, durationMs > 0,
               let streams = cost.streams, streams >= 1
@@ -180,8 +193,16 @@ struct RecordedRunCost: Equatable, Sendable {
     }
 
     static func complete(contentsOf url: URL) -> RecordedRunCost? {
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        return complete(from: data)
+        // #2879: the DECODE runs inside the shared reader, not after it. Read as two steps, a malformed
+        // results file came back as "no cost recorded", which is a legitimate documented state of a
+        // perfectly good file (a chunked run that could not measure itself writes `recorded: false`), so
+        // a broken file taught the estimate nothing and said nothing.
+        HandoffFile.read(at: url) { data -> RecordedRunCost? in
+            guard let envelope = try? JSONDecoder().decode(Envelope.self, from: data) else {
+                throw CocoaError(.propertyListReadCorrupt)
+            }
+            return complete(envelope: envelope)
+        }.value ?? nil
     }
 }
 

@@ -204,6 +204,19 @@ struct RootView: View {
     // looked, so the masthead says nothing rather than vouching for a file nobody has opened.
     @State private var shootHistoryHealth: ShootHistory.Health?
 
+    // #2879: the handoff files Overture currently cannot read. Held as state and refreshed on a tick,
+    // following this view's existing convention (StatusLine is a plain value in @State too) rather than
+    // reading the register inside `body`, which would register no dependency on it and leave the line
+    // frozen at whatever was true when the masthead last drew for some other reason.
+    @State private var unreadableFiles: [HandoffReadFailures.Failure] = []
+
+    // Reads an in-memory dictionary under a lock, no filesystem and no derivation, and assigns only on a
+    // real change so an app with nothing wrong redraws nothing (#1774: an idle surface must pay nothing).
+    private func refreshUnreadableFiles() {
+        let current = HandoffReadFailures.shared.current()
+        if current != unreadableFiles { unreadableFiles = current }
+    }
+
     // The ONE place the file is read for this line, so the launch load and the notice's own re-read
     // cannot reach different verdicts about the same file.
     // Returns what it read as well as storing it, so the caller that has to ANSWER the read never has
@@ -454,7 +467,11 @@ struct RootView: View {
                   // screen would ever say it had gone stale.
                   notices: AppNotices.current(omniFocusFailing: omniFocusFailedAt > 0,
                                               bookingsVanished: bookingsVanished,
-                                              shootHistory: shootHistoryHealth, status: status),
+                                              shootHistory: shootHistoryHealth,
+                                              // #2879: and any handoff file the app is reading and
+                                              // cannot read, which used to be indistinguishable from a
+                                              // file that was simply not there yet.
+                                              unreadableFiles: unreadableFiles, status: status),
                   // #2250: the remedy a notice names, run from here where the sync lives.
                   onNoticeAction: { action in
                       switch action {
@@ -864,6 +881,18 @@ struct RootView: View {
             // launch is enough for a file only a manual import rewrites, and the notice's own re-read
             // control covers the case where Dan runs that import mid-session.
             .task { readShootHistoryHealth() }
+            // #2879: keep the "couldn't read" line current. Once at launch, because the launch ingests
+            // have already run by then, and then on a tick, because most of these files are read by
+            // background work (a run watcher, the reconcile scheduler) that has no way to reach this
+            // view. Reading the register is a dictionary lookup, so an app with nothing wrong pays a
+            // lock and an equality check a minute and redraws nothing.
+            .task {
+                refreshUnreadableFiles()
+                while !Task.isCancelled {
+                    try? await Task.sleep(nanoseconds: 60 * 1_000_000_000)
+                    refreshUnreadableFiles()
+                }
+            }
             .onChange(of: feedClientCount) { clientRoster?.reload() }
             .task {
                 guard AppEnvironment.shouldStartBackgroundServices else { return }
@@ -1624,15 +1653,21 @@ struct RootView: View {
     // #1054: how many shows the cancelled read wrote that would actually survive the guard, read from the
     // same results file the ingest would use, without importing anything.
     private func pendingCancelledReadCount() -> Int {
-        guard let data = try? Data(contentsOf: ScoutExtractResultsDecoder.defaultURL),
-              let results = try? ScoutExtractResultsDecoder.decode(data) else { return 0 }
+        // #2879: recorded, because this is the same file the ingest below reads, and this count is what
+        // Dan is shown when he is asked whether to keep a cancelled read.
+        guard let results = HandoffFile.read(at: ScoutExtractResultsDecoder.defaultURL,
+                                             decode: ScoutExtractResultsDecoder.decode).value else { return 0 }
         return results.usableEventCount
     }
 
     @discardableResult
     private func ingestScoutExtract() -> ScoutService.Outcome? {
-        guard let data = try? Data(contentsOf: ScoutExtractResultsDecoder.defaultURL),
-              let results = try? ScoutExtractResultsDecoder.decode(data) else { return nil }
+        // #2879: THE SCOUT SIBLING of #2873, the same line for the third time. A results file the
+        // decoder refused returned nil here, which every caller reads as "the run produced nothing", so
+        // a whole extract run's shows could be dropped in silence. The answer to the caller is unchanged;
+        // the failure is now recorded against the file and reaches the masthead.
+        guard let results = HandoffFile.read(at: ScoutExtractResultsDecoder.defaultURL,
+                                             decode: ScoutExtractResultsDecoder.decode).value else { return nil }
         let loaded = DownbeatBridge.loadWithHealth(now: Date())
         let existing = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         let outcome = ScoutExtractIngest.ingest(

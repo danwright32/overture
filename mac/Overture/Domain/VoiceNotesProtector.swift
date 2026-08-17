@@ -59,7 +59,9 @@ enum VoiceNotesProtector {
 
     // Copy the guidance file aside before a run, so the post-run restore has a trusted reference.
     static func backup(fileURL: URL, backupURL: URL) {
-        guard let data = try? Data(contentsOf: fileURL) else { return }
+        // #2879: a guidance file that cannot be read leaves the post-run restore with no reference at
+        // all, so the protection silently is not there. Recorded rather than skipped in silence.
+        guard let data = HandoffFile.data(at: fileURL).value else { return }
         try? data.write(to: backupURL, options: .atomic)
     }
 

@@ -62,25 +62,38 @@ struct RunDurationHistory: Codable, Equatable, Sendable {
     }
 }
 
-// Persistence for the history, best-effort in both directions: a missing or malformed file reads as empty
-// history (so the dialog simply shows no estimate), and a failed write is swallowed (telemetry must never
-// disturb a run). Mirrors ScoutExtractProgressDecoder's tolerant-read convention.
+// Persistence for the history. Best-effort for a READER: a missing or malformed file reads as empty
+// history, so the dialog simply shows no estimate, and a failed write is swallowed (telemetry must never
+// disturb a run).
+//
+// #2879: NOT best-effort for the writer. `record` refuses to write over a file it could not read, because
+// rebuilding the file from a read that answered empty is how an unreadable history got erased outright
+// (L105). Absent still writes: there is nothing to lose, and the first run of a fresh install has to land.
 enum RunDurationHistoryStore {
     static var defaultURL: URL {
         StoreLocation.handoffDirectory.appendingPathComponent("overture-run-duration-history.json")
     }
 
     static func load(from url: URL = defaultURL) -> RunDurationHistory {
-        guard let data = try? Data(contentsOf: url),
-              let history = try? JSONDecoder().decode(RunDurationHistory.self, from: data) else {
-            return RunDurationHistory()
-        }
-        return history
+        read(from: url).value ?? RunDurationHistory()
+    }
+
+    // #2879: the read `record` goes through, keeping absent apart from unreadable. `load` flattens both
+    // to an empty history, which is right for a READER (no learned pace yet, either way) and catastrophic
+    // for the WRITER below.
+    private static func read(from url: URL) -> HandoffRead<RunDurationHistory> {
+        HandoffFile.read(at: url) { try JSONDecoder().decode(RunDurationHistory.self, from: $0) }
     }
 
     @discardableResult
     static func record(sources: Int, seconds: Double, at url: URL = defaultURL) -> RunDurationHistory {
-        let updated = load(from: url).recording(sources: sources, seconds: seconds)
+        let existing = read(from: url)
+        // #2879: REFUSES to write over a file it could not read. This rebuilt the file from `load`, which
+        // answered an unreadable file with an empty history, so the first corrupt or half-written read
+        // erased every run ever recorded and the estimate silently started again from nothing (L105).
+        // Absent is different and still writes: there is genuinely nothing to lose.
+        if case .unreadable = existing { return RunDurationHistory() }
+        let updated = (existing.value ?? RunDurationHistory()).recording(sources: sources, seconds: seconds)
         if let data = try? JSONEncoder().encode(updated) {
             try? data.write(to: url, options: .atomic)
         }
