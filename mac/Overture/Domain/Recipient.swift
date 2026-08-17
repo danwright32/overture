@@ -551,14 +551,14 @@ final class Recipient {
     // the same thread re-opens it. Without that the whole back half of a conversation would be
     // unanswerable from the queue. It is the same shape freezeSentReply already uses to decide whether
     // they have written again since the last capture.
-    // #2900: and the show it belongs to has no ending recorded. A close-out writes onto the SHOW and
-    // deliberately nothing onto the contacts (#2396, L83), so without this line no reader of this
-    // property could see an ending at all, and a show Dan had closed out went on minting an OmniFocus
-    // triage task for ever. Asked HERE rather than at each of the thirteen readers, and `!= true` so a
-    // contact with no show wired (every bare-Recipient unit test below) is unaffected rather than
-    // having its absent show read as an ending.
+    // #2910, Dan's call: an ending recorded on the SHOW deliberately does NOT come into this. Closing a
+    // show out records what happened to the show; it does not mean he wrote back to the person who took
+    // the trouble to reply, so it must not answer them on his behalf. #2900 briefly made an ending close
+    // the reply here, and that also made a reply arriving AFTER the ending silent, which is the reply
+    // most worth hearing. What makes leaving it open safe is that clearing one no longer needs an ending
+    // to stand in for it: answering in Overture, answering from his mail client (#2865), ticking the
+    // triage task off in OmniFocus (#2899), or standing the contact down all retire it.
     var hasUnhandledReply: Bool {
-        guard prospect?.hasRecordedEnding != true else { return false }
         guard replied, resolution == nil, !bounced else { return false }
         guard let handled = replyHandledAt else { return true }
         guard let theirs = replyArrivedAt else { return false }
