@@ -230,9 +230,10 @@ struct WhoRepliedTests {
 
 // A backfill that works and a backfill that RUNS are two claims, and only the second one reaches Dan's
 // store. These drive the real `GmailReplyChecker.markReplies` against the full app schema, because the
-// pass depends on an edit in a different file: the checker's thread-collection deliberately skips any
-// row that has already replied, so without that edit the backfill would run every poll, be handed no
-// thread at all, and quietly fill nothing forever.
+// pass depends on an edit in a different file: the checker's thread-collection narrows what it pulls for
+// a row that has already replied, so without that edit the backfill would run every poll, be handed no
+// thread at all, and quietly fill nothing forever. (#2815 widened that scope to any conversation still
+// open; the gap is still what keeps a CLOSED one in the fetch set until the repair is done with it.)
 @MainActor
 @Suite("The responder backfill runs in the live reply check")
 struct ResponderBackfillWiringTests {
@@ -293,11 +294,18 @@ struct ResponderBackfillWiringTests {
 
     // Once named, the thread drops back out of the fetch set, so the pass cannot become a standing Gmail
     // cost on every poll for the life of the row.
+    //
+    // #2815: the row is CLOSED OUT here, which is what now decides that. Naming the writer alone used to
+    // be enough, and that is precisely the defect: a conversation still going was dropped the moment its
+    // gap closed, so everything the presenter said after Dan's first answer was never fetched. The cost
+    // this test exists to bound is now bounded by the conversation ending rather than by the repair
+    // finishing, which is the smaller of the two sets that anybody is still owed an answer on.
     @Test func aThreadThatAlreadyNamesItsWriterIsNotFetchedAgain() async throws {
         let ctx = ModelContext(try container())
         let r = repliedShow(ctx)
         r.replyFromAddress = "nbecker@everyvoicechoirs.org"
         r.lastReplyText = "Thanks, that sounds good."   // #2147: complete means writer AND words
+        r.resolution = .declinedHard                    // #2815: and nothing new can arrive on it
         var fetches = 0
         await GmailReplyChecker(fromEmail: me).markReplies(
             in: ctx, token: "tok", now: Date(timeIntervalSince1970: 9_999),

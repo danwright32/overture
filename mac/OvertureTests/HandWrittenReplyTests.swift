@@ -114,6 +114,56 @@ struct HandWrittenReplyTests {
         #expect(RecipientSnapshot(untouched).replyAuthorLabel == nil)
     }
 
+    // MARK: what the PANEL says about it (#2177)
+
+    // The panel opens on the draft already waiting (#2143). When that draft came from the unattended
+    // classify run, Dan opens a box he left empty and finds text in it with nothing saying who wrote it,
+    // and words he takes for his own get read differently from words he knows a model wrote.
+    @Test func anUntouchedAiDraftInTheBoxSaysWhoWroteIt() {
+        #expect(ReplyPanel.draftAuthorNote(typed: "Straight from the drafter.",
+                                           seeded: "Straight from the drafter.",
+                                           writtenByDan: false, editedByDan: false) == "Written by AI")
+    }
+
+    // His own words gain no line. "Written by you" on words he just typed says nothing he does not know,
+    // and the panel is already dense (#843).
+    @Test func hisOwnWordsGainNoLine() {
+        #expect(ReplyPanel.draftAuthorNote(typed: "Tuesday works.", seeded: "Tuesday works.",
+                                           writtenByDan: true, editedByDan: false) == nil)
+    }
+
+    // Nor do words he has already changed: they are partly his, so the line would claim a model wrote
+    // what he is looking at.
+    @Test func aDraftHeHasEditedGainsNoLine() {
+        #expect(ReplyPanel.draftAuthorNote(typed: "Changed.", seeded: "Changed.",
+                                           writtenByDan: false, editedByDan: true) == nil)
+    }
+
+    // Typing over the draft withdraws the line as he types, because the box stops holding the model's
+    // words the moment he changes them.
+    @Test func typingOverTheDraftWithdrawsTheLine() {
+        #expect(ReplyPanel.draftAuthorNote(typed: "Tuesday works, and I'll bring the 85mm.",
+                                           seeded: "Straight from the drafter.",
+                                           writtenByDan: false, editedByDan: false) == nil)
+    }
+
+    // An empty box gains no line either: there is no author to name.
+    @Test func anEmptyBoxGainsNoLine() {
+        #expect(ReplyPanel.draftAuthorNote(typed: "", seeded: "",
+                                           writtenByDan: false, editedByDan: false) == nil)
+    }
+
+    // The three states are the Archive card's three, said in its vocabulary rather than a second one.
+    // Two of them are already named there and stay unsaid here; only the third is new.
+    @Test func thepanelDoesNotGrowASecondVocabularyForTheseStates() throws {
+        let ctx = ModelContext(try container())
+        let untouched = contact(ctx)
+        untouched.replyDraftBody = "Straight from the drafter."
+        #expect(RecipientSnapshot(untouched).replyAuthorLabel == nil,
+                "the Archive card still says nothing about an untouched draft")
+        #expect(ReplyPanelCopy.aiWroteThisDraft == "Written by AI")
+    }
+
     // MARK: the lint
 
     // Dan's own words are not linted, which is the same rule his edits already got, and for the same

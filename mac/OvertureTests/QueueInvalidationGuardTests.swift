@@ -79,8 +79,7 @@ struct QueueInvalidationGuardTests {
     // argument evaluates at its call site, so it ran on every scroll frame while looking like it belonged
     // to the masthead (#1916's lesson, one level up).
     @Test func theWholeStoreSweepsHappenAboveTheScrollContent() {
-        guard let body = SourceGuardHelper.propertyBody("static func make(_ i: Inputs) -> QueueView.RenderData {",
-                                                        in: renderPass) else {
+        guard let body = SourceGuardHelper.bodyOfFunction(named: "make", in: renderPass) else {
             Issue.record("expected to find the render pass")
             return
         }
@@ -94,16 +93,14 @@ struct QueueInvalidationGuardTests {
         // And the scroll content only READS them. `fanOutLine: fanOutWarning` at the masthead call is the
         // exact shape that made a whole-store sweep run per scroll frame while looking like the masthead's
         // business, so the masthead must be handed the finished value instead.
-        guard let scroll = SourceGuardHelper.propertyBody(
-            "private func queueScroll(_ data: RenderData) -> some View {", in: queueView) else {
+        guard let scroll = SourceGuardHelper.bodyOfFunction(named: "queueScroll", in: queueView) else {
             Issue.record("expected to find queueScroll's body")
             return
         }
         #expect(scroll.contains("fanOutLine: data.fanOutLine"))
         #expect(!scroll.contains("fanOutLine: fanOutWarning"))
         // Likewise the grouping: re-derived in the list it would run on every scroll frame.
-        guard let section = SourceGuardHelper.propertyBody(
-            "@ViewBuilder private func focusedSection(data: RenderData) -> some View {", in: queueView) else {
+        guard let section = SourceGuardHelper.bodyOfFunction(named: "focusedSection", in: queueView) else {
             Issue.record("expected to find focusedSection's body")
             return
         }
@@ -218,8 +215,7 @@ struct QueueInvalidationGuardTests {
     // The derivation no longer folds the just-sent rows in. That fold is what made a send re-derive the
     // whole store twice, once to start the leaving delight and once to end it.
     @Test func theDerivationNoLongerFoldsInTheJustSentRows() {
-        guard let body = SourceGuardHelper.propertyBody("private func makeRenderData() -> RenderData {",
-                                                        in: queueView) else {
+        guard let body = SourceGuardHelper.bodyOfFunction(named: "makeRenderData", in: queueView) else {
             Issue.record("expected to find makeRenderData's body")
             return
         }
@@ -245,8 +241,14 @@ struct QueueInvalidationGuardTests {
     // unenforced rule of exactly the kind that broke the stage-pill invariant twice.
     @Test func bothJumpsDriveTheScrollThroughTheDeclaredParameter() {
         #expect(queueView.contains("@State private var jumpTarget: QueueJumpRequest?"))
-        for fn in ["private func focusOnLeads(", "private func navigateToLead("] {
-            guard let body = SourceGuardHelper.propertyBody(fn, in: queueView) else {
+        // #2784: by NAME. These two markers used to stop at the opening PAREN, which is the shape
+        // `everyPropertyBodyMarkerEndsAtItsOwnBrace` exists to refuse and which that check could not see,
+        // because a marker held in an array is not a literal argument to `propertyBody`. Counting braces
+        // from a "(" starts the scan inside the signature and only balances at the end of the whole
+        // type, so the "body" was every line of QueueView after these functions and both assertions were
+        // answered by any `jumpTarget = ` anywhere in it (L70).
+        for fn in ["focusOnLeads", "navigateToLead"] {
+            guard let body = SourceGuardHelper.bodyOfFunction(named: fn, in: queueView) else {
                 Issue.record("expected to find \(fn)")
                 continue
             }

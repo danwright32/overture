@@ -49,8 +49,7 @@ struct SourceAddressWiringTests {
     // The appearance Dan asked to keep, pinned. A link that quietly grew link styling would be the change
     // he specifically ruled out.
     @Test func theappearanceIsUnchanged() throws {
-        let body = try #require(SourceGuardHelper.propertyBody(
-            "static func addressText(_ url: String) -> some View {", in: source))
+        let body = try #require(SourceGuardHelper.bodyOfFunction(named: "addressText", in: source))
         #expect(body.contains("font(.system(size: 11))"))
         #expect(body.contains("foregroundStyle(OVColor.inkFaint)"))
         #expect(body.contains("lineLimit(1)"))

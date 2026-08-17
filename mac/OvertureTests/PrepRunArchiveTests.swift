@@ -321,8 +321,7 @@ struct PrepRunArchiveTests {
     private var rootView: String { SourceGuardHelper.source("Overture/App/RootView.swift") }
 
     @Test func settlingAFinishedRunArchivesItFirst() throws {
-        guard let body = SourceGuardHelper.propertyBody("private func settleFinishedRun(slot: RunSlot) async {",
-                                                        in: rootView) else {
+        guard let body = SourceGuardHelper.bodyOfFunction(named: "settleFinishedRun", in: rootView) else {
             Issue.record("settleFinishedRun not found in RootView")
             return
         }
@@ -349,8 +348,7 @@ struct PrepRunArchiveTests {
     // name would claim the run's slot with a half-finished copy that the real settle then declines to
     // replace.
     @Test func theArchiveIsWiredToTheLiveHandoffPairAndNothingElse() throws {
-        guard let body = SourceGuardHelper.propertyBody("private func archiveFinishedRun(slot: RunSlot) {",
-                                                        in: rootView) else {
+        guard let body = SourceGuardHelper.bodyOfFunction(named: "archiveFinishedRun", in: rootView) else {
             Issue.record("archiveFinishedRun not found in RootView")
             return
         }

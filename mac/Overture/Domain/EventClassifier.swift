@@ -308,11 +308,29 @@ enum EventClassifier {
         let atWeill = matches(venue ?? "", "weill")
         let coverage: Coverage =
             (atWeill || (production == .selfProduced && profile == .strong)) ? .likelyUncovered : .unknown
-        return (coverage,
-                buildReason(production: production, profile: profile, coverage: coverage, discipline: discipline))
+        return (coverage, buildReason(production: production, profile: profile, discipline: discipline))
     }
 
-    private static func buildReason(production: Production, profile: Profile, coverage: Coverage, discipline: Discipline) -> String {
+    // #2022: the sentence no longer takes COVERAGE, and that is the whole of the change. It used to append
+    // ", likely without its own photographer" whenever the coverage it had just derived was
+    // `likelyUncovered`, which is any Weill show or any self-produced strong-profile show. That is exactly
+    // the shape a long-standing client of Dan's takes, so the group he has photographed three times was the
+    // group most likely to be told it has no photographer.
+    //
+    // Dan read it on the card for "The Pumpkin Singalong at Sakura Park" (Every Voice Choirs), two lines
+    // under "Pitch will say you've photographed a few shows here" and one line above a gold "Worked
+    // together before" pill: "I'm literally their photographer. We can see I've worked with them for years."
+    //
+    // His call, 2026-08-16: drop the clause rather than suppress it on a known relationship. It is a guess
+    // on EVERY row, not only on the ones where it is visibly wrong; the "Likely uncovered" pill beside it
+    // already carries the same claim, so the sentence was restating its neighbour (#843); and dropping it
+    // removes the whole class instead of one instance. Losing the weak signal on groups he has no history
+    // with is the accepted trade.
+    //
+    // `Coverage.likelyUncovered` itself is untouched. It still feeds the fit score and the pill, which is
+    // what makes the trade a trade: the guess keeps a surface, it just stops being a sentence that can
+    // contradict what the card already knows.
+    private static func buildReason(production: Production, profile: Profile, discipline: Discipline) -> String {
         if production == .agency && profile == .weak {
             return "Agency-routed showcase rental, the dead zone that rarely converts."
         }
@@ -328,8 +346,7 @@ enum EventClassifier {
         // same card, each reading fine alone (L118). Lowercased because it sits mid-sentence.
         let genre = discipline == .other ? "" : " \(discipline.label.lowercased())"
         if production == .selfProduced && profile == .strong {
-            let where_ = coverage == .likelyUncovered ? ", likely without its own photographer" : ""
-            return "Self-produced\(genre) group, a strong-fit target\(where_)."
+            return "Self-produced\(genre) group, a strong-fit target."
         }
         if production == .selfProduced {
             return "Self-produced\(genre); worth a look once the fit is confirmed."

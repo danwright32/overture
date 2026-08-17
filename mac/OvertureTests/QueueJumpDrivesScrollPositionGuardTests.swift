@@ -29,9 +29,8 @@ struct QueueJumpDrivesScrollPositionGuardTests {
     // edit whatsoever. Both survived the rename green while protecting nothing, which is the
     // a-guard-can-go-vacuous failure mode this whole suite exists to prevent.
     @Test func bothJumpsDriveTheScrollTargetRatherThanClearingIt() {
-        for jump in ["private func navigateToLead(_ key: String, proxy: ScrollViewProxy) {",
-                     "private func focusOnLeads(_ keys: [String], proxy: ScrollViewProxy) {"] {
-            guard let body = SourceGuardHelper.propertyBody(jump, in: queueView) else {
+        for jump in ["navigateToLead", "focusOnLeads"] {
+            guard let body = SourceGuardHelper.bodyOfFunction(named: jump, in: queueView) else {
                 Issue.record("expected to find the body of \(jump)")
                 continue
             }
@@ -70,9 +69,8 @@ struct QueueJumpDrivesScrollPositionGuardTests {
     // them. The away-alert path already landed at the top, so the two disagreed about where a jump ends,
     // which is the kind of difference that is invisible in code and obvious on screen.
     @Test func bothJumpsLandTheRowAtTheTop() {
-        for jump in ["private func navigateToLead(_ key: String, proxy: ScrollViewProxy) {",
-                     "private func focusOnLeads(_ keys: [String], proxy: ScrollViewProxy) {"] {
-            guard let body = SourceGuardHelper.propertyBody(jump, in: queueView) else {
+        for jump in ["navigateToLead", "focusOnLeads"] {
+            guard let body = SourceGuardHelper.bodyOfFunction(named: jump, in: queueView) else {
                 Issue.record("expected to find the body of \(jump)")
                 continue
             }

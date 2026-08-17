@@ -149,22 +149,46 @@ struct PrepWebCallCountTests {
     // never read (L46) and a run blocked at every attempt looks identical to one that never needed the
     // web. That mattered concretely: the first diagnosis of #1824 read a refused browser call as evidence
     // the run HAD browser access.
+    // #2362: and it joins its two sentences with a COLON. They are two complete sentences, the style rules
+    // forbid a dash, and a comma between them is the punctuation Dan read on screen.
     @Test func aRunWhoseLookupsWereRefusedSaysSo() {
         var outcome = PrepImporter.Outcome()
         outcome.webCalls = PrepResults.WebCalls(recorded: true, total: 6, denied: 2, items: 1,
                                                 capPerItem: 15, allowance: 15, overCap: false)
         #expect(PrepRunSummary.notes(for: outcome)
-            .contains("2 web calls refused, that research never happened"))
+            .contains("2 web calls refused: that research never happened"))
     }
 
     // One refusal is one lookup. Same plural trap the "1 show" sentence fell into, and the same reason it
     // is worth a test of its own: every other case here uses more than one.
     @Test func aSingleRefusalIsNotDescribedAsLookups() {
         var outcome = PrepImporter.Outcome()
-        outcome.webCalls = PrepResults.WebCalls(recorded: true, total: 6, denied: 1, items: 1,
+        outcome.webCalls = PrepResults.WebCalls(recorded: true, total: 2, denied: 1, items: 1,
                                                 capPerItem: 15, allowance: 15, overCap: false)
         #expect(PrepRunSummary.notes(for: outcome)
-            .contains("1 web call refused, that research never happened"))
+            .contains("1 web call refused: that research never happened"))
+    }
+
+    // #2362, Dan's own measured run (2026-08-09): 338 web calls got through and 2 were refused, both of
+    // them a browser the run is deliberately never given. The sentence claims that research never happened,
+    // which was not true of that run: both shows ended with a contact found by the ordinary routes. A line
+    // that fires on a run that worked is one he learns to scroll past (L36), so a handful of refusals
+    // against a run that mostly reached says nothing.
+    @Test func ahandfulOfRefusalsInALargeRunSaysNothing() {
+        var outcome = PrepImporter.Outcome()
+        outcome.webCalls = PrepResults.WebCalls(recorded: true, total: 338, denied: 2, items: 17,
+                                                capPerItem: 15, allowance: 810, overCap: false)
+        #expect(PrepRunSummary.notes(for: outcome).contains { $0.contains("refused") } == false)
+    }
+
+    // The signal #1835 exists to keep: a run blocked at EVERY attempt must not read like one that never
+    // needed the web. Nothing got through here, so "that research never happened" is exactly true.
+    @Test func aRunRefusedEveryWebCallSaysSo() {
+        var outcome = PrepImporter.Outcome()
+        outcome.webCalls = PrepResults.WebCalls(recorded: true, total: 0, denied: 3, items: 1,
+                                                capPerItem: 15, allowance: 15, overCap: false)
+        #expect(PrepRunSummary.notes(for: outcome)
+            .contains("3 web calls refused: that research never happened"))
     }
 
     // The ordinary run is silent. Refusals are rare, and a sentence that appears when nothing was refused
@@ -222,6 +246,6 @@ struct PrepWebCallCountTests {
 
         #expect(outcome?.webCalls?.denied == 2)
         #expect(PrepRunSummary.notes(for: outcome ?? PrepImporter.Outcome())
-            .contains("2 web calls refused, that research never happened"))
+            .contains("2 web calls refused: that research never happened"))
     }
 }

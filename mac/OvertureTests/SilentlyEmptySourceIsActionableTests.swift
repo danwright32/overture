@@ -127,8 +127,7 @@ struct SilentlyEmptySectionGuardTests {
     private var source: String { SourceGuardHelper.source("Overture/UI/ScoutSummaryView.swift") }
 
     @Test func thequietSectionIsNoLongerAnInformationalBlock() throws {
-        let section = try #require(SourceGuardHelper.propertyBody(
-            "private func sectionView(_ section: ScoutWarnings.Section) -> some View {", in: source))
+        let section = try #require(SourceGuardHelper.bodyOfFunction(named: "sectionView", in: source))
         // The case renders the card, not the one-sentence block whose whole comment says there is
         // nothing to act on.
         #expect(section.contains("silentlyEmptyBlock(stillEmpty)"))
@@ -136,9 +135,7 @@ struct SilentlyEmptySectionGuardTests {
     }
 
     @Test func eachQuietRowCarriesFixConfirmAndStopWatching() throws {
-        let row = try #require(SourceGuardHelper.propertyBody(
-            "private func silentlyEmptyRow(_ result: ScoutService.SourceResult) -> some View {",
-            in: source))
+        let row = try #require(SourceGuardHelper.bodyOfFunction(named: "silentlyEmptyRow", in: source))
         #expect(row.contains("SourceFixConfirmActions("))
         #expect(row.contains("offersStopWatching: true"))
         #expect(row.contains("readFineAndCameBackEmpty: true"))

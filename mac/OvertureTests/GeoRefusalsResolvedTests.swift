@@ -131,8 +131,7 @@ struct GeoRefusalsRenderPassWiringTests {
     private var renderPass: String { SourceGuardHelper.source("Overture/UI/QueueRenderPass.swift") }
 
     @Test func thePassResolvesEveryShowsPlaceOnce() {
-        guard let body = SourceGuardHelper.propertyBody("static func make(_ i: Inputs) -> QueueView.RenderData {",
-                                                        in: renderPass) else {
+        guard let body = SourceGuardHelper.bodyOfFunction(named: "make", in: renderPass) else {
             Issue.record("expected to find the render pass")
             return
         }
@@ -145,8 +144,7 @@ struct GeoRefusalsRenderPassWiringTests {
     // reaching for the unresolved value and sweeping the store again.
     @Test func theResolvedGateRidesInTheRenderSnapshot() {
         #expect(queueView.contains("let geo: GeoRefusals"))
-        guard let empty = SourceGuardHelper.propertyBody("private func stageEmptyState(for stage: StageFocus, data: RenderData) -> some View {",
-                                                         in: queueView) else {
+        guard let empty = SourceGuardHelper.bodyOfFunction(named: "stageEmptyState", in: queueView) else {
             Issue.record("expected to find stageEmptyState")
             return
         }

@@ -47,8 +47,14 @@ enum ReplyService {
                 //
                 // It is re-read while its conversation is still open, which is both the useful set and the
                 // bound on the cost: one thread fetch per live conversation per check.
+                //
+                // #2815: through `ReplyWatchScope`, which is the same predicate deciding WHICH threads are
+                // fetched. Stated only here, this rule reached nothing: the fetch scope asked the narrower
+                // "does this row still have a gap to fill", that gap closes on the pass that records the
+                // first reply, and so the thread this loop is willing to re-read was never handed to it.
+                // The bound quoted above was the one thing it could not get (L16, L70).
+                if !ReplyWatchScope.couldReceiveANewMessage(r) { continue }
                 let alreadyReplied = r.replied
-                if alreadyReplied && !r.replyWatchConversationIsOpen { continue }
                 guard let data = fetchThread(threadId),
                       ReplyDetection.hasReply(fromAddresses: ReplyDetection.fromAddresses(threadJSON: data),
                                               selfEmail: selfEmail) else { continue }

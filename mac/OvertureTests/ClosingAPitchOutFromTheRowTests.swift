@@ -239,13 +239,17 @@ struct ReachedOutCloseWiringTests {
     private var source: String { SourceGuardHelper.source("Overture/UI/QueueView.swift") }
 
     @Test func therowDrawsTheHintAndTheControl() throws {
-        let row = try #require(SourceGuardHelper.propertyBody(
-            // #2644: the marker follows the signature, which now takes the in-flight timestamp and is
-            // internal so the on-screen test can render it. Pinning the exact rendering of a signature is
-            // what makes a guard fail its first legitimate refinement (L103); what these two assert is
-            // the row's CONTENT, which is unchanged.
-            "func reachedOutRow(_ pair: (prospect: Prospect, recipient: Recipient, next: Date),",
-            in: source))
+        // #2644 re-anchored this when the signature took the in-flight timestamp, and #2784 moved it off
+        // the signature altogether: found by NAME, so the next refinement of the parameters leaves it
+        // asking the same question. What these assert is the row's CONTENT, which is unchanged.
+        //
+        // It was worth more than a re-anchor. The marker it carried stopped at a COMMA, mid-signature,
+        // so `propertyBody` counted braces from inside the argument list and only balanced at the end of
+        // the whole type: `row` was every line of QueueView below this function, and both assertions
+        // were answered by any occurrence anywhere in it (L70). `everyPropertyBodyMarkerEndsAtItsOwnBrace`
+        // exists to refuse exactly that and could not see it, because the comments sitting between
+        // `propertyBody(` and its literal hid the call from a scan that reads raw text.
+        let row = try #require(SourceGuardHelper.bodyOfFunction(named: "reachedOutRow", in: source))
         #expect(row.contains("ReachedOutClose.passedHint(hasOpened: p.hasOpened(today: today)"))
         #expect(row.contains("CloseOutMenu(outcomes: ShowOutcome.menu(wasPitched: p.wasPitched))"))
         // #2417: the menu now hands the ending to `closeOut`, which marks the row leaving BEFORE it
@@ -259,8 +263,7 @@ struct ReachedOutCloseWiringTests {
     // And the hop lands where it claims to. Asserted separately from the row so a `closeOut` that
     // animated the departure and never wrote anything could not pass on the row's say-so alone.
     @Test func theCloseOutMarksTheRowLeavingAndThenRecordsTheEnding() throws {
-        let closeOut = try #require(SourceGuardHelper.propertyBody(
-            "private func closeOut(_ p: Prospect, as outcome: ShowOutcome) {", in: source))
+        let closeOut = try #require(SourceGuardHelper.bodyOfFunction(named: "closeOut", in: source))
 
         #expect(closeOut.contains("ProspectMutations.recordOutcome("),
                 "the ending must still reach the one write, whatever the row does on screen first")
@@ -279,13 +282,11 @@ struct ReachedOutCloseWiringTests {
     // must not read as two identical dropdowns. It carries the outcome icon and the outcome accent, which
     // is what makes them a deliberate system rather than one branded control and one system default.
     @Test func theoutcomeControlIsNotASecondStateMenu() throws {
-        let row = try #require(SourceGuardHelper.propertyBody(
-            // #2644: the marker follows the signature, which now takes the in-flight timestamp and is
-            // internal so the on-screen test can render it. Pinning the exact rendering of a signature is
-            // what makes a guard fail its first legitimate refinement (L103); what these two assert is
-            // the row's CONTENT, which is unchanged.
-            "func reachedOutRow(_ pair: (prospect: Prospect, recipient: Recipient, next: Date),",
-            in: source))
+        // The row still exists, by NAME (#2784, and see the note on the test above). Nothing here reads
+        // its body: what this test asserts lives in CloseOutMenu.swift and in the control vocabulary, so
+        // this is a requirement that the surface is still there, spelled as one rather than as a binding
+        // nobody uses.
+        _ = try #require(SourceGuardHelper.bodyOfFunction(named: "reachedOutRow", in: source))
         let menu = SourceGuardHelper.source("Overture/UI/CloseOutMenu.swift")
         #expect(menu.contains("ContactRowControls.Kind.outcome.icon"))
         #expect(menu.contains("ContactRowControls.Kind.outcome.accent.color"))

@@ -70,8 +70,7 @@ struct WatchGapLineOnScreenTests {
     // And it is wired into the masthead, not merely built: a view nothing places renders nowhere.
     @Test func theMastheadDrawsTheLine() {
         let queue = SourceGuardHelper.source("Overture/UI/QueueView.swift")
-        let masthead = SourceGuardHelper.propertyBody(
-            "agentInputs: AgentInputs) -> some View {", in: queue)
+        let masthead = SourceGuardHelper.bodyOfFunction(named: "masthead", in: queue)
         #expect(masthead?.contains("WatchGapLine()") == true,
                 "the queue masthead must draw the watch gap line")
     }

@@ -37,6 +37,10 @@ enum PrepRunSummary {
     // TRUE for a Prep run (PrepQueueBuilder re-queues an undrafted prospect) and FALSE for a check
     // (nothing re-checks reachability by itself; Dan has to pick those dates again). Same fact, different
     // promise, so the check states it its own way in ReachabilityRunSummary and suppresses this one.
+    // #2362: one refusal in this many attempts is where the refused-web-calls sentence starts speaking.
+    // Named rather than inlined so the rule can be read as "a quarter" instead of as arithmetic.
+    private static let refusalShareFloor = 4
+
     static func concernNotes(for outcome: PrepImporter.Outcome, includeRetryNote: Bool = true) -> [String] {
         var notes: [String] = []
         // #1721: a run that reached the web far more than expected. Said in WEB CALLS and shows, never in
@@ -72,9 +76,34 @@ enum PrepRunSummary {
         // they are the opposite fact: those calls reached nothing, so whatever the run reported about
         // those shows it found without them. Silent at zero and silent when the figure is absent (an old
         // results file, or an incomplete count), because absent means nobody looked, not none.
-        if let web = outcome.webCalls, let denied = web.denied, denied > 0 {
+        //
+        // #2362: it speaks only when the refusals are a MEANINGFUL SHARE of what the run reached for, and
+        // it joins its two sentences with a colon.
+        //
+        // The share, because measured against Dan's own run (2026-08-09) the sentence was firing on a run
+        // that worked: 338 web calls got through and 2 were refused, both of them a browser this runner is
+        // deliberately never given. Neyla Pekarek got 13 allowed lookups and Danny Decker 10, and both
+        // ended with a contact found. "That research never happened" was not true of that run, and a line
+        // that fires on a run that went fine is one he learns to scroll past by the time one has not (L36).
+        // A quarter is the bar: below it the refusals are noise beside what the run did reach, and at or
+        // above it the sentence is describing the run rather than a footnote to it. A run refused at EVERY
+        // attempt (no successful calls at all) is the case #1835 exists for and always clears the bar.
+        //
+        // The colon, because those are two complete sentences and a comma between them was the punctuation
+        // Dan read on screen. The style rules forbid the dash that would otherwise do this job.
+        //
+        // It carries no ACTION, deliberately, and that is the answer to #2362's other half rather than an
+        // omission: the browser is outside PREP_ALLOWED_TOOLS under a fail-closed mode, so the refusal is
+        // `claude-run-scope.sh` doing its job and there is nothing for Dan to grant. Wording it as though
+        // there were would name a step that changes nothing (L111).
+        //
+        // Needs a COMPLETE count, like the over-cap sentence above: a share cannot be computed from a
+        // partial figure, and the incomplete path publishes `partialDenied` rather than `denied` anyway, so
+        // nothing real is lost by requiring one.
+        if let web = outcome.webCalls, web.recorded, let denied = web.denied, denied > 0,
+           let total = web.total, denied * refusalShareFloor >= denied + total {
             let calls = denied == 1 ? "1 web call" : "\(denied) web calls"
-            notes.append("\(calls) refused, that research never happened")
+            notes.append("\(calls) refused: that research never happened")
         }
         if !outcome.unmatchedKeys.isEmpty { notes.append("\(outcome.unmatchedKeys.count) didn't match") }
         // #876: shows the run was GIVEN and never answered. Left silent, they sit in "ready to prep" run

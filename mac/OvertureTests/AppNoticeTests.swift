@@ -90,8 +90,7 @@ struct AppNoticePlacementGuardTests {
 
     @Test func themastheadDrawsThem() throws {
         let queue = SourceGuardHelper.source("Overture/UI/QueueView.swift")
-        let masthead = try #require(SourceGuardHelper.propertyBody(
-            "agentInputs: AgentInputs) -> some View {", in: queue))
+        let masthead = try #require(SourceGuardHelper.bodyOfFunction(named: "masthead", in: queue))
         // #1805: the masthead may filter an offer it cannot serve on the way in, so what this pins is that
         // the notices REACH it, not the exact call shape.
         #expect(masthead.contains("AppNoticeLines("))

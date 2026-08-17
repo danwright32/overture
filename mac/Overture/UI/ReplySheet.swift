@@ -79,6 +79,7 @@ struct ReplySheet: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             draftOffer
+            draftAuthorLine
             if phase.showsComposeBox { compose }
             footer
         }
@@ -221,6 +222,17 @@ struct ReplySheet: View {
                 .help(ReplyPanelCopy.useTheDraftHelp)
                 Spacer()
             }
+        }
+    }
+
+    // #2177: who wrote what is in the box, directly above it, where he reads before typing. The decision is
+    // ReplyPanel's; this only renders it. Absent on an entity with no drafter (an inquiry), where the box
+    // can only ever hold his own words.
+    @ViewBuilder private var draftAuthorLine: some View {
+        if let note = ReplyPanel.draftAuthorNote(typed: body_, seeded: seeded,
+                                                 writtenByDan: composition.aiDraft?.writtenByDan() ?? false,
+                                                 editedByDan: composition.aiDraft?.editedByDan() ?? false) {
+            Text(note).font(OVType.meta).foregroundStyle(OVColor.inkFaint)
         }
     }
 
