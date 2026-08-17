@@ -115,7 +115,61 @@ build_failed() {
   grep -qE '^[^[:space:]].*:[0-9]+:[0-9]+: (fatal )?error: ' <<< "${output}"
 }
 
-# run_outcome <xcodebuild output> <exit code>. "crashed", "build-failed", "failed", or "" for a pass.
+# Did xcodebuild fail to reach this Mac's TEST SERVICE, with no test having started? (#2322)
+#
+# Measured 2026-08-08: three consecutive runs reported "the test host crashed with no named test
+# failure (a known self-hosted flake)" and were retried. The real cause was testmanagerd wedged
+# since the previous Tuesday, so xctest hung before establishing a connection and ZERO tests
+# executed. The message named the app host, which was blameless, the retry cost a second full build
+# each time, and the investigation went down two wrong paths before the raw error was read.
+#
+# A crashed host and a machine that cannot start any test are different problems with different
+# fixes (retry versus restart the service), and the evidence separating them was already here.
+# BOTH halves are required, and the second is what keeps this from firing on an ordinary crash:
+#   * the daemon's own wording, rather than a crash signature; and
+#   * NO tests executed at all. A crash has a partial count, because it died partway through
+#     something. A daemon timeout appearing in a run that DID execute tests is that ordinary crash,
+#     and is still worth one retry (L104: test what the filter must preserve, not only what it
+#     must catch).
+test_service_wedged() {
+  local output="$1"
+  [[ -z "$(test_run_totals "${output}")" ]] || return 0
+  grep -qaE 'hung before establishing connection|Timed out .*initiating control session' <<< "${output}" \
+    && echo "wedged"
+  return 0
+}
+
+# How old a test service has to be before it is worth mentioning (#2323), in days.
+#
+# Calibrated against a real reading rather than a round number: this Mac's testmanagerd was
+# 2 days 8 hours old and perfectly healthy when measured on 2026-08-16, so a threshold below that
+# would fire on the ordinary case and be ignored within a day (L93, L147). The wedged one on
+# 2026-08-08 had been up since "the previous Tuesday", which is days further still.
+TESTMANAGERD_OLD_DAYS=5
+
+# testmanagerd_age_report <pid> <ps -o etime= output> [threshold days]. The advisory sentence when
+# the machine's test service is old enough to be worth suspecting, and nothing otherwise (#2323).
+#
+# Advisory only and never blocking, matching prune-stale-registrations.sh: a long-lived daemon is
+# usually fine, and this line only has to be in front of somebody at the moment a run fails oddly.
+#
+# `ps -o etime=` writes [[dd-]hh:]mm:ss, so days exist only when there is a "-", and a reading that
+# does not parse yields NOTHING rather than falling through to a comparison that would score it as
+# young (L50). Saying nothing is the right outcome for an advisory either way, but it must be
+# reached by refusing to measure, not by measuring wrongly.
+testmanagerd_age_report() {
+  local pid="$1" etime="$2" threshold="${3:-${TESTMANAGERD_OLD_DAYS}}"
+  pid="${pid//[[:space:]]/}"
+  etime="${etime//[[:space:]]/}"
+  [[ -n "${pid}" && -n "${etime}" ]] || return 0
+  [[ "${etime}" =~ ^([0-9]+)-[0-9]{1,2}:[0-9]{2}:[0-9]{2}$ ]] || return 0
+  local days=$((10#${BASH_REMATCH[1]}))
+  [[ "${days}" -ge "${threshold}" ]] || return 0
+  echo "this Mac's test service (testmanagerd, PID ${pid}) has been running for ${days} days. That is usually fine, so this is advisory and blocks nothing. It is here because on 2026-08-08 one this old was wedged: xctest hung before establishing a connection, three consecutive full suite runs executed no tests at all, and nothing on screen pointed at it. If this run fails oddly, restart it (launchd respawns it on demand) with: pkill -x testmanagerd"
+}
+
+# run_outcome <xcodebuild output> <exit code>. "crashed", "build-failed", "test-service-wedged",
+# "failed", or "" for a pass.
 #
 # #1006: a killed run and a failing run must never look alike. On 2026-07-16 this printed
 # `Test run with 1574 tests in 229 suites passed` for a ~2400-test suite and then died with
@@ -138,13 +192,23 @@ run_outcome() {
   # having run nothing. Require the positive banner, don't merely trust exit 0.
   if [[ "${code}" -eq 0 ]]; then
     grep -q '\*\* TEST SUCCEEDED \*\*' <<< "${output}" && return
+    # #2322: asked here too, not only on the non-zero path. A run that never reached the test service
+    # has no verdict of its own, and xcodebuild has been seen to exit 0 on a run that started nothing
+    # (#1252), so the two can meet.
+    if [[ -n "$(test_service_wedged "${output}")" ]]; then
+      echo "test-service-wedged"
+      return
+    fi
     echo "crashed"
     return
   fi
 
-  # Every line xcodebuild lists between "Failing tests:" and its verdict is a named failure.
+  # Every line xcodebuild lists between "Failing tests:" and its verdict is a named failure. Read
+  # through suite-stats.sh's parser rather than a second copy of the same awk, so this decision and
+  # the list reprinted at the end of a failing run (#2600) can never disagree about what a named
+  # failure is.
   local named
-  named="$(awk '/^Failing tests:/{f=1;next} /^\*\* TEST/{f=0} f' <<< "${output}" | grep -c '[^[:space:]]' || true)"
+  named="$(failing_test_names "${output}" | grep -c . || true)"
   if [[ "${named}" -gt 0 ]]; then
     echo "failed"
     return
@@ -154,6 +218,13 @@ run_outcome() {
   # falling through to "crashed", which is now only what it says: the run died.
   if build_failed "${output}"; then
     echo "build-failed"
+    return
+  fi
+  # #2322: and a machine whose test service never answered is not a dead host either. Same shape
+  # (failed, nothing named), different cause, different fix, and the retry below must not be spent
+  # on it.
+  if [[ -n "$(test_service_wedged "${output}")" ]]; then
+    echo "test-service-wedged"
     return
   fi
   echo "crashed"
@@ -361,8 +432,7 @@ pure_failure_evidence() {
   local output="$1" named infra
   # The same block run_outcome reads to decide "failed": every line xcodebuild lists under
   # "Failing tests:" is a named failure, and on a pure-suite failure those names ARE the evidence.
-  named="$(awk '/^Failing tests:/{f=1;next} /^\*\* TEST/{f=0} f' <<< "${output}" \
-    | grep -a '[^[:space:]]' | head -20 || true)"
+  named="$(failing_test_names "${output}" | head -20 || true)"
   # A wedged testmanagerd (2026-08-08), a host that could not launch, a relaunch after an unexpected
   # exit, and code that did not compile. The LAST of these are the ones nearest the death.
   infra="$(grep -aE 'encountered an error|Timed out |Could not launch|Restarting after unexpected exit|^[^[:space:]].*:[0-9]+:[0-9]+: (fatal )?error: ' <<< "${output}" \
@@ -422,6 +492,17 @@ main() {
     echo "lock, so the test host cannot launch and the run would die after a full build." >&2
     echo "Quit the Debug app (Cmd+Q only backgrounds it; quit it from the menu bar) and rerun. See #1257." >&2
     exit 1
+  fi
+
+  # #2323: how old this Mac's test service is, read BEFORE anything takes the lock, so a run that
+  # then sits queued behind another worktree's suite still carries the line. One cheap read, and on
+  # 2026-08-08 it was the whole answer while nothing on screen pointed at it.
+  local daemon_pid="" daemon_age="" daemon_advisory=""
+  daemon_pid="$(pgrep -x testmanagerd 2>/dev/null | head -1 || true)"
+  [[ -n "${daemon_pid}" ]] && daemon_age="$(ps -o etime= -p "${daemon_pid}" 2>/dev/null || true)"
+  daemon_advisory="$(testmanagerd_age_report "${daemon_pid}" "${daemon_age}")"
+  if [[ -n "${daemon_advisory}" ]]; then
+    echo "run-tests-locked.sh: ${daemon_advisory}" >&2
   fi
 
   # #1331: run the suite, and if the HOST crashes (the run died with no named test failure, a known
@@ -507,9 +588,12 @@ main() {
   # as a 99% truncation, and a green one would then overwrite the baseline with that handful and disable
   # the gate for every full run after it. The empty-run gate below is judged on every run either way,
   # because "nothing ran" is never correct.
-  local executed baseline="" truncated="" scoped=0
+  local executed baseline="" truncated="" scoped=0 restarted=""
   [[ $# -gt 0 ]] && scoped=1
   executed="$(executed_test_count "${last_output}")"
+  # #2821: whether the test process was RELAUNCHED partway through, which makes every count below a
+  # count of the REMAINDER rather than of this run.
+  restarted="$(test_run_restarted "${last_output}")"
   if [[ "${scoped}" -eq 0 ]]; then
     [[ -f "${BASELINE_FILE}" ]] && baseline="$(cat "${BASELINE_FILE}" 2>/dev/null || true)"
     truncated="$(truncated_report "${executed}" "${baseline}")"
@@ -524,9 +608,15 @@ main() {
     # test-all.sh would go on to say "all suites passed" having run two thirds of it. A result that
     # cannot be believed must never exit 0.
     [[ "${test_exit_code}" -ne 0 ]] || test_exit_code=1
-  elif [[ "${scoped}" -eq 0 && -z "${outcome}" && -n "${executed}" ]]; then
+  elif [[ "${scoped}" -eq 0 && -z "${outcome}" && -n "${executed}" && -z "${restarted}" ]]; then
     # Only a genuinely green FULL run may move the baseline, so neither a truncated one, nor a failing
     # one, nor a scoped one can quietly lower the bar it is measured against.
+    #
+    # #2821: nor a RESTARTED one, which is the same hazard arriving by a different route. Its count
+    # is the remainder that ran after the relaunch, and a green one would record that remainder as
+    # the bar every later run is measured against, which disables the SHORT RUN gate above for
+    # everything after it. A restarted run that ends RED is already caught by that gate whenever a
+    # baseline exists; this closes the green case, which is the one that writes.
     echo "${executed}" > "${BASELINE_FILE}"
   fi
 
@@ -550,6 +640,22 @@ main() {
   # run that executes nothing. A readout the run produces itself cannot drift.
   echo >&2
   echo "run-tests-locked.sh: $(suite_report_for_run "${last_output}" "${MAC_DIR}")" >&2
+
+  # #2322: no test started at all, and the evidence says the machine rather than the change. Said
+  # before the crash branch below, and INSTEAD of it, because a crashed host and a machine that
+  # cannot start any test want different actions and must never share one message.
+  if [[ "${outcome}" == "test-service-wedged" ]]; then
+    echo >&2
+    echo "run-tests-locked.sh: NO TEST RAN, and the evidence points at this MACHINE rather than at" >&2
+    echo "your change. xcodebuild could not reach the test service: the runner hung before" >&2
+    echo "establishing a connection, or the control session with the testmanagerd daemon timed out," >&2
+    echo "and not one test executed. The app host is blameless here." >&2
+    echo "Nothing was retried and the pure suite was not asked: both go through that same daemon, so" >&2
+    echo "each would meet the same wedge after paying for another full build." >&2
+    echo "Restart it (launchd respawns it on demand) and run again:" >&2
+    echo "  pkill -x testmanagerd" >&2
+    echo "See #2322, #2323." >&2
+  fi
 
   if [[ "${outcome}" == "build-failed" ]]; then
     echo >&2
@@ -618,6 +724,25 @@ main() {
       fi
       rm -f "${pure_output}"
     fi
+  fi
+
+  # #2600: and the LAST thing on screen is the complete list of what failed.
+  #
+  # A failed run reports its failures two different ways and reading the log for one of them
+  # under-counts: Swift Testing prints "Expectation failed:" for an #expect, while a guard raising
+  # Issue.record prints only "recorded an issue". On 2026-08-12 a run of #2417's branch was read by
+  # searching for the first phrase, reported as two failures, and actually had eight; twenty minutes
+  # of work followed from believing the branch was nearly green. xcodebuild's own list is the honest
+  # answer and was already in the output, roughly forty thousand lines up a log nobody reads to the
+  # end, which is why the cheap partial reading is the one anybody working at speed reaches for.
+  #
+  # Printed only when this run NAMED failing tests. A crash prints the heading with nothing under it
+  # (#1006's whole tell), and "FAILING TESTS (0)" would be a count of a run that did not fail at all.
+  local failing_reprint
+  failing_reprint="$(failing_tests_report "${last_output}")"
+  if [[ -n "${failing_reprint}" ]]; then
+    echo >&2
+    awk 'NR==1 {print "run-tests-locked.sh: " $0; next} {print}' <<< "${failing_reprint}" >&2
   fi
 
   # #1252: a test-host launch failure exits xcodebuild 0, so `test_exit_code` alone would let a dead run

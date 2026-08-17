@@ -143,6 +143,17 @@ run_foreground_check "scripts/check-live-store-claims.sh" "${REPO_ROOT}/scripts/
 echo "==> mac/scripts/prune-stale-registrations.sh"
 "${REPO_ROOT}/mac/scripts/prune-stale-registrations.sh" || true
 
+# #2302: says when this checkout has silently filled up with local branches again, and nothing at all
+# when it has not. Advisory only and structurally unable to fail a run (the script always exits 0, and
+# the `|| true` is belt and braces), for the same reason as the line above: a cluttered checkout is not
+# a defect in the change being pushed.
+#
+# Here rather than in a script somebody has to remember, because the failure mode IS that nobody
+# counts: the 496 that #2234 cleared accumulated because nothing ever did, and the merge scripts it
+# fixed cover only the paths that are a merge script.
+echo "==> scripts/check-branch-backlog.sh"
+"${REPO_ROOT}/scripts/check-branch-backlog.sh" || true
+
 # #2585: deletes the Xcode build folders belonging to worktrees that no longer exist, and says how much
 # room is left. Xcode keys DerivedData by workspace PATH, so every throwaway verify worktree and every
 # parallel agent mints a fresh ~1.6 GB folder outside the checkout that nothing reclaimed. On 2026-08-12

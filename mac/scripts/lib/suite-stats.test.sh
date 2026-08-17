@@ -145,6 +145,129 @@ assert_eq "no declarations counted means no share claimed" \
   "$(format_suite_report "6177 878 106.868" "1.66" "0" "0")" \
   "Suite shape: 6177 tests in 878 suites, 106.868s. Test Swift to app Swift 1.66 to 1. Source-text guard share could not be measured."
 
+echo
+# ---------------------------------------------------------------------------
+# failing_test_names / failing_tests_report: the list, reprinted (#2600)
+# ---------------------------------------------------------------------------
+# A failed run reports its failures two different ways, and reading the log for one of them
+# UNDER-COUNTS. Swift Testing prints "Expectation failed:" for an #expect, but a guard raising
+# Issue.record prints only "recorded an issue". On 2026-08-12 a run of #2417's branch was read by
+# searching for the first phrase, reported as two failures, and actually had eight. Twenty minutes
+# of work followed from believing the branch was nearly green.
+#
+# xcodebuild's own "Failing tests:" block is the honest answer and is already in the output, roughly
+# forty thousand lines down a log nobody reads to the end. So the run reprints it at the very end.
+
+# Both kinds in one log, which is the case the cheap partial reading gets wrong. Named with the tab
+# xcodebuild indents them by, so the parsing under test is the real shape.
+MIXED_FAILURE_OUTPUT="Test aThingWorks() recorded an issue at Foo.swift:12:5: Expectation failed: 1 == 2
+Test aGuardHolds() recorded an issue at Bar.swift:44:3: the venue guard did not fire
+Failing tests:
+	OvertureTests.FooTests.aThingWorks()
+	OvertureTests.BarTests.aGuardHolds()
+
+** TEST FAILED **"
+
+assert_eq "every test xcodebuild named is read out of the block, trimmed" \
+  "$(failing_test_names "${MIXED_FAILURE_OUTPUT}")" \
+  "OvertureTests.FooTests.aThingWorks()
+OvertureTests.BarTests.aGuardHolds()"
+
+# THE case, stated as the difference between the two readings. A log in which NOT ONE line says
+# "Expectation failed:" still holds two real failures, and the phrase-counting habit reports zero.
+ISSUE_RECORD_ONLY_OUTPUT="Test aGuardHolds() recorded an issue at Bar.swift:44:3: the venue guard did not fire
+Test anotherGuardHolds() recorded an issue at Baz.swift:9:1: the pill count did not match its rows
+Failing tests:
+	OvertureTests.BarTests.aGuardHolds()
+	OvertureTests.BazTests.anotherGuardHolds()
+
+** TEST FAILED **"
+
+assert_eq "the phrase-counting reading of an Issue.record-only run really does find nothing" \
+  "$(grep -c 'Expectation failed:' <<< "${ISSUE_RECORD_ONLY_OUTPUT}")" \
+  "0"
+
+assert_eq "while the block names both of them" \
+  "$(failing_test_names "${ISSUE_RECORD_ONLY_OUTPUT}" | grep -c .)" \
+  "2"
+
+assert_eq "the reprint leads with the count and then names each test" \
+  "$(failing_tests_report "${ISSUE_RECORD_ONLY_OUTPUT}")" \
+  "FAILING TESTS (2), reprinted so the list is the last thing on screen:
+  OvertureTests.BarTests.aGuardHolds()
+  OvertureTests.BazTests.anotherGuardHolds()"
+
+assert_eq "one failure is counted in the singular" \
+  "$(failing_tests_report "Failing tests:
+	OvertureTests.FooTests.aThingWorks()
+** TEST FAILED **")" \
+  "FAILING TEST (1), reprinted so the list is the last thing on screen:
+  OvertureTests.FooTests.aThingWorks()"
+
+# A crashed run prints the heading with NOTHING under it, which is #1006's whole tell. It must not
+# come back as "FAILING TESTS (0)": a run that named no failing test did not fail, it died, and the
+# crash path says so in its own words.
+assert_eq "a crash, which names the heading and nothing under it, reprints nothing" \
+  "$(failing_tests_report "Test run with 1574 tests in 229 suites passed after 10.851 seconds.
+Failing tests:
+** TEST FAILED **")" \
+  ""
+
+assert_eq "and a passing run has nothing to reprint" \
+  "$(failing_tests_report "Test run with 6177 tests in 878 suites passed after 106.868 seconds.
+** TEST SUCCEEDED **")" \
+  ""
+
+echo
+# ---------------------------------------------------------------------------
+# test_run_restarted: a remainder is not the run (#2821)
+# ---------------------------------------------------------------------------
+# Measured 2026-08-16 while re-checking #2808's mutations: mutated code made a test exceed its one
+# minute .timeLimit, which kills the test process. xcodebuild restarted and ran the remainder, and
+# the final line read "Suite shape: 12 tests in 2 suites, 0.009s" for a run that had really started
+# 70 tests across 8 suites.
+#
+# AGENTS.md names that line as THE reference for "did this run execute the whole suite?", written
+# precisely because a scoped run matching almost nothing prints success. After a restart the line
+# reports a small number for a run that was BROKEN rather than small, so the reading it exists to
+# support is exactly the reading it gets wrong.
+#
+# It refuses to print a shape rather than summing across the attempts, because a total assembled
+# across a crash is its own kind of claim: xcodebuild says the summary "will include totals from
+# previous launches" and the measurement above says it did not.
+RESTARTED_OUTPUT="Test Suite 'All tests' started
+Restarting after unexpected exit, crash, or test timeout in OvertureTests.PrepTests/aCheckStartedWhileAPrepIsLiveIsStillFollowed(); summary will include totals from previous launches.
+Test run with 12 tests in 2 suites failed after 0.009 seconds with 1 issue.
+** TEST FAILED **"
+
+assert_eq "a run xcodebuild relaunched says so" \
+  "$(test_run_restarted "${RESTARTED_OUTPUT}")" \
+  "restarted"
+
+assert_eq "an ordinary run did not restart" \
+  "$(test_run_restarted "${TWO_TARGET_RUN}")" \
+  ""
+
+# The totals are still READ, unchanged: the parser is not the thing that was wrong, the reporting of
+# its answer as the whole run was.
+assert_eq "the parser still reads the remainder's own numbers" \
+  "$(test_run_totals "${RESTARTED_OUTPUT}")" \
+  "12 2 0.009"
+
+assert_eq "a restarted run refuses to state a shape, and names the restart" \
+  "$(format_suite_report "12 2 0.009" "1.66" "1204" "5980" "restarted")" \
+  "Suite shape: NOT REPORTED. The test process RESTARTED during this run (xcodebuild relaunched it after an unexpected exit, crash or test timeout), so the totals it printed cover only what ran AFTER the last restart, not this whole run. Nothing here can be read as the size of the suite. Re-run it. See #2821."
+
+# And it must not quietly keep the plausible-looking number beside the warning, which is what makes
+# a post-restart remainder readable as a real measurement in the first place.
+assert_eq "the refusal states no count at all" \
+  "$(format_suite_report "12 2 0.009" "1.66" "1204" "5980" "restarted" | grep -c '12 tests')" \
+  "0"
+
+assert_eq "an ordinary run is unaffected by the new argument being absent" \
+  "$(format_suite_report "6177 878 106.868" "1.66" "1204" "5980")" \
+  "Suite shape: 6177 tests in 878 suites, 106.868s. Test Swift to app Swift 1.66 to 1. Source-text guards are 1204 of 5980 test declarations."
+
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All suite-stats.sh fixtures passed."
   exit 0
