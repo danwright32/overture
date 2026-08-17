@@ -112,6 +112,29 @@ enum SwiftSource {
         return starts != ends
     }
 
+    // #2671: an ignore region opened while one is ALREADY open, reported by the line it opened on.
+    //
+    // Nested markers cancel each other. `skippedLines` opens on the first start and closes on the first
+    // end it meets, so the inner region's `ignore-end` closes the OUTER region too, and every literal
+    // between there and the outer end leaks into a list meant to hold only sentences Overture says to
+    // Dan. `unclosedIgnoreRegion` cannot see it: nesting leaves the starts and the ends balanced, which
+    // is exactly why this is a separate question rather than a widening of that one.
+    //
+    // Reported as the LINE rather than as a bare Bool, because the two markers involved are routinely
+    // hundreds of lines apart and "this file nests a region somewhere" is not something anybody can act
+    // on. Returns the first offending start only: the fix for one is usually the fix for the rest.
+    static func nestedIgnoreRegion(in source: String) -> Int? {
+        var openedAt: Int?
+        for comment in tokenize(source).comments {
+            if comment.text.contains(ignoreStart) {
+                if openedAt != nil { return comment.line }
+                openedAt = comment.line
+            }
+            if comment.text.contains(ignoreEnd) { openedAt = nil }
+        }
+        return nil
+    }
+
     // MARK: - Line skipping (DEBUG branches, marked regions)
 
     private static func skippedLines(_ scan: Scan, skipping: Skips) -> Set<Int> {

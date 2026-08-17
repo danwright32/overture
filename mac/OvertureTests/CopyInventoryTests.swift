@@ -124,6 +124,43 @@ struct CopyInventoryTests {
         #expect(SwiftSource.unclosedIgnoreRegion(in: source))
     }
 
+    // #2671: two NESTED markers cancel each other, and the counts balance while they do it. The inner
+    // region's ignore-end closes the OUTER one as well, so every literal between it and the outer end
+    // leaks into a list that is meant to hold only sentences Overture says to Dan, and
+    // `unclosedIgnoreRegion` reports nothing wrong because it only counts starts against ends. It
+    // happened for real while building #2647: a region was opened around a function that already carried
+    // one for an HTTP header, and three developer diagnostics appeared in the checked-in list of the
+    // app's own voice, caught only by reading the generated diff by hand.
+    @Test func aNestedIgnoreRegionIsFoundAtItsOwnLine() {
+        let source = """
+        // copy-inventory:ignore-start  outbound email
+        let body = "I'll leave it here either way."
+        // copy-inventory:ignore-start  an RFC822 header Gmail reads
+        let header = "Content-Type is not a sentence."
+        // copy-inventory:ignore-end
+        let leaked = "This developer diagnostic is not Dan's copy."
+        // copy-inventory:ignore-end
+        """
+        // The counts balance, so the unclosed check is structurally unable to see this. That is the
+        // whole reason it needs its own detection rather than a widening of that one.
+        #expect(!SwiftSource.unclosedIgnoreRegion(in: source))
+        #expect(SwiftSource.nestedIgnoreRegion(in: source) == 3)
+    }
+
+    // And the ordinary case it must not fire on: two regions one after another in the same file, which
+    // is what several files legitimately carry today.
+    @Test func twoRegionsOneAfterAnotherAreNotNested() {
+        let source = """
+        // copy-inventory:ignore-start  outbound email
+        let body = "I'll leave it here either way."
+        // copy-inventory:ignore-end
+        // copy-inventory:ignore-start  AppleScript OmniFocus reads
+        let script = "tell application to do nothing"
+        // copy-inventory:ignore-end
+        """
+        #expect(SwiftSource.nestedIgnoreRegion(in: source) == nil)
+    }
+
     // MARK: - The classifier
 
     @Test func aSentenceIsCopy() {
@@ -286,6 +323,39 @@ struct CopyInventoryTests {
         #expect(throws: CopyInventory.Failure.self) {
             try CopyInventory.build(root: directory, floor: 1)
         }
+    }
+
+    // #2671, the same refusal for the nested case, and asserted on the SPECIFIC failure rather than on
+    // the mere fact of a throw: a test satisfied by any error is satisfied by its own fixture going
+    // wrong, and would report hardest on the branch it covers least (L140). The message has to name the
+    // file and the line, because the two markers involved are usually hundreds of lines apart.
+    @Test func refusesAFileThatOpensAnIgnoreRegionInsideAnotherOne() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("copy-inventory-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try """
+        // copy-inventory:ignore-start  outbound email
+        let body = "I'll leave it here either way."
+        // copy-inventory:ignore-start  an RFC822 header Gmail reads
+        let header = "Content-Type is not a sentence."
+        // copy-inventory:ignore-end
+        let leaked = "This developer diagnostic would leak into the list of Dan's own copy."
+        // copy-inventory:ignore-end
+        """.write(to: directory.appendingPathComponent("Nested.swift"),
+                  atomically: true, encoding: .utf8)
+
+        var reported = ""
+        #expect(throws: CopyInventory.Failure.self) {
+            do {
+                _ = try CopyInventory.build(root: directory, floor: 1)
+            } catch let failure as CopyInventory.Failure {
+                reported = failure.description
+                throw failure
+            }
+        }
+        #expect(reported.contains("Nested.swift"))
+        #expect(reported.contains("line 3"))
     }
 
     @Test func everyExcludedRegionSaysWhy() throws {

@@ -237,8 +237,7 @@ struct AddressCorrectionTests {
         let classBody = try #require(SourceGuardHelper.propertyBody("final class WatchedSource {", in: model),
                                      "WatchedSource's class body could not be read")
         let cleared = try #require(
-            SourceGuardHelper.propertyBody("static func clearStateDerivedFromTheWatchedPage(_ source: WatchedSource) {",
-                                           in: editing),
+            SourceGuardHelper.bodyOfFunction(named: "clearStateDerivedFromTheWatchedPage", in: editing),
             "the correction's clearing function could not be found: it is what this guard measures")
 
         let unaccounted = storedProperties(in: classBody).filter { name in

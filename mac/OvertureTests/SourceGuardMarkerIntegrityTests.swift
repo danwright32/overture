@@ -81,8 +81,21 @@ struct SourceGuardMarkerIntegrityTests {
 
     private struct GuardFile {
         let name: String
-        let text: String
+        let text: String         // the guard file's CODE, comments stripped (see below)
         let haystack: String     // every source file this test reads, joined
+    }
+
+    // Every marker below is read out of the guard file's CODE, never its raw text. A guard test's
+    // comments quote the very shapes these patterns look for (this file's own do), and a commented-out
+    // or merely DESCRIBED call would then be scanned as a live one: reported as stale when it matches
+    // nothing, or as a mid-signature pin when it was only ever an example in prose. A pattern that reads
+    // comments is a pattern that fires on its own documentation (L103), which is one of the three ways
+    // the guards this suite audits have already passed on broken code (#2726).
+    //
+    // `skipping: []` on purpose: a DEBUG branch or a marked region in a test file still holds real
+    // guards, and this is asking about the guards, not about what the app says.
+    private static func code(of text: String) -> String {
+        SwiftSource.scannableLines(in: text, skipping: []).map(\.code).joined(separator: "\n")
     }
 
     private static let guardFiles: [GuardFile] = {
@@ -92,12 +105,13 @@ struct SourceGuardMarkerIntegrityTests {
             // empty list a guard would read as a clean result.
             for file in AppSourceWalk.files(under: macRoot.appendingPathComponent(dir), floor: 20) {
                 guard !buildsItsOwnText.contains(file.name) else { continue }
-                guard file.text.contains("propertyBody(") || file.text.contains("between(")
-                        || file.text.contains("bodyOfFunction(") else { continue }
-                let bodies = Set(captures(pathLiteral, in: file.text, groups: [1])).compactMap {
+                let source = code(of: file.text)
+                guard source.contains("propertyBody(") || source.contains("between(")
+                        || source.contains("bodyOfFunction(") else { continue }
+                let bodies = Set(captures(pathLiteral, in: source, groups: [1])).compactMap {
                     try? String(contentsOf: macRoot.appendingPathComponent($0), encoding: .utf8)
                 }
-                out.append(GuardFile(name: file.name, text: file.text,
+                out.append(GuardFile(name: file.name, text: source,
                                      haystack: bodies.joined(separator: "\n")))
             }
         }
@@ -113,7 +127,17 @@ struct SourceGuardMarkerIntegrityTests {
         let markers = Self.guardFiles.flatMap {
             Self.captures(Self.propertyBodyMarker, in: $0.text, groups: [1])
         }
-        #expect(markers.count >= 40, "found only \(markers.count) propertyBody markers")
+        let names = Self.guardFiles.flatMap {
+            Self.captures(Self.functionNameMarker, in: $0.text, groups: [1])
+        }
+        // A floor PER IDIOM, not one total. #2599 moved 45 markers off `propertyBody` and onto
+        // `bodyOfFunction`, so a single total would have stayed comfortably above its floor while one of
+        // the two regexes stopped matching anything at all, and an idiom nobody is scanning is exactly
+        // the state this suite exists to make impossible (L53, L96). Measured after that sweep,
+        // 2026-08-16: 31 and 53. Both floors sit well under those, because a tight number fails on an
+        // ordinary deletion and teaches the next person to lower it without reading (L63).
+        #expect(markers.count >= 15, "found only \(markers.count) propertyBody markers")
+        #expect(names.count >= 25, "found only \(names.count) bodyOfFunction markers")
     }
 
     // 1. Every `propertyBody` marker ends at its own opening brace.
@@ -135,6 +159,99 @@ struct SourceGuardMarkerIntegrityTests {
                         """)
             }
         }
+    }
+
+    // Is this `propertyBody` marker anchored to a FUNCTION rather than to a property, a type or a
+    // brace-delimited region? Two shapes, and they are two because the guards were written both ways:
+    //
+    //   1. The whole signature as written ("private func focusOnStage(_ status: AgentStatus) {").
+    //   2. The LAST LINE of a wrapped argument list ("agentInputs: AgentInputs) -> some View {",
+    //      "async -> ReconcileSummary {"), which is what a guard reaches for once the signature no
+    //      longer fits on one line.
+    //
+    // The second is told from a legitimate marker by its parens: a mid-signature anchor CLOSES a paren
+    // it never opened, or opens with the tail of a signature (`->`, `async`, `throws`). A marker that
+    // merely contains a balanced call, `.onChange(of: focus) {`, is left alone, which is why this counts
+    // parens rather than looking for one.
+    static func functionAnchor(_ marker: String) -> String? {
+        if marker.contains("func ") { return "it pins the function's whole signature as written" }
+        if marker.filter({ $0 == ")" }).count > marker.filter({ $0 == "(" }).count {
+            return "it pins the last line of the function's argument list"
+        }
+        let head = marker.trimmingCharacters(in: .whitespaces)
+        if ["->", "async", "throws", "rethrows"].contains(where: { head.hasPrefix($0) }) {
+            return "it pins the tail of the function's signature"
+        }
+        return nil
+    }
+
+    // 3. No `propertyBody` marker is anchored to a function (#2599, #2784).
+    //
+    // `propertyBody` needs its marker to run all the way to the opening brace, so a guard using it on a
+    // function is pinned to that function's signature AS WRITTEN. Adding a parameter, renaming one, or
+    // merely re-wrapping the signature across two lines then makes the marker match nothing:
+    // `propertyBody` returns nil, and at the call sites that spell that `?? ""` every assertion beneath
+    // it is quietly false, while at the ones that `Issue.record` it goes red for a reason unrelated to
+    // the rule. #2417 hit it (five guards over two QueueView functions), #2524 hit it again (two more),
+    // and each time the fix was the same: `bodyOfFunction(named:in:)`, which finds the declaration by
+    // name and walks the parameter list by paren depth.
+    //
+    // So the class is closed here rather than swept a third time (L30, L96). This runs over every guard
+    // file in both targets, derived rather than listed, so a marker written tomorrow is covered.
+    @Test func noPropertyBodyMarkerIsAnchoredToAFunction() {
+        for file in Self.guardFiles {
+            for marker in Self.captures(Self.propertyBodyMarker, in: file.text, groups: [1]) {
+                let anchor = Self.functionAnchor(marker)
+                #expect(anchor == nil,
+                        """
+                        \(file.name): the marker \(marker.debugDescription) anchors propertyBody to a \
+                        function, because \(anchor ?? ""). The next parameter added or signature \
+                        re-wrapped makes it match nothing, and a marker that matches nothing returns \
+                        nil, which every `contains` beneath it reads as false. Use \
+                        SourceGuardHelper.bodyOfFunction(named:in:) instead, which finds the \
+                        declaration by name (#2599, #2784, L103).
+                        """)
+            }
+        }
+    }
+
+    // The classifier itself, exercised on each shape it claims to know rather than only ever watched not
+    // to fire. A documented outcome nobody constructs can be unreachable in the code while the guard
+    // looks thoroughly tested (L151), and the mid-signature shapes are exactly the ones a fixture is
+    // least likely to reach for.
+    @Test func theClassifierKnowsEachShapeItNames() {
+        #expect(Self.functionAnchor("private func focusOnStage(_ status: AgentStatus) {") != nil)
+        #expect(Self.functionAnchor("@ViewBuilder private func focusedSection(data: RenderData) -> some View {")
+                != nil)
+        #expect(Self.functionAnchor("agentInputs: AgentInputs) -> some View {") != nil)
+        #expect(Self.functionAnchor("only: Set<String>? = nil) {") != nil)
+        #expect(Self.functionAnchor("async -> ReconcileSummary {") != nil)
+
+        // And the markers it must leave alone: a stored property, a type, a brace-delimited region, and
+        // one carrying a BALANCED call, which is what separates this from "the marker mentions a paren".
+        #expect(Self.functionAnchor("private var masthead: some View {") == nil)
+        #expect(Self.functionAnchor("struct QueueScrollHolder<Content: View>: View {") == nil)
+        #expect(Self.functionAnchor("if let insecure = source.insecureFetchNote {") == nil)
+        #expect(Self.functionAnchor(".onChange(of: focusedStage) {") == nil)
+    }
+
+    // And the scan reads code, not prose. This file's own comments quote the exact call shapes the
+    // patterns above look for, so without the strip a marker that only ever existed as an example, or a
+    // call somebody commented out, would be scanned as a live guard: reported stale when it matches
+    // nothing, or reported as a mid-signature pin when it is not a pin at all. Exercised on both, rather
+    // than trusted, because a strip that stopped working leaves every check passing for the wrong reason.
+    @Test func theScanReadsCodeAndNotComments() {
+        let file = """
+        // An example in prose: SourceGuardHelper.propertyBody("private func gone(x: Int) {", in: src)
+        struct Thing {
+            let real = SourceGuardHelper.propertyBody("private var masthead: some View {", in: src)
+            // let old = SourceGuardHelper.propertyBody("private func alsoGone() {", in: src)
+        }
+        """
+        let markers = Self.captures(Self.propertyBodyMarker, in: Self.code(of: file), groups: [1])
+        #expect(markers == ["private var masthead: some View {"])
+        // Which is exactly what the raw text would NOT have said, and the difference is the point.
+        #expect(Self.captures(Self.propertyBodyMarker, in: file, groups: [1]).count == 3)
     }
 
     // 2. Every marker still matches something in the source its own test file reads.

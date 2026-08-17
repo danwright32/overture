@@ -44,8 +44,7 @@ struct ScrollPassthroughWebViewTests {
     // wiring are two separate claims).
     @Test func thePreviewBuildsItsWebViewAsThePassthroughKind() {
         let source = SourceGuardHelper.source("Overture/UI/DraftSignaturePreview.swift")
-        let body = SourceGuardHelper.propertyBody(
-            "func makeNSView(context: Context) -> WKWebView {", in: source)
+        let body = SourceGuardHelper.bodyOfFunction(named: "makeNSView", in: source)
 
         #expect(body?.contains("ScrollPassthroughWebView(frame:") == true,
                 "SignatureWebView must instantiate the passthrough subclass.")

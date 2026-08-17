@@ -26,7 +26,7 @@ struct GmailConnectFailureAlertTests {
         // the one raiser, which closes whatever is presented first, because an alert raised into a window
         // already showing a sheet queues behind it and is never seen.
         #expect(src.contains("reportGmailConnectError(error.localizedDescription)"))
-        #expect(SourceGuardHelper.propertyBody("private func reportGmailConnectError(_ message: String) {", in: src)?
+        #expect(SourceGuardHelper.bodyOfFunction(named: "reportGmailConnectError", in: src)?
             .contains("modals.raise { gmailConnectError = message }") == true)
         // A dedicated alert, titled for the Gmail connect, with a one-click Try again that reruns connect.
         #expect(src.contains(#".alert("Couldn't connect Gmail""#))

@@ -71,8 +71,8 @@ struct RootViewModalGuardTests {
     // `.sheet(isPresented: $x)` modifiers rather than listed here, so a sheet added later fails this
     // instead of quietly becoming a place questions go to die (L41).
     @Test func everySheetItCanPresentIsOneItCanClose() throws {
-        let body = try #require(SourceGuardHelper.propertyBody(
-            "private func closeEveryPresentedSheet() {", in: source))
+        let body = try #require(
+            SourceGuardHelper.bodyOfFunction(named: "closeEveryPresentedSheet", in: source))
         var found = 0
         for line in source.split(separator: "\n") {
             guard let range = line.range(of: ".sheet(isPresented: $") else { continue }
@@ -91,16 +91,18 @@ struct RootViewModalGuardTests {
     // clearing it); setting it to anything else is a question raised, and there is exactly one place per
     // alert where that may happen.
     @Test func nothingSetsAnAlertStateOutsideItsOwnRaiser() {
-        // Each marker ends at the function's own opening brace on purpose. `propertyBody` counts braces
-        // from the marker, so a marker stopping at "(" starts the scan inside the signature and only
-        // balances at the end of the whole type: the "body" would then contain every raise site in the
-        // file and agree with itself whatever they say (L70). Caught by mutation, not by review.
-        let raisers = ["errorMessage": "private func reportError(_ message: String) {",
-                       "gmailConnectError": "private func reportGmailConnectError(_ message: String) {",
-                       "cancelledScoutRead": "private func askAboutCancelledRead(count: Int) {",
-                       "scoutReadAsk": "private func askReadBudget(_ ask: ScoutReadAsk) {"]
+        // Each raiser is found by NAME (#2784). It used to be found by its whole signature, which is a
+        // pin on the parameters it happens to take today: add one and the marker matches nothing,
+        // `propertyBody` returns nil, and the `?? ""` below turns every assertion under it false while
+        // the suite stays green. The related trap the old comment here warned about is now refused for
+        // everybody by `SourceGuardMarkerIntegrityTests`: a marker stopping at "(" counts braces from
+        // inside the signature and returns the rest of the type, which agrees with itself (L70).
+        let raisers = ["errorMessage": "reportError",
+                       "gmailConnectError": "reportGmailConnectError",
+                       "cancelledScoutRead": "askAboutCancelledRead",
+                       "scoutReadAsk": "askReadBudget"]
         for (state, raiser) in raisers {
-            let inside = SourceGuardHelper.propertyBody(raiser, in: source) ?? ""
+            let inside = SourceGuardHelper.bodyOfFunction(named: raiser, in: source) ?? ""
             #expect(inside.contains("modals.raise"),
                     "\(state) must be raised through the one presenter")
             for line in source.split(separator: "\n") {
@@ -117,9 +119,7 @@ struct RootViewModalGuardTests {
     // routes out, the buttons and the dismissal, or a scout answered with Escape carries on with nothing
     // on screen, which is the same invisibility from the other end.
     @Test func answeringTheReadBudgetQuestionPutsTheTakeoverBack() throws {
-        let answered = try #require(SourceGuardHelper.propertyBody(
-            "private func answerReadAsk(_ ask: ScoutReadAsk, _ choice: ScoutReadBudget.Choice) {",
-            in: source))
+        let answered = try #require(SourceGuardHelper.bodyOfFunction(named: "answerReadAsk", in: source))
         #expect(answered.contains("if isScanning { scoutSheetShown = true }"))
 
         let binding = try #require(SourceGuardHelper.propertyBody(

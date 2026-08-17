@@ -224,19 +224,17 @@ struct ReprepHandOverTests {
 
         // The run produced results (the ingest path), and the launch-time ingest of a run that finished
         // while Overture was closed, both go through ingestPrep.
-        let ingest = SourceGuardHelper.propertyBody("private func ingestPrep() {", in: root)
+        let ingest = SourceGuardHelper.bodyOfFunction(named: "ingestPrep", in: root)
         #expect(ingest?.contains(scoped) == true,
                 "a run that produced results must give back the requests it did not serve")
 
         // The run finished having produced nothing at all: the case #1940 exists for.
-        let settle = SourceGuardHelper.propertyBody("private func settleFinishedRun(slot: RunSlot) async {",
-                                                    in: root)
+        let settle = SourceGuardHelper.bodyOfFunction(named: "settleFinishedRun", in: root)
         #expect(settle?.contains(scoped) == true,
                 "a run that finished empty must give back every request it was carrying")
 
         // The run died rather than finished.
-        let swept = SourceGuardHelper.propertyBody("private func sweptADeadRun(slot: RunSlot) -> Bool {",
-                                                   in: root)
+        let swept = SourceGuardHelper.bodyOfFunction(named: "sweptADeadRun", in: root)
         #expect(swept?.contains(scoped) == true,
                 "a run that died must give back every request it was carrying")
     }

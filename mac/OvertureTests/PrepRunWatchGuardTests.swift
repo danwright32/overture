@@ -30,8 +30,7 @@ struct PrepRunWatchGuardTests {
     @Test func theWatcherOnlyEntersOnAGenuinelyLiveRunAndReopensTheTakeover() {
         // Isolate the watcher's own body so these assertions cannot be satisfied by the identical wiring
         // elsewhere in the file (the idle toolbar label, canStartPrep, and so on all read isRunning too).
-        guard let body = SourceGuardHelper.propertyBody("private func watchRuns(slot: RunSlot) async {",
-                                                        in: rootView) else {
+        guard let body = SourceGuardHelper.bodyOfFunction(named: "watchRuns", in: rootView) else {
             Issue.record("watchRuns body not found"); return
         }
         // Only when a run genuinely starts, which includes one a previous launch left in flight (that is

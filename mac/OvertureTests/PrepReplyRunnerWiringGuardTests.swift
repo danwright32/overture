@@ -173,7 +173,7 @@ struct PrepReplyRunnerWiringGuardTests {
     // runs only when a run was genuinely followed to its end.
     @Test func theCompletionWatcherWaitsForARunInsteadOfPollingForOne() {
         #expect(!rootView.isEmpty)
-        guard let body = SourceGuardHelper.propertyBody("private func watchReplyClassifyRuns() async {",
+        guard let body = SourceGuardHelper.bodyOfFunction(named: "watchReplyClassifyRuns",
                                                         in: rootView) else {
             Issue.record("expected to find watchReplyClassifyRuns")
             return

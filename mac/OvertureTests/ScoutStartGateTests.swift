@@ -82,8 +82,7 @@ struct ScoutStartGateWiringTests {
     private var source: String { SourceGuardHelper.source("Overture/App/RootView.swift") }
 
     @Test func thepressChecksTheReaderBeforeSweeping() throws {
-        let run = try #require(SourceGuardHelper.propertyBody(
-            "only: Set<String>? = nil) {", in: source))
+        let run = try #require(SourceGuardHelper.bodyOfFunction(named: "runScout", in: source))
         #expect(run.contains("ScoutStartGate.decide("))
         #expect(run.contains("readerIsRunning: ScoutExtractService.isRunning(now: Date())"))
         // And it STOPS. A gate that decided, said so, and then swept anyway would be the defect with a

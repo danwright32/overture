@@ -20,9 +20,7 @@ struct StageOnlyNavWiringGuardTests {
 
     // The Reached out stage renders its per-recipient list (not the standard natural-key rows).
     @Test func theReachedOutStageRendersReachedOutList() {
-        guard let body = SourceGuardHelper.propertyBody(
-            "@ViewBuilder private func focusedSection(data: RenderData) -> some View {",
-            in: queueView) else {
+        guard let body = SourceGuardHelper.bodyOfFunction(named: "focusedSection", in: queueView) else {
             Issue.record("expected focusedSection's body"); return
         }
         #expect(body.contains("if focusedStage == .reachedOut"))
@@ -33,9 +31,7 @@ struct StageOnlyNavWiringGuardTests {
     // its tap starts a run through RootView's closure.
     @Test func thePrepButtonIsGatedAndWired() {
         #expect(queueView.contains("var onStartPrep: () -> Void = {}"))
-        guard let body = SourceGuardHelper.propertyBody(
-            "@ViewBuilder private func focusedSection(data: RenderData) -> some View {",
-            in: queueView) else {
+        guard let body = SourceGuardHelper.bodyOfFunction(named: "focusedSection", in: queueView) else {
             Issue.record("expected focusedSection's body"); return
         }
         #expect(body.contains("PrepQueueButton.shouldShow(stage: focusedStage"))

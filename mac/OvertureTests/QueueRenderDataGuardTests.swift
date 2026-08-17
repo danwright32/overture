@@ -44,8 +44,7 @@ struct QueueRenderDataGuardTests {
     // The pass builds the expensive `items` map a single time and derives the rest from that one array,
     // rather than rebuilding it for each field.
     @Test func makeRenderDataReadsItemsOnce() {
-        guard let body = SourceGuardHelper.propertyBody(
-            "static func make(_ i: Inputs) -> QueueView.RenderData {", in: renderPass) else {
+        guard let body = SourceGuardHelper.bodyOfFunction(named: "make", in: renderPass) else {
             Issue.record("expected to find the render pass")
             return
         }
@@ -70,9 +69,7 @@ struct QueueRenderDataGuardTests {
     // the inputs are handed over. Re-anchored rather than deleted: the defect it guards against is one
     // word at a call site, and moving the call site does not make the word any harder to write.
     @Test func theProbeBarUsesTheItemsItWasHanded() {
-        guard let body = SourceGuardHelper.propertyBody(
-            "private func probeSelectionBar(_ data: RenderData) -> some View {",
-            in: queueView) else {
+        guard let body = SourceGuardHelper.bodyOfFunction(named: "probeSelectionBar", in: queueView) else {
             Issue.record("expected to find probeSelectionBar's body")
             return
         }
@@ -105,11 +102,9 @@ struct QueueRenderDataGuardTests {
     // focus. Paired with StageNavigationCountsTests, which proves that single pass agrees with the
     // per-focus navigation it replaced.
     @Test func agentInputsCountsInOnePass() {
-        // #1570 added a `geo:` argument and #2365 folded it, the day and the instant into one
-        // `context:`, so the anchor is the last line of the signature, not the whole of it.
-        guard let body = SourceGuardHelper.propertyBody(
-            "runInFlight: RunKind?, replyRunAlive: Bool) -> AgentInputs {",
-            in: agentRoster) else {
+        // Anchored on the NAME (#2784): #1570 added a `geo:` argument and #2365 folded it, the day and
+        // the instant into one `context:`, and every such change used to move the text this pinned.
+        guard let body = SourceGuardHelper.bodyOfFunction(named: "from", in: agentRoster) else {
             Issue.record("expected to find AgentInputs.from's body")
             return
         }

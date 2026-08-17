@@ -136,7 +136,8 @@ struct GenrePrecedenceTests {
     // The whole classification moves together or the row describes two different shows: `fitReason` is
     // built from the discipline, production, profile and coverage of ONE classify call, so keeping the
     // genre while taking a second source's reason would print a sentence about a genre the row does not
-    // hold. #1664 is open on that sentence being read by Dan.
+    // hold. #1664 covered how that sentence reads to Dan and is closed: #1657 stopped the fit reason
+    // printing the raw genre code on 2026-08-08.
     @Test func theKeptClassificationKeepsItsOwnReason() throws {
         let ctx = try context()
         source(ctx, "frigid")

@@ -23,16 +23,13 @@ struct FocusedStageWiringGuardTests {
     // deleted, because the defect it guards (filtering a frozen key set) is just as writable at the new
     // site as the old one.
     @Test func stageMembershipIsResolvedLiveNotFromAFrozenKeySet() {
-        guard let body = SourceGuardHelper.propertyBody(
-            "static func make(_ i: Inputs) -> QueueView.RenderData {", in: renderPass) else {
+        guard let body = SourceGuardHelper.bodyOfFunction(named: "make", in: renderPass) else {
             Issue.record("expected to find the render pass")
             return
         }
         #expect(body.contains("StageNavigation.focusedKeys(stage: i.focusedStage"))
         // And the list renders what that produced, rather than re-deriving its own set.
-        guard let section = SourceGuardHelper.propertyBody(
-            "@ViewBuilder private func focusedSection(data: RenderData) -> some View {",
-            in: queueView) else {
+        guard let section = SourceGuardHelper.bodyOfFunction(named: "focusedSection", in: queueView) else {
             Issue.record("expected to find focusedSection's body")
             return
         }
@@ -44,22 +41,20 @@ struct FocusedStageWiringGuardTests {
     // sets the stage that actually CONTAINS the lead, so the row is on screen when it scrolls to it.
     @Test func stageIsSetOnEntryAndRoutedOnEveryOtherPath() {
         // Set when a pill is tapped.
-        guard let focusOnStage = SourceGuardHelper.propertyBody(
-            "private func focusOnStage(_ status: AgentStatus) {", in: queueView) else {
+        guard let focusOnStage = SourceGuardHelper.bodyOfFunction(named: "focusOnStage", in: queueView) else {
             Issue.record("expected focusOnStage's body"); return
         }
         #expect(focusOnStage.contains("focusedStage = status.focus"))
 
         // The away-alert leads path is not a stage: it clears focusedStage so the flat named list renders.
-        guard let focusOnLeads = SourceGuardHelper.propertyBody(
-            "private func focusOnLeads(_ keys: [String], proxy: ScrollViewProxy) {", in: queueView) else {
+        guard let focusOnLeads = SourceGuardHelper.bodyOfFunction(named: "focusOnLeads", in: queueView) else {
             Issue.record("expected focusOnLeads's body"); return
         }
         #expect(focusOnLeads.contains("focusedStage = nil"))
 
         // A deep-linked lead focuses the stage that contains it, so the row renders before the scroll.
-        guard let navigateToLead = SourceGuardHelper.propertyBody(
-            "private func navigateToLead(_ key: String, proxy: ScrollViewProxy) {", in: queueView) else {
+        guard let navigateToLead = SourceGuardHelper.bodyOfFunction(
+            named: "navigateToLead", in: queueView) else {
             Issue.record("expected navigateToLead's body"); return
         }
         #expect(navigateToLead.contains("focusedStage = StageNavigation.stage(containing: key"))

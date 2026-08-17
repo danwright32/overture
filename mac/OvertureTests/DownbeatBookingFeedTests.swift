@@ -441,8 +441,7 @@ struct DownbeatBookingFeedWiringGuardTests {
         let sched = SourceGuardHelper.source("Overture/App/ReconcileScheduler.swift")
         // Scoped to that function's own balanced-brace body, not the file, so a mention of the store
         // anywhere else in a 300-line scheduler cannot stand in for the tick actually doing it (L63).
-        guard let body = SourceGuardHelper.propertyBody("into defaults: UserDefaults = .standard) {",
-                                                        in: sched) else {
+        guard let body = SourceGuardHelper.bodyOfFunction(named: "observeFeedFreshness", in: sched) else {
             Issue.record("observeFeedFreshness not found"); return
         }
         #expect(body.contains("DownbeatBookingFeedStore.record("),
