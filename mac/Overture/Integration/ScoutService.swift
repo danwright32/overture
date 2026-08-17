@@ -752,14 +752,6 @@ enum ScoutService {
         (error as? SourceFetchError) ?? .transport(error)
     }
 
-    // Carnegie's watchlist row, or nil on a store whose #800 backfill has not run yet (and in a test
-    // container that does not declare the model at all).
-    private static func carnegieRow(in context: ModelContext) -> WatchedSource? {
-        let id = WatchedSource.carnegieId
-        let descriptor = FetchDescriptor<WatchedSource>(predicate: #Predicate { $0.sourceId == id })
-        return (try? context.fetch(descriptor))?.first
-    }
-
     // Records that this source was checked, and folds the run into its own feed-health history. Not
     // saved here: apply() already saved, and the caller's own save covers this (a lost health update is
     // recoverable, unlike a lost prospect).
