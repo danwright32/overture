@@ -19,6 +19,7 @@ describe("prep-runbook judgment rules are present (#591)", () => {
 
   it("guards the concrete rules this harness cares about", () => {
     expect(RUNBOOK_RULES.map((r) => r.name).sort()).toEqual([
+      "a-name-match-alone-is-not-enough",
       "act-pursued-when-no-organiser-named",
       "agency-inbox-never-satisfies-step-two",
       "ask-presupposes-photography-plans",
@@ -61,6 +62,7 @@ describe("prep-runbook judgment rules are present (#591)", () => {
       "representative-only-when-the-target-names-a-person",
       "returning-client-register",
       "search-the-bare-name-first",
+      "search-the-platform-for-a-profile",
       "sentence-one-introduces-dan",
       "several-contacts-get-an-unnamed-hello",
       "social-profile-is-a-pointer",
