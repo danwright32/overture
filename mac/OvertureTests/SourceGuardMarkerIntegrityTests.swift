@@ -42,6 +42,39 @@ struct SourceGuardMarkerIntegrityTests {
     // silently finds no haystack and every marker in that file reads as unmatched.
     private static let pathLiteral = regex(#""([A-Za-z0-9_/+.-]+\.(?:swift|sh))""#)
     private static let propertyBodyMarker = regex(#"propertyBody\(\s*"((?:[^"\\]|\\.)*)""#)
+
+    // #2841: the same call with its marker arriving through a NAME rather than as a literal.
+    //
+    // The regex above only ever saw a literal, and that is not a hypothetical hole: it is exactly how the
+    // defect the guard was written for stayed hidden. The `focusOnLeads` vacuity in
+    // `QueueInvalidationGuardTests` survived #2784 because its markers sat in an array rather than as
+    // literal arguments, so nothing matched the call at all and the scan reported cleanly on a guard whose
+    // searched region was every line of QueueView below a function.
+    //
+    // A bare identifier only. `surface.marker` and other member accesses are deliberately NOT matched:
+    // those come from a registry (`QueueShowableSurfacesAreOnePredicateTests`) that drives its own missing
+    // and ambiguous findings, so it is reviewed, just not by this guard, and there is no single literal to
+    // resolve them to anyway.
+    private static let propertyBodyVariableMarker = regex(#"propertyBody\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*,"#)
+
+    // `let name = "literal"`, or `let name: String = "literal"`, in the same file. One level, no
+    // arithmetic, no concatenation: a name defined once and used once is the shape this is for, and
+    // anything cleverer would be a source-text interpreter guessing at values (L103's direction).
+    private static func literalBinding(named name: String, in source: String) -> String? {
+        let pattern = regex(#"\blet\s+"# + NSRegularExpression.escapedPattern(for: name)
+                            + #"\s*(?::\s*String\s*)?=\s*"((?:[^"\\]|\\.)*)""#)
+        return captures(pattern, in: source, groups: [1]).first
+    }
+
+    // Every marker a file hands to `propertyBody`, whether written at the call or resolved through a
+    // local binding. One list, so the checks below cannot cover one shape and miss the other.
+    private static func propertyBodyMarkers(in source: String) -> [String] {
+        var out = captures(propertyBodyMarker, in: source, groups: [1])
+        for name in captures(propertyBodyVariableMarker, in: source, groups: [1]) {
+            if let literal = literalBinding(named: name, in: source) { out.append(literal) }
+        }
+        return out
+    }
     private static let betweenMarkers = regex(#"between\(\s*"((?:[^"\\]|\\.)*)"\s*,\s*and:\s*"((?:[^"\\]|\\.)*)""#)
     // #2417: the third way a guard names the code it reads. `bodyOfFunction` takes a NAME rather than a
     // signature, which is what makes it survive a parameter change, but the name can go stale in exactly
@@ -147,9 +180,12 @@ struct SourceGuardMarkerIntegrityTests {
     // returned "body" is then most of the file, and a guard asking whether it CONTAINS something is
     // answered by any occurrence anywhere, while one asking whether it does NOT is answered by the whole
     // file. Either way it agrees with itself and stops depending on the code it names.
+    // #2841: through the resolver, so a marker arriving by name is held to this too. All three checks in
+    // this file share one list, or one shape would be covered and the other missed, which is the defect
+    // being closed here rather than a second version of it.
     @Test func everyPropertyBodyMarkerEndsAtItsOwnBrace() {
         for file in Self.guardFiles {
-            for marker in Self.captures(Self.propertyBodyMarker, in: file.text, groups: [1]) {
+            for marker in Self.propertyBodyMarkers(in: file.text) {
                 #expect(marker.hasSuffix("{"),
                         """
                         \(file.name): the marker \(marker.debugDescription) does not end at "{". \
@@ -198,9 +234,11 @@ struct SourceGuardMarkerIntegrityTests {
     //
     // So the class is closed here rather than swept a third time (L30, L96). This runs over every guard
     // file in both targets, derived rather than listed, so a marker written tomorrow is covered.
+    // #2841: markers reaching `propertyBody` through a local NAME are judged too, because that is the
+    // shape the defect this guard exists for actually wore.
     @Test func noPropertyBodyMarkerIsAnchoredToAFunction() {
         for file in Self.guardFiles {
-            for marker in Self.captures(Self.propertyBodyMarker, in: file.text, groups: [1]) {
+            for marker in Self.propertyBodyMarkers(in: file.text) {
                 let anchor = Self.functionAnchor(marker)
                 #expect(anchor == nil,
                         """
@@ -254,6 +292,59 @@ struct SourceGuardMarkerIntegrityTests {
         #expect(Self.captures(Self.propertyBodyMarker, in: file, groups: [1]).count == 3)
     }
 
+    // #2841: a marker reaching propertyBody through a local NAME is resolved and judged.
+    //
+    // The guard used to see literal arguments only, and that is not a hypothetical hole: it is how the
+    // `focusOnLeads` vacuity survived #2784, its markers sitting in an array rather than at the call. So
+    // the vacuous marker below is planted in the shape that actually hid one, and every check in this
+    // file is asked of it.
+    @Test func aMarkerReachedThroughALocalNameIsResolvedAndJudged() {
+        let file = """
+        struct Guarded {
+            func check() {
+                let marker = "private func focusOnLeads(_ keys: Set<String>) {"
+                let body = SourceGuardHelper.propertyBody(marker, in: src) ?? ""
+                #expect(body.contains("something"))
+            }
+        }
+        """
+        let resolved = Self.propertyBodyMarkers(in: Self.code(of: file))
+        #expect(resolved == ["private func focusOnLeads(_ keys: Set<String>) {"],
+                "a marker defined once and used once must be followed to its literal")
+        // And once resolved it is CONDEMNED, which is the whole point: this is a function signature, so
+        // propertyBody scans from inside the parameter list and hands back most of the type.
+        #expect(Self.functionAnchor(resolved[0]) != nil,
+                "a resolved marker must be judged by the same rule a literal one is")
+    }
+
+    // The other direction, which is what keeps this from becoming a source interpreter: a name it cannot
+    // resolve to a single literal in the same file yields NOTHING rather than a guess. The registry in
+    // QueueShowableSurfacesAreOnePredicateTests is the live example, and it is reviewed by its own missing
+    // and ambiguous findings rather than by this.
+    @Test func anUnresolvableNameIsNotGuessedAt() {
+        let registry = """
+        struct Guarded {
+            func check() {
+                for surface in Self.surfaces {
+                    let body = SourceGuardHelper.propertyBody(surface.marker, in: text)
+                }
+            }
+        }
+        """
+        #expect(Self.propertyBodyMarkers(in: Self.code(of: registry)).isEmpty,
+                "a member access has no single literal to resolve to, so it is left to its own review")
+
+        let elsewhere = """
+        struct Guarded {
+            func check() {
+                let body = SourceGuardHelper.propertyBody(markerFromAnotherFile, in: text)
+            }
+        }
+        """
+        #expect(Self.propertyBodyMarkers(in: Self.code(of: elsewhere)).isEmpty,
+                "a name with no binding in this file is not invented")
+    }
+
     // 2. Every marker still matches something in the source its own test file reads.
     //
     // A marker that stops matching returns nil, spelled at the call site as `?? ""` or an optional chain,
@@ -261,7 +352,7 @@ struct SourceGuardMarkerIntegrityTests {
     // asking anything at all.
     @Test func everyMarkerStillMatchesTheSourceItIsAskedOf() {
         for file in Self.guardFiles where !file.haystack.isEmpty {
-            let markers = Self.captures(Self.propertyBodyMarker, in: file.text, groups: [1])
+            let markers = Self.propertyBodyMarkers(in: file.text)
                 + Self.captures(Self.betweenMarkers, in: file.text, groups: [1, 2])
             for marker in markers where !marker.isEmpty {
                 #expect(file.haystack.contains(Self.unescape(marker)),
