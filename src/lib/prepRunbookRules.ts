@@ -111,6 +111,13 @@ export const RUNBOOK_RULES: RunbookRule[] = [
   // how a stranger's profile gets surfaced as the act, and Dan sends that DM by hand (#2147, L75).
   { name: "search-the-platform-for-a-profile", pattern: /GO AND SEARCH the platform\s+for a profile/i },
   { name: "a-name-match-alone-is-not-enough", pattern: /a name match alone is NOT enough/i },
+  // #2893: a `method` names a route, so it may not be emitted without one. The prompt only ever stated
+  // the positive form ("record it as form_or_dm with the form URL in formUrl"), and a run that can read
+  // the app's own Swift derived its permission from an OPTIONAL field instead: any combination the
+  // schema tolerates will eventually be emitted and defended as valid (L167). The deterministic half is
+  // `Reachability.declaredRouteIsMissing` at the ingest boundary; this is the half that stops the run
+  // producing the shape in the first place.
+  { name: "a-method-names-a-route", pattern: /may never be emitted without one/i },
   // #2269: and neither rule means anything if the run reports links it never received. Measured
   // 2026-08-07: it summarised a profile as carrying "and 2 more" links when the fetched page held one.
   { name: "only-what-the-fetch-returned", pattern: /only what the fetch actually returned counts/i },

@@ -500,6 +500,17 @@ in order, stop at the first that works:
 3. **The target's contact form / Instagram DM** when it publishes no email, and only after (a) and
    (b) above have come back with nothing. Record it as `method: "form_or_dm"` with the form URL in
    `formUrl` (the app surfaces it as a tappable link). This outranks any venue inbox.
+
+   **A `method` NAMES A ROUTE, so it may never be emitted without one (#2893).** `form_or_dm` with no
+   `formUrl`, or `named_decision_maker` or `generic_inbox` with no `email`, promises a way in and
+   supplies none. Emit no contact at all instead: an omitted target says honestly that nothing was
+   found, where a contact naming a route it does not carry says the search finished when it did not,
+   and the app cannot tell those apart from the entry alone. The field being OPTIONAL in the app's own
+   Swift is not permission for that combination: `formUrl` is optional because the two other methods
+   have no form, and `email` is optional because a `form_or_dm` contact has no address. On 2026-08-17 a
+   run read that source mid-run, concluded "`formUrl` is optional, so a `form_or_dm` contact can carry
+   no `formUrl`", and emitted two such contacts; the app discarded both and the card told Dan the show
+   had no way in while he found one himself in seconds.
 4. **A genuine presenting org** (the presenter named for the show, NOT the venue). Find its
    contact the SAME way, running steps 1-3 above once more with the presenting org itself as
    the target (so it too can carry a named decision-maker, a generic inbox with a named
