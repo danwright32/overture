@@ -231,13 +231,25 @@ extension ShowOutcome {
 
 // MARK: - The bridge to the vocabulary being replaced
 //
-// TEMPORARY, and #2395 is the issue that removes it: phase 2 puts the menus over `ShowOutcome`
-// directly, at which point `DismissReason` and everything here goes. It exists so phase 1 can move the
-// STORAGE to one field without also rewriting every surface that still speaks in dismiss reasons, which
-// would make one reviewable change into two unreviewable ones.
+// #2685: NOT temporary any more, and this comment used to say it was, naming #2395 as the issue that
+// would remove it. #2395 shipped, the menus moved onto `ShowOutcome` directly, and the bridge stayed,
+// so the next person reading this file met a promise that it was about to disappear. What is left is
+// smaller than it was and is here for one reason.
 //
-// Total both ways for the nine never-pitched values, and that is what makes it safe to convert at a
-// boundary: nothing is lost in either direction. `DismissReasonBridgeTests` asserts the round trip.
+// WHAT STILL NEEDS IT: stored data. `dismissReasonRaw` (`Prospect.swift`) holds the legacy spelling on
+// every row written before #2395, and `DismissReasonMigration` and `ShowOutcomeBackfill` read it to
+// bring those rows forward. `asShowOutcome` below is what they convert through. So the bridge lives as
+// long as a store predating that move can still be opened, which is Dan's live store.
+//
+// WHAT WOULD LET IT GO: a migration that rewrites every stored `dismissReasonRaw` into the new field
+// and a guard proving none is left, at which point `DismissReason`, this bridge and its tests go
+// together. Nobody has to do that: it costs a migration to remove a small enum, and the enum is doing
+// real work until then.
+//
+// Note the two directions are not equally alive. `asShowOutcome` is read by the migrations above.
+// `asDismissReason` has no production caller and exists to prove the mapping is TOTAL: the round trip
+// in `DismissReasonBridgeTests` is what says nothing is lost converting a stored row, which is the whole
+// safety argument for the migrations. It is a guard's instrument, not a seam to build on.
 
 extension DismissReason {
     var asShowOutcome: ShowOutcome {

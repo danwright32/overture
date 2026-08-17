@@ -12,9 +12,14 @@ struct OutgoingMail: Equatable, Sendable {
     private(set) var to: [String]
     var subject: String
     var body: String
-    // Threading (#74): on the first send, `messageID` stamps the message so a follow-up can
-    // reference it. On a follow-up, `inReplyTo` + `threadId` reply onto the original thread.
-    var messageID: String? = nil
+    // Threading (#74): a follow-up replies onto the original thread with `inReplyTo` + `threadId`.
+    //
+    // #2672: there is no `messageID` here any more. It was the caller's chance to STAMP a message with an
+    // id of its own, and #2647 established that Gmail discards a client-supplied Message-ID and assigns
+    // its own, so a value put here has never been on the wire. Nothing had set it since, which left a
+    // field that read as a working seam, was threaded all the way down into the RFC822 headers, and could
+    // only ever invite somebody to use it on the one path that throws it away (L29, L46). The id that
+    // matters is the one read BACK off the send, which is `SentReceipt.messageID`.
     var inReplyTo: String? = nil
     // #2648: the WHOLE ancestry of this message, oldest first, space separated. `inReplyTo` is the
     // immediate parent only, which is all RFC 2822 lets that header carry; `References` is defined as the
@@ -36,7 +41,7 @@ struct OutgoingMail: Equatable, Sendable {
     // the screen above it did. The subject is kept verbatim rather than trimmed here: what he approved is
     // what sends, and this only decides whether there is one at all.
     init?(to: [String], subject: String, body: String,
-          messageID: String? = nil, inReplyTo: String? = nil, references: String? = nil,
+          inReplyTo: String? = nil, references: String? = nil,
           threadId: String? = nil) {
         let addresses = to.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
         guard !addresses.isEmpty,
@@ -44,7 +49,6 @@ struct OutgoingMail: Equatable, Sendable {
         self.to = addresses
         self.subject = subject
         self.body = body
-        self.messageID = messageID
         self.inReplyTo = inReplyTo
         self.references = references
         self.threadId = threadId

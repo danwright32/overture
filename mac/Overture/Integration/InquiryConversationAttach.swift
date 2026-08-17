@@ -30,6 +30,20 @@ struct InquiryConversationAttach {
         var attached = 0
         var unreadable = 0
         var notConnected = false
+        // #2798: how many inquiries this pass MATCHED and therefore tried to read a thread for. Without
+        // it `unreadable` is a bare count with nothing to judge it against, and the two things worth
+        // telling apart, one thread Gmail happened to refuse and Gmail refusing every one of them, look
+        // the same from a number alone.
+        var threadsTried = 0
+
+        // #2798: a RATE, not a count, and the same rule `GmailReplyChecker.Outcome` already applies to
+        // the thread watcher (#2741). One refused thread on a tick is ordinary contention and waking Dan
+        // for it teaches him to ignore the line; every thread on a tick is Gmail being down or a token
+        // being dead, which is the thing he has to know (L77).
+        //
+        // A pass that matched NOTHING is not an outage: `threadsTried > 0` is what says the question was
+        // asked at all, and finding no subjects is its own outcome rather than a pass (L98).
+        var everyThreadUnreadable: Bool { threadsTried > 0 && unreadable == threadsTried }
     }
 
     // #949: the same sending identity every other Gmail path reads, so what counts as Dan's own mail
@@ -64,6 +78,11 @@ struct InquiryConversationAttach {
         for inquiry in subjects {
             guard let match = ReplyCandidateMatch.inquiryMatch(candidates, for: inquiry,
                                                                selfEmail: fromEmail) else { continue }
+            // Counted BEFORE the read, so `unreadable` is judged against what was attempted rather than
+            // against what succeeded. Counted after the match, deliberately: an inquiry nobody wrote to
+            // was never a thread this pass could read, and folding it in would put the rate below the
+            // bar on exactly the tick where Gmail refused everything it did try (#2798).
+            outcome.threadsTried += 1
             // The metadata thread is what detection reads and what the attach cannot proceed without. A
             // thread Gmail refuses leaves the inquiry exactly as it was: stamping the id and detecting
             // nothing would leave the row holding a conversation, no reply and no parent message, which is

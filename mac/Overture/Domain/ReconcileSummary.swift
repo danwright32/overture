@@ -32,6 +32,26 @@ struct ReconcileSummary: Equatable, Sendable {
     // Set on the RATE, never on a count: one unreadable thread is ordinary contention, and an alert that
     // fires on it is an alert Dan learns to ignore (L77). `GmailReplyChecker.Outcome` decides.
     var replyWatchUnreadable: Bool = false
+    // #2798: this tick could not READ Gmail for the conversations a HIRE INQUIRY is on, on every thread
+    // it tried. Its own field for the reason the two above are: a read that failed is not a save that
+    // failed, and two independent checks sharing one status field means a pass from either erases the
+    // other's failure (L53).
+    //
+    // Distinct from `replyWatchUnreadable` too, which is the watcher over threads Overture SENT. This is
+    // the pass that finds the conversation a hire inquiry is already on, which Dan answered in his own
+    // mailbox, and it is the half where the silence is worst: nothing else in the product is watching
+    // that conversation, so a refusal here leaves him believing nobody has written.
+    //
+    // Set on the RATE, never on a count, exactly as #2741's is: one unreadable thread is contention, and
+    // an alert that fires on it is one he learns to ignore (L77). `InquiryConversationAttach.Outcome`
+    // decides, so the count and the verdict come from one predicate (L16).
+    var inquiryThreadsUnreadable: Bool = false
+    // #2798: and this tick could not reach Gmail AT ALL for the inquiry half, having got far enough to
+    // read the mailbox for everything else. Rare and real: the search runs first and returns
+    // `.notConnected` when Gmail is disconnected, so the only way here is a token that died between the
+    // two. Named separately from the line above because the remedy differs (reconnect Gmail, versus
+    // Gmail refused these particular reads), and a message may claim only what its check measured (L11).
+    var inquiryGmailNotConnected: Bool = false
 
     // #308: every new lead's key this tick (replies then bookings, aligned with the name arrays), so a
     // coalesced multi-lead away alert can carry the whole set and a tap can filter the queue to exactly
@@ -60,6 +80,18 @@ struct ReconcileSummary: Equatable, Sendable {
         if replyWatchUnreadable {
             return "Reconcile ran but couldn't read Gmail for any of the conversations it watches, so it "
                 + "can't tell whether anyone replied. Check the Gmail connection."
+        }
+        // #2798: the inquiry half, below the watcher's line and above the ordinary report, for the same
+        // reason. Its own sentence rather than a share of that one, because it is a different set of
+        // conversations: these are the ones a hire inquiry is on, which nothing else in the product is
+        // watching, so a refusal here is the state in which Dan would go on believing nobody has written.
+        if inquiryGmailNotConnected {
+            return "Reconcile ran but couldn't reach Gmail for the hire inquiries it watches, so it "
+                + "can't tell whether anyone answered them. Check the Gmail connection."
+        }
+        if inquiryThreadsUnreadable {
+            return "Reconcile ran but Gmail refused every hire inquiry conversation it tried to read, so "
+                + "it can't tell whether anyone answered them. Try again shortly."
         }
         var parts: [String] = []
         // #287 / #297: a reply or booking found this pass is the headline event, so lead with it and name

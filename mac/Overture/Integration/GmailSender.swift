@@ -62,9 +62,10 @@ struct GmailSender: MailSender {
         // that, while every standards based client (Spark, Apple Mail, Outlook) threads purely on the
         // headers and filed a second conversation. The real id is read back below instead.
         //
-        // `mail.messageID` is still honoured, for a caller that genuinely supplies one; no production
-        // caller does, and on the Gmail path it would be discarded anyway.
-        let suppliedMessageID = mail.messageID
+        // #2672: and nothing is HONOURED here either. `OutgoingMail.messageID` was kept after #2647 for
+        // "a caller that genuinely supplies one", and no caller ever did, so what it really left was a
+        // field that read as a supported way to stamp your own id on the one path that discards it.
+        //
         // #1144: attach Dan's signature. Prefer his live styled Gmail signature (stored by
         // GmailSignatureService); if none is stored (fetch never succeeded, or he hasn't re-authorized for
         // the settings scope yet) fall back to the plain-text sign-off and log loudly, rather than sending
@@ -80,7 +81,7 @@ struct GmailSender: MailSender {
             fromName: fromName, fromEmail: fromEmail,
             to: mail.to, subject: mail.subject, body: mail.body,
             signature: sig,
-            messageID: suppliedMessageID, inReplyTo: mail.inReplyTo, references: mail.references)
+            inReplyTo: mail.inReplyTo, references: mail.references)
 
         var req = URLRequest(url: URL(string: "https://gmail.googleapis.com/gmail/v1/users/me/messages/send")!)
         req.httpMethod = "POST"

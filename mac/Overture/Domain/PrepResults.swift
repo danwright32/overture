@@ -38,6 +38,19 @@ struct PrepResults: Codable, Equatable, Sendable {
         // looked, which is a different claim from "none were refused", so this stays optional and the app
         // says nothing when it is missing.
         var denied: Int? = nil
+        // #2387: the same refusals BY ROUTE, which `record_web_calls` has always written
+        // (`deniedByRoute` in `lib/models.sh`) and nothing here decoded, so the app threw the one thing
+        // away that says whether a refusal is news.
+        //
+        // The route is the difference between two unrelated pieces of news. A refused BROWSER call is
+        // the tool scope holding, working exactly as designed, and there is nothing Dan can grant. A
+        // refused fetch or search means the run's ordinary research routes were blocked, which is a real
+        // problem. Reported as one number they read identically, which is why he asked on 2026-08-09
+        // what he was supposed to do with the line.
+        //
+        // Optional and additive, and its KEYS are open: an unrecognised route from a newer runner decodes
+        // into the dictionary and is reported by name rather than failing the file or being dropped.
+        var deniedByRoute: [String: Int]? = nil
         var items: Int = 0
         // #1864: the research TARGETS the allowance was sized for, which is not the number of shows. An
         // organiser-less show pursues every performer its listing names and the runbook puts no headcount

@@ -26,7 +26,17 @@ struct ReplyProposalSweep {
         // than added into `proposed`. The two are different acts: a proposal is a question waiting on Dan,
         // an attach is a conversation Overture has already started watching, and one count covering both
         // would promise rows that do not exist on the Due pill (L16).
-        case swept(proposed: Int, attached: Int, saveFailed: Bool)
+        // #2798: `inquiryThreadsUnreadable` and `inquiryNotConnected` are the two facts the inquiry half
+        // establishes that are NOT "nothing arrived", and until now neither had a reader outside the
+        // tests, so a tick where Gmail refused every inquiry thread was completely silent. A check that
+        // failed outright and a check that found no replies were then indistinguishable, and the failing
+        // one is the reassuring reading of the pair (L98, L11): Dan goes on believing nobody has written.
+        //
+        // Carried as two fields rather than one, because they are two different failures with two
+        // different remedies, and one field standing for both means a pass on either erases the other
+        // (L53). They ride beside `saveFailed` for the same reason it is separate from `proposed`.
+        case swept(proposed: Int, attached: Int, saveFailed: Bool,
+                   inquiryThreadsUnreadable: Bool = false, inquiryNotConnected: Bool = false)
     }
 
     var fromEmail: String = SendIdentity.danWright.email
@@ -117,6 +127,8 @@ struct ReplyProposalSweep {
                 // copy-inventory:ignore-end
             }
         }
-        return .swept(proposed: proposed, attached: attachOutcome.attached, saveFailed: saveFailed)
+        return .swept(proposed: proposed, attached: attachOutcome.attached, saveFailed: saveFailed,
+                      inquiryThreadsUnreadable: attachOutcome.everyThreadUnreadable,
+                      inquiryNotConnected: attachOutcome.notConnected)
     }
 }

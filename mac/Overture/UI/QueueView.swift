@@ -729,8 +729,11 @@ struct QueueView: View {
 
     // The reasons, under a heading that says what they are about to do and to how many shows. Without the
     // heading a right-click would show a bare list of dismiss reasons that names neither the action nor the
-    // night. `danCanChoose` (#864), the same list a card's own Dismiss menu offers, so the reason written
-    // here is one Dan could have written by hand: "Went by" and "Too far" are Overture's own.
+    // night. The reasons come from `ShowOutcome.menu(wasPitched:)` (#2395), the same one place a card's
+    // own Dismiss menu reads, so the reason written here is one Dan could have written by hand:
+    // "Went by" and "Too far" are Overture's own and are in neither half of it. (#2685: this used to say
+    // `danCanChoose`, which is what the menus read before #2395 and has since been deleted; a comment
+    // naming code that is not there is a bug, L32.)
     @ViewBuilder private func nightDismissMenu(_ group: QueueModel.DateGroup) -> some View {
         let plan = BulkDismiss.plan(for: group.items.map(BulkDismiss.Show.init), on: group.id)
         // #2687: one confirm covering many shows, so the refusal has to say HOW MANY of them are blocked
