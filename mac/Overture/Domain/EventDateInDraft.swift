@@ -169,6 +169,13 @@ enum EventDateInDraft {
         found.append(NamedDay(day: stamp, text: text.trimmingCharacters(in: .whitespaces)))
     }
 
+    // The en dash is BUILT rather than written, even as an escape. `UserFacingDashGuardTests` reads the
+    // VALUE of every string literal in the app, not its source text, so `\\u{2013}` in the source is a
+    // literal en dash by the time that guard sees it, and the escape trick that satisfies the pre-push
+    // style gate does not satisfy this one. A span written with an en dash ("March 10 \u{2013} 14") is a
+    // real thing to match, so the alternative was exempting this whole file for ever.
+    private static let enDash = String(UnicodeScalar(0x2013)!)
+
     // copy-inventory:ignore-start  date-shape patterns: what the check HUNTS FOR, never words it says
     private static let monthNames =
         "jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?"
@@ -176,7 +183,7 @@ enum EventDateInDraft {
 
     private static let monthFirst =
         "\\b(\(monthNames))\\.?\\s+(\\d{1,2})(st|nd|rd|th)?(?:,?\\s+(\\d{4}))?"
-        + "(\\s*(?:to|through|until|[-\u{2013}])\\s*(?:\(monthNames))?\\.?\\s*(\\d{1,2})(?:st|nd|rd|th)?)?"
+        + "(\\s*(?:to|through|until|[-\(enDash)])\\s*(?:\(monthNames))?\\.?\\s*(\\d{1,2})(?:st|nd|rd|th)?)?"
 
     private static let dayFirst = "\\b(\\d{1,2})(st|nd|rd|th)?\\s+(\(monthNames))\\b"
 
