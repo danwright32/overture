@@ -245,6 +245,36 @@ struct PrepWebCallCountTests {
             defaults: UserDefaults(suiteName: "PrepWebCalls-\(UUID().uuidString)")!)
 
         #expect(outcome?.webCalls?.denied == 2)
+        // #2387: the sentence NAMES THE ROUTE now, and this is the whole way through: the
+        // `deniedByRoute` the runner wrote into the results file above, decoded, and read out in the
+        // words Dan gets. It is the exact shape of his 2026-08-09 run, where both refusals were browser
+        // calls the runner is deliberately never given, and the old sentence gave him no way to know
+        // that without reading the run's event streams.
+        #expect(outcome?.webCalls?.deniedByRoute == ["fetch": 0, "search": 0, "browser": 2, "bash": 0])
+        #expect(PrepRunSummary.notes(for: outcome ?? PrepImporter.Outcome())
+            .contains("2 web calls refused (browser): that research never happened"))
+    }
+
+    // The other half of the same wiring: a results file with NO route breakdown still produces the
+    // sentence it always did, rather than an empty pair of brackets. An old archived run is exactly this
+    // shape, and absent is not zero (L11).
+    @Test func aRunThatRecordedNoRoutesKeepsTheSentenceItAlwaysHad() throws {
+        let ctx = ModelContext(try ModelContainer(
+            for: AppSchema.schema, configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("prep-results-\(UUID().uuidString).json")
+        try """
+        {"version": 7, "generatedAt": "2026-07-29T00:00:00Z", "results": [],
+         "webCalls": {"recorded": true, "total": 4, "denied": 2, "items": 1, "capPerItem": 15,
+                      "allowance": 15, "overCap": false, "streams": 1}}
+        """.write(to: url, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let outcome = PrepImporter.consumeIfNew(slot: .prep,
+            at: url, into: ctx,
+            defaults: UserDefaults(suiteName: "PrepWebCalls-\(UUID().uuidString)")!)
+
+        #expect(outcome?.webCalls?.deniedByRoute == nil)
         #expect(PrepRunSummary.notes(for: outcome ?? PrepImporter.Outcome())
             .contains("2 web calls refused: that research never happened"))
     }

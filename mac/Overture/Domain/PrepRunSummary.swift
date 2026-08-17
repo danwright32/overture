@@ -108,8 +108,8 @@ enum PrepRunSummary {
         if let web = outcome.webCalls, web.recorded, let denied = web.denied, denied > 0,
            let total = web.total, denied * refusalShareFloor >= denied + total {
             let calls = denied == 1 ? "1 web call" : "\(denied) web calls"
-            notes.append("\(calls) refused\(WebCallRefusals.routeClause(web.deniedByRoute)): "
-                         + "that research never happened")
+            notes.append(WebCallRefusals.refusalSentence(calls: calls,
+                                                        deniedByRoute: web.deniedByRoute))
         }
         if !outcome.unmatchedKeys.isEmpty { notes.append("\(outcome.unmatchedKeys.count) didn't match") }
         // #876: shows the run was GIVEN and never answered. Left silent, they sit in "ready to prep" run

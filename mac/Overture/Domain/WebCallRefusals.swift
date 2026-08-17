@@ -22,13 +22,27 @@ import Foundation
 // Pure, so every branch is reachable from a test without a run.
 enum WebCallRefusals {
 
-    // What to append after "N web calls refused". Empty when the routes cannot be named, which is the
-    // honest answer for a results file written before `deniedByRoute` was decoded, or by a runner that
-    // did not record it: the sentence then reads exactly as it did before rather than inventing a route.
-    static func routeClause(_ deniedByRoute: [String: Int]?) -> String {
+    // The WHOLE sentence, both spellings written out as literals rather than one sentence with a clause
+    // interpolated into the middle of it.
+    //
+    // That is deliberate and is about `docs/copy-inventory.md`, not about the code: the inventory records
+    // each string literal, so a sentence assembled around a function call appears there as
+    // `"\(calls) refused\(WebCallRefusals.routeClause(...)): "`, which tells a reader nothing about what
+    // is on screen. The cold read of that file is a required pre-PR step and is the only thing that
+    // catches this class of copy defect, so an entry that cannot be cold read defeats it silently
+    // (#915, #2570). Both readings below are readable as they stand.
+    //
+    // `calls` is passed in already worded ("2 web calls") because the count and its singular are the
+    // caller's, decided beside the threshold that lets the sentence speak at all.
+    static func refusalSentence(calls: String, deniedByRoute: [String: Int]?) -> String {
         let named = routesWithRefusals(deniedByRoute)
-        guard !named.isEmpty else { return "" }
-        return " (\(list(named)))"
+        // No routes recorded is the honest answer for a results file written before this was decoded, or
+        // by a runner that did not record them. The sentence then reads exactly as it did before rather
+        // than showing an empty pair of brackets or inventing a route (L11).
+        guard !named.isEmpty else {
+            return "\(calls) refused: that research never happened"
+        }
+        return "\(calls) refused (\(list(named))): that research never happened"
     }
 
     // The routes that actually refused something, most refusals first and alphabetical within a tie, so
