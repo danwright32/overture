@@ -1203,15 +1203,40 @@ final class Prospect {
         }
     }
 
-    // A contact replied and nobody has answered it: not booked, and some replied / unresolved /
-    // un-bounced contact still owes a reply. Per-recipient (#653), so answering one contact never masks
-    // a different contact's unanswered reply. Deliberately INDEPENDENT of `isClosed` (#424, Dan's call)
-    // so a late reply on a closed show still surfaces.
+    // #2900: this show has an ENDING recorded, so there is nothing left to chase on it and no reply on
+    // it is outstanding any more. One definition, read by `Recipient.hasUnhandledReply`, so all
+    // thirteen of that property's readers inherit the answer rather than each getting a chance to
+    // forget it (L16). It replaces the `performanceStatus != .booked` that `hasUnhandledReply` used to
+    // carry by hand: the question was real, had been answered once, and the answer was not shared.
+    //
+    // Derived, never mirrored onto the contacts, so taking an ending back (`reopenOutcome`,
+    // `clearDismissal`) starts every reader asking again with nothing to undo, and one fact keeps one
+    // home (#2396, L83).
+    //
+    // Overture's OWN two endings are deliberately excluded, by `isOverturesOwn` rather than by naming
+    // them here, so an ending added to either half of the menu cannot land on this side by accident.
+    // `wentBy` is the show's last night passing while the row sat untriaged, which is a fact about the
+    // calendar and no decision at all, and somebody who writes to Dan is still owed an answer whatever
+    // the calendar did. `tooFar` is the consequence of blocking a town, likewise not an ending anyone
+    // recorded against this show.
+    var hasRecordedEnding: Bool {
+        if isBooked { return true }
+        guard let ending = showOutcome else { return false }
+        return !ending.isOverturesOwn
+    }
+
+    // A contact replied and nobody has answered it: some replied / unresolved / un-bounced contact
+    // still owes a reply, on a show with no ending recorded. Per-recipient (#653), so answering one
+    // contact never masks a different contact's unanswered reply. Still deliberately independent of
+    // `isClosed` (#424, Dan's call): that asks whether ROUTINE work is over, which is a different
+    // question from whether Dan drew a line under the show.
     //
     // #2397: no longer excluded by a hand-set conversation state, because there is no state to set. What
     // clears a reply now is ANSWERING it, which `Recipient.hasUnhandledReply` already asks.
+    // #2900: the ending check moved down into `Recipient.hasUnhandledReply`, so this is no longer the
+    // only reader that asks it.
     var hasUnhandledReply: Bool {
-        performanceStatus != .booked && recipients.contains(where: \.hasUnhandledReply)
+        recipients.contains(where: \.hasUnhandledReply)
     }
 
     // Record a lead outcome as Dan's own call (manual source, timestamped, booking-suggestion
