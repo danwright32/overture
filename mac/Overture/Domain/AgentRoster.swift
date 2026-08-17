@@ -210,16 +210,15 @@ enum AgentRoster {
             return "Sent emails that hit a problem, or approved ones you can't send yet."
         case .reachedOut: return "Shows you've pitched and are waiting to hear back on."
         case .followUps: return "Nudges due on shows you've already reached out to."
-        // A show held by a date clash has NO PILL of its own: it is reached from Prep's own empty state,
-        // so nothing can call this for it. Empty, and named rather than defaulted, which is the whole
-        // point of the switch: the compiler still asks about it, and the answer is recorded here.
+        // A show held by a date clash DOES reach a pill: `statuses` returns a "Prep" status carrying this
+        // focus whenever `prepBlocked > 0`, and it outranks the ordinary ready-to-prep state, so it is
+        // what Dan hovers on exactly the day something is stuck.
         //
-        // Deliberately not given words. Writing a sentence for a surface that cannot render it would put
-        // a line into docs/copy-inventory.md that no screen can say, which is #2707 exactly, and the cold
-        // read of that file is a required step whose whole cost is attention spent on real sentences. If
-        // this stage is ever given a pill, `StageEmptyState.restingDetail(for: .prepBlocked)` already
-        // holds the wording somebody wrote for it.
-        case .prepBlocked: return ""
+        // Said plainly because the first version of this switch returned "" here, on the belief that this
+        // focus had no pill of its own. It has: the pill is named "Prep" and only its FOCUS differs. That
+        // wrong belief blanked this tooltip whenever a show was held, which is the very defect #2654 was
+        // written to close, reintroduced by closing it.
+        case .prepBlocked: return "Shows you kept that a date clash is holding back."
         }
     }
 
