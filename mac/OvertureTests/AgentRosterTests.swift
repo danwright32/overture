@@ -152,16 +152,37 @@ struct AgentRosterTests {
     // stable concept sentence per pill (independent of live state) fixes that without touching
     // the existing per-state `detail` strings above, which stay pinned by the tests above.
     @Test func conceptSummaryExplainsEachPillAsAWorkQueue() {
-        #expect(AgentRoster.conceptSummary(for: "Scout").contains("keep") || AgentRoster.conceptSummary(for: "Scout").contains("dismiss"))
-        #expect(AgentRoster.conceptSummary(for: "Prep").contains("draft"))
-        #expect(AgentRoster.conceptSummary(for: "Review").contains("read"))
-        #expect(AgentRoster.conceptSummary(for: "Review").contains("send"))
-        #expect(AgentRoster.conceptSummary(for: "Send issues").contains("sent") || AgentRoster.conceptSummary(for: "Send issues").contains("send"))
-        #expect(AgentRoster.conceptSummary(for: "Follow-ups").contains("reached out"))
+        #expect(AgentRoster.conceptSummary(for: .scout).contains("keep") || AgentRoster.conceptSummary(for: .scout).contains("dismiss"))
+        #expect(AgentRoster.conceptSummary(for: .prep).contains("draft"))
+        #expect(AgentRoster.conceptSummary(for: .review).contains("read"))
+        #expect(AgentRoster.conceptSummary(for: .review).contains("send"))
+        #expect(AgentRoster.conceptSummary(for: .sendErrors).contains("sent") || AgentRoster.conceptSummary(for: .sendErrors).contains("send"))
+        #expect(AgentRoster.conceptSummary(for: .followUps).contains("reached out"))
     }
 
-    @Test func conceptSummaryIsEmptyForAnUnknownName() {
-        #expect(AgentRoster.conceptSummary(for: "Nonsense").isEmpty)
+    // #2654: there is no longer an "unknown name" to be empty for. The lookup is keyed on `StageFocus`,
+    // which every AgentStatus already carries, so the question the old test asked ("what does a name
+    // nobody recognises get?") cannot be posed: renaming a pill in the UI used to blank its explaining
+    // sentence silently, and an empty string renders as nothing rather than as a gap.
+    //
+    // What replaces it is the property that matters: every stage that CAN show a pill has a sentence.
+    //
+    // Asked of the focuses the roster actually produces rather than of every case in the enum, and that
+    // distinction is the point: `prepBlocked` has no pill (it is reached from Prep's own empty state), so
+    // giving it a sentence would put a line into docs/copy-inventory.md that no screen can render, which
+    // is #2707. Derived from the roster rather than listed here, so a stage that gains a pill tomorrow is
+    // covered without anybody remembering (L96).
+    @Test func everyStageWithAPillHasAConceptSentence() {
+        var inputs = calm
+        inputs.toTriage = 3; inputs.keptToPrep = 2; inputs.toReview = 1
+        inputs.sendErrors = 1; inputs.followUpsDue = 1; inputs.reachedOutDue = 1
+        let focuses = Set(AgentRoster.statuses(inputs).map(\.focus))
+        #expect(focuses.count >= 4, "the roster produced almost no pills, so this checked nothing (L98)")
+        for focus in focuses {
+            let summary = AgentRoster.conceptSummary(for: focus)
+            #expect(!summary.isEmpty, "\(focus) shows a pill with no sentence saying what that stage is for")
+            #expect(summary.hasSuffix("."), "\(focus)'s sentence is shown beside a live count and reads as prose")
+        }
     }
 
     // #843: the tooltip is concept + live detail, shown together. In the common state of three pills the
@@ -171,7 +192,7 @@ struct AgentRosterTests {
         var i = calm; i.runInFlight = .prep
         #expect(status("Prep", i).detail == "Running now…")
         // The old detail repeated the concept's own verbs; the new one does not.
-        let help = AgentRoster.chipHelp(name: "Prep", detail: status("Prep", i).detail)
+        let help = AgentRoster.chipHelp(focus: .prep, detail: status("Prep", i).detail)
         #expect(!help.contains("drafts") || !help.contains("drafting"))
         #expect(!help.contains("Finding contacts and drafting"))
     }
@@ -283,9 +304,9 @@ struct AgentRosterTests {
 
     // Its concept sentence is distinct from Follow-ups (waiting to hear back, vs a nudge that is due).
     @Test func reachedOutConceptIsDistinctFromFollowUps() {
-        let reached = AgentRoster.conceptSummary(for: "Reached out")
+        let reached = AgentRoster.conceptSummary(for: .reachedOut)
         #expect(reached.contains("hear back"))
-        #expect(reached != AgentRoster.conceptSummary(for: "Follow-ups"))
+        #expect(reached != AgentRoster.conceptSummary(for: .followUps))
     }
 
     // #357: what a chip tap actually DOES, pulled out of QueueView's Button closure (the #863 lesson:

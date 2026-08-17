@@ -44,7 +44,13 @@ enum StageEmptyState {
         // #2050: shows, not drafts. An approved show waiting to send is counted here too now.
         case .review: return "\(Plural.count(count, "show")) to review"
         case .reachedOut: return "\(Plural.count(count, "show")) you've pitched"
-        default: return Plural.count(count, "show")
+        // #2654: the send focuses and follow-ups, NAMED rather than defaulted. Each is a bare count on
+        // purpose (they name a problem rather than a queue of work), but naming them is what makes a
+        // stage added later break the build here instead of silently inheriting a phrase written for
+        // something else. A default is indistinguishable from a deliberate choice (L113).
+        case .sendApproved, .sendBlocked, .sendErrors, .sendStuck, .sendDegraded,
+             .sendThreadingDegraded, .followUps:
+            return Plural.count(count, "show")
         }
     }
 
@@ -57,7 +63,12 @@ enum StageEmptyState {
         case .prep: return "Nothing to prep yet"
         case .prepBlocked: return "Nothing held by a date clash"
         case .review: return "Nothing to review yet"
-        default: return "Nothing here right now"
+        // #2654: named rather than defaulted, for the reason above. `reachedOut` is here because the
+        // reached-out stage renders its own empty copy and never calls this, so it takes the generic
+        // title it would have taken anyway, stated rather than inherited.
+        case .sendApproved, .sendBlocked, .sendErrors, .sendStuck, .sendDegraded,
+             .sendThreadingDegraded, .followUps, .reachedOut:
+            return "Nothing here right now"
         }
     }
 
@@ -80,7 +91,14 @@ enum StageEmptyState {
         // arriving after he kept it, not the clash itself.
         case .prepBlocked: return "A show you kept lands here if a clash with your calendar turns up later."
         case .review: return "Prepped drafts land here to read and send."
-        default: return ""
+        // #2654: named rather than defaulted. The empty string is the DECISION described above, not an
+        // absence, and spelling the cases out is what makes a stage added later have to make that
+        // decision for itself rather than inherit silence. #1547 is why that matters: a heading over a
+        // bare count, with the explaining sentence in the branch not taken, reads as the opposite of
+        // what it means.
+        case .sendApproved, .sendBlocked, .sendErrors, .sendStuck, .sendDegraded,
+             .sendThreadingDegraded, .followUps, .reachedOut:
+            return ""
         }
     }
 }

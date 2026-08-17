@@ -794,12 +794,29 @@ enum SourceFailure: Equatable, Sendable {
     // cause, which is everything EXCEPT the two failures no address change can fix: a run that ended
     // before opening the page (it self-heals on the next scout) and a run that contradicted itself (a
     // run bug, not a bad page).
+    // #2654: every case NAMED, no default. This is the more consequential of that issue's two instances,
+    // because the default was PERMISSIVE on a control Dan can press: any failure kind added later silently
+    // inherited "Change the page link", and #1027 and #1171 both exist because offering that on a failure
+    // no address change can fix is a false affordance. A permissive default on an affordance fails open,
+    // which is the direction L42 is about, and a default is indistinguishable from a deliberate choice
+    // (L113). Named, a new failure kind breaks the build here and has to make the decision for itself.
     var offersFix: Bool {
         switch self {
         // #1171: a changed feed FORMAT is not a wrong ADDRESS. Re-pointing the URL cannot fix a platform's
         // feed shape change, so offering "Change the page link" here would be a false affordance (like notRead).
         case .verdict(.notRead), .inconsistentResult, .fetch(.feedShapeChanged): return false
-        default: return true
+        // The fetch failures a different address could plausibly fix. `addressUnusable` is the one #1555
+        // named as exactly this button's case; the rest are a page that answered wrongly, was the wrong
+        // kind of thing, moved, or could not be reached, and any of those can be a stale link.
+        case .fetch(.http), .fetch(.notHTML), .fetch(.redirectedAway), .fetch(.unreachable),
+             .fetch(.secureConnectionFailed), .fetch(.addressUnusable):
+            return true
+        // The verdicts where the page WAS read and said something Overture could not use. A wrong address
+        // is a plausible cause of each: the wrong page for the org, a JavaScript calendar, a listing that
+        // was cut short, or a feed whose real calendar lives elsewhere.
+        case .verdict(.noDatedContent), .verdict(.unreadable), .verdict(.incompleteExtraction),
+             .verdict(.upcomingListings), .verdict(.allPast):
+            return true
         }
     }
 

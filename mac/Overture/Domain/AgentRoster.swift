@@ -181,22 +181,45 @@ enum AgentRoster {
     // detail ("what is in it right now"). Both halves were domain-computed already; the sentence that
     // joins them was the view's, which meant the one thing nobody could test was the only part that was
     // ever going to be got wrong (a missing space, a swapped order).
-    static func chipHelp(name: String, detail: String) -> String {
+    static func chipHelp(focus: StageFocus, detail: String) -> String {
         // #1134: a stage with no live detail yet (Reached out with no one in it) shows only the concept,
         // with no dangling trailing space after it.
-        detail.isEmpty ? conceptSummary(for: name) : "\(conceptSummary(for: name)) \(detail)"
+        detail.isEmpty ? conceptSummary(for: focus) : "\(conceptSummary(for: focus)) \(detail)"
     }
 
-    static func conceptSummary(for name: String) -> String {
-        switch name {
-        case "Scout": return "Freshly found events waiting for you to keep or dismiss."
-        case "Prep": return "Finds a contact and drafts an email for shows you've kept."
+    // #2654: keyed on `StageFocus`, which every AgentStatus already carries, rather than on the pill's
+    // DISPLAY NAME.
+    //
+    // Keyed on text this could not be made exhaustive at all, and its default returned "", which renders
+    // as nothing rather than as a gap: renaming a pill in the UI silently blanked the sentence explaining
+    // what that stage is for, and there was no version of that failure anybody would see. A default is
+    // indistinguishable from a deliberate choice (L113), and a lookup keyed on a display name is one
+    // rename away from answering for nothing.
+    //
+    // Now the compiler asks the question. A stage added to StageFocus breaks the build here, and a pill
+    // renamed tomorrow keeps its sentence, because the name was never what identified it.
+    static func conceptSummary(for focus: StageFocus) -> String {
+        switch focus {
+        case .scout: return "Freshly found events waiting for you to keep or dismiss."
+        case .prep: return "Finds a contact and drafts an email for shows you've kept."
         // #2050: "and send", because a show now stays here until it has gone out.
-        case "Review": return "Drafts waiting for you to read, edit, and send."
-        case "Send issues": return "Sent emails that hit a problem, or approved ones you can't send yet."
-        case "Reached out": return "Shows you've pitched and are waiting to hear back on."
-        case "Follow-ups": return "Nudges due on shows you've already reached out to."
-        default: return ""
+        case .review: return "Drafts waiting for you to read, edit, and send."
+        // The five send focuses and the threading one are ONE pill, "Send issues", so they share its
+        // sentence. Named individually rather than collapsed to a default, which is the whole point.
+        case .sendApproved, .sendBlocked, .sendErrors, .sendStuck, .sendDegraded, .sendThreadingDegraded:
+            return "Sent emails that hit a problem, or approved ones you can't send yet."
+        case .reachedOut: return "Shows you've pitched and are waiting to hear back on."
+        case .followUps: return "Nudges due on shows you've already reached out to."
+        // A show held by a date clash has NO PILL of its own: it is reached from Prep's own empty state,
+        // so nothing can call this for it. Empty, and named rather than defaulted, which is the whole
+        // point of the switch: the compiler still asks about it, and the answer is recorded here.
+        //
+        // Deliberately not given words. Writing a sentence for a surface that cannot render it would put
+        // a line into docs/copy-inventory.md that no screen can say, which is #2707 exactly, and the cold
+        // read of that file is a required step whose whole cost is attention spent on real sentences. If
+        // this stage is ever given a pill, `StageEmptyState.restingDetail(for: .prepBlocked)` already
+        // holds the wording somebody wrote for it.
+        case .prepBlocked: return ""
         }
     }
 
