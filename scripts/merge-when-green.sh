@@ -25,10 +25,13 @@ source "${SCRIPT_DIR}/lib/pr-completeness-guard.sh"
 source "${SCRIPT_DIR}/lib/pr-merge.sh"
 # delete_merged_local_branch, shared with verify-and-merge-branch.sh and tidy-checkout.sh (#2234).
 source "${SCRIPT_DIR}/lib/checkout-tidy.sh"
+# judge_ref_project_freshness: the one implementation of "is this ref's own committed project file
+# fresh", shared with verify-and-merge-branch.sh and so with the batch path too (#2818).
+source "${SCRIPT_DIR}/lib/project-freshness.sh"
 
 POLL_INTERVAL_SECONDS=15
 DEFAULT_MAX_WAIT_SECONDS=900
-PBXPROJ_REL="mac/Overture.xcodeproj/project.pbxproj"
+PBXPROJ_REL="${PROJECT_FRESHNESS_PATH_REL}"
 
 usage() {
   echo "Usage: $(basename "$0") <pr-number> [max-wait-seconds] [allow-red-base]" >&2
@@ -99,11 +102,16 @@ base_branch_stop_reason() {
 # Whether this branch touches the Mac project is decided by paths_touch_mac_project, sourced above from
 # scripts/lib/mac-project-paths.sh and shared with the post-merge hook (#1251 Phase 3).
 
-# Fetches the PR branch into a throwaway worktree and runs check-pbxproj-fresh.sh against it, returning
-# that gate's verdict (0 fresh, non-zero stale or unverifiable). A real side-effecting helper (git fetch +
-# worktree + xcodegen), named and extracted so a fixture can stub it and drive the merge DECISION without
-# touching git. Mirrors verify-and-merge-branch.sh's setup/cleanup worktree pair (a candidate for a shared
-# helper if a third caller appears).
+# Fetches the PR branch into a throwaway worktree and puts the SHARED freshness judgement over it,
+# returning that gate's verdict (0 fresh, 1 refused having said which of the two refusals it is). A real
+# side-effecting helper (git fetch + worktree + xcodegen), named and extracted so a fixture can stub it
+# and drive the merge DECISION without touching git.
+#
+# Only the worktree is this script's own now (#2818). The judgement itself is
+# judge_ref_project_freshness in scripts/lib/project-freshness.sh, the same one
+# verify-and-merge-branch.sh's per-ref gate calls, so the two merge paths cannot answer this question
+# differently. They already did: this script used to fold "stale" and "cannot be verified" into one
+# sentence whose stated remedy was wrong for the second of them.
 verify_branch_pbxproj_fresh() {
   local pr_number="$1"
   local branch worktree rc=0
@@ -111,7 +119,7 @@ verify_branch_pbxproj_fresh() {
   worktree="$(mktemp -d "${TMPDIR:-/tmp}/overture-pbxproj-${branch//\//-}.XXXXXX")"
   git -C "${REPO_ROOT}" fetch -q origin "${branch}"
   git -C "${REPO_ROOT}" worktree add -q --detach "${worktree}" "origin/${branch}"
-  "${SCRIPT_DIR}/check-pbxproj-fresh.sh" "${worktree}" || rc=$?
+  judge_ref_project_freshness "${worktree}" "${branch}" || rc=$?
   git -C "${REPO_ROOT}" worktree remove --force "${worktree}" 2>/dev/null || true
   return "${rc}"
 }
@@ -179,8 +187,10 @@ main() {
         echo "Branch touches the Mac app; verifying ${PBXPROJ_REL} is fresh before merging..."
         if ! verify_branch_pbxproj_fresh "${PR_NUMBER}"; then
           echo
-          echo "Stopped: ${PBXPROJ_REL} is stale or could not be verified on this branch, so this merge would land a project file that does not match mac/project.yml. Not merging." >&2
-          echo "Regenerate it (cd mac && xcodegen generate), commit the result, and rerun this script." >&2
+          # The reason and its remedy are printed by judge_ref_project_freshness above, which is the only
+          # thing that knows WHICH of the two refusals this is. Restating one of them here is how this
+          # script came to tell someone to regenerate a file that was already correct (#2818, L11).
+          echo "Stopped: ${PBXPROJ_REL} did not pass the freshness gate on this branch (the reason is above), so this merge is not going ahead." >&2
           exit 1
         fi
       fi
