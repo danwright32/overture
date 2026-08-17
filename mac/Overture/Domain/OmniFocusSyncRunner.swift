@@ -50,6 +50,16 @@ enum OmniFocusSyncRunner {
         do {
             let r = try OmniFocusSync.apply(desired: desired, client: client)
             let stamped = recordCompletions(r.handled)
+            // #2882: a run that got through with some tasks refused is not a success and not a total
+            // failure, and it must not be recorded as either. Recorded as a failure so it stays on the
+            // masthead until a clean run clears it, with a message naming WHICH shows were missed, since
+            // the harm is a reminder that never arrives and Dan cannot see an absence.
+            if let message = OmniFocusSync.partialFailureMessage(
+                failures: r.failures, attempted: r.created + r.completed + r.failures.count) {
+                OmniFocusSyncStatus.recordFailure(message, at: now, into: defaults)
+                if !hadFailure { notifier.notifySyncFailed(message) }
+                return (r.created + r.completed, stamped)
+            }
             OmniFocusSyncStatus.recordSuccess(at: now, into: defaults)
             return (r.created + r.completed, stamped)
         } catch {

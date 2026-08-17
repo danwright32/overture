@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1398 sentences**.
+Every sentence Overture can say to Dan: **1401 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1320,6 +1320,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AppNotice.swift`
 "OmniFocus sync needs attention"
     `App/MenuBarStatus.swift`
+"OmniFocus updated \(updated) of \(attempted) reminders. It could not update \(named)."
+    `Domain/OmniFocusSync.swift`
 "On this email"
     `UI/SendConfirmSheet.swift`
 "Once you have sent a pitch, the shows you are waiting to hear back about show up here, soonest follow-up first. A show drops off when you close it out, or when its follow-ups run out."
@@ -2552,8 +2554,12 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/ScoutService.swift`
 "\(filed) \(note)"
     `Domain/BulkDismiss.swift`
+"\(first) and \(names[1])"
+    `Domain/OmniFocusSync.swift`
 "\(first) and \(rest) other\(rest == 1 ? "" : "s")"
     `Domain/SelfBookingConflict.swift`
+"\(first), \(names[1]) and \(names.count - 2) more"
+    `Domain/OmniFocusSync.swift`
 "\(found) times"
     `Domain/RunBoundaryViolations.swift`
 "\(i.followUpsDue) due"

@@ -2338,6 +2338,17 @@ struct RootView: View {
                 if OmniFocusSync.recordCompletions(result.handled, in: all, now: Date()) > 0 {
                     try? context.save()
                 }
+                // #2882: some tasks refused is neither a clean run nor a dead one. Recorded and shown the
+                // same way at both sync sites, through the same message builder, so the launch sync and
+                // the scheduled sync cannot describe one state two ways.
+                if let message = OmniFocusSync.partialFailureMessage(
+                    failures: result.failures,
+                    attempted: result.created + result.completed + result.failures.count) {
+                    OmniFocusSyncStatus.recordFailure(message, at: Date())
+                    if force { reportError(message) }
+                    omniFocusSyncStartedAt = nil
+                    return
+                }
                 OmniFocusSyncStatus.recordSuccess(at: Date())   // clears any prior failure warning (#239)
                 // Dan (2026-07-18): no routine "N due, N created" receipt here anymore. The OmniFocus toolbar menu
                 // already shows "last synced" when opened, and the only thing worth the shared status

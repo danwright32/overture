@@ -178,18 +178,54 @@ enum OmniFocusSync {
         try apply(desired: desired(from: prospects, now: now, horizonDays: horizonDays), client: client)
     }
 
+    // #2882: what OmniFocus refused, per task. One show that OmniFocus will not act on used to abort the
+    // whole pass, so every show AFTER it silently got no reminder at all and nothing said which ones.
+    // Independent per-show work sharing one failure boundary makes every show's reliability depend on
+    // every other show's worst case (L73), and an item left with no trace is indistinguishable from one
+    // never attempted (L47), which is why the failure names the show rather than only counting.
+    struct TaskFailure: Equatable, Sendable {
+        enum Action: String, Equatable, Sendable { case create, complete }
+        let action: Action
+        let naturalKey: String
+        let recipientId: String
+        let reason: String
+    }
+
     // The OmniFocus I/O half, over value types only, so it can run off the main actor while the
-    // prospect read (desired) stays on it. Each step is independent: a failed Apple event on one
-    // task doesn't abort the rest.
+    // prospect read (desired) stays on it. Each task gets its OWN failure boundary: every create and
+    // complete is attempted, and the failures are collected and reported together at the end.
+    //
+    // The two READS still throw, and that difference is deliberate. Not knowing what OmniFocus holds
+    // makes every later decision guesswork, so a plan built on a failed read would complete and create
+    // against a picture of nothing: that is a failure of the whole run and says so.
     @discardableResult
     static func apply(desired: [DesiredTask], client: OmniFocusClient) throws
-        -> (existing: Int, created: Int, completed: Int, handled: [DesiredTask]) {
+        -> (existing: Int, created: Int, completed: Int, handled: [DesiredTask], failures: [TaskFailure]) {
         let existing = try client.existingOvertureTasks()
         let completed = try client.completedOvertureTasks()
         let plan = reconcile(desired: desired, existing: existing, completed: completed)
-        for task in plan.toCreate { try client.create(task) }
-        for task in plan.toComplete { try client.complete(task) }
-        return (existing.count, plan.toCreate.count, plan.toComplete.count, plan.handled)
+        var failures: [TaskFailure] = []
+        var created = 0
+        var completedCount = 0
+        for task in plan.toCreate {
+            do {
+                try client.create(task)
+                created += 1
+            } catch {
+                failures.append(TaskFailure(action: .create, naturalKey: task.naturalKey,
+                                            recipientId: task.recipientId, reason: "\(error)"))
+            }
+        }
+        for task in plan.toComplete {
+            do {
+                try client.complete(task)
+                completedCount += 1
+            } catch {
+                failures.append(TaskFailure(action: .complete, naturalKey: task.naturalKey,
+                                            recipientId: task.recipientId, reason: "\(error)"))
+            }
+        }
+        return (existing.count, created, completedCount, plan.handled, failures)
     }
 
     // Diff the desired set against what OmniFocus currently holds (by naturalKey + recipientId, #653:
@@ -306,4 +342,41 @@ extension OmniFocusSync {
 // reason (a revoked Automation permission, a moved app) is the only part Dan can act on.
 extension OmniFocusSync {
     static func failureMessage(reason: String) -> String { "OmniFocus sync failed: \(reason)" }
+
+    // #2882: the run got through, and some reminders did not. A different sentence from the one above,
+    // because it is a different fact and Dan acts on it differently: the failure above means nothing
+    // synced at all, this one means most of it did and names what did not. Saying only "sync failed"
+    // over a run that updated eleven of twelve reminders would send him looking for a fault that is not
+    // there, and saying nothing would leave a missing reminder invisible, which is the state this whole
+    // sync exists to prevent (L11).
+    //
+    // It NAMES the shows rather than counting them, because the only useful act is to go and look at
+    // one, and a count tells him a reminder is missing without telling him whose (L80). Two names then
+    // "and N more", so the sentence stays readable in the masthead when a whole run is refused.
+    // nil when nothing failed, so there is no sentence for a state that cannot happen: a fallback
+    // naming no show at all would be a line Dan could never be shown, and dead copy in the inventory
+    // reads exactly like live copy (L29, L132).
+    static func partialFailureMessage(failures: [TaskFailure], attempted: Int) -> String? {
+        let names = failures.map { showName(fromNaturalKey: $0.naturalKey) }.reduce(into: [String]()) {
+            if !$0.contains($1) { $0.append($1) }   // one show, not one per contact on it
+        }
+        guard let first = names.first else { return nil }
+        let updated = max(0, attempted - failures.count)
+        let named: String
+        switch names.count {
+        case 1: named = first
+        case 2: named = "\(first) and \(names[1])"
+        default: named = "\(first), \(names[1]) and \(names.count - 2) more"
+        }
+        return "OmniFocus updated \(updated) of \(attempted) reminders. It could not update \(named)."
+    }
+
+    // The show's own name, read off the first field of its natural key (`group|date|venue`), which is
+    // the only name a task failure carries: a task being COMPLETED is an ExistingTask and has no title,
+    // so there is nothing else to call it. Falls back to the whole key rather than to a placeholder, so
+    // a key shaped differently reads as odd rather than as a nameless show (L67).
+    static func showName(fromNaturalKey key: String) -> String {
+        let first = key.split(separator: "|", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? key
+        return first.isEmpty ? key : first
+    }
 }
