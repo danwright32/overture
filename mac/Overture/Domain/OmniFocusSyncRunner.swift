@@ -23,30 +23,39 @@ protocol OmniFocusNotifier {
 
 enum OmniFocusSyncRunner {
     // Returns how many OmniFocus tasks changed (created + completed), so a manual reconcile can report
-    // it; 0 when skipped or failed.
+    // it, and how many contacts a completion Dan made over there stamped; both 0 when skipped or failed.
+    //
+    // #2899: `recordCompletions` is injected rather than called directly, because this layer is pure over
+    // value types and the model it has to write to lives on the main actor. Defaulted to doing nothing so
+    // the permission and failure tests need not care, and asserted at BOTH real call sites by
+    // `OmniFocusCompletionsAreCarriedBackTests`: a default that silently drops the signal is exactly the
+    // shape that leaves a task ticked off in OmniFocus and nothing moved in Overture (L46).
     @discardableResult
     static func run(desired: [OmniFocusSync.DesiredTask],
                     permission: AutomationAuthorization,
                     client: OmniFocusClient,
                     notifier: OmniFocusNotifier,
                     now: Date,
-                    defaults: UserDefaults = .standard) -> Int {
+                    defaults: UserDefaults = .standard,
+                    recordCompletions: ([OmniFocusSync.DesiredTask]) -> Int = { _ in 0 })
+        -> (tasks: Int, stamped: Int) {
         guard permission == .granted else {
             // Edge-detect on the prior state so a denial that persists across many ticks notifies once.
             let alreadyFlagged = OmniFocusSyncStatus.isPermissionNeeded(from: defaults)
             OmniFocusSyncStatus.recordPermissionNeeded(at: now, into: defaults)
             if !alreadyFlagged { notifier.notifyPermissionNeeded() }
-            return 0
+            return (0, 0)
         }
         let hadFailure = OmniFocusSyncStatus.lastFailure(from: defaults) != nil
         do {
             let r = try OmniFocusSync.apply(desired: desired, client: client)
+            let stamped = recordCompletions(r.handled)
             OmniFocusSyncStatus.recordSuccess(at: now, into: defaults)
-            return r.created + r.completed
+            return (r.created + r.completed, stamped)
         } catch {
             OmniFocusSyncStatus.recordFailure("\(error)", at: now, into: defaults)
             if !hadFailure { notifier.notifySyncFailed("\(error)") }   // one per failure episode
-            return 0
+            return (0, 0)
         }
     }
 }

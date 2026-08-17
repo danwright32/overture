@@ -34,6 +34,11 @@ struct OmniFocusSyncConfig: Sendable {
 // can only be verified live, not unit-tested.
 protocol OmniFocusClient {
     func existingOvertureTasks() throws -> [OmniFocusSync.ExistingTask]   // incomplete Overture-marked tasks
+    // #2899: and the COMPLETED ones. A task Dan ticked off and a task that was never created are the same
+    // state to a sync that reads only what is open, and it resolved that ambiguity by creating, every
+    // pass, for ever. The one act he performs in the tool the reminders live in was the one act Overture
+    // could not learn from (L162).
+    func completedOvertureTasks() throws -> [OmniFocusSync.ExistingTask]
     func create(_ task: OmniFocusSync.DesiredTask) throws
     // #2885: takes the whole ExistingTask, so the instruction is addressed by the same three things
     // reconcile decided over (naturalKey, recipientId, dueDate). Taking the first two named every
@@ -47,6 +52,16 @@ enum OmniFocusSync {
     // #653: one task per (show, recipient), not per show, so a multi-contact show can have one
     // contact's follow-up due while another's isn't.
     struct DesiredTask: Equatable, Sendable {
+        // #2899: WHY this task exists, because completing it means a different thing for each and the
+        // instruction Dan gave by ticking it off can only be honoured against the right one. Not
+        // defaulted: a caller that has not decided which kind it is emitting cannot compile, and a
+        // wrong default here would silently stamp a reply as answered off the back of a close-out
+        // reminder (L168).
+        enum Kind: String, Equatable, Sendable {
+            case postEventPrompt   // record how this show ended. Only Dan holds that fact.
+            case replyTriage       // somebody wrote and nobody has answered them.
+        }
+        let kind: Kind
         let naturalKey: String
         let recipientId: String
         let title: String
@@ -55,7 +70,7 @@ enum OmniFocusSync {
         let dueDate: Date     // 6pm Eastern on the due day: the deadline
     }
 
-    struct ExistingTask: Equatable, Sendable {
+    struct ExistingTask: Equatable, Hashable, Sendable {
         let naturalKey: String
         let recipientId: String
         let dueDate: Date
@@ -78,6 +93,12 @@ enum OmniFocusSync {
     struct Plan: Equatable, Sendable {
         var toCreate: [DesiredTask]
         var toComplete: [ExistingTask]
+        // #2899: the desired tasks Dan has already ticked off in OmniFocus. Not an OmniFocus instruction
+        // (there is nothing left to do there), but a signal to carry back into the model, which is what
+        // `recordCompletions` does. Named separately from `toCreate` rather than merely subtracted from
+        // it, because a signal read and then dropped is worse than one never read: the task stops coming
+        // back and nothing in Overture has moved (L46, L90).
+        var handled: [DesiredTask] = []
     }
 
     // Tasks that should exist now, one per RECIPIENT (#653). #2397: two things earn one, and the
@@ -121,7 +142,7 @@ enum OmniFocusSync {
                 if let due = PostEventPrompt.nextPromptDate(for: r, of: p),
                    PostEventPrompt.prompt(for: r, of: p, now: now) != nil, due <= cutoff {
                     let dueDate = easternTime(hour: dueHour, onDayOf: due)
-                    earned.append((r, DesiredTask(naturalKey: p.naturalKey, recipientId: r.id, title: title(for: p, r),
+                    earned.append((r, DesiredTask(kind: .postEventPrompt, naturalKey: p.naturalKey, recipientId: r.id, title: title(for: p, r),
                                                   note: note(for: p, r, dueDate: dueDate),
                                                   deferDate: easternTime(hour: deferHour, onDayOf: due),
                                                   dueDate: dueDate)))
@@ -136,7 +157,7 @@ enum OmniFocusSync {
                     // recreate the task on every new calendar day until he answers.
                     let anchor = r.replyArrivedAt ?? r.sentAt ?? now
                     let dueDate = easternTime(hour: dueHour, onDayOf: anchor)
-                    earned.append((r, DesiredTask(naturalKey: p.naturalKey, recipientId: r.id, title: triageTitle(for: p, r),
+                    earned.append((r, DesiredTask(kind: .replyTriage, naturalKey: p.naturalKey, recipientId: r.id, title: triageTitle(for: p, r),
                                                   note: note(for: p, r, dueDate: dueDate),
                                                   deferDate: easternTime(hour: deferHour, onDayOf: anchor),
                                                   dueDate: dueDate)))
@@ -161,12 +182,14 @@ enum OmniFocusSync {
     // prospect read (desired) stays on it. Each step is independent: a failed Apple event on one
     // task doesn't abort the rest.
     @discardableResult
-    static func apply(desired: [DesiredTask], client: OmniFocusClient) throws -> (existing: Int, created: Int, completed: Int) {
+    static func apply(desired: [DesiredTask], client: OmniFocusClient) throws
+        -> (existing: Int, created: Int, completed: Int, handled: [DesiredTask]) {
         let existing = try client.existingOvertureTasks()
-        let plan = reconcile(desired: desired, existing: existing)
+        let completed = try client.completedOvertureTasks()
+        let plan = reconcile(desired: desired, existing: existing, completed: completed)
         for task in plan.toCreate { try client.create(task) }
         for task in plan.toComplete { try client.complete(task) }
-        return (existing.count, plan.toCreate.count, plan.toComplete.count)
+        return (existing.count, plan.toCreate.count, plan.toComplete.count, plan.handled)
     }
 
     // Diff the desired set against what OmniFocus currently holds (by naturalKey + recipientId, #653:
@@ -175,19 +198,38 @@ enum OmniFocusSync {
     // nudge re-anchored it, so that task is stale). Create any desired task with no matching existing
     // task at the right due.
     private struct TaskKey: Hashable { let naturalKey: String; let recipientId: String }
-    static func reconcile(desired: [DesiredTask], existing: [ExistingTask]) -> Plan {
+    static func reconcile(desired: [DesiredTask], existing: [ExistingTask],
+                          completed: [ExistingTask] = []) -> Plan {
         func key(_ naturalKey: String, _ recipientId: String) -> TaskKey { TaskKey(naturalKey: naturalKey, recipientId: recipientId) }
         let desiredByKey = Dictionary(desired.map { (key($0.naturalKey, $0.recipientId), $0) }, uniquingKeysWith: { a, _ in a })
         let toComplete = existing.filter { e in
             guard let d = desiredByKey[key(e.naturalKey, e.recipientId)] else { return true }   // resolved / no longer desired
             return d.dueDate != e.dueDate                                                       // stale due (re-anchored)
         }
+        // #2899: what Dan ticked off. A completed task counts only when it matches a task that is desired
+        // RIGHT NOW, at the same due, which is what makes this idempotent and what keeps stale evidence
+        // out. Once the completion is applied the state moves, the task stops being desired, and no later
+        // pass can match it again; and when the state re-opens (a second reply re-anchors the due) the
+        // old completed task no longer matches, so the new task is created rather than swallowed.
+        //
+        // Matched on all THREE, through a set rather than a dictionary keyed on two: a contact can hold
+        // several completed tasks at different dues, and picking one of them to stand for the rest would
+        // decide by whichever the dictionary happened to keep (L131).
+        let completedTasks = Set(completed)
+        let handled = desired.filter {
+            completedTasks.contains(ExistingTask(naturalKey: $0.naturalKey, recipientId: $0.recipientId,
+                                                 dueDate: $0.dueDate))
+        }
+        let handledKeys = Set(handled.map { key($0.naturalKey, $0.recipientId) })
         let liveByKey = Dictionary(
             existing.filter { e in desiredByKey[key(e.naturalKey, e.recipientId)]?.dueDate == e.dueDate }
                 .map { (key($0.naturalKey, $0.recipientId), $0) },
             uniquingKeysWith: { a, _ in a })
-        let toCreate = desired.filter { liveByKey[key($0.naturalKey, $0.recipientId)] == nil }
-        return Plan(toCreate: toCreate, toComplete: toComplete)
+        let toCreate = desired.filter {
+            liveByKey[key($0.naturalKey, $0.recipientId)] == nil
+                && !handledKeys.contains(key($0.naturalKey, $0.recipientId))
+        }
+        return Plan(toCreate: toCreate, toComplete: toComplete, handled: handled)
     }
 
     private static func displayName(_ r: Recipient) -> String {
@@ -221,6 +263,42 @@ enum OmniFocusSync {
             parts.append("Open in Overture: \(link)")
         }
         return parts.joined(separator: "\n")
+    }
+}
+
+// #2899: carrying back what Dan ticked off in OmniFocus.
+//
+// One implementation, called by both sync sites, because a caller that forgets it leaves the signal read
+// and dropped: the task stops coming back and nothing in Overture moves, which is worse than never having
+// read it (L46, L90). `OmniFocusCompletionsAreCarriedBackTests` asserts both sites call it.
+extension OmniFocusSync {
+    // Returns how many contacts were stamped, so a manual sync can say so.
+    @discardableResult
+    static func recordCompletions(_ handled: [DesiredTask], in prospects: [Prospect], now: Date) -> Int {
+        guard !handled.isEmpty else { return 0 }
+        let byKey = Dictionary(prospects.map { ($0.naturalKey, $0) }, uniquingKeysWith: { a, _ in a })
+        var stamped = 0
+        for task in handled {
+            // Only the reply triage kind is honoured, and each kind is named rather than defaulted, so an
+            // added kind breaks the build here instead of silently taking somebody else's meaning (L113).
+            switch task.kind {
+            case .replyTriage:
+                guard let p = byKey[task.naturalKey],
+                      let r = p.recipients.first(where: { $0.id == task.recipientId }) else { continue }
+                AnsweredReply.recordHandled(on: r, in: p, now: now)
+                stamped += 1
+            case .postEventPrompt:
+                // Dan's call, 2026-08-17: ticking this one off means "I know, I will do it in Overture",
+                // never an ending. Overture cannot invent WHICH ending, and the ending is the fact the
+                // whole funnel is reported on, so guessing one would file a number nobody can tell is
+                // wrong (L163). Nothing is written. What the completion buys is that OmniFocus stops
+                // asking: `reconcile` will not recreate a task Dan has completed at the same due, and the
+                // show goes on asking in the app, through the post-event prompt that is already on screen,
+                // until he records the ending there.
+                continue
+            }
+        }
+        return stamped
     }
 }
 

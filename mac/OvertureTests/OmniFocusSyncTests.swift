@@ -201,6 +201,7 @@ struct OmniFocusSyncTests {
         var completed: [OmniFocusSync.ExistingTask] = []
         init(existing: [OmniFocusSync.ExistingTask]) { self.existing = existing }
         func existingOvertureTasks() throws -> [OmniFocusSync.ExistingTask] { existing }
+        func completedOvertureTasks() throws -> [OmniFocusSync.ExistingTask] { [] }
         func create(_ task: OmniFocusSync.DesiredTask) throws { created.append(task) }
         func complete(_ task: OmniFocusSync.ExistingTask) throws { completed.append(task) }
     }
@@ -248,8 +249,8 @@ struct OmniFocusSyncTests {
         let day1Defer = Date(timeIntervalSince1970: 20_000_000)
         let day1Due = day1Defer.addingTimeInterval(7 * 3_600)
         let dayOldDue = day1Due.addingTimeInterval(-7 * 86_400)
-        let desired = [OmniFocusSync.DesiredTask(naturalKey: "a", recipientId: "a@e.com", title: "A", note: "", deferDate: day1Defer, dueDate: day1Due),
-                       OmniFocusSync.DesiredTask(naturalKey: "c", recipientId: "c@e.com", title: "C", note: "", deferDate: day1Defer, dueDate: day1Due)]
+        let desired = [OmniFocusSync.DesiredTask(kind: .replyTriage, naturalKey: "a", recipientId: "a@e.com", title: "A", note: "", deferDate: day1Defer, dueDate: day1Due),
+                       OmniFocusSync.DesiredTask(kind: .replyTriage, naturalKey: "c", recipientId: "c@e.com", title: "C", note: "", deferDate: day1Defer, dueDate: day1Due)]
         let existing = [OmniFocusSync.ExistingTask(naturalKey: "a", recipientId: "a@e.com", dueDate: day1Due),   // matches: leave
                         OmniFocusSync.ExistingTask(naturalKey: "b", recipientId: "b@e.com", dueDate: day1Due),   // resolved: complete
                         OmniFocusSync.ExistingTask(naturalKey: "c", recipientId: "c@e.com", dueDate: dayOldDue)] // stale due day: complete + recreate
@@ -262,8 +263,8 @@ struct OmniFocusSyncTests {
     // naturalKey the way the pre-#653 keying would have.
     @Test func reconcileTreatsDifferentRecipientsOnTheSameShowAsDistinctTasks() {
         let due = Date(timeIntervalSince1970: 20_000_000)
-        let desired = [OmniFocusSync.DesiredTask(naturalKey: "multi", recipientId: "a@e.com", title: "A", note: "", deferDate: due, dueDate: due),
-                       OmniFocusSync.DesiredTask(naturalKey: "multi", recipientId: "b@e.com", title: "B", note: "", deferDate: due, dueDate: due)]
+        let desired = [OmniFocusSync.DesiredTask(kind: .replyTriage, naturalKey: "multi", recipientId: "a@e.com", title: "A", note: "", deferDate: due, dueDate: due),
+                       OmniFocusSync.DesiredTask(kind: .replyTriage, naturalKey: "multi", recipientId: "b@e.com", title: "B", note: "", deferDate: due, dueDate: due)]
         let plan = OmniFocusSync.reconcile(desired: desired, existing: [])
         #expect(Set(plan.toCreate.map(\.recipientId)) == ["a@e.com", "b@e.com"])
     }
