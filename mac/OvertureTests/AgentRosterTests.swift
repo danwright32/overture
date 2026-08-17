@@ -173,11 +173,24 @@ struct AgentRosterTests {
     // is #2707. Derived from the roster rather than listed here, so a stage that gains a pill tomorrow is
     // covered without anybody remembering (L96).
     @Test func everyStageWithAPillHasAConceptSentence() {
-        var inputs = calm
-        inputs.toTriage = 3; inputs.keptToPrep = 2; inputs.toReview = 1
-        inputs.sendErrors = 1; inputs.followUpsDue = 1; inputs.reachedOutDue = 1
-        let focuses = Set(AgentRoster.statuses(inputs).map(\.focus))
-        #expect(focuses.count >= 4, "the roster produced almost no pills, so this checked nothing (L98)")
+        // Driven over SEVERAL input shapes, not one, because a pill's FOCUS depends on which branch its
+        // builder takes and one fixture only ever reaches one of them. That is not a hypothetical: the
+        // first version of this test set `keptToPrep` and never reached the `prepBlocked` branch, so it
+        // passed while the Prep pill's tooltip was blank for every show held by a date clash.
+        var ready = calm
+        ready.toTriage = 3; ready.keptToPrep = 2; ready.toReview = 1
+        ready.sendErrors = 1; ready.followUpsDue = 1; ready.reachedOutDue = 1
+        var blocked = ready
+        blocked.keptToPrep = 0; blocked.prepBlocked = 2
+        var idle = calm
+        var focuses = Set<StageFocus>()
+        for inputs in [ready, blocked, idle] {
+            focuses.formUnion(AgentRoster.statuses(inputs).map(\.focus))
+        }
+        _ = idle
+        #expect(focuses.contains(.prepBlocked),
+                "the held-by-a-clash pill was never produced, so its tooltip went unchecked")
+        #expect(focuses.count >= 6, "the roster produced almost no pills, so this checked nothing (L98)")
         for focus in focuses {
             let summary = AgentRoster.conceptSummary(for: focus)
             #expect(!summary.isEmpty, "\(focus) shows a pill with no sentence saying what that stage is for")
