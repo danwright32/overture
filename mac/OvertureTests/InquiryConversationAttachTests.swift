@@ -28,11 +28,11 @@ struct InquiryConversationAttachTests {
 
     private let me = "dan@danwrightphotography.com"
     private let now = Date(timeIntervalSince1970: 1_786_000_000)
-    private let them = "priya.raman@gmail.com"
+    private let them = "priya.raman@example.com"
 
     // Logged by hand four days ago, never answered from inside Overture: no thread, no message id.
     @discardableResult
-    private func inquiry(_ ctx: ModelContext, email: String? = "priya.raman@gmail.com",
+    private func inquiry(_ ctx: ModelContext, email: String? = "priya.raman@example.com",
                          loggedDaysAgo: Double = 4) -> Inquiry {
         let i = Inquiry(source: .directEmail, inquirerName: "Priya Raman", inquirerEmail: email,
                         eventName: "Spring gala", performanceDate: nil, venue: "Merkin Hall",

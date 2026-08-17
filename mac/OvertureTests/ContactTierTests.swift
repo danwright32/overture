@@ -4,10 +4,10 @@ import SwiftData
 
 // #2622: every found email scored the same, whoever it belonged to.
 //
-// The card for Pier Lamia Porter at The Green Room 42 read "Unverified email found" over
-// jasonwetzelmusic@gmail.com, and that row's only contact is Jason Wetzel, her Musical Director. An
-// address for the person whose show it is, an address for somebody performing on it, and an address for
-// that person's manager are three different findings, and Overture recorded one.
+// The mechanism, measured on a live card: a show billed to one performer read "Unverified email found"
+// over the only address the check had found, and that address belonged to the performer's musical
+// director. An address for the person whose show it is, an address for somebody performing on it, and an
+// address for that person's manager are three different findings, and Overture recorded one.
 //
 // LIVE-STORE-CLAIM verified=2026-08-13 measure="ZPROSPECT.ZFITSCORE over shows at reachabilityResult = email_found"
 // Across the 29 shows then at `email_found`, the scores pile up either side of the high-fit line: 11 at

@@ -4,7 +4,7 @@ import SwiftData
 
 // #2645: a follow-up nudge was still scheduled for a show that had already happened.
 //
-// Measured on the live store, 2026-08-13: recipient 147 (smokeringquartet@gmail.com), pitched Tue Aug 11
+// Measured on the live store, 2026-08-13: recipient 147 (smokeringquartet@example.com), pitched Tue Aug 11
 // at 9:52pm Eastern, `FollowUpConfig.gapDays` 6, so the next nudge came due Mon Aug 17. The show
 // performed Aug 13. By the time that nudge fired the show would have been four days in the past, and the
 // nudge body is written to chase a pitch about an UPCOMING performance.

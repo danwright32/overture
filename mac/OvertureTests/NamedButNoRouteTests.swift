@@ -55,7 +55,7 @@ struct NamedButNoRouteTests {
     // A run that found a real address has nothing to explain, so no reason is written over it.
     @Test func aRunThatLandedAContactWritesNoReason() {
         let found = [PrepContact(name: "ICB Productions", role: "Producer",
-                                 email: "icbproductionsnyc@gmail.com", method: "named_decision_maker",
+                                 email: "icbproductionsnyc@example.com", method: "named_decision_maker",
                                  confidence: "high", formUrl: nil, provenance: "presenter")]
         #expect(Reachability.emptyReason(afterIngesting: found, usableRecipients: 1) == nil)
     }

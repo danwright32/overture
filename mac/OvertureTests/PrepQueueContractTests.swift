@@ -96,7 +96,7 @@ struct PrepQueueContractTests {
         let decoded = try JSONDecoder().decode(PrepQueue.self, from: try fixture("v12.json"))
         #expect(decoded.version == 12)
         #expect(decoded.items[1].refusedEmails
-                == ["harbourwindsfan@gmail.com", "info@theexampleroom.example"])
+                == ["harbourwindsfan@example.com", "info@theexampleroom.example"])
         #expect(decoded.items[0].refusedEmails == nil)
         // The earlier fixture, unchanged, still decodes and says nothing about strikes.
         let v11 = try JSONDecoder().decode(PrepQueue.self, from: try fixture("v11.json"))

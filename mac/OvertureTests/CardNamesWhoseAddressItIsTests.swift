@@ -5,9 +5,10 @@ import SwiftData
 // #2623: the queue card printed the addresses a check found and nothing else, so it could not tell Dan
 // that the address he is looking at belongs to somebody other than the act.
 //
-// The card for Pier Lamia Porter at The Green Room 42 read "Unverified email found" over a bare
-// jasonwetzelmusic@gmail.com. That row holds `name = "Jason Wetzel"` and `role = "Musical Director"`,
-// both written by the check that found the address, and neither reached the screen.
+// The mechanism, measured on a live card: a show billed to one performer read "Unverified email found"
+// over a bare address belonging to that performer's musical director. The row held the contact's `name`
+// and `role`, both written by the check that found the address, and neither reached the screen. The
+// names and the address below are invented; the shape they stand for was measured.
 //
 // LIVE-STORE-CLAIM verified=2026-08-13 measure="stored contacts on shows at reachabilityResult = email_found"
 // Of the 29 shows at `email_found`, a hand grouping of the stored names and roles finds the billed artist
@@ -24,7 +25,7 @@ struct CardNamesWhoseAddressItIsTests {
     }
 
     private func show(_ ctx: ModelContext) -> Prospect {
-        let p = Prospect(naturalKey: "k", groupName: "Pier Lamia Porter", discipline: "music",
+        let p = Prospect(naturalKey: "k", groupName: "Rosalind Verrier", discipline: "music",
                          venue: "The Green Room 42", performanceDate: "2026-08-17", sourceListingURL: nil,
                          websiteURL: nil, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 5, tier: "mid",
@@ -45,15 +46,15 @@ struct CardNamesWhoseAddressItIsTests {
 
     @Test func theAddressCarriesTheNameAndRoleOfWhoeverItBelongsTo() throws {
         let ctx = try context()
-        let r = Recipient(id: "jasonwetzelmusic@gmail.com", email: "jasonwetzelmusic@gmail.com",
-                          name: "Jason Wetzel", provenance: .performer)
+        let r = Recipient(id: "marionalcottmusic@example.com", email: "marionalcottmusic@example.com",
+                          name: "Marion Alcott", provenance: .performer)
         r.role = "Musical Director"
 
         let shown = item(ctx, [r]).displayedContactAddresses
 
         #expect(shown.count == 1)
-        #expect(shown.first?.email == "jasonwetzelmusic@gmail.com")
-        #expect(shown.first?.attribution == "Jason Wetzel, Musical Director")
+        #expect(shown.first?.email == "marionalcottmusic@example.com")
+        #expect(shown.first?.attribution == "Marion Alcott, Musical Director")
     }
 
     // Six of the 29 measured shows hold an address with no name. That is not a defect to paper over with
@@ -89,9 +90,9 @@ struct CardNamesWhoseAddressItIsTests {
     // MARK: how the two fields compose
 
     @Test func aroleIsAppendedToTheNameAndEitherHalfStandsAlone() {
-        #expect(QueueItem.DisplayedAddress.attribution(name: "Jason Wetzel", role: "Musical Director")
-                == "Jason Wetzel, Musical Director")
-        #expect(QueueItem.DisplayedAddress.attribution(name: "Jason Wetzel", role: nil) == "Jason Wetzel")
+        #expect(QueueItem.DisplayedAddress.attribution(name: "Marion Alcott", role: "Musical Director")
+                == "Marion Alcott, Musical Director")
+        #expect(QueueItem.DisplayedAddress.attribution(name: "Marion Alcott", role: nil) == "Marion Alcott")
         // A role with no name still answers the question the line exists to answer: whose address is this.
         #expect(QueueItem.DisplayedAddress.attribution(name: nil, role: "Booking Agent") == "Booking Agent")
         #expect(QueueItem.DisplayedAddress.attribution(name: nil, role: nil) == nil)
@@ -101,7 +102,7 @@ struct CardNamesWhoseAddressItIsTests {
     // must read as absent, never as an empty line or a stray comma on the card.
     @Test func awhitespaceOnlyNameOrRoleReadsAsAbsent() {
         #expect(QueueItem.DisplayedAddress.attribution(name: "  ", role: "  ") == nil)
-        #expect(QueueItem.DisplayedAddress.attribution(name: "Jason Wetzel", role: "   ") == "Jason Wetzel")
+        #expect(QueueItem.DisplayedAddress.attribution(name: "Marion Alcott", role: "   ") == "Marion Alcott")
         #expect(QueueItem.DisplayedAddress.attribution(name: " ", role: "Musical Director") == "Musical Director")
     }
 

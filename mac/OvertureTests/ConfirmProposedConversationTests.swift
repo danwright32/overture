@@ -42,7 +42,7 @@ struct ConfirmProposedConversationTests {
         r.sendState = .sent
         p.addRecipient(r)
         ProposedConversation.propose(
-            .init(messageId: "m1", threadId: "t1", fromAddress: "caseen.gaines@gmail.com",
+            .init(messageId: "m1", threadId: "t1", fromAddress: "caseen.gaines@example.com",
                   fromName: "Caseen Gaines", subject: "Re: the anniversary show",
                   sentAt: now.addingTimeInterval(-3600), score: 9), on: r, now: now)
         return r
@@ -51,7 +51,7 @@ struct ConfirmProposedConversationTests {
     private func threadData() -> Data {
         try! JSONSerialization.data(withJSONObject: ["messages": [[
             "id": "m1", "internalDate": "\(Int64(now.timeIntervalSince1970 - 3600) * 1000)",
-            "payload": ["headers": [["name": "From", "value": "Caseen Gaines <caseen.gaines@gmail.com>"],
+            "payload": ["headers": [["name": "From", "value": "Caseen Gaines <caseen.gaines@example.com>"],
                                     ["name": "Subject", "value": "Re: the anniversary show"],
                                     ["name": "Message-ID", "value": "<theirs@mail.gmail.com>"]]],
         ]]])
@@ -76,7 +76,7 @@ struct ConfirmProposedConversationTests {
 
         guard case .attached = outcome else { Issue.record("expected an attach, got \(outcome)"); return }
         #expect(r.gmailThreadId == "t1")
-        #expect(r.email == "caseen.gaines@gmail.com")
+        #expect(r.email == "caseen.gaines@example.com")
         #expect(r.replied)
         #expect(ProposedConversation.stored(on: r) == nil)
     }
@@ -116,7 +116,7 @@ struct ConfirmProposedConversationTests {
         let ctx = ModelContext(try container())
         let p = show(ctx)
         let r = pitchWithProposal(ctx, on: p)
-        ContactRefusal.refuse(email: "caseen.gaines@gmail.com", scope: .show(p.naturalKey),
+        ContactRefusal.refuse(email: "caseen.gaines@example.com", scope: .show(p.naturalKey),
                               in: ctx, now: now)
 
         let outcome = await ConfirmProposedConversation(fromEmail: me)
@@ -125,7 +125,7 @@ struct ConfirmProposedConversationTests {
         guard case .refused(let reason) = outcome else {
             Issue.record("a struck address must refuse, got \(outcome)"); return
         }
-        #expect(reason.contains("caseen.gaines@gmail.com"))
+        #expect(reason.contains("caseen.gaines@example.com"))
         #expect(ProposedConversation.stored(on: r) != nil)
         #expect(r.gmailThreadId == nil)
     }
