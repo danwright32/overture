@@ -321,9 +321,16 @@ assert_not_contains() {
 # #2321: the fourth argument is where the run may keep a diagnostic it cannot print in full. It
 # defaults inside the throwaway bin_dir, so a fixture is structurally unable to write into the real
 # one (L2); pass a directory of your own when the assertion is about what survives the run.
+#
+# #2323: the fifth and sixth are the machine's test service as this run should find it, its PID and
+# its `ps -o etime=` age. Both default to absent, which is a Mac with no testmanagerd running, so
+# every call above this one is unchanged. They exist because the advisory reads a REAL daemon on a
+# real Mac, and a fixture that reached the live process table would assert about whatever this Mac
+# happened to be doing (L2), including the healthy two-day-old daemon measured here on 2026-08-16.
 run_wrapper_with_stub_xcodebuild() {
   local xcodebuild_output="$1" xcodebuild_exit="$2" log_output="${3:-}" diagnostics_dir="${4:-}"
-  local bin_dir output code log_calls
+  local daemon_pid="${5:-}" daemon_etime="${6:-}"
+  local bin_dir output code log_calls baseline
 
   bin_dir="$(mktemp -d)"
   [[ -n "${diagnostics_dir}" ]] || diagnostics_dir="${bin_dir}/diagnostics"
@@ -337,10 +344,35 @@ exec "$@"
 STUB
 
   # A process table with nothing Overture-shaped in it, so the pre-flight neither kills anything nor
-  # stops for a blocking Debug app.
-  cat > "${bin_dir}/ps" <<'STUB'
+  # stops for a blocking Debug app. The etime branch answers the ONE other question main asks `ps`
+  # (#2323: how old the machine's test service is) and is deliberately told apart by the flag rather
+  # than by answering both questions with one string, which would feed the age parser a process line.
+  cat > "${bin_dir}/ps" <<STUB
 #!/usr/bin/env bash
+case "\$*" in
+  *etime*) echo "${daemon_etime}"; exit 0 ;;
+esac
 echo "  501 /sbin/launchd"
+STUB
+
+  # A Mac with no test service running, unless this call says otherwise. Nothing printed and a
+  # nonzero status is what the real pgrep does when it matches nothing, which is the case the
+  # advisory must stay silent on.
+  #
+  # It intercepts ONLY its own question and hands every other one to the real pgrep. The stall
+  # watcher tears itself down with `pgrep -P <pid>` to find its children, and a stub that answered
+  # that with a fixed PID made the run try to kill a process it had never started: the first version
+  # of this one aimed a `kill` at the very testmanagerd PID the fixture was pretending to observe.
+  cat > "${bin_dir}/pgrep" <<STUB
+#!/usr/bin/env bash
+case "\$*" in
+  *testmanagerd*)
+    [[ -n "${daemon_pid}" ]] || exit 1
+    echo "${daemon_pid}"
+    exit 0
+    ;;
+esac
+exec /usr/bin/pgrep "\$@"
 STUB
 
   cat > "${bin_dir}/xcodebuild" <<STUB
@@ -362,7 +394,7 @@ ${log_output}
 LOG_OUTPUT
 STUB
 
-  chmod +x "${bin_dir}/flock" "${bin_dir}/ps" "${bin_dir}/xcodebuild" "${bin_dir}/log"
+  chmod +x "${bin_dir}/flock" "${bin_dir}/ps" "${bin_dir}/pgrep" "${bin_dir}/xcodebuild" "${bin_dir}/log"
 
   # #2195: a throwaway baseline. The stub reports a handful of tests, so against the real one every
   # wrapper run here would read as a catastrophically short run, and a fixture must never write to the
@@ -373,8 +405,12 @@ STUB
     "${SCRIPT_DIR}/run-tests-locked.sh" 2>&1)"
   code=$?
   log_calls="$(grep -c . "${bin_dir}/log-calls" 2>/dev/null || echo 0)"
+  # #2821: what this run RECORDED as the count every later run is measured against. Read out here
+  # because the file is thrown away with the bin dir, and because "did this run move the baseline?"
+  # is not answerable from anything the script prints.
+  baseline="$(cat "${baseline_file}" 2>/dev/null || true)"
   rm -rf "${bin_dir}"
-  printf '%s\nlogcalls=%s\nexit=%s\n' "${output}" "${log_calls}" "${code}"
+  printf '%s\nbaseline=%s\nlogcalls=%s\nexit=%s\n' "${output}" "${baseline}" "${log_calls}" "${code}"
 }
 
 # THE case. Two deliberately-red guards on #1451 came out of this wrapper labelled a crashed run.
@@ -707,8 +743,12 @@ xctest encountered an error (The test runner hung before establishing connection
 Failing tests:
 ** TEST FAILED **'
 
-assert_equals "a hung test runner is a crash, which is what sends the run to the pure suite" \
-  "crashed" "$(run_outcome "${HUNG_RUNNER_OUTPUT}" 65)"
+# #2322: this output is no longer read as a crashed HOST. It is the machine's test service wedged,
+# which is a different cause with a different fix, and the assertion that used to stand here (that
+# it is "crashed") is what sent three consecutive runs into a retry that rebuilt everything and
+# named the blameless app host. The wedged section at the end of this file owns it now.
+assert_equals "a hung test runner is the machine's test service, not a crashed host" \
+  "test-service-wedged" "$(run_outcome "${HUNG_RUNNER_OUTPUT}" 65)"
 
 # Named first, because a shell assertion whose helper does not exist is the trap this repo keeps
 # hitting (L100): the call prints "command not found" to stderr, the substitution comes back empty,
@@ -811,15 +851,32 @@ pure_suite_section() {
   awk '/asking the PURE suite directly/{f=1} f' <<< "$1"
 }
 
+# The run driven here is a host that DIED, not the wedged test service above: since #2322 a wedged
+# service never reaches the pure-suite probe at all, because the pure scheme goes through the same
+# daemon and a probe would meet the same wedge after paying for another full build.
+#
+# Assembled from lines this repo has captured elsewhere rather than taken from one recorded run, and
+# said so rather than presented as a capture (L48): the launch failure is NEVER_LAUNCHED_OUTPUT's,
+# and `encountered an error` is xctest's own prefix, already the shape pure_failure_evidence reads.
+HOST_DIED_OUTPUT='Test Suite '"'"'All tests'"'"' started
+2026-08-08 09:12:03.200 Overture[41205:9912] [error] CoreData: error: Executing as effective user 501
+xctest encountered an error (Early unexpected exit, operation never finished bootstrapping)
+	Could not launch "OvertureTests"
+Failing tests:
+** TEST FAILED **'
+
+assert_equals "a host that died is still a crash, and still probes the pure suite" \
+  "crashed" "$(run_outcome "${HOST_DIED_OUTPUT}" 65)"
+
 PURE_DIAG_DIR="$(mktemp -d)"
-PURE_FAIL_RUN="$(run_wrapper_with_stub_xcodebuild "${HUNG_RUNNER_OUTPUT}" 65 "" "${PURE_DIAG_DIR}")"
+PURE_FAIL_RUN="$(run_wrapper_with_stub_xcodebuild "${HOST_DIED_OUTPUT}" 65 "" "${PURE_DIAG_DIR}")"
 PURE_SECTION="$(pure_suite_section "${PURE_FAIL_RUN}")"
 
 assert_contains "the pure-suite failure names the cause on screen, not only a path" \
-  "The test runner hung before establishing connection." "${PURE_SECTION}"
+  "Early unexpected exit, operation never finished bootstrapping" "${PURE_SECTION}"
 
-assert_contains "and the daemon timeout with it" \
-  "Timed out after 120.0s while initiating control session with daemon." "${PURE_SECTION}"
+assert_contains "and the launch failure with it" \
+  "Could not launch" "${PURE_SECTION}"
 
 # THE case. Whatever path that message points at must still be there when somebody goes to read it.
 # Deliberately reads the path back out of the message rather than assuming this fix's own naming, so
@@ -840,6 +897,217 @@ assert_equals "a passing run keeps no diagnostic at all" \
   "0" "$(find "${PASS_DIAG_DIR}" -type f | grep -c .)"
 
 rm -rf "${PURE_DIAG_DIR}" "${PASS_DIAG_DIR}"
+
+echo
+# --- the failing test list, reprinted at the end (#2600) -----------------------------------
+#
+# suite-stats.test.sh proves the list is PARSED right. These prove the script prints it, on the runs
+# that have one, and prints it LAST, which is the whole of what the issue asks for: the honest
+# answer already existed roughly forty thousand lines up a log nobody reads to the end.
+
+# A run whose failures are ALL Issue.record, so the cheap partial reading of the log ("grep for
+# Expectation failed:") finds nothing at all while two tests really failed. That is the 2026-08-12
+# defect in its smallest form.
+ISSUE_RECORD_ONLY_OUTPUT="Test aGuardHolds() recorded an issue at Bar.swift:44:3: the venue guard did not fire
+Test anotherGuardHolds() recorded an issue at Baz.swift:9:1: the pill count did not match its rows
+Failing tests:
+	OvertureTests.BarTests.aGuardHolds()
+	OvertureTests.BazTests.anotherGuardHolds()
+
+** TEST FAILED **"
+
+REPRINT_RUN="$(run_wrapper_with_stub_xcodebuild "${ISSUE_RECORD_ONLY_OUTPUT}" 65)"
+
+assert_contains "a failed run reprints the list with the count xcodebuild itself named" \
+  "FAILING TESTS (2)" "${REPRINT_RUN}"
+
+assert_contains "and names each failing test" \
+  "OvertureTests.BazTests.anotherGuardHolds()" "${REPRINT_RUN}"
+
+# The last line of a fixture in this file is always the wrapper's own exit= line, so ordering is
+# asserted against the one thing it has to beat: the shape readout it sits beside.
+line_number_of() {
+  local haystack="$1" needle="$2"
+  grep -n -F -- "${needle}" <<< "${haystack}" | tail -1 | cut -d: -f1
+}
+
+assert_equals "the reprint comes after the shape line, so the list is the last thing on screen" \
+  "after" \
+  "$(if [[ "$(line_number_of "${REPRINT_RUN}" "FAILING TESTS")" -gt "$(line_number_of "${REPRINT_RUN}" "Suite shape:")" ]]; then echo after; else echo before; fi)"
+
+assert_not_contains "a passing run has no list to reprint" \
+  "FAILING TEST" "${PASSING_RUN}"
+
+# A crash prints the heading with nothing under it (#1006's whole tell), and must never come back as
+# "FAILING TESTS (0)": a run that named no failing test did not fail, it died, and the crash path
+# already says so in its own words.
+assert_not_contains "a crashed run does not reprint an empty list as a count of zero" \
+  "FAILING TEST" "${CRASH_RUN}"
+
+echo
+# --- a post-restart remainder is not the run (#2821) ---------------------------------------
+#
+# Measured 2026-08-16 while re-checking #2808's mutations: a test that exceeded its one minute
+# .timeLimit killed the test process, xcodebuild restarted and ran the remainder, and the final line
+# read "Suite shape: 12 tests in 2 suites, 0.009s" for a run that had really started 70 tests across
+# 8 suites.
+#
+# The green fixture is deliberate rather than a capture, and it is the case that matters: a restarted
+# run that ends red is already caught by the SHORT RUN gate whenever a baseline exists, while a
+# restarted run that ends GREEN is the one that would quietly RECORD its remainder as the count every
+# later run is measured against, disabling that gate for everything after it.
+RESTARTED_GREEN_OUTPUT="Test Suite 'All tests' started
+Restarting after unexpected exit, crash, or test timeout in OvertureTests.PrepTests/aSlowCheck(); summary will include totals from previous launches.
+Test run with 12 tests in 2 suites passed after 0.009 seconds.
+** TEST SUCCEEDED **"
+
+RESTARTED_RUN="$(run_wrapper_with_stub_xcodebuild "${RESTARTED_GREEN_OUTPUT}" 0)"
+
+assert_contains "a restarted run refuses to state a shape and names the restart" \
+  "Suite shape: NOT REPORTED" "${RESTARTED_RUN}"
+
+# THE misreading. AGENTS.md names that line as the reference for "did this run execute the whole
+# suite?", so a plausible small number printed for a run that was broken rather than small is the
+# one answer it must never give.
+#
+# Scoped to what this SCRIPT says, not to the whole run: xcodebuild's own streamed output carries
+# that sentence too, by construction, and an assertion over everything on screen would be answered
+# by the raw log rather than by the readout under test (L135).
+assert_not_contains "and never presents the remainder's count as the run's own" \
+  "12 tests in 2 suites" "$(grep 'run-tests-locked.sh:' <<< "${RESTARTED_RUN}")"
+
+assert_equals "a restarted run never becomes the baseline later runs are measured against" \
+  "baseline=" "$(grep '^baseline=' <<< "${RESTARTED_RUN}")"
+
+# The other half of the same claim: this must not have disabled the baseline for ordinary runs, or
+# the SHORT RUN gate quietly stops having anything to measure against.
+assert_equals "an ordinary green run still records its own count as the baseline" \
+  "baseline=2400" "$(grep '^baseline=' <<< "${PASSING_RUN}")"
+
+echo
+# --- a wedged test service is not a crashed host (#2322) -----------------------------------
+#
+# Measured 2026-08-08: three consecutive runs reported "the test host crashed with no named test
+# failure (a known self-hosted flake)" and retried. The real cause was this Mac's testmanagerd
+# wedged since the previous Tuesday, so xctest hung before establishing a connection and ZERO tests
+# executed. The message named the app host, which was blameless, the retry cost a second full build
+# each time, and the investigation went down two wrong paths before the raw error was read.
+#
+# The runner already held the evidence that separates them: a crash has a partial test count, this
+# has none at all, and the output carries the daemon's own wording rather than a crash signature.
+
+assert_equals "a wedged test service is never retried; a second build meets the same wedge" \
+  "" "$(should_retry "test-service-wedged" 1 2)"
+
+# Nor probed. The pure scheme is a different scheme through the SAME daemon, so the probe would hang
+# identically after paying for another full build, and the runner now names the cause itself rather
+# than needing the probe's output to do it.
+assert_equals "a wedged test service is never probed; the pure suite uses the same daemon" \
+  "" "$(should_probe_pure_suite "test-service-wedged")"
+
+# What it must PRESERVE, not only what it must catch (L104). The markers alone are not enough: a
+# daemon timeout can also appear in a run that DID execute tests and then lost its host, and that is
+# an ordinary crash with an ordinary retry. Zero tests executed is the other half of the tell.
+HUNG_MIDRUN_OUTPUT='Test Suite '"'"'All tests'"'"' started
+Test run with 1574 tests in 229 suites passed after 10.851 seconds.
+2026-08-08 09:12:03.100 xcodebuild[41200:9911] Timed out after 120.0s while initiating control session with daemon.
+Failing tests:
+** TEST FAILED **'
+assert_equals "a run that executed tests and then lost the daemon is still an ordinary crash" \
+  "crashed" "$(run_outcome "${HUNG_MIDRUN_OUTPUT}" 65)"
+
+assert_equals "and an ordinary dead host with no daemon markers is untouched" \
+  "crashed" "$(run_outcome "${CRASHED_OUTPUT}" 65)"
+
+assert_equals "a genuine test failure is still a failure, wedge markers or not" \
+  "failed" "$(run_outcome "${REAL_FAILURE_OUTPUT}" 65)"
+
+WEDGED_RUN="$(run_wrapper_with_stub_xcodebuild "${HUNG_RUNNER_OUTPUT}" 65 "${REAL_LOG_OUTPUT}")"
+
+assert_contains "a wedged run names the machine's test service" \
+  "testmanagerd" "${WEDGED_RUN}"
+
+assert_contains "and says no test ran at all" \
+  "NO TEST RAN" "${WEDGED_RUN}"
+
+assert_contains "and hands over the one command that fixes it" \
+  "pkill -x testmanagerd" "${WEDGED_RUN}"
+
+# THE regression. Every one of these is what the 2026-08-08 runs did instead.
+assert_not_contains "a wedged run never blames the app host" \
+  "the test host crashed" "${WEDGED_RUN}"
+
+assert_not_contains "nor reports the run as having died" \
+  "the test run CRASHED" "${WEDGED_RUN}"
+
+assert_not_contains "and is never retried" \
+  "Retrying once" "${WEDGED_RUN}"
+
+# No host ever launched, so there is no host log to read and nothing in it to find. Asserted on the
+# call count rather than on the output, because "asked and found nothing" prints the same as "never
+# asked" (L11).
+assert_contains "a wedged run never asks the OS log about a host that never started" \
+  "logcalls=0" "${WEDGED_RUN}"
+
+assert_equals "a wedged run exits with xcodebuild's own code" \
+  "exit=65" "$(tail -n 1 <<< "${WEDGED_RUN}")"
+
+echo
+# --- say when the machine's test service is old enough to be the problem (#2323) -----------
+#
+# The daemon's age was one cheap read and it was the whole answer on 2026-08-08, and nothing pointed
+# at it. Advisory only and never blocking, matching prune-stale-registrations.sh: a long-lived daemon
+# is usually fine, and the line only has to be in front of somebody at the moment a run fails oddly.
+
+# `ps -o etime=` writes days only when there are days, so the shapes below are the three it produces.
+assert_equals "an age in minutes and seconds is not old enough to mention" \
+  "" "$(testmanagerd_age_report "1234" "07:41" 5)"
+
+assert_equals "nor is one in hours" \
+  "" "$(testmanagerd_age_report "1234" "23:07:41" 5)"
+
+# Calibrated against a real reading rather than a round number: this Mac's testmanagerd was
+# 2 days 8 hours old and perfectly healthy on 2026-08-16, so a threshold below that would fire on
+# the ordinary case and be ignored within a day (L93, L147).
+assert_equals "and neither is the two-day-old daemon measured here while healthy" \
+  "" "$(testmanagerd_age_report "1234" "02-08:15:57" 5)"
+
+SIX_DAY_REPORT="$(testmanagerd_age_report "1234" "06-03:14:05" 5)"
+
+assert_contains "a daemon days past the threshold is named, with its age and PID" \
+  "6 days" "${SIX_DAY_REPORT}"
+
+assert_contains "and the PID, so it can be looked at before it is killed" \
+  "1234" "${SIX_DAY_REPORT}"
+
+assert_contains "and the one command that clears it" \
+  "pkill -x testmanagerd" "${SIX_DAY_REPORT}"
+
+# A reading it cannot parse is not an age. Saying nothing is right here (this is advisory), but
+# saying nothing must never be reached by scoring an unreadable value as young (L50).
+assert_equals "an unreadable age is not scored as a young daemon" \
+  "" "$(testmanagerd_age_report "1234" "not an elapsed time" 5)"
+
+assert_equals "and no daemon at all says nothing" \
+  "" "$(testmanagerd_age_report "" "" 5)"
+
+# The wiring, which is the separate claim (L3). The advisory is read BEFORE the lock, so a run
+# queued behind another worktree's suite still carries it.
+OLD_DAEMON_RUN="$(run_wrapper_with_stub_xcodebuild "${PASSING_OUTPUT}" 0 "" "" "24298" "06-03:14:05")"
+
+assert_contains "a run on a Mac whose test service is days old says so" \
+  "testmanagerd" "${OLD_DAEMON_RUN}"
+
+assert_equals "and it is still only advisory: the run passes" \
+  "exit=0" "$(tail -n 1 <<< "${OLD_DAEMON_RUN}")"
+
+YOUNG_DAEMON_RUN="$(run_wrapper_with_stub_xcodebuild "${PASSING_OUTPUT}" 0 "" "" "24298" "03:14:05")"
+
+assert_not_contains "an ordinary run on a fresh daemon says nothing about it" \
+  "testmanagerd" "${YOUNG_DAEMON_RUN}"
+
+assert_not_contains "and neither does a run on a Mac with no test service running at all" \
+  "testmanagerd" "${PASSING_RUN}"
 
 # ---------------------------------------------------------------------------
 # #2577: the stall-versus-queue scenarios live in run-tests-locked-stall.test.sh

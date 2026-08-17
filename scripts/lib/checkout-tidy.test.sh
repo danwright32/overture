@@ -219,6 +219,61 @@ assert_eq "an unknown branch name is never acted on" \
   "$(local_branch_deletable "" "main" "")" \
   "protected"
 
+echo
+# ---------------------------------------------------------------------------
+# branch_backlog_report: say when the backlog is climbing again (#2302)
+# ---------------------------------------------------------------------------
+# #2234 fixed the two leaks it could reach (both merge scripts now delete the local branch they just
+# landed, and this script clears a backlog). Neither covers the paths that are not a merge script: a
+# branch made by hand and abandoned, an agent worktree, or the bare one-line merge the next-issue
+# shortcut uses. So the count can still climb with nobody watching, which is exactly how it reached
+# 496 the first time: not because anyone chose to keep them, but because nothing ever counted them.
+#
+# The obvious check agrees that all is well the whole way up, since this repo squash-merges and
+# `git branch --merged main -d` recognised 39 of those 496.
+
+assert_eq "an ordinary checkout is not worth a word" \
+  "$(branch_backlog_report 27 50)" \
+  ""
+
+# The boundary is stated rather than left to be inferred. At the threshold exactly, nothing is said:
+# the line exists to report a count that has gone PAST the point where somebody should look.
+assert_eq "a count exactly at the threshold is still not worth a word" \
+  "$(branch_backlog_report 50 50)" \
+  ""
+
+BACKLOG_LINE="$(branch_backlog_report 512 50)"
+
+assert_eq "a backlog past the threshold states the count it measured" \
+  "$(printf '%s' "${BACKLOG_LINE}" | grep -c '512 local branches')" \
+  "1"
+
+# What it MEASURED is refs. It must not claim they are dead ones: this counts nothing about whether
+# a branch has shipped, and the whole reason #2234 exists is that the cheap answer to that question
+# is wrong here (L11: a message may claim only what its check actually measured).
+assert_eq "it never claims to have measured which of them are dead" \
+  "$(printf '%s' "${BACKLOG_LINE}" | grep -ci 'dead branches\|shipped branches')" \
+  "0"
+
+# And it names the command that decides, or the count is a number with nowhere to go (L80).
+assert_eq "it names the command that answers which of them can go" \
+  "$(printf '%s' "${BACKLOG_LINE}" | grep -c 'scripts/tidy-checkout.sh')" \
+  "1"
+
+assert_eq "and says it is advisory, since a cluttered checkout is nobody's defect" \
+  "$(printf '%s' "${BACKLOG_LINE}" | grep -ci 'advisory')" \
+  "1"
+
+# A count that is not a number is not a small count. It must never reach the comparison and land on
+# the quiet side, which is the one direction this can fail in (L50).
+assert_eq "an unreadable count says nothing rather than reading as healthy" \
+  "$(branch_backlog_report "" 50)" \
+  ""
+
+assert_eq "and neither does an unreadable threshold turn every checkout into a backlog" \
+  "$(branch_backlog_report 512 "")" \
+  ""
+
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All checkout-tidy.sh fixtures passed."
   exit 0

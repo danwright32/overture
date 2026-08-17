@@ -161,6 +161,16 @@ already drifting from the Swift version it mirrored.
   worktree holding uncommitted work, and answers every unanswerable question in the keep direction.
   From #2234 both merge scripts also delete the local branch they just merged, since
   `gh pr merge --delete-branch` only removes it on GitHub, which is where the backlog came from.
+  What that does NOT cover is every path that is not a merge script (a branch made by hand and
+  abandoned, an agent worktree, the bare one-line merge the next-issue shortcut uses), so since #2302
+  `scripts/check-branch-backlog.sh` rides along inside `scripts/test-all.sh` and prints one line when
+  the count of local refs has climbed past its threshold. Advisory only, never blocking, and it
+  counts REFS rather than dead ones: it says so, and hands the expensive question to the script
+  above, because the tidy's own counting pass reads every merged PR head branch from GitHub and then
+  computes a patch-id per commit, which is far too slow to sit inside every push. The reason it
+  exists at all is that nothing counted: the 496 accumulated with the obvious command agreeing all
+  was well the whole way up. The other repos named in #2302 (nursedex, playedit, PostRoll, Downbeat)
+  were NOT measured or covered here; that half of the issue is still open.
 - Reclaiming Xcode's build output: `scripts/reclaim-orphan-derived-data.sh` (#2585) deletes the
   DerivedData folders belonging to worktrees that no longer exist. It runs by itself inside every
   `scripts/test-all.sh`, so there is nothing to remember; run it by hand only to act immediately.
@@ -230,6 +240,17 @@ already drifting from the Swift version it mirrored.
   has been observed to hang there, so there is no measured number to set a limit from. Retune with
   `OVERTURE_TEST_STALL_LIMIT_SECONDS`, `OVERTURE_TEST_STALL_CHECK_SECONDS` and
   `OVERTURE_TEST_LOCK_NOTICE_SECONDS`.
+  A red run that named no failing test is one of THREE things, not two, since #2322. A crashed app
+  host is retried once as the known #1331 flake. Code that did not compile is not (#1465). And a run
+  that never reached this Mac's TEST SERVICE, whose tell is the daemon's own wording plus a total of
+  zero tests executed, is now `test-service-wedged`: it is neither retried nor followed by the pure
+  suite probe, because both go through the same `testmanagerd` and would meet the same wedge after
+  another full build, and it says so and hands over `pkill -x testmanagerd`. On 2026-08-08 that
+  cause spent three full cycles being reported as a crashed app host, which was blameless.
+  The same daemon's AGE is read before the lock and mentioned when it is implausibly old (#2323),
+  advisory only, never blocking, in the way `prune-stale-registrations.sh` already rides along.
+  Retune the threshold in `TESTMANAGERD_OLD_DAYS`; it is set above a healthy reading measured on
+  this Mac rather than at a round number, so it does not fire on the ordinary case.
   How long a full run takes is deliberately NOT written down here. It moved as the suite grew and
   the stated figure was wrong by minutes, which matters because the paragraph above tells you to
   check a suspiciously fast run against what a full one costs: an understated number weakens the
@@ -332,11 +353,25 @@ already drifting from the Swift version it mirrored.
   could not start. That figure is what the suite was THAT DAY and is deliberately not updated: it
   is the record of an experiment, not a claim about the suite's current size. For the current size,
   see the readout below.
-- **The suite states its own size, every run.** `run-tests-locked.sh` ends with a
+- **The suite states its own size, every run, unless it cannot honestly state one.**
+  `run-tests-locked.sh` ends with a
   `Suite shape:` line giving the tests and suites actually executed, the wall clock, the ratio of
   test Swift to app Swift, and how many test declarations are source-text guards (#2193, #2232).
   Use that line, never a number written in this file, as the reference for "did this run execute
-  the whole suite?". The counts here used to be hand-written and both had drifted badly, which
+  the whole suite?".
+  Since #2821 there is one state in which it deliberately states NOTHING: a run whose test process
+  RESTARTED. xcodebuild relaunches the process after an unexpected exit, crash or `.timeLimit`
+  timeout, and the totals it then prints are totals of the REMAINDER. Measured 2026-08-16 while
+  re-checking #2808's mutations, the line read `Suite shape: 12 tests in 2 suites` for a run that
+  had really started 70 across 8 suites. A plausible small number is precisely the answer this line
+  must never give, since the reading it exists to support is "was this run short?", so it prints
+  `Suite shape: NOT REPORTED` and names the restart instead of summing across a crash, and such a
+  run can no longer record its own count as the baseline the short-run gate measures against.
+  Since #2600 a FAILING run then reprints xcodebuild's own `Failing tests:` block, with a count, as
+  the last thing on screen. Read that rather than searching the log: a failure raised by
+  `Issue.record` prints only `recorded an issue` while an `#expect` prints `Expectation failed:`, so
+  grepping for the second phrase under-counts. On 2026-08-12 a branch read that way was reported as
+  having two failures and had eight. The counts here used to be hand-written and both had drifted badly, which
   quietly weakened the warning two paragraphs up: a stated total is exactly what someone checks a
   suspicious scoped run against, so a wrong one is worse than none (L32). `AgentsDocSuiteCountsTests`
   fails if a hand-written count is ever put back.
@@ -372,6 +407,17 @@ already drifting from the Swift version it mirrored.
   that made it untestable before. `build-install.sh` fails loud if that identity is missing rather than
   falling back to ad-hoc. The one-time switch to this identity re-prompts for permissions on the first
   install after it, then they persist.
+  Signing reads the USER's keychain search list, which is a persistent OS resource shared with every
+  other tool on this Mac, and something once left a THROWAWAY keychain under a temp directory in it
+  (#2611). `mac/scripts/prune-stale-keychains.sh` removes any entry whose file is gone and keeps
+  every entry that exists, in the order it was in; `--dry-run` reports and changes nothing. It is
+  deliberately NOT in `scripts/test-all.sh`, unlike the two advisories that ride along there: those
+  read or clear something this repo created, while this WRITES a list shared with the whole machine,
+  so it stays behind a command somebody typed. It refuses outright when no entry survives, because
+  an unreadable listing and an empty list look identical and the only way to change the list is to
+  write the whole of it back. If a fixture ever needs its own keychain it must pass it by
+  `--keychain` scope; a guard in `mac/scripts/prune-stale-keychains.test.sh` fails if any `*.test.sh`
+  writes the search list instead.
 - `build-install.sh` builds WHATEVER IS CHECKED OUT, which is what you want when installing a branch build
   deliberately. The freshness panel's Update button does NOT run it directly: it runs
   `mac/scripts/update-overture.sh`, which brings the checkout up to origin/main first and only then

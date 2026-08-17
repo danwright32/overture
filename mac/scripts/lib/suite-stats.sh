@@ -44,6 +44,64 @@ test_run_totals() {
   '
 }
 
+# Prints "restarted" when xcodebuild relaunched the test process partway through this run, and
+# nothing otherwise (#2821).
+#
+# Why this is worth its own reading. A restart makes every count below it a count of the REMAINDER.
+# Measured 2026-08-16 while re-checking #2808's mutations: mutated code made a test exceed its one
+# minute .timeLimit, which kills the test process; xcodebuild restarted and ran what was left, and
+# the readout said "12 tests in 2 suites" for a run that had really started 70 tests across 8
+# suites. xcodebuild's own message promises the summary "will include totals from previous
+# launches", and that measurement says it did not, which is exactly why the totals cannot be
+# believed and cannot be summed either.
+#
+# Matched on xcodebuild's own sentence. The same phrase is already what pure_failure_evidence in
+# run-tests-locked.sh keeps as a named cause, so this is a shape this repo has captured rather than
+# one invented here.
+test_run_restarted() {
+  local output="$1"
+  grep -qa 'Restarting after unexpected exit' <<< "${output}" && echo "restarted"
+  return 0
+}
+
+# Every test xcodebuild named under its own "Failing tests:" heading, one per line, trimmed of the
+# tab it indents them by. Empty when it named none, which is a real and different state: a run that
+# reports failure and names NOTHING did not fail, it died (#1006).
+#
+# One implementation, because three places read this same block and all three have to agree about
+# what a named failure is: run_outcome's crashed-versus-failed decision, pure_failure_evidence, and
+# the reprint below.
+failing_test_names() {
+  local output="$1"
+  awk '/^Failing tests:/{f=1;next} /^\*\* TEST/{f=0} f' <<< "${output}" \
+    | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' \
+    | grep -a '[^[:space:]]' || true
+}
+
+# The failing test list, reprinted with its count, or nothing when this run named no failing test
+# (#2600).
+#
+# Why a reprint rather than "read the log". A failed run reports its failures two different ways and
+# reading the log for one of them UNDER-COUNTS: Swift Testing prints "Expectation failed:" for an
+# #expect, while a guard raising Issue.record prints only "recorded an issue". On 2026-08-12 a run
+# of #2417's branch was read by searching for the first phrase, reported as two failures, and
+# actually had eight, and twenty minutes of work followed from believing the branch was nearly
+# green. xcodebuild's own block is the honest answer and was in the output the whole time, roughly
+# forty thousand lines down a log nobody reads to the end, which is why the cheap partial reading is
+# the one anybody working at speed reaches for.
+#
+# Deliberately uncapped. The list is the whole point, and a cap would reintroduce an under-count at
+# exactly the size where one matters most; the count leads so a very long list announces itself
+# before it scrolls.
+failing_tests_report() {
+  local output="$1" names count
+  names="$(failing_test_names "${output}")"
+  [[ -n "${names}" ]] || return 0
+  count="$(grep -c . <<< "${names}")"
+  echo "FAILING TEST$([[ "${count}" == 1 ]] || echo S) (${count}), reprinted so the list is the last thing on screen:"
+  sed 's/^/  /' <<< "${names}"
+}
+
 # Test Swift measured against app Swift, to two decimal places, or "unknown" when it cannot be a
 # ratio. Never a fabricated stand-in: an app line count of zero means the counting is broken, and
 # saying so beats printing a number nobody can act on.
@@ -66,9 +124,21 @@ line_ratio() {
 # compiled one, or a future Swift Testing that counts cases rather than functions would part them.
 # A share formed by dividing a count read off the source by a count read off the run would then be
 # a percentage of nothing real, and would keep looking plausible (L63).
+#
+# #2821: a run whose test process RESTARTED gets no shape at all, and is told so. The counts after a
+# restart are counts of the remainder, and this line is the one AGENTS.md names as THE reference for
+# "did this run execute the whole suite?". Reporting a small number for a run that was broken rather
+# than small is the single reading it must never produce, so it states none: not the totals, not the
+# ratio, not the guard share, because a plausible-looking figure standing beside a warning is what
+# makes a remainder readable as a measurement in the first place.
 format_suite_report() {
-  local totals="$1" ratio="$2" guard_decls="$3" total_decls="$4"
+  local totals="$1" ratio="$2" guard_decls="$3" total_decls="$4" restarted="${5:-}"
   local out="Suite shape: "
+
+  if [[ -n "${restarted}" ]]; then
+    echo "${out}NOT REPORTED. The test process RESTARTED during this run (xcodebuild relaunched it after an unexpected exit, crash or test timeout), so the totals it printed cover only what ran AFTER the last restart, not this whole run. Nothing here can be read as the size of the suite. Re-run it. See #2821."
+    return 0
+  fi
 
   if [[ -n "${totals}" ]]; then
     local tests suites seconds
@@ -149,5 +219,6 @@ suite_report_for_run() {
 
   format_suite_report "$(test_run_totals "${output}")" \
                       "$(line_ratio "${app_lines}" "${test_lines}")" \
-                      "${guard_decls}" "${total_decls}"
+                      "${guard_decls}" "${total_decls}" \
+                      "$(test_run_restarted "${output}")"
 }

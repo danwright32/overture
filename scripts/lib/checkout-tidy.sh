@@ -142,6 +142,31 @@ local_branch_deletable() {
   echo "deletable"
 }
 
+# branch_backlog_report <local branch count> <threshold>. One line when the checkout has climbed
+# past the point where somebody should look, and nothing otherwise (#2302).
+#
+# WHY there is a detector at all. #2234 fixed the two leaks it could reach: both merge scripts now
+# delete the local branch they just landed, and tidy-checkout.sh clears a backlog. Neither covers
+# the paths that are not a merge script (a branch made by hand and abandoned, an agent worktree, the
+# bare one-line merge the next-issue shortcut uses), so the count can still climb with nobody
+# watching. That is exactly how it reached 496: not because anyone chose to keep them, but because
+# nothing ever counted them, and the standard idiom agrees that all is well the whole way up.
+#
+# What it MEASURES is refs, and it says so rather than calling them dead: whether a branch has
+# shipped is the expensive question this file exists to answer carefully, and a caller cheap enough
+# to ride along inside every push cannot ask it (L11). So the line reports a count and hands over
+# the command that decides.
+#
+# A count or threshold that is not a number yields NOTHING. An unreadable value must never reach the
+# comparison, where it would land on the quiet side and look exactly like a tidy checkout (L50).
+branch_backlog_report() {
+  local count="$1" threshold="$2"
+  [[ "${count}" =~ ^[0-9]+$ ]] || return 0
+  [[ "${threshold}" =~ ^[0-9]+$ ]] || return 0
+  [[ "${count}" -gt "${threshold}" ]] || return 0
+  echo "this checkout holds ${count} local branches, past the advisory threshold of ${threshold}. That is a count of REFS and nothing more: which of them can go is a question this repo's squash merges make the obvious command answer wrongly, so ask the one that gets it right, which reports and deletes nothing until you pass --apply: scripts/tidy-checkout.sh. Advisory only, and it blocks nothing. See #2302."
+}
+
 # Whole-line membership of a newline-separated list. Substring matching would be a live hazard here:
 # every branch in this repo is named after an issue, so "1234-fix" is a substring of "1234-fix-again"
 # and a careless match would silently protect (or condemn) the wrong branch.
