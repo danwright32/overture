@@ -148,6 +148,64 @@ struct SendProgressStateTests {
         #expect(departure?.reason == .closedOut)
     }
 
+    // #2729: a departure whose clear never ran is disregarded rather than kept for the session.
+    //
+    // Nothing but `finishDeparting` removes one, and the clear CAN be missed: `closeOut` marks the
+    // departure before its write, deliberately, so a refused save leaves the mark behind; a view can be
+    // torn down mid animation; and any later caller that marks one and returns early on an error path
+    // does the same. Left standing, that show goes on drawing its exit wherever it appears.
+    @Test func aDepartureWhoseClearNeverRanStopsCounting() {
+        let state = SendProgressState()
+        let marked = Date(timeIntervalSince1970: 1_000_000)
+        state.depart("stranded", as: item("stranded"), because: .closedOut, at: marked)
+
+        // Still live while the exit could plausibly be playing. The longest plan totals 0.97s, so a
+        // ceiling that cut in here would break the animation it exists to protect.
+        let duringTheExit = marked.addingTimeInterval(1)
+        #expect(state.departure("stranded", now: duringTheExit) != nil)
+        #expect(state.isDeparting("stranded", now: duringTheExit))
+        #expect(state.departureReason("stranded", now: duringTheExit) == .closedOut)
+
+        // And gone once no exit could possibly still be running.
+        let longAfter = marked.addingTimeInterval(SendProgressState.departureCeiling + 1)
+        #expect(state.departure("stranded", now: longAfter) == nil)
+        #expect(!state.isDeparting("stranded", now: longAfter))
+        #expect(state.departureReason("stranded", now: longAfter) == nil)
+    }
+
+    // The ceiling is far enough above the longest exit that it cannot cut a real one short, which is the
+    // property that lets it be a bounded wrong rather than a new defect. Read off SendDelightTiming
+    // rather than restated, so retuning the animation cannot silently walk the two into each other (L70).
+    @Test func theCeilingCannotCutAnExitShort() {
+        let longest = max(SendDelightTiming.plan(reduceMotion: false).total,
+                          SendDelightTiming.plan(reduceMotion: true).total)
+        #expect(SendProgressState.departureCeiling > longest * 10,
+                "a ceiling near the exit's own length would clear a departure mid animation")
+    }
+
+    // Marking a new departure sweeps stranded ones, so the dictionary is bounded by how many shows are
+    // leaving at once rather than by how long the session has been open.
+    @Test func markingADepartureSweepsTheStrandedOnes() {
+        let state = SendProgressState()
+        let old = Date(timeIntervalSince1970: 1_000_000)
+        state.depart("stranded", as: item("stranded"), because: .closedOut, at: old)
+        #expect(state.departures.count == 1)
+
+        state.depart("fresh", as: item("fresh"),
+                     at: old.addingTimeInterval(SendProgressState.departureCeiling + 1))
+        #expect(state.departures.keys.sorted() == ["fresh"],
+                "the stranded entry is removed, not merely disregarded on read")
+    }
+
+    // And the splice the queue reads is filtered too, or a stranded departure would go on putting a
+    // closed-out show back into the list it just left.
+    @Test func theSpliceDropsAStrandedDeparture() {
+        let state = SendProgressState()
+        state.depart("stranded", as: item("stranded"), because: .closedOut,
+                     at: Date().addingTimeInterval(-SendProgressState.departureCeiling - 1))
+        #expect(state.departing.isEmpty)
+    }
+
     // A row that is not leaving has no departure, whatever else is recorded about it.
     @Test func aRowThatIsNotLeavingHasNoDeparture() {
         let state = SendProgressState()
