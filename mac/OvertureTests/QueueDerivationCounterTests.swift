@@ -97,8 +97,7 @@ struct QueueDerivationCounterTests {
     // The one place that may count is the one place that derives. Counting anywhere else would report a
     // number that is not the thing under test.
     @Test func onlyTheWholeStoreDerivationIsCounted() {
-        guard let body = SourceGuardHelper.propertyBody("static func make(_ i: Inputs) -> QueueView.RenderData {",
-                                                        in: renderPass) else {
+        guard let body = SourceGuardHelper.bodyOfFunction(named: "make", in: renderPass) else {
             Issue.record("expected to find the render pass")
             return
         }
@@ -110,8 +109,7 @@ struct QueueDerivationCounterTests {
     // Gated out of Release, at both ends: the counter itself and the call that feeds it.
     @Test func theCounterIsDebugOnly() {
         #expect(renderPass.contains("#if DEBUG"))
-        guard let body = SourceGuardHelper.propertyBody("static func make(_ i: Inputs) -> QueueView.RenderData {",
-                                                        in: renderPass) else {
+        guard let body = SourceGuardHelper.bodyOfFunction(named: "make", in: renderPass) else {
             Issue.record("expected to find the render pass")
             return
         }

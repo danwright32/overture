@@ -187,7 +187,7 @@ struct DeadPrepRunTests {
     @Test func theSweepRunsWhenARunEndsAndAgainAtLaunch() {
         let root = SourceGuardHelper.source("Overture/App/RootView.swift")
         // When a watched run stops being live.
-        let settle = SourceGuardHelper.propertyBody("private func settleFinishedRun(slot: RunSlot) async {", in: root)
+        let settle = SourceGuardHelper.bodyOfFunction(named: "settleFinishedRun", in: root)
         #expect(settle?.contains("sweptADeadRun(slot: slot)") == true,
                 "a run that ends must be checked for having died rather than finished")
         // And at launch, for a run that died while Overture was closed and so was never watched at all.

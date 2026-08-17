@@ -198,8 +198,7 @@ struct ScoutWaitingWiringGuardTests {
     // refuses again here if it is ever reached another way. Two guards, because the cost of getting this
     // wrong is a leaked suspended run plus a second full 68-source sweep (L70: not one check twice).
     @Test func retryRefusesToAbandonARunThatIsWaiting() throws {
-        let retry = try #require(SourceGuardHelper.propertyBody(
-            "private func retryScout() {", in: source))
+        let retry = try #require(SourceGuardHelper.bodyOfFunction(named: "retryScout", in: source))
         #expect(retry.contains("if let ask = scoutReadAsk { askReadBudget(ask); return }"))
 
         let view = SourceGuardHelper.source("Overture/UI/RunProgressView.swift")
@@ -209,8 +208,7 @@ struct ScoutWaitingWiringGuardTests {
 
     // Cancelling a parked run answers its question, or the stop leaks the run instead of ending it.
     @Test func cancellingAParkedRunAnswersItsQuestion() throws {
-        let cancel = try #require(SourceGuardHelper.propertyBody(
-            "private func cancelScout() {", in: source))
+        let cancel = try #require(SourceGuardHelper.bodyOfFunction(named: "cancelScout", in: source))
         #expect(cancel.contains("scoutReadAsk?.replyIfUnanswered()"))
     }
 

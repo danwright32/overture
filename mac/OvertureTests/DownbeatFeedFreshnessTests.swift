@@ -99,7 +99,7 @@ struct FeedFreshnessWiringGuardTests {
         // the character count while the wiring it protects was untouched, so the guard failed for a
         // reason unrelated to what it asserts (L63). The body is the quantity it actually means, and it
         // now also covers the REST of the function, which the count never did.
-        guard let body = SourceGuardHelper.propertyBody("async -> ReconcileSummary {", in: sched) else {
+        guard let body = SourceGuardHelper.bodyOfFunction(named: "runSafeReconcilesOnce", in: sched) else {
             Issue.record("runSafeReconcilesOnce not found"); return
         }
         #expect(body.contains("observeFeedFreshness(now: now)"),

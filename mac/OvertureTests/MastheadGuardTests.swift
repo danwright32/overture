@@ -24,12 +24,12 @@ struct MastheadGuardTests {
         // fooled by a resized reintroduction of the same dot.
         let queueView = source("Overture/UI/QueueView.swift")
         #expect(!queueView.isEmpty)
-        // The locator is the function's real signature, so a change to it fails this LOUDLY (a nil body)
-        // rather than quietly scoping the check to nothing and passing. #1694 changed the signature and
-        // this is how that was noticed. #1771 added an agentInputs: argument, so the anchor is the last
-        // line of the signature rather than the whole of it (the same shape QueueRenderDataGuardTests
-        // uses for AgentInputs.from).
-        let mastheadBody = SourceGuardHelper.propertyBody("agentInputs: AgentInputs) -> some View {", in: queueView)
+        // The locator is the function's NAME, so a signature change leaves this asking the same
+        // question, while a rename or a deletion still fails it LOUDLY (a nil body) rather than quietly
+        // scoping the check to nothing and passing. It used to pin the signature: #1694 changed it and
+        // #1771 added an agentInputs: argument, and each of those turned this red for formatting while
+        // the rule it exists for was untouched (#2784, #2599, L103).
+        let mastheadBody = SourceGuardHelper.bodyOfFunction(named: "masthead", in: queueView)
         #expect(mastheadBody != nil)
         #expect(mastheadBody?.contains("Circle()") == false)
     }
@@ -92,8 +92,7 @@ struct MastheadGuardTests {
         // Scoped to the strip's own body, so a match elsewhere in a 900-line file cannot answer for it. The
         // locator is the real signature: a change to it fails this loudly with a nil body rather than
         // quietly scoping the check to nothing.
-        let strip = SourceGuardHelper.propertyBody("private func agentStrip(_ inputs: AgentInputs) -> some View {",
-                                                   in: queueView)
+        let strip = SourceGuardHelper.bodyOfFunction(named: "agentStrip", in: queueView)
         #expect(strip != nil)
         #expect(strip?.contains("needsYou") == false)
 

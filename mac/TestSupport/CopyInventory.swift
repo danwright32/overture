@@ -167,6 +167,12 @@ enum CopyInventory {
             let source = try String(contentsOf: file, encoding: .utf8)
             let name = relativePath(of: file, under: root)
 
+            // #2671 first, because nesting leaves the counts BALANCED: the unclosed check below cannot
+            // see it, and reporting it as "unclosed" would send the reader looking for a missing marker
+            // that is not missing (L11).
+            if let line = SwiftSource.nestedIgnoreRegion(in: source) {
+                throw Failure.nestedIgnoreRegion(name, line)
+            }
             if SwiftSource.unclosedIgnoreRegion(in: source) {
                 throw Failure.unclosedIgnoreRegion(name)
             }
@@ -182,11 +188,17 @@ enum CopyInventory {
 
     enum Failure: Error, CustomStringConvertible {
         case unclosedIgnoreRegion(String)
+        case nestedIgnoreRegion(String, Int)
         var description: String {
             switch self {
             case .unclosedIgnoreRegion(let file):
                 return "\(file) opens a \(SwiftSource.ignoreStart) it never closes, which would hide "
                      + "every sentence after it from the inventory."
+            case .nestedIgnoreRegion(let file, let line):
+                return "\(file) line \(line) opens a \(SwiftSource.ignoreStart) inside a region that is "
+                     + "already open. The inner region's \(SwiftSource.ignoreEnd) closes the outer one "
+                     + "too, so every sentence between there and the outer end leaks into the inventory. "
+                     + "Widen the outer region, or close it before opening the inner one."
             }
         }
     }
