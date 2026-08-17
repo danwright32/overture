@@ -49,22 +49,19 @@ If Overture is not installed yet, build and install the resident app first: `cd 
 && ./build-install.sh --launch` (builds Release, installs to `/Applications`, and
 starts it as a login agent).
 
-Point the app at the runner script (so the app can launch it). The defaults domain
-depends on which build reads it: the resident Release app reads
-`com.danwright.overture`; a Debug build launched from Xcode reads its own
-`com.danwright.overture.debug` domain and never sees the Release one. Set whichever
-domain matches the app you are actually running (both, if you switch between them):
+**Pointing the app at the runner script is no longer a step (#2838).** The install above already did
+it: `build-install.sh` writes `replyClassifyRunnerScriptPath` into the Release preferences domain from
+its own repo root and makes the script executable, and `mac/scripts/run-debug.sh` does the same for
+`com.danwright.overture.debug`. The two builds read different preferences domains, which is why this
+used to be two commands holding an absolute path.
 
-```
-chmod +x mac/scripts/reply-classify-run.sh
-# Resident Release app (installed via build-install.sh):
-defaults write com.danwright.overture replyClassifyRunnerScriptPath "$(pwd)/mac/scripts/reply-classify-run.sh"
-# Debug build (run from Xcode):
-defaults write com.danwright.overture.debug replyClassifyRunnerScriptPath "$(pwd)/mac/scripts/reply-classify-run.sh"
-```
+If the checkout MOVES, nothing needs correcting: a stored path naming nothing runnable falls back to
+the checkout recorded in `installed-build.json` (`RunnerScripts.resolve`). A stored path that still
+works is left alone.
 
-Until this is set, the app writes the work-list and the launch fails gracefully (no crash); the
-replies simply stay surfaced as "needs a state" for Dan to tag by hand.
+If no script is found either way, the app writes the work-list and the launch fails gracefully (no
+crash), naming the setting and what it points at; the replies simply stay surfaced as "needs a state"
+for Dan to tag by hand.
 
 ## Notes
 

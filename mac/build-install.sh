@@ -128,6 +128,14 @@ printf '{"version":1,"commit":"%s","commitDate":"%s","repoPath":"%s"}\n' \
 mv -f "${INSTALLED_TMP}" "${OVERTURE_DATA_DIR}/installed-build.json"
 echo "==> Recorded installed build: ${INSTALLED_COMMIT:0:7}"
 
+# #2838: and point the Release domain at THIS checkout's three runner scripts, so the six absolute
+# paths that used to be typed from a runbook are derived from the install instead. Written after the
+# record above and from the same root, so the two can never disagree about which checkout this build
+# came from. mac/scripts/run-debug.sh does the same for the Debug domain.
+# shellcheck source=scripts/lib/runner-defaults.sh
+source "$(pwd)/scripts/lib/runner-defaults.sh"
+write_runner_defaults "com.danwright.overture" "${OVERTURE_REPO_ROOT}"
+
 # And what has shipped, through the one shared writer, so a freshly installed Mac never sits in the
 # "nothing has recorded a merge" state with a panel it has no way to clear.
 "${OVERTURE_REPO_ROOT}/scripts/record-shipped-commit.sh" || true

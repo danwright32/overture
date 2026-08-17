@@ -136,7 +136,7 @@ struct ScoutQueueForReadingTests {
         let outcome = try await ScoutService.runScout(
             into: ctx, extractor: noEvents, fetch: page("new"),
             pin: { _, _ in URL(fileURLWithPath: "/tmp/x.html") },
-            launch: { _ in throw ScoutExtractService.ExtractLaunchError.runnerUnavailable },
+            launch: { _ in throw ScoutExtractService.ExtractLaunchError.runnerUnavailable("no runner") },
             defaults: defaults())
 
         let warning = outcome.warning ?? ""
@@ -155,7 +155,7 @@ struct ScoutQueueForReadingTests {
         let outcome = try await ScoutService.runScout(
             into: ctx, extractor: noEvents, fetch: page("new"),
             pin: { _, _ in URL(fileURLWithPath: "/tmp/x.html") },
-            launch: { _ in throw ScoutExtractService.ExtractLaunchError.runnerUnavailable },
+            launch: { _ in throw ScoutExtractService.ExtractLaunchError.runnerUnavailable("no runner") },
             defaults: defaults())
 
         #expect(s.health != .failing)

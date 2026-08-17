@@ -20,6 +20,12 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MAC_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+REPO_ROOT="$(cd "${MAC_DIR}/.." && pwd)"
+
+# write_runner_defaults: points this build's preferences domain at THIS checkout's runner scripts
+# (#2838). Shared with mac/build-install.sh, which does the same for the Release domain.
+# shellcheck source=scripts/lib/runner-defaults.sh
+source "${SCRIPT_DIR}/lib/runner-defaults.sh"
 
 # shellcheck source=scripts/lib/stale-registrations.sh
 source "${SCRIPT_DIR}/lib/stale-registrations.sh"
@@ -139,6 +145,18 @@ main() {
   local bundle_id
   bundle_id="$(built_bundle_id "${built_app}")"
   assert_is_debug_bundle "${bundle_id}" || exit 1
+
+  # #2838: point the DEBUG defaults domain at THIS checkout's runner scripts.
+  #
+  # A Debug build reads `com.danwright.overture.debug`, a different preferences domain from the resident
+  # Release app, so the three runner paths had to be set twice, by hand, from a runbook holding a literal
+  # path. That is six entries recording where the checkout HAPPENED to be, none of them inside the repo
+  # where anything could notice they had gone stale (L153). Written here because this script already
+  # knows where the checkout is: it is running from inside it.
+  #
+  # Release's half is `mac/build-install.sh`, which writes the same three keys in the Release domain from
+  # its own repo root, so neither has to be typed anywhere.
+  write_runner_defaults "${DEBUG_BUNDLE_ID}" "${REPO_ROOT}"
 
   # DerivedData hashes change, so print what was ACTUALLY launched and which store it will touch.
   echo "==> Launching ${built_app}"

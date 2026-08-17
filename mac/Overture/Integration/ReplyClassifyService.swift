@@ -49,11 +49,13 @@ enum ReplyClassifyService {
     }
 
     enum ClassifyLaunchError: LocalizedError {
-        case nothingToClassify, runnerUnavailable, alreadyRunning
+        case nothingToClassify, alreadyRunning
+        // #2838: carries its reason, so it can name the setting that is wrong and what it points at.
+        case runnerUnavailable(String)
         var errorDescription: String? {
             switch self {
             case .nothingToClassify: return "No replies need classifying right now."
-            case .runnerUnavailable: return "Couldn't find the reply-classify runner. Make sure Claude Code is installed and the Overture project is set up."
+            case .runnerUnavailable(let reason): return reason
             case .alreadyRunning: return "A reply-classify run is already in progress. Wait for it to finish."
             }
         }
@@ -171,9 +173,15 @@ enum ReplyClassifyService {
     }
 
     private static func launchRunner() throws {
-        guard let script = DetachedRunner.scriptURL(defaultsKey: "replyClassifyRunnerScriptPath"),
-              FileManager.default.isExecutableFile(atPath: script.path) else {
-            throw ClassifyLaunchError.runnerUnavailable
+        // #2838: see ScoutExtractService.launchRunner. One rule for all three runs.
+        let script: URL
+        switch DetachedRunner.resolveRunner(.replyClassify) {
+        case .configured(let url), .derivedFromInstalledRepo(let url):
+            script = url
+        case .unavailable(let configuredPath, let derivedPath):
+            throw ClassifyLaunchError.runnerUnavailable(
+                RunnerScripts.unavailableMessage(.replyClassify, configuredPath: configuredPath,
+                                                 derivedPath: derivedPath))
         }
         try DetachedRunner.launch(scriptPath: script.path, supportDirectory: StoreLocation.handoffDirectory)
     }

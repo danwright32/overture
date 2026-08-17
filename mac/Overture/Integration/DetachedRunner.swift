@@ -72,6 +72,33 @@ enum DetachedRunner {
         return URL(fileURLWithPath: path)
     }
 
+    // #2838: where a runner script actually is, asked once for all three runs.
+    //
+    // The impure half of RunnerScripts, which owns the rule and is pure. Everything this reads is a real
+    // resource, and all three of them are injected so a test drives the whole decision without touching
+    // UserDefaults, the file system or Dan's Application Support folder (L2):
+    //
+    //   * the per-script default, which is what a person configured,
+    //   * `installed-build.json`'s `repoPath`, which `mac/build-install.sh` writes at every install and is
+    //     the only thing in this app that knows where the checkout is,
+    //   * whether a path names something runnable, which is what tells a live setting from a stale one.
+    //
+    // A DEBUG build reads its own handoff directory, which holds no installed record, so it derives
+    // nothing and falls back to its own domain's default. That is correct rather than a gap: a Debug run
+    // must not launch the Release checkout's scripts, and `mac/scripts/run-debug.sh` writes the Debug
+    // domain's keys for the same reason the installer writes the Release ones.
+    static func resolveRunner(_ runner: RunnerScripts.Runner,
+                              configuredPath: String? = nil,
+                              installedRepoPath: String? = nil,
+                              isRunnable: ((String) -> Bool)? = nil) -> RunnerScripts.Resolution {
+        RunnerScripts.resolve(
+            runner,
+            configuredPath: configuredPath ?? UserDefaults.standard.string(forKey: runner.defaultsKey),
+            installedRepoPath: installedRepoPath
+                ?? BuildFreshness.installedRecord(in: StoreLocation.handoffDirectory)?.repoPath,
+            isRunnable: isRunnable ?? { FileManager.default.isExecutableFile(atPath: $0) })
+    }
+
     // The inherited environment plus OVERTURE_SUPPORT_DIR, which tells the script which handoff folder
     // to read/write. Without it the script falls back to the live path and a Debug build (whose handoff
     // dir is the isolated Overture-Debug subfolder) reads the wrong folder, finds no work-list, and dies
