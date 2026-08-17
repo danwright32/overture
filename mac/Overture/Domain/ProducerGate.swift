@@ -452,11 +452,4 @@ enum ProducerGate {
         }
         return false
     }
-
-    private static func distinctVenues(_ presenterKey: String, among shows: [Show]) -> Set<String> {
-        Set(shows.compactMap { show -> String? in
-            guard key(show.presenter) == presenterKey else { return nil }
-            return key(show.venue)
-        })
-    }
 }

@@ -90,11 +90,6 @@ struct DraftReviewView: View {
     @State private var addContactName = ""
     @State private var showGreetingOverrideConfirm = false
     @State private var showLintOverrideConfirm = false
-
-    // #885: the sentence lives in DraftCheck, which is the type that decides what blocks a send.
-    private var draftLintBlockMessage: String {
-        DraftCheck.blockMessage(blockers: item.draftLintBlockers)
-    }
     // #733: guard against repeatedly re-prepping the same prospect. #2007: and against replacing text
     // Dan wrote himself. Both raise this one alert, carrying whichever sentence applies.
     @State private var showReprepConfirm = false
