@@ -111,14 +111,29 @@ extension AgentInputs {
             reachedOut: ReachedOutQueue.showCount(from: prospects, now: context.now)   // #1194: shows, not recipients
                 + inquiryCount(.reachedOut),   // #1436: replied inquiries awaiting a response
             // #2114: how many of those rows are actually due. Counted from the SAME rows the reached-out
-            // view lists, through ReachedOutQueue's own isDueNow, so the pill's gold and the list Dan
-            // lands on cannot disagree about what is waiting.
+            // view lists, and asked the SAME question each of those rows is asked, so the pill's gold and
+            // the list Dan lands on cannot disagree about what is waiting.
+            //
+            // #2802: which means `isDueNow(for:of:now:)`, never `isDueNow(next:)` over `$0.next`. The two
+            // dates a reached-out row carries are deliberately different: `$0.next` is the SORT key, and it
+            // folds in #2397's floor pinning an open pitch to the show's own night so a live pitch can never
+            // fall off the stage (L45). The floor is an anchor and asserts nothing about anything being
+            // owed. #2550 moved the ROW onto what is owed and left this count on the sort key, and this
+            // comment went on claiming they agreed without a character of it changing (L32). So every
+            // pitched show counted as due on its own night: on 2026-08-16 the masthead read
+            // "Reached out  1 due" in gold over four rows counting down in days, none of them rust.
+            //
+            // Asked of the ROW's representative contact (`$0.recipient`), which is the one the row speaks
+            // for and paints its urgency from. Stated rather than left implicit, because a show could hold a
+            // quiet representative beside a colleague who is owed something: counting that colleague would
+            // land Dan on a row that disagrees with the number that sent him there, which is #863 over
+            // again in the other direction.
             //
             // An inquiry that has replied is due by definition: somebody is waiting on an answer, which is
             // the whole reason an inquiry rides this queue at all (AGENTS.md). It carries no reach-out
             // schedule of its own to consult.
             reachedOutDue: ReachedOutQueue.activeWithDates(from: prospects, now: context.now)
-                .filter { ReachedOutQueue.isDueNow(next: $0.next, now: context.now) }.count
+                .filter { ReachedOutQueue.isDueNow(for: $0.recipient, of: $0.prospect, now: context.now) }.count
                 + inquiries.filter { StageNavigation.stage(for: $0) == .reachedOut && $0.replied }.count
         )
     }
