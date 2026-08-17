@@ -138,7 +138,7 @@ if [[ "${code}" -ne 0 ]]; then
 else
   fail "a process that survives KILL is a real failure, not a hang or a false success" "exit ${code}"
 fi
-if echo "${err}" | grep -q "909"; then
+if grep -q "909" <<< "${err}"; then
   pass "the failure names the surviving process"
 else
   fail "the failure names the surviving process" "stderr: ${err}"

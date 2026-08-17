@@ -134,7 +134,7 @@ chmod 700 "${DEADDIR}"
 # ARGUMENT, not read from an outer variable, because a subshell that cannot see the variable finds nothing
 # and the check then passes for the wrong reason forever (caught by mutation while writing this).
 calls_unguarded() {
-  printf '%s' "$1" | grep -qE "$2 [^|]*$"
+  grep -qE "$2 [^|]*$" <<< "$1"
 }
 
 RUNNERS_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -167,7 +167,7 @@ for runner in prep-run.sh scout-extract-run.sh reply-classify-run.sh; do
   loop_body="$(awk '/heartbeat_guard_exit/{f=1} f; /done \) &/{f=0}' "${path}")"
   assert "${runner}: the heartbeat's own region was found" test -n "${loop_body}"
   for bookkeeping in merge_chunk_results update_progress_from_results; do
-    if printf '%s' "${loop_body}" | grep -q "${bookkeeping} "; then
+    if grep -q "${bookkeeping} " <<< "${loop_body}"; then
       refute "${runner}: a failing ${bookkeeping} cannot end the heartbeat" \
         calls_unguarded "${loop_body}" "${bookkeeping}"
     fi

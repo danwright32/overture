@@ -157,7 +157,7 @@ assert_contains "scout-extract-run.sh builds its claude flags from the scope" "$
 # lines are stripped first, so the header's account of the old flag (valuable history) is not mistaken for
 # a live call site: the invariant is that no COMMAND passes --allowedTools, not that the word never appears.
 runner_code="$(printf '%s\n' "${runner_body}" | grep -v '^[[:space:]]*#')"
-if printf '%s' "${runner_code}" | grep -q -- '--allowedTools'; then
+if grep -q -- '--allowedTools' <<< "${runner_code}"; then
   fail "scout-extract-run.sh still hardcodes --allowedTools on a call site" \
        "every claude invocation must fold through scout_extract_claude_scope, or a call site keeps the unrestricted flag"
 else
@@ -167,7 +167,7 @@ fi
 # #1682: the scope needs the claude binary to enumerate this Mac's plugins with, so the runner must
 # resolve that binary BEFORE it builds the scope and hand it over. Built is not wired: a runner that still
 # called the scope function with no argument would refuse and never start at all.
-if printf '%s' "${runner_code}" | grep -qF 'scout_extract_claude_scope "$CLAUDE"'; then
+if grep -qF 'scout_extract_claude_scope "$CLAUDE"' <<< "${runner_code}"; then
   pass "scout-extract-run.sh hands the resolved claude binary to the scope"
 else
   fail "scout-extract-run.sh must call scout_extract_claude_scope \"\$CLAUDE\"" \

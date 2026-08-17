@@ -57,7 +57,7 @@ if [[ "${rc}" -ne 0 ]]; then
 else
   fail "signed anyway when the identity was missing (should fail loud, not ad-hoc)"
 fi
-if codesign -dvvv "${missing_bundle}" 2>&1 | grep -q "Signature=adhoc"; then
+if grep -q "Signature=adhoc" <<< "$(codesign -dvvv "${missing_bundle}" 2>&1)"; then
   fail "fell back to an ad-hoc signature, exactly the silent-drop trap #1425 is about"
 else
   pass "left the bundle without an ad-hoc signature"
@@ -77,7 +77,7 @@ else
   overture_stable_sign "${a}" >/dev/null 2>&1 || fail "stable sign of a.app failed"
   overture_stable_sign "${b}" >/dev/null 2>&1 || fail "stable sign of b.app failed"
 
-  if codesign -dvvv "${a}" 2>&1 | grep -q "Signature=adhoc"; then
+  if grep -q "Signature=adhoc" <<< "$(codesign -dvvv "${a}" 2>&1)"; then
     fail "signed ad-hoc despite a valid identity being available"
   else
     pass "signed with a real identity, not ad-hoc"

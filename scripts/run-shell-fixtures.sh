@@ -104,6 +104,67 @@ fixture_asserted_something() {
   grep -qE '^[[:space:]]*ok\b' "${log}"
 }
 
+# #2850: did this fixture's own plumbing invent a failure?
+#
+# Every fixture declares `set -o pipefail`, and a pipeline whose CONSUMER exits early (`grep -q` stops at
+# its first match, `head` at its Nth line) kills the PRODUCER with SIGPIPE. pipefail then makes the
+# pipeline's status the producer's failure rather than the consumer's success, so an `if` reading it takes
+# the else branch and the fixture reports an assertion failing about code that is perfectly correct.
+#
+# Whether it happens is a race between the producer finishing its write and the consumer exiting, so it
+# depends on the size of the text and on machine load: invisible on a quiet Mac, and showing up under
+# load, which is exactly when several things are running. Measured 2026-08-16 during a full
+# `scripts/test-all.sh`, where `scout-tools.test.sh` reported that `scout-extract-run.sh` does not call
+# `scout_extract_claude_scope "$CLAUDE"`, on the very line where it does, and passed when run alone.
+#
+# This is the RUNTIME half, and it reads the evidence rather than guessing: the shell prints the write
+# error itself. It catches any producer and consumer pair, including ones no pattern anticipated. The
+# source-side half (`fixture_sources_avoid_short_circuit_pipes`) is what fires even on the runs where the
+# race happens not to open, which is most of them.
+#
+# It fails the fixture whatever its exit status, because the harm runs both ways: the pipeline can invent
+# a failure, and on a fixture that happened to pass it means an assertion was decided by a race.
+fixture_pipeline_did_not_break() {
+  local log="$1"
+  if grep -qE 'write error: Broken pipe|Broken pipe' "${log}"; then
+    echo "FAIL - ${FIXTURE_PATH_FOR_REPORT:-a fixture} broke a pipe while asserting (#2850)"
+    grep -nE 'write error: Broken pipe|Broken pipe' "${log}" | sed 's/^/    /'
+    echo "  Under 'set -o pipefail' that makes the PIPELINE's status the producer's failure, not the"
+    echo "  consumer's success, so an assertion reading it reports a failure that did not happen."
+    echo "  Feed the consumer from a herestring instead: grep -q '...' <<< \"\${text}\"."
+    return 1
+  fi
+  return 0
+}
+
+# The source-side half of #2850. Fires on every run rather than only on the runs where the race opens,
+# which is what makes it a gate rather than a witness.
+#
+# Narrow twice over, because the first version was not and would have been switched off within a day
+# (L93). It flags a short-circuiting consumer (`grep -q`, `grep -qF`, `grep -qE`, `head`) ONLY where the
+# pipeline's STATUS IS READ, which means the condition of an `if`, `elif` or `while`. That is where the
+# damage is: pipefail turns the producer's SIGPIPE into the pipeline's status and the condition flips.
+#
+# A pipeline inside `$(...)` whose value is assigned is deliberately left alone, and measured rather than
+# assumed: eight such lines exist here (`x="$(printf ... | grep -n ... | head -1)"`), and none of them
+# reads the status at all, so none can be flipped by it. A consumer that reads to the end is fine too.
+fixture_sources_avoid_short_circuit_pipes() {
+  local offenders
+  # The needle is BUILT rather than written, so this file does not match its own rule and the scan cannot
+  # condemn the line describing it (the trick #2193 established for the style gate).
+  local q="grep -q"
+  # -H as well as -n: grep omits the filename when it is given exactly ONE file, so a scan of a single
+  # fixture named a line number and no file, which is the half the reader needs.
+  offenders="$(grep -HnE "^[[:space:]]*(if|elif|while)[[:space:]].*\| *(${q}|head )" "$@" 2>/dev/null || true)"
+  [[ -z "${offenders}" ]] && return 0
+  echo "FAIL - a fixture pipes into a consumer that exits early (#2850)"
+  sed 's/^/    /' <<< "${offenders}"
+  echo "  'grep -q' stops at its first match and 'head' at its Nth line, which closes the pipe and kills"
+  echo "  the producer. Every fixture sets pipefail, so that becomes the pipeline's status and the"
+  echo "  assertion reports a failure that never happened. Use a herestring: cmd <<< \"\${text}\"."
+  return 1
+}
+
 # fixture_temp_allowed_names <uid>: the names a fixture may leave in its private temp directory without
 # being called a leak, because it did not create them. node and tsx write these caches wherever TMPDIR
 # points, on any run that shells out to either.
@@ -206,6 +267,11 @@ WRAPPER
     rc="$(cat "${scratch}/status-${i}" 2>/dev/null || echo 1)"
     if [[ "${rc}" -ne 0 ]]; then
       echo "FAIL - ${fixture}"
+      # #2850: a fixture that failed may have failed because of a broken pipe rather than because
+      # anything is wrong, which is the whole point of that check. Said on THIS branch as well, because
+      # this is the one somebody is standing in when they need to know it. It cannot add a failure here,
+      # the run is already red; it explains one.
+      FIXTURE_PATH_FOR_REPORT="${fixture}" fixture_pipeline_did_not_break "${scratch}/log-${i}" || true
       failures=$((failures + 1))
     else
       # The unresolved-command check goes FIRST, and the order is load-bearing rather than arbitrary. A
@@ -220,6 +286,8 @@ WRAPPER
         echo "  found nothing to check is not a run that found everything correct: exit 0 here means"
         echo "  the body did not do what it looks like it does (an early return, an empty loop, a"
         echo "  guard that skipped every case)."
+        failures=$((failures + 1))
+      elif ! FIXTURE_PATH_FOR_REPORT="${fixture}" fixture_pipeline_did_not_break "${scratch}/log-${i}"; then
         failures=$((failures + 1))
       elif ! FIXTURE_PATH_FOR_REPORT="${fixture}" fixture_left_temp_files "${scratch}/tmp-${i}"; then
         failures=$((failures + 1))
@@ -244,8 +312,21 @@ main() {
     exit 0
   fi
 
+  # #2850: read the fixtures' own plumbing BEFORE running them. It costs one grep, and it fires on every
+  # run rather than only on the runs where the race actually opens, which is what separates a gate from a
+  # witness. The runtime half still runs per fixture below and catches shapes this pattern does not know.
+  local source_status=0
+  fixture_sources_avoid_short_circuit_pipes "${fixtures[@]}" || source_status=1
+
   echo "Running ${#fixtures[@]} shell fixture(s)..."
-  run_shell_fixtures "${fixtures[@]}"
+  local run_status=0
+  run_shell_fixtures "${fixtures[@]}" || run_status=$?
+  # Both verdicts, never one standing for the other: a clean run says nothing about the plumbing, and
+  # broken plumbing says nothing about the assertions (L53).
+  if [[ "${source_status}" -ne 0 ]]; then
+    return $((run_status + 1))
+  fi
+  return "${run_status}"
 }
 
 # Allow this file to be sourced (e.g. by a test fixture) without running main, so

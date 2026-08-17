@@ -96,7 +96,7 @@ merge_call_sites() {
     base="$(basename "${f}")"
     [[ "${base}" == "pr-merge.sh" ]] && continue
     [[ "${base}" == *.test.sh ]] && continue
-    if grep -v '^[[:space:]]*#' "${f}" | grep -qE 'pr[[:space:]]+merge'; then
+    if grep -qE 'pr[[:space:]]+merge' <<< "$(grep -v '^[[:space:]]*#' "${f}")"; then
       echo "${base}"
     fi
   done
@@ -107,7 +107,7 @@ assert_empty "no script but lib/pr-merge.sh invokes gh pr merge itself" "${CALLE
 # And the two callers really do reach the shared one, which is the other half of the same claim: a file
 # that neither calls gh nor calls merge_pr would pass the check above while merging nothing.
 for caller in verify-and-merge-branch.sh merge-when-green.sh; do
-  if grep -v '^[[:space:]]*#' "${REPO_ROOT}/scripts/${caller}" | grep -q 'merge_pr'; then
+  if grep -q 'merge_pr' <<< "$(grep -v '^[[:space:]]*#' "${REPO_ROOT}/scripts/${caller}")"; then
     pass "${caller} merges through the shared merge_pr"
   else
     fail "${caller} does not call merge_pr, so it either cannot merge or has its own copy again"
