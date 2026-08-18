@@ -62,6 +62,10 @@ struct AnsweredOutsideOvertureTests {
 
     private enum Who { case dan, them }
 
+    // #2918: `labelIds` is part of what Gmail returns for every message, on both formats this app asks
+    // for, and it is what says whether a message was actually SENT or is still an unsent draft. It is in
+    // the fixture because it is in the real response: leaving it out made these threads a shape Gmail
+    // never returns, and the readers now refuse a message that claims nothing about being sent.
     private static func message(_ id: String, from who: Who, at sentAt: Date, text: String,
                                 headers extra: [(String, String)] = []) -> String {
         let body = Data(text.utf8).base64EncodedString()
@@ -70,11 +74,13 @@ struct AnsweredOutsideOvertureTests {
             .replacingOccurrences(of: "=", with: "")
         let from = who == .dan ? me : "Priya Raman <\(them)>"
         let to = who == .dan ? them : me
+        let labels = who == .dan ? "\"SENT\"" : "\"INBOX\",\"UNREAD\""
         let headers = ([("From", from), ("To", to)] + extra)
             .map { #"{"name":"\#($0.0)","value":"\#($0.1)"}"# }
             .joined(separator: ",")
         return """
         {"id":"\(id)","internalDate":"\(Int(sentAt.timeIntervalSince1970) * 1000)",
+         "labelIds":[\(labels)],
          "payload":{"headers":[\(headers)],"mimeType":"text/plain","body":{"data":"\(body)"}}}
         """
     }

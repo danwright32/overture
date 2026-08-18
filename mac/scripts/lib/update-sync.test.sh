@@ -45,12 +45,44 @@ got="$(overture_update_verdict no yes no yes)"
 [ "${got}" = "sync" ] && pass "on main but behind, it brings the code up first" \
   || fail "on main but behind, it brings the code up first" "got: ${got}"
 
-# THE CASE DAN HIT. Note what it is not: the branch commit is NOT an ancestor of the shipped commit,
-# because a squash merge makes a new commit carrying the same content. So the question can never be
-# "can this branch fast-forward"; it is "can main fast-forward, and may I move to it".
+# #2923. A checkout standing on any branch other than main is REFUSED, and this is the case that used
+# to be answered "sync". On 2026-08-17 this moved a working checkout off an in-progress feature branch
+# in the middle of a session: a full scripts/test-all.sh run then verified main while everyone believed
+# it verified the branch, and that pass was written into a PR body as evidence for code it had never
+# compiled. A `git push -u origin <branch>` afterwards pushed main's HEAD at the branch's name and was
+# refused only by luck of the ref ordering.
+#
+# Committed work is not evidence that nobody is here (the incident's branch was clean and committed one
+# command earlier), and neither is a branch whose commits are all already in main: the harm is that the
+# SHELL moves, so the session's next commit lands on main and its next push aims main at a branch name.
 got="$(overture_update_verdict no no no yes)"
-[ "${got}" = "sync" ] && pass "on a feature branch with nothing in progress, it moves to main and builds that" \
-  || fail "on a feature branch with nothing in progress, it moves to main and builds that" "got: ${got}"
+[ "${got}" = "refuse:not-on-main" ] && pass "a checkout standing somewhere other than main is refused, never moved" \
+  || fail "a checkout standing somewhere other than main is refused, never moved" "got: ${got}"
+
+# The refusal has to beat the fast-forward question, or which of two true things gets asked first
+# decides the answer.
+got="$(overture_update_verdict no no no no)"
+[ "${got}" = "refuse:not-on-main" ] && pass "and is refused for that reason rather than as a diverged main" \
+  || fail "and is refused for that reason rather than as a diverged main" "got: ${got}"
+
+# Unsaved work still outranks it: dirty is the older, broader refusal and must not be relabelled.
+got="$(overture_update_verdict yes no no yes)"
+[ "${got}" = "refuse:work-in-progress" ] && pass "uncommitted work off main is still reported as unsaved work" \
+  || fail "uncommitted work off main is still reported as unsaved work" "got: ${got}"
+
+# The one move that remains is the one that moves no branch: main fast-forwarding onto its own remote.
+got="$(overture_update_verdict no yes no yes)"
+[ "${got}" = "sync" ] && pass "main catching up to its own remote is still allowed" \
+  || fail "main catching up to its own remote is still allowed" "got: ${got}"
+
+# Its refusal explains itself in the same plain register as the other two.
+got="$(overture_update_reason refuse:not-on-main)"
+[ -n "${got}" ] && pass "the not-on-main refusal has a sentence of its own" \
+  || fail "the not-on-main refusal has a sentence of its own"
+case "${got}" in
+  *"unsaved work"*) fail "and is not the unsaved-work sentence wearing a second name" "got: ${got}" ;;
+  *) pass "and is not the unsaved-work sentence wearing a second name" ;;
+esac
 
 # The refusal that protects a session mid-flight. Uncommitted work means somebody is in here.
 got="$(overture_update_verdict yes no no yes)"
@@ -117,28 +149,48 @@ ship_another() {
   rm -rf "${work}"
 }
 
-# 1. Dan's case: clean checkout parked on a feature branch, with newer work on the remote.
+# 1. #2923: a clean checkout standing on a feature branch, with newer work on the remote. It is left
+# EXACTLY where it was found, because moving it is what silently redirected a session's suite run, its
+# next commit and its next push in the incident this refusal comes from.
 clone="$(make_pair parked)"
 git -C "${clone}" checkout --quiet -b some-feature
 ship_another "${clone}"
+before="$(git -C "${clone}" rev-parse HEAD)"
 out="$(overture_bring_checkout_current "${clone}" 2>&1)"
 status=$?
 branch="$(git -C "${clone}" rev-parse --abbrev-ref HEAD)"
 head="$(git -C "${clone}" rev-parse HEAD)"
-remote_head="$(git -C "${clone}" rev-parse origin/main)"
-if [ "${status}" -eq 0 ] && [ "${branch}" = "main" ] && [ "${head}" = "${remote_head}" ]; then
-  pass "a checkout parked on a branch ends up on the shipped commit"
+if [ "${status}" -ne 0 ] && [ "${branch}" = "some-feature" ] && [ "${head}" = "${before}" ]; then
+  pass "a checkout standing on a feature branch is left exactly where it was"
 else
-  fail "a checkout parked on a branch ends up on the shipped commit" \
+  fail "a checkout standing on a feature branch is left exactly where it was" \
     "status=${status} branch=${branch} out=${out}"
 fi
 
-# 2. The branch is still there afterwards. Moving to main must not cost anybody their work.
-if git -C "${clone}" rev-parse --verify --quiet some-feature >/dev/null; then
-  pass "and the branch it moved off still exists"
+# 2. And it SAYS so, naming the branch. A skipped move that leaves no trace is the whole defect: the
+# incident was found only because an unrelated later step happened to fail.
+assert_contains "and says which branch it refused to move off" "${out}" "some-feature"
+assert_contains "and says nothing was installed, so the silence is not read as success" \
+  "${out}" "Nothing was moved"
+
+# 2a. A detached checkout is the other way to be somewhere that is not main, and it is refused too. The
+# line says so in words: git prints the literal "HEAD" for that state, which reads as a branch of that
+# name to anyone who does not work in git, and this window is read by somebody who does not.
+clone="$(make_pair detached)"
+git -C "${clone}" checkout --quiet --detach HEAD
+ship_another "${clone}"
+before="$(git -C "${clone}" rev-parse HEAD)"
+out="$(overture_bring_checkout_current "${clone}" 2>&1)"
+status=$?
+head="$(git -C "${clone}" rev-parse HEAD)"
+if [ "${status}" -ne 0 ] && [ "${head}" = "${before}" ]; then
+  pass "a detached checkout is refused and left where it was"
 else
-  fail "and the branch it moved off still exists"
+  fail "a detached checkout is refused and left where it was" "status=${status} out=${out}"
 fi
+assert_contains "and the state is described rather than named as git names it" \
+  "${out}" "a single commit with no branch"
+assert_not_contains "so the bare word HEAD never reaches the person reading it" "${out}" 'on HEAD,'
 
 # 3. Uncommitted work is refused, and nothing about the checkout moves.
 clone="$(make_pair busy)"
@@ -177,6 +229,23 @@ if [ "${status}" -eq 0 ] && [ "${head}" = "${remote_head}" ]; then
 else
   fail "a checkout already on the shipped commit is left alone and reports success" \
     "status=${status} out=${out}"
+fi
+
+# 5. The move that survives #2923, and the reason the refusal above is not simply "never touch git":
+# a checkout standing ON main, behind the remote, still fast-forwards. No branch changes hands, so
+# nobody's session is redirected, and this is what the Update button is for.
+clone="$(make_pair behind)"
+ship_another "${clone}"
+out="$(overture_bring_checkout_current "${clone}" 2>&1)"
+status=$?
+branch="$(git -C "${clone}" rev-parse --abbrev-ref HEAD)"
+head="$(git -C "${clone}" rev-parse HEAD)"
+remote_head="$(git -C "${clone}" rev-parse origin/main)"
+if [ "${status}" -eq 0 ] && [ "${branch}" = "main" ] && [ "${head}" = "${remote_head}" ]; then
+  pass "a checkout on main but behind is still brought up to the shipped commit"
+else
+  fail "a checkout on main but behind is still brought up to the shipped commit" \
+    "status=${status} branch=${branch} out=${out}"
 fi
 
 if [ "${FAILURES}" -gt 0 ]; then
