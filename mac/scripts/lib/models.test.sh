@@ -179,6 +179,30 @@ assert_contains "and records the duration" \
 assert_contains "and marks the reading as recorded" \
   "$(cat "${TMP}/cost-ok.json")" '"recorded": true'
 
+# #2762: and whether the run had the machine to itself, which is what makes this wall clock comparable
+# with the next run's. The app refuses to pool a contended sample with a solo one, so this flag is what
+# tells the two apart, and it is written on EVERY complete reading rather than only when contended: an
+# absent flag means "a runner that predates this", which the app treats as unpoolable, and a solo run
+# reporting nothing would silently stop teaching the estimate anything.
+printf '%s' '{"version":2,"results":[]}' > "${TMP}/cost-solo.json"
+OVERTURE_RUN_CONTENDED=0 record_run_cost "${TMP}/cost-solo.json" "${TMP}/events-ok.jsonl"
+assert_contains "a run with the machine to itself says so" \
+  "$(cat "${TMP}/cost-solo.json")" '"contended": false'
+
+printf '%s' '{"version":2,"results":[]}' > "${TMP}/cost-shared.json"
+OVERTURE_RUN_CONTENDED=1 record_run_cost "${TMP}/cost-shared.json" "${TMP}/events-ok.jsonl"
+assert_contains "a run that shared the machine says so" \
+  "$(cat "${TMP}/cost-shared.json")" '"contended": true'
+
+# A caller that said nothing writes NO flag, rather than claiming solo. This is the update window: the
+# runner script is resolved out of the git checkout and update-overture.sh fast-forwards it before the
+# rebuild, so a new app meets an old script, and an old script claiming "solo" would file exactly the
+# co-run this exists to measure as evidence about a run that had the machine to itself.
+printf '%s' '{"version":2,"results":[]}' > "${TMP}/cost-unsaid.json"
+(unset OVERTURE_RUN_CONTENDED; record_run_cost "${TMP}/cost-unsaid.json" "${TMP}/events-ok.jsonl")
+assert_not_contains "a caller that said nothing claims nothing" \
+  "$(cat "${TMP}/cost-unsaid.json")" '"contended"'
+
 # Failure path one: the event file never appeared, because claude died before writing anything.
 printf '%s' '{"version":2,"results":[]}' > "${TMP}/cost-missing.json"
 record_run_cost "${TMP}/cost-missing.json" "${TMP}/no-such-events.jsonl"
@@ -562,14 +586,17 @@ keys_of() {
   ' "$1" "$2"
 }
 
+# #2762: with OVERTURE_RUN_CONTENDED set, because prep-run.sh always sets it to one value or the other.
+# Left unset here the comparison would describe a file no real run produces, and the checked-in fixtures
+# are the spec anyone reads before changing this shape.
 cp "${FIXTURES}/v8.json" "${FIXTMP}/fresh-complete.json"
 record_model "${FIXTMP}/fresh-complete.json" "sonnet"
-record_run_cost "${FIXTMP}/fresh-complete.json" "${FIXTMP}/s1.jsonl" "${FIXTMP}/s2.jsonl" "${FIXTMP}/s3.jsonl"
+OVERTURE_RUN_CONTENDED=0 record_run_cost "${FIXTMP}/fresh-complete.json" "${FIXTMP}/s1.jsonl" "${FIXTMP}/s2.jsonl" "${FIXTMP}/s3.jsonl"
 record_web_calls "${FIXTMP}/fresh-complete.json" 15 "${FIXTMP}/s1.jsonl" "${FIXTMP}/s2.jsonl" "${FIXTMP}/s3.jsonl"
 
 cp "${FIXTURES}/v8.json" "${FIXTMP}/fresh-partial.json"
 record_model "${FIXTMP}/fresh-partial.json" "sonnet"
-record_run_cost "${FIXTMP}/fresh-partial.json" "${FIXTMP}/s1.jsonl" "${FIXTMP}/s2.jsonl" "${FIXTMP}/never-appeared.jsonl"
+OVERTURE_RUN_CONTENDED=0 record_run_cost "${FIXTMP}/fresh-partial.json" "${FIXTMP}/s1.jsonl" "${FIXTMP}/s2.jsonl" "${FIXTMP}/never-appeared.jsonl"
 record_web_calls "${FIXTMP}/fresh-partial.json" 15 "${FIXTMP}/s1.jsonl" "${FIXTMP}/s2.jsonl" "${FIXTMP}/never-appeared.jsonl"
 
 for pair in "model:record_model" "runCost:record_run_cost" "webCalls:record_web_calls"; do

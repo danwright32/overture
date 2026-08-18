@@ -54,7 +54,8 @@
     "recorded": true,
     "usd": 5.395423,
     "durationMs": 389906,
-    "streams": 3
+    "streams": 3,
+    "contended": false
   },
   "webCalls": {
     "recorded": true,

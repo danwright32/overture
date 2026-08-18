@@ -256,6 +256,18 @@ already drifting from the Swift version it mirrored.
   check a suspiciously fast run against what a full one costs: an understated number weakens the
   very warning it was there to support (#2532, L32). Every run ends with its own `Suite shape:`
   line giving the wall clock it actually took, so read that.
+- **Measuring two runs going at once: `scripts/measure-concurrent-runs.sh` (#2762).** Starts a reachability
+  check and a Prep run together and counts what the machine really does, which is the session that unblocks
+  the rest of #2620. It spends REAL usage, so it plans and launches nothing without `--yes`, and it is a
+  Dan-at-the-machine job rather than an agent one. It refuses three ways before anything is spent: a support
+  directory that is or is inside the live one, two queues that share a show (#2765 is what would make an
+  overlap safe and it does not exist yet), and a check queue too small to fan out, since
+  `split_queue_into_chunks` makes `min(items, OVERTURE_PREP_MAX_PARALLEL)` chunks and a three-show run is
+  three claudes rather than the case in question (L101). The evidence it produces is an observed COUNT of
+  concurrent processes sampled throughout, not only a wall clock, because two halves that never actually
+  overlapped still produce a perfectly good duration. `docs/measure-concurrent-runs.md` is the runbook and
+  says how to read what it prints.
+
 - **Seeing a guard fail, which every guard here is supposed to have been (L1): `scripts/mutate.sh`
   (#2755).** `scripts/mutate.sh <file> <perl-expression> [test-scope ...]` breaks the code on purpose,
   runs the suite, restores the file through a trap, and reports which tests went red. Roughly 1600 of the

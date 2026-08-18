@@ -37,6 +37,47 @@ struct ProbeDurationHistory: Codable, Equatable, Sendable {
         var lookups: Int
         var streams: Int
         var seconds: Double
+
+        // #2762: was another RUN SLOT alive while this one was being measured.
+        //
+        // Deliberately NOT "was the machine busy". A scout extract (up to four claudes, fired hourly by
+        // `autoScoutIfDue`) or a reply classify can be going too, and folding those in would give one
+        // field two meanings depending on which version wrote the row (L118). Those are counted directly
+        // by #2762's measurement session instead.
+        //
+        // Observed by the RUNNER, which is the only thing alive for the whole span, and carried in
+        // `runCost` beside the wall clock it qualifies, so one observer answers for both facts about one
+        // run rather than two that can disagree exactly when it matters (L70).
+        var contended: Bool
+
+        // No default on the property above: a construction site that forgot it would file a co-run sample
+        // as solo, which is the one mislabel this whole field exists to prevent (L168). The DECODER
+        // supplies one, and that is a different question, answered below.
+        private enum CodingKeys: String, CodingKey { case lookups, streams, seconds, contended }
+
+        init(lookups: Int, streams: Int, seconds: Double, contended: Bool) {
+            self.lookups = lookups
+            self.streams = streams
+            self.seconds = seconds
+            self.contended = contended
+        }
+
+        // A row with NO `contended` key was written before #2762, and every one of those ran while the
+        // prep/check exclusion was still in force (#2760 kept it deliberately; #2765 is what lifts it), so
+        // no other slot could have been beside it. Reading such a row as SOLO is therefore a fact about
+        // the code that wrote it rather than an assumption about the data, which is the only ground on
+        // which a new field's emptiness is allowed to speak for old rows (L90).
+        //
+        // What makes that safe is the other half: every row THIS version writes carries the key, and a
+        // run whose contention is UNKNOWN is refused by `ProbeRunPaceRecording.sample` rather than stored
+        // flagless. So a flagless row can only ever be one written before the flag existed.
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            lookups = try container.decode(Int.self, forKey: .lookups)
+            streams = try container.decode(Int.self, forKey: .streams)
+            seconds = try container.decode(Double.self, forKey: .seconds)
+            contended = try container.decodeIfPresent(Bool.self, forKey: .contended) ?? false
+        }
     }
 
     // The last ten, so the pace tracks recent behaviour rather than averaging over all history forever.
@@ -77,12 +118,25 @@ struct ProbeDurationHistory: Codable, Equatable, Sendable {
     // Append and cap. A run that cannot teach anything is refused HERE rather than stored and filtered on
     // the way out: stored, ten one-show rechecks would push the last real evidence off the front of the
     // file and the estimate would silently go back to the constant with a full history sitting beside it.
-    func recording(lookups: Int, streams: Int, seconds: Double) -> ProbeDurationHistory {
+    func recording(lookups: Int, streams: Int, seconds: Double, contended: Bool) -> ProbeDurationHistory {
         guard Self.isComparable(lookups: lookups, streams: streams, seconds: seconds) else { return self }
         var next = runs
-        next.append(Run(lookups: lookups, streams: streams, seconds: seconds))
-        if next.count > Self.maxEntries {
-            next.removeFirst(next.count - Self.maxEntries)
+        next.append(Run(lookups: lookups, streams: streams, seconds: seconds, contended: contended))
+        // #2762: the last ten OF EACH CLASS, not the last ten overall. Capped across both, a stretch of
+        // co-runs would evict every solo sample, and the next check with the machine to itself would be
+        // quoted the hand-set constant with a full history sitting beside it. That is the same failure
+        // this cap already refuses to cause for uncomparable runs, arriving through the new field.
+        //
+        // Trimmed by dropping the oldest of the OVERFULL class only, so the file stays in the order the
+        // runs happened rather than being regrouped by class.
+        let overfull = next.filter { $0.contended == contended }.count - Self.maxEntries
+        if overfull > 0 {
+            var toDrop = overfull
+            next = next.filter { run in
+                guard toDrop > 0, run.contended == contended else { return true }
+                toDrop -= 1
+                return false
+            }
         }
         return ProbeDurationHistory(version: version, runs: next)
     }
@@ -96,8 +150,18 @@ struct ProbeDurationHistory: Codable, Equatable, Sendable {
     // Every stored run is re-judged here even though `recording` already refused the bad ones. Nothing
     // parsed off disk is trusted for having been written (L50): a hand edit, a file from an older shape,
     // or a zero written by a bug must read as no evidence rather than as a pace of nought.
-    var learnedSecondsPerRound: Double? {
-        let usable = runs.filter { Self.isComparable(lookups: $0.lookups, streams: $0.streams, seconds: $0.seconds) }
+    //
+    // #2762: pooled WITHIN one contention class and never across it. A check that shared the machine with
+    // a Prep run and a check that had it to itself are measuring two different things, and the estimate
+    // exists to be read before Dan spends, so three contended samples pooled in would retrain the figure
+    // he decides on (L37). A class with fewer than a handful of its own answers nil and the caller falls
+    // back to the constant, rather than borrowing the other class's pace, which would be pooling across by
+    // another route.
+    func learnedSecondsPerRound(contended: Bool) -> Double? {
+        let usable = runs.filter {
+            $0.contended == contended
+                && Self.isComparable(lookups: $0.lookups, streams: $0.streams, seconds: $0.seconds)
+        }
         guard usable.count >= Self.minForEstimate else { return nil }
         let totalRounds = usable.reduce(0) { $0 + Self.rounds(lookups: $1.lookups, streams: $1.streams) }
         guard totalRounds > 0 else { return nil }
@@ -137,7 +201,8 @@ enum ProbeDurationHistoryStore {
         guard let run else { return existing }
         // #2879: never write over a file that could not be read (L105). See RunDurationHistoryStore.
         if case .unreadable = read { return ProbeDurationHistory() }
-        let updated = existing.recording(lookups: run.lookups, streams: run.streams, seconds: run.seconds)
+        let updated = existing.recording(lookups: run.lookups, streams: run.streams, seconds: run.seconds,
+                                         contended: run.contended)
         guard updated != existing, let data = try? JSONEncoder().encode(updated) else { return existing }
         try? data.write(to: url, options: .atomic)
         return updated
@@ -156,6 +221,15 @@ struct RecordedRunCost: Equatable, Sendable {
     // How many chunks ran at once. For a check this is the concurrency; a Prep run is never chunked.
     let streams: Int
 
+    // #2762: whether another run slot was alive during this run, as the runner observed it.
+    //
+    // nil is a THIRD state and not a defensive one: the runner script does not ship inside the app bundle,
+    // it is resolved from a UserDefaults path into the git checkout, and `update-overture.sh`
+    // fast-forwards that checkout BEFORE the rebuild. So a new app meets a script that predates this flag
+    // for a couple of minutes on every update, and permanently for anyone who only pulls. Read as solo,
+    // that window would file exactly the co-run this issue measures as evidence about a solo one.
+    let contended: Bool?
+
     // Decoded, never subscripted. `JSONSerialization` hands back an NSNumber for both `true` and `1`, so a
     // hand-written `as? Double` would read `"recorded": true` as a duration of one millisecond; Codable
     // refuses the type outright, which is the behaviour this needs.
@@ -164,6 +238,7 @@ struct RecordedRunCost: Equatable, Sendable {
             var recorded: Bool?
             var durationMs: Double?
             var streams: Int?
+            var contended: Bool?
         }
         var runCost: Cost?
     }
@@ -189,7 +264,11 @@ struct RecordedRunCost: Equatable, Sendable {
               let durationMs = cost.durationMs, durationMs.isFinite, durationMs > 0,
               let streams = cost.streams, streams >= 1
         else { return nil }
-        return RecordedRunCost(seconds: durationMs / 1000, streams: streams)
+        // `contended` is passed through as it arrives, INCLUDING absent. It is deliberately not part of
+        // the guard above: a run that measured itself perfectly well and simply predates the flag has a
+        // complete cost reading, and whether that reading may be POOLED is a separate decision belonging
+        // to `ProbeRunPaceRecording`.
+        return RecordedRunCost(seconds: durationMs / 1000, streams: streams, contended: cost.contended)
     }
 
     static func complete(contentsOf url: URL) -> RecordedRunCost? {
@@ -223,8 +302,16 @@ enum ProbeRunPaceRecording {
     ///     record either: two facts, and neither is allowed to stand in for the other.
     static func sample(lookups: Int?, cost: RecordedRunCost?, cancelled: Bool) -> ProbeDurationHistory.Run? {
         guard !cancelled, let lookups, let cost else { return nil }
+        // #2762: a run that did not say whether it was contended is not stored at all. It cannot be filed
+        // as solo without mislabelling the co-run this issue exists to measure, and it cannot be filed as
+        // contended either, so it is evidence about neither class. The cost is one lost sample inside the
+        // update window described on `RecordedRunCost.contended`, and the gain is that a flagless row in
+        // the history can only ever mean "written before the flag existed", which is what lets the decoder
+        // read those as solo on the strength of the exclusion that was in force.
+        guard let contended = cost.contended else { return nil }
         guard ProbeDurationHistory.isComparable(lookups: lookups, streams: cost.streams,
                                                 seconds: cost.seconds) else { return nil }
-        return ProbeDurationHistory.Run(lookups: lookups, streams: cost.streams, seconds: cost.seconds)
+        return ProbeDurationHistory.Run(lookups: lookups, streams: cost.streams, seconds: cost.seconds,
+                                        contended: contended)
     }
 }

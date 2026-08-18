@@ -1405,7 +1405,7 @@ struct RootView: View {
         switch DetachedRunOutcome.phase(runStartedAt: started, resultsModifiedAt: resultsMod ?? nil) {
         case .producedResults:
             if let report = PrepQueueService.settleReachabilityProbe(slot: slot, into: context, now: Date()) {
-                recordCheckPace(lookups: checkLookups, cancelled: report.cancelled)
+                recordCheckPace(slot: slot, lookups: checkLookups, cancelled: report.cancelled)
                 reportReachabilityRun(report)
             } else {
                 ingestPrep()
@@ -1505,10 +1505,19 @@ struct RootView: View {
     // long Overture took to notice it had ended. Whether the sample counts at all is
     // ProbeRunPaceRecording's decision, so the rule sits where a test can reach it rather than in a view.
     // Best-effort in both directions: this must never disturb a run that has just settled paid-for answers.
-    private func recordCheckPace(lookups: Int?, cancelled: Bool) {
+    //
+    // #2978: THIS run's results file, from the slot that just settled, never `PrepImporter.defaultURL`.
+    // That default is the prep slot, and since #2760 a check has its own, so the pace being learned was
+    // whatever the other slot happened to be holding. Measured on the live store on 2026-08-18: one stale
+    // prep-slot reading (301470ms over 6 streams, from two days earlier) was filed as two different
+    // checks' pace, while the two checks that actually ran that day recorded nothing at all. The legacy
+    // path still reads the prep file, because for a check sitting in the prep slot that genuinely IS its
+    // file, which is the one case the old line was accidentally right about.
+    private func recordCheckPace(slot: RunSlot, lookups: Int?, cancelled: Bool) {
         ProbeDurationHistoryStore.record(
             ProbeRunPaceRecording.sample(lookups: lookups,
-                                         cost: RecordedRunCost.complete(contentsOf: PrepImporter.defaultURL),
+                                         cost: RecordedRunCost.complete(
+                                            contentsOf: PrepImporter.resultsURL(for: slot)),
                                          cancelled: cancelled))
     }
 

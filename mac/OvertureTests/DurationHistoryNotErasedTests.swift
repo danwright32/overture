@@ -61,7 +61,7 @@ struct DurationHistoryNotErasedTests {
     // A run the store will genuinely keep: `isComparable` needs at least two lookups, at least two
     // streams, and streams no greater than lookups.
     private var recordableRun: ProbeDurationHistory.Run {
-        .init(lookups: 4, streams: 2, seconds: 60)
+        .init(lookups: 4, streams: 2, seconds: 60, contended: false)
     }
 
     // The other half, and the reason the refusal above is not simply "never write": an ABSENT file is a
