@@ -1,6 +1,9 @@
 import Testing
 import Foundation
 
+
+// #2928: the one Gmail fixture builder, at file scope.
+private let delayDetectionGmail = GmailFixture(selfEmail: "dan@danwrightphotography.com")
 // #656: alongside the existing hard-bounce detection (#398), BounceService.detectBounces also
 // notices a soft/temporary Gmail delay notice on the same already-fetched thread and records when
 // it was first seen. Purely informational: never sets bounced, never touches isSilent or
@@ -23,20 +26,16 @@ struct BounceServiceDelayDetectionTests {
     }
 
     private static func delayJSON(id: String = "delay-1") -> Data {
-        Data("""
-        {"messages":[{"id":"\(id)","payload":{"headers":[
-          {"name":"From","value":"mailer-daemon@googlemail.com"},
-          {"name":"Subject","value":"Delivery Status Notification (Delay)"}
-        ]}}]}
-        """.utf8)
+        delayDetectionGmail.thread([
+            .init(from: "mailer-daemon@googlemail.com",
+                  subject: "Delivery Status Notification (Delay)", id: id),
+        ])
     }
 
-    private static let hardBounceJSON = Data("""
-    {"messages":[{"id":"bounce-1","payload":{"headers":[
-      {"name":"From","value":"mailer-daemon@googlemail.com"},
-      {"name":"Subject","value":"Delivery Status Notification (Failure)"}
-    ]}}]}
-    """.utf8)
+    private static let hardBounceJSON = delayDetectionGmail.thread([
+        .init(from: "mailer-daemon@googlemail.com",
+              subject: "Delivery Status Notification (Failure)", id: "bounce-1"),
+    ])
 
     @Test @MainActor func recordsWhenADelayNoticeWasFirstSeen() {
         let p = Self.prospectWithSentRecipient()

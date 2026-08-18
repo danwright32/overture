@@ -2,6 +2,9 @@ import Testing
 import Foundation
 import SwiftData
 
+
+// #2928: the one Gmail fixture builder, at file scope.
+private let unreadableReplyGmail = GmailFixture(selfEmail: "dan@danwrightphotography.com")
 // #2149. #2147 widened the repair gap so a replied row missing its message text is refetched and filled.
 // The condition was not self-terminating.
 //
@@ -17,12 +20,6 @@ import SwiftData
 @Suite("An unreadable reply is tried once, not forever (#2149)")
 struct UnreadableReplyStopsRetryingTests {
     private let me = "dan@danwrightphotography.com"
-
-    private func b64url(_ text: String) -> String {
-        Data(text.utf8).base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
-    }
 
     private func container() throws -> ModelContainer {
         try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
@@ -54,19 +51,16 @@ struct UnreadableReplyStopsRetryingTests {
     // A reply Overture can see but cannot read: a real sender, and a body in a part it cannot decode.
     // This is the message shape the whole issue is about.
     private func unreadableThread(from: String) -> Data {
-        Data("""
-        {"messages":[{"id":"m1","internalDate":"1754355390000","payload":{"headers":[
-          {"name":"From","value":"\(from)"},{"name":"To","value":"\(me)"}],
-          "mimeType":"image/png","body":{"attachmentId":"a1","size":9001}}}]}
-        """.utf8)
+        unreadableReplyGmail.thread([
+            .init(from: from, to: me, id: "m1", internalDateMillis: 1_754_355_390_000,
+                  attachmentOnly: true),
+        ])
     }
 
     private func readableThread(from: String, body: String) -> Data {
-        Data("""
-        {"messages":[{"id":"m1","internalDate":"1754355390000","payload":{"headers":[
-          {"name":"From","value":"\(from)"},{"name":"To","value":"\(me)"}],
-          "mimeType":"text/plain","body":{"data":"\(b64url(body))"}}}]}
-        """.utf8)
+        unreadableReplyGmail.thread([
+            .init(from: from, to: me, id: "m1", internalDateMillis: 1_754_355_390_000, text: body),
+        ])
     }
 
     // The premise, checked rather than assumed: this really is a message whose body cannot be read. If

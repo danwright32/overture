@@ -18,6 +18,10 @@ import SwiftData
 // entry point is the thing under test.
 //
 // The people and the words below are invented. Nothing here is anybody's real conversation.
+// #2928: the one builder every Gmail fixture in the suite goes through. At file scope because the stub
+// below answers from a nonisolated closure.
+private let answeredOutsideGmail = GmailFixture(selfEmail: "dan@danwrightphotography.com", threadId: "t")
+
 @MainActor
 @Suite("An answer Dan sent outside Overture (#2865)")
 struct AnsweredOutsideOvertureTests {
@@ -60,71 +64,69 @@ struct AnsweredOutsideOvertureTests {
 
     // MARK: - Threads, as Gmail's `threads.get` returns them
 
-    private enum Who { case dan, them }
+    // #2918 put `labelIds` on these fixtures, which Gmail returns on every message and none of them
+    // carried. #2928 moved the whole shape into `GmailFixture`, the one builder every Gmail fixture in
+    // the suite now goes through, so a message here gets `id`, `threadId`, `internalDate` and `labelIds`
+    // without this file restating any of them.
+    // File scope rather than a static on this `@MainActor` suite: `StubGmail.fetch` hands a nonisolated
+    // closure to `markReplies`, and a main-actor static cannot be read from inside one.
+    private static var gmail: GmailFixture { answeredOutsideGmail }
 
-    // #2918: `labelIds` is part of what Gmail returns for every message, on both formats this app asks
-    // for, and it is what says whether a message was actually SENT or is still an unsent draft. It is in
-    // the fixture because it is in the real response: leaving it out made these threads a shape Gmail
-    // never returns, and the readers now refuse a message that claims nothing about being sent.
-    private static func message(_ id: String, from who: Who, at sentAt: Date, text: String,
-                                headers extra: [(String, String)] = []) -> String {
-        let body = Data(text.utf8).base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
-        let from = who == .dan ? me : "Priya Raman <\(them)>"
-        let to = who == .dan ? them : me
-        let labels = who == .dan ? "\"SENT\"" : "\"INBOX\",\"UNREAD\""
-        let headers = ([("From", from), ("To", to)] + extra)
-            .map { #"{"name":"\#($0.0)","value":"\#($0.1)"}"# }
-            .joined(separator: ",")
-        return """
-        {"id":"\(id)","internalDate":"\(Int(sentAt.timeIntervalSince1970) * 1000)",
-         "labelIds":[\(labels)],
-         "payload":{"headers":[\(headers)],"mimeType":"text/plain","body":{"data":"\(body)"}}}
-        """
+    private static func his(_ id: String, at sentAt: Date, text: String,
+                            headers extra: [(name: String, value: String)] = []) -> GmailFixture.Message {
+        GmailFixture.Message(from: me, to: them, id: id,
+                             internalDateMillis: Int64(sentAt.timeIntervalSince1970) * 1000,
+                             text: text, extraHeaders: extra)
     }
 
-    private static func thread(_ messages: [String]) -> Data {
-        Data("{\"messages\":[\(messages.joined(separator: ","))]}".utf8)
+    private static func theirs(_ id: String, at sentAt: Date, text: String) -> GmailFixture.Message {
+        GmailFixture.Message(from: "Priya Raman <\(them)>", to: me, id: id,
+                             internalDateMillis: Int64(sentAt.timeIntervalSince1970) * 1000, text: text)
     }
 
     // Overture's send, then their reply. Nothing of his since.
-    private var stillWaiting: Data {
-        Self.thread([
-            Self.message("m-0", from: .dan, at: Date(timeIntervalSince1970: 1_000), text: "My pitch."),
-            Self.message("r-1", from: .them, at: theyWrote, text: "Interesting, what's your rate?"),
-        ])
+    private var stillWaiting: [GmailFixture.Message] {
+        [
+            Self.his("m-0", at: Date(timeIntervalSince1970: 1_000), text: "My pitch."),
+            Self.theirs("r-1", at: theyWrote, text: "Interesting, what's your rate?"),
+        ]
     }
 
     // The same conversation with his answer on the end, sent from his mail client.
-    private func answeredInGmail(headers: [(String, String)] = []) -> Data {
-        Self.thread([
-            Self.message("m-0", from: .dan, at: Date(timeIntervalSince1970: 1_000), text: "My pitch."),
-            Self.message("r-1", from: .them, at: theyWrote, text: "Interesting, what's your rate?"),
-            Self.message("m-1", from: .dan, at: heAnsweredInGmail,
-                         text: "It's $250 an hour plus tax, and I deliver within two weeks.",
-                         headers: headers),
-        ])
+    private func answeredInGmail(headers: [(name: String, value: String)] = []) -> [GmailFixture.Message] {
+        stillWaiting + [
+            Self.his("m-1", at: heAnsweredInGmail,
+                     text: "It's $250 an hour plus tax, and I deliver within two weeks.",
+                     headers: headers),
+        ]
     }
 
+    // #2928: it answers the way Gmail does, honouring `format` and `metadataHeaders`, rather than
+    // handing back the same blob whatever was asked for.
+    //
+    // That distinction is not decoration here. `isAutomatedSend` reads `Auto-Submitted`, `X-Autoreply`,
+    // `X-Autorespond` and `Precedence`, and until #2928 the metadata fetch asked Gmail for `From` and
+    // `Subject` alone, so those four headers never arrived and the refusal below could not fire in
+    // production. A stub that returns them regardless proves the reader against a response the app can
+    // never receive (L52, L143).
     private final class StubGmail {
-        var body: Data
+        var thread: [GmailFixture.Message]
         private(set) var requestedThreadIds: [String] = []
-        init(body: Data) { self.body = body }
+        private(set) var requestedQueries: [String] = []
+        init(thread: [GmailFixture.Message]) { self.thread = thread }
         var fetch: (URLRequest) async throws -> (Data, URLResponse) {
             { req in
                 let url = req.url!
                 if let id = url.path.split(separator: "/").last { self.requestedThreadIds.append(String(id)) }
-                return (self.body, HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil,
-                                                   headerFields: nil)!)
+                self.requestedQueries.append(url.query ?? "")
+                return answeredOutsideGmail.respond(to: req, thread: self.thread)
             }
         }
     }
 
     @discardableResult
-    private func check(_ ctx: ModelContext, thread: Data, at when: Date) async -> StubGmail {
-        let gmail = StubGmail(body: thread)
+    private func check(_ ctx: ModelContext, thread: [GmailFixture.Message], at when: Date) async -> StubGmail {
+        let gmail = StubGmail(thread: thread)
         await GmailReplyChecker(fromEmail: Self.me)
             .markReplies(in: ctx, token: "tok", now: when, fetch: gmail.fetch)
         return gmail
@@ -204,7 +206,8 @@ struct AnsweredOutsideOvertureTests {
         let ctx = ModelContext(try container())
         let (_, r) = try await waitingOnHim(ctx)
 
-        await check(ctx, thread: answeredInGmail(headers: headers), at: now)
+        await check(ctx, thread: answeredInGmail(headers: headers.map { (name: $0.0, value: $0.1) }),
+                    at: now)
 
         #expect(r.hasUnhandledReply, "an out of office is not an answer: \(headers)")
         #expect(r.replyHandledAt == nil)
@@ -217,7 +220,7 @@ struct AnsweredOutsideOvertureTests {
         let ctx = ModelContext(try container())
         let (_, r) = try await waitingOnHim(ctx)
 
-        await check(ctx, thread: answeredInGmail(headers: [("Auto-Submitted", "no")]), at: now)
+        await check(ctx, thread: answeredInGmail(headers: [(name: "Auto-Submitted", value: "no")]), at: now)
 
         #expect(!r.hasUnhandledReply)
     }
@@ -255,9 +258,9 @@ struct AnsweredOutsideOvertureTests {
     // comparison is to ask the rule. Without this the `>` could be `>=` and nothing would notice.
     @Test func aMessageSentAtTheSameInstantAsTheirsIsNotAnAnswerToIt() {
         let sameInstant = Date(timeIntervalSince1970: 5_000)
-        let thread = Self.thread([
-            Self.message("r-1", from: .them, at: sameInstant, text: "What's your rate?"),
-            Self.message("m-1", from: .dan, at: sameInstant, text: "Crossed in the post."),
+        let thread = Self.gmail.thread([
+            Self.theirs("r-1", at: sameInstant, text: "What's your rate?"),
+            Self.his("m-1", at: sameInstant, text: "Crossed in the post."),
         ])
 
         #expect(AnsweredElsewhere.answeredAt(threadJSON: thread, selfEmail: Self.me,

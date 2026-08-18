@@ -2,6 +2,9 @@ import Testing
 import Foundation
 import SwiftData
 
+
+// #2928: the one Gmail fixture builder, at file scope.
+private let attachedReadersGmail = GmailFixture(selfEmail: "dan@danwrightphotography.com")
 // #2717: a non-empty `gmailThreadId` has until now meant exactly one thing, that Overture sent an email
 // on this conversation. Milestone #58 gives that field a SECOND writer (#2715, Dan attaching the Gmail
 // conversation a form or DM pitch was answered on), and every reader carrying the old assumption is
@@ -333,30 +336,22 @@ struct AttachedConversationReadersTests {
 
     // MARK: fixtures
 
-    // One Gmail thread as the API returns it for `format=metadata`, built the way
-    // `GmailThreadingRepairTests` builds it, because a second shape here would only ever confirm an
-    // assumption about an interface nobody read (L52). `internalDate` is what orders the messages.
-    // #2918: `labelIds` too, for the same reason and in the same shape, because a message of Dan's that
-    // claims nothing about having been sent is no longer read as something he sent.
+    // One Gmail thread as the API returns it for `format=metadata`. #2928: through `GmailFixture`, which
+    // is now the one builder every Gmail fixture in the suite goes through, so a second shape here cannot
+    // confirm an assumption about an interface nobody read (L52). `internalDate` is what orders the
+    // messages, and `labelIds` is what says whether one was really sent.
     private func threadJSON(_ messages: [(from: String, messageId: String?, at: Int64)]) -> Data {
-        let payloads: [[String: Any]] = messages.map { m in
-            var headers: [[String: Any]] = [["name": "From", "value": m.from]]
-            if let id = m.messageId { headers.append(["name": "Message-ID", "value": id]) }
-            let mine = ReplyDetection.email(from: m.from) == ReplyDetection.email(from: me)
-            return ["internalDate": "\(m.at)", "labelIds": mine ? ["SENT"] : ["INBOX"],
-                    "payload": ["headers": headers]]
-        }
-        return try! JSONSerialization.data(withJSONObject: ["messages": payloads])
+        attachedReadersGmail.thread(messages.map { m in
+            .init(from: m.from, messageID: m.messageId, internalDateMillis: m.at)
+        })
     }
 
     // The shape `BounceServiceHardBounceTests` drives the real detector with.
     private func hardBounceJSON(id: String = "bounce-1") -> Data {
-        Data("""
-        {"messages":[{"id":"\(id)","payload":{"headers":[
-          {"name":"From","value":"mailer-daemon@googlemail.com"},
-          {"name":"Subject","value":"Delivery Status Notification (Failure)"}
-        ]}}]}
-        """.utf8)
+        attachedReadersGmail.thread([
+            .init(from: "mailer-daemon@googlemail.com",
+                  subject: "Delivery Status Notification (Failure)", id: id),
+        ])
     }
 
     private func responder(_ body: @escaping (URLRequest) -> (Data, Int))

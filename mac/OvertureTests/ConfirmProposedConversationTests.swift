@@ -2,6 +2,9 @@ import Testing
 import Foundation
 import SwiftData
 
+
+// #2928: the one Gmail fixture builder, at file scope.
+private let confirmProposedGmail = GmailFixture(selfEmail: "dan@danwrightphotography.com", threadId: "t1")
 // #2718: what happens when Dan answers the question.
 //
 // The proposal is stored in full so the ROW needs no Gmail call to ask. Answering does need one, because
@@ -49,12 +52,11 @@ struct ConfirmProposedConversationTests {
     }
 
     private func threadData() -> Data {
-        try! JSONSerialization.data(withJSONObject: ["messages": [[
-            "id": "m1", "internalDate": "\(Int64(now.timeIntervalSince1970 - 3600) * 1000)",
-            "payload": ["headers": [["name": "From", "value": "Caseen Gaines <caseen.gaines@example.com>"],
-                                    ["name": "Subject", "value": "Re: the anniversary show"],
-                                    ["name": "Message-ID", "value": "<theirs@mail.gmail.com>"]]],
-        ]]])
+        confirmProposedGmail.thread([
+            .init(from: "Caseen Gaines <caseen.gaines@example.com>",
+                  subject: "Re: the anniversary show", messageID: "<theirs@mail.gmail.com>",
+                  id: "m1", internalDateMillis: Int64(now.timeIntervalSince1970 - 3600) * 1000),
+        ])
     }
 
     private func gmail(status: Int = 200) -> (URLRequest) async throws -> (Data, URLResponse) {

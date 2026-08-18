@@ -2,6 +2,9 @@ import Testing
 import Foundation
 import SwiftData
 
+
+// #2928: the one Gmail fixture builder, at file scope.
+private let detachConversationGmail = GmailFixture(selfEmail: "dan@danwrightphotography.com")
 // #2719: unlinking a conversation Dan attached to the wrong pitch.
 //
 // The plan promised "a detach that restores the prior state exactly". It cannot be built as stated, and
@@ -53,20 +56,14 @@ struct DetachConversationTests {
         return r
     }
 
-    // #2918: with `labelIds`, which Gmail returns on every message and which says whether one was really
-    // sent or is still an unsent draft. A message of Dan's carrying no label is no longer read as his.
+    // #2918 put `labelIds` on these, which Gmail returns on every message and which says whether one was
+    // really sent or is still an unsent draft. #2928 moved the shape into `GmailFixture`.
     private func threadJSON(_ messages: [(from: String, at: Int64, subject: String, messageId: String?)])
     -> Data {
-        let payloads: [[String: Any]] = messages.map { m in
-            var headers: [[String: Any]] = [["name": "From", "value": m.from],
-                                            ["name": "Subject", "value": m.subject]]
-            if let id = m.messageId { headers.append(["name": "Message-ID", "value": id]) }
-            let mine = ReplyDetection.email(from: m.from) == ReplyDetection.email(from: me)
-            return ["id": "msg-\(m.at)", "internalDate": "\(m.at * 1000)",
-                    "labelIds": mine ? ["SENT"] : ["INBOX"],
-                    "payload": ["headers": headers]]
-        }
-        return try! JSONSerialization.data(withJSONObject: ["messages": payloads])
+        detachConversationGmail.thread(messages.map { m in
+            .init(from: m.from, subject: m.subject, messageID: m.messageId,
+                  id: "msg-\(m.at)", internalDateMillis: m.at * 1000)
+        })
     }
 
     private func theirReply() -> Data {

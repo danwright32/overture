@@ -2,6 +2,9 @@ import Testing
 import Foundation
 import SwiftData
 
+
+// #2928: the one Gmail fixture builder, at file scope.
+private let secondMessageGmail = GmailFixture(selfEmail: "dan@danwrightphotography.com", threadId: "t")
 // #2815. A second message arriving on a conversation that has already recorded a reply is never fetched,
 // so it never reaches Dan.
 //
@@ -58,23 +61,12 @@ struct ASecondMessageIsFetchedTests {
 
     // One Gmail thread as `threads.get` returns it. `internalDate` is what orders the messages.
     private static func thread(replies: [(id: String, sentAt: Date, text: String)]) -> Data {
-        let outbound = """
-        {"id":"m-0","internalDate":"1000","payload":{"headers":[
-          {"name":"From","value":"\(me)"},{"name":"To","value":"\(them)"}]}}
-        """
-        let inbound = replies.map { r in
-            let body = Data(r.text.utf8).base64EncodedString()
-                .replacingOccurrences(of: "+", with: "-")
-                .replacingOccurrences(of: "/", with: "_")
-                .replacingOccurrences(of: "=", with: "")
-            return """
-            {"id":"\(r.id)","internalDate":"\(Int(r.sentAt.timeIntervalSince1970) * 1000)",
-             "payload":{"headers":[
-               {"name":"From","value":"Marion Alcott <\(them)>"},{"name":"To","value":"\(me)"}],
-             "mimeType":"text/plain","body":{"data":"\(body)"}}}
-            """
-        }
-        return Data("{\"messages\":[\(([outbound] + inbound).joined(separator: ","))]}".utf8)
+        secondMessageGmail.thread(
+            [GmailFixture.Message(from: me, to: them, id: "m-0", internalDateMillis: 1000)]
+            + replies.map { r in
+                .init(from: "Marion Alcott <\(them)>", to: me, id: r.id,
+                      internalDateMillis: Int64(r.sentAt.timeIntervalSince1970) * 1000, text: r.text)
+            })
     }
 
     // The shape that matters is WHEN each message lands, not what it says: one before Dan's answer, one

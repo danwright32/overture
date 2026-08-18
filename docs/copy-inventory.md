@@ -87,6 +87,7 @@ What is not, and why:
 - `Integration/GmailSignatureService.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Integration/GmailSignatureService.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Integration/GmailSignatureStore.swift`: developer diagnostic log, not the app's own voice (#915)
+- `Integration/GmailThreadHeaders.swift`: RFC822 header names in a Google API URL, not sentences Overture says (#915)
 - `Integration/GmailThreadingRepair.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Integration/GmailThreadingRepair.swift`: a Google API URL and an HTTP header, not sentences Overture says (#915)
 - `Integration/InquiryConversationAttach.swift`: an HTTP header, not a sentence (#915)
