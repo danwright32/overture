@@ -288,6 +288,58 @@ export const RUNBOOK_RULES: RunbookRule[] = [
     pattern: /no two sentences in a row may use the same connector construction/i },
   { name: "body-runs-in-short-paragraphs",
     pattern: /Write the body in short paragraphs/i },
+  // #2874: the answer to "what do you charge", the highest-intent reply Overture ever drafts. The whole
+  // answer used to be one parenthetical here ("$250 an hour plus tax, one-hour minimum, gallery within
+  // two weeks"), which is the CEILING on what a drafted reply can say, and on 2026-08-17 a real reply to
+  // a presenter who asked exactly this came back with precisely those three facts and nothing else. The
+  // drafter did not invent a thin answer; it reproduced the thin answer it was given (L167: an AI writer
+  // derives its contract from what it is handed).
+  //
+  // Dan's call the same day: his own two paragraphs go in VERBATIM, and the drafter writes only the lines
+  // around them. So the guarded thing here is the TEXT, not a rule about the text, and each fact below is
+  // guarded separately because each one fails in its own direction and each is a real objection to the
+  // price that the paragraph answers. Strike any one and the reply still reads as complete while quietly
+  // withholding the fact that makes the number acceptable.
+  { name: "rate-answer-two-paragraphs-verbatim",
+    pattern: /Dan's\s+own\s+two\s+paragraphs,\s+VERBATIM/i },
+  // The half that keeps this from smearing into a cold pitch, which is the opposite rule and still
+  // stands (#1906, "cold-pitch-carries-no-price" above). Putting the full rate answer into this runbook
+  // is what makes that risk real, so the prohibition travels with the text rather than sitting 200 lines
+  // above it.
+  { name: "rate-answer-never-in-a-cold-pitch",
+    pattern: /these\s+paragraphs\s+never\s+appear\s+in\s+a\s+first\s+email/i },
+  { name: "rate-answer-rate-plus-tax",
+    pattern: /I\s+charge\s+\$250\/hr\s+plus\s+tax/i },
+  { name: "rate-answer-one-hour-minimum",
+    pattern: /with\s+a\s+minimum\s+of\s+one\s+hour/i },
+  // Fact 1: a tax-exempt organisation pays no tax. Most of the people who ask this question run one.
+  { name: "rate-answer-tax-exempt-pays-no-tax",
+    pattern: /unless\s+you're\s+tax\s+exempt,\s+in\s+which\s+case\s+I'd\s+just\s+need\s+that\s+documentation/i },
+  // Fact 2: the hours billed are hours at the performance, so the edit is not a second invoice. Without
+  // it "$250 an hour" reads as an open-ended meter to anyone who has hired a photographer before.
+  { name: "rate-answer-no-charge-for-editing",
+    pattern: /there\s+is\s+no\s+charge\s+for\s+time\s+spent\s+editing\s+afterward/i },
+  // The turnaround, which the cold pitch may not state and a reply must (#1906). It is the one fact the
+  // thin answer already carried, so it is guarded here to stop the fix from losing it.
+  { name: "rate-answer-two-week-delivery",
+    pattern: /delivery\s+of\s+the\s+full\s+gallery\s+within\s+2\s+weeks/i },
+  // Fact 3: no extra or hidden fees. The sentence a presenter needs before taking a number to a board.
+  { name: "rate-answer-no-hidden-fees",
+    pattern: /There\s+are\s+no\s+extra\s+or\s+hidden\s+fees\s+beyond\s+that/i },
+  // Fact 4, in two halves that fail in opposite directions. Drop the first and the add-ons vanish, so a
+  // client who wants black and white or a faster gallery never learns they can have either. Drop the
+  // second and the drafter, asked what one costs, invents a price Dan never set (L167 again).
+  { name: "rate-answer-add-ons-are-named",
+    pattern: /add-ons\s+such\s+as\s+black\s+and\s+white\s+edits\s+and\s+faster\s+turnaround\s+times/i },
+  { name: "rate-answer-add-ons-are-never-priced",
+    pattern: /The\s+add-ons\s+are\s+named,\s+never\s+priced/i },
+  // Fact 5, also two halves. The delivery clause answers how they actually get the photos; the usage
+  // clause answers what they may do with them, which for an organisation buying photography is often the
+  // whole question, and no other sentence in the product states it.
+  { name: "rate-answer-online-gallery-downloads",
+    pattern: /download\s+both\s+high\s+and\s+web-resolution\s+files/i },
+  { name: "rate-answer-full-usage-rights",
+    pattern: /you\s+have\s+full\s+usage\s+rights\s+to\s+the\s+images/i },
 ];
 
 /** Returns the names of the rules whose text is absent from the given runbook contents. */

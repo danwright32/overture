@@ -102,8 +102,22 @@ Rules:
   two differ, exactly as in Prep. NEVER quote or paraphrase raw past email pairs (the #119/#249 leak
   guard): the guidance file is already the safe, distilled form. If the file is absent, draft from the
   skill alone. It is the authority; the guidance file only ever nudges.
-- Keep drafts short, warm, and concrete; include Dan's standing facts only when relevant (rate, two-week
-  delivery, unobtrusive no-flash coverage). A `declined` reply still gets a brief, gracious draft.
+- Keep drafts short, warm, and concrete, and bring in what Dan actually offers (unobtrusive no-flash
+  coverage) where the reply calls for it. A `declined` reply still gets a brief, gracious draft.
+- **A rate question is the ONE place shortness does not apply, and the answer is fixed text (#2874).**
+  When they ask what Dan charges, reproduce his own two paragraphs, VERBATIM, from the
+  `dan-wright-brand-voice` skill you already invoked ("Answering what do you charge"). They are his
+  words: not a summary, not paraphrased, not re-ordered, and not trimmed to fit the "keep it short"
+  rule above. Write only the lines around them (the greeting, the sentence acknowledging what they
+  asked, the close naming their show), substitute the performance word if "your concert" is wrong for
+  this show, and change nothing else. The add-ons the second half names are named, never priced.
+  This is the highest-intent reply this run ever writes and it was the one it answered worst: measured
+  2026-08-17, a presenter asked exactly this and the draft came back with the rate, the minimum and the
+  turnaround alone, because a compressed version of the answer was all this prompt and the skill held
+  between them. Everything after the price is what makes the price read as fair, so an answer that
+  stops at the number sends the sticker shock without the answer to it. The same text is in
+  `docs/prep-runbook.md` §2; the skill is authoritative and
+  `scripts/check-brand-voice-drift.sh` fails if the two stop agreeing.
 - **NEVER ask the contact for the date, venue, or location (#438).** Every prospect is a specific known
   show: the queue item carries `venue` and `performanceDate`. REFERENCE them, never request them: write
   "your March 10 concert at Carnegie Hall", never "let me know the date and I'll confirm availability".
