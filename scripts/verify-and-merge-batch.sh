@@ -176,7 +176,14 @@ verify_and_merge_batch() {
 
   # The base is current origin/main, so the combined tree IS what will exist after all of them land
   # (#2353, L85). Nothing else needs to bring main in.
-  setup_worktree "main"
+  # Checked for the same reason as on the single-PR path: this function is called where errexit is
+  # suspended, so a refused slot has to stop the run explicitly rather than fall through into a suite
+  # run over whatever the worktree happens to hold (#2923).
+  if ! setup_worktree "main"; then
+    release_verify_slot
+    echo "Nothing was verified and nothing was merged." >&2
+    return 1
+  fi
 
   # BEFORE any merge and before the post-merge hook regenerates anything (#2812). Each ref's own project
   # file is judged exactly as its author committed it, which is the version that reaches main, so the

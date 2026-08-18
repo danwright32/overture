@@ -32,6 +32,10 @@ source "${SCRIPT_DIR}/lib/pr-merge.sh"
 # gate_branch_project_freshness and judge_ref_project_freshness: the one implementation of "is this
 # ref's own committed project file fresh", shared with merge-when-green.sh (#2818).
 source "${SCRIPT_DIR}/lib/project-freshness.sh"
+# require_scratch_worktree: the one answer to "is this directory mine to scrub" (#2923). Sourced here
+# as well as by project-freshness.sh, so this script's own setup_worktree can ask it before it deletes
+# anything, whatever order the sources happen to be in.
+source "${SCRIPT_DIR}/lib/worktree-safety.sh"
 
 usage() {
   echo "Usage: $(basename "$0") <pr-number-or-branch-name>" >&2
@@ -69,6 +73,15 @@ setup_worktree() {
   local branch="$1"
   WORKTREE_DIR="${OVERTURE_VERIFY_WORKTREE:-${HOME}/.overture-verify-worktree}"
   local slot_lock="${OVERTURE_VERIFY_WORKTREE_LOCK:-/tmp/overture-verify-worktree.lock}"
+
+  # #2923, and BEFORE the lock as well as before anything destructive: everything below this line
+  # force-detaches the slot, runs `git clean -ffdx` over it, and on the fallback path deletes the
+  # directory outright. The path comes from an environment variable, and until this asked, nothing
+  # between that variable and an `rm -rf` looked at what was actually there. A refusal here has taken
+  # nothing and holds nothing.
+  if ! require_scratch_worktree "${WORKTREE_DIR}" "${REPO_ROOT}" "The verify worktree setup"; then
+    return 1
+  fi
 
   # Two verifications must not share the slot: the second would scrub the first mid-suite. The lock
   # is a kernel flock, so a crashed holder releases it by dying, and the wait announces itself
@@ -255,7 +268,15 @@ verify_and_merge() {
   require_pr_completeness "${PR_NUMBER}" "${PR_BODY}"
 
   echo "Verifying PR #${PR_NUMBER} (${PR_BRANCH}) in the verify worktree..."
-  setup_worktree "${PR_BRANCH}"
+  # Checked, not left to errexit: every caller of verify_and_merge invokes it somewhere errexit is
+  # suspended (an `if` condition, an `||` list), which is the same reason merge_pr had to start
+  # reporting its own status (#2602). A refused slot must stop the run, not fall through into a suite
+  # over whatever the worktree happens to hold.
+  if ! setup_worktree "${PR_BRANCH}"; then
+    release_verify_slot
+    echo "Not merging PR #${PR_NUMBER} (${PR_BRANCH}). Nothing was verified." >&2
+    return 1
+  fi
 
   # #2812: judge each side's OWN project file before anything is merged or regenerated. The same gap
   # exists here as on the batch path, because the post-merge hook fires on this merge too and the

@@ -15,6 +15,12 @@
 #
 # It is sourced, never executed: it defines functions and one constant and runs nothing.
 
+# require_scratch_worktree, the one answer to "is this directory mine to scrub" (#2923). Sourced here
+# rather than assumed from the caller, because this file is sourced by three merge paths and a guard
+# that exists only when somebody else happened to source it first is not a guard.
+# shellcheck source=./worktree-safety.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/worktree-safety.sh"
+
 # The generated file this is all about. Held here rather than restated per script, because it was
 # spelled out separately in check-pbxproj-fresh.sh, merge-when-green.sh and verify-and-merge-branch.sh,
 # and the last two both use it to build the message a person acts on.
@@ -66,6 +72,13 @@ judge_ref_project_freshness() {
 gate_branch_project_freshness() {
   local dir="$1"
   shift
+  # #2923. This walks the directory through every ref it is given with `checkout --force --detach`, and
+  # its restore is to a bare SHA, so pointed at a working checkout it would both move it off its branch
+  # and leave it detached. The dir is a caller's argument and nothing checked it. A refusal changes
+  # nothing, which is the point: it happens before the first checkout.
+  if ! require_scratch_worktree "${dir}" "${REPO_ROOT:-}" "The per-ref project file gate"; then
+    return 1
+  fi
   local start_head ref rc=0
   start_head="$(git -C "${dir}" rev-parse HEAD)"
   for ref in "$@"; do
