@@ -47,11 +47,13 @@ enum ReplyPanel {
     // Guarded against a stale stamp: recordAnswerSent consumes the draft body and leaves
     // replyDraftRequestedAt standing, so a request belonging to an exchange already answered would
     // otherwise read as a run that is drafting right now (L68).
+    //
+    // #2966: that guard was written HERE and nowhere else, and the same question was asked in two other
+    // bodies without it (`Recipient.isReplyDraftStalled`, `RecipientSnapshot.isDraftingReply`). The
+    // conditions now live in `ReplyDraftRequest` and all three read them, so a guard added to one of them
+    // again cannot leave the others behind (L16, L30).
     static func isDrafting(_ recipient: Recipient) -> Bool {
-        guard let requested = recipient.replyDraftRequestedAt else { return false }
-        guard recipient.replyDraftBody?.isEmpty != false else { return false }
-        if let answered = recipient.replyHandledAt, requested <= answered { return false }
-        return true
+        recipient.awaitedReplyDraftRequestedAt != nil
     }
 
     // #2143: a draft landing while the panel is open. Three outcomes, because Dan's own words and an

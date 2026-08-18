@@ -732,6 +732,14 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     var replyDraftSubject: String? = nil
     var replyDraftBody: String? = nil
     var replyDraftRequestedAt: Date? = nil
+    // #2966: WHEN the reply draft this contact is still waiting on was asked for, or nil when nothing is
+    // awaited. The ANSWER from `ReplyDraftRequest`, carried across rather than the inputs to it, for two
+    // reasons. The snapshot then holds no copy of the rule at all, which is the whole point of there being
+    // one (it used to ask "requested and nothing stored" for itself, missing the guard that a request
+    // outlives the answer which consumed its draft, so the card offered to restart a run that had finished
+    // hours earlier). And the default is the QUIET direction: a snapshot built without it draws no
+    // drafting label, where carrying the raw stamps would have made a forgotten field draw a phantom one.
+    var awaitedReplyDraftRequestedAt: Date? = nil
     var intentHint: String? = nil
     var replyDraftEditedByDan: Bool = false
     var replyDraftWrittenByDan: Bool = false   // #2131: he wrote it himself, with nothing to edit
@@ -839,8 +847,9 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
         return replyAudience.filter { $0.lowercased() != own }
     }
 
-    // A draft was requested but hasn't arrived yet: show progress.
-    var isDraftingReply: Bool { replyDraftRequestedAt != nil && !hasReplyDraft }
+    // A draft was requested, hasn't arrived, and belongs to an exchange nobody has answered: show
+    // progress. #2966: from the shared rule, carried on the snapshot, never re-derived here.
+    var isDraftingReply: Bool { awaitedReplyDraftRequestedAt != nil }
 
     var displayName: String {
         if let name, !name.trimmingCharacters(in: .whitespaces).isEmpty { return name }
@@ -2618,7 +2627,11 @@ extension RecipientSnapshot {
                   suppressionReason: r.suppressionReason,
                   isHeldFromSending: r.isBlockedAwaitingReview,
                   replyDraftSubject: r.replyDraftSubject, replyDraftBody: r.replyDraftBody,
-                  replyDraftRequestedAt: r.replyDraftRequestedAt, intentHint: r.intentHint,
+                  replyDraftRequestedAt: r.replyDraftRequestedAt,
+                  // #2966: the shared rule's answer, so the card and the reply panel cannot disagree about
+                  // whether a run is still going.
+                  awaitedReplyDraftRequestedAt: r.awaitedReplyDraftRequestedAt,
+                  intentHint: r.intentHint,
                   replyDraftEditedByDan: r.replyDraftEditedByDan,
                   replyDraftWrittenByDan: r.replyDraftWrittenByDan,
                   replyAudience: SendGroup.replyAudience(of: r),

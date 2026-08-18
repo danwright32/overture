@@ -25,7 +25,7 @@ struct ThreadingRepairFailureIsReportedTests {
 
     private func tick(_ ctx: ModelContext,
                       repair: GmailThreadingRepair.Outcome?) async -> ReconcileSummary {
-        await ReconcileScheduler(context: ctx).runSafeReconcilesOnce(
+        await ReconcileScheduler(context: ctx, replyRunAlive: { _ in false }).runSafeReconcilesOnce(
             defaults: UserDefaults(suiteName: "overture.tests.2679") ?? .standard,
             repairThreading: { _ in repair })
     }

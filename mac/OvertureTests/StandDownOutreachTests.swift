@@ -206,12 +206,12 @@ struct StandDownDueListTests {
     @Test func theDueCountDropsWithTheRow() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx, contacts: ["one@example.org"])
-        #expect(DueWork.counts(prospects: [p], now: now).followUps == 1)
+        #expect(DueWork.counts(prospects: [p], now: now, replyRunAlive: false).followUps == 1)
 
         p.recipients.first!.standDownOutreach(now: now)
         try? ctx.save()
 
-        #expect(DueWork.counts(prospects: [p], now: now).followUps == 0)
+        #expect(DueWork.counts(prospects: [p], now: now, replyRunAlive: false).followUps == 0)
         #expect(FollowUp.dueRecipients(from: [p], now: now).isEmpty)
     }
 

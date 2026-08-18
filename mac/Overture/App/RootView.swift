@@ -157,7 +157,12 @@ struct RootView: View {
     // the body before, and summed again in FollowUpsView's own body: the pill Dan clicks and the list he
     // lands on stated the same rule twice, with nothing asserting they agreed.
     private var followUpsDue: Int {
-        DueWork.counts(prospects: allProspects, now: Date()).total
+        let now = Date()
+        // #2878: the badge counts a stalled reply draft too, because the sheet it opens now lists one.
+        // The liveness is read here rather than defaulted, so a classify run still beating is not
+        // reported as a dead one (#471, L168).
+        return DueWork.counts(prospects: allProspects, now: now,
+                              replyRunAlive: ReplyClassifyService.isRunning(now: now)).total
     }
 
     // #805: how many watched sources need Dan's eyes. Counted by SourceAttention and never summed here, for

@@ -396,17 +396,27 @@ struct QueueItemSnapshotTests {
     // #420 C6 — the draft-state computed props that drive the conversation surface (draft present vs
     // drafting-in-progress vs neither) and the plain-language intent-hint label.
     @Test func recipientSnapshotDraftStatesAndIntentLabel() {
-        func s(body: String? = nil, requestedAt: Date? = nil) -> RecipientSnapshot {
+        // #2966: `awaited` is the shared rule's answer, carried onto the snapshot rather than re-derived
+        // by it, so these spell the rule's inputs and let `ReplyDraftRequest` decide, exactly as
+        // `RecipientSnapshot.init(_:)` does in the app.
+        func s(body: String? = nil, requestedAt: Date? = nil, answeredAt: Date? = nil) -> RecipientSnapshot {
             RecipientSnapshot(id: "x", name: "N", email: "e@e.example", role: nil, provenance: .act,
                               sendState: .sent, replied: true, lastReplyText: nil, resolution: nil,
                               bounced: false, outcomeSource: nil, replyDraftSubject: nil,
-                              replyDraftBody: body, replyDraftRequestedAt: requestedAt, intentHint: nil)
+                              replyDraftBody: body, replyDraftRequestedAt: requestedAt,
+                              awaitedReplyDraftRequestedAt: ReplyDraftRequest.awaited(
+                                  requestedAt: requestedAt, draftBody: body, answeredAt: answeredAt),
+                              intentHint: nil)
         }
+        let asked = Date(timeIntervalSince1970: 1_780_000_000)
         #expect(s(body: "a draft").hasReplyDraft == true)
         #expect(s().hasReplyDraft == false)
-        #expect(s(requestedAt: Date()).isDraftingReply == true)            // requested, not yet arrived
-        #expect(s(body: "a draft", requestedAt: Date()).isDraftingReply == false)  // arrived
+        #expect(s(requestedAt: asked).isDraftingReply == true)            // requested, not yet arrived
+        #expect(s(body: "a draft", requestedAt: asked).isDraftingReply == false)  // arrived
         #expect(s().isDraftingReply == false)                             // never requested
+        // #2966: answered through Overture, which consumes the draft body and leaves the request stamp
+        // standing. The card used to draw "Drafting a reply..." with a Retry on this forever.
+        #expect(s(requestedAt: asked, answeredAt: asked.addingTimeInterval(60)).isDraftingReply == false)
 
         // #2397: the AI's hint is shown verbatim now. It used to be mapped through the conversation-state
         // vocabulary, and inventing a second translation table for it would say less than the model did.

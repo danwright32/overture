@@ -45,7 +45,7 @@ struct DueWorkTests {
         _ = silentLead(context)
         let prospects = try context.fetch(FetchDescriptor<Prospect>())
 
-        let counts = DueWork.counts(prospects: prospects, now: sent.addingTimeInterval(10 * day))
+        let counts = DueWork.counts(prospects: prospects, now: sent.addingTimeInterval(10 * day), replyRunAlive: false)
 
         #expect(counts.followUps == 1)
         #expect(counts.afterTheShow == 0)
@@ -71,7 +71,7 @@ struct DueWorkTests {
         }
         let prospects = try context.fetch(FetchDescriptor<Prospect>())
 
-        let counts = DueWork.counts(prospects: prospects, now: sent.addingTimeInterval(10 * day))
+        let counts = DueWork.counts(prospects: prospects, now: sent.addingTimeInterval(10 * day), replyRunAlive: false)
 
         #expect(counts.total == 0)
     }
