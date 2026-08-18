@@ -2,6 +2,9 @@ import Testing
 import Foundation
 import SwiftData
 
+
+// #2928: the one Gmail fixture builder, at file scope.
+private let inquiryAttachGmail = GmailFixture(selfEmail: "dan@danwrightphotography.com")
 // #2712: a hire inquiry Dan answers in Gmail, which is the natural thing to do when the mail is already
 // open in front of him, was never watched for replies at all.
 //
@@ -55,22 +58,15 @@ struct InquiryConversationAttachTests {
     // A Gmail thread as `threads.get` returns it. `internalDate` orders the messages, not their position
     // in the array, which is what every reader in ReplyDetection relies on.
     //
-    // #2918: with `labelIds`, which Gmail returns on every message and which is what says whether one was
-    // actually sent or is still an unsent draft. A message of Dan's carrying no label at all no longer
-    // dates an inquiry or counts as his answer, so a fixture that omits it is not the thread it means.
+    // #2918 put `labelIds` on these, which is what says whether one was actually sent or is still an
+    // unsent draft. #2928 moved the shape into `GmailFixture`.
     private func threadJSON(_ messages: [(from: String, secondsAgo: Int64, subject: String,
                                           messageId: String?)]) -> Data {
-        let payloads: [[String: Any]] = messages.map { m in
-            var headers: [[String: Any]] = [["name": "From", "value": m.from],
-                                            ["name": "Subject", "value": m.subject]]
-            if let id = m.messageId { headers.append(["name": "Message-ID", "value": id]) }
+        inquiryAttachGmail.thread(messages.map { m in
             let at = Int64(now.timeIntervalSince1970) - m.secondsAgo
-            let mine = ReplyDetection.email(from: m.from) == me
-            return ["id": "msg-\(at)", "internalDate": "\(at * 1000)",
-                    "labelIds": mine ? ["SENT"] : ["INBOX"],
-                    "payload": ["headers": headers]]
-        }
-        return try! JSONSerialization.data(withJSONObject: ["messages": payloads])
+            return .init(from: m.from, subject: m.subject, messageID: m.messageId,
+                         id: "msg-\(at)", internalDateMillis: at * 1000)
+        })
     }
 
     // The conversation this issue is about: they wrote, Dan answered in Gmail, they wrote again.

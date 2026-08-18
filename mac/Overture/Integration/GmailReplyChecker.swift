@@ -157,9 +157,15 @@ struct GmailReplyChecker {
         id: String, token: String, format: String = "metadata",
         fetch: (URLRequest) async throws -> (Data, URLResponse)
     ) async -> ThreadRead {
-        // Subject is included alongside From (#398) so a hard-bounce notification can be told
-        // apart from a temporary delay purely from metadata, no full-body fetch needed.
-        let query = format == "metadata" ? "format=metadata&metadataHeaders=From&metadataHeaders=Subject" : "format=full"
+        // #2928: the headers come from `GmailThreadHeaders`, which is the union of what every reader of a
+        // thread actually reads, rather than a list kept by hand here. This asked for From and Subject
+        // alone, and Gmail returns ONLY the headers named, so two readers downstream of this call were
+        // reading empty strings in production while their tests passed against fixtures that handed back
+        // headers nobody had requested: #2653's `Message-ID` (so no answer ever threaded onto their
+        // message) and #2865's `Auto-Submitted` family (so an out of office from Dan's own mailbox would
+        // have read as his answer). Subject is in that list for #398's hard-bounce-versus-delay call,
+        // which is what put it here in the first place.
+        let query = format == "metadata" ? GmailThreadHeaders.metadataQuery : "format=full"
         guard let url = URL(string: "https://gmail.googleapis.com/gmail/v1/users/me/threads/\(id)?\(query)") else { return .unreadable }
         var req = URLRequest(url: url)
         // copy-inventory:ignore-start  the HTTP Authorization header Google reads, not a sentence

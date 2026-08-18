@@ -2,6 +2,9 @@ import Testing
 import Foundation
 import SwiftData
 
+// #2928: the one Gmail fixture builder, at file scope so a nonisolated context can read it.
+private let replyDetectionGmail = GmailFixture(selfEmail: "dan@danwrightphotography.com")
+
 // #40 reply detection: when someone other than Dan posts to a sent email's thread, that's
 // a reply, and the prospect's outcome becomes .replied (source auto) — one of the two
 // automatic outcome signals. Pure parse + decision here; manual outcomes stay sticky.
@@ -53,13 +56,12 @@ struct ReplyDetectionTests {
     }
 
     @Test func parsesFromHeadersOutOfAGmailThreadResponse() {
-        let json = #"""
-        {"messages":[
-          {"payload":{"headers":[{"name":"To","value":"x"},{"name":"From","value":"Dan <dan@danwrightphotography.com>"}]}},
-          {"payload":{"headers":[{"name":"From","value":"emma@icchoir.org"}]}}
-        ]}
-        """#
-        let froms = ReplyDetection.fromAddresses(threadJSON: Data(json.utf8))
+        // #2928: through the one builder, so this reads the same real shape every other fixture does.
+        let json = GmailFixture(selfEmail: me).thread([
+            .init(from: "Dan <dan@danwrightphotography.com>", to: "x"),
+            .init(from: "emma@icchoir.org"),
+        ])
+        let froms = ReplyDetection.fromAddresses(threadJSON: json)
         #expect(froms.count == 2)
         #expect(ReplyDetection.hasReply(fromAddresses: froms, selfEmail: me) == true)
     }
@@ -105,8 +107,10 @@ struct ReplyServiceTests {
         return r
     }
 
-    private let replyThread = Data(#"{"messages":[{"payload":{"headers":[{"name":"From","value":"dan@danwrightphotography.com"}]}},{"payload":{"headers":[{"name":"From","value":"them@org.org"}]}}]}"#.utf8)
-    private let noReplyThread = Data(#"{"messages":[{"payload":{"headers":[{"name":"From","value":"dan@danwrightphotography.com"}]}}]}"#.utf8)
+    // #2928: one builder, real shape by default.
+    private let replyThread = replyDetectionGmail.thread([.init(from: "dan@danwrightphotography.com"),
+                                                          .init(from: "them@org.org")])
+    private let noReplyThread = replyDetectionGmail.thread([.init(from: "dan@danwrightphotography.com")])
 
     @Test func marksRepliedWhenThreadHasAReply() throws {
         let ctx = ModelContext(try container())
@@ -192,8 +196,8 @@ struct ReplyServiceTests {
     @Test func capturesReplyBodyAndTimeOnTheContactForClassify() throws {
         let ctx = ModelContext(try container())
         let p = make(ctx, group: "Show", threadId: "t1", sentAt: Date())
-        // "WWVz" is base64url for "Yes"; a valid text/plain part so latestReplyBody returns it.
-        let full = Data(#"{"messages":[{"payload":{"headers":[{"name":"From","value":"them@org.org"}],"mimeType":"text/plain","body":{"data":"WWVz"}}}]}"#.utf8)
+        // A text/plain part, base64url encoded by the builder, so latestReplyBody returns it.
+        let full = replyDetectionGmail.thread([.init(from: "them@org.org", text: "Yes")])
         _ = ReplyService.detectReplies(in: [p], selfEmail: "dan@danwrightphotography.com",
                                        now: Date(timeIntervalSince1970: 50),
                                        fetchThread: { _ in self.replyThread },

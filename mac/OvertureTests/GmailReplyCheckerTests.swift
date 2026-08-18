@@ -2,6 +2,9 @@ import Testing
 import Foundation
 import SwiftData
 
+// #2928: the one Gmail fixture builder, at file scope so the nonisolated fetch closures can read it.
+private let replyCheckerGmail = GmailFixture(selfEmail: "dan@danwrightphotography.com")
+
 // #84: marking a sent prospect .replied off a real thread response is now testable through an
 // injected fetch (no network, no live token), driving the tested ReplyService/ReplyDetection.
 @MainActor
@@ -35,12 +38,8 @@ struct GmailReplyCheckerTests {
 
     // A Gmail threads.get metadata response whose only inbound From is `from`.
     private func threadFetch(from: String) -> (URLRequest) async throws -> (Data, URLResponse) {
-        let json = #"{"messages":[{"payload":{"headers":[{"name":"From","value":""#
-            + from + #""}]}}]}"#
-        return { req in
-            (Data(json.utf8),
-             HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
-        }
+        let messages = [GmailFixture.Message(from: from)]
+        return { req in replyCheckerGmail.respond(to: req, thread: messages) }
     }
 
     @Test func marksRepliedWhenSomeoneElseRepliesOnTheThread() async throws {
@@ -60,17 +59,10 @@ struct GmailReplyCheckerTests {
     // the body for the format=full request. Proves the checker full-fetches the replied thread and
     // captures the body.
     private func twoPhaseFetch(from: String, body: String) -> (URLRequest) async throws -> (Data, URLResponse) {
-        let meta = #"{"messages":[{"payload":{"headers":[{"name":"From","value":""# + from + #""}]}}]}"#
-        let b64 = Data(body.utf8).base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
-        let full = #"{"messages":[{"payload":{"headers":[{"name":"From","value":""# + from
-            + #""}],"mimeType":"text/plain","body":{"data":""# + b64 + #""}}}]}"#
-        return { req in
-            let isFull = req.url?.absoluteString.contains("format=full") == true
-            return (Data((isFull ? full : meta).utf8),
-                    HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
-        }
+        // #2928: one fixture answering BOTH formats, honouring the request the way Gmail does, so the
+        // metadata call gets no body and only the headers it asked for.
+        let messages = [GmailFixture.Message(from: from, text: body)]
+        return { req in replyCheckerGmail.respond(to: req, thread: messages) }
     }
 
     @Test func capturesTheReplyBodyViaTheTwoPhaseFetch() async throws {
@@ -113,14 +105,8 @@ struct GmailReplyCheckerTests {
     }
 
     private func bounceThreadFetch(from: String, subject: String) -> (URLRequest) async throws -> (Data, URLResponse) {
-        let json = #"{"messages":[{"id":"bounce-1","payload":{"headers":["#
-            + #"{"name":"From","value":""# + from + #""},"#
-            + #"{"name":"Subject","value":""# + subject + #""}"#
-            + #"]}}]}"#
-        return { req in
-            (Data(json.utf8),
-             HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
-        }
+        let messages = [GmailFixture.Message(from: from, subject: subject, id: "bounce-1")]
+        return { req in replyCheckerGmail.respond(to: req, thread: messages) }
     }
 
     // #398: a hard bounce on the recipient's own thread marks it bounced, auto-sourced so Dan's

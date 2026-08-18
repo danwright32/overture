@@ -1,6 +1,9 @@
 import Testing
 import Foundation
 
+
+// #2928: the one Gmail fixture builder, at file scope.
+private let sharedThreadGmail = GmailFixture(selfEmail: "dan@danwrightphotography.com")
 // #2032. Once one email can reach two people (#2031), a Gmail thread can carry more than one contact,
 // and the two things watched on a thread stop being the same KIND of fact.
 //
@@ -45,25 +48,17 @@ struct SharedThreadReplyAndBounceTests {
     }
 
     private static func replyJSON(from: String, id: String = "r-1", text: String = "Sounds good") -> Data {
-        Data("""
-        {"messages":[
-          {"id":"m-0","internalDate":"100","payload":{"headers":[
-            {"name":"From","value":"dan@danwrightphotography.com"}]}},
-          {"id":"\(id)","internalDate":"200","payload":{"headers":[
-            {"name":"From","value":"\(from)"}],
-            "body":{"data":"\(Data(text.utf8).base64EncodedString().replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: ""))"},
-            "mimeType":"text/plain"}}
-        ]}
-        """.utf8)
+        sharedThreadGmail.thread([
+            .init(from: "dan@danwrightphotography.com", id: "m-0", internalDateMillis: 100),
+            .init(from: from, id: id, internalDateMillis: 200, text: text),
+        ])
     }
 
     private static func hardBounceJSON(id: String = "bounce-1") -> Data {
-        Data("""
-        {"messages":[{"id":"\(id)","internalDate":"200","payload":{"headers":[
-          {"name":"From","value":"mailer-daemon@googlemail.com"},
-          {"name":"Subject","value":"Delivery Status Notification (Failure)"}
-        ]}}]}
-        """.utf8)
+        sharedThreadGmail.thread([
+            .init(from: "mailer-daemon@googlemail.com",
+                  subject: "Delivery Status Notification (Failure)", id: id, internalDateMillis: 200),
+        ])
     }
 
     private static let me = "dan@danwrightphotography.com"

@@ -1,6 +1,9 @@
 import Testing
 import Foundation
 
+// #2928: the one Gmail fixture builder, at file scope.
+private let replyBodyGmail = GmailFixture(selfEmail: "dan@danwrightphotography.com")
+
 // Extracting the latest inbound reply's text from a Gmail threads.get (format=full) response (#181),
 // so the reply can be handed to the classify workflow (#112). Forgiving by design: prefer text/plain,
 // fall back to HTML stripped, decode base64url, cap length, and leave residual quoted history for the
@@ -9,23 +12,14 @@ import Foundation
 struct ReplyBodyTests {
     private let me = "dan@danwrightphotography.com"
 
-    // Gmail base64url: URL-safe alphabet, no padding (what the API returns in body.data).
-    private func b64url(_ text: String) -> String {
-        Data(text.utf8).base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
-    }
-
-    // A threads.get JSON with the given messages, each a (from, mimeType, text). Single-part bodies;
-    // the multipart helper below builds the alternative case.
+    // #2928: every fixture here comes from the one builder, which base64url-encodes the body the way
+    // Gmail does and carries `labelIds`, `id`, `threadId` and `internalDate` on every message.
     private func thread(_ messages: [(from: String, mime: String, text: String)]) -> Data {
-        let msgs = messages.map { m in
-            """
-            {"payload":{"headers":[{"name":"From","value":"\(m.from)"}],"mimeType":"\(m.mime)","body":{"data":"\(b64url(m.text))"}}}
-            """
-        }.joined(separator: ",")
-        return Data("{\"messages\":[\(msgs)]}".utf8)
+        replyBodyGmail.thread(messages.map { m in
+            m.mime == "text/html"
+                ? GmailFixture.Message(from: m.from, html: m.text)
+                : GmailFixture.Message(from: m.from, text: m.text)
+        })
     }
 
     @Test func extractsAPlainTextReply() {
@@ -35,12 +29,11 @@ struct ReplyBodyTests {
     }
 
     @Test func prefersThePlainTextPartOfAMultipartReply() {
-        let plain = b64url("The plain part.")
-        let html = b64url("<p>The HTML part.</p>")
-        let json = """
-        {"messages":[{"payload":{"headers":[{"name":"From","value":"emma@org.example"}],"mimeType":"multipart/alternative","parts":[{"mimeType":"text/plain","body":{"data":"\(plain)"}},{"mimeType":"text/html","body":{"data":"\(html)"}}]}}]}
-        """
-        #expect(ReplyDetection.latestReplyBody(threadJSON: Data(json.utf8), selfEmail: me) == "The plain part.")
+        // Both parts present is what the builder produces for a message given text AND html.
+        let json = replyBodyGmail.thread([
+            .init(from: "emma@org.example", text: "The plain part.", html: "<p>The HTML part.</p>"),
+        ])
+        #expect(ReplyDetection.latestReplyBody(threadJSON: json, selfEmail: me) == "The plain part.")
     }
 
     @Test func fallsBackToStrippedHtmlWhenNoPlainPart() {
@@ -62,15 +55,11 @@ struct ReplyBodyTests {
     // the opposite of the usual oldest-first shape, so picking by position would return the
     // older text instead of the newer one.
     @Test func picksTheNewestInboundMessageByInternalDateNotArrayPosition() {
-        let newer = b64url("Newest, by date.")
-        let older = b64url("Older, by date.")
-        let json = """
-        {"messages":[
-          {"internalDate":"3000","payload":{"headers":[{"name":"From","value":"emma@org.example"}],"mimeType":"text/plain","body":{"data":"\(newer)"}}},
-          {"internalDate":"2000","payload":{"headers":[{"name":"From","value":"emma@org.example"}],"mimeType":"text/plain","body":{"data":"\(older)"}}}
-        ]}
-        """
-        #expect(ReplyDetection.latestReplyBody(threadJSON: Data(json.utf8), selfEmail: me) == "Newest, by date.")
+        let json = replyBodyGmail.thread([
+            .init(from: "emma@org.example", internalDateMillis: 3000, text: "Newest, by date."),
+            .init(from: "emma@org.example", internalDateMillis: 2000, text: "Older, by date."),
+        ])
+        #expect(ReplyDetection.latestReplyBody(threadJSON: json, selfEmail: me) == "Newest, by date.")
     }
 
     @Test func skipsAutomatedSendersAndReturnsNilWhenNoRealReply() {

@@ -2,6 +2,9 @@ import Testing
 import Foundation
 import SwiftData
 
+
+// #2928: the one Gmail fixture builder, at file scope.
+private let replyWatchReadFailureGmail = GmailFixture(selfEmail: "dan@danwrightphotography.com")
 // #2741: a Gmail read that FAILED used to be indistinguishable from a conversation nobody answered.
 //
 // `fetchThread` returned nil for every non-200 and every thrown error alike, its callers omitted that
@@ -41,11 +44,8 @@ struct ReplyWatchReadFailureTests {
     }
 
     private func replying(from: String) -> (URLRequest) async throws -> (Data, URLResponse) {
-        let json = #"{"messages":[{"payload":{"headers":[{"name":"From","value":""# + from + #""}]}}]}"#
-        return { req in
-            (Data(json.utf8), HTTPURLResponse(url: req.url!, statusCode: 200,
-                                              httpVersion: nil, headerFields: nil)!)
-        }
+        let messages = [GmailFixture.Message(from: from)]
+        return { req in replyWatchReadFailureGmail.respond(to: req, thread: messages) }
     }
 
     private func refusing(status: Int) -> (URLRequest) async throws -> (Data, URLResponse) {
@@ -126,9 +126,10 @@ struct ReplyWatchReadFailureTests {
             .markReplies(in: ctx, token: "tok", now: Date()) { req in
                 seen += 1
                 let status = seen == 1 ? 429 : 200
-                let json = #"{"messages":[{"payload":{"headers":[{"name":"From","value":"dan@danwrightphotography.com"}]}}]}"#
-                return (Data(json.utf8), HTTPURLResponse(url: req.url!, statusCode: status,
-                                                         httpVersion: nil, headerFields: nil)!)
+                let json = replyWatchReadFailureGmail
+                    .thread([.init(from: "dan@danwrightphotography.com")])
+                return (json, HTTPURLResponse(url: req.url!, statusCode: status,
+                                              httpVersion: nil, headerFields: nil)!)
             }
 
         #expect(outcome.threadsChecked == 3)

@@ -2,6 +2,9 @@ import Testing
 import Foundation
 import SwiftData
 
+
+// #2928: the one Gmail fixture builder, at file scope.
+private let threadingRepairGmail = GmailFixture(selfEmail: "dan@danwrightphotography.com")
 // #2649: #2647 fixed what Overture STORES from the next send onward. It did not touch what is already in
 // the store, so every `gmailMessageId` written by a past send is an `@danwrightphotography.com` id Gmail
 // discarded, and the next follow-up on each of those live conversations would still ship a dangling
@@ -53,18 +56,12 @@ struct GmailThreadingRepairTests {
     // One Gmail thread as the API returns it for `format=metadata`. `internalDate` is what orders the
     // messages, deliberately, rather than their position in the array.
     //
-    // #2918: with `labelIds`, which Gmail returns on every message and which says whether it was really
-    // sent or is still an unsent draft. The repair now refuses to reference a message that claims
-    // nothing about having been sent, so a fixture that omits the field is not the thread it means.
+    // #2918 put `labelIds` on these: the repair refuses to reference a message that claims nothing about
+    // having been sent. #2928 moved the shape into `GmailFixture`.
     private func threadJSON(_ messages: [(from: String, messageId: String?, at: Int64)]) -> Data {
-        let payloads: [[String: Any]] = messages.map { m in
-            var headers: [[String: Any]] = [["name": "From", "value": m.from]]
-            if let id = m.messageId { headers.append(["name": "Message-ID", "value": id]) }
-            let mine = ReplyDetection.email(from: m.from) == ReplyDetection.email(from: me)
-            return ["internalDate": "\(m.at)", "labelIds": mine ? ["SENT"] : ["INBOX"],
-                    "payload": ["headers": headers]]
-        }
-        return try! JSONSerialization.data(withJSONObject: ["messages": payloads])
+        threadingRepairGmail.thread(messages.map { m in
+            .init(from: m.from, messageID: m.messageId, internalDateMillis: m.at)
+        })
     }
 
     private func responder(_ body: @escaping (URLRequest) -> (Data, Int))

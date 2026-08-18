@@ -1,6 +1,10 @@
 import Testing
 import Foundation
+
 import SwiftData
+
+// #2928: the one Gmail fixture builder, at file scope.
+private let answersTheirMessageGmail = GmailFixture(selfEmail: "dwright@danwrightphotography.com")
 
 // #2653: Dan's approved reply threaded off `recipient.gmailMessageId`, which is the id of OVERTURE'S OWN
 // last outgoing message, not the id of the message being answered.
@@ -27,19 +31,12 @@ struct ReplyAnswersTheirMessageTests {
 
     // A Gmail thread as the API returns it: Dan's send, then their answer.
     private func thread(theirMessageID: String = "<theirs@example.com>") -> Data {
-        let json = """
-        {"messages": [
-          {"internalDate": "1000",
-           "payload": {"headers": [
-             {"name": "From", "value": "Dan Wright <dwright@danwrightphotography.com>"},
-             {"name": "Message-ID", "value": "<ours@mail.gmail.com>"}]}},
-          {"internalDate": "2000",
-           "payload": {"headers": [
-             {"name": "From", "value": "Nora Vance <nora@example.com>"},
-             {"name": "Message-ID", "value": "\(theirMessageID)"}]}}
-        ]}
-        """
-        return Data(json.utf8)
+        answersTheirMessageGmail.thread([
+            .init(from: "Dan Wright <dwright@danwrightphotography.com>",
+                  messageID: "<ours@mail.gmail.com>", internalDateMillis: 1000),
+            .init(from: "Nora Vance <nora@example.com>", messageID: theirMessageID,
+                  internalDateMillis: 2000),
+        ])
     }
 
     private let me = "dwright@danwrightphotography.com"
@@ -57,21 +54,19 @@ struct ReplyAnswersTheirMessageTests {
     // Dan's own message is never the answer, whichever way round the thread arrives, or the fix would
     // reintroduce the defect by a different route.
     @Test func aThreadWithNothingButDansOwnMessagesNamesNoReply() {
-        let onlyMine = Data("""
-        {"messages": [{"internalDate": "1000", "payload": {"headers": [
-          {"name": "From", "value": "dwright@danwrightphotography.com"},
-          {"name": "Message-ID", "value": "<ours@mail.gmail.com>"}]}}]}
-        """.utf8)
+        let onlyMine = answersTheirMessageGmail.thread([
+            .init(from: "dwright@danwrightphotography.com", messageID: "<ours@mail.gmail.com>",
+                  internalDateMillis: 1000),
+        ])
         #expect(ReplyDetection.latestReplyMessageID(threadJSON: onlyMine, selfEmail: me) == nil)
     }
 
     // A reply that carries no Message-ID at all reads as nil rather than as an empty string, so the
     // caller can tell "not known" from a value and fall back rather than emitting an empty header.
     @Test func aReplyWithNoMessageIdHeaderNamesNothing() {
-        let noID = Data("""
-        {"messages": [{"internalDate": "2000", "payload": {"headers": [
-          {"name": "From", "value": "nora@example.com"}]}}]}
-        """.utf8)
+        let noID = answersTheirMessageGmail.thread([
+            .init(from: "nora@example.com", internalDateMillis: 2000),
+        ])
         #expect(ReplyDetection.latestReplyMessageID(threadJSON: noID, selfEmail: me) == nil)
     }
 

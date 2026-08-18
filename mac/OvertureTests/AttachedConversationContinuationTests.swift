@@ -2,6 +2,9 @@ import Testing
 import Foundation
 import SwiftData
 
+
+// #2928: the one Gmail fixture builder, at file scope.
+private let continuationGmail = GmailFixture(selfEmail: "dan@danwrightphotography.com")
 // #2796: `AttachedConversation.refusalToContinue` had no caller anywhere in the shipping app, so #2717's
 // refusal was built and unwired, and an unwired guard is indistinguishable from no guard (L3).
 //
@@ -273,13 +276,10 @@ struct AttachedConversationContinuationTests {
     // confirm an assumption about an interface nobody read (L52).
     private func headerlessInboundThread() -> Data {
         let at = Int64(now.timeIntervalSince1970) - 3600
-        let payload: [String: Any] = [
-            "id": "msg-1",
-            "internalDate": "\(at * 1000)",
-            "payload": ["headers": [["name": "From", "value": "Priya Raman <\(them)>"],
-                                    ["name": "Subject", "value": "Photography for our spring gala"]]]
-        ]
-        return try! JSONSerialization.data(withJSONObject: ["messages": [payload]])
+        return continuationGmail.thread([
+            .init(from: "Priya Raman <\(them)>", subject: "Photography for our spring gala",
+                  id: "msg-1", internalDateMillis: at * 1000),
+        ])
     }
 }
 
