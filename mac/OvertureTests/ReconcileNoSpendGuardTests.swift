@@ -86,7 +86,7 @@ struct ReconcileNoSpendGuardTests {
         #expect(PrepQueueBuilder.needsPrepEligible(p))   // precondition: it WOULD be picked up by a Prep run
         #expect(r.intentHint == nil)                     // precondition: the reply is unread by the model
 
-        let scheduler = ReconcileScheduler(context: ctx)
+        let scheduler = ReconcileScheduler(context: ctx, replyRunAlive: { _ in false })
         _ = await scheduler.runSafeReconcilesOnce(now: Date(timeIntervalSince1970: 4_000_000_000))
 
         // The tick drafted nothing: the prospect is still kept-and-undrafted, still awaiting a Prep run.

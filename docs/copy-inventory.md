@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1413 sentences**.
+Every sentence Overture can say to Dan: **1417 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -233,6 +233,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
 - "View in Archive"
   - `UI/FollowUpsView.swift`
   - `UI/FollowUpsView.swift`
+  - `UI/FollowUpsView.swift`
 - "Voice guidance"
   - `App/RootView.swift`
   - `UI/VoiceGuidanceView.swift`
@@ -272,6 +273,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
 - "no contact"
   - `Domain/FollowUp.swift`
   - `Domain/ReplyIdentity.swift`
+  - `UI/FollowUpsView.swift`
   - `UI/FollowUpsView.swift`
 - "show is"
   - `Domain/ProbeSelection.swift`
@@ -426,6 +428,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/Reachability.swift`
 "A reachability check on another \(organisation) show found this contact, so this show didn't need checking again."
     `Domain/Reachability.swift`
+"A reply draft that stalls before it arrives appears here too."
+    `Domain/StalledReplyDraft.swift`
 "A reply drafting run finished, but Overture couldn't read what it wrote, so no draft was saved (\(reason)). The file it wrote is still on disk, as overture-reply-classify-results.json."
     `Domain/ReplyClassifyRunSummary.swift`
 "A reply-classify run is already in progress. Wait for it to finish."
@@ -756,6 +760,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AppNotice.swift`
 "Draft a reply"
     `UI/ReplyConversationView.swift`
+"Draft it again"
+    `Domain/StalledReplyDraft.swift`
 "Draft with AI"
     `Domain/ReplyPanel.swift`
 "Drafted by \(name)"
@@ -1290,8 +1296,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DraftReviewNotes.swift`
 "Nothing scouted yet"
     `Domain/EmptyState.swift`
-"Nothing to act on. Shows you've emailed appear here for a gentle follow-up, and again once the date has passed so you can close them out. They drop off the moment you record how one ended."
-    `UI/FollowUpsView.swift`
+"Nothing to act on. Shows you've emailed appear here for a gentle follow-up, and again once the date has passed so you can close them out; they drop off the moment you record how one ended."
+    `Domain/EmptyState.swift`
 "Nothing to prep yet"
     `Domain/StageEmptyState.swift`
 "Nothing to review"
@@ -1900,6 +1906,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceAttention.swift`
 "Sources you stopped watching."
     `Domain/SourceGrade.swift`
+"Stalled reply drafts"
+    `Domain/StalledReplyDraft.swift`
 "Start a new experiment"
     `UI/ExperimentReportView.swift`
 "Start at login"
@@ -2374,6 +2382,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SelfBookingConflict.swift`
 "You already watch \(org) at that address."
     `UI/SourceFixConfirmActions.swift`
+"You asked for this reply draft \(ago(requestedAt, now: now)) and it never arrived."
+    `Domain/StalledReplyDraft.swift`
 "You blocked \(day) (\(name))."
     `Domain/BlockedCalendar.swift`
 "You blocked \(day)."

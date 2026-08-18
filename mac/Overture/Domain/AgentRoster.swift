@@ -99,9 +99,12 @@ extension AgentInputs {
             gmailConnected: gmailConnected,
             sendErrors: count(.sendErrors),
             followUpsDue: FollowUp.dueRecipients(from: prospects, now: context.now).count,
-            stalledReplyDrafts: prospects.reduce(0) { sum, p in
-                sum + p.recipients.filter { $0.isReplyDraftStalled(now: context.now, runAlive: replyRunAlive) }.count
-            },
+            // #2878/#2828: the SAME function FollowUpsView builds its "Stalled reply drafts" section
+            // from, so the number on this pill and the rows behind it cannot answer differently. It used
+            // to sweep the recipients here for itself, and the sheet swept nothing at all, so the pill
+            // said "1 reply draft stalled" and the sheet said "Due 0" over an empty state (L16).
+            stalledReplyDrafts: StalledReplyDraft.dueRecipients(from: prospects, now: context.now,
+                                                                runAlive: replyRunAlive).count,
             stuckSends: count(.sendStuck),
             degradedReplyTracking: count(.sendDegraded),
             degradedThreading: count(.sendThreadingDegraded),
@@ -380,9 +383,15 @@ enum AgentRoster {
 
     private static func shows(_ n: Int) -> String { Plural.word(n, "show") }   // #885: one pluralizer
 
-    // #863: the one pill exempt from "the number equals the rows you land on", because it does not land
-    // Dan on rows at all: it opens FollowUpsView, which lists the due RECIPIENTS. So a recipient count is
-    // the honest one here, and .followUps deliberately resolves no queue keys.
+    // #863: exempt from `StageNavigation`'s half of "the number equals the rows you land on", because it
+    // does not land Dan on queue rows at all: it opens FollowUpsView, which lists the due RECIPIENTS. So
+    // a recipient count is the honest one here, and .followUps deliberately resolves no queue keys.
+    //
+    // #2878/#2828: that exemption is about the GRAIN, and it was read as an exemption from the promise
+    // itself. It is not. The count still has to equal the rows the SHEET renders, and the stalled branch
+    // below did not: nothing anywhere listed a stalled reply draft, so the pill named a number over an
+    // empty screen. `StalledReplyDraftSectionTests` is the Follow-ups half of the guard
+    // `StagePillCountMatchesNavigationTests` holds for every other pill.
     private static func followUps(_ i: AgentInputs) -> AgentStatus {
         // A dead reply-drafter run takes priority: it's an abnormal stall Dan should clear (#431).
         if i.stalledReplyDrafts > 0 {

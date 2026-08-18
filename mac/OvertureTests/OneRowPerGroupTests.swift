@@ -76,7 +76,7 @@ struct OneRowPerGroupTests {
             r.repliedAt = daysAgo(1)
         }
         // One post-event prompt for the show, not one per contact on the shared email.
-        #expect(DueWork.counts(prospects: [p], now: now).afterTheShow == 1)
+        #expect(DueWork.counts(prospects: [p], now: now, replyRunAlive: false).afterTheShow == 1)
     }
 
     // MARK: the work a naive collapse would delete

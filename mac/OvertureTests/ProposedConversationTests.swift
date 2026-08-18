@@ -269,10 +269,10 @@ struct ProposedConversationTests {
         let ctx = ModelContext(try container())
         let p = show(ctx)
         let r = formPitch(ctx, on: p)
-        let before = DueWork.counts(prospects: [p], now: now)
+        let before = DueWork.counts(prospects: [p], now: now, replyRunAlive: false)
         ProposedConversation.propose(candidate("m1"), on: r, now: now)
 
-        let after = DueWork.counts(prospects: [p], now: now)
+        let after = DueWork.counts(prospects: [p], now: now, replyRunAlive: false)
 
         #expect(after.conversationsToConfirm == before.conversationsToConfirm + 1)
         #expect(after.total == before.total + 1)
@@ -287,7 +287,7 @@ struct ProposedConversationTests {
 
         ProposedConversation.decline(on: r)
 
-        #expect(DueWork.counts(prospects: [p], now: now).conversationsToConfirm == 0)
+        #expect(DueWork.counts(prospects: [p], now: now, replyRunAlive: false).conversationsToConfirm == 0)
     }
 
     // The count and the rows it promises come from ONE shared predicate, so the pill and the list it
@@ -301,7 +301,7 @@ struct ProposedConversationTests {
         formPitch(ctx, on: c)
 
         let rows = ProposedConversation.dueRecipients(from: [a, b, c])
-        let count = DueWork.counts(prospects: [a, b, c], now: now).conversationsToConfirm
+        let count = DueWork.counts(prospects: [a, b, c], now: now, replyRunAlive: false).conversationsToConfirm
 
         #expect(rows.count == count)
         #expect(Set(rows.map(\.prospect.naturalKey)) == ["a", "b"])

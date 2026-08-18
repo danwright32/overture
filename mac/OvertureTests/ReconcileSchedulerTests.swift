@@ -71,7 +71,7 @@ struct ReconcileSchedulerTests {
         try ctx.save()
 
         let fake = CapturingOmniFocusClient()
-        let scheduler = ReconcileScheduler(context: ctx)
+        let scheduler = ReconcileScheduler(context: ctx, replyRunAlive: { _ in false })
         // #268: inject granted permission so this exercises the apply path (the real silent probe would
         // skip under the test host); the gating decision itself is covered by OmniFocusSyncRunnerTests.
         scheduler.syncOmniFocus(now: now, client: fake, horizonDays: 14,
@@ -85,7 +85,7 @@ struct ReconcileSchedulerTests {
         let defaults = freshDefaults()
         OmniFocusSyncStatus.recordFailure("stale", at: Date(timeIntervalSince1970: 1), into: defaults)
 
-        let scheduler = ReconcileScheduler(context: ctx)
+        let scheduler = ReconcileScheduler(context: ctx, replyRunAlive: { _ in false })
         scheduler.syncOmniFocus(now: Date(timeIntervalSince1970: 100),
                                 client: CapturingOmniFocusClient(), horizonDays: 14,
                                 permission: .granted, notifier: NoopNotifier(), statusDefaults: defaults)
@@ -96,7 +96,7 @@ struct ReconcileSchedulerTests {
     // #301/#308: the while-away alert threads the new leads' keys onto the notification so a tap deep-
     // links — to the sole lead when one is new, and to the filtered set when several are.
     @Test func whileAwayAlertCarriesTheDeepLinkKeyForASoleNewLead() {
-        let scheduler = ReconcileScheduler(context: ModelContext(try! container()))
+        let scheduler = ReconcileScheduler(context: ModelContext(try! container()), replyRunAlive: { _ in false })
         var captured: (body: String, keys: [String])?
         scheduler.notifyIfNewWhileAway(
             ReconcileSummary(omniFocusChanged: 0, newReplies: ["Carnegie Hall"], newReplyKeys: ["carnegie|2026|hall"]),
@@ -105,7 +105,7 @@ struct ReconcileSchedulerTests {
     }
 
     @Test func whileAwayAlertCarriesEveryNewKeyWhenSeveralLeadsAreNew() {
-        let scheduler = ReconcileScheduler(context: ModelContext(try! container()))
+        let scheduler = ReconcileScheduler(context: ModelContext(try! container()), replyRunAlive: { _ in false })
         var captured: (body: String, keys: [String])?
         scheduler.notifyIfNewWhileAway(
             ReconcileSummary(omniFocusChanged: 0, newReplies: ["A", "B"], newReplyKeys: ["a|2026|v", "b|2026|v"]),
@@ -146,7 +146,7 @@ struct ReconcileSchedulerTests {
                 ctx.insert(p)
             },
             body: { ctx in
-                let scheduler = ReconcileScheduler(context: ctx)
+                let scheduler = ReconcileScheduler(context: ctx, replyRunAlive: { _ in false })
                 return scheduler.reconcileBookings(now: Date(), from: exportURL)
             })
 
@@ -184,7 +184,7 @@ struct ReconcileSchedulerTests {
         try ctx.save()
         #expect(p.hasUnclearedConflict == false)   // the scout ran before the booking existed
 
-        let scheduler = ReconcileScheduler(context: ctx)
+        let scheduler = ReconcileScheduler(context: ctx, replyRunAlive: { _ in false })
         scheduler.reapplyConflicts(now: Date(), from: exportURL)
 
         #expect(p.hasUnclearedConflict)                                          // flagged, no scout needed
@@ -211,7 +211,7 @@ struct ReconcileSchedulerTests {
                          status: .queued)
         ctx.insert(p)
         try ctx.save()
-        let scheduler = ReconcileScheduler(context: ctx)
+        let scheduler = ReconcileScheduler(context: ctx, replyRunAlive: { _ in false })
 
         // A booking on the show's night flags it.
         try """
@@ -241,7 +241,7 @@ struct ReconcileSchedulerTests {
     @Test func aTickStampsTheWatchHeartbeat() async throws {
         let ctx = ModelContext(try container())
         let defaults = freshDefaults()
-        let scheduler = ReconcileScheduler(context: ctx)
+        let scheduler = ReconcileScheduler(context: ctx, replyRunAlive: { _ in false })
         let now = Date(timeIntervalSince1970: 1_700_000_000)
 
         await scheduler.runSafeReconcilesOnce(now: now, defaults: defaults,
@@ -258,7 +258,7 @@ struct ReconcileSchedulerTests {
     @Test func aTickResumingAfterASilenceRecordsIt() async throws {
         let ctx = ModelContext(try container())
         let defaults = freshDefaults()
-        let scheduler = ReconcileScheduler(context: ctx)
+        let scheduler = ReconcileScheduler(context: ctx, replyRunAlive: { _ in false })
         let before = Date(timeIntervalSince1970: 1_700_000_000)
         await scheduler.runSafeReconcilesOnce(now: before, defaults: defaults,
                                               watchReadings: liveSince(before))
@@ -284,7 +284,7 @@ struct ReconcileSchedulerTests {
     @Test func aTickAfterTheProcessWasGoneRecordsThatInstead() async throws {
         let ctx = ModelContext(try container())
         let defaults = freshDefaults()
-        let scheduler = ReconcileScheduler(context: ctx)
+        let scheduler = ReconcileScheduler(context: ctx, replyRunAlive: { _ in false })
         let before = Date(timeIntervalSince1970: 1_700_000_000)
         await scheduler.runSafeReconcilesOnce(now: before, defaults: defaults,
                                               watchReadings: liveSince(before))
@@ -308,7 +308,7 @@ struct ReconcileSchedulerTests {
     @Test func aTickAfterTheMacSleptRecordsNoSilence() async throws {
         let ctx = ModelContext(try container())
         let defaults = freshDefaults()
-        let scheduler = ReconcileScheduler(context: ctx)
+        let scheduler = ReconcileScheduler(context: ctx, replyRunAlive: { _ in false })
         let before = Date(timeIntervalSince1970: 1_700_000_000)
         await scheduler.runSafeReconcilesOnce(now: before, defaults: defaults,
                                               watchReadings: liveSince(before))

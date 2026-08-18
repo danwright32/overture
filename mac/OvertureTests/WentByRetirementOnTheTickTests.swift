@@ -44,7 +44,7 @@ struct WentByRetirementOnTheTickTests {
     @Test func aShowThatOpensBetweenTicksIsRetiredWithoutARelaunch() throws {
         let ctx = try context()
         let show = untriaged(ctx, "opens-during-the-session", date: openingNight)
-        let scheduler = ReconcileScheduler(context: ctx)
+        let scheduler = ReconcileScheduler(context: ctx, replyRunAlive: { _ in false })
 
         // An earlier tick, while it was still ahead: not Overture's to take.
         #expect(scheduler.retireShowsThatOpened(now: before).count == 0)
@@ -63,7 +63,7 @@ struct WentByRetirementOnTheTickTests {
         let ctx = try context()
         let show = untriaged(ctx, "future", date: openingNight)
 
-        _ = ReconcileScheduler(context: ctx).retireShowsThatOpened(now: before)
+        _ = ReconcileScheduler(context: ctx, replyRunAlive: { _ in false }).retireShowsThatOpened(now: before)
 
         #expect(show.status == .new, "a tick dated before the opening must not retire it")
     }
@@ -76,7 +76,7 @@ struct WentByRetirementOnTheTickTests {
         untriaged(ctx, "future", date: openingNight)
         untriaged(ctx, "undated", date: nil)
 
-        let result = ReconcileScheduler(context: ctx).retireShowsThatOpened(now: before)
+        let result = ReconcileScheduler(context: ctx, replyRunAlive: { _ in false }).retireShowsThatOpened(now: before)
 
         #expect(result.count == 0)
         #expect(result.saveFailed == false)
@@ -91,7 +91,7 @@ struct WentByRetirementOnTheTickTests {
         let ctx = try context()
         let show = untriaged(ctx, "opened", date: openingNight)
 
-        let result = ReconcileScheduler(context: ctx)
+        let result = ReconcileScheduler(context: ctx, replyRunAlive: { _ in false })
             .retireShowsThatOpened(now: after, save: { throw StoreRefused() })
 
         #expect(result.count == 1, "it still says what it did, so the count is not lost with the save")
@@ -109,7 +109,7 @@ struct WentByRetirementOnTheTickTests {
         let show = untriaged(ctx, "ticked-\(UUID().uuidString)", date: openingNight)
         try ctx.save()
 
-        _ = await ReconcileScheduler(context: ctx).runSafeReconcilesOnce(now: after)
+        _ = await ReconcileScheduler(context: ctx, replyRunAlive: { _ in false }).runSafeReconcilesOnce(now: after)
 
         #expect(show.status == .dismissed)
         #expect(show.showOutcome == .wentBy)

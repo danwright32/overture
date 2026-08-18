@@ -37,7 +37,7 @@ struct FollowUpsView: View {
     // within. The recipient reveal below scrolls by a different identity (the contact's id), so this is
     // cleared when a reveal starts, letting proxy.scrollTo own that jump. Its own identity, not the
     // section's display title, so the scroll wiring never becomes a second copy of that copy (#843).
-    private enum ScrollSection: Hashable { case afterTheShow, silent }
+    private enum ScrollSection: Hashable { case afterTheShow, silent, stalledReplyDrafts }
     @State private var topSection: ScrollSection?
 
     // #948: each pending send now carries the branded SendConfirmation the shared SendConfirmSheet
@@ -48,16 +48,15 @@ struct FollowUpsView: View {
         let confirmation: SendConfirmation
     }
 
-    private var due: [FollowUp.DueRecipient] {
-        FollowUp.dueRecipients(from: prospects, now: Date())
-            .sorted { ($0.recipient.sentAt ?? .distantPast) < ($1.recipient.sentAt ?? .distantPast) }
-    }
-
-    // #2397: the post-event prompts, already ordered by urgency then soonest event in
-    // PostEventPrompt.dueRecipients. The conversation-state chase that used to fill this section is
-    // retired along with the states it chased; what is left is triggered by the show's DATE.
-    private var postEventDue: [PostEventPrompt.DueRecipient] {
-        PostEventPrompt.dueRecipients(from: prospects, now: Date())
+    // #2878/#2828: every row this sheet renders, from the ONE place that also produces the number its
+    // header states and the number the pill that opens it states. The three lists used to be derived
+    // here, in a view body no test can reach, which is how a fourth thing (a stalled reply draft) could
+    // be counted by the pill while this sheet listed nothing at all (L16, #863).
+    //
+    // #2397: the post-event prompts arrive already ordered by urgency then soonest event, and the silent
+    // follow-ups oldest pitch first; both orderings live in DueWork.rows now.
+    private var rows: DueWork.Rows {
+        DueWork.rows(prospects: prospects, now: Date(), replyRunAlive: replyRunAlive)
     }
 
     // #1770: the cached flag, not the disk read. As written before, this re-opened and JSON-decoded the
@@ -69,23 +68,33 @@ struct FollowUpsView: View {
     // singleton cannot be set from one.
     var gmailConnectedOverride: Bool?
     private var gmailConnected: Bool { gmailConnectedOverride ?? GmailConnection.shared.isConnected }
-    private var isEmpty: Bool { due.isEmpty && postEventDue.isEmpty }
+    // #2878: a seam of the same shape and for the same reason as `gmailConnectedOverride` above. A
+    // classify run that is still beating means nothing is stalled (#471), and a test has to be able to
+    // render both sides of that without a live detached run.
+    var replyRunAliveOverride: Bool?
+    private var replyRunAlive: Bool { replyRunAliveOverride ?? ReplyClassifyService.isRunning(now: Date()) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        // #2878: ONE derivation for the whole sheet, so the header, the empty test and the three lists
+        // are three readings of one answer rather than three sweeps of the store that could disagree.
+        // It used to be derived up to three times in this body (#1121's rule, in the other direction).
+        let listed = rows
+        return VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("Due").font(OVType.dateHeading).foregroundStyle(OVColor.ink)
                 // #885: the SAME count RootView's badge shows, from the one definition, so the pill Dan
                 // clicks and the sheet he lands on can never disagree.
-                Text("\(DueWork.counts(prospects: prospects, now: Date()).total)")
+                Text("\(listed.counts.total)")
                     .font(.system(size: 12)).foregroundStyle(OVColor.inkFaint)
                 Spacer()
                 Button("Done") { dismiss() }
             }
             .padding(OVSpacing.lg)
             Divider()
-            if isEmpty {
-                Text("Nothing to act on. Shows you've emailed appear here for a gentle follow-up, and again once the date has passed so you can close them out. They drop off the moment you record how one ended.")
+            if listed.isEmpty {
+                // #2878: the sentence lives in EmptyState with its siblings, composed to name every
+                // subject this sheet holds, including the stalled reply drafts (L11, #885).
+                Text(EmptyState.followUpsSheet)
                     .font(OVType.body).foregroundStyle(OVColor.inkSoft).multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity, maxHeight: .infinity).padding(OVSpacing.xl)
             } else {
@@ -97,9 +106,20 @@ struct FollowUpsView: View {
                             // #2919: one clock for the whole list, on the same rule, rather than each row
                             // reading `Date()` for itself and dating its own sentence a moment apart.
                             let now = Date()
-                            if !postEventDue.isEmpty {
+                            // #2878: first, because it is the only one of the three that says something
+                            // has gone WRONG. The other two are work arriving on schedule.
+                            if !listed.stalledReplyDrafts.isEmpty {
+                                section(StalledReplyDraftCopy.section) {
+                                    ForEach(listed.stalledReplyDrafts, id: \.recipient.id) { d in
+                                        stalledReplyDraftRow(d, sourceCalendars: sourceCalendars, now: now)
+                                        Divider()
+                                    }
+                                }
+                                .id(ScrollSection.stalledReplyDrafts)   // #976
+                            }
+                            if !listed.afterTheShow.isEmpty {
                                 section("After the show") {
-                                    ForEach(postEventDue, id: \.recipient.id) { d in
+                                    ForEach(listed.afterTheShow, id: \.recipient.id) { d in
                                         postEventRow(d, since: sending[d.recipient.id],
                                                      sourceCalendars: sourceCalendars, now: now); Divider()
                                     }
@@ -107,9 +127,9 @@ struct FollowUpsView: View {
                                 // #976: identity for the position modifier, so the top section pins.
                                 .id(ScrollSection.afterTheShow)
                             }
-                            if !due.isEmpty {
+                            if !listed.silent.isEmpty {
                                 section("Silent follow-ups") {
-                                    ForEach(Array(due.enumerated()), id: \.offset) { _, d in
+                                    ForEach(Array(listed.silent.enumerated()), id: \.offset) { _, d in
                                         row(d, since: sending[d.recipient.id],
                                             sourceCalendars: sourceCalendars); Divider()
                                     }
@@ -248,6 +268,49 @@ struct FollowUpsView: View {
         .padding(.vertical, OVSpacing.xs)
         .padding(.horizontal, OVSpacing.xs)
         .id(r.id)
+    }
+
+    // #2878/#2828: a reply draft Dan asked for that died on the way. The pill has counted these for a
+    // long time and nothing listed them, so this is the row that number was always a promise about.
+    //
+    // It carries an action, because naming a problem with nowhere to go is its own defect (#80, #126):
+    // "Draft it again" asks for the same draft on the same conversation, and "View in Archive" reaches
+    // the full card where the reply text and the compose box are, so he can simply write it himself.
+    // #710: threaded parameters and no defaults for the same reasons the two rows above have them (L168).
+    func stalledReplyDraftRow(_ d: StalledReplyDraft.DueRecipient,
+                              sourceCalendars: [String: String], now: Date) -> some View {
+        let p = d.prospect, r = d.recipient
+        return HStack(alignment: .top, spacing: OVSpacing.md) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(p.groupName).font(OVType.groupName).foregroundStyle(OVColor.ink)
+                RowSourceLink(listingURL: p.sourceListingURL, sourceIds: p.sourceIds,
+                              calendars: sourceCalendars)
+                Text(r.email ?? "no contact").font(OVType.body).foregroundStyle(OVColor.inkSoft)
+                Text(StalledReplyDraftCopy.line(requestedAt: d.requestedAt, now: now))
+                    .font(.system(size: 10)).foregroundStyle(OVColor.rust)
+            }
+            Spacer(minLength: OVSpacing.sm)
+            VStack(alignment: .trailing, spacing: 6) {
+                // forestText, never forest: the brand green is a FILL token and measures 2.53 to 1 as
+                // dark-theme text (ForestTextColourTests, #2264, L149).
+                Button(StalledReplyDraftCopy.tryAgain) { draftAgain(prospect: p, recipient: r) }
+                    .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forestText)
+                Button("View in Archive") { onOpenInArchive(p.naturalKey, r.id) }
+                    .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+            }
+        }
+        .padding(.vertical, OVSpacing.xs)
+        .padding(.horizontal, OVSpacing.xs)
+        .id(r.id)
+    }
+
+    // The scoped drafter (#2129, consolidated as the one draftReply in #2944), so pressing this spends
+    // on the one conversation Dan pressed it on rather than on every reply waiting. Re-stamping the
+    // request is what takes this row out of the stalled list: it is no longer a dead run, it is a run
+    // that has just started.
+    private func draftAgain(prospect: Prospect, recipient: Recipient) {
+        ProspectMutations.draftReply(prospect.naturalKey, recipient.id, prospects: prospects,
+                                     context: context, feedback: feedback)
     }
 
     private func reasonPill(_ text: String, color: Color) -> some View {

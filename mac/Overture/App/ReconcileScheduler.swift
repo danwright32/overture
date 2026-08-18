@@ -20,8 +20,18 @@ final class ReconcileScheduler {
     nonisolated static let lastReconcileKey = "lastReconcileAt"
     private(set) var lastReconcileAt: Date?
 
-    init(context: ModelContext) {
+    // #2966/#2878: whether the reply-classify run is alive at a given instant, INJECTED rather than
+    // read here, because the only symbol that can answer it is one of the paid-run launchers and this
+    // file must never so much as name one, even in a comment: ReconcileNoSpendGuardTests matches the
+    // file's whole text (#237/#1098). Reading the run's marker file is free, but that guard is
+    // deliberately coarser than the free/paid distinction. AppDelegate supplies the real closure.
+    // No default (L168): a default standing for "no run is alive" would silently report a live drafting
+    // run as a dead one (#471) on the Dock tile and menu bar, a wrong badge instead of a compile error.
+    private let replyRunAlive: (Date) -> Bool
+
+    init(context: ModelContext, replyRunAlive: @escaping (Date) -> Bool) {
         self.context = context
+        self.replyRunAlive = replyRunAlive
     }
 
     // Trigger one reconcile on demand (the menu's "Run reconcile now"). Unlike the silent timer ticks,
@@ -187,7 +197,9 @@ final class ReconcileScheduler {
         // because this tick already holds every prospect fetched and already writes to defaults, and
         // because neither surface that draws it can hold a SwiftData query of its own. Same predicate as
         // the toolbar's Due badge, so the three can never state different numbers.
-        DueBadge.publish(DueWork.counts(prospects: after, now: now).total, into: defaults)
+        DueBadge.publish(DueWork.counts(prospects: after, now: now,
+                                        replyRunAlive: replyRunAlive(now)).total,
+                         into: defaults)
         // #2091: the watch heartbeat, carrying the observed sleep alongside the wall clock so the next
         // tick can tell a sleeping Mac (nothing missed) from a dead process (everything missed).
         WatchHeartbeatStore.stamp(now: now, readings: readings, into: defaults)

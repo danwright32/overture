@@ -83,7 +83,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         // rather than returning a false that this call site discarded. Reporting lives with the failure
         // so every caller gets it, instead of each one having to remember.
         LaunchMigrations.run(in: container.mainContext)
-        let scheduler = ReconcileScheduler(context: container.mainContext)
+        // #2966: the classify run's liveness, handed in HERE because the scheduler itself may not name
+        // ReplyClassifyService (ReconcileNoSpendGuardTests). This closure only reads the run's marker
+        // file; it can never start a run.
+        let scheduler = ReconcileScheduler(context: container.mainContext,
+                                           replyRunAlive: { ReplyClassifyService.isRunning(now: $0) })
         scheduler.start()
         self.scheduler = scheduler
 
