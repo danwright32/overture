@@ -311,9 +311,16 @@ final class Prospect {
     // #2612: the social profiles Dan will actually DM. Judged through the SAME venue and press guards as
     // the form list below, so a room's own Instagram or a press account is no more a route here than it
     // is there; only the social-host test differs, and it is inverted.
+    // #2912: and never a profile the run itself called a NAME MATCH ONLY. This list is what makes the
+    // show read as reachable (the stored verdict, the fit score, the organisation ledger, and whether
+    // Dan can record a DM he sent by hand), and every one of those is Overture ASSERTING that a way in
+    // exists. An account carrying the right name and nothing tying it to this show cannot support that
+    // claim, so the assertion side sees exactly what it saw when such a profile was refused outright
+    // (#2147, L75). The CARD still shows the handle, marked, because looking at it costs Dan seconds.
     var socialRouteURLs: [String] {
         recipients.compactMap { r -> String? in
-            guard let raw = r.contactFormURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+            guard !r.nameMatchOnly,
+                  let raw = r.contactFormURL?.trimmingCharacters(in: .whitespacesAndNewlines),
                   !raw.isEmpty, Reachability.isSocialOnly(raw),
                   !VenueContactGuard.looksLikeVenue(formURL: raw, venue: venue),
                   !PressContactGuard.looksLikePressContact(formURL: raw) else { return nil }

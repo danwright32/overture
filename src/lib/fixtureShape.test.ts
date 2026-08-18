@@ -220,9 +220,10 @@ describe("prep-results fixture shapes", () => {
   // v8's results, hence the -v8 suffix: the version in the name is what this suite validates each file
   // against, so a fixture whose name does not carry one would be checked against version 1.
   it("covers exactly the known prep-results files", () => {
+    // Lexicographic, because the assertion compares against files.sort(): "v10" sorts next to "v1".
     expect(files.sort()).toEqual(["run-metadata-complete-v8.json", "run-metadata-partial-v8.json",
-                                  "v1.json", "v2.json", "v3.json", "v4.json", "v5.json", "v6.json",
-                                  "v7.json", "v8.json", "v9.json"]);
+                                  "v1.json", "v10.json", "v2.json", "v3.json", "v4.json", "v5.json",
+                                  "v6.json", "v7.json", "v8.json", "v9.json"]);
   });
 
   for (const file of files) {
@@ -255,6 +256,32 @@ describe("prep-results fixture shapes", () => {
     const mutated = readJson("prep-results", "v7.json") as { results: Array<Record<string, unknown>> };
     mutated.results[1].emptyReason = "no_one_identified";
     expect(() => assertPrepResultsShape(mutated, "v7.json", 7)).not.toThrow();
+  });
+
+  // #2912: the run's declaration that only the NAME matched, which is what lets the card show a handle
+  // as a guess instead of withholding it. Refused on an older version for the same reason every other
+  // added field is: a fixture carrying it under a version whose reader knows nothing about it would have
+  // the flag silently dropped, and a dropped flag reads as a confirmed route.
+  it("rejects a v9 fixture that already carries the v10 nameMatchOnly field", () => {
+    const mutated = readJson("prep-results", "v9.json") as { results: Array<Record<string, unknown>> };
+    (mutated.results[0].contacts as Array<Record<string, unknown>>)[0].nameMatchOnly = true;
+    expect(() => assertPrepResultsShape(mutated, "v9.json", 9)).toThrow(/must not be present before version 10/);
+  });
+
+  // A string is what a model reaching for a new boolean writes first, and "false" is truthy nowhere it
+  // matters here: the app would read a non-boolean as absent, which is the confirmed reading.
+  it("rejects a nameMatchOnly that is not a boolean", () => {
+    const mutated = readJson("prep-results", "v10.json") as { results: Array<Record<string, unknown>> };
+    (mutated.results[0].contacts as Array<Record<string, unknown>>)[0].nameMatchOnly = "true";
+    expect(() => assertPrepResultsShape(mutated, "v10.json", 10)).toThrow(/must be a boolean/);
+  });
+
+  // The contradiction the app also refuses on its own side by storing `low`: `high` is reserved for an
+  // address read off a page naming the target, and a name match established nobody.
+  it("rejects a name match emitted at high confidence", () => {
+    const mutated = readJson("prep-results", "v10.json") as { results: Array<Record<string, unknown>> };
+    (mutated.results[0].contacts as Array<Record<string, unknown>>)[0].confidence = "high";
+    expect(() => assertPrepResultsShape(mutated, "v10.json", 10)).toThrow(/cannot be high confidence/);
   });
 
   it("rejects a v6 file that already carries the v7 emptyReason field", () => {

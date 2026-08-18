@@ -10,6 +10,11 @@ struct FollowUpsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(ActionFeedback.self) private var feedback   // #285
     @Query private var prospects: [Prospect]
+    // #2816: the watchlist, so a row's link back to the show can say whether it reaches the show's own
+    // page or only the source's calendar (#1680). A @Query on the same precedent QueueView follows: a
+    // source whose calendar address changes re-decides the label with no other prompting, and an empty
+    // table would label every link as an event page, which is #1825's defect pointing the other way.
+    @Query private var watchedSources: [WatchedSource]
     @State private var pending: PendingNudge?
     // #686: neither row here carries the reply text, AI reply drafter, or Mark… menu (the same
     // gap #683/#684 found and fixed on the Reached Out row); this jumps to the full card that
@@ -87,10 +92,13 @@ struct FollowUpsView: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         VStack(alignment: .leading, spacing: OVSpacing.lg) {
+                            // #2816: built ONCE for both sections rather than per row (#1121).
+                            let sourceCalendars = QueueModel.sourceCalendarIndex(watchedSources)
                             if !postEventDue.isEmpty {
                                 section("After the show") {
                                     ForEach(postEventDue, id: \.recipient.id) { d in
-                                        postEventRow(d, since: sending[d.recipient.id]); Divider()
+                                        postEventRow(d, since: sending[d.recipient.id],
+                                                     sourceCalendars: sourceCalendars); Divider()
                                     }
                                 }
                                 // #976: identity for the position modifier, so the top section pins.
@@ -99,7 +107,8 @@ struct FollowUpsView: View {
                             if !due.isEmpty {
                                 section("Silent follow-ups") {
                                     ForEach(Array(due.enumerated()), id: \.offset) { _, d in
-                                        row(d, since: sending[d.recipient.id]); Divider()
+                                        row(d, since: sending[d.recipient.id],
+                                            sourceCalendars: sourceCalendars); Divider()
                                     }
                                 }
                                 .id(ScrollSection.silent)   // #976
@@ -139,11 +148,20 @@ struct FollowUpsView: View {
     // #710: `since` is threaded explicitly (not read from `self.sending[r.id]` internally) so this
     // is directly testable with ViewInspector, the same prop-threading shape DraftReviewView and
     // ProspectRowView already use, rather than fighting an owned @State from outside a view instance.
-    func row(_ d: FollowUp.DueRecipient, since: Date?) -> some View {
+    // #2816: `sourceCalendars` is the watchlist's sourceId-to-calendar table, built once by the body and
+    // handed down. No default: an empty table calls every link the show's own page, including the ones
+    // that only reach the venue's calendar, so a caller that forgot it would get a confidently wrong
+    // label instead of a compile error (L168).
+    func row(_ d: FollowUp.DueRecipient, since: Date?, sourceCalendars: [String: String]) -> some View {
         let r = d.recipient
         return HStack(alignment: .top, spacing: OVSpacing.md) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(d.prospect.groupName).font(OVType.groupName).foregroundStyle(OVColor.ink)
+                // #2816: the same way back to the show that the Reached out row carries, for the same
+                // reason: this is the other surface where an open pitch is worked, and deciding whether
+                // to nudge turns on the show as much as on the silence.
+                RowSourceLink(listingURL: d.prospect.sourceListingURL, sourceIds: d.prospect.sourceIds,
+                              calendars: sourceCalendars)
                 Text(FollowUp.nudgeLabel(email: r.email, followUpCount: r.followUpCount))
                     .font(OVType.body).foregroundStyle(OVColor.inkSoft)
                 if let line = SendFailureLine.text(for: r.sendError) {
@@ -171,11 +189,19 @@ struct FollowUpsView: View {
 
     // #2397: a post-event prompt, tagged by reason, with the action its kind calls for. #710: see
     // row(_:since:) above for why `since` is an explicit parameter rather than an internal read.
-    func postEventRow(_ d: PostEventPrompt.DueRecipient, since: Date?) -> some View {
+    // #2816: `sourceCalendars` for the same reason, and with no default for the same reason (L168). See
+    // `row(_:since:sourceCalendars:)` above.
+    func postEventRow(_ d: PostEventPrompt.DueRecipient, since: Date?,
+                      sourceCalendars: [String: String]) -> some View {
         let p = d.prospect, r = d.recipient
         return HStack(alignment: .top, spacing: OVSpacing.md) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(p.groupName).font(OVType.groupName).foregroundStyle(OVColor.ink)
+                // #2816: the show is over here, and the question is how it ended, which is exactly when
+                // the listing is worth another look. Covered with its sibling rather than left as the one
+                // open-pitch row without a way back (the class, not the instance).
+                RowSourceLink(listingURL: p.sourceListingURL, sourceIds: p.sourceIds,
+                              calendars: sourceCalendars)
                 reasonPill(d.prompt.reason, color: PostEventPrompt.accent(for: d.prompt.kind).color)
                 Text(r.email ?? "no contact").font(OVType.body).foregroundStyle(OVColor.inkSoft)
                 // #316: the durable failure surface. A real send failure persists on the recipient
