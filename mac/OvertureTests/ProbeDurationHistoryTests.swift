@@ -266,7 +266,11 @@ struct ProbePaceWiringGuardTests {
     // The writing end: a finished check hands its size and its recorded cost to the store.
     @Test func aFinishedCheckRecordsItsPace() {
         let root = source("Overture/App/RootView.swift")
-        #expect(root.contains("recordCheckPace(lookups: checkLookups, cancelled: report.cancelled)"))
+        // #2978: the SLOT travels with it. The call used to name no slot and the recording read the prep
+        // slot's results file for every check, so this string is what changed when that was fixed. As
+        // code rather than raw text, so re-wrapping the call cannot turn this red for formatting (#2543).
+        #expect(SourceGuardHelper.containsCode(
+            "recordCheckPace(slot: slot, lookups: checkLookups, cancelled: report.cancelled)", in: root))
         #expect(root.contains("ProbeDurationHistoryStore.record("))
         #expect(root.contains("ProbeRunPaceRecording.sample(lookups: lookups,"))
     }
