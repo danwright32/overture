@@ -19,6 +19,15 @@ enum PriorRelationship: String, Decodable, Sendable {
 }
 enum Discipline: String, Decodable, Sendable, CaseIterable {
     case dance, opera, theater, music, band, comedy, other
+    // #2813: the event is not a live performance at all. A film screening, a lecture, a book launch, an
+    // exhibition. Not a shade of `.other`, which means nobody has read a genre yet: this is a genre that
+    // HAS been read, and the answer is that there is nothing here to photograph.
+    //
+    // It exists because `GenreGate` (#2687) blocks Keep and every Dismiss on a row with no genre read, and
+    // the six genres are all live performance, so the only way past the gate was to name a genre that is
+    // false. Dan met that on 2026-08-16 on a screening of Verdi's Rigoletto and could neither keep it nor
+    // dismiss it.
+    case notALivePerformance = "not_a_live_performance"
 
     // #1657: what this genre is CALLED, in one place, because three surfaces show it (the row's genre
     // line, the genre editor's picker, and the fit reason's sentence) and they were free to disagree.
@@ -43,6 +52,7 @@ enum Discipline: String, Decodable, Sendable, CaseIterable {
         case .band: return "Band"
         case .comedy: return "Comedy"
         case .other: return "No genre read"
+        case .notALivePerformance: return "Not a live performance"
         }
     }
 }
@@ -205,6 +215,11 @@ enum Ranker {
         case .opera, .theater: return 2
         case .music, .band, .comedy: return 1
         case .other: return 0
+        // #2813: a nudge well below the high-fit cutoff (5), the same shape as the past-decline penalty
+        // above rather than a burial. A typical strong show scores 9, so a screening marked this way lands
+        // at 4 and stops being promoted while staying reachable in the longshots, which matters because
+        // this genre is a JUDGEMENT somebody made and judgements are occasionally wrong.
+        case .notALivePerformance: return -5
         }
     }
 
