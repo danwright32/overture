@@ -336,11 +336,15 @@ struct AttachedConversationReadersTests {
     // One Gmail thread as the API returns it for `format=metadata`, built the way
     // `GmailThreadingRepairTests` builds it, because a second shape here would only ever confirm an
     // assumption about an interface nobody read (L52). `internalDate` is what orders the messages.
+    // #2918: `labelIds` too, for the same reason and in the same shape, because a message of Dan's that
+    // claims nothing about having been sent is no longer read as something he sent.
     private func threadJSON(_ messages: [(from: String, messageId: String?, at: Int64)]) -> Data {
         let payloads: [[String: Any]] = messages.map { m in
             var headers: [[String: Any]] = [["name": "From", "value": m.from]]
             if let id = m.messageId { headers.append(["name": "Message-ID", "value": id]) }
-            return ["internalDate": "\(m.at)", "payload": ["headers": headers]]
+            let mine = ReplyDetection.email(from: m.from) == ReplyDetection.email(from: me)
+            return ["internalDate": "\(m.at)", "labelIds": mine ? ["SENT"] : ["INBOX"],
+                    "payload": ["headers": headers]]
         }
         return try! JSONSerialization.data(withJSONObject: ["messages": payloads])
     }

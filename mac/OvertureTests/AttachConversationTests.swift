@@ -52,13 +52,19 @@ struct AttachConversationTests {
 
     // A Gmail thread as `threads.get?format=metadata` returns it. `internalDate` orders the messages,
     // not their position in the array, which is what every reader in ReplyDetection relies on.
+    //
+    // #2918: `labelIds` too, because Gmail returns it on every message and it is what says whether a
+    // message was actually sent or is still an unsent draft. A message of Dan's carrying no label at all
+    // is now refused as evidence that he answered, so a fixture that omits it is not the thread it means.
     private func threadJSON(_ messages: [(from: String, at: Int64, subject: String, messageId: String?)])
     -> Data {
         let payloads: [[String: Any]] = messages.map { m in
             var headers: [[String: Any]] = [["name": "From", "value": m.from],
                                             ["name": "Subject", "value": m.subject]]
             if let id = m.messageId { headers.append(["name": "Message-ID", "value": id]) }
+            let mine = ReplyDetection.email(from: m.from) == me
             return ["id": "msg-\(m.at)", "internalDate": "\(m.at * 1000)",
+                    "labelIds": mine ? ["SENT"] : ["INBOX"],
                     "payload": ["headers": headers]]
         }
         return try! JSONSerialization.data(withJSONObject: ["messages": payloads])

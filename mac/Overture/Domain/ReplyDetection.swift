@@ -87,6 +87,58 @@ enum ReplyDetection {
         return nil
     }
 
+    // #2918: Gmail's `threads.get` returns UNSENT DRAFTS inside `messages`, alongside real mail, and until
+    // this nothing on this path looked at `labelIds` at all. A reply Dan started answering in Gmail and
+    // abandoned therefore sat on the thread carrying his own address in `From` and an `internalDate` newer
+    // than the message it answered, and every reader below that asks "what did Dan send" read it as his
+    // answer. `AnsweredElsewhere` stamped `replyHandledAt` off it, `hasUnhandledReply` went false, and
+    // `markReplyAnswered` never moves the stamp backwards, so the reply was silenced for good. Measured on
+    // a live thread on 2026-08-17: an abandoned draft sat 29 minutes above a real reply, and any check tick
+    // inside that window would have buried it. It escaped by timing alone.
+    //
+    // Gmail already hands over the evidence: a message his mailbox really sent carries `SENT`, and one he
+    // is still composing carries `DRAFT`. Both formats this app ever asks for return `labelIds` on every
+    // message (`format=metadata` returns ids, labels and headers; `format=full` returns the whole Message),
+    // so this costs no extra call and needed no new plumbing.
+    //
+    // The labels of a message, or nil when the message carries no `labelIds` field at all. The two are
+    // kept apart deliberately, because that distinction is the whole of the rule below: an EMPTY list is
+    // Gmail saying this message has no labels, and a MISSING one is Gmail not having been asked, or a
+    // shape nobody here has seen. Upper-cased on the way out, since these are Gmail's own constants.
+    static func labelIds(of message: [String: Any]) -> [String]? {
+        guard let raw = message["labelIds"] as? [Any] else { return nil }
+        return raw.compactMap { $0 as? String }.map { $0.uppercased() }
+    }
+
+    // A message Gmail is holding as an unsent draft. False when the labels are missing, because an absent
+    // field is not a claim either way and the refusal below is what fails closed on it.
+    static func isDraft(_ message: [String: Any]) -> Bool {
+        labelIds(of: message)?.contains("DRAFT") ?? false
+    }
+
+    // Did Dan's mailbox actually SEND this message? The predicate every reader here uses before it will
+    // let a message stand for something he did.
+    //
+    // It FAILS CLOSED: no label information means refused, not accepted. The two directions are not
+    // symmetrical, which is the reason for the asymmetry in the code. A message wrongly accepted clears a
+    // row that is genuinely waiting on him, permanently and silently, which is the defect this exists to
+    // end; a message wrongly refused leaves a row asking about a conversation he has closed, which costs
+    // him a glance and can be seen and corrected (L42, L98).
+    static func wasSentByUser(_ message: [String: Any]) -> Bool {
+        guard let labels = labelIds(of: message) else { return false }
+        return labels.contains("SENT") && !labels.contains("DRAFT")
+    }
+
+    // The thread's real messages, newest first, with the drafts dropped.
+    //
+    // Dropped rather than treated as fatal, because a draft is not a message anybody has seen: it should
+    // not be able to answer "who wrote last", and it should not be able to HIDE the message that can. An
+    // abandoned draft can sit on a thread for years, so a rule that simply refused any thread topped by one
+    // would silence a real answer of his underneath it for just as long.
+    private static func realMessagesNewestFirst(_ messages: [[String: Any]]) -> [[String: Any]] {
+        newestFirst(messages).filter { !isDraft($0) }
+    }
+
     // #2649: the mirror of `latestReplyMessage`, and the id a follow-up on this conversation should
     // reference: the Message-ID header of the newest message on the thread that DAN sent.
     //
@@ -104,8 +156,11 @@ enum ReplyDetection {
               let messages = obj["messages"] as? [[String: Any]] else { return nil }
         let me = email(from: selfEmail)
         guard !me.isEmpty else { return nil }
-        for m in newestFirst(messages) {
+        for m in realMessagesNewestFirst(messages) {
             guard email(from: headerValue("from", of: m)) == me else { continue }
+            // #2918: only a message Gmail actually sent. Storing a draft's Message-ID would thread his next
+            // follow-up onto something nobody ever received, and the row would read as threaded.
+            guard wasSentByUser(m) else { continue }
             let id = headerValue("message-id", of: m).trimmingCharacters(in: .whitespacesAndNewlines)
             return id.isEmpty ? nil : id
         }
@@ -126,8 +181,12 @@ enum ReplyDetection {
               let messages = obj["messages"] as? [[String: Any]] else { return nil }
         let me = email(from: selfEmail)
         guard !me.isEmpty else { return nil }
-        for m in newestFirst(messages) {
+        for m in realMessagesNewestFirst(messages) {
             guard email(from: headerValue("from", of: m)) == me else { continue }
+            // #2918: a draft dates nothing. An inquiry stamped from one would read as answered on a day
+            // nothing went, and the follow-up nudge, the closing suggestion and the day it groups under
+            // all hang off that stamp.
+            guard wasSentByUser(m) else { continue }
             let millis = internalDateMillis(m)
             guard millis > 0 else { return nil }
             return Date(timeIntervalSince1970: TimeInterval(millis) / 1000)
@@ -157,9 +216,11 @@ enum ReplyDetection {
     static func newestMessageFromSelf(threadJSON data: Data, selfEmail: String) -> SentMessage? {
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let messages = obj["messages"] as? [[String: Any]],
-              let newest = newestFirst(messages).first else { return nil }
+              let newest = realMessagesNewestFirst(messages).first else { return nil }
         let me = email(from: selfEmail)
         guard !me.isEmpty, email(from: headerValue("from", of: newest)) == me else { return nil }
+        // #2918: and Gmail has to say his mailbox SENT it. This is the reader the issue was filed against.
+        guard wasSentByUser(newest) else { return nil }
         let millis = internalDateMillis(newest)
         guard millis > 0 else { return nil }
         return SentMessage(sentAt: Date(timeIntervalSince1970: TimeInterval(millis) / 1000),
@@ -193,10 +254,12 @@ enum ReplyDetection {
     static func newestMessageIsSelf(threadJSON data: Data, selfEmail: String) -> Bool {
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let messages = obj["messages"] as? [[String: Any]],
-              let newest = newestFirst(messages).first else { return false }
+              let newest = realMessagesNewestFirst(messages).first else { return false }
         let me = email(from: selfEmail)
         guard !me.isEmpty else { return false }
-        return email(from: headerValue("from", of: newest)) == me
+        // #2918: the attach stamps `replyHandledAt` off this answer, so a draft here silences the reply
+        // exactly as it does on the unattended pass. The same predicate, in both places (L30).
+        return email(from: headerValue("from", of: newest)) == me && wasSentByUser(newest)
     }
 
     private static func headerValue(_ name: String, of message: [String: Any]) -> String {
