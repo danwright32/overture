@@ -18,6 +18,7 @@ enum DraftIssue: Equatable, Hashable, Sendable, CaseIterable {
     case venueHistoryCount        // states how MANY times Dan has shot the room (#1887)
     case hedgedEffectClaim        // weakens the claim that the audience doesn't notice him (#2722)
     case asksForNothing           // admires the show and requests nothing (#1889, #2531)
+    case repeatedSentenceShape    // two sentences in a row built the same way (#2807)
 
     var label: String {
         switch self {
@@ -34,6 +35,7 @@ enum DraftIssue: Equatable, Hashable, Sendable, CaseIterable {
         case .venueHistoryCount: return "Says how many times Dan has shot the venue"
         case .hedgedEffectClaim: return "Hedges the claim that the audience doesn't notice Dan"
         case .asksForNothing: return "Asks for nothing: no request about their photography plans"
+        case .repeatedSentenceShape: return "Two sentences in a row are built the same way"
         }
     }
 
@@ -64,9 +66,14 @@ enum DraftIssue: Equatable, Hashable, Sendable, CaseIterable {
         // #2531: advisory for the same reason. Whether a sentence ASKS for something is a judgment about
         // wording, and the runbook instructs the run to reword the ask every time, so the phrasing this
         // rule has never seen is the ordinary case rather than the exception.
+        // #2807: advisory, and settled by the precedent above rather than reopened. Cadence is a rule
+        // about TONE, not a fact about the text, which is the bar #789 set for a blocker. It reads a
+        // CONSTRUCTION out of punctuation and connector words, and English lets a perfectly good pair of
+        // sentences land on the same one; the cost of a wrong block is Dan's time on a draft that reads
+        // fine.
         case .performativeEnthusiasm, .emDash, .presumesBooking, .coldHedge,
              .asksForKnownFact, .concessionLanguage, .nonCanonicalRate,
-             .hedgedEffectClaim, .asksForNothing: return false
+             .hedgedEffectClaim, .asksForNothing, .repeatedSentenceShape: return false
         }
     }
 
@@ -167,6 +174,7 @@ enum DraftCheck {
         if hasGalleryPathLink(body) { issues.append(.galleryPathLink) }
         if hasVenueHistoryCount(body) { issues.append(.venueHistoryCount) }
         if hasHedgedEffectClaim(text) { issues.append(.hedgedEffectClaim) }
+        if hasRepeatedSentenceShape(body) { issues.append(.repeatedSentenceShape) }
         if isColdPitch, !asksAboutPhotographyPlans(body) { issues.append(.asksForNothing) }
         return issues
     }
@@ -356,6 +364,146 @@ enum DraftCheck {
             }
         }
         return false
+    }
+
+    // #2807: two sentences in a row built the same way.
+    //
+    // Dan, 2026-08-16, on a real cold pitch: "this draft is a lot of short sentences and doesn't feel
+    // great". Three of its sentences were long, so length was not it. What he was hearing was three
+    // consecutive sentences of one shape (independent clause, comma, "and"/"so", trailing clause), two of
+    // them ending on the same "so ..." effect tail. Every sentence was individually compliant: every
+    // drafting rule is scoped to ONE sentence and each supplies its own canonical phrasing, so used back
+    // to back they stack. Nothing governed variety WITHIN one email.
+    //
+    // THE DETECTOR THAT LOOKS RIGHT AND IS NOT. Counting first-person sentence openings is the first
+    // instinct (six of the eight sentences began with I, I'm, I've or My). Scored against Dan's OWN proven
+    // cold pitch, which the brand voice skill keeps as the reference, that rule REFUSES it: five of its six
+    // sentences open in first person, three of them consecutively, a higher rate than the draft he
+    // complained about. A lint that blocks Dan's own text is a defect this repo has shipped before. Both
+    // texts are in `DraftCadenceTests`, the bad one as the case that must be caught and his as the case
+    // that must pass, so a later "improvement" cannot quietly re-derive the pronoun rule.
+    //
+    // What separates them is CONSTRUCTION. Dan's pitch alternates: compound, simple, compound,
+    // fronted-subordinate, compound, simple, and no two neighbours are built the same way. So: inside one
+    // paragraph, no two consecutive sentences may carry the same connector construction.
+    //
+    // PARAGRAPH-SCOPED, and that is load-bearing. #2807's own reference rewrite, the shape it holds up as
+    // correct, keeps two "so" tails and splits them across a paragraph break. A break resets the cadence
+    // for the reader, and paragraphing is the other half of what the issue asks for, so a draft clears this
+    // finding either by varying the construction or by breaking the block, and both are the fix.
+    //
+    // There is deliberately NO check on paragraph LENGTH, though the runbook and the skill both ask for
+    // short paragraphs. Dan's reference pitch is one block of six sentences, so any rule capping sentences
+    // per paragraph refuses it, exactly the way the pronoun rule does.
+    static func hasRepeatedSentenceShape(_ body: String) -> Bool {
+        for paragraph in paragraphs(of: body) {
+            let shapes = sentences(in: paragraph).map(sentenceShape)
+            for i in shapes.indices.dropLast() where shapes[i] != nil && shapes[i] == shapes[i + 1] {
+                return true
+            }
+        }
+        return false
+    }
+
+    // A blank line starts a new paragraph, which is what a reader sees. A single newline does not: Dan's
+    // reference pitch puts its greeting on the line directly above the first sentence.
+    private static func paragraphs(of body: String) -> [String] {
+        var out: [String] = []
+        var current: [String] = []
+        for line in body.components(separatedBy: .newlines) {
+            if line.trimmingCharacters(in: .whitespaces).isEmpty {
+                if !current.isEmpty { out.append(current.joined(separator: "\n")) }
+                current = []
+            } else {
+                current.append(line)
+            }
+        }
+        if !current.isEmpty { out.append(current.joined(separator: "\n")) }
+        return out
+    }
+
+    // The sentences of one paragraph.
+    //
+    // A greeting line ("Hi Emma,") and a routing line ("Attn: ..., Director of Marketing") are dropped
+    // first, because they end in punctuation that is not a sentence end and would otherwise be glued onto
+    // the sentence below, donating a comma that invents a construction the sentence does not have.
+    //
+    // The split needs whitespace AND a capital after the mark, because the one link every draft carries
+    // ends in ".com" and a naive split on "." cuts it in half.
+    private static func sentences(in paragraph: String) -> [String] {
+        let lines = paragraph
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && !$0.hasSuffix(",") && !$0.hasSuffix(":") }
+        let text = lines.joined(separator: " ")
+        guard !text.isEmpty,
+              let re = try? NSRegularExpression(pattern: #"[.!?]["')\]]*\s+(?=[A-Z"(])"#) else {
+            return text.isEmpty ? [] : [text]
+        }
+        let ns = text as NSString
+        var out: [String] = []
+        var start = 0
+        for m in re.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+            let end = m.range.location + m.range.length
+            out.append(ns.substring(with: NSRange(location: start, length: end - start)))
+            start = end
+        }
+        if start < ns.length { out.append(ns.substring(from: start)) }
+        return out
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+    }
+
+    // copy-inventory:ignore-start  cadence lint needles: connector and subordinator words MATCHED in a draft, never words Overture says (#2807)
+
+    // The connectors that join a trailing clause after a comma. "so" is on it because the doubled
+    // "so ..." effect tail is the pair Dan actually heard; it needs no special case, it is one value.
+    private static let clauseConnectors = ["and", "so", "but", "which", "though", "while", "or", "yet",
+                                           "because", "since"]
+    // A sentence that opens on one of these, with a comma in it, is a fronted subordinate clause.
+    private static let subordinators: Set<String> = ["if", "when", "while", "since", "because",
+                                                     "although", "though", "after", "before", "once",
+                                                     "unless", "whenever", "as"]
+    // What a real clause starts with, used ONLY to tell a clause join from an Oxford comma. Without it
+    // "Madison Square Garden, Lincoln Center, and Radio City Music Hall" reads as a connector, and since
+    // that exact list is in Dan's own reference pitch the rule would refuse his text (L104: test the
+    // matcher against what it must PRESERVE, not only against what it must catch).
+    private static let clauseSubjects: Set<String> = ["i", "i'm", "i've", "i'd", "i'll", "it", "it's",
+                                                      "we", "you", "they", "he", "she", "there", "that",
+                                                      "my", "the", "his", "her", "their", "your"]
+    // copy-inventory:ignore-end
+
+    // The construction of one sentence, or nil for a sentence that joins no clause. A nil NEVER pairs:
+    // Dan's complaint was explicitly not about length, so two short plain sentences side by side are not
+    // this defect and must not be reported as it.
+    private static func sentenceShape(_ sentence: String) -> String? {
+        if isFrontedSubordinate(sentence) { return "fronted" }
+        if let connector = commaJoinedConnector(sentence) { return "comma-" + connector }
+        return nil
+    }
+
+    private static func isFrontedSubordinate(_ sentence: String) -> Bool {
+        guard sentence.contains(",") else { return false }
+        let first = sentence.lowercased()
+            .components(separatedBy: CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz'").inverted)
+            .first { !$0.isEmpty } ?? ""
+        return subordinators.contains(first)
+    }
+
+    // The FIRST comma-joined connector whose trailing text reads as a clause rather than as the last item
+    // of a list. Only "and" and "or" need that test: no list is written "x, so y".
+    private static func commaJoinedConnector(_ sentence: String) -> String? {
+        let pattern = #",\s+("# + clauseConnectors.joined(separator: "|") + #")\s+([a-z']+)"#
+        guard let re = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive])
+        else { return nil }
+        let ns = sentence as NSString
+        for m in re.matches(in: sentence, range: NSRange(location: 0, length: ns.length)) {
+            let word = ns.substring(with: m.range(at: 1)).lowercased()
+            let next = ns.substring(with: m.range(at: 2)).lowercased()
+            if (word == "and" || word == "or") && !clauseSubjects.contains(next) { continue }
+            return word
+        }
+        return nil
     }
 
     // A whole-word containment test, so "most" does not fire on "almost" and "often" does not fire on

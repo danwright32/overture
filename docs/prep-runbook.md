@@ -914,6 +914,33 @@ Anatomy:
   experienced in, don't describe genre-specific technique as established practice (for
   example, don't claim a particular way of "moving with the room" for dancers). Keep
   the approach description general (no-flash, unobtrusive documentary style) and let the credentials above carry the confidence instead.
+- **Vary the construction WITHIN one email (#2807).** Every rule above is scoped to ONE
+  sentence and each supplies its own canonical phrasing, so written back to back they stack
+  into an email of a single shape. Dan, 2026-08-16, reading a real draft: "this draft is a lot
+  of short sentences and doesn't feel great". Three of its sentences were long, so length was
+  not what he was hearing. Three consecutive sentences were built the same way (independent
+  clause, comma, "and" or "so", trailing clause) and two of them landed on the same "so ..."
+  effect tail: "so the performance isn't disturbed", then "so I'm familiar with the space".
+
+  So **no two sentences in a row may use the same connector construction**. Never two "so ..."
+  effect tails back to back, never two ", and ..." trailing clauses back to back, never two
+  sentences opening on a fronted "If ..." or "When ..." clause back to back. Dan's own proven
+  pitch already does this without being told: compound, simple, compound, fronted-subordinate,
+  compound, simple, with no two neighbours alike. Read a finished draft as a sequence of SHAPES
+  before writing it out, not as a list of individually correct sentences.
+
+  **Write the body in short paragraphs**, two or three sentences each, rather than one block.
+  That is the second fix as well as its own rule: a break between two sentences of the same
+  shape resets the cadence for a reader, so either varying the construction or breaking the
+  block will do.
+
+  Do NOT reach for a rule about first-person sentence openings. It looks like the same defect
+  (six of that draft's eight sentences began with I, I'm, I've or My) and it is not: Dan's own
+  reference pitch opens five of its six sentences in first person, three consecutively, a higher
+  rate than the draft he objected to. Overture WARNS on the repeated construction
+  (`DraftCheck.repeatedSentenceShape`) and says nothing about pronouns. It warns rather than
+  refusing the send, because a construction is a judgment about wording, not a fact about the
+  text, which is the bar #789 set for a blocker.
 - **Anti-repetition within the run (#362):** before finalizing each draft, compare it
   against the one or two drafts immediately before it in this run. Don't reuse the
   same opening line, hook, or distinctive phrase back to back.

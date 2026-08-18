@@ -273,6 +273,21 @@ export const RUNBOOK_RULES: RunbookRule[] = [
     pattern: /State every one of those absolutely; never quantify the audience/i },
   { name: "audience-half-said-once",
     pattern: /And say the audience half ONCE/i },
+  // #2807: within-draft variety, two halves that fail in different directions.
+  //
+  // Dropping the CONSTRUCTION half returns the drafter to stacking the per-sentence rules verbatim, which
+  // is exactly what produced the draft Dan objected to on 2026-08-16: every sentence individually
+  // compliant, three of them built the same way, two of them ending on the same "so ..." effect tail. No
+  // other rule here is scoped wider than one sentence, so nothing else can hold this.
+  //
+  // Dropping the PARAGRAPH half loses the other fix, and the one a drafter can apply without rewording
+  // anything: a break between two same-shaped sentences resets the cadence. It also returns the body to
+  // one block, which the brand voice skill has asked against in its opening line all along while the
+  // runbook never said it at all.
+  { name: "no-two-sentences-in-a-row-alike",
+    pattern: /no two sentences in a row may use the same connector construction/i },
+  { name: "body-runs-in-short-paragraphs",
+    pattern: /Write the body in short paragraphs/i },
 ];
 
 /** Returns the names of the rules whose text is absent from the given runbook contents. */

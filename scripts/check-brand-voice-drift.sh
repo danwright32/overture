@@ -45,6 +45,15 @@ BRAND_VOICE_ANCHORS=(
   # Dan, 2026-07-31: the ask presupposes they HAVE photography plans, rather than asking whether they want
   # photography at all. The presupposition is the point, not the wording: a yes/no offer invites a no.
   "photography plans"
+  # #2807: within-draft variety, the one axis no rule governed. Every drafting rule here is scoped to ONE
+  # sentence and supplies its own canonical phrasing, so stacked back to back they produce an email of a
+  # single shape, which is what Dan heard on 2026-08-16. Both halves are anchors because they are separate
+  # instructions that fail differently: drop the first and the constructions stack again, drop the second
+  # and the body goes back to one block. The second half is the older of the two ("Short paragraphs" has
+  # been in the skill's opening line all along) and had never been stated in the runbook at all, which is
+  # exactly the one-sided state this check exists to name.
+  "no two sentences in a row"
+  "short paragraphs"
   # #1824: describe Dan, never categorize the recipient. The phrase that broke this rule ("working with
   # performing arts organizations in New York", sent to one singer-songwriter) was in neither source, which
   # is precisely why the rule now has to be in BOTH: a model with no instruction either way will assemble

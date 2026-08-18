@@ -118,6 +118,16 @@ untouched because it names a different room.
 past-tense shooting claim with a number, and a second implementation of that matcher in another language is
 the twin-drift L26 warns about. This harness covers the half nothing else judges: the wording.
 
+**Neither is CADENCE (#2807), for the same reason, and one sample changed because of it.** The rule that no
+two consecutive sentences may use the same connector construction is judged by
+`DraftCheck.repeatedSentenceShape`, which reads every body the app is about to mail, including one Dan
+edited by hand. Restating it as a `PrepEvalExpectation` would be the same matcher written twice in two
+languages. What DID belong here is the sample: this fixture's own `sampleCompliantOutput` carried
+"...so the performance isn't disturbed" immediately followed by "...so I'm familiar with the room", which
+is the exact pair Dan objected to, so the reference answer was teaching the eval that the cadence is fine
+(the README rule above: a sample must satisfy the runbook AS IT STANDS). It was the ONLY body in either
+fixture set the new check fired on, measured across all 79 drafted bodies in `fixtures/`.
+
 ### Why the ask check is calibrated on the recorded bodies, not on one phrasing (#1889)
 
 The runbook's CTA rule is the one drafting rule shaped as a clause every body must CONTAIN, rather than a
