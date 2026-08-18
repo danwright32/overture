@@ -39,17 +39,41 @@ struct NamedButNoRouteTests {
         return p
     }
 
-    // The live shape, verbatim from the run's own results file.
+    // The live shape from the run's own results file, with the two people's real names replaced: this
+    // repo is public and a fixture is exactly the route a real name travels out on (L155).
+    //
+    // #2893: this shape, a `form_or_dm` carrying no `formUrl`, is now `routeNamedButNotSupplied`. It
+    // names a route and supplies none, which is a fact about the RUN rather than about the show, and
+    // filing it here was this suite's own mistake: `namedButNoRoute` means the search FINISHED and found
+    // no way in. `theTwoPeopleWithNoRouteFound` below is that shape, and it keeps this suite's original
+    // coverage.
     private var theTwoUnreachablePeople: [PrepContact] {
-        [PrepContact(name: "Isabella Borte", role: "Director/Producer", email: nil,
+        [PrepContact(name: "A Director", role: "Director/Producer", email: nil,
                      method: "form_or_dm", confidence: "low", formUrl: nil, provenance: "performer"),
-         PrepContact(name: "Ani Chong", role: "Music Director", email: nil,
+         PrepContact(name: "A Music Director", role: "Music Director", email: nil,
                      method: "form_or_dm", confidence: "low", formUrl: nil, provenance: "performer")]
     }
 
+    // The same two people as the run SHOULD have emitted them (#2893): found, with no route found, said
+    // in the one value that means that.
+    private var theTwoPeopleWithNoRouteFound: [PrepContact] {
+        theTwoUnreachablePeople.map {
+            var c = $0
+            c.method = ContactMethod.noRouteFound.rawValue
+            return c
+        }
+    }
+
     @Test func namingPeopleWithNoWayToReachThemIsItsOwnReason() {
-        #expect(Reachability.emptyReason(afterIngesting: theTwoUnreachablePeople, usableRecipients: 0)
+        #expect(Reachability.emptyReason(afterIngesting: theTwoPeopleWithNoRouteFound, usableRecipients: 0)
                 == .namedButNoRoute)
+    }
+
+    // #2893: and the shape the run actually emitted is a different finding, because it declared a route
+    // and gave none. Both leave Dan with nobody to write to; only one of them means the search finished.
+    @Test func declaringARouteAndSupplyingNoneIsADifferentFinding() {
+        #expect(Reachability.emptyReason(afterIngesting: theTwoUnreachablePeople, usableRecipients: 0)
+                == .routeNamedButNotSupplied)
     }
 
     // A run that found a real address has nothing to explain, so no reason is written over it.
@@ -101,7 +125,7 @@ struct NamedButNoRouteTests {
             #expect(Recipient.makeId(email: contact.email, formURL: contact.formUrl) == nil)
         }
         #expect(p.recipients.isEmpty)
-        #expect(Reachability.emptyReason(afterIngesting: theTwoUnreachablePeople,
+        #expect(Reachability.emptyReason(afterIngesting: theTwoPeopleWithNoRouteFound,
                                          usableRecipients: p.recipients.count) == .namedButNoRoute)
     }
 

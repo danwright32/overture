@@ -512,6 +512,7 @@
 		44A08701383BC787E1CA3182 /* ReplyWatchable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A6341DB6204D5AE36BB2880 /* ReplyWatchable.swift */; };
 		44E58907B1A855B528AA38B8 /* VenueTixExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADB71F56DF74479701BC1F89 /* VenueTixExtractor.swift */; };
 		44E5F92CE5EAF67B9BD1FDFB /* SourceGuardHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51E49C7D7A0552D17A0B564B /* SourceGuardHelper.swift */; };
+		4518E28FE4429F150C9B129D /* ARouteNamedButNotSuppliedTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA7D6D54DF1EA0055F9FD5A2 /* ARouteNamedButNotSuppliedTests.swift */; };
 		45382D36A20BC7908F5DB323 /* ManualPrepSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F7856DEFD3CE2B708A9273A /* ManualPrepSheet.swift */; };
 		454BA3BAE2BF28A07D483895 /* GenreGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CE455DF45552C12F60830C9 /* GenreGate.swift */; };
 		4561D5BCF0070354147EB4B7 /* ReplyClassifyImporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29142D7CC954AB5D8C0B6052 /* ReplyClassifyImporterTests.swift */; };
@@ -3082,6 +3083,7 @@
 		FA29FD36A165F7F09BF65224 /* ReplyIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReplyIdentity.swift; sourceTree = "<group>"; };
 		FA4855E0A391F15D086981B8 /* QueueCopyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueCopyTests.swift; sourceTree = "<group>"; };
 		FA5ED46F02B196ABCAE4E24D /* ExtractedEventGuard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtractedEventGuard.swift; sourceTree = "<group>"; };
+		FA7D6D54DF1EA0055F9FD5A2 /* ARouteNamedButNotSuppliedTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARouteNamedButNotSuppliedTests.swift; sourceTree = "<group>"; };
 		FADECD2610E46B7D569E790E /* ProbeSelectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProbeSelectionTests.swift; sourceTree = "<group>"; };
 		FAE7DA263BEB65D842BE38BD /* RefusalStopsWatchingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RefusalStopsWatchingTests.swift; sourceTree = "<group>"; };
 		FAE80D572EC11AF6F877E9CA /* ReplyPanelRefusalOnScreenTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReplyPanelRefusalOnScreenTests.swift; sourceTree = "<group>"; };
@@ -3288,6 +3290,7 @@
 				5F7A0F425FAF904BFA6A65A7 /* ArchiveStatusTests.swift */,
 				E9FD33A4882802D6484467A5 /* ArchiveViewRestoreSaveGuardTests.swift */,
 				9ADFC758684FC9430A7BCBB2 /* AReplyOnAClosedOutShowTests.swift */,
+				FA7D6D54DF1EA0055F9FD5A2 /* ARouteNamedButNotSuppliedTests.swift */,
 				4366D25AE734D9C3F6D38B83 /* ASchedulingMissIsNeutralTests.swift */,
 				8AACE9526CF7ED440AEE288D /* ASecondMessageIsFetchedTests.swift */,
 				E54DB46D246FFF8C44DDCE2A /* ASecondReplyReachesDanTests.swift */,
@@ -5196,6 +5199,7 @@
 				F1CA6A0D75726D30B8EE8DFD /* ABookingReachesEverythingTests.swift in Sources */,
 				4D41C80F37EF505797BB4BC5 /* ANoticeCarriesItsActionTests.swift in Sources */,
 				F36010960E610F36894A0F62 /* AReplyOnAClosedOutShowTests.swift in Sources */,
+				4518E28FE4429F150C9B129D /* ARouteNamedButNotSuppliedTests.swift in Sources */,
 				D1C840C77AEC95C9C4EFBAA4 /* ASchedulingMissIsNeutralTests.swift in Sources */,
 				372099F99DBADDE26972F6EF /* ASecondMessageIsFetchedTests.swift in Sources */,
 				EBD04D7341087364FC5FBAAD /* ASecondReplyReachesDanTests.swift in Sources */,

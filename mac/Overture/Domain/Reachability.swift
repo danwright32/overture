@@ -254,6 +254,43 @@ enum Reachability {
         // check. This one hands him NAMES with no route, which is the state where a two-minute hand
         // search is most likely to beat the machine, because it starts from something.
         case namedButNoRoute = "named_but_no_route"
+        // #2893: the check DECLARED a way in and supplied none. `method: "form_or_dm"` means "reach this
+        // person through a form or a DM", so a contact carrying it with no `formUrl` names the way in and
+        // gives none; the same holds for a named decision maker or a generic inbox carrying no address.
+        //
+        // Its own value, and specifically not a shade of `namedButNoRoute`, whose comment above cites
+        // exactly this shape as its live instance. That was the mistake: `namedButNoRoute` is a fact
+        // about the WORLD (these people publish nothing), and this is a fact about the RUN (it stated a
+        // route type and did not finish the step that finds one). Both arrive as "no contacts survived",
+        // and telling Dan a search finished when it did not is the L11 overclaim. He acts on them
+        // differently too: this one is worth another check, where names with no route is worth his own
+        // two minutes on the listing.
+        case routeNamedButNotSupplied = "route_named_but_not_supplied"
+    }
+
+    // Whether a contact names a route it does not carry. Exhaustive over `ContactMethod`, so a method
+    // added later breaks the build here and has to declare which field it promises, rather than
+    // defaulting into "nothing is missing" (L113).
+    //
+    // An absent or unrecognised `method` is NOT a contradiction: nobody declared a route, so nothing is
+    // contradicted, and reading silence as a claim would fire this on every older run.
+    static func declaredRouteIsMissing(_ contact: PrepContact) -> Bool {
+        guard let method = ContactMethod(rawValue: contact.method ?? "") else { return false }
+        func absent(_ value: String?) -> Bool {
+            (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        switch method {
+        // Both are addresses: the method says which desk, and either way the promise is an email.
+        case .namedDecisionMaker, .genericInbox: return absent(contact.email)
+        // A bare homepage root as the `formUrl` is deliberately ACCEPTED here, and it is a real case (two
+        // in the 2026-08-17 run). It is a weaker route than a form, but it is a route: it lands Dan on
+        // the act's own site, where he can find the contact page in seconds. Refusing it would delete a
+        // usable way in to enforce a tidier shape, which is a worse trade than keeping it (L116).
+        case .formOrDM: return absent(contact.formUrl)
+        // #2893: promises nothing, so it can contradict nothing. This is the value a run uses to say it
+        // found the person and no route, which is a finished answer rather than a broken one.
+        case .noRouteFound: return false
+        }
     }
 
     // #2259: why a check that emitted contacts still left the show with nobody to write to.
@@ -268,6 +305,11 @@ enum Reachability {
     static func emptyReason(afterIngesting contacts: [PrepContact],
                             usableRecipients: Int) -> EmptyReason? {
         guard !contacts.isEmpty, usableRecipients == 0 else { return nil }
+        // #2893: asked FIRST, because it is the only one of the three that is a fact about the RUN
+        // rather than about the show, and it is the only one that says the search did not finish. A
+        // single contradictory contact is enough: the run has already shown it will state a route it did
+        // not find, so nothing it emitted for this show establishes that anything was searched properly.
+        if contacts.contains(where: declaredRouteIsMissing) { return .routeNamedButNotSupplied }
         // A doorway found and not opened keeps its own reason: it is the state most likely to change on
         // a re-check, and collapsing it into the new one would hide that (#2265).
         if onlySocialRoutes(contacts) { return .onlySocialProfile }
@@ -462,6 +504,11 @@ enum ReachabilityCopy {
         // with "Only", matching three of the five, so the set reads as one family rather than as one
         // sentence dropped among labels.
         case .namedButNoRoute: return "Only names, no way to reach them"
+        // #2893: names what the CHECK did, not what the show is like, because that is the difference
+        // this reason exists to carry and the thing Dan acts on. It deliberately breaks the "Only"
+        // family the four above share: those four report a finished search that found little, and this
+        // one reports a search that stopped mid step, so reading as one of them is exactly the confusion.
+        case .routeNamedButNotSupplied: return "Check named a route it never found"
         case .nothingPublished, nil: return noEmailFoundBadge
         }
     }
@@ -491,6 +538,11 @@ enum ReachabilityCopy {
         // listing, which is where the check read them in the first place.
         case .namedButNoRoute:
             return "A check worked out who is putting this on and found no way to reach any of them, so it kept none of them. The listing still names them, and a search by name often turns up an address the check missed."
+        // #2893: says plainly that the fault is the check's, and what follows from that. The last clause
+        // is the only thing this sentence can say that no other one can: another check is worth more
+        // here than his own search, which is the reverse of the advice above it.
+        case .routeNamedButNotSupplied:
+            return "A check said there was a way to reach these people and then did not give one, so there was nothing to keep. That is the check falling short rather than the show being hard to reach, so another check is worth more here than a search by hand."
         case .nothingPublished, nil:
             return noEmailFoundHelp
         }

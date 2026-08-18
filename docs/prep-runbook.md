@@ -236,11 +236,15 @@ item's `production` field first:
     performer contact directly"), since you are emailing them directly, not describing
     them to a third party. A performer NAMED on the authoritative listing is ALWAYS
     surfaced as her own `provenance: "performer"` entry, even when you cannot corroborate
-    her against this performance or find a contact for her: in that case still emit a FULL
-    contact for her, `provenance: "performer"`, her `name`, `confidence: "low"`, and a
-    `method` (the waterfall method for however she can be reached, e.g. `form_or_dm`),
-    leaving `email` and `sourceUrl` absent when you have not verified one. A name-only
-    entry still needs its `method`; never omit a required contact field. Dropping a named
+    her against this performance or find a contact for her: in that case still emit a
+    contact for her, `provenance: "performer"`, her `name` and `confidence: "low"`, leaving
+    `email` and `sourceUrl` absent when you have not verified one.
+    **Her `method` is `no_route_found` (#2893).** A `method` names a route, so stating one you
+    have not found ("e.g. `form_or_dm`", which is what this rule asked for until 2026-08-17)
+    says the search finished when it did not, and a run followed that to the letter on two
+    performers, which is what #2893 was filed about. `no_route_found` says what is true: you
+    found the person and no way to reach them. The app reads it and reports the show as having
+    names and no way to reach any of them. Dropping a named
     performer is the failure; a stale or misnaming secondary source is exactly the case the
     `low` flag exists for, so hold her at low confidence rather than over-trusting the site
     OR omitting her.
@@ -500,6 +504,19 @@ in order, stop at the first that works:
 3. **The target's contact form / Instagram DM** when it publishes no email, and only after (a) and
    (b) above have come back with nothing. Record it as `method: "form_or_dm"` with the form URL in
    `formUrl` (the app surfaces it as a tappable link). This outranks any venue inbox.
+
+   **A `method` NAMES A ROUTE, so it may never be emitted without one (#2893).** `form_or_dm` with no
+   `formUrl`, or `named_decision_maker` or `generic_inbox` with no `email`, promises a way in and
+   supplies none. Use `method: "no_route_found"` instead, keeping whatever you did establish: that says
+   honestly that you found the person and not a route, where naming a route you do not carry says the
+   search finished when it did not, and the app cannot tell those apart from the entry alone. This
+   never means dropping somebody: a named performer is always surfaced, with `no_route_found`, per the
+   performer rule above. The field being OPTIONAL in the app's own
+   Swift is not permission for that combination: `formUrl` is optional because the two other methods
+   have no form, and `email` is optional because a `form_or_dm` contact has no address. On 2026-08-17 a
+   run read that source mid-run, concluded "`formUrl` is optional, so a `form_or_dm` contact can carry
+   no `formUrl`", and emitted two such contacts; the app discarded both and the card told Dan the show
+   had no way in while he found one himself in seconds.
 4. **A genuine presenting org** (the presenter named for the show, NOT the venue). Find its
    contact the SAME way, running steps 1-3 above once more with the presenting org itself as
    the target (so it too can carry a named decision-maker, a generic inbox with a named
