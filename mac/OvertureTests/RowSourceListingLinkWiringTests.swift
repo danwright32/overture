@@ -6,8 +6,11 @@ import Foundation
 //
 // Its own file rather than a second suite beside that rule, because #629's meta-guard reads a file that
 // calls `SourceGuard.functionBody` for the function names it references and checks each one still exists.
-// It collects those from the file's array literals, and a fixture dictionary in the rule's tests
-// (`== ["hall": ...]`) reads as one, so it reported "hall" as a function that had gone missing.
+// It collects those from anything array-shaped after an equals sign, so an assertion comparing a built
+// table against a dictionary of fixture values reads as a list of function names, and the rule's own tests
+// have one. It named a fixture key as a function that had gone missing. This comment deliberately quotes
+// none of it: written out, the example is itself swept up and the guard fails on the sentence explaining
+// why it fails.
 @Suite("The stages that work an open pitch actually draw the link (#2816)")
 struct RowSourceListingLinkWiringTests {
 
