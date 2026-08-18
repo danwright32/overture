@@ -60,6 +60,9 @@ run_harness() {
   (
     export OVERTURE_MEASURE_RUNNER="${STUB}"
     export OVERTURE_MEASURE_PROCESS_PATTERN="stub-runner"
+    # The fixture's stub is a bash script, so its process NAME is bash and only a command-line match can
+    # find it. Production matches the exact name instead, for the reason asserted at the end of this file.
+    export OVERTURE_MEASURE_PGREP_MODE="-f"
     "${SCRIPT}" "$@" 2>&1
   )
 }
@@ -120,5 +123,25 @@ if [ -n "${SAMPLES}" ]; then
 else
   fail "a samples file was written" "no concurrency-samples-*.csv in ${SUPPORT_DIR}"
 fi
+
+# --- the count is of claude processes, not of anything mentioning claude ------------------------------
+# Measured on this Mac 2026-08-18 before the first real session: `pgrep -f claude` returned 4, of which
+# THREE were a bash hook and an fswatch whose command lines merely contain a ~/.claude path, and one was a
+# real claude. A peak inflated by whatever else happens to name the directory is not evidence, and it
+# inflates in the reassuring direction (L102).
+assert_contains "production matches the exact process name" \
+  "$(cat "${SCRIPT}")" 'OVERTURE_MEASURE_PGREP_MODE:--x}'
+
+# --- and the baseline is recorded, because the machine is never empty ---------------------------------
+# The interactive Claude Code session driving this is itself a claude process, so a peak of 11 with one
+# already running is ten new ones. Reported rather than silently subtracted: the raw count and what was
+# already there are two facts, and folding them would leave nobody able to check the arithmetic.
+rm -f "${SUPPORT_DIR}"/concurrency-samples-*.csv
+OUT="$(OVERTURE_SUPPORT_DIR="${SUPPORT_DIR}" run_harness --yes --sample-seconds 1 \
+  --prep-queue "${WORK}/prep-queue.json" --check-queue "${WORK}/check-queue.json")"
+assert_contains "the baseline is reported beside the peak" "${OUT}" "already running before it started"
+SAMPLES="$(ls "${SUPPORT_DIR}"/concurrency-samples-*.csv 2>/dev/null | head -1)"
+assert_contains "and the baseline is in the samples as its own row" \
+  "$(cat "${SAMPLES}" 2>/dev/null)" "baseline"
 
 exit "${FAILURES:-0}"

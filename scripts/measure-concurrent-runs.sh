@@ -48,6 +48,13 @@ SAMPLE_SECONDS="${OVERTURE_MEASURE_SAMPLE_SECONDS:-5}"
 RUNNER="${OVERTURE_MEASURE_RUNNER:-${HERE}/../mac/scripts/prep-run.sh}"
 PROCESS_PATTERN="${OVERTURE_MEASURE_PROCESS_PATTERN:-claude}"
 
+# How the pattern is matched, and the default is the whole point. `pgrep -f` searches the full command
+# line, and measured on this Mac on 2026-08-18 that returned FOUR processes for "claude", of which three
+# were a shell hook and an fswatch whose command lines merely contain a ~/.claude path. A peak inflated by
+# whatever else happens to name that directory is not evidence, and it inflates in the reassuring
+# direction (L102). `-x` matches the process NAME exactly, which is what a chunk's claude is called.
+PGREP_MODE="${OVERTURE_MEASURE_PGREP_MODE:--x}"
+
 # MUST match OVERTURE_PREP_MAX_PARALLEL's default in mac/scripts/prep-run.sh. Read from the environment
 # the same way the runner reads it, so a session run with a different cap measures against that cap.
 MAX_PARALLEL="${OVERTURE_PREP_MAX_PARALLEL:-10}"
@@ -153,7 +160,7 @@ echo "measure-concurrent-runs: would start two runs against ${SUPPORT_REAL}"
 echo "  check: ${CHECK_SHOWS} shows (fans out to $((CHECK_SHOWS < MAX_PARALLEL ? CHECK_SHOWS : MAX_PARALLEL)) chunks)"
 echo "  prep:  ${PREP_SHOWS} shows"
 echo "  the two share no show"
-echo "  counting processes matching '${PROCESS_PATTERN}' every ${SAMPLE_SECONDS}s"
+echo "  counting processes named '${PROCESS_PATTERN}' (pgrep ${PGREP_MODE}) every ${SAMPLE_SECONDS}s"
 
 if [ "${CONFIRMED}" -ne 1 ]; then
   echo
@@ -171,6 +178,13 @@ cp "${PREP_QUEUE}" "${SUPPORT}/overture-prep-queue.json"
 printf '{"version":1,"startedAt":"%s","lookups":%s}\n' \
   "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "${CHECK_SHOWS}" > "${SUPPORT}/reachability-probe-run.json"
 
+# The machine is never empty. The interactive Claude Code session driving this is itself a claude
+# process, so a peak of 11 with one already running means ten new ones. Sampled BEFORE anything starts and
+# REPORTED beside the peak rather than silently subtracted: the raw count and what was already there are
+# two facts, and folding them into one would leave nobody able to check the arithmetic.
+count_processes() { pgrep "${PGREP_MODE}" "${PROCESS_PATTERN}" 2>/dev/null | grep -c . || true; }
+BASELINE="$(count_processes)"
+
 started_at="$(date +%s)"
 
 OVERTURE_SUPPORT_DIR="${SUPPORT}" OVERTURE_RUN_SLOT=check "${RUNNER}" &
@@ -179,13 +193,14 @@ OVERTURE_SUPPORT_DIR="${SUPPORT}" OVERTURE_RUN_SLOT=prep "${RUNNER}" &
 PREP_PID=$!
 
 echo "elapsed_s,processes" > "${SAMPLES}"
+echo "baseline,${BASELINE}" >> "${SAMPLES}"
 peak=0
 while kill -0 "${CHECK_PID}" 2>/dev/null || kill -0 "${PREP_PID}" 2>/dev/null; do
   now="$(( $(date +%s) - started_at ))"
   # -c on pgrep counts matches; a pattern matching nothing exits non-zero, which is a count of zero and
   # not an error. Zero is itself a reading worth recording: it is what a run parked on a rate limit
   # looks like from outside.
-  count="$(pgrep -f "${PROCESS_PATTERN}" 2>/dev/null | grep -c . || true)"
+  count="$(count_processes)"
   [ "${count}" -le "${peak}" ] || peak="${count}"
   echo "${now},${count}" >> "${SAMPLES}"
   sleep "${SAMPLE_SECONDS}"
@@ -217,6 +232,7 @@ report_run() {
 echo
 echo "measure-concurrent-runs: done in ${elapsed}s"
 echo "  peak concurrent '${PROCESS_PATTERN}' processes: ${peak}"
+echo "  ${BASELINE} were already running before it started, so at most $((peak - BASELINE)) belonged to these two runs"
 echo "  samples: ${SAMPLES}"
 report_run check "${CHECK_STATUS}"
 report_run prep "${PREP_STATUS}"
