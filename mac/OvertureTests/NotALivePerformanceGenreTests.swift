@@ -40,12 +40,14 @@ struct NotALivePerformanceGenreTests {
         #expect(!Discipline.notALivePerformance.staysInTheBoroughs)
     }
 
-    // The sentence says the dominant fact rather than running the row through the production and profile
-    // chain, which would produce "Self-produced not a live performance group, a strong-fit target".
-    @Test func theFitReasonSaysWhyItIsNotAFitRatherThanArguingForIt() {
+    // No fit reason at all, and the important half is the second assertion: without an early return the
+    // chain would produce "Self-produced not a live performance group, a strong-fit target", an argument
+    // FOR a show there is nothing to photograph at. It is empty rather than a sentence because the row's
+    // genre line one line above already reads "Not a live performance" (#843).
+    @Test func theFitReasonSaysNothingRatherThanArguingForTheShow() {
         let reason = EventClassifier.derived(discipline: .notALivePerformance, production: .selfProduced,
                                              profile: .strong, venue: "The Example Room").fitReason
-        #expect(reason == "Not a live performance, so there is nothing here to shoot.")
+        #expect(reason.isEmpty)
         #expect(!reason.contains("strong-fit"))
     }
 

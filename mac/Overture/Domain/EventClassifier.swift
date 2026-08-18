@@ -371,13 +371,18 @@ enum EventClassifier {
         // the stored raw value. Built from the raw value this sentence said "theater" while the
         // picker one line above it offered "Performing Arts": one genre under two names on the
         // same card, each reading fine alone (L118). Lowercased because it sits mid-sentence.
-        // #2813: the dominant fact about the row, so it is said before anything about the production or
-        // the profile. Running it through the chain below would produce "Self-produced not a live
-        // performance group, a strong-fit target", which argues for a show there is nothing to photograph
-        // at.
-        if discipline == .notALivePerformance {
-            return "Not a live performance, so there is nothing here to shoot."
-        }
+        // #2813: NO sentence, and an early return rather than a fall-through, which are two separate
+        // decisions.
+        //
+        // Early, because the chain below would produce "Self-produced not a live performance group, a
+        // strong-fit target": an argument FOR a show there is nothing to photograph at.
+        //
+        // And empty, because the row's own genre line one line above already reads "Not a live
+        // performance". A sentence here could only restate it, which is the #843 shape, and it was
+        // written that way first and cut on the cold read of the inventory diff. The row hides an empty
+        // reason, exactly as #1600 relied on when it removed the catch-all, so the genre line and the
+        // score carry the fact between them.
+        if discipline == .notALivePerformance { return "" }
         let genre = discipline == .other ? "" : " \(discipline.label.lowercased())"
         if production == .selfProduced && profile == .strong {
             return "Self-produced\(genre) group, a strong-fit target."
