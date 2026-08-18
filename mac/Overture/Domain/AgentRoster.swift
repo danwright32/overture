@@ -132,12 +132,17 @@ extension AgentInputs {
             // land Dan on a row that disagrees with the number that sent him there, which is #863 over
             // again in the other direction.
             //
-            // An inquiry that has replied is due by definition: somebody is waiting on an answer, which is
-            // the whole reason an inquiry rides this queue at all (AGENTS.md). It carries no reach-out
-            // schedule of its own to consult.
+            // An inquiry with a reply nobody has dealt with is due by definition: somebody is waiting on an
+            // answer, which is the whole reason an inquiry rides this queue at all (AGENTS.md). It carries
+            // no reach-out schedule of its own to consult.
+            //
+            // #2943: `hasUnhandledReply`, not `replied`. Answering used to clear `replied`, so the plain
+            // flag was the only reading available; now that the answer is its own fact, `replied` stays
+            // true for the rest of the conversation and this pill would count a conversation Dan has
+            // already answered as still owing him something, on every launch, for ever.
             reachedOutDue: ReachedOutQueue.activeWithDates(from: prospects, now: context.now)
                 .filter { ReachedOutQueue.isDueNow(for: $0.recipient, of: $0.prospect, now: context.now) }.count
-                + inquiries.filter { StageNavigation.stage(for: $0) == .reachedOut && $0.replied }.count
+                + inquiries.filter { StageNavigation.stage(for: $0) == .reachedOut && $0.hasUnhandledReply }.count
         )
     }
 }

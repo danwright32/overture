@@ -13,6 +13,16 @@ struct InquiryRow: Identifiable, Equatable, Sendable {
     let outcome: Outcome
     let sentAt: Date?
     let replied: Bool
+    // #2943: whether that reply is still waiting on Dan, which `replied` stopped being able to say once
+    // the answer became its own fact. Two fields rather than one, because they are two facts and a single
+    // flag standing for both is what let answering erase the exchange (L53): `replied` still says somebody
+    // wrote, and this says whether it is his move.
+    let hasUnhandledReply: Bool
+    // #2943: the sentence saying a reply arrived and was answered, or nil where there is none. Rendered
+    // here against the row's own `now` (like the two nudge flags below) rather than in the view, and by
+    // `AnsweredReplyNote`, which is where the scouted row's identical sentence comes from, so one exchange
+    // is not described in two sets of words in one list (L118).
+    let answeredReplyLine: String?
     // #2145: whether this thread bounced. Carried so the Reply control can refuse the same case the
     // show side already refuses: an answer to an address that has proved dead cannot arrive.
     let bounced: Bool

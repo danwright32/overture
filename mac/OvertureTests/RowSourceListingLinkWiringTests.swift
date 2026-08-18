@@ -4,13 +4,14 @@ import Foundation
 // Built is not wired (L3). The rule in `RowSourceListingLinkTests` is a sentence the app never says unless
 // the stages Dan works an OPEN PITCH on actually draw it.
 //
-// Its own file rather than a second suite beside that rule, because #629's meta-guard reads a file that
-// calls `SourceGuard.functionBody` for the function names it references and checks each one still exists.
-// It collects those from anything array-shaped after an equals sign, so an assertion comparing a built
-// table against a dictionary of fixture values reads as a list of function names, and the rule's own tests
-// have one. It named a fixture key as a function that had gone missing. This comment deliberately quotes
-// none of it: written out, the example is itself swept up and the guard fails on the sentence explaining
-// why it fails.
+// Its own file rather than a second suite beside that rule, which was originally a workaround: #629's
+// meta-guard reads a file that calls `SourceGuard.functionBody` for the function names it references and
+// checks each one still exists, and it collected those from anything array-shaped after an equals sign, so
+// `#expect(table == ["hall": "https://example-hall.example/whats-on"])` in the rule's own tests read as a
+// list of function names and reported that "hall" was a function that had gone missing. #2953 fixed that
+// (a dictionary is no longer read as a list of names, and the sweep reads code rather than comments), so
+// the example above can be written out here, where before it made the guard fail on the sentence
+// explaining why it failed. The split stays because these are the wiring tests, not the rule's.
 @Suite("The stages that work an open pitch actually draw the link (#2816)")
 struct RowSourceListingLinkWiringTests {
 

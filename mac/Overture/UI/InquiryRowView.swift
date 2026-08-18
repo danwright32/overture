@@ -51,7 +51,10 @@ struct InquiryRowView: View {
 
     private var subtitle: String { InquiryCopy.rowSubtitle(event: row.eventName, venue: row.venue) }
 
-    private var stateText: String { InquiryCopy.rowState(sentAt: row.sentAt, replied: row.replied) }
+    private var stateText: String {
+        InquiryCopy.rowState(sentAt: row.sentAt, replied: row.replied,
+                             answeredReplyLine: row.answeredReplyLine)
+    }
 
     @ViewBuilder private var stateLine: some View {
         HStack(spacing: OVSpacing.xs) {
@@ -109,7 +112,9 @@ struct InquiryRowView: View {
 
     private var actions: some View {
         HStack(spacing: OVSpacing.sm) {
-            if InquiryMutations.showsReplyAction(sentAt: row.sentAt, replied: row.replied, bounced: row.bounced) {
+            if InquiryMutations.showsReplyAction(sentAt: row.sentAt,
+                                                 hasUnhandledReply: row.hasUnhandledReply,
+                                                 bounced: row.bounced) {
                 Button(action: onReply) {
                     Text("Reply").font(OVType.meta).foregroundStyle(OVColor.onForest)
                         .padding(.horizontal, OVSpacing.md).padding(.vertical, 4)

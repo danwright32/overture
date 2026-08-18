@@ -33,8 +33,28 @@ struct InquiryCopyTests {
     }
 
     @Test func stateReflectsLifecycle() {
-        #expect(InquiryCopy.rowState(sentAt: nil, replied: false) == "Awaiting your first reply")
-        #expect(InquiryCopy.rowState(sentAt: Date(), replied: false) == "Sent, waiting to hear back")
-        #expect(InquiryCopy.rowState(sentAt: Date(), replied: true) == "They replied")
+        #expect(InquiryCopy.rowState(sentAt: nil, replied: false, answeredReplyLine: nil)
+                    == "Awaiting your first reply")
+        #expect(InquiryCopy.rowState(sentAt: Date(), replied: false, answeredReplyLine: nil)
+                    == "Sent, waiting to hear back")
+        #expect(InquiryCopy.rowState(sentAt: Date(), replied: true, answeredReplyLine: nil)
+                    == "They replied")
+    }
+
+    // #2943: the fourth state, which used to be word for word the second one. An answered inquiry read
+    // "Sent, waiting to hear back", identical to one nobody ever wrote back to, because the answer was
+    // recorded by clearing the reply.
+    @Test func anAnsweredExchangeSaysSoRatherThanReadingAsSilence() {
+        let answered = "Replied Aug 14, you answered Aug 15"
+        #expect(InquiryCopy.rowState(sentAt: Date(), replied: true, answeredReplyLine: answered)
+                    == answered)
+    }
+
+    // A row Dan has not sent anything on cannot have answered anything, so the first branch still wins:
+    // the states are ordered, not a set of independent tests.
+    @Test func nothingSentStillReadsAsAwaitingHisFirstReply() {
+        #expect(InquiryCopy.rowState(sentAt: nil, replied: true,
+                                     answeredReplyLine: "Replied Aug 14, you answered that day")
+                    == "Awaiting your first reply")
     }
 }

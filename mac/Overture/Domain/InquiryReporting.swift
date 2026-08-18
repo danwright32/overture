@@ -26,6 +26,12 @@ enum InquiryReporting {
         case conversationDied   // they answered, then it went nowhere
     }
 
+    // #2943: this deliberately goes on reading `replied`, and that IS the fix rather than an oversight.
+    // The question here is whether anybody ever wrote to Dan, which is exactly what `replied` means now
+    // that answering no longer takes it away. It used to be cleared on the way out, so an inquiry where
+    // somebody genuinely wrote and Dan genuinely answered was filed under "he replied, they never
+    // answered", counting a real conversation as silence: a confident wrong number rather than a gap
+    // (L90, #2868). Whose move it is now is a different question, asked through `hasUnhandledReply`.
     static func stage(for inquiry: Inquiry) -> Stage {
         if inquiry.outcome == .booked { return .booked }
         if !inquiry.isOpen { return .lost }

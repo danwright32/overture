@@ -44,10 +44,10 @@ struct InquiryReplyAgainTests {
     @Test("the row offers a way to answer once they have replied")
     func replyActionReturnsAfterTheyReply() {
         // Before this, Reply was offered ONLY before the first send, so a replied inquiry had none.
-        #expect(InquiryMutations.showsReplyAction(sentAt: nil, replied: false, bounced: false))
-        #expect(!InquiryMutations.showsReplyAction(sentAt: Date(), replied: false, bounced: false),
+        #expect(InquiryMutations.showsReplyAction(sentAt: nil, hasUnhandledReply: false, bounced: false))
+        #expect(!InquiryMutations.showsReplyAction(sentAt: Date(), hasUnhandledReply: false, bounced: false),
                 "still no action while waiting on them")
-        #expect(InquiryMutations.showsReplyAction(sentAt: Date(), replied: true, bounced: false),
+        #expect(InquiryMutations.showsReplyAction(sentAt: Date(), hasUnhandledReply: true, bounced: false),
                 "they answered, so Dan can answer back")
     }
 
@@ -64,24 +64,36 @@ struct InquiryReplyAgainTests {
 
         #expect(result == .sent)
         #expect(inq.sentAt == now, "the wait restarts from this reply")
-        #expect(!inq.replied, "he is waiting on them again, not sitting on an unanswered reply")
+        // #2943: he is waiting on them again because the reply has been ANSWERED, not because the reply
+        // has been taken back. `replied` still says somebody wrote, which is what the row, the queue and
+        // #16's funnel all go on reading.
+        #expect(!inq.hasUnhandledReply, "he is waiting on them again, not sitting on an unanswered reply")
+        #expect(inq.replied, "and the reply itself is still on the record")
         #expect(inq.isOpen)
     }
 
     // The one that would bite silently: reply detection keys off the last reply id, so unless the reply
     // he just answered is marked handled, the very next check would flag the row as needing him again
     // and it would never leave the "they replied" state.
+    //
+    // #2943 changed HOW that is recorded. It used to strike their message as a wrong reply
+    // (`dismissedReplyId`), which was the only tool available while the answer had no field of its own,
+    // and which is what erased the exchange. The answer is stamped now, and their real message stays a
+    // real message.
     @Test("their old reply does not immediately re-flag the row")
     func theAnsweredReplyIsMarkedHandled() async throws {
         let ctx = ModelContext(try container())
         let inq = repliedTo(ctx)
+        let now = Date(timeIntervalSince1970: 3_000)
 
         _ = await InquiryMutations.sendReply(
-            inq, subject: "s", body: "b", now: Date(timeIntervalSince1970: 3_000),
+            inq, subject: "s", body: "b", now: now,
             sender: StubSender(receipt: SentReceipt(threadId: "th-1", messageID: "m-2")),
             context: ctx, feedback: ActionFeedback())
 
-        #expect(inq.dismissedReplyId == "reply-1")
+        #expect(inq.replyHandledAt == now)
+        #expect(inq.lastReplyId == "reply-1", "their message is still the last reply this thread carries")
+        #expect(inq.dismissedReplyId == nil, "answering is not the same act as saying it was never a reply")
     }
 
     // A refused send must leave the inquiry exactly as it was: still showing their reply, still
@@ -97,9 +109,9 @@ struct InquiryReplyAgainTests {
             sender: FailingSender(), context: ctx, feedback: ActionFeedback())
 
         #expect(result == .sendFailed)
-        #expect(inq.replied, "they still await an answer")
+        #expect(inq.hasUnhandledReply, "they still await an answer")
         #expect(inq.sentAt == before)
-        #expect(inq.dismissedReplyId == nil)
+        #expect(inq.replyHandledAt == nil, "nothing may look answered that was not")
     }
 
     // The first reply still behaves exactly as it did: nothing to mark handled, and the same stamps.
@@ -120,5 +132,9 @@ struct InquiryReplyAgainTests {
         #expect(fresh.sentAt == now)
         #expect(fresh.gmailThreadId == "th-9")
         #expect(fresh.dismissedReplyId == nil)
+        // #2943: and nothing is recorded as answered, because there was nothing to answer. This same
+        // function sends the first reply as well as every later one (#1513), so an unconditional stamp
+        // here would claim an answer to a message nobody sent (L11).
+        #expect(fresh.replyHandledAt == nil)
     }
 }

@@ -28,6 +28,17 @@ extension Inquiry: ReplyWatchableRecipient {
         conversationAttachedAt != nil && hasWatchableConversation && gmailMessageId == nil
     }
 
+    // #2865's inquiry half, which was held open only because this model had no answered stamp to write:
+    // the protocol's default is a no-op and named #2868 as where the decision belonged. #2943 adds the
+    // stamp, so an inquiry Dan answers in his own mail client retires the same way a scouted contact
+    // does, instead of the row asking forever (L162).
+    //
+    // The answered fact ONLY, exactly as `Recipient.recordAnsweredElsewhere` does, and through
+    // `markReplyAnswered` so it can never move the stamp backwards.
+    func recordAnsweredElsewhere(at answeredAt: Date) {
+        markReplyAnswered(now: answeredAt)
+    }
+
     // The same question `Recipient.hasWatchableConversation` answers, asked of an inquiry's single thread:
     // is there a conversation for the reply watcher to fetch at all?
     var hasWatchableConversation: Bool {

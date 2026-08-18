@@ -39,6 +39,54 @@ struct SourceGuardCoverageGuardTests {
         pattern: #"=\s*\[([^\]]*)\]"#, options: [.dotMatchesLineSeparators])
     private static let identifierStringLiteral = try! NSRegularExpression(pattern: #""([A-Za-z_][A-Za-z0-9_]*)""#)
 
+    // #2953: is what sits between those brackets a DICTIONARY rather than a list of names?
+    //
+    // The bracket pattern above cannot tell the two apart, and an equality is an equals sign, so an
+    // ordinary `#expect(table == ["hall": "https://..."])` read as a list of function names and named a
+    // fixture KEY as a function that had gone missing. That cost #2816 real time chasing a fault that was
+    // not there, and left it splitting a file to get out of the way of a guard. A check that cries wolf
+    // is one people learn to ignore (L36).
+    //
+    // Judged by a colon at DEPTH ZERO, with string contents skipped, which is what separates a key from
+    // the two colons that are not one: an argument label inside a call (`[Fixture(named: "pushOut")]`,
+    // still a list) and a colon inside a string. Nesting is where this stops: the pattern above ends the
+    // body at the first "]", so an array whose FIRST element is itself a dictionary is still read as a
+    // list. That shape appears nowhere in the suite today and would need bracket-balanced extraction to
+    // reach, which is a bigger change than the false alarm justifies.
+    static func isDictionaryLiteral(_ body: String) -> Bool {
+        var depth = 0
+        var inString = false
+        var escaped = false
+        for character in body {
+            if escaped { escaped = false; continue }
+            if inString {
+                if character == "\\" { escaped = true }
+                if character == "\"" { inString = false }
+                continue
+            }
+            switch character {
+            case "\"": inString = true
+            case "(", "[", "{": depth += 1
+            case ")", "]", "}": depth -= 1
+            case ":" where depth == 0: return true
+            default: break
+            }
+        }
+        return false
+    }
+
+    // #2953: the sweep reads CODE, never prose. A guard file's comments quote the very shapes these
+    // patterns look for, and #2816 could not write the sentence explaining this defect down, because
+    // writing the example out made the guard fail on its own explanation. A pattern that reads comments
+    // is a pattern that fires on its own documentation (L103), which `SourceGuardMarkerIntegrityTests`
+    // already had to learn; this is the same reading, spelled the same way.
+    //
+    // `skipping: []` on purpose: a DEBUG branch or a marked region inside a test file still holds real
+    // references, and this is asking what the file references, not what the app says.
+    private static func code(of text: String) -> String {
+        SwiftSource.scannableLines(in: text, skipping: []).map(\.code).joined(separator: "\n")
+    }
+
     private static func matches(_ regex: NSRegularExpression, in text: String, group: Int = 1) -> [String] {
         let ns = text as NSString
         return regex.matches(in: text, range: NSRange(location: 0, length: ns.length)).map {
@@ -61,15 +109,28 @@ struct SourceGuardCoverageGuardTests {
     // we sweep every array literal in the file. That's coarser than a precise call-site link, but
     // it means a name that has genuinely moved out of every path this file references still gets
     // caught, which is the actual failure mode #629 is about.
+    //
+    // Coarse is not the same as indiscriminate, which is what #2953 corrected: the sweep reads the file's
+    // CODE, and a bracketed literal that is a DICTIONARY is fixture data rather than a list of names.
     private static func references(in src: String) -> FileReferences {
-        let paths = Set(matches(pathLiteral, in: src))
-        var names = Set(matches(namedLiteral, in: src))
-        if hasMatch(namedNonLiteral, in: src) {
-            for arrayBody in matches(arrayLiteral, in: src) {
+        let source = code(of: src)
+        var names = Set(matches(namedLiteral, in: source))
+        if hasMatch(namedNonLiteral, in: source) {
+            for arrayBody in matches(arrayLiteral, in: source) where !isDictionaryLiteral(arrayBody) {
                 names.formUnion(matches(identifierStringLiteral, in: arrayBody))
             }
         }
-        return FileReferences(paths: paths, names: names)
+        return FileReferences(paths: referencedPaths(in: src), names: names)
+    }
+
+    // The path half, kept off the lexer deliberately. It is asked of every one of the 800-odd files in
+    // OvertureTests, where the name sweep above only ever runs on the couple of dozen that call
+    // SourceGuard.functionBody, and stripping comments from 8MB of Swift to reach a difference measured
+    // at ZERO files (2026-08-18, over every test file in the repo) would cost the suite real time for
+    // nothing. A source path quoted in a comment and since deleted is a false alarm of the same family
+    // and is NOT covered here: nobody has hit one, and the day somebody does the fix is one line.
+    private static func referencedPaths(in src: String) -> Set<String> {
+        Set(matches(pathLiteral, in: src))
     }
 
     // #2311: through the shared walk, which refuses out loud on an empty result. This guard exists to
@@ -83,7 +144,7 @@ struct SourceGuardCoverageGuardTests {
         var missing: [String] = []
         for file in try Self.otherTestFiles() {
             let src = try String(contentsOf: file, encoding: .utf8)
-            for path in Self.references(in: src).paths {
+            for path in Self.referencedPaths(in: src) {
                 let full = Self.macRoot.appendingPathComponent(path)
                 if !FileManager.default.fileExists(atPath: full.path) {
                     missing.append("\(file.lastPathComponent) references \(path), which does not exist")
@@ -125,5 +186,94 @@ struct SourceGuardCoverageGuardTests {
             }
         }
         #expect(missing.isEmpty, "Stale SourceGuard function-name reference(s):\n\(missing.joined(separator: "\n"))")
+    }
+
+    // MARK: - What the sweep is allowed to read (#2953)
+
+    // A file in the exact shape this sweep reads: it passes `named:` a non-literal, so its array
+    // literals are swept for function names, and it also holds an ordinary assertion comparing a built
+    // table against a DICTIONARY of fixture values. Both halves are asked of this ONE fixture on
+    // purpose: a test that only asserts the dictionary is ignored is satisfied by a fixture in which
+    // nothing could have been found at all (L159), so the list of real handler names has to be picked
+    // out of the same text.
+    private static let fileWithAListOfNamesAndADictionaryFixture = #"""
+        @Suite("A guard in the shape this sweep reads")
+        struct AGuard {
+            private static let guardedFunctions = ["pushOut", "standDown"]
+
+            @Test func theHandlersStillSurfaceASaveFailure() throws {
+                let src = SourceGuardHelper.source("Overture/UI/FollowUpsView.swift")
+                for name in Self.guardedFunctions {
+                    let body = try SourceGuard.functionBody(named: name, in: src)
+                    #expect(!body.contains("try? context.save()"))
+                }
+            }
+
+            @Test func theTableIsBuiltFromTheWatchedSources() {
+                #expect(table == ["hall": "https://example-hall.example/whats-on"])
+            }
+        }
+        """#
+
+    // The same shape again, with the example written out in PROSE. #2816 had to leave the sentence
+    // explaining this defect unwritten, because writing it made the guard fail on its own explanation.
+    private static let fileWhoseCommentQuotesTheExample = #"""
+        // The sweep collects names from anything array-shaped after an equals sign, so an assertion
+        // like `#expect(table == ["hall": "https://example-hall.example/whats-on"])` read as a list of
+        // function names, and so did a bare example = ["quotedInProse"].
+        @Suite("A guard whose comment quotes the shape that broke it")
+        struct AGuard {
+            private static let guardedFunctions = ["pushOut"]
+
+            @Test func theHandlersStillSurfaceASaveFailure() throws {
+                let src = SourceGuardHelper.source("Overture/UI/FollowUpsView.swift")
+                for name in Self.guardedFunctions {
+                    _ = try SourceGuard.functionBody(named: name, in: src)
+                }
+            }
+        }
+        """#
+
+    @Test func aDictionaryFixtureIsNotReadAsAListOfFunctionNames() {
+        let refs = Self.references(in: Self.fileWithAListOfNamesAndADictionaryFixture)
+        #expect(refs.paths == ["Overture/UI/FollowUpsView.swift"])
+        // The positive half, in this same fixture: a list of handler names is still collected, so a
+        // name that has genuinely moved out of every path the file reads is still caught.
+        #expect(refs.names == ["pushOut", "standDown"],
+                """
+                the sweep must still read a file's own list of handler names; it collected \
+                \(refs.names.sorted().joined(separator: ", "))
+                """)
+        // And the negative half: a dictionary's keys and values are fixture data, not references
+        // anybody wrote. #2816 was told a fixture key was a function that had gone missing (#2953).
+        #expect(!refs.names.contains("hall"),
+                "a dictionary fixture's key was read as a function name this file references (#2953)")
+    }
+
+    @Test func theSweepReadsCodeAndNotComments() {
+        let refs = Self.references(in: Self.fileWhoseCommentQuotesTheExample)
+        #expect(refs.names == ["pushOut"],
+                """
+                the sweep read a name out of prose; it collected \
+                \(refs.names.sorted().joined(separator: ", "))
+                """)
+        #expect(!refs.names.contains("quotedInProse"),
+                "an example quoted in a comment was read as a function reference (#2953)")
+        #expect(!refs.names.contains("hall"),
+                "a dictionary quoted in a comment was read as a function reference (#2953)")
+    }
+
+    // The classifier itself, exercised on each shape it claims to tell apart rather than only ever
+    // watched not to fire on the one fixture above (L151). The two it must NOT condemn are the ones a
+    // fixture is least likely to reach for: a colon inside a call's argument label, and a colon inside
+    // a string.
+    @Test func theDictionaryClassifierKnowsEachShapeItNames() {
+        #expect(Self.isDictionaryLiteral(#""hall": "https://example-hall.example/whats-on""#))
+        #expect(Self.isDictionaryLiteral(":"))                                  // [:], the empty one
+        #expect(Self.isDictionaryLiteral(#".hall: "a-source""#))                // a non-string key
+
+        #expect(!Self.isDictionaryLiteral(#""pushOut", "standDown""#))
+        #expect(!Self.isDictionaryLiteral(#"Fixture(named: "pushOut"), Fixture(named: "standDown")"#))
+        #expect(!Self.isDictionaryLiteral(#""a: b", "c""#))
     }
 }

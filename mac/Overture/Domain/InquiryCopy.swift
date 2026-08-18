@@ -82,8 +82,25 @@ enum InquiryCopy {
         "Overture found this conversation in your Gmail, from the address you logged, and is watching it for replies."
 
     // The one-line lifecycle state shown on the row.
-    static func rowState(sentAt: Date?, replied: Bool) -> String {
+    //
+    // #2943: four states now, not three. Answering an inquiry used to be recorded by clearing `replied`,
+    // so this line went back to "Sent, waiting to hear back", word for word what it says for an inquiry
+    // nobody ever wrote back to. A live negotiation and total silence read identically, which is #2919's
+    // finding on the scouted half arriving here by a worse route: there the exchange was unreported, here
+    // it was destroyed.
+    //
+    // `answeredReplyLine` is rendered by `AnsweredReplyNote`, the SAME function the scouted row's line
+    // comes from, rather than a wording of this file's own. The two kinds of row sit in one list under one
+    // set of date headings, and one exchange described in two sets of words is the collision that only
+    // shows up when they are read together (L118). Nil is the whole of the empty branch: no heading over
+    // an absence, no placeholder, just the state this row was already in.
+    //
+    // It is a rendered sentence rather than two dates because this row is a pure snapshot taken against
+    // one `now` (see `QueueModel.inquiryRows`), the same reading `followUpNudgeDue` and
+    // `shouldSuggestClosing` already arrive as, so the view holds no clock of its own.
+    static func rowState(sentAt: Date?, replied: Bool, answeredReplyLine: String?) -> String {
         if sentAt == nil { return "Awaiting your first reply" }
+        if let answeredReplyLine { return answeredReplyLine }
         if replied { return "They replied" }
         return "Sent, waiting to hear back"
     }

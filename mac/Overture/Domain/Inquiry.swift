@@ -118,6 +118,21 @@ final class Inquiry {
     // #2149: when the repair pass last TRIED to fill in the message text, whether or not it found any.
     // Without it a reply with no decodable body stays in the gap and its thread is refetched forever.
     var replyTextCheckedAt: Date?
+    // #2943: when Dan ANSWERED, the mirror of `Recipient.replyHandledAt` (#2170) rather than a second
+    // vocabulary for the same fact. Its own field, because the reply genuinely happened and its arrival
+    // still dates the row.
+    //
+    // Both paths that recorded an answer used to say it by clearing `replied`, which is L163 exactly: the
+    // model had no field for the fact, so the fact was expressed by negating a neighbouring one, and every
+    // reader of `replied` went on reading that negation as "nobody ever wrote back". The row reverted to
+    // "Sent, waiting to hear back" and #16's funnel filed a real two way conversation as silence.
+    //
+    // Optional and nil by default, which is the only kind of schema change this app makes (see
+    // `AppSchema`): purely additive, handled by SwiftData's lightweight migration, no MigrationPlan. Nil
+    // reads as "not answered", which is honest for every row already in the store: measured 2026-08-18,
+    // the live store holds ONE inquiry, booked, never sent and carrying no thread, so nothing there has an
+    // answer this field could have recorded and there is nothing to backfill.
+    var replyHandledAt: Date?
     var dismissedReplyId: String?
     var bounced: Bool = false
     var lastBounceId: String?
@@ -224,6 +239,38 @@ extension Inquiry {
         }
     }
 
+    // #2943: they wrote and nobody has dealt with it yet. The mirror of `Recipient.hasUnhandledReply`,
+    // asking the same three facts first: `isOpen` is where an inquiry keeps what `resolution == nil`
+    // keeps for a contact, and a bounce is its own fact on both.
+    //
+    // Compared against when their message ARRIVED rather than being a plain flag, for the same reason the
+    // contact side is: a SECOND reply on the same thread re-opens it, and without that the back half of
+    // every conversation would be unanswerable from the queue.
+    var hasUnhandledReply: Bool {
+        guard replied, isOpen, !bounced else { return false }
+        guard let handled = replyHandledAt else { return true }
+        guard let theirs = replyArrivedAt else { return false }
+        return theirs > handled
+    }
+
+    // #2943: they wrote, Dan answered, and nothing has arrived since. Written OVER `hasUnhandledReply`
+    // rather than beside it (#2921's rule, and the same shape `Recipient.replyIsAnswered` took in #2919),
+    // so the two can never disagree about whether this conversation has been dealt with. The three facts
+    // in front of it are the three that predicate short-circuits on, and they are here because
+    // `!hasUnhandledReply` on its own is equally true of an inquiry nobody ever answered, one that
+    // bounced, and one Dan closed out. A line may claim only what its check actually measured (L11).
+    var replyIsAnswered: Bool {
+        replied && !bounced && isOpen && replyHandledAt != nil && !hasUnhandledReply
+    }
+
+    // #2943: the answer, recorded. Never moves backwards, exactly as `Recipient.markReplyAnswered` does
+    // not, so a later answer on this conversation cannot be undone by an earlier one arriving out of
+    // order.
+    func markReplyAnswered(now: Date) {
+        guard let existing = replyHandledAt else { replyHandledAt = now; return }
+        if now > existing { replyHandledAt = now }
+    }
+
     // #1513: when this inquiry next needs Dan, so it can be grouped in Reached out under the SAME date
     // heading as the shows there ("Grouped by when to reach out next", #1233) instead of carrying its
     // event date into a view where every other date means something else.
@@ -247,13 +294,19 @@ extension Inquiry {
             // Falls back to the send for a row that replied before an arrival time was ever captured,
             // which is a real past instant rather than the reading of the clock `.waiting(since: nil)`
             // would settle for.
-            if replied { return [.waiting(since: replyArrivedAt ?? sentAt)] }
+            // #2943: asked of the UNHANDLED reply, not of `replied`. Once the answer became its own fact
+            // rather than the absence of a reply, `replied` stays true for the rest of the conversation,
+            // and a row keyed on it would sit under the day they wrote forever instead of restarting the
+            // nudge from Dan's answer.
+            if hasUnhandledReply { return [.waiting(since: replyArrivedAt ?? sentAt)] }
             return [.scheduled(BusinessDay.advance(sentAt, byBusinessDays: Inquiry.followUpNudgeBusinessDays))]
         }
     }
 
+    // #2943: `!hasUnhandledReply` rather than `!replied`, for the reason above. Chasing is what Dan does
+    // while he is waiting on THEM, which is exactly the state an answered conversation is back in.
     func followUpNudgeDue(now: Date) -> Bool {
-        guard isOpen, !replied, !bounced, let sentAt else { return false }
+        guard isOpen, !hasUnhandledReply, !bounced, let sentAt else { return false }
         // #1438: the two nudges are drawn as badges side by side on the row, so they must not both be
         // true. Once the silence is long enough to suggest closing, that supersedes "follow up"; showing
         // both told Dan to chase it and to give up on it at the same time.
@@ -262,7 +315,7 @@ extension Inquiry {
     }
 
     func shouldSuggestClosing(now: Date) -> Bool {
-        guard isOpen, !replied, let sentAt else { return false }
+        guard isOpen, !hasUnhandledReply, let sentAt else { return false }
         return BusinessDay.count(after: sentAt, through: now) >= Inquiry.closingSuggestionBusinessDays
     }
 
