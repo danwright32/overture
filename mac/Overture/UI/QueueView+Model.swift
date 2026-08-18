@@ -1141,11 +1141,58 @@ enum QueueModel {
     // run's URLs are the members' own event pages, so every row matched itself and 639 rows whose link
     // opens a single show's page were announced as the venue's calendar.
     static func listingLinkLabel(_ item: QueueItem) -> String {
-        guard let listing = item.sourceListingURL else { return "Source listing" }
+        listingLabel(listing: item.sourceListingURL, calendars: item.sourceCalendarURLs)
+    }
+
+    // The rule itself, over the two facts it needs rather than over a whole card, so a surface that is
+    // handed a Prospect can reach it (#2816). One rule in one place: a card and a row describing the same
+    // link in two different words is what #1825 was.
+    private static func listingLabel(listing: String?, calendars: [String]) -> String {
+        guard let listing else { return "Source listing" }
         let normalized = canonicalLink(listing)
-        return item.sourceCalendarURLs.contains(where: { canonicalLink($0) == normalized })
+        return calendars.contains(where: { canonicalLink($0) == normalized })
             ? "Venue calendar"
             : "Source listing"
+    }
+
+    // #2816: the way back to the show's own page, for a stage that draws a ROW rather than a card.
+    //
+    // Dan, on a Reached out row: "I'll need to add a source link to this page so I can see the source on
+    // demand." Reached out is where he decides what to do about an open pitch, and that decision turns on
+    // the show itself: what it is, how long it runs, who else is on the bill, whether the listing has
+    // changed since the pitch went out. The only web address the row carried was the contact ROUTE, which
+    // is the one place he does not need to go back to.
+    //
+    // Takes the prospect's own facts rather than a QueueItem, because these stages are handed a Prospect
+    // and building a card per row would run the send-group derivation (#2046) for a show that has already
+    // sent. Nil where there is nothing to link to, so the caller's `if let` is the whole of the empty
+    // branch: no heading, no gap, no dead control (L45).
+    struct RowListingLink: Equatable, Sendable {
+        let url: URL
+        let label: String
+    }
+
+    static func rowListingLink(listingURL: String?, sourceIds: [String],
+                               calendars: [String: String]) -> RowListingLink? {
+        guard let url = url(listingURL) else { return nil }
+        // The row's OWN sources, never every watched source, so a show can never inherit a calendar
+        // address from a source it was not found on (#1825's rule, same resolution as `items(from:)`).
+        return RowListingLink(url: url,
+                              label: listingLabel(listing: listingURL,
+                                                  calendars: sourceIds.compactMap { calendars[$0] }))
+    }
+
+    // #1825's table: which watched source publishes which calendar address. Built ONCE by a caller and
+    // read per row, never rebuilt per card (#1121). Lifted out of `items(from:)` by #2816 so the rows on
+    // Reached out and Follow-ups resolve their links against the same table the queue card does rather
+    // than a second copy of it.
+    static func sourceCalendarIndex(_ sources: [WatchedSource]) -> [String: String] {
+        Dictionary(
+            sources.compactMap { s -> (String, String)? in
+                guard let u = s.listingsURL, !u.isEmpty else { return nil }
+                return (s.sourceId, u)
+            },
+            uniquingKeysWith: { first, _ in first })
     }
 
     // A trailing slash is not a different page, and the fallback link is the source URL verbatim, so one
@@ -2311,12 +2358,9 @@ enum QueueModel {
             overrides: overrides)
         // #1825: built ONCE, for the same reason as venueBrands above. Every row resolves its own sources
         // through this rather than walking the watchlist per card.
-        let calendarBySourceId = Dictionary(
-            sources.compactMap { s -> (String, String)? in
-                guard let u = s.listingsURL, !u.isEmpty else { return nil }
-                return (s.sourceId, u)
-            },
-            uniquingKeysWith: { first, _ in first })
+        // #2816: the table lives on QueueModel now, because the reached-out and follow-up rows resolve
+        // their own links against it too, and two builds of one table are two things to drift.
+        let calendarBySourceId = sourceCalendarIndex(sources)
         return prospects.map {
             var item = QueueItem($0)
             // #2524: inside the sweep that was already happening. Asked as its own pass over the store it

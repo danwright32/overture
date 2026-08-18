@@ -52,14 +52,14 @@ struct ControlRefusalOnScreenTests {
     // dead and the tooltip read "Review and send", which is the wrong sentence rather than no sentence.
     @Test func aNudgeToAContactWithNoAddressSaysSoOnTheRow() throws {
         let view = FollowUpsView(gmailConnectedOverride: true)
-        let shown = try visibleRefusals(view.row(followUpRow(email: nil), since: nil))
+        let shown = try visibleRefusals(view.row(followUpRow(email: nil), since: nil, sourceCalendars: [:]))
         #expect(shown == [SendGate.noAddressReason], "shown: \(shown)")
     }
 
     // The other cause, on the same button, saying something different.
     @Test func aNudgeWithGmailDisconnectedNamesGmailInstead() throws {
         let view = FollowUpsView(gmailConnectedOverride: false)
-        let shown = try visibleRefusals(view.row(followUpRow(email: "emma@aurora.example"), since: nil))
+        let shown = try visibleRefusals(view.row(followUpRow(email: "emma@aurora.example"), since: nil, sourceCalendars: [:]))
         #expect(shown == [GmailCopy.notConnected], "shown: \(shown)")
     }
 
@@ -68,7 +68,7 @@ struct ControlRefusalOnScreenTests {
     @Test func aSendableNudgeRowShowsNoRefusalAtAll() throws {
         let view = FollowUpsView(gmailConnectedOverride: true)
         #expect(try visibleRefusals(view.row(followUpRow(email: "emma@aurora.example"),
-                                             since: nil)).isEmpty)
+                                             since: nil, sourceCalendars: [:])).isEmpty)
     }
 
     // MARK: - ReplyConversationView's Send reply

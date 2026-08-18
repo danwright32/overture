@@ -41,7 +41,8 @@ struct ReachedOutRowSendStateTests {
     private func row(since: Date?) -> some View {
         let (p, r) = pitched()
         return QueueView(deepLinkedKey: .constant(nil), deepLinkedKeys: .constant(nil))
-            .reachedOutRow((prospect: p, recipient: r, next: Date()), now: Date(), since: since)
+            .reachedOutRow((prospect: p, recipient: r, next: Date()), now: Date(), since: since,
+                           sourceCalendars: [:])
     }
 
     private func texts(_ view: some View) -> [String] {

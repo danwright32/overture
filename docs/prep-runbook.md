@@ -848,9 +848,9 @@ Anatomy:
   portfolio and the ask, and let them raise money themselves; answering that question in a
   REPLY is a conversation, and a conversation is the point.
 
-  This is about a COLD PITCH. A reply to someone who asks what Dan charges states the rate
-  plainly, as it always has ($250 an hour plus tax, one-hour minimum, gallery within two
-  weeks).
+  This is about a COLD PITCH. A reply to someone who asks what Dan charges answers in FULL, and
+  that answer is fixed text rather than a summary somebody writes fresh each time: see
+  "Answering what do you charge" at the end of this section (#2874).
   The original plan called for A/B testing "state the rate" against "link the contract
   page", but that second arm was never real, and the only way to write it is to invent a
   URL that 404s in an email Dan actually sends. There is nothing to choose between here.
@@ -1040,12 +1040,38 @@ body above, INCLUDING the greeting rule (#2545): this contact receives their own
 its `overrideBody` opens with its own greeting naming them, "Hi Virgile," then a blank line
 then the first sentence. It is a one-person email whatever else is on the show, so the
 two-or-more "Hello," case never applies to it. Everything else follows the shared body too:
-no performative enthusiasm, no em dashes, the same canonical rate and A/B offer
-handling, the same portfolio link, and the same "never ask for a known
+no performative enthusiasm, no em dashes, no price and no turnaround (the Offer rule
+above), the same portfolio link, and the same "never ask for a known
 fact" rule. The subject line stays shared and unchanged, third-person subjects read
 fine regardless of recipient. When two named performers are pursued for the same
 show (§1), each gets their OWN `overrideBody` naming their co-performer correctly,
 never a copy-pasted version naming the wrong person.
+
+**Answering "what do you charge": Dan's own two paragraphs, VERBATIM (#2874).** This governs a
+REPLY to someone who asked, and nothing else. A cold pitch still carries no rate and no turnaround
+(the Offer rule above), so these paragraphs never appear in a first email, and the Prep run you are
+reading this as never writes one: the reply drafter does (`docs/reply-classify-runbook.md`), and the
+text lives here because this file is the repo's copy of the drafting rules. Where they do apply they
+are Dan's words, not a summary to be paraphrased, shortened or re-ordered. Reproduce both paragraphs
+exactly, and write only the lines AROUND them: the greeting, the sentence acknowledging what they
+asked, and the close referencing their specific show.
+
+    I charge $250/hr plus tax (unless you're tax exempt, in which case I'd just need that documentation) with a minimum of one hour. I only charge for time spent at the performance, so there is no charge for time spent editing afterward. The cost includes the time spent photographing your concert as well as editing and delivery of the full gallery within 2 weeks. There are no extra or hidden fees beyond that, although I do offer some add-ons such as black and white edits and faster turnaround times.
+
+    From there, all photos are delivered via an online gallery where you're able to download both high and web-resolution files, and you have full usage rights to the images so you're free to do whatever you would like to with them.
+
+Substitute the performance word for the context ("your concert" becomes "your show" or "your
+performance") and nothing else. The add-ons are named, never priced: if they ask what an add-on
+costs, that is a question for Dan, not a number to invent.
+
+Never state the number without the paragraphs that follow it. Everything after the price is what
+makes the price read as fair, so a reply that stops at "$250 an hour plus tax" sends the sticker
+shock without the answer to it. That is measured, not hypothetical: until #2874 this whole answer
+was one parenthetical here, and on 2026-08-17 a real reply to a presenter who asked exactly this
+came back with the rate, the minimum and the turnaround and nothing else. The drafter did not invent
+a thin answer, it reproduced the thin answer it was given, faithfully. The same text is in the
+`dan-wright-brand-voice` skill, which is the authoritative copy and which the reply run invokes;
+`scripts/check-brand-voice-drift.sh` fails if the two sides stop agreeing on these facts.
 
 ### 3. Validate before writing (deterministic guard, Phase C / #39)
 
@@ -1054,7 +1080,8 @@ fix a draft body that:
 - contains "discount", "flexible", "free", or "complimentary" (no concession language
   in a cold email);
 - states a rate, a price, or a delivery turnaround AT ALL (#1906: a cold pitch carries
-  neither; a reply to someone who asked still does);
+  neither. A reply to someone who asked carries all of it, through the canonical two
+  paragraphs above, and this validation does not apply to that reply);
 - contains performative enthusiasm: "love to", "thrilled", "excited", "can't wait",
   "delighted", or an exclamation point ANYWHERE EXCEPT the final closing sentence
   (#1906, Dan's call 2026-07-31: "I look forward to hearing from you!" is his own sign-off

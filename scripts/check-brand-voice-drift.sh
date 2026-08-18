@@ -22,10 +22,18 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 # The concrete facts both sources state today. Each MUST appear in both the runbook and the skill;
 # a fact present on one side but not the other is drift. Deliberately NOT word-for-word (a reword
-# or a line wrap must not trip it) and deliberately NOT the rate: the rate ($250/hour, etc.) lives
-# only in the runbook by design, since the skill defers specifics to it, so requiring it in both
-# would false-alarm. These are the credential, venue, portfolio, opener-shape, and soft-close facts
-# the #365/#362 fixes had to keep in sync by hand.
+# or a line wrap must not trip it). These are the credential, venue, portfolio, opener-shape, and
+# soft-close facts the #365/#362 fixes had to keep in sync by hand, plus, since #2874, the rate
+# answer's own facts.
+#
+# The rate used to be excluded here on the stated ground that it "lives only in the runbook by
+# design, since the skill defers specifics to it". That stopped being true on 2026-08-17: Dan's
+# answer to "what do you charge" is now fixed text reproduced VERBATIM, and the skill holds the
+# canonical copy. Two sources holding one paragraph word for word is precisely the situation this
+# check exists for, and the cost of it drifting is higher than for anything else on this list,
+# because these sentences are sent to a stranger under Dan's name and each one answers an objection
+# to the price. An anchor that goes missing on one side means somebody edited the answer in one
+# place, which is the one thing that must not happen quietly.
 BRAND_VOICE_ANCHORS=(
   "nearly 10 years"
   "Madison Square Garden"
@@ -59,6 +67,20 @@ BRAND_VOICE_ANCHORS=(
   # is precisely why the rule now has to be in BOTH: a model with no instruction either way will assemble
   # one from Dan's identity line again.
   "never categorize the recipient"
+  # #2874: the rate answer, fact by fact. Single-quoted where the text carries a dollar sign, because
+  # "$250" inside double quotes expands as positional parameter $2 and would silently anchor on
+  # "50/hr plus tax" instead.
+  'two paragraphs, VERBATIM'
+  '$250/hr plus tax'
+  "minimum of one hour"
+  "tax exempt"
+  "no charge for time spent editing"
+  "within 2 weeks"
+  "no extra or hidden fees"
+  "black and white edits"
+  "named, never priced"
+  "high and web-resolution"
+  "full usage rights"
 )
 
 # #1227: phrases Dan has SUPERSEDED. Unlike an anchor (a fact that must appear on both sides), a rejected

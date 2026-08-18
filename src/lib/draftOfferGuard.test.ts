@@ -60,6 +60,16 @@ describe("the runbook never tells the drafter to link a contract or pricing page
     expect(runbook).not.toMatch(/ALWAYS\s+state\s+the\s+rate\s+plainly/i);
   });
 
+  // #2874 swept the sibling: the same reversal was never carried into PLAN.md, which went on stating
+  // "The email always states the rate plainly (#612)" for two weeks after Dan reversed it, one section
+  // below the heading the runbook cites as the drafter's own source ("Draft the email (PLAN.md section
+  // 7 ...)"). Nothing handed PLAN.md to a run, so no draft was ever written from it, which is exactly
+  // why it could sit contradicting the shipped rule unnoticed. The guard above is pointed at PLAN.md too
+  // so the pair cannot come apart again in the direction that matters (a price in a first email).
+  it("PLAN.md does not tell the drafter to state the rate in a cold pitch", () => {
+    expect(plan).not.toMatch(/ALWAYS\s+states?\s+the\s+rate\s+plainly/i);
+  });
+
   // #5 Phase 0: the `variant` field no longer records the retired constant "rate_stated" (a leftover
   // from the killed rate-vs-contract A/B, which the offer bullet above still explains was never real).
   // It now records the opener archetype the drafter actually PRODUCED (one of the four #362 shapes), so

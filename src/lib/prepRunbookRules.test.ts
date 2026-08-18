@@ -11,6 +11,7 @@ import { RUNBOOK_RULES, findMissingRunbookRules } from "./prepRunbookRules";
 
 const repoRoot = join(__dirname, "..", "..");
 const runbook = readFileSync(join(repoRoot, "docs", "prep-runbook.md"), "utf8");
+const replyRunbook = readFileSync(join(repoRoot, "docs", "reply-classify-runbook.md"), "utf8");
 
 describe("prep-runbook judgment rules are present (#591)", () => {
   it("the current runbook is missing none of the guarded rules", () => {
@@ -64,6 +65,18 @@ describe("prep-runbook judgment rules are present (#591)", () => {
       "portfolio-is-mine-not-the",
       "press-media-disqualified",
       "pursue-each-named-performer",
+      "rate-answer-add-ons-are-named",
+      "rate-answer-add-ons-are-never-priced",
+      "rate-answer-full-usage-rights",
+      "rate-answer-never-in-a-cold-pitch",
+      "rate-answer-no-charge-for-editing",
+      "rate-answer-no-hidden-fees",
+      "rate-answer-one-hour-minimum",
+      "rate-answer-online-gallery-downloads",
+      "rate-answer-rate-plus-tax",
+      "rate-answer-tax-exempt-pays-no-tax",
+      "rate-answer-two-paragraphs-verbatim",
+      "rate-answer-two-week-delivery",
       "reason-first-names-the-date",
       "representative-only-when-the-target-names-a-person",
       "returning-client-register",
@@ -94,4 +107,26 @@ describe("prep-runbook judgment rules are present (#591)", () => {
       expect(findMissingRunbookRules(withoutRule, RUNBOOK_RULES)).toContain(rule.name);
     });
   }
+});
+
+// #2874, the sibling half. The runbook guarded above is the PREP prompt, which drafts the COLD pitch and
+// is forbidden to state a rate at all. The run that actually answers "what do you charge" is a different
+// one reading a different prompt (docs/reply-classify-runbook.md), and it is the run whose draft was
+// measured on 2026-08-17 stopping at the number. Fixing only the prep runbook would leave the reader that
+// caused the defect untouched.
+//
+// That runbook deliberately does NOT get a third copy of the canonical text: it points at the skill both
+// runs invoke, so there is one place the paragraphs live in full and one place they can be edited (L41).
+describe("the reply drafter is sent to the canonical rate answer (#2874)", () => {
+  it("tells the reply run the rate answer is reproduced verbatim, not summarised", () => {
+    expect(replyRunbook).toMatch(/two\s+paragraphs,\s+VERBATIM/i);
+  });
+
+  // The sentence that licensed the thin answer, kept as a negative for the same reason "Happy to answer
+  // any questions" is: it told the run to include "Dan's standing facts only when relevant (rate,
+  // two-week delivery, ...)" while also telling it to keep drafts short, which is an instruction to
+  // compress precisely the answer that must not be compressed.
+  it("no longer tells the reply run to reduce the rate to a standing fact", () => {
+    expect(replyRunbook).not.toMatch(/standing\s+facts\s+only\s+when\s+relevant/i);
+  });
 });

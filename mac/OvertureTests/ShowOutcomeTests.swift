@@ -16,8 +16,8 @@ struct ShowOutcomeTests {
 
     // MARK: the shape of the vocabulary
 
-    @Test func danCanChooseExactlyThirteenValues() {
-        #expect(ShowOutcome.danCanChoose.count == 13)
+    @Test func danCanChooseExactlyFourteenValues() {
+        #expect(ShowOutcome.danCanChoose.count == 14)
     }
 
     // The order is a property of the vocabulary rather than something each view re-decides, so it is
@@ -29,9 +29,11 @@ struct ShowOutcomeTests {
                                              .noWayToReachThem, .duplicate])
     }
 
-    @Test func fiveEndingsForAShowThatWasPitched() {
+    // #2863 put `theySaidPriceTooHigh` with the other answers somebody gave, after the flat no, and kept
+    // Dan's own refusal last.
+    @Test func sixEndingsForAShowThatWasPitched() {
         #expect(ShowOutcome.pitched == [.booked, .neverHeardBack, .theySaidNotNow,
-                                        .theySaidNo, .turnedThemDown])
+                                        .theySaidNo, .theySaidPriceTooHigh, .turnedThemDown])
     }
 
     // The two halves must not overlap. An overlap is how an impossible option reaches the screen:
@@ -87,15 +89,16 @@ struct ShowOutcomeTests {
         #expect(!ShowOutcome.hadPaidWork.label.lowercased().contains("booked"))
     }
 
-    // The five pitched endings in Dan's own words, from the interview. Pinned because they are a
+    // The six pitched endings in Dan's own words, from the interview. Pinned because they are a
     // contract with him, not an implementation detail: "I turned them down" replaced "You stopped
     // working this", which he rejected outright ("I will never stop working something without
-    // closure").
-    @Test func theFiveEndingsReadAsDanWordedThem() {
+    // closure"). #2863 added the sixth in the same "They said..." shape as its neighbours.
+    @Test func theSixEndingsReadAsDanWordedThem() {
         #expect(ShowOutcome.booked.label == "Booked")
         #expect(ShowOutcome.neverHeardBack.label == "Never heard back")
         #expect(ShowOutcome.theySaidNotNow.label == "They said not now")
         #expect(ShowOutcome.theySaidNo.label == "They said no")
+        #expect(ShowOutcome.theySaidPriceTooHigh.label == "They said the price was too high")
         #expect(ShowOutcome.turnedThemDown.label == "I turned them down")
     }
 
@@ -125,7 +128,8 @@ struct ShowOutcomeTests {
             #expect(outcome.group == .neverPitched)
         }
         #expect(ShowOutcome.booked.group == .booked)
-        for outcome in [ShowOutcome.neverHeardBack, .theySaidNotNow, .theySaidNo, .turnedThemDown] {
+        for outcome in [ShowOutcome.neverHeardBack, .theySaidNotNow, .theySaidNo,
+                        .theySaidPriceTooHigh, .turnedThemDown] {
             #expect(outcome.group == .pitchedAndLost)
         }
     }

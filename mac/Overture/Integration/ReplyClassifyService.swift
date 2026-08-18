@@ -12,8 +12,24 @@ enum ReplyClassifyService {
     // draft was requested (so an "actually, yes" turnaround is re-read rather than lost). Per-recipient
     // now, so each contact on a show is queued independently and once (keyed by recipientId), never
     // collapsing to the first replier.
+    // #2921: and only while the conversation still needs Dan, asked of `Recipient.hasUnhandledReply`
+    // rather than re-derived here. That property IS the gate on the Answer control
+    // (`ReplyPanel.isOffered`), so sharing it is what stops the run drafting a reply the only surface Dan
+    // answers from can never show: it reads the answered stamp this predicate never did, and the run
+    // spent, on every window open, on conversations Overture had itself recorded as answered.
+    //
+    // Measured on the live store on 2026-08-17: a contact wrote at 17:50, Dan answered from his mail
+    // client at 18:00, detection stamped `replyHandledAt` at 18:06, and a later launch drafted a full
+    // reply to that message anyway (L16, L70).
+    //
+    // Deliberately the whole property and not a copy of the one field: a second predicate that agrees
+    // today is exactly how these two came apart in the first place. It also brings the two facts this one
+    // never read, a resolution recorded on the contact and a bounce, and it keeps a conversation they
+    // wrote on AGAIN after the answer, because `hasUnhandledReply` compares their message against the
+    // stamp rather than treating the stamp as final.
     static func recipientNeedsClassify(_ r: Recipient) -> Bool {
         guard r.replied, let text = r.lastReplyText, !text.isEmpty else { return false }
+        guard r.hasUnhandledReply else { return false }
         guard r.outcomeSource != .manual else { return false }
         if r.replyDraftBody == nil { return true }
         if let repliedAt = r.repliedAt, let requestedAt = r.replyDraftRequestedAt, repliedAt > requestedAt { return true }
