@@ -1,0 +1,44 @@
+{
+  "version": 10,
+  "generatedAt": "2026-08-17T00:00:00.000Z",
+  "results": [
+    {
+      "naturalKey": "paper-lanterns|2026-09-14|the-lantern-room",
+      "showSummary": "A one-night song cycle written and performed by two people, 70 minutes, no interval.",
+      "contacts": [
+        {
+          "name": "Rowan Ashfield",
+          "role": "Writer and performer",
+          "tier": "primary",
+          "method": "form_or_dm",
+          "confidence": "low",
+          "formUrl": "https://www.instagram.com/rowanashfieldmusic/",
+          "provenance": "performer",
+          "nameMatchOnly": true,
+          "overrideBody": "I photograph performing arts in New York and saw you're bringing your song cycle to The Lantern Room on September 14. I shoot unobtrusive, no-flash documentary coverage, which suits a room that size. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com/performing-arts."
+        },
+        {
+          "name": "Mira Sandoval",
+          "role": "Writer and performer",
+          "tier": "primary",
+          "email": "mira@mirasandoval.example",
+          "method": "named_decision_maker",
+          "confidence": "high",
+          "provenance": "performer",
+          "sourceUrl": "https://mirasandoval.example/contact",
+          "overrideBody": "I photograph performing arts in New York and saw you're bringing your song cycle to The Lantern Room on September 14. I shoot unobtrusive, no-flash documentary coverage, which suits a room that size. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com/performing-arts."
+        }
+      ],
+      "draft": {
+        "subject": "Photographing Paper Lanterns at The Lantern Room.",
+        "body": "I photograph performing arts in New York and saw Paper Lanterns is playing The Lantern Room on September 14. I shoot unobtrusive, no-flash documentary coverage, which suits a room that size. My rate is $250 an hour plus tax, one-hour minimum, with the gallery delivered within two weeks. Recent work is at danwrightphotography.com/performing-arts.",
+        "variant": "reason-first"
+      }
+    },
+    {
+      "naturalKey": "unlisted-ensemble|2026-09-20|community-hall",
+      "showSummaryAbsentReason": "no_listing_page",
+      "emptyReason": "nothing_published"
+    }
+  ]
+}

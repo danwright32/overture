@@ -595,9 +595,13 @@ struct ProspectRowView: View {
             // #1722: same badge, same rust tone, same icon. Only the SENTENCE varies, so a check that
             // found the room's own address and refused it stops reporting that it found nothing. With no
             // reason recorded this is byte-identical to what it always said.
+            // #2912: and the TONE follows the reason for exactly one of them, the row that found a
+            // profile it could not tie to this show. Rust is the colour of a finding of nothing, and
+            // that row has a link on it Dan can judge in seconds. Decided in the domain, like the
+            // sentence beside it, so the choice is testable rather than a switch inside a body.
             reachabilityNote(icon: "envelope.badge",
                              text: ReachabilityCopy.emptyAnswerBadge(item.reachabilityEmptyReason),
-                             tone: Reachability.tone(for: .noEmailFound),
+                             tone: Reachability.emptyAnswerTone(item.reachabilityEmptyReason),
                              help: ReachabilityCopy.emptyAnswerHelp(item.reachabilityEmptyReason))
         case .weakContactOnly:
             // #1324: gold, the caution between the rust "none" and the forest "found": an address exists,
@@ -747,14 +751,28 @@ struct ProspectRowView: View {
             // #1628: no caveat here either. Every contact form is unverified by definition (the runbook
             // maps form-or-DM to low confidence unconditionally), so a warning on all of them would say
             // nothing the "Contact form only" pill above does not already say.
-            ForEach(item.displayedContactForms, id: \.self) { url in
-                Link(destination: url) {
-                    Text(QueueModel.contactFormSiteLabel(url))
-                        .underline()
+            // #2912: a link the run could tie to nobody carries the reason on its own line, ABOVE the
+            // handle, in the same quiet meta styling the address column gives an attribution (#2623). A
+            // second line costs height, which this row has, where the caveat that broke this column three
+            // times was competing for its WIDTH. Only when the badge above cannot say it for the whole
+            // row; the model decides that, so a card can never say it twice or not at all.
+            ForEach(item.displayedContactRoutes()) { route in
+                VStack(alignment: .trailing, spacing: 0) {
+                    if route.marksUnconfirmed {
+                        Text(ReachabilityCopy.unconfirmedProfileNote)
+                            .font(OVType.meta)
+                            .foregroundStyle(OVColor.inkFaint)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .multilineTextAlignment(.trailing)
+                    }
+                    Link(destination: route.url) {
+                        Text(QueueModel.contactFormSiteLabel(route.url))
+                            .underline()
+                    }
+                    .font(OVType.meta)
+                    .foregroundStyle(OVColor.forestText)
+                    .multilineTextAlignment(.trailing)
                 }
-                .font(OVType.meta)
-                .foregroundStyle(OVColor.forestText)
-                .multilineTextAlignment(.trailing)
             }
         }
     }

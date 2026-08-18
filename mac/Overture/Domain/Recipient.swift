@@ -170,6 +170,25 @@ final class Recipient {
     // so the card, the review panel and the merge cannot each spell the pair differently.
     var isHeldDownToUnverified: Bool { heldDownToUnverified && !heldDownToUnverifiedDismissed }
 
+    // #2912: the run said the ONLY thing tying this route to the person named here is the NAME. The live
+    // case is a social profile found by searching the platform (#2892): the account carries the right
+    // name and its bio and recent posts say nothing about this show, so who is on the end of it was never
+    // established. Dan asked to SEE those rather than have them withheld, and to be told they are guesses.
+    //
+    // Set by PrepImporter from the contact's own `nameMatchOnly`, and re-derived on EVERY ingest rather
+    // than latched, exactly like `heldDownToUnverified` above: a later run that emits the same profile
+    // without the declaration is making the verification claim a bare `form_or_dm` carries, so the mark
+    // clears with the doubt it describes.
+    //
+    // FALSE on every row written before this shipped, which means "nobody has said it is a guess", not
+    // "confirmed". Nothing asserts anything on a false, so an old row keeps exactly today's wording.
+    //
+    // What it deliberately does NOT do is make the show reachable. `Prospect.socialRouteURLs` excludes a
+    // profile carrying this, so the stored verdict, the fit score and the organisation ledger see what
+    // they saw when such a profile was refused outright (#2147, L75): the app still never CLAIMS a route
+    // it cannot tie to anybody. The card shows the handle and says what could not be confirmed.
+    var nameMatchOnly: Bool = false
+
     // #2622: WHO this contact is to the show (primary, secondary, tertiary), as the check judged it from
     // the page it read. Raw, like the confidence and method beside it, so a value this build does not know
     // decodes as nil rather than being invented here. nil means nobody has said, which every contact

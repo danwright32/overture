@@ -163,6 +163,24 @@ struct PrepContact: Codable, Equatable, Sendable {
     // runbook's STRICT verification bar); distinct from formUrl, which stays the form_or_dm
     // contact's own submission link and never doubles as a citation.
     var sourceUrl: String?
+    // v10 (#2912): the run's own declaration that the ONLY thing tying this route to the target is the
+    // NAME. A social profile carrying the right name and nothing tying it to this show (not the title,
+    // not the venue, not the date, not another name on the bill) is now surfaced as a guess rather than
+    // withheld: Dan would rather look at a handle for two seconds than never see it, and the search that
+    // found it is a search nobody can repeat cheaply.
+    //
+    // Its OWN field rather than a `confidence` value, which is the whole judgement here. The runbook maps
+    // every form or DM to `low` unconditionally, so a CONFIRMED profile is already `low`: the two states
+    // Dan has to tell apart would share one value, and the card would be reading a field that cannot
+    // answer the question it is being asked. `confidence` goes on saying how good the ROUTE is; this says
+    // whether the person on the end of it was established at all.
+    //
+    // TRUE is the alarming value, deliberately. Absent is what every contact written before this carried
+    // and what a run says when it has nothing to declare, so absence reads as "nobody has said", and a run
+    // that emits a bare `form_or_dm` is making the verification claim the runbook requires for one. The
+    // app never leaves the pair free to disagree: a contact carrying this may not be stored as `high`
+    // (ContactConfidenceGuard), so the card reads ONE answer to "how sure are we" (L16).
+    var nameMatchOnly: Bool?
 }
 
 struct PrepDraft: Codable, Equatable, Sendable {
@@ -190,7 +208,9 @@ enum PrepResultsDecoder {
     // fixture, for exactly the reason the paragraph above gives.
     // #2622 raised this to 9 with the contact `tier` field, IN THE SAME COMMIT as `fixtures/prep-results/v9.json`,
     // for exactly the reason the paragraph above gives.
-    static let supportedVersion = 9
+    // #2912 raised this to 10 with the contact `nameMatchOnly` field, IN THE SAME COMMIT as
+    // `fixtures/prep-results/v10.json`, for exactly the reason the paragraph above gives.
+    static let supportedVersion = 10
     static let minimumVersion = 1
 
     static func decode(_ data: Data) throws -> PrepResults {

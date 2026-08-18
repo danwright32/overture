@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1408 sentences**.
+Every sentence Overture can say to Dan: **1411 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -383,6 +383,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/PrepQueueButton.swift`
 "A booking was detected that needs your confirmation. Tap to confirm or dismiss."
     `UI/ProspectRowView.swift`
+"A check found a profile carrying the right name and nothing in its bio or recent posts tying it to this show, so who is on the end of it is not settled. If you recognise the handle below, the DM is yours to send."
+    `Domain/Reachability.swift`
 "A check has already run over this show once and never got an answer for it."
     `Domain/ProbeSelection.swift`
 "A check missed this show"
@@ -1087,6 +1089,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "Name (optional)"
     `UI/DraftReviewView.swift`
+"Name matches, nothing ties it to this show"
+    `Domain/Reachability.swift`
 "Name the venue"
     `UI/SourcesView.swift`
 "Needs a look"
@@ -1497,6 +1501,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ProspectRowView.swift`
 "Possible match to \(possibleMatchOrigin(item.possibleMatchSource)): \(name)?"
     `UI/QueueView+Model.swift`
+"Possible profile, not confirmed"
+    `Domain/Reachability.swift`
 "Possibly one name twice"
     `UI/OrganisationsView.swift`
 "Prep \(Plural.count(count, "show"))"

@@ -23,7 +23,16 @@ enum ContactConfidenceGuard {
     //
     // Never upgrades: a `medium` or `low` find with a page is still whatever the run judged it to be, and
     // an absent confidence stays absent rather than being invented here.
-    static func confidence(raw: String?, sourceURL: String?) -> String? {
+    // #2912: and a contact the run itself called a NAME MATCH ONLY may never be high either, whatever
+    // page it cites. The page is not in question there; who is on it is. Without this the card could be
+    // handed a `high` beside a declared guess and would have two sources answering "how sure are we"
+    // differently, with nothing saying which wins (L16). The declaration wins, because it is the more
+    // specific claim and the more cautious one (L42).
+    //
+    // Defaulted so every existing caller keeps asking exactly the question it asked before, and so
+    // `heldDown` below goes on meaning the ONE thing it was defined to mean: the citation rule fired.
+    static func confidence(raw: String?, sourceURL: String?, nameMatchOnly: Bool = false) -> String? {
+        if nameMatchOnly { return raw == nil ? nil : "low" }
         guard raw == "high" else { return raw }
         let cited = (sourceURL ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         return cited.isEmpty ? "low" : raw

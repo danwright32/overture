@@ -237,6 +237,7 @@ function assertPrepContact(
   provenanceRequired: boolean,
   overrideBodyAllowed: boolean,
   sourceUrlAllowed: boolean,
+  nameMatchOnlyAllowed: boolean,
 ): void {
   const o = requireObject(data, file, path);
   optionalString(o.name, file, `${path}.name`);
@@ -260,6 +261,23 @@ function assertPrepContact(
   } else if (o.overrideBody !== undefined) {
     fail(file, `${path}.overrideBody must not be present before version 4`);
   }
+  // #2912: the run's declaration that only the NAME matched. A BOOLEAN, and true is the only value
+  // worth writing: the app reads absence as "nobody has said", so a `false` says nothing a missing
+  // field did not. It is refused as a string ("true" is what a model reaching for this field writes
+  // first, and it would read as absent all the way to Dan's card).
+  if (nameMatchOnlyAllowed) {
+    if (o.nameMatchOnly !== undefined && typeof o.nameMatchOnly !== "boolean") {
+      fail(file, `${path}.nameMatchOnly must be a boolean when present`);
+    }
+    // A name match is by definition not verified, and `high` is reserved for an address read off a page
+    // naming the target. The pair contradicts itself, and the app resolves it by storing `low`; refusing
+    // it here means the contradiction is never written in the first place.
+    if (o.nameMatchOnly === true && o.confidence === "high") {
+      fail(file, `${path}.nameMatchOnly cannot be high confidence`);
+    }
+  } else if (o.nameMatchOnly !== undefined) {
+    fail(file, `${path}.nameMatchOnly must not be present before version 10`);
+  }
 }
 
 // overture-prep-results.json (version 1: singular contact; version 2: contacts[], replaces it;
@@ -267,10 +285,11 @@ function assertPrepContact(
 // alreadyCoveredNote fit-risk flag on the result itself, #611; version 6: adds an optional
 // sourceUrl per contact, #363; version 7: adds an optional emptyReason on the result itself, REQUIRED
 // when contacts is absent, #1722; version 8: adds an optional showSummary plus a showSummaryAbsentReason
-// that is REQUIRED when there is no summary, #1824)
+// that is REQUIRED when there is no summary, #1824; version 10: adds an optional boolean
+// nameMatchOnly per contact, #2912)
 export function assertPrepResultsShape(data: unknown, file: string, expectedVersion: number): void {
   const root = requireObject(data, file, "(root)");
-  const version = requireVersion(root.version, file, [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  const version = requireVersion(root.version, file, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
   if (version !== expectedVersion) fail(file, `version ${version} does not match filename version ${expectedVersion}`);
   requireString(root.generatedAt, file, "generatedAt");
   const results = requireArray(root.results, file, "results");
@@ -279,6 +298,7 @@ export function assertPrepResultsShape(data: unknown, file: string, expectedVers
   const showSummaryAllowed = version >= 8;
   const alreadyCoveredNoteAllowed = version >= 5;
   const sourceUrlAllowed = version >= 6;
+  const nameMatchOnlyAllowed = version >= 10;
   results.forEach((item, i) => {
     const o = requireObject(item, file, `results[${i}]`);
     requireString(o.naturalKey, file, `results[${i}].naturalKey`);
@@ -337,12 +357,13 @@ export function assertPrepResultsShape(data: unknown, file: string, expectedVers
     }
     if (version === 1) {
       if (o.contacts !== undefined) fail(file, `results[${i}].contacts must not be present before version 2`);
-      if (o.contact !== undefined) assertPrepContact(o.contact, file, `results[${i}].contact`, false, overrideBodyAllowed, sourceUrlAllowed);
+      if (o.contact !== undefined) assertPrepContact(o.contact, file, `results[${i}].contact`, false, overrideBodyAllowed, sourceUrlAllowed, nameMatchOnlyAllowed);
     } else {
       if (o.contact !== undefined) fail(file, `results[${i}].contact was replaced by contacts[] in version 2`);
       if (o.contacts !== undefined) {
         const contacts = requireArray(o.contacts, file, `results[${i}].contacts`);
-        contacts.forEach((c, j) => assertPrepContact(c, file, `results[${i}].contacts[${j}]`, true, overrideBodyAllowed, sourceUrlAllowed));
+        contacts.forEach((c, j) => assertPrepContact(c, file, `results[${i}].contacts[${j}]`, true, overrideBodyAllowed,
+                                        sourceUrlAllowed, nameMatchOnlyAllowed));
       }
     }
   });

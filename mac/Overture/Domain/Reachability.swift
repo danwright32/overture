@@ -98,6 +98,20 @@ enum Reachability {
         }
     }
 
+    // #2912: the pill's TONE for that one reason, which is the half a sentence cannot carry. Every other
+    // empty answer is rust, the colour of a finding of nothing, and that is right for them. This row has
+    // a link on it that Dan can judge in seconds, so rust would tell him to stop looking at the one card
+    // where looking is the whole point; gold would say he can write to somebody, which is the
+    // substitution #2147 refuses. `tentative` is the tone whose own definition is "found something, but
+    // cannot stand behind it".
+    //
+    // A function rather than a `tone(for:)` case, because the badge is still `.noEmailFound` and nothing
+    // else about the verdict moves (#1722): the fit score, the ledger and the stored result see exactly
+    // what they saw when such a profile was refused outright.
+    static func emptyAnswerTone(_ reason: EmptyReason?) -> OVPillTone {
+        reason == .unconfirmedSocialProfile ? .tentative : tone(for: .noEmailFound)
+    }
+
     // #1325: how long a probe result is trusted before it reads as possibly out of date (~90 days,
     // roughly the pitch horizon). Past this the badge asks Dan to re-check rather than trusting the old
     // answer.
@@ -266,6 +280,19 @@ enum Reachability {
         // differently too: this one is worth another check, where names with no route is worth his own
         // two minutes on the listing.
         case routeNamedButNotSupplied = "route_named_but_not_supplied"
+        // #2912: the check found a social profile carrying the target's NAME and nothing tying it to this
+        // show, and Dan asked to see it rather than have it withheld. So the show has a handle on it and
+        // still has nobody Overture can say it reaches.
+        //
+        // Its own value, and specifically not a shade of the two nearest ones, because both would be
+        // false about the card Dan is looking at. `onlySocialProfile` calls the account "this act's",
+        // which is the substitution #2147 forbids said in a sentence instead of a field. `namedButNoRoute`
+        // says the search finished and found no way in, and sends him to the listing to search by hand,
+        // while this card is showing him a possible way in he can judge in seconds.
+        //
+        // It is the one empty reason under which the card SHOWS him something to act on, which is why it
+        // is also the one that changes the pill's tone (see `emptyAnswerTone`).
+        case unconfirmedSocialProfile = "unconfirmed_social_profile"
     }
 
     // Whether a contact names a route it does not carry. Exhaustive over `ContactMethod`, so a method
@@ -310,10 +337,30 @@ enum Reachability {
         // single contradictory contact is enough: the run has already shown it will state a route it did
         // not find, so nothing it emitted for this show establishes that anything was searched properly.
         if contacts.contains(where: declaredRouteIsMissing) { return .routeNamedButNotSupplied }
+        // #2912: asked BEFORE the social reason below, because the sentence below asserts the profile is
+        // the act's own and here nothing established that. Every social profile this run found is a name
+        // match, so there is no confirmed handle on the card for that sentence to be true of.
+        //
+        // Asked over the profiles rather than over every contact, deliberately: a person the run found
+        // with no route at all beside the guess does not turn this back into names with no route, because
+        // the card IS showing a handle and the line above it has to be about the handle.
+        let profiles = contacts.filter(isSocialRoute)
+        if !profiles.isEmpty, profiles.allSatisfy({ $0.nameMatchOnly == true }) {
+            return .unconfirmedSocialProfile
+        }
         // A doorway found and not opened keeps its own reason: it is the state most likely to change on
         // a re-check, and collapsing it into the new one would hide that (#2265).
         if onlySocialRoutes(contacts) { return .onlySocialProfile }
         return .namedButNoRoute
+    }
+
+    // #2912: a contact whose only way in is a social profile. Extracted from `onlySocialRoutes` below
+    // rather than written a second time, so "is this route a social profile" has one definition and the
+    // reason above and the verdict cannot answer it differently (L16).
+    static func isSocialRoute(_ contact: PrepContact) -> Bool {
+        let hasEmail = !(contact.email ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        guard !hasEmail, let form = contact.formUrl else { return false }
+        return isSocialOnly(form)
     }
 
     // nil means no check has ever run, which is a different thing from a check that came back empty. The
@@ -393,11 +440,7 @@ enum Reachability {
     // reason and its own branch.
     static func onlySocialRoutes(_ contacts: [PrepContact]) -> Bool {
         guard !contacts.isEmpty else { return false }
-        return contacts.allSatisfy { contact in
-            let hasEmail = !(contact.email ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            guard !hasEmail, let form = contact.formUrl else { return false }
-            return isSocialOnly(form)
-        }
+        return contacts.allSatisfy(isSocialRoute)
     }
 
     static func isSocialOnly(_ urlString: String) -> Bool {
@@ -509,6 +552,11 @@ enum ReachabilityCopy {
         // family the four above share: those four report a finished search that found little, and this
         // one reports a search that stopped mid step, so reading as one of them is exactly the confusion.
         case .routeNamedButNotSupplied: return "Check named a route it never found"
+        // #2912: says the two things at once that decide what Dan does next, and it has to say both. A
+        // profile exists, so this is not a row to give up on; nobody confirmed whose it is, so it is not
+        // a contact either. It joins neither family above on purpose: not the "Only" four, which report
+        // a finished search that found little, and not the route badges, which promise a way in.
+        case .unconfirmedSocialProfile: return "Possible profile, not confirmed"
         case .nothingPublished, nil: return noEmailFoundBadge
         }
     }
@@ -543,10 +591,29 @@ enum ReachabilityCopy {
         // here than his own search, which is the reverse of the advice above it.
         case .routeNamedButNotSupplied:
             return "A check said there was a way to reach these people and then did not give one, so there was nothing to keep. That is the check falling short rather than the show being hard to reach, so another check is worth more here than a search by hand."
+        // #2912: what the check DID establish, what it could not, and whose call the rest is. The middle
+        // clause is the one no other sentence here can say, and it is the reason the handle is not being
+        // counted as a contact: an account with the right name on it is not the same as the right person.
+        case .unconfirmedSocialProfile:
+            return "A check found a profile carrying the right name and nothing in its bio or recent posts tying it to this show, so who is on the end of it is not settled. If you recognise the handle below, the DM is yours to send."
         case .nothingPublished, nil:
             return noEmailFoundHelp
         }
     }
+
+    // #2912: the same fact printed on the LINE of one link, for the row that carries more than one and
+    // where the badge above can no longer say WHICH. A confirmed handle and a stranger's, side by side
+    // and reading identically, is the exact shape #2147 refuses, and it is the shape a two performer show
+    // produces the moment one of them is searchable and the other is not.
+    //
+    // Deliberately NOT printed when the row shows a single link: the badge directly above is already
+    // saying it, and a second line telling Dan nothing the first did not is the #843 shape (his own call
+    // in #1628, about the caveat that used to sit beside every address).
+    //
+    // Short enough for the right justified meta column, and it names the missing half rather than only
+    // announcing doubt: "not confirmed" alone leaves him guessing whether the doubt is about the person,
+    // the address or the show.
+    static let unconfirmedProfileNote = "Name matches, nothing ties it to this show"
 
     // #1626: no email, but the act takes messages through a form on its own site. A way through that
     // costs Dan a few minutes rather than a send, so it says what he would have to do.

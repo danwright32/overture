@@ -449,10 +449,39 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     //
     // A contact that HAS an address is still never offered a form: its address is the way in, and the
     // form beside it would be a second control for the same person.
-    var displayedContactForms: [URL] {
-        contacts
+    var displayedContactForms: [URL] { displayedContactRoutes().map(\.url) }
+
+    // #2912: the same list, each link carrying whether the card has to say ON ITS OWN LINE that this one
+    // is a guess. Derived from this rather than restated beside it, exactly as `displayedContactEmails`
+    // is derived from `displayedContactAddresses`, so the links the card draws and the marks beside them
+    // can never come from two readings of the same row (L16).
+    struct DisplayedRoute: Identifiable, Equatable, Sendable {
+        let url: URL
+        // The run said only the NAME matched, so nobody established who is on the end of this link.
+        let isNameMatchOnly: Bool
+        // Whether the LINE says so. False when the badge above is already saying it for every link on the
+        // row, which is the common case (one handle, one sentence), because a second line telling Dan
+        // nothing the first did not is the #843 shape.
+        let marksUnconfirmed: Bool
+        var id: URL { url }
+    }
+
+    func displayedContactRoutes(now: Date = Date()) -> [DisplayedRoute] {
+        let routes = contacts
             .filter { ($0.email ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-            .compactMap(usableContactFormURL)
+            .compactMap { c -> (URL, Bool)? in
+                usableContactFormURL(c).map { ($0, c.nameMatchOnly) }
+            }
+        // The badge can only speak for the row when it is actually carrying that sentence AND every link
+        // under it is one of these. Read from the same badge and the same stored reason the card renders,
+        // never from a second derivation of them, so the two can never disagree about whether the row has
+        // already been told (L16). It fails CLOSED: a row whose badge says something else marks its own
+        // lines rather than leaving a bare handle reading as a found contact (L42).
+        let badgeSaysIt = reachabilityBadge(now: now) == .noEmailFound
+            && reachabilityEmptyReason == .unconfirmedSocialProfile
+            && !routes.isEmpty && routes.allSatisfy(\.1)
+        return routes.map { DisplayedRoute(url: $0.0, isNameMatchOnly: $0.1,
+                                           marksUnconfirmed: $0.1 && !badgeSaysIt) }
     }
 
     // #1961: the one predicate behind both the links the card offers and the count printed above them,
@@ -731,6 +760,9 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     var contactTier: ContactTier? = nil
     var contactMethod: ContactMethod? = nil
     var contactFormURL: String? = nil
+    // #2912: the run said the only thing matching was the NAME, so the card can mark the link as a guess.
+    // False on every contact written before this shipped, which means nobody has said it is one.
+    var nameMatchOnly: Bool = false
     // #363: mirrors Recipient.contactSourceURL. See contactSourceLinkURL below for the display
     // gate (only ever a link at confidence == .high).
     var contactSourceURL: String? = nil
@@ -2598,6 +2630,7 @@ extension RecipientSnapshot {
                   contactTier: r.contactTier,
                   contactMethod: r.contactMethod,
                   contactFormURL: r.contactFormURL,
+                  nameMatchOnly: r.nameMatchOnly,
                   contactSourceURL: r.contactSourceURL,
                   delayNoticeAt: r.delayNoticeAt,
                   looksLikeVenue: r.looksLikeVenue,
