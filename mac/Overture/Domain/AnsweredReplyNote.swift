@@ -65,6 +65,22 @@ enum AnsweredReplyNote {
         return text(arrived: arrived, answered: answered, now: now)
     }
 
+    // #2943: the same sentence for a direct hire inquiry, which is the other kind of row in the reached
+    // out queue and which had the worse half of this defect. A scouted row merely failed to REPORT the
+    // exchange; answering an inquiry ERASED it, because the model had no answered stamp and the answer
+    // was expressed by clearing `replied` (L163).
+    //
+    // The same wording, from the same function, deliberately: one exchange must not be described in two
+    // sets of words on two rows that sit under one set of date headings (L118). No send group to resolve,
+    // because an inquiry is its own single thread (`Inquiry+Watchable`), so the peer lookup above has
+    // nothing to do here and the predicate is asked of the row itself.
+    static func line(for inquiry: Inquiry, now: Date) -> String? {
+        guard inquiry.replyIsAnswered,
+              let arrived = inquiry.replyArrivedAt,
+              let answered = inquiry.replyHandledAt else { return nil }
+        return text(arrived: arrived, answered: answered, now: now)
+    }
+
     // The copy itself, over the two instants, so the wording is testable without a store.
     static func text(arrived: Date, answered: Date, now: Date) -> String {
         // A pitch never ages off until Dan closes it, so a row can sit here past new year, and "Nov 2"

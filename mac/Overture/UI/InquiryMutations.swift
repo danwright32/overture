@@ -72,9 +72,14 @@ enum InquiryMutations {
     // (Recipient.hasUnhandledReply guards it); an inquiry offered one, so Dan could write a reply to an
     // address that had already proved dead and only learn at the send. Found by asserting both rules
     // against the same state rather than describing the difference in a comment (L57).
-    static func showsReplyAction(sentAt: Date?, replied: Bool, bounced: Bool) -> Bool {
+    // #2943: asked of the UNANSWERED reply, not of `replied`. Once the answer became its own fact rather
+    // than the absence of a reply, `replied` stays true for the rest of the conversation, so a control
+    // keyed on it would go on offering itself after it had been pressed and succeeded, which is the exact
+    // defect #2170 fixed on the show side (L44). It is the same predicate the row's own state line reads,
+    // so the control and the words beside it cannot disagree.
+    static func showsReplyAction(sentAt: Date?, hasUnhandledReply: Bool, bounced: Bool) -> Bool {
         guard !bounced else { return false }
-        return sentAt == nil || replied
+        return sentAt == nil || hasUnhandledReply
     }
 
     // What the reply sheet should do next. `.sent` means the mail is gone and the sheet closes, whether

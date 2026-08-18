@@ -15,7 +15,8 @@ struct InquirySendProblemsOnScreenTests {
                      sendError: String? = nil) -> InquiryRow {
         InquiryRow(id: "i1", inquirerName: "Nora Vance", source: .contactForm,
                    eventName: "A recital", performanceDate: "2026-09-12", venue: "Weill Recital Hall",
-                   outcome: .noResponse, sentAt: Date(), replied: false, bounced: false,
+                   outcome: .noResponse, sentAt: Date(), replied: false, hasUnhandledReply: false,
+                   answeredReplyLine: nil, bounced: false,
                    bookingSuggested: false, followUpNudgeDue: false, shouldSuggestClosing: false,
                    threadIdDegraded: threadIdDegraded, threadingDegraded: threadingDegraded,
                    sendError: sendError)
@@ -69,6 +70,6 @@ struct InquirySendProblemsOnScreenTests {
     @Test func theRowStillSaysWhoAndWhatItAlwaysDid() {
         let drawn = lines(row(threadIdDegraded: true))
         #expect(drawn.contains("Nora Vance"))
-        #expect(drawn.contains(InquiryCopy.rowState(sentAt: Date(), replied: false)))
+        #expect(drawn.contains(InquiryCopy.rowState(sentAt: Date(), replied: false, answeredReplyLine: nil)))
     }
 }

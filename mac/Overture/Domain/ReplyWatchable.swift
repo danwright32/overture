@@ -74,11 +74,11 @@ protocol ReplyWatchableRecipient: AnyObject {
     // #2865: record that Dan answered this conversation from his mail client, dated by that message.
     //
     // A DEFAULTED no-op rather than a required member, which is the exception to this protocol's own rule
-    // about defaults (L129), so it names its reason and the issue that ends it. `Recipient` has an
-    // answered stamp and overrides this. `Inquiry` has none at all in the live schema, so a required
-    // member would have to invent one, and adding a stored field to that model is #2868's job: it is
-    // already open, on exactly that gap, and is where the decision about the inquiry half belongs. Until
-    // then an inquiry learns nothing from this check, which is what it does today.
+    // about defaults (L129). #2943 closed the reason it was written for: `Inquiry` had no answered stamp
+    // in the live schema, so a required member would have had to invent one, and it now has
+    // `replyHandledAt` and overrides this exactly as `Recipient` does. BOTH real conformers answer for
+    // themselves; what the default still covers is the test doubles in this suite, which own no such
+    // fact and are not the thing this protocol is about.
     func recordAnsweredElsewhere(at answeredAt: Date)
 
     var dismissedReplyId: String? { get }        // a reply Dan already dismissed as not real.

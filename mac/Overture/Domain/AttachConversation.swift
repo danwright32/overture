@@ -224,16 +224,17 @@ enum AttachConversation {
                                                   fetchThread: { $0 == thread ? threadJSON : nil },
                                                   fetchFullThread: { $0 == thread ? fullThreadJSON : nil })
 
-        // Dan found the conversation in Gmail, and the ordinary thing to do there is answer it. An inquiry
-        // records that the way its own send path does, by dismissing the reply it has already been
-        // answered: leave it and the row asserts somebody is waiting on him on a conversation he closed
-        // days ago.
+        // Dan found the conversation in Gmail, and the ordinary thing to do there is answer it. Leave it
+        // and the row asserts somebody is waiting on him on a conversation he closed days ago.
+        //
+        // #2943: recorded as the ANSWER, which is now a fact an inquiry can hold, and in the same line
+        // the pitch branch above uses. It used to say the same thing by striking the reply as wrong and
+        // clearing `replied`, which was the only tool available (#2868) and which destroyed the evidence
+        // a reply had ever arrived: the row read as an inquiry nobody answered and #16's funnel counted
+        // a real conversation as silence (L163).
         let alreadyAnswered = ReplyDetection.newestMessageIsSelf(threadJSON: threadJSON,
                                                                  selfEmail: selfEmail)
-        if alreadyAnswered, inquiry.replied {
-            inquiry.dismissedReplyId = inquiry.lastReplyId
-            inquiry.replied = false
-        }
+        if alreadyAnswered, inquiry.replied, inquiry.replyHandledAt == nil { inquiry.replyHandledAt = now }
 
         return .attached(repliesDetected: detected, alreadyAnswered: alreadyAnswered)
     }

@@ -12,10 +12,15 @@ enum InquiryReplySender {
     // #1513: this now sends ANY reply Dan writes, not only the first. Answering again is the same act
     // (he types it, it goes on the same thread), so it is the same path rather than a second copy.
     //
-    // What differs is the waiting state. After he answers, he is waiting on THEM again, so `replied`
-    // clears and the nudge clock restarts from this send. The reply he just answered is marked handled,
-    // because reply detection keys off the last reply id: leave it and the very next check re-flags the
-    // row as needing him, and it could never leave the "they replied" state.
+    // What differs is the waiting state. After he answers, he is waiting on THEM again, and the nudge
+    // clock restarts from this send.
+    //
+    // #2943: that is recorded by STAMPING the answer, not by clearing `replied`. Clearing it destroyed the
+    // evidence a reply ever arrived: the row went back to "Sent, waiting to hear back", identical to an
+    // inquiry nobody ever wrote back to, and #16's funnel counted a real conversation as silence (L163).
+    // `hasUnhandledReply` compares the answer against when their message arrived, so the reply he just
+    // answered stops asking while a NEWER one still re-opens the row, which is the rule
+    // `Recipient.recordAnswerSent` has followed since #2170.
     @discardableResult
     static func sendReply(_ inquiry: Inquiry, subject: String, body: String, now: Date,
                           sender: MailSender) async -> Bool {
@@ -74,10 +79,16 @@ enum InquiryReplySender {
             // #2675: cleared on success, or a failure Dan has since recovered from would sit on the row
             // for good. A guard that fails closed forever is still a defect.
             inquiry.sendError = nil
-            if inquiry.replied {
-                inquiry.dismissedReplyId = inquiry.lastReplyId
-                inquiry.replied = false
-            }
+            // #2943: only when there was something to answer. Unlike the prospect reply path, this same
+            // function sends the FIRST reply to an inquiry too (#1513), and stamping that would record an
+            // answer to a message nobody sent (L11).
+            //
+            // `dismissedReplyId` is deliberately no longer written here. It was standing in for the
+            // answered fact: with `replied` cleared, detection would have met their same message as a
+            // brand new one, so it had to be struck as a wrong reply. With the answer recorded, detection
+            // skips it on the id it already holds, and striking a real reply as never having happened is
+            // the destruction this issue is about.
+            if inquiry.replied { inquiry.markReplyAnswered(now: now) }
             return true
         } catch {
             // #2675: recorded, not merely returned. The caller's `.sendFailed` notice clears, and after it
