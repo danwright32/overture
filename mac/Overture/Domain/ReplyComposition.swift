@@ -139,9 +139,9 @@ extension ReplyComposition {
                 isRunning: { ReplyPanel.isDrafting(recipient) },
                 requestedAt: { recipient.replyDraftRequestedAt },
                 request: {
-                    ProspectMutations.draftOneReply(prospect.naturalKey, recipient.id,
-                                                    prospects: [prospect], context: context,
-                                                    feedback: feedback)
+                    ProspectMutations.draftReply(prospect.naturalKey, recipient.id,
+                                                 prospects: [prospect], context: context,
+                                                 feedback: feedback)
                 },
                 writtenByDan: { recipient.replyDraftWrittenByDan },
                 editedByDan: { recipient.replyDraftEditedByDan }),
