@@ -420,23 +420,30 @@ enum ProspectMutations {
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
-    static func draftReply(_ item: QueueItem, _ recipientId: String, prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
-        guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
-        model.updateRecipient(id: recipientId) { $0.replyDraftRequestedAt = Date() }
-        context.saveOrWarn(org: item.groupName, feedback: feedback)
-        _ = try? ReplyClassifyService.startClassify(from: context, now: Date())
+    // #2944: how a "Draft a reply" button launches the drafter, and the scope it launches with. A seam,
+    // because a source guard can only ever see that the word `only:` is written at a call, never that a
+    // real Target arrives there, and nil is exactly the value that spends across every waiting
+    // conversation (L3).
+    typealias ReplyDraftLaunch = @MainActor (ModelContext, ReplyClassifyService.Target?) -> Void
+
+    static func launchReplyDrafter(_ context: ModelContext, _ target: ReplyClassifyService.Target?) {
+        _ = try? ReplyClassifyService.startClassify(from: context, now: Date(), only: target)
     }
 
-    // #2129: draft THIS reply, not every reply waiting. Same run, scoped to one conversation, so the
-    // button spends on the one Dan pressed it on and its Cancel abandons only that.
-    static func draftOneReply(_ naturalKey: String, _ recipientId: String, prospects: [Prospect],
-                              context: ModelContext, feedback: ActionFeedback) {
+    // #2129 and #2944: draft THIS reply, not every reply waiting. Same run, scoped to one conversation,
+    // so the button spends on the one Dan pressed it on and its Cancel abandons only that.
+    //
+    // ONE implementation, for both the reply panel and the card. #2129 scoped the panel's button and left
+    // the card's on a second, unscoped copy of the same three lines, so pressing Draft a reply on a card
+    // drafted every waiting conversation. There is no unscoped version left for a caller to reach: the
+    // scope is built here from the arguments naming the conversation, not asked of the caller.
+    static func draftReply(_ naturalKey: String, _ recipientId: String, prospects: [Prospect],
+                           context: ModelContext, feedback: ActionFeedback,
+                           start: ReplyDraftLaunch = launchReplyDrafter) {
         guard let model = prospects.first(where: { $0.naturalKey == naturalKey }) else { return }
         model.updateRecipient(id: recipientId) { $0.replyDraftRequestedAt = Date() }
         context.saveOrWarn(org: model.groupName, feedback: feedback)
-        _ = try? ReplyClassifyService.startClassify(
-            from: context, now: Date(),
-            only: ReplyClassifyService.Target(naturalKey: naturalKey, recipientId: recipientId))
+        start(context, ReplyClassifyService.Target(naturalKey: naturalKey, recipientId: recipientId))
     }
 
     static func editReplyDraft(_ item: QueueItem, _ recipientId: String, _ body: String,
