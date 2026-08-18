@@ -1076,6 +1076,9 @@ struct QueueView: View {
             .padding(.horizontal, OVSpacing.xl)
         } else {
             let now = Date()
+            // #2816: built ONCE for the whole list, on the #1121 rule, rather than walking the watchlist
+            // per row on every scroll frame.
+            let sourceCalendars = QueueModel.sourceCalendarIndex(watchedSources)
             let groups = QueueModel.reachOutDateGroups(entries, reachDate: { $0.next })
             VStack(alignment: .leading, spacing: OVSpacing.md) {
                 // #1233/#1232: the date headers below are REACH-OUT dates (Dan's call), so say so once here
@@ -1108,7 +1111,8 @@ struct QueueView: View {
                                         ClosedOutDepartureRow(item: departure.item)
                                     } else {
                                         reachedOutRow((prospect: prospect, recipient: recipient, next: next),
-                                                      now: now, since: sendingSince)
+                                                      now: now, since: sendingSince,
+                                                      sourceCalendars: sourceCalendars)
                                     }
                                 }
                             case .inquiry(let inquiry, let row, _):
@@ -1156,8 +1160,14 @@ struct QueueView: View {
     // refactor #710 made to `FollowUpsView.row` for the same reason: a row whose in-flight state is read
     // from private @State cannot be driven from outside the view, and an unprovable working state is how
     // this one stayed missing.
+    // #2816: `sourceCalendars` is the watchlist's sourceId-to-calendar table, built once for the whole
+    // list by `reachedOutList` and handed down, on the same #1121 rule the render pass follows: resolving
+    // it here would walk the watchlist once per row on every scroll frame. No default value, deliberately:
+    // an empty table answers "Source listing" for every row including the ones whose link is only the
+    // venue's calendar, so a caller that forgets it would get a confidently wrong label rather than a
+    // compile error (L168).
     func reachedOutRow(_ pair: (prospect: Prospect, recipient: Recipient, next: Date),
-                       now: Date, since: Date?) -> some View {
+                       now: Date, since: Date?, sourceCalendars: [String: String]) -> some View {
         let p = pair.prospect, r = pair.recipient
         return HStack(alignment: .top, spacing: OVSpacing.md) {
             VStack(alignment: .leading, spacing: 3) {
@@ -1168,6 +1178,17 @@ struct QueueView: View {
                 Text(ReachedOutRowChrome.showDateLine(performanceDate: p.performanceDate,
                                                       runEndDate: p.runEndDate))
                     .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                // #2816: the way back to the show's own page. Dan: "I'll need to add a source link to
+                // this page so I can see the source on demand." What to do about an open pitch turns on
+                // the show (how long it runs, who else is on the bill, whether the listing has changed
+                // since the pitch went out), and once it sent, the show was a title with nowhere to go.
+                //
+                // With the show's own facts, above everything about the conversation, because that is
+                // what it is about: the audience, the channel line and the proposed-conversation block
+                // below are all about the conversation. `RowSourceLink` owns what it draws, including the
+                // empty branch and #1680's label, so the three surfaces that carry it cannot differ.
+                RowSourceLink(listingURL: p.sourceListingURL, sourceIds: p.sourceIds,
+                              calendars: sourceCalendars)
                 // #2121: everyone this row's next email reaches, so Dan can see whether he is answering
                 // one person or five before he opens it, with the writer of the reply marked out.
                 //
