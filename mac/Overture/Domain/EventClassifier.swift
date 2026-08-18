@@ -154,7 +154,28 @@ enum EventClassifier {
     // the point. A hand-maintained list of "words we know" beside the list that actually decides is two
     // definitions of one thing, and it would drift the first time either was edited (L41).
     static func alreadyReads(_ word: String) -> Bool {
-        detectDiscipline(wordSeparated(word)) != .other
+        let text = wordSeparated(word)
+        // #2813: `namesANonPerformance` is a second thing the classifier reads, so a word it matches is a
+        // word already read. Left out, the correction report would keep proposing "screening" as a genre
+        // word to add, every time, which is how a report stops being read.
+        return detectDiscipline(text) != .other || namesANonPerformance(text)
+    }
+
+    // #2813: does this name something that is not a live performance at all? A film screening, a lecture,
+    // a workshop, a book launch, an exhibition.
+    //
+    // Deliberately NOT a pass inside `detectDiscipline`, and this is the whole safety argument. `classify`
+    // reads the title first and only falls back to the title-plus-presenter haystack when the title says
+    // nothing, so a pass in there would have matched the TITLE of "Honor, An Artist Lecture by Suzanne
+    // Bocanegra Starring Lili Taylor", stopped the fallback, and demoted a staged piece whose genre comes
+    // entirely from its presenter, "Theatre for a New Audience". Measured on the live store 2026-08-17,
+    // and invisible from the title alone (L48).
+    //
+    // Asked of the SHOW'S OWN TITLE only, never the presenter, for the reason #1658 already gives: a
+    // building's name is a poor witness to what is on inside it tonight. An organisation with "Workshop"
+    // in its name puts on real shows.
+    static func namesANonPerformance(_ title: String) -> Bool {
+        matches(title, #"\b(screening|on screen|film festival|film series|film hour|documentary|book launch|book release|lecture|workshop|exhibition)\b"#)
     }
 
     private static func detectDiscipline(_ text: String) -> Discipline {
@@ -220,7 +241,13 @@ enum EventClassifier {
         // lands exactly where it always did: this phase changes which signal WINS, never how many rows are
         // readable. Title-only would leave 510 of 699 rows unreadable; with this fallback it stays at 377.
         let fromTitle = detectDiscipline(event.title)
-        let discipline = fromTitle == .other ? detectDiscipline(haystack) : fromTitle
+        let read = fromTitle == .other ? detectDiscipline(haystack) : fromTitle
+        // #2813: last, and only over a row that BOTH passes above left unread, so it is structurally
+        // unable to demote a show the classifier already understands. Measured on the live store
+        // 2026-08-16: of the 18 rows whose words it matches, 16 read `.other` and the 2 that carry a real
+        // genre keep it. One false positive Dan accepted: a book release show at Roulette that is probably
+        // a real gig, which he can correct on the row itself.
+        let discipline = (read == .other && namesANonPerformance(event.title)) ? .notALivePerformance : read
 
         // #2504: WHO this show would be pitched to. The presenting organisation when one is named, and
         // the ACT itself when none is.
@@ -344,6 +371,18 @@ enum EventClassifier {
         // the stored raw value. Built from the raw value this sentence said "theater" while the
         // picker one line above it offered "Performing Arts": one genre under two names on the
         // same card, each reading fine alone (L118). Lowercased because it sits mid-sentence.
+        // #2813: NO sentence, and an early return rather than a fall-through, which are two separate
+        // decisions.
+        //
+        // Early, because the chain below would produce "Self-produced not a live performance group, a
+        // strong-fit target": an argument FOR a show there is nothing to photograph at.
+        //
+        // And empty, because the row's own genre line one line above already reads "Not a live
+        // performance". A sentence here could only restate it, which is the #843 shape, and it was
+        // written that way first and cut on the cold read of the inventory diff. The row hides an empty
+        // reason, exactly as #1600 relied on when it removed the catch-all, so the genre line and the
+        // score carry the fact between them.
+        if discipline == .notALivePerformance { return "" }
         let genre = discipline == .other ? "" : " \(discipline.label.lowercased())"
         if production == .selfProduced && profile == .strong {
             return "Self-produced\(genre) group, a strong-fit target."

@@ -61,11 +61,19 @@ struct PerformingArtsGenreNameTests {
 
     // Every other genre still reads as English in that sentence, which is the half that keeps the change
     // from being "it works for the one I looked at". `.other` names no genre at all, deliberately (#1657).
+    //
+    // #2813: matched case-insensitively, because `.notALivePerformance` is the dominant fact about its
+    // row and therefore OPENS its sentence rather than sitting mid-clause. The claim being asserted is
+    // unchanged (the genre is named in its own reason) and it still fails on a genre that is not.
     @Test func everyGenreStillReadsAsASentence() {
-        for genre in Discipline.allCases where genre != .other {
+        // #2813: `.notALivePerformance` joins `.other` in naming no genre in this sentence, for the
+        // neighbouring reason. `.other` is silent because no genre was read; this one is silent because
+        // the row's genre line already says it and a sentence could only restate it (#843).
+        for genre in Discipline.allCases where genre != .other && genre != .notALivePerformance {
             let reason = EventClassifier.derived(discipline: genre, production: .selfProduced,
                                                  profile: .strong, venue: "V").fitReason
-            #expect(reason.contains(genre.label.lowercased()), "\(genre) is not named in its own fit reason")
+            #expect(reason.lowercased().contains(genre.label.lowercased()),
+                    "\(genre) is not named in its own fit reason")
         }
         let unread = EventClassifier.derived(discipline: .other, production: .selfProduced,
                                              profile: .strong, venue: "V").fitReason

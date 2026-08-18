@@ -347,7 +347,11 @@ extension Discipline {
     var staysInTheBoroughs: Bool {
         switch self {
         case .music, .band: return true
-        case .dance, .opera, .theater, .comedy, .other: return false
+        // #2813: `.notALivePerformance` takes the LOOSE rule alongside `.other`, for a related but
+        // distinct reason. `.other` is loose because an unreadable title errs toward being shown; this is
+        // loose because setting a genre must never be the thing that removes a card from the queue (#1658).
+        // Dan sets it on a row he is looking at, and a card vanishing under his hand reads as a bug.
+        case .dance, .opera, .theater, .comedy, .other, .notALivePerformance: return false
         }
     }
 }

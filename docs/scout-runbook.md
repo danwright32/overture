@@ -46,6 +46,10 @@ earlier TypeScript reference pipeline once it was confirmed unused and drifting)
      `unknown`.
    - `discipline`: dance > opera/theater > music/band/comedy > other (baseline, no signal).
      Choral is not its own category; choir/chorus signals classify as music.
+     `not_a_live_performance` (#2813) for an event that is not a performance at all: a film
+     screening, a lecture, a workshop, a book launch, an exhibition. It is a genre that HAS been
+     read, not a shade of `other`, which means nobody has read one yet, and it scores below every
+     real genre so a row carrying it sinks out of high fit.
    - `reachable`: true for any venue Dan can reach by transit (section 8).
    - `fit_reason`: one plain sentence, in Dan's terms.
 
