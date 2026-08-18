@@ -111,6 +111,15 @@ export const RUNBOOK_RULES: RunbookRule[] = [
   // how a stranger's profile gets surfaced as the act, and Dan sends that DM by hand (#2147, L75).
   { name: "search-the-platform-for-a-profile", pattern: /GO AND SEARCH the platform\s+for a profile/i },
   { name: "a-name-match-alone-is-not-enough", pattern: /a name match alone is NOT enough/i },
+  // #2912: and the other half of that pair, which fails in the third direction. The rule above stops a
+  // name match being emitted AS the act. Without this one it also stops the handle reaching Dan at all,
+  // which is what shipped and what he reversed on 2026-08-17: he would rather look at it for two seconds
+  // than have a search nobody repeats cheaply thrown away. Dropping this line puts the withholding back;
+  // dropping the flag from it is worse, because the contact is then indistinguishable from a verified
+  // route and the card would name a stranger as the act, which is the substitution #2147 forbids.
+  { name: "a-name-match-is-surfaced-as-a-guess",
+    pattern: /On a NAME MATCH and nothing more, emit it and SAY that is all you have/i },
+  { name: "a-name-match-carries-the-flag", pattern: /`nameMatchOnly: true`/ },
   // #2893: a `method` names a route, so it may not be emitted without one. The prompt only ever stated
   // the positive form ("record it as form_or_dm with the form URL in formUrl"), and a run that can read
   // the app's own Swift derived its permission from an OPTIONAL field instead: any combination the

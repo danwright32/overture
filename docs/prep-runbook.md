@@ -81,7 +81,7 @@ destroy the drafts it has already paid for.
   must not guess between (no history there, no history imported at all, or a Carnegie show, where
   the tenure credential already covers that exact room). See §2's rule on saying Dan knows the room.
 - **Write:** the RESULTS FILE the prompt names
-  (`PrepResults` version `9`: `results[]` each with `naturalKey`, `contacts[]`, `draft`, an
+  (`PrepResults` version `10`: `results[]` each with `naturalKey`, `contacts[]`, `draft`, an
   optional `alreadyCoveredNote` (see the already-covered fit-risk flag in §1 below), an
   optional `emptyReason` REQUIRED on any entry whose `contacts` is absent, see "Say WHY an
   entry has no contacts" in §1, and (v8, #1824) an optional `showSummary` with a
@@ -90,7 +90,9 @@ destroy the drafts it has already paid for.
   corrected with the v7 bump in #1722.)
   Each entry in `contacts[]` is one party to email for the performance, carrying a
   `provenance` of `act`, `performer`, or `presenter` (never the host venue), and (v9, #2622)
-  a `tier` saying WHO they are to the show, see "Say who the contact is" in §1. Emit either
+  a `tier` saying WHO they are to the show, see "Say who the contact is" in §1, and (v10, #2912)
+  an optional `nameMatchOnly` saying the only thing tying this route to that party is the NAME,
+  see step 3(c) in §1. Emit either
   the act OR its named lead performer(s), never both, see §1 below, plus at most one
   real presenting org; the app sends one separate email per contact. A `provenance:
   "performer"` contact MAY also carry its own `overrideBody`, a direct second-person
@@ -489,10 +491,22 @@ in order, stop at the first that works:
    Two ordinary names plus a handle resembling neither is precisely the state where a wrong profile gets
    emitted with confidence. The bio or a recent post must carry something tying the account to THIS
    show: its title, the venue, the date, or another name credited on the bill. On a verified hit, emit
-   `method: "form_or_dm"` with the profile URL in `formUrl`. On anything less, emit nothing and let the
-   empty reason say so: a target you cannot identify is REFUSED, never replaced with the nearest
-   candidate (#2147). A wrong handle is worse than none, because Dan sends the DM by hand believing it
-   is the act.
+   `method: "form_or_dm"` with the profile URL in `formUrl`.
+
+   **On a NAME MATCH and nothing more, emit it and SAY that is all you have (#2912).** Same
+   `method: "form_or_dm"` and the profile URL in `formUrl`, `confidence: "low"`, and
+   `nameMatchOnly: true`. Dan's call, 2026-08-17: he would rather look at a handle for two seconds and
+   judge it himself than never see it, and the search that found it is one nobody repeats cheaply. The
+   app treats a contact carrying that flag as a LEAD and not a route: it never counts towards the show
+   being reachable, it cannot be stored as verified, and the card prints the handle under a line saying
+   the name matched and nothing tied it to this show. What #2147 refuses is intact and is what
+   `nameMatchOnly` exists to say: an unidentified target is never presented AS the act. So the flag is
+   not optional politeness. Emitting one of these without it is the substitution that rule forbids, and
+   the run has already claimed the verification a bare `form_or_dm` carries.
+
+   **Below a name match, still emit nothing.** A handle that is not even the right name is the nearest
+   candidate rather than the target, and a wrong handle is worse than none, because Dan sends the DM by
+   hand believing it is the act. Let the empty reason say what happened.
 
    A handle is rarely guessable and rarely searchable. On 2026-08-17 the two profiles for "A Time To Be"
    at The Green Room 42 used a middle name the listing never states and a longer form of a first name,
@@ -571,6 +585,13 @@ medium, form/DM or inferred = low. **For a named performer specifically**, only 
 (name plus instrument/role/context match, e.g. their own site lists this date/venue or
 names this group); a bare name match with no such corroboration is a misidentification
 risk, so mark it `low` instead, same as any other unverified guess.
+
+**`confidence` and `nameMatchOnly` (v10, #2912) answer two different questions, and only one of them
+is about the PERSON.** `confidence` says how good the ROUTE is, and it is close to mechanical: a form
+or a DM is `low` whether or not anybody established whose it is, so it cannot carry "I could not tell
+who this is". `nameMatchOnly` is the field that says that, and it is never a substitute for a low
+confidence: a contact carrying it is `low` too. Never emit it with `high`, which is a contradiction the
+app refuses on your behalf by storing the contact as `low` anyway.
 
 **Say who the contact is (`tier`, v9, #2622).** Every entry in `contacts[]` carries a `tier`. It answers
 one question, and it is NOT about billing order: **who could actually say yes to hiring a photographer?**

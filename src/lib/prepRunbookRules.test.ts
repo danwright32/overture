@@ -21,6 +21,8 @@ describe("prep-runbook judgment rules are present (#591)", () => {
     expect(RUNBOOK_RULES.map((r) => r.name).sort()).toEqual([
       "a-method-names-a-route",
       "a-name-match-alone-is-not-enough",
+      "a-name-match-carries-the-flag",
+      "a-name-match-is-surfaced-as-a-guess",
       "act-pursued-when-no-organiser-named",
       "agency-inbox-never-satisfies-step-two",
       "ask-presupposes-photography-plans",

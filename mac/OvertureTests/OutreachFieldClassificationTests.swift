@@ -52,6 +52,10 @@ struct OutreachFieldClassificationTests {
         "looksLikePressContactDismissed": "Dan waving that guard off, an answer about the address",
         "looksLikeDuplicateContact": "a guard's opinion of the address",
         "looksLikeDuplicateContactDismissed": "Dan waving that guard off, an answer about the address",
+        // #2912: what the CHECK said about the route it found, in the same family as the two below it.
+        // Nobody has been written to on the strength of a name matching a handle; the write that would
+        // prove this contact was reached is formOutreachRecordedAt, which the rule counts.
+        "nameMatchOnly": "the check saying only the NAME matched, a fact about the route it found",
         "heldDownToUnverified": "a guard's opinion of how the address was cited",
         "heldDownToUnverifiedDismissed": "Dan waving that guard off, an answer about the address",
 

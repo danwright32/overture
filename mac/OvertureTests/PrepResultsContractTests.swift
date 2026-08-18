@@ -194,6 +194,28 @@ struct PrepResultsContractTests {
         #expect(v8.results.first?.contacts?.first?.tier == nil)
     }
 
+    // #2912: v10 adds `nameMatchOnly` to a contact. The version gate rose with it, in the same commit as
+    // the fixture, which is the rule the decoder's own comment states and the reason #1594's shape cannot
+    // repeat. The fixture carries BOTH shapes on one show deliberately: the handle nobody could tie to
+    // the show, and the address read off a page, because that pair is what the card has to tell apart.
+    @Test func decodesTheV10FixtureWithANameMatchOnlyContact() throws {
+        let results = try PrepResultsDecoder.decode(try fixture("v10.json"))
+        #expect(results.version == 10)
+
+        let contacts = try #require(results.results.first?.contacts)
+        #expect(contacts.first?.nameMatchOnly == true)
+        #expect(contacts.first?.confidence == "low")
+        #expect(contacts.last?.nameMatchOnly == nil)
+        #expect(contacts.last?.confidence == "high")
+    }
+
+    // Additive: an earlier fixture reads as nobody having said it is a guess, which is not the same
+    // claim as somebody having confirmed it, and nothing on the card asserts one from the other.
+    @Test func anearlierFixtureCarriesNoNameMatchFlag() throws {
+        let v9 = try PrepResultsDecoder.decode(try fixture("v9.json"))
+        #expect(v9.results.first?.contacts?.first?.nameMatchOnly == nil)
+    }
+
     // MARK: - Negative paths (#747)
     //
     // The enumeration guard above only proves a POSITIVE: every committed fixture decodes. That

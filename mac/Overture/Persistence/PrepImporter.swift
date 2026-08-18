@@ -336,10 +336,17 @@ enum PrepImporter {
                                           // #1856: a find may claim to be verified only when it names the
                                           // page it was read off; the runbook always said so and nothing
                                           // enforced it (L27).
+                                          // #2912: and a declared name match may never be high whatever
+                                          // it cites, so the card is never handed two answers to "how
+                                          // sure are we".
                                           contactConfidenceRaw: ContactConfidenceGuard.confidence(
-                                              raw: c.confidence, sourceURL: c.sourceUrl),
+                                              raw: c.confidence, sourceURL: c.sourceUrl,
+                                              nameMatchOnly: c.nameMatchOnly == true),
                                           contactFormURL: c.formUrl,
                                           contactSourceURL: c.sourceUrl)
+                // #2912: the run's own declaration that only the NAME matched, kept so the card can mark
+                // the handle as a guess and so it never counts as a route (Prospect.socialRouteURLs).
+                recipient.nameMatchOnly = c.nameMatchOnly == true
                 // #1866: and the fact that it did, so "Unverified email found" can say which of the two
                 // things put it there. Written here rather than derived at read time because the guard
                 // rewrites the confidence in place: once `high` has become `low` the row no longer holds
@@ -458,8 +465,16 @@ enum PrepImporter {
         // (the run does not know Overture downgraded it, so it reports `high` again every time).
         let heldDown = ContactConfidenceGuard.heldDown(raw: r.contactConfidenceRaw,
                                                        sourceURL: r.contactSourceURL)
+        // #2912: re-derived from THIS run's declaration rather than falling back to what the row held,
+        // unlike the method, confidence and tier above. Those describe a finding a later run can decline
+        // to repeat; this describes whether the person on the end of a route was ever established, and a
+        // run that emits the same route without the declaration is claiming the verification a bare
+        // `form_or_dm` carries. Latching it would also leave the mark on a row whose next check finally
+        // read a real address off a page, holding a genuinely verified find down to `low` forever.
+        r.nameMatchOnly = c.nameMatchOnly == true
         r.contactConfidenceRaw = ContactConfidenceGuard.confidence(raw: r.contactConfidenceRaw,
-                                                                   sourceURL: r.contactSourceURL)
+                                                                   sourceURL: r.contactSourceURL,
+                                                                   nameMatchOnly: r.nameMatchOnly)
         // Dan's overrule is a judgement about THIS address, so a genuinely different address gets it asked
         // again: the same reset-on-real-change convention the venue and duplicate guesses use below. Placed
         // here rather than in that block because the guard itself runs on every contact, manual included.
