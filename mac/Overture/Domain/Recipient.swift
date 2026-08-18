@@ -584,6 +584,20 @@ final class Recipient {
         return theirs > handled
     }
 
+    // #2919: they wrote, Dan answered, and nothing has arrived since. The state #2170 created and no
+    // surface ever spoke: once `replyHandledAt` clears the reply, the reached-out row went back to
+    // looking exactly like a pitch nobody ever answered, so a live negotiation and total silence rendered
+    // identically (L152).
+    //
+    // Written OVER `hasUnhandledReply` rather than beside it (#2921's rule), so the two can never disagree
+    // about whether this conversation has been dealt with. The three facts in front of it are the three
+    // that predicate short-circuits on, and they are here because `!hasUnhandledReply` on its own is
+    // equally true of a contact that never replied, one that bounced, and one Dan stood down. A line may
+    // claim only what its check actually measured (L11).
+    var replyIsAnswered: Bool {
+        replied && !bounced && resolution == nil && replyHandledAt != nil && !hasUnhandledReply
+    }
+
     // #2113 lives on ReplyWatchableRecipient now (#2118): `replyArrivedAt` is one definition for every
     // watched thread, an inquiry's included, because the two kinds of row share the reached-out queue's
     // date headings and two of them dating a reply differently is how a card ends up under the wrong day.

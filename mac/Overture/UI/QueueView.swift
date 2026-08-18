@@ -1204,6 +1204,18 @@ struct QueueView: View {
                         .foregroundStyle(wroteBack ? OVColor.ink : OVColor.inkSoft)
                         .accessibilityLabel(audience.spokenLabel(for: line))
                 }
+                // #2919: a conversation happened here and was dealt with, which this row used to say
+                // nothing about at all. Once #2170's stamp retires the Answer control, the row fell back
+                // to exactly what it draws for a pitch nobody replied to, so a live negotiation and total
+                // silence rendered identically (L152).
+                //
+                // Directly under the audience, because it is about the people just listed: the writer's
+                // own address is one of those lines and is already marked as the one who wrote, which is
+                // why this line names nobody. Nothing is wrong here, so inkSoft rather than rust, and not
+                // gold, which is reserved for what Dan can act on.
+                if let answered = AnsweredReplyNote.line(for: r, in: p, now: now) {
+                    Text(answered).font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
+                }
                 // #1630: a form pitch has no address and no thread, so the row has to account for the
                 // silence itself. Said in inkSoft, not rust: nothing is wrong here.
                 // #2716: and once a conversation is attached, the half of that sentence claiming a reply

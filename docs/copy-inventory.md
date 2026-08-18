@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1411 sentences**.
+Every sentence Overture can say to Dan: **1413 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1667,6 +1667,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReplyPanel.swift`
 "Replaces the scout's name on this row. Your name stays put across future scouts."
     `UI/ProspectRowView.swift`
+"Replied \(theirs), you answered \(his)"
+    `Domain/AnsweredReplyNote.swift`
+"Replied \(theirs), you answered that day"
+    `Domain/AnsweredReplyNote.swift`
 "Replies can't be tracked"
     `Domain/InquiryCopy.swift`
 "Reply to \(inquirerName)"

@@ -94,11 +94,14 @@ struct FollowUpsView: View {
                         VStack(alignment: .leading, spacing: OVSpacing.lg) {
                             // #2816: built ONCE for both sections rather than per row (#1121).
                             let sourceCalendars = QueueModel.sourceCalendarIndex(watchedSources)
+                            // #2919: one clock for the whole list, on the same rule, rather than each row
+                            // reading `Date()` for itself and dating its own sentence a moment apart.
+                            let now = Date()
                             if !postEventDue.isEmpty {
                                 section("After the show") {
                                     ForEach(postEventDue, id: \.recipient.id) { d in
                                         postEventRow(d, since: sending[d.recipient.id],
-                                                     sourceCalendars: sourceCalendars); Divider()
+                                                     sourceCalendars: sourceCalendars, now: now); Divider()
                                     }
                                 }
                                 // #976: identity for the position modifier, so the top section pins.
@@ -191,8 +194,11 @@ struct FollowUpsView: View {
     // row(_:since:) above for why `since` is an explicit parameter rather than an internal read.
     // #2816: `sourceCalendars` for the same reason, and with no default for the same reason (L168). See
     // `row(_:since:sourceCalendars:)` above.
+    // #2919: `now` for the same reason `since` and `sourceCalendars` are parameters, and with no default
+    // for the same reason (L168): the answered line dates a real exchange, and a caller that forgot it
+    // would silently get a sentence dated from some other moment rather than a compile error.
     func postEventRow(_ d: PostEventPrompt.DueRecipient, since: Date?,
-                      sourceCalendars: [String: String]) -> some View {
+                      sourceCalendars: [String: String], now: Date) -> some View {
         let p = d.prospect, r = d.recipient
         return HStack(alignment: .top, spacing: OVSpacing.md) {
             VStack(alignment: .leading, spacing: 3) {
@@ -204,6 +210,14 @@ struct FollowUpsView: View {
                               calendars: sourceCalendars)
                 reasonPill(d.prompt.reason, color: PostEventPrompt.accent(for: d.prompt.kind).color)
                 Text(r.email ?? "no contact").font(OVType.body).foregroundStyle(OVColor.inkSoft)
+                // #2919, the sibling of the reached-out row and covered with it rather than left for a
+                // later sweep (the class, not the instance). This row asks how the show ended and offers
+                // the endings; asking that with no sign that a conversation ever happened is the same
+                // defect, on the surface where the answer matters most. The same sentence, from the same
+                // rule, so one exchange cannot be described in two different words on two screens.
+                if let answered = AnsweredReplyNote.line(for: r, in: p, now: now) {
+                    Text(answered).font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
+                }
                 // #316: the durable failure surface. A real send failure persists on the recipient
                 // (SendService sets sendError), so it stays visible here until the next successful
                 // send clears it, unlike the fading banner a later success can overwrite first.
