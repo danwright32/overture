@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1407 sentences**.
+Every sentence Overture can say to Dan: **1408 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -29,6 +29,7 @@ What is not, and why:
 - `Domain/DebugStaging.swift`: a debug-only stand-in draft body (contact-facing email copy, not app voice)
 - `Domain/DebugStaging.swift`: a debug-only stand-in draft body (contact-facing email copy, not app voice)
 - `Domain/DraftCheck.swift`: draft lint needles: phrases the linter HUNTS FOR, never words it says (#915)
+- `Domain/DraftCheck.swift`: cadence lint needles: connector and subordinator words MATCHED in a draft, never words Overture says (#2807)
 - `Domain/DraftCheck.swift`: Words MATCHED in a draft, never shown to Dan (#1887)
 - `Domain/DriftedRunMerge.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Domain/EventDateInDraft.swift`: date-shape patterns: what the check HUNTS FOR, never words it says
@@ -2242,6 +2243,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/Reachability.swift`
 "Try another link"
     `UI/AddLeadSheet.swift`
+"Two sentences in a row are built the same way"
+    `Domain/DraftCheck.swift`
 "Undo \(actionLabel) and Days Off: \(subject)"
     `Domain/QueueUndoStack.swift`
 "Undo \(actionLabel): \(subject)"
