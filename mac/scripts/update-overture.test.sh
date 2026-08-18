@@ -68,10 +68,13 @@ ship_another() {
   rm -rf "${work}"
 }
 
-# 1. Dan's case: parked on a feature branch, newer work shipped. It moves to the shipped commit and
-#    THEN installs, so what gets built is what he was told he was missing.
-clone="$(make_pair parked)"
-git -C "${clone}" checkout --quiet -b some-feature
+# 1. The ordinary case: on main, behind what shipped. It brings the code up and THEN installs, so what
+#    gets built is what Dan was told he was missing.
+#
+#    This used to be Dan's parked-on-a-branch case. Since #2923 that one refuses instead (case 1a
+#    below): moving a working checkout off a branch redirected a live session's suite run, its next
+#    commit and its next push, none of it visible until days later.
+clone="$(make_pair behind)"
 ship_another "${clone}"
 : > "${INSTALL_LOG}"
 out="$(OVERTURE_REPO_ROOT="${clone}" OVERTURE_INSTALL_CMD="${INSTALLER}" \
@@ -91,6 +94,31 @@ fi
 case "$(cat "${INSTALL_LOG}")" in
   *--launch*) pass "and asks the installer to bring Overture back" ;;
   *) fail "and asks the installer to bring Overture back" "got: $(cat "${INSTALL_LOG}")" ;;
+esac
+
+# 1a. #2923: a clean checkout standing on a feature branch. Nothing moves, nothing installs, and the
+#     branch it left alone is named. Committed and clean is not evidence that nobody is working here:
+#     the incident's branch had been committed one command earlier.
+clone="$(make_pair parked)"
+git -C "${clone}" checkout --quiet -b some-feature
+ship_another "${clone}"
+before="$(git -C "${clone}" rev-parse HEAD)"
+: > "${INSTALL_LOG}"
+out="$(OVERTURE_REPO_ROOT="${clone}" OVERTURE_INSTALL_CMD="${INSTALLER}" \
+       "${SCRIPT_DIR}/update-overture.sh" 2>&1)"
+status=$?
+branch="$(git -C "${clone}" rev-parse --abbrev-ref HEAD)"
+head="$(git -C "${clone}" rev-parse HEAD)"
+if [ "${status}" -ne 0 ] && [ "${branch}" = "some-feature" ] && [ "${head}" = "${before}" ] \
+   && [ ! -s "${INSTALL_LOG}" ]; then
+  pass "a checkout standing on a feature branch is neither moved nor built"
+else
+  fail "a checkout standing on a feature branch is neither moved nor built" \
+    "status=${status} branch=${branch} installed=$(cat "${INSTALL_LOG}") out=${out}"
+fi
+case "${out}" in
+  *some-feature*) pass "and the run names the branch it refused to move off" ;;
+  *) fail "and the run names the branch it refused to move off" "got: ${out}" ;;
 esac
 
 # 3. THE ONE THAT MATTERS: work in progress means no install at all. Building anyway is the loop.

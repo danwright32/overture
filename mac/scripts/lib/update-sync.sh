@@ -13,21 +13,47 @@
 #
 # Note what the question is NOT. It cannot be "can this branch fast-forward to main", because a squash
 # merge makes a new commit: the branch commit is not an ancestor of the main commit even when the code
-# is identical. The question is "can MAIN fast-forward, and may I move the checkout onto it".
+# is identical.
+#
+# #2923 SETTLED WHAT IT IS, and narrowed it. This used to answer "move the checkout onto main" for a
+# checkout standing anywhere else, and on 2026-08-17 it did exactly that to a working checkout in the
+# middle of a session, off an in-progress feature branch. Nothing asked for it and nothing said it had
+# happened. The cost is not the inconvenience: a full scripts/test-all.sh run made straight afterwards
+# verified main while everyone believed it verified the branch, and that pass was written into a PR body
+# as evidence for code it had never compiled (L98, L70). A `git push -u origin <branch>` then pushed
+# main's HEAD at the feature branch's name, refused only by luck of the ref ordering.
+#
+# So the question is now "may MAIN fast-forward onto its own remote", and nothing else. The only move
+# left is one that changes no branch, which is why no session can be redirected by it. A checkout
+# standing anywhere else is REFUSED and told so, and putting it back on main is a person's decision
+# (AGENTS.md already asks a session to leave the checkout on main when it finishes, which is the right
+# place for that convention: the end of a session, not the middle of one).
+#
+# What that deliberately gives up is the automatic rescue of Dan's 2026-08-04 loop, a checkout parked on
+# an already-squash-merged branch. It is given up because the two states cannot be told apart cheaply
+# and honestly: a squashed branch's commits are not ancestors of main and not patch-equal to it either,
+# so "already shipped" needs gh, and even a branch carrying nothing of its own is one a session may be
+# standing in. The loop it leaves behind is loud rather than silent, which is the difference that
+# mattered: a refusal naming the branch, in the Terminal and in the app's own panel.
 
 # overture_update_verdict DIRTY ON_MAIN HEAD_IS_UPSTREAM MAIN_CAN_FAST_FORWARD
 #   Each argument is yes/no. Prints one of:
 #     ready                    already on the shipped commit, just build
-#     sync                     move to main and fast-forward it, then build
+#     sync                     fast-forward main onto its own remote, then build
 #     refuse:work-in-progress  somebody is working in here; touch nothing
+#     refuse:not-on-main       HEAD is on some other branch (or detached); moving it is not this
+#                              script's to make (#2923)
 #     refuse:diverged          local main holds commits the remote does not; needs a person
 #
 # Dirty is checked FIRST and beats everything, including a checkout that is otherwise ready: the safe
-# answer must not depend on which of several true things gets checked first.
+# answer must not depend on which of several true things gets checked first. not-on-main is checked
+# before the fast-forward question for the same reason, and it is a DISTINCT refusal rather than a
+# second use of one of the others, because it names a different state and a different remedy (L11).
 overture_update_verdict() {
   local dirty="${1:-no}" on_main="${2:-no}" head_is_upstream="${3:-no}" can_ff="${4:-no}"
   [ "${dirty}" = "yes" ] && { printf 'refuse:work-in-progress\n'; return 0; }
   [ "${on_main}" = "yes" ] && [ "${head_is_upstream}" = "yes" ] && { printf 'ready\n'; return 0; }
+  [ "${on_main}" = "yes" ] || { printf 'refuse:not-on-main\n'; return 0; }
   [ "${can_ff}" = "yes" ] && { printf 'sync\n'; return 0; }
   printf 'refuse:diverged\n'
   return 0
@@ -40,6 +66,9 @@ overture_update_reason() {
   case "${1:-}" in
     refuse:work-in-progress)
       printf '%s\n' "There is unsaved work in progress in the code folder, and updating would disturb it. Ask Claude to finish or put aside that work, then press Update again."
+      ;;
+    refuse:not-on-main)
+      printf '%s\n' "The code folder is standing on a piece of work in progress rather than on the shared copy, and moving it would redirect whatever is being worked on there. Ask Claude to put the code folder back on the shared copy, then press Update again."
       ;;
     refuse:diverged)
       printf '%s\n' "The code folder holds work that never reached the shared copy, so it cannot be brought up to date on its own. Ask Claude to sort it out, then press Update again."
@@ -80,9 +109,13 @@ overture_bring_checkout_current() {
     return 1
   fi
 
-  local dirty=no on_main=no head_is_upstream=no can_ff=no
+  local dirty=no on_main=no head_is_upstream=no can_ff=no here
   [ -n "$(git -C "${repo}" status --porcelain 2>/dev/null)" ] && dirty=yes
-  [ "$(git -C "${repo}" rev-parse --abbrev-ref HEAD 2>/dev/null)" = "main" ] && on_main=yes
+  # Read once and kept, because the refusal below has to NAME it. A skipped move that leaves no trace
+  # is the whole of #2923: the branch switch was found days later, from the reflog, and only because an
+  # unrelated later step happened to fail.
+  here="$(git -C "${repo}" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")"
+  [ "${here}" = "main" ] && on_main=yes
   [ "$(git -C "${repo}" rev-parse HEAD 2>/dev/null)" = "$(git -C "${repo}" rev-parse origin/main 2>/dev/null)" ] \
     && head_is_upstream=yes
   # Whether LOCAL main can fast-forward onto the remote, which is the only move that never loses a
@@ -99,18 +132,30 @@ overture_bring_checkout_current() {
   case "${verdict}" in
     ready) return 0 ;;
     sync) : ;;
+    refuse:not-on-main)
+      # Said in the Terminal in the terms whoever is working here needs, on top of the plain sentence
+      # the app's panel gets: which branch was left alone, and that nothing about the checkout moved.
+      # #2923's damage came entirely from a move nobody could see afterwards.
+      # A detached HEAD gets said in words rather than as the literal "HEAD" git prints for it, which
+      # would read as a branch of that name to anyone who does not work in git.
+      local standing_on="${here}"
+      if [ -z "${standing_on}" ] || [ "${standing_on}" = "HEAD" ]; then
+        standing_on="a single commit with no branch"
+      fi
+      printf 'Nothing was moved: the code folder is on %s, not main.\n' "${standing_on}" >&2
+      overture_update_refuse "$(overture_update_reason "${verdict}")"
+      return 1
+      ;;
     *)
       overture_update_refuse "$(overture_update_reason "${verdict}")"
       return 1
       ;;
   esac
 
-  # The move itself, and it must not be able to half-happen: if either step fails the checkout is left
-  # where it is and the installer is told not to build, rather than building something nobody chose.
-  if ! git -C "${repo}" checkout --quiet main 2>/dev/null; then
-    overture_update_refuse "It could not switch the code folder to the shared copy. Ask Claude to look."
-    return 1
-  fi
+  # The move itself, and note what it is NOT since #2923: HEAD is already on main by the time this runs,
+  # so this fast-forwards one branch onto its own remote and never carries the checkout off anything.
+  # It must not be able to half-happen: if it fails the checkout is left where it is and the installer
+  # is told not to build, rather than building something nobody chose.
   if ! git -C "${repo}" merge --ff-only --quiet origin/main 2>/dev/null; then
     overture_update_refuse "It could not bring the code folder up to what has shipped. Ask Claude to look."
     return 1

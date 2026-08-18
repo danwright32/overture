@@ -435,13 +435,39 @@ already drifting from the Swift version it mirrored.
 - `build-install.sh` builds WHATEVER IS CHECKED OUT, which is what you want when installing a branch build
   deliberately. The freshness panel's Update button does NOT run it directly: it runs
   `mac/scripts/update-overture.sh`, which brings the checkout up to origin/main first and only then
-  installs, refusing (and installing nothing) when it cannot do that safely, e.g. uncommitted work in the
-  tree or a local main holding commits the remote does not. Pressing Update means "get me what has
-  shipped"; running the installer by hand means "build this". They were the same command until 2026-08-04,
-  and Dan hit the loop that follows from it: the panel compares the installed commit against origin/main,
-  so a checkout parked on an already-merged branch reinstalled the same commit and stayed behind forever.
-  A corollary for anyone working here: leave the checkout on main when you finish, because a session that
-  parks it on a branch is what puts the Update button in front of that state.
+  installs, refusing (and installing nothing) when it cannot do that safely. Pressing Update means "get me
+  what has shipped"; running the installer by hand means "build this". They were the same command until
+  2026-08-04, and Dan hit the loop that follows from it: the panel compares the installed commit against
+  origin/main, so a checkout parked on an already-merged branch reinstalled the same commit and stayed
+  behind forever.
+  **Since #2923 the ONLY move it will make is fast-forwarding main onto its own remote**, and that is the
+  paragraph to read before changing it. It used to switch a checkout standing anywhere else onto main, and
+  on 2026-08-17 it did that to a working checkout in the middle of a session, off an in-progress feature
+  branch, silently. The cost was not the inconvenience: the `scripts/test-all.sh` run made straight
+  afterwards verified main while everyone believed it was verifying the branch, and that pass was written
+  into a PR body as evidence for code it had never compiled; the `git push -u origin <branch>` after it
+  pushed main's HEAD at the feature branch's name and was refused only by luck of the ref ordering. So the
+  three refusals are now uncommitted work, a local main the remote does not contain, and **HEAD standing
+  anywhere other than main**, each with its own sentence in the Terminal and in the app's panel, and the
+  last of them naming the branch it left alone. What that gives up is the automatic rescue of the parked
+  checkout above: telling a parked branch from a live one cannot be done cheaply or honestly (a
+  squash-merged branch is neither an ancestor of main nor patch-equal to it, so "already shipped" needs
+  `gh`, and even a branch carrying nothing of its own may be one a session is standing in). The loop it
+  leaves is LOUD rather than silent, which is the difference that mattered.
+  A corollary for anyone working here, and it is now what clears that refusal: leave the checkout on main
+  when you finish, because a session that parks it on a branch is what puts the Update button in front of
+  that state.
+  The same issue covered the CLASS rather than that one instance. `scripts/lib/worktree-safety.sh` holds
+  one answer to "is this directory mine to scrub", and both remaining places that move a checkout's HEAD
+  ask it before they touch anything: `setup_worktree` in `scripts/verify-and-merge-branch.sh` (which
+  force-detaches the verify slot, runs `git clean -ffdx` over it and on its fallback path deletes the
+  directory outright, at a path that comes from `OVERTURE_VERIFY_WORKTREE`) and
+  `gate_branch_project_freshness` in `scripts/lib/project-freshness.sh` (which walks a caller's directory
+  through every ref it is given and restores it to a bare SHA). It tells them apart by evidence rather
+  than by a name: the verify slot is created with `worktree add --detach` and is detached for its whole
+  life, so a directory standing on a NAMED branch is somebody's working checkout, whatever it is called.
+  It asks that independently of "is this the checkout I am running from", so neither side answers for the
+  other.
 - Changing what the app SAYS: `docs/copy-inventory.md` is every sentence Overture can say to Dan
   (#915), generated from the source and checked in. The test suite fails when it is stale, so a PR
   that changes the app's wording shows that change in the diff, in the words Dan will read rather
