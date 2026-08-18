@@ -53,7 +53,8 @@ struct OneWaitingOnDanRuleTests {
         ReplyPanel.isOffered(for: r, in: p)
     }
     private func inquiryOffersReply(_ i: Inquiry) -> Bool {
-        InquiryMutations.showsReplyAction(sentAt: i.sentAt, replied: i.replied, bounced: i.bounced)
+        InquiryMutations.showsReplyAction(sentAt: i.sentAt, hasUnhandledReply: i.hasUnhandledReply,
+                                          bounced: i.bounced)
     }
 
     // The one genuine difference, pinned so it cannot silently become two. An inquiry is somebody
