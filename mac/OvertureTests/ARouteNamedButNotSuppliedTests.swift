@@ -135,5 +135,8 @@ struct ARouteNamedButNotSuppliedTests {
     @Test func theHelpSaysAnotherCheckIsWorthMoreThanASearchByHand() {
         let help = ReachabilityCopy.emptyAnswerHelp(.routeNamedButNotSupplied)
         #expect(help.contains("another check is worth more here than a search by hand"))
+        // Says "a way to reach these people", not "a form or a DM": the same reason fires for an address
+        // method carrying no address, and naming only one of the three would be wrong on the others.
+        #expect(!help.contains("form or a DM"))
     }
 }

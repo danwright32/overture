@@ -542,7 +542,7 @@ enum ReachabilityCopy {
         // is the only thing this sentence can say that no other one can: another check is worth more
         // here than his own search, which is the reverse of the advice above it.
         case .routeNamedButNotSupplied:
-            return "A check said these people take messages through a form or a DM, then gave no link to one, so there was nothing to keep. That is the check falling short rather than the show being hard to reach, so another check is worth more here than a search by hand."
+            return "A check said there was a way to reach these people and then did not give one, so there was nothing to keep. That is the check falling short rather than the show being hard to reach, so another check is worth more here than a search by hand."
         case .nothingPublished, nil:
             return noEmailFoundHelp
         }

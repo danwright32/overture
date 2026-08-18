@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1402 sentences**.
+Every sentence Overture can say to Dan: **1404 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -388,6 +388,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/Reachability.swift`
 "A check ran and got no further than this act's social profile, which needs a login. Their own site may still publish an address, so of all the shows with no contact this is the one most likely to give one up on another check."
     `Domain/Reachability.swift`
+"A check said there was a way to reach these people and then did not give one, so there was nothing to keep. That is the check falling short rather than the show being hard to reach, so another check is worth more here than a search by hand."
+    `Domain/Reachability.swift`
 "A check worked out who is putting this on and found no way to reach any of them, so it kept none of them. The listing still names them, and a search by name often turns up an address the check missed."
     `Domain/Reachability.swift`
 "A contact check is already going. Wait for it to finish."
@@ -596,6 +598,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Change the page link"
     `UI/SourceFixConfirmActions.swift`
 "Check again"
+    `Domain/Reachability.swift`
+"Check named a route it never found"
     `Domain/Reachability.swift`
 "Check reachability"
     `Domain/Reachability.swift`
