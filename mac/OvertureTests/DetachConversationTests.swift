@@ -53,13 +53,17 @@ struct DetachConversationTests {
         return r
     }
 
+    // #2918: with `labelIds`, which Gmail returns on every message and which says whether one was really
+    // sent or is still an unsent draft. A message of Dan's carrying no label is no longer read as his.
     private func threadJSON(_ messages: [(from: String, at: Int64, subject: String, messageId: String?)])
     -> Data {
         let payloads: [[String: Any]] = messages.map { m in
             var headers: [[String: Any]] = [["name": "From", "value": m.from],
                                             ["name": "Subject", "value": m.subject]]
             if let id = m.messageId { headers.append(["name": "Message-ID", "value": id]) }
+            let mine = ReplyDetection.email(from: m.from) == ReplyDetection.email(from: me)
             return ["id": "msg-\(m.at)", "internalDate": "\(m.at * 1000)",
+                    "labelIds": mine ? ["SENT"] : ["INBOX"],
                     "payload": ["headers": headers]]
         }
         return try! JSONSerialization.data(withJSONObject: ["messages": payloads])

@@ -52,11 +52,17 @@ struct GmailThreadingRepairTests {
 
     // One Gmail thread as the API returns it for `format=metadata`. `internalDate` is what orders the
     // messages, deliberately, rather than their position in the array.
+    //
+    // #2918: with `labelIds`, which Gmail returns on every message and which says whether it was really
+    // sent or is still an unsent draft. The repair now refuses to reference a message that claims
+    // nothing about having been sent, so a fixture that omits the field is not the thread it means.
     private func threadJSON(_ messages: [(from: String, messageId: String?, at: Int64)]) -> Data {
         let payloads: [[String: Any]] = messages.map { m in
             var headers: [[String: Any]] = [["name": "From", "value": m.from]]
             if let id = m.messageId { headers.append(["name": "Message-ID", "value": id]) }
-            return ["internalDate": "\(m.at)", "payload": ["headers": headers]]
+            let mine = ReplyDetection.email(from: m.from) == ReplyDetection.email(from: me)
+            return ["internalDate": "\(m.at)", "labelIds": mine ? ["SENT"] : ["INBOX"],
+                    "payload": ["headers": headers]]
         }
         return try! JSONSerialization.data(withJSONObject: ["messages": payloads])
     }
