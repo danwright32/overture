@@ -64,6 +64,21 @@ enum LocalHistory {
             // they refused him, which is the opposite of what happened, and would then penalise an org for
             // a decision he made about a single event.
             //
+            // #2863: `theySaidPriceTooHigh` gets NO BRANCH HERE, and that is a decision rather than an
+            // omission. A budget answer is a REPLY, and a reply already earns the org "warm" further down,
+            // which `Ranker.priorPoints` weights 10. Any branch added up here would run BEFORE that one and
+            // could only take the signal away: "lost_soft" would drop the org from 10 to 3, and "lost_hard"
+            // would put a -20 penalty on an org that said yes to the work and no to the rate. So falling
+            // through is what preserves the stronger and truer thing the reply already taught.
+            //
+            // A show closed on price whose reply Dan heard some other way (a phone call, a forwarded note)
+            // has nothing recorded on a contact and lands on "contacted" below, exactly like any other
+            // pitched show with no recorded reply. Nothing about the rate makes the org a worse lead than
+            // one that was merely emailed, and Overture has no signal that would say more. What matters is
+            // that it never goes NEGATIVE. `LostOnPriceOutcomeTests` asserts both landings against
+            // `theySaidNo` and `theySaidNotNow` in the same run, so a later tidy-up into either lost branch
+            // goes red rather than silently changing what the scout learns.
+            //
             // #2684: `noWayToReachThem` teaches NOTHING, and that is the whole risk the value carries. It
             // records that Overture could not find a way in, so the org did nothing to be judged on. Filed
             // as "declined" it would join the scheduling misses; filed as "passed" it would teach a

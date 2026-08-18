@@ -7,7 +7,7 @@ import Foundation
 // "Mark..." menu, `InquiryLostReason`, `StandDownCopy`, and the show-level `Outcome`): about 28 options
 // describing roughly a dozen actual facts. One field, one column to report on, one list to read.
 //
-// Thirteen values Dan picks, split into two halves, plus two Overture writes for itself. Which half is
+// Fourteen values Dan picks, split into two halves, plus two Overture writes for itself. Which half is
 // offered depends on whether anything was SENT, which is a fact about the send record and is
 // deliberately NOT encoded in the words: `ShowOutcome.menu(wasPitched:)` is the only place that
 // decision is made, so an impossible option ("Never heard back" on a show nobody emailed, "Date
@@ -56,8 +56,8 @@ enum ShowOutcome: String, CaseIterable, Equatable, Hashable, Sendable {
     case noWayToReachThem = "no_way_to_reach_them"
     case duplicate
 
-    // The five for a show that WAS pitched. Four of them are somebody's answer, or the absence of one;
-    // the fifth is Dan's.
+    // The six for a show that WAS pitched. Five of them are somebody's answer, or the absence of one;
+    // the sixth is Dan's.
     case booked
     // A silence, not a refusal. Distinct from having no value at all, which means nothing has happened
     // yet: the difference between "still waiting to hear" and "they never answered, I am closing this"
@@ -65,6 +65,16 @@ enum ShowOutcome: String, CaseIterable, Equatable, Hashable, Sendable {
     case neverHeardBack = "never_heard_back"
     case theySaidNotNow = "they_said_not_now"
     case theySaidNo = "they_said_no"
+    // #2863: they wanted the work and could not pay this rate. Must never be folded into `theySaidNo`,
+    // which is where it landed before and which keeps the right GROUP (pitched and lost) while throwing
+    // away the only part of the answer worth having. A flat no is a judgement about the work; a budget
+    // answer is a fact about DAN'S PRICING, and it is the one lost reason he can act on. Same argument
+    // that keeps `theySaidNotNow` out of `theySaidNo` (timing is not refusal) and `noWayToReachThem` out
+    // of `notAFit` (#2684).
+    //
+    // Kept separate is what makes #16 able to ask how many pitches a season are lost on rate, which is
+    // the number that says whether the rate itself is the bottleneck.
+    case theySaidPriceTooHigh = "they_said_price_too_high"
     // Replaces the stored `stoodDown`, whose wording was "You stopped working this". Dan rejected that
     // framing outright: "I will never stop working something without closure. Either they didn't
     // respond/turned me down or I turned them down." So it is an active refusal, not an abandonment.
@@ -93,6 +103,11 @@ enum ShowOutcome: String, CaseIterable, Equatable, Hashable, Sendable {
         case .neverHeardBack: return "Never heard back"
         case .theySaidNotNow: return "They said not now"
         case .theySaidNo: return "They said no"
+        // #2863: the "They said..." shape, because it is the plainest report of what happened and it
+        // matches the two endings above it. "Price was too high" would read as Dan judging his own rate,
+        // and it is the counted phrase that settles the choice: these words survive being read after a
+        // number ("3 said the price was too high" is a sentence) and those ones do not.
+        case .theySaidPriceTooHigh: return "They said the price was too high"
         case .turnedThemDown: return "I turned them down"
         case .wentBy: return "Went by"
         case .tooFar: return "Too far"
@@ -117,6 +132,7 @@ enum ShowOutcome: String, CaseIterable, Equatable, Hashable, Sendable {
         case .neverHeardBack: return "never heard back"
         case .theySaidNotNow: return "they said not now"
         case .theySaidNo: return "they said no"
+        case .theySaidPriceTooHigh: return "they said the price was too high"
         case .turnedThemDown: return "I turned them down"
         // Nothing counts these, so giving them wording would be a second vocabulary nothing reads. Note
         // the label is not merely unread for them, it is wrong: "3 Date conflict" and "3 Duplicate" are
@@ -135,8 +151,10 @@ enum ShowOutcome: String, CaseIterable, Equatable, Hashable, Sendable {
                                               .tooSoon, .notAFit, .dontWantToShoot,
                                               .noWayToReachThem, .duplicate]
 
+    // #2863 put `theySaidPriceTooHigh` beside the other answers somebody actually gave, after the flat
+    // no and before Dan's own refusal, which stays last.
     static let pitched: [ShowOutcome] = [.booked, .neverHeardBack, .theySaidNotNow,
-                                         .theySaidNo, .turnedThemDown]
+                                         .theySaidNo, .theySaidPriceTooHigh, .turnedThemDown]
 
     static var danCanChoose: [ShowOutcome] { neverPitched + pitched }
 
@@ -185,6 +203,9 @@ extension ShowOutcome {
         case .neverHeardBack: return "\(org) closed out: never heard back."
         case .theySaidNotNow: return "\(org) closed out: they said not now."
         case .theySaidNo: return "\(org) closed out: they said no."
+        // #2863: names the rate rather than the refusal, because that is the whole reason this ending
+        // exists: they wanted the work, and the price is what stopped it.
+        case .theySaidPriceTooHigh: return "\(org) closed out: they said the price was too high."
         case .turnedThemDown: return "\(org) closed out: you turned them down."
         case .dateConflict: return "\(org) dismissed: date conflict."
         case .hadPaidWork: return "\(org) dismissed: you had paid work."
@@ -282,6 +303,12 @@ extension ShowOutcome {
         // tell "they said not now" from "nobody answered", and the same STATUS, because neither is a refusal.
         case .neverHeardBack, .theySaidNotNow: return .lostDoorOpen
         case .theySaidNo: return .lostNotInterested
+        // #2863: `lostDoorOpen`, with `neverHeardBack` and `theySaidNotNow`, because an org that wanted
+        // the work and could not pay this time is not an org to stop pitching. `lostNotInterested` would
+        // say they refused the work itself, which is the one thing a budget answer does not do. A distinct
+        // RECORD from both, so the lost split can count it, and the same STATUS, for the same reason the
+        // pair above share one: neither is a refusal.
+        case .theySaidPriceTooHigh: return .lostDoorOpen
         case .turnedThemDown: return .stoodDown
         case .dateConflict, .hadPaidWork, .pitchingOtherShows, .tooSoon, .notAFit, .dontWantToShoot,
              .noWayToReachThem, .duplicate, .wentBy, .tooFar:
@@ -289,7 +316,7 @@ extension ShowOutcome {
         }
     }
 
-    // Nil for the five pitched endings, which is correct rather than a gap: a show that was closed out
+    // Nil for the six pitched endings, which is correct rather than a gap: a show that was closed out
     // after a pitch was never dismissed, so it has no dismiss reason to report.
     var asDismissReason: DismissReason? {
         switch self {
@@ -302,7 +329,9 @@ extension ShowOutcome {
         case .pitchingOtherShows: return .pitchingOtherShows
         case .wentBy: return .wentBy
         case .tooFar: return .tooFar
-        case .booked, .neverHeardBack, .theySaidNotNow, .theySaidNo, .turnedThemDown: return nil
+        case .booked, .neverHeardBack, .theySaidNotNow, .theySaidNo, .theySaidPriceTooHigh,
+             .turnedThemDown:
+            return nil
         // #2684: this ending never existed under `DismissReason`, so it has no spelling there and the
         // bridge's contract is now "the nine that predate it" rather than every never-pitched value.
         // Nil is the stated answer, not a gap: the bridge exists ONLY to read stores written before
