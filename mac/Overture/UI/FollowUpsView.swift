@@ -304,12 +304,13 @@ struct FollowUpsView: View {
         .id(r.id)
     }
 
-    // #2129's scoped drafter, so pressing this spends on the one conversation Dan pressed it on rather
-    // than on every reply waiting. Re-stamping the request is what takes this row out of the stalled
-    // list: it is no longer a dead run, it is a run that has just started.
+    // The scoped drafter (#2129, consolidated as the one draftReply in #2944), so pressing this spends
+    // on the one conversation Dan pressed it on rather than on every reply waiting. Re-stamping the
+    // request is what takes this row out of the stalled list: it is no longer a dead run, it is a run
+    // that has just started.
     private func draftAgain(prospect: Prospect, recipient: Recipient) {
-        ProspectMutations.draftOneReply(prospect.naturalKey, recipient.id, prospects: prospects,
-                                        context: context, feedback: feedback)
+        ProspectMutations.draftReply(prospect.naturalKey, recipient.id, prospects: prospects,
+                                     context: context, feedback: feedback)
     }
 
     private func reasonPill(_ text: String, color: Color) -> some View {
