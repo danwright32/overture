@@ -76,6 +76,28 @@ struct ContendedChecksDoNotPoolTests {
         #expect(history.runs.count == 3)   // stored by the test's own initializer, refused by the pooling
     }
 
+    // MARK: - Neither class can starve the other
+
+    // The window is "the last ten" so the pace tracks recent behaviour, and once there are two classes
+    // that has to mean the last ten OF EACH. Capped across both, a stretch of co-runs would evict every
+    // solo sample, and the next check with the machine to itself would quote the hand-set constant with a
+    // full history sitting beside it, which is the exact failure `recording` already refuses for
+    // uncomparable runs.
+    @Test func eachClassKeepsItsOwnLastTen() {
+        var history = ProbeDurationHistory()
+        for i in 1...12 {
+            history = history.recording(lookups: 10, streams: 10, seconds: 300 + Double(i), contended: true)
+        }
+        for i in 1...12 {
+            history = history.recording(lookups: 10, streams: 10, seconds: 200 + Double(i), contended: false)
+        }
+        #expect(history.runs.filter { $0.contended }.count == ProbeDurationHistory.maxEntries)
+        #expect(history.runs.filter { !$0.contended }.count == ProbeDurationHistory.maxEntries)
+        // And it is the LAST ten of each that survived, not the first.
+        #expect(history.runs.filter { $0.contended }.first?.seconds == 303)
+        #expect(history.runs.filter { !$0.contended }.first?.seconds == 203)
+    }
+
     // MARK: - What the runner reported
 
     // The flag reaches the history from the run's own results file, beside the wall clock it qualifies.

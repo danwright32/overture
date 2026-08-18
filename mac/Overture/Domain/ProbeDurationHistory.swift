@@ -122,8 +122,21 @@ struct ProbeDurationHistory: Codable, Equatable, Sendable {
         guard Self.isComparable(lookups: lookups, streams: streams, seconds: seconds) else { return self }
         var next = runs
         next.append(Run(lookups: lookups, streams: streams, seconds: seconds, contended: contended))
-        if next.count > Self.maxEntries {
-            next.removeFirst(next.count - Self.maxEntries)
+        // #2762: the last ten OF EACH CLASS, not the last ten overall. Capped across both, a stretch of
+        // co-runs would evict every solo sample, and the next check with the machine to itself would be
+        // quoted the hand-set constant with a full history sitting beside it. That is the same failure
+        // this cap already refuses to cause for uncomparable runs, arriving through the new field.
+        //
+        // Trimmed by dropping the oldest of the OVERFULL class only, so the file stays in the order the
+        // runs happened rather than being regrouped by class.
+        let overfull = next.filter { $0.contended == contended }.count - Self.maxEntries
+        if overfull > 0 {
+            var toDrop = overfull
+            next = next.filter { run in
+                guard toDrop > 0, run.contended == contended else { return true }
+                toDrop -= 1
+                return false
+            }
         }
         return ProbeDurationHistory(version: version, runs: next)
     }
