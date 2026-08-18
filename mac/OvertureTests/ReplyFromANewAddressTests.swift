@@ -2,6 +2,9 @@ import Testing
 import Foundation
 import SwiftData
 
+
+// #2928: the one Gmail fixture builder, at file scope.
+private let replyFromANewAddressGmail = GmailFixture(selfEmail: "dan@danwrightphotography.com")
 // #2147, measured on the live store 2026-08-05. Dan emailed two contacts and Nicole replied from an
 // address he had never written to: he pitched nbecker@everyvoicechoirs.org, she answered from
 // nicolebecker@everyvoicechoirs.org.
@@ -48,11 +51,9 @@ struct ReplyFromANewAddressTests {
     }
 
     private func thread(from: String, to: String, body: String) -> Data {
-        Data("""
-        {"messages":[{"id":"m1","internalDate":"1754355390000","payload":{"headers":[
-          {"name":"From","value":"\(from)"},{"name":"To","value":"\(to)"}],
-          "mimeType":"text/plain","body":{"data":"\(b64url(body))"}}}]}
-        """.utf8)
+        replyFromANewAddressGmail.thread([
+            .init(from: from, to: to, id: "m1", internalDateMillis: 1_754_355_390_000, text: body),
+        ])
     }
 
     // MARK: the words must survive

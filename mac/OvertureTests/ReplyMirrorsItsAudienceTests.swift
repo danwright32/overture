@@ -155,17 +155,12 @@ struct ReplyMirrorsItsAudienceTests {
         p.sentAt = Date(timeIntervalSince1970: 1)
 
         // Ann replied to Dan and to Ben, leaving Cara off.
-        let full = Data("""
-        {"messages":[
-          {"internalDate":"1000","payload":{"headers":[
-            {"name":"From","value":"\(me)"},
-            {"name":"To","value":"ann@org.example, ben@org.example, cara@org.example"}]}},
-          {"internalDate":"2000","payload":{"headers":[
-            {"name":"From","value":"Ann <ann@org.example>"},
-            {"name":"To","value":"\(me), ben@org.example"}],
-            "body":{"data":"\(base64url("July works."))"},"mimeType":"text/plain"}}
-        ]}
-        """.utf8)
+        let full = GmailFixture(selfEmail: me).thread([
+            .init(from: me, to: "ann@org.example, ben@org.example, cara@org.example",
+                  internalDateMillis: 1000),
+            .init(from: "Ann <ann@org.example>", to: "\(me), ben@org.example",
+                  internalDateMillis: 2000, text: "July works."),
+        ])
 
         let n = ReplyService.detectReplies(in: [p], selfEmail: me, now: Date(timeIntervalSince1970: 10),
                                            fetchThread: { _ in full }, fetchFullThread: { _ in full })
@@ -205,10 +200,4 @@ struct ReplyMirrorsItsAudienceTests {
         #expect(sender.last?.to == ["ann@org.example"])
     }
 
-    private func base64url(_ s: String) -> String {
-        Data(s.utf8).base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
-    }
 }

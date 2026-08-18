@@ -2,6 +2,9 @@ import Testing
 import Foundation
 import SwiftData
 
+
+// #2928: the one Gmail fixture builder, at file scope.
+private let attachConversationGmail = GmailFixture(selfEmail: "dan@danwrightphotography.com")
 // #2715: the write that links a Gmail conversation to a pitch Overture cannot watch.
 //
 // It stamps `gmailThreadId` AND runs `ReplyService` detection over the thread already in hand, in the
@@ -53,21 +56,15 @@ struct AttachConversationTests {
     // A Gmail thread as `threads.get?format=metadata` returns it. `internalDate` orders the messages,
     // not their position in the array, which is what every reader in ReplyDetection relies on.
     //
-    // #2918: `labelIds` too, because Gmail returns it on every message and it is what says whether a
-    // message was actually sent or is still an unsent draft. A message of Dan's carrying no label at all
-    // is now refused as evidence that he answered, so a fixture that omits it is not the thread it means.
+    // #2918 put `labelIds` on these, because Gmail returns it on every message and it is what says whether
+    // one was really sent or is still an unsent draft. #2928 moved the whole shape into `GmailFixture`,
+    // which works the labels out from the sender rather than each fixture restating the rule.
     private func threadJSON(_ messages: [(from: String, at: Int64, subject: String, messageId: String?)])
     -> Data {
-        let payloads: [[String: Any]] = messages.map { m in
-            var headers: [[String: Any]] = [["name": "From", "value": m.from],
-                                            ["name": "Subject", "value": m.subject]]
-            if let id = m.messageId { headers.append(["name": "Message-ID", "value": id]) }
-            let mine = ReplyDetection.email(from: m.from) == me
-            return ["id": "msg-\(m.at)", "internalDate": "\(m.at * 1000)",
-                    "labelIds": mine ? ["SENT"] : ["INBOX"],
-                    "payload": ["headers": headers]]
-        }
-        return try! JSONSerialization.data(withJSONObject: ["messages": payloads])
+        attachConversationGmail.thread(messages.map { m in
+            .init(from: m.from, subject: m.subject, messageID: m.messageId,
+                  id: "msg-\(m.at)", internalDateMillis: m.at * 1000)
+        })
     }
 
     private func theirReply(subject: String = "Re: Photography for the anniversary celebration") -> Data {

@@ -1,6 +1,9 @@
 import Testing
 import Foundation
 
+
+// #2928: the one Gmail fixture builder, at file scope.
+private let bounceServiceGmail = GmailFixture(selfEmail: "dan@danwrightphotography.com")
 // #676: BounceServiceDelayDetectionTests (#656) only covers the delay-notice behavior added
 // alongside the original hard-bounce path (#398). These tests exercise that original path
 // directly: the outcomeSource/booked/already-bounced/already-replied/resolution guards, and the
@@ -23,12 +26,10 @@ struct BounceServiceHardBounceTests {
     }
 
     private static func hardBounceJSON(id: String = "bounce-1") -> Data {
-        Data("""
-        {"messages":[{"id":"\(id)","payload":{"headers":[
-          {"name":"From","value":"mailer-daemon@googlemail.com"},
-          {"name":"Subject","value":"Delivery Status Notification (Failure)"}
-        ]}}]}
-        """.utf8)
+        bounceServiceGmail.thread([
+            .init(from: "mailer-daemon@googlemail.com",
+                  subject: "Delivery Status Notification (Failure)", id: id),
+        ])
     }
 
     @Test @MainActor func aManualOutcomeSourceRecipientIsNeverFlagged() {

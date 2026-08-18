@@ -1,6 +1,9 @@
 import Testing
 import Foundation
 
+// #2928: the one Gmail fixture builder, at file scope.
+private let bounceDetectionGmail = GmailFixture(selfEmail: "dan@danwrightphotography.com")
+
 // Pure classification for #398: a genuine HARD (permanent) Gmail bounce is a message from a
 // bounce-notification sender (mailer-daemon/postmaster) whose subject reads as a permanent
 // failure, not a temporary delay. Deliberately conservative: sender AND subject must both
@@ -37,11 +40,7 @@ struct BounceDetectionTests {
     }
 
     private func threadJSON(from: String, subject: String, id: String = "m1") -> Data {
-        let json = #"{"messages":[{"id":""# + id + #"","payload":{"headers":["#
-            + #"{"name":"From","value":""# + from + #""},"#
-            + #"{"name":"Subject","value":""# + subject + #""}"#
-            + #"]}}]}"#
-        return Data(json.utf8)
+        bounceDetectionGmail.thread([.init(from: from, subject: subject, id: id)])
     }
 
     @Test func findsTheHardBounceMessageIdWhenSenderAndSubjectBothMatch() {
@@ -73,18 +72,12 @@ struct BounceDetectionTests {
     // here is the OLDER message, so a fix that just returns the first array match would wrongly
     // return "bounce-1" instead of the newest, "bounce-2".
     @Test func returnsTheNewestHardBounceNotArrayPosition() {
-        let json = Data(#"""
-        {"messages":[
-          {"id":"bounce-1","internalDate":"1000","payload":{"headers":[
-            {"name":"From","value":"mailer-daemon@googlemail.com"},
-            {"name":"Subject","value":"Delivery Status Notification (Failure)"}
-          ]}},
-          {"id":"bounce-2","internalDate":"2000","payload":{"headers":[
-            {"name":"From","value":"mailer-daemon@googlemail.com"},
-            {"name":"Subject","value":"Delivery Status Notification (Failure)"}
-          ]}}
-        ]}
-        """#.utf8)
+        let json = bounceDetectionGmail.thread([
+            .init(from: "mailer-daemon@googlemail.com", subject: "Delivery Status Notification (Failure)",
+                  id: "bounce-1", internalDateMillis: 1000),
+            .init(from: "mailer-daemon@googlemail.com", subject: "Delivery Status Notification (Failure)",
+                  id: "bounce-2", internalDateMillis: 2000),
+        ])
         #expect(BounceDetection.hardBounceMessageId(threadJSON: json, selfEmail: "dan@danwrightphotography.com") == "bounce-2")
     }
 
@@ -124,18 +117,12 @@ struct BounceDetectionTests {
     }
 
     @Test func returnsTheNewestDelayNoticeNotArrayPosition() {
-        let json = Data(#"""
-        {"messages":[
-          {"id":"delay-1","internalDate":"1000","payload":{"headers":[
-            {"name":"From","value":"mailer-daemon@googlemail.com"},
-            {"name":"Subject","value":"Delivery Status Notification (Delay)"}
-          ]}},
-          {"id":"delay-2","internalDate":"2000","payload":{"headers":[
-            {"name":"From","value":"mailer-daemon@googlemail.com"},
-            {"name":"Subject","value":"Delivery Status Notification (Delay)"}
-          ]}}
-        ]}
-        """#.utf8)
+        let json = bounceDetectionGmail.thread([
+            .init(from: "mailer-daemon@googlemail.com", subject: "Delivery Status Notification (Delay)",
+                  id: "delay-1", internalDateMillis: 1000),
+            .init(from: "mailer-daemon@googlemail.com", subject: "Delivery Status Notification (Delay)",
+                  id: "delay-2", internalDateMillis: 2000),
+        ])
         #expect(BounceDetection.delayMessageId(threadJSON: json, selfEmail: "dan@danwrightphotography.com") == "delay-2")
     }
 }

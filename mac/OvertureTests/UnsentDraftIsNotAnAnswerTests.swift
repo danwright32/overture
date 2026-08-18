@@ -2,6 +2,9 @@ import Testing
 import Foundation
 import SwiftData
 
+
+// #2928: the one Gmail fixture builder, at file scope.
+private let unsentDraftGmail = GmailFixture(selfEmail: "dan@danwrightphotography.com", threadId: "t")
 // #2918. Dan starts a reply in Gmail, gets pulled away, and never sends it. Gmail keeps that draft on the
 // thread, and `threads.get` returns it inside `messages` alongside real mail, carrying his own address in
 // its `From` header and an `internalDate` newer than the reply it answers.
@@ -40,31 +43,23 @@ struct UnsentDraftIsNotAnAnswerTests {
     private enum Who { case dan, them }
 
     /// `labels` is what Gmail puts in `labelIds`. `nil` means the field is absent from the message
-    /// altogether, which is the state the refusal has to fail closed on.
+    /// altogether, which is the state the refusal has to fail closed on, and `GmailFixture` makes that
+    /// absence something a call site has to ASK for rather than something it can drift into (#2928).
     private static func message(_ id: String, from who: Who, at sentAt: Date,
                                 labels: [String]?, messageID: String? = nil,
-                                text: String = "Some words.") -> [String: Any] {
-        var headers: [[String: Any]] = [
-            ["name": "From", "value": who == .dan ? me : "Priya Raman <\(them)>"],
-            ["name": "To", "value": who == .dan ? them : me],
-            ["name": "Subject", "value": "Re: Photography for the spring gala"],
-        ]
-        if let messageID { headers.append(["name": "Message-ID", "value": messageID]) }
-        let body = Data(text.utf8).base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
-        var m: [String: Any] = [
-            "id": id,
-            "internalDate": "\(Int(sentAt.timeIntervalSince1970) * 1000)",
-            "payload": ["headers": headers, "mimeType": "text/plain", "body": ["data": body]] as [String: Any],
-        ]
-        if let labels { m["labelIds"] = labels }
-        return m
+                                text: String = "Some words.") -> GmailFixture.Message {
+        let m = GmailFixture.Message(
+            from: who == .dan ? me : "Priya Raman <\(them)>",
+            to: who == .dan ? them : me,
+            subject: "Re: Photography for the spring gala",
+            messageID: messageID, id: id,
+            internalDateMillis: Int64(sentAt.timeIntervalSince1970) * 1000,
+            labelIds: labels, text: text)
+        return labels == nil ? m.withoutLabelIds() : m
     }
 
-    private static func thread(_ messages: [[String: Any]]) -> Data {
-        try! JSONSerialization.data(withJSONObject: ["messages": messages])
+    private static func thread(_ messages: [GmailFixture.Message]) -> Data {
+        unsentDraftGmail.thread(messages)
     }
 
     /// His pitch, their reply, and then a message of his on top. What that last message IS is the whole
@@ -336,5 +331,42 @@ struct UnsentDraftIsNotAnAnswerTests {
             fromAddresses: ReplyDetection.fromAddresses(threadJSON: thread), selfEmail: Self.me))
         #expect(ReplyDetection.latestReplyId(threadJSON: thread, selfEmail: Self.me) == "r-1")
         #expect(ReplyDetection.latestReplySender(threadJSON: thread, selfEmail: Self.me) == Self.them)
+    }
+
+    /// #2928, the class rather than the instance (L30). The three tests above cover three of the INBOUND
+    /// readers. There are nine, and the reason none of them needs a `labelIds` rule of its own is one
+    /// fact worth stating rather than assuming: every draft on a thread in Dan's mailbox carries HIS
+    /// address in `From`, and each of these already refuses a message of his. That is a different signal
+    /// from the label, so it is measured here rather than reasoned about.
+    ///
+    /// Written as one test over the whole set deliberately: the claim is about the SET, and the way this
+    /// goes wrong is a tenth reader arriving with nobody having asked the question.
+    @Test("every inbound reader is untouched by a draft sitting on top of the thread")
+    func everyInboundReaderIgnoresHisDraft() {
+        let thread = conversation(hisLastMessageLabels: ["DRAFT"])
+
+        #expect(ReplyDetection.latestReplyMessageID(threadJSON: thread, selfEmail: Self.me)
+                == "<theirs@mail.gmail.com>", "the id his answer threads onto is still theirs")
+        #expect(ReplyDetection.latestReplySenderHeader(threadJSON: thread, selfEmail: Self.me)?
+            .contains("Priya Raman") == true)
+        #expect(ReplyDetection.latestReplySentAt(threadJSON: thread, selfEmail: Self.me) == theyWrote)
+        #expect(ReplyDetection.latestReplyBody(threadJSON: thread, selfEmail: Self.me)
+                == "What's your rate?", "the words are still theirs, not the draft's")
+        #expect(ReplyDetection.latestReplyAudience(threadJSON: thread, selfEmail: Self.me)
+                == [Self.them], "and so is the audience his answer will go to")
+
+        // The bounce readers walk the same messages and are the last pair in the set. A draft is not from
+        // a bounce sender, so it can neither be read as one nor hide one, and the second half is the
+        // control: a real bounce under the same draft is still found, so the nil above is about the
+        // absence of a bounce rather than about an unreadable fixture (L159).
+        #expect(BounceDetection.hardBounceMessageId(threadJSON: thread, selfEmail: Self.me) == nil)
+        let bounced = unsentDraftGmail.thread([
+            .init(from: "mailer-daemon@googlemail.com",
+                  subject: "Delivery Status Notification (Failure)", id: "b-1",
+                  internalDateMillis: Int64(theyWrote.timeIntervalSince1970) * 1000),
+            Self.message("m-1", from: .dan, at: heDraftedIt, labels: ["DRAFT"],
+                         text: "One more thought"),
+        ])
+        #expect(BounceDetection.hardBounceMessageId(threadJSON: bounced, selfEmail: Self.me) == "b-1")
     }
 }

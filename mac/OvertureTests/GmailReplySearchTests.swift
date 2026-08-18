@@ -125,12 +125,12 @@ struct GmailReplySearchTests {
         return try! JSONSerialization.data(withJSONObject: body)
     }
 
+    // #2928: through the one builder, so a search candidate is read out of the same real message shape
+    // the checked-in `message-metadata.json` fixture records, `labelIds` included.
     private func metadataJSON(id: String, from: String, subject: String, sentAt: Date) -> Data {
-        try! JSONSerialization.data(withJSONObject: [
-            "id": id, "threadId": id, "internalDate": "\(Int64(sentAt.timeIntervalSince1970 * 1000))",
-            "payload": ["headers": [["name": "From", "value": from],
-                                    ["name": "Subject", "value": subject]]],
-        ])
+        GmailFixture(selfEmail: "dan@danwrightphotography.com", threadId: id)
+            .message(.init(from: from, subject: subject, id: id,
+                           internalDateMillis: Int64(sentAt.timeIntervalSince1970 * 1000)))
     }
 
     // One fake mailbox: a list call answers with every id whose message is in the window, and a get

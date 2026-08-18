@@ -151,8 +151,13 @@ struct GmailThreadingRepair {
         return outcome
     }
 
-    // Read only, and metadata only: the three headers the decision needs and nothing else. A GET against
-    // the threads endpoint, which is what `thePassNeverSends` asserts rather than assumes.
+    // Read only, and metadata only. A GET against the threads endpoint, which is what `thePassNeverSends`
+    // asserts rather than assumes.
+    //
+    // #2928: through `GmailThreadHeaders` like every other thread read, rather than naming the two headers
+    // this pass happens to need. The list is the union of what every thread reader reads, so a reader
+    // reached from here later cannot silently find its header missing, and the extra names ride a response
+    // that is already being fetched.
     // copy-inventory:ignore-start  a Google API URL and an HTTP header, not sentences Overture says (#915)
     private func fetchThread(
         id: String, token: String,
@@ -160,7 +165,7 @@ struct GmailThreadingRepair {
     ) async -> Data? {
         guard let escaped = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
               let url = URL(string: "https://gmail.googleapis.com/gmail/v1/users/me/threads/" + escaped
-                            + "?format=metadata&metadataHeaders=From&metadataHeaders=Message-ID")
+                            + "?" + GmailThreadHeaders.metadataQuery)
         else { return nil }
         var req = URLRequest(url: url)
         req.httpMethod = "GET"

@@ -2,6 +2,9 @@ import Testing
 import Foundation
 import SwiftData
 
+
+// #2928: the one Gmail fixture builder, at file scope.
+private let inquiryGmail = GmailFixture(selfEmail: "dan@danwrightphotography.com")
 // Phase 2 (#1435): the Inquiry record and its intake logic. An inquiry's identity is the EVENT
 // (performance / date / venue), NOT the inquirer's email, because Dan logs it by hand and wouldn't
 // re-log the same event twice. The duplicate check is SOFT (a warning, not a hard unique
@@ -101,14 +104,13 @@ struct InquiryTests {
 @Suite("Inquiry rides the shared reply/bounce pipeline")
 struct InquiryReplyWatchableTests {
     private let me = "dan@danwrightphotography.com"
-    private let replyThread = Data(#"{"messages":[{"payload":{"headers":[{"name":"From","value":"dan@danwrightphotography.com"}]}},{"payload":{"headers":[{"name":"From","value":"ada@x.org"}]}}]}"#.utf8)
+    private let replyThread = inquiryGmail.thread([.init(from: "dan@danwrightphotography.com"),
+                                                   .init(from: "ada@x.org")])
     private func hardBounceJSON() -> Data {
-        Data("""
-        {"messages":[{"id":"bounce-1","payload":{"headers":[
-          {"name":"From","value":"mailer-daemon@googlemail.com"},
-          {"name":"Subject","value":"Delivery Status Notification (Failure)"}
-        ]}}]}
-        """.utf8)
+        inquiryGmail.thread([
+            .init(from: "mailer-daemon@googlemail.com",
+                  subject: "Delivery Status Notification (Failure)", id: "bounce-1"),
+        ])
     }
 
     private func sentInquiry(threadId: String = "t1") -> Inquiry {
@@ -160,11 +162,8 @@ struct InquiryPipelineWiringTests {
     }
 
     private func threadFetch(from: String) -> (URLRequest) async throws -> (Data, URLResponse) {
-        let json = #"{"messages":[{"payload":{"headers":[{"name":"From","value":""# + from + #""}]}}]}"#
-        return { req in
-            (Data(json.utf8),
-             HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
-        }
+        let messages = [GmailFixture.Message(from: from)]
+        return { req in inquiryGmail.respond(to: req, thread: messages) }
     }
 
     @Test func aReplyToALoggedInquiryIsDetectedByMarkReplies() async throws {

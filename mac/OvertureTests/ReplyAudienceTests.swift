@@ -1,6 +1,9 @@
 import Testing
 import Foundation
 
+
+// #2928: the one Gmail fixture builder, at file scope.
+private let replyAudienceGmail = GmailFixture(selfEmail: "dan@danwrightphotography.com")
 // #2063: who a reply was addressed to, read off the message being answered.
 //
 // Overture used to address Dan's response to everyone who received the ORIGINAL email, which is a record
@@ -19,13 +22,10 @@ struct ReplyAudienceTests {
     // A Gmail threads.get (format=full) response, which is the shape the reply checker already fetches for
     // any thread carrying a reply.
     private func thread(_ messages: [(from: String, to: String?, cc: String?, date: String)]) -> Data {
-        let msgs: [[String: Any]] = messages.enumerated().map { i, m in
-            var headers: [[String: Any]] = [["name": "From", "value": m.from]]
-            if let to = m.to { headers.append(["name": "To", "value": to]) }
-            if let cc = m.cc { headers.append(["name": "Cc", "value": cc]) }
-            return ["id": "m\(i)", "internalDate": m.date, "payload": ["headers": headers]]
-        }
-        return try! JSONSerialization.data(withJSONObject: ["messages": msgs])
+        replyAudienceGmail.thread(messages.enumerated().map { i, m in
+            .init(from: m.from, to: m.to, cc: m.cc, id: "m\(i)",
+                  internalDateMillis: Int64(m.date)!)
+        })
     }
 
     @Test func aDirectReplyReachesOnlyThePersonWhoWroteIt() {

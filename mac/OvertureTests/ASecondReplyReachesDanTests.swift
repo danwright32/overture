@@ -2,6 +2,9 @@ import Testing
 import Foundation
 import SwiftData
 
+
+// #2928: the one Gmail fixture builder, at file scope.
+private let secondReplyGmail = GmailFixture(selfEmail: "dan@danwrightphotography.com", threadId: "t")
 // #2196. Somebody writes back. Dan answers. They write again. Overture never told him.
 //
 // `detectReplies` skipped any contact that had already replied, and that skip was the ONLY route to the
@@ -57,23 +60,13 @@ struct ASecondReplyReachesDanTests {
 
     // One thread, seen through Gmail's metadata shape. `sentAt` is Gmail's internalDate in milliseconds.
     private static func thread(replies: [(id: String, from: String, sentAt: Date, text: String)]) -> Data {
-        let outbound = """
-        {"id":"m-0","internalDate":"1000","payload":{"headers":[
-          {"name":"From","value":"\(me)"},{"name":"To","value":"chelsea@everyvoicechoirs.org"}]}}
-        """
-        let inbound = replies.map { r in
-            let body = Data(r.text.utf8).base64EncodedString()
-                .replacingOccurrences(of: "+", with: "-")
-                .replacingOccurrences(of: "/", with: "_")
-                .replacingOccurrences(of: "=", with: "")
-            return """
-            {"id":"\(r.id)","internalDate":"\(Int(r.sentAt.timeIntervalSince1970) * 1000)",
-             "payload":{"headers":[
-               {"name":"From","value":"\(r.from)"},{"name":"To","value":"\(me)"}],
-             "mimeType":"text/plain","body":{"data":"\(body)"}}}
-            """
-        }
-        return Data("{\"messages\":[\(([outbound] + inbound).joined(separator: ","))]}".utf8)
+        secondReplyGmail.thread(
+            [GmailFixture.Message(from: me, to: "chelsea@everyvoicechoirs.org", id: "m-0",
+                                  internalDateMillis: 1000)]
+            + replies.map { r in
+                .init(from: r.from, to: me, id: r.id,
+                      internalDateMillis: Int64(r.sentAt.timeIntervalSince1970) * 1000, text: r.text)
+            })
     }
 
     private static let firstOnly = thread(replies: [

@@ -2,6 +2,9 @@ import Testing
 import Foundation
 import SwiftData
 
+
+// #2928: the one Gmail fixture builder, at file scope.
+private let phase1Gmail = GmailFixture(selfEmail: "dan@danwrightphotography.com")
 // Phase 1 (#1434): the reply/bounce/booking-match integration layer is genericized behind the
 // `ReplyWatchable` and `BookingMatchable` protocols so a second entity type (Inquiry, #1435) can
 // ride the SAME tested pipeline instead of a duplicated one. These tests drive the generic entry
@@ -58,14 +61,13 @@ struct Phase1GenericizeTests {
     }
 
     private let me = "dan@danwrightphotography.com"
-    private let replyThread = Data(#"{"messages":[{"payload":{"headers":[{"name":"From","value":"dan@danwrightphotography.com"}]}},{"payload":{"headers":[{"name":"From","value":"them@org.org"}]}}]}"#.utf8)
+    private let replyThread = phase1Gmail.thread([.init(from: "dan@danwrightphotography.com"),
+                                                  .init(from: "them@org.org")])
     private func hardBounceJSON(id: String = "bounce-1") -> Data {
-        Data("""
-        {"messages":[{"id":"\(id)","payload":{"headers":[
-          {"name":"From","value":"mailer-daemon@googlemail.com"},
-          {"name":"Subject","value":"Delivery Status Notification (Failure)"}
-        ]}}]}
-        """.utf8)
+        phase1Gmail.thread([
+            .init(from: "mailer-daemon@googlemail.com",
+                  subject: "Delivery Status Notification (Failure)", id: id),
+        ])
     }
 
     // ── BookingMatchable ─────────────────────────────────────────────────────────

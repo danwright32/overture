@@ -22,9 +22,9 @@ struct ConfirmProposedConversation {
     // copy-inventory:ignore-start  Google API URLs and an HTTP header, not sentences Overture says (#915)
     static func threadURL(id: String, format: String) -> URL? {
         guard let escaped = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else { return nil }
-        let query = format == "metadata"
-            ? "format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Message-ID"
-            : "format=full"
+        // #2928: the shared list. This one already asked for Message-ID, and still went short of the
+        // headers `AnsweredElsewhere` reads through the detection the attach runs over this very thread.
+        let query = format == "metadata" ? GmailThreadHeaders.metadataQuery : "format=full"
         return URL(string: "https://gmail.googleapis.com/gmail/v1/users/me/threads/" + escaped + "?" + query)
     }
     // copy-inventory:ignore-end

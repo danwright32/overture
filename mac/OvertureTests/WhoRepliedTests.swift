@@ -2,6 +2,9 @@ import Testing
 import Foundation
 import SwiftData
 
+
+// #2928: the one Gmail fixture builder, at file scope.
+private let whoRepliedGmail = GmailFixture(selfEmail: "dan@danwrightphotography.com")
 // #2113: a card in the reached-out queue named the wrong person. Dan (2026-08-05): the Pumpkin
 // Singalong card showed chelsea@everyvoicechoirs.org, but Nicole Becker (nbecker@everyvoicechoirs.org)
 // is the one who replied.
@@ -48,10 +51,7 @@ struct WhoRepliedTests {
 
     // A Gmail threads.get body: one message from `from`, sent at `internalDate` (epoch millis).
     private func thread(from: String, internalDate: String = "1000000") -> Data {
-        Data("""
-        {"messages":[{"id":"m1","internalDate":"\(internalDate)",
-          "payload":{"headers":[{"name":"From","value":"\(from)"}]}}]}
-        """.utf8)
+        whoRepliedGmail.thread([.init(from: from, id: "m1", internalDateMillis: Int64(internalDate)!)])
     }
 
     // MARK: reading the sender out of the thread
@@ -82,9 +82,7 @@ struct WhoRepliedTests {
 
     // Dan's own messages and automated senders are not replies, so neither may be reported as the writer.
     @Test func danAndAutomatedSendersAreNeverTheSender() {
-        let mine = Data("""
-        {"messages":[{"id":"m1","payload":{"headers":[{"name":"From","value":"\(me)"}]}}]}
-        """.utf8)
+        let mine = whoRepliedGmail.thread([.init(from: me, id: "m1")])
         #expect(ReplyDetection.latestReplySenderHeader(threadJSON: mine, selfEmail: me) == nil)
         let robot = thread(from: "no-reply@mailer.example")
         #expect(ReplyDetection.latestReplySenderHeader(threadJSON: robot, selfEmail: me) == nil)
@@ -265,14 +263,11 @@ struct ResponderBackfillWiringTests {
 
     private func fetching(from: String, internalDate: String, count: UnsafeMutablePointer<Int>)
     -> (URLRequest) async throws -> (Data, URLResponse) {
-        let json = """
-        {"messages":[{"id":"m9","internalDate":"\(internalDate)",
-          "payload":{"headers":[{"name":"From","value":"\(from)"}]}}]}
-        """
+        let messages = [GmailFixture.Message(from: from, id: "m9",
+                                            internalDateMillis: Int64(internalDate)!)]
         return { req in
             count.pointee += 1
-            return (Data(json.utf8),
-                    HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+            return whoRepliedGmail.respond(to: req, thread: messages)
         }
     }
 

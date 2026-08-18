@@ -332,8 +332,11 @@ struct SendServiceTests {
                     return (Data(#"{"threadId":"t-194","id":"m1"}"#.utf8),
                             HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
                 }
-                let meta = #"{"payload":{"headers":[{"name":"Message-ID","value":"<real-194@mail.gmail.com>"}]}}"#
-                return (Data(meta.utf8),
+                // #2928: the read back, in the shape a real `messages.get` returns.
+                let meta = GmailFixture(selfEmail: "dan@danwrightphotography.com", threadId: "t-194")
+                    .message(.init(from: "dan@danwrightphotography.com",
+                                   messageID: "<real-194@mail.gmail.com>", id: "m1"))
+                return (meta,
                         HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
             })
 

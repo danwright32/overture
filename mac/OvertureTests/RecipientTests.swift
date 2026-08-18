@@ -2,6 +2,9 @@ import Testing
 import Foundation
 import SwiftData
 
+
+// #2928: the one Gmail fixture builder, at file scope.
+private let recipientTestsGmail = GmailFixture(selfEmail: "dan@danwrightphotography.com")
 // One party emailed for a performance. Multiple per performance, each with its own send state and
 // engagement. The behaviors that matter to the rest of the system: who is "silent" (the only ones
 // that get follow-ups), the provenance/send-state mapping, and a clean Codable round-trip (it is
@@ -406,7 +409,7 @@ struct RecipientTests {
         r.markOutcomeManually(resolution: .declinedHard)   // Dan judged: not interested
         p.addRecipient(r)
 
-        let reply = Data(#"{"messages":[{"payload":{"headers":[{"name":"From","value":"them@org.org"}]}}]}"#.utf8)
+        let reply = recipientTestsGmail.thread([.init(from: "them@org.org")])
         let n = ReplyService.detectReplies(in: [p], selfEmail: "dan@danwrightphotography.com",
                                            now: Date()) { _ in reply }
         #expect(n == 0)                          // detection skips the hand-marked contact
@@ -556,7 +559,7 @@ struct RecipientTests {
         pending.sendState = .pending   // never emailed yet
         p.setRecipients([sent, pending])
 
-        let reply = Data(#"{"messages":[{"payload":{"headers":[{"name":"From","value":"them@org.org"}]}}]}"#.utf8)
+        let reply = recipientTestsGmail.thread([.init(from: "them@org.org")])
         let n = ReplyService.detectReplies(in: [p], selfEmail: "dan@danwrightphotography.com",
                                            now: Date()) { _ in reply }
         #expect(n == 1)                        // the act's reply detected

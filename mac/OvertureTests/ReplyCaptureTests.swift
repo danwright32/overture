@@ -10,11 +10,10 @@ import SwiftData
 struct ReplyCaptureTests {
     private let me = "dan@danwrightphotography.com"
 
-    private func b64url(_ text: String) -> String {
-        Data(text.utf8).base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
-    }
+    // #2928: every Gmail fixture in the suite is built here, in the shape the API really returns, so
+    // `labelIds`, `id`, `threadId` and `internalDate` are on every message without this file saying so.
+    private let gmail = GmailFixture(selfEmail: "dan@danwrightphotography.com", threadId: "t")
+    private let them = "emma@org.example"
 
     private func container() throws -> ModelContainer {
         try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
@@ -43,10 +42,8 @@ struct ReplyCaptureTests {
     @Test func capturesReplyBodyWhenMarkingReplied() throws {
         let ctx = ModelContext(try container())
         let p = sentLead(ctx)
-        let meta = Data(#"{"messages":[{"payload":{"headers":[{"name":"From","value":"emma@org.example"}]}}]}"#.utf8)
-        let full = Data("""
-        {"messages":[{"payload":{"headers":[{"name":"From","value":"emma@org.example"}],"mimeType":"text/plain","body":{"data":"\(b64url("Yes, let's book."))"}}}]}
-        """.utf8)
+        let meta = gmail.thread([.init(from: them)])
+        let full = gmail.thread([.init(from: them, text: "Yes, let's book.")])
         let now = Date(timeIntervalSince1970: 5000)
         let n = ReplyService.detectReplies(in: [p], selfEmail: me, now: now,
                                            fetchThread: { _ in meta }, fetchFullThread: { _ in full })
@@ -60,7 +57,7 @@ struct ReplyCaptureTests {
     // #219: the id of the newest message from someone other than Dan, used to dismiss one specific
     // auto-detected reply while still catching a genuinely new one later.
     @Test func latestReplyIdIsTheNewestNonSelfMessage() {
-        let json = Data(#"{"messages":[{"id":"m1","payload":{"headers":[{"name":"From","value":"dan@danwrightphotography.com"}]}},{"id":"m2","payload":{"headers":[{"name":"From","value":"emma@org.example"}]}}]}"#.utf8)
+        let json = gmail.thread([.init(from: me, id: "m1"), .init(from: them, id: "m2")])
         #expect(ReplyDetection.latestReplyId(threadJSON: json, selfEmail: me) == "m2")
     }
 
@@ -68,13 +65,11 @@ struct ReplyCaptureTests {
     // chronologically newest message is array position 0, not the last, so a fix that just
     // reverses the array must not be fooled into returning "older".
     @Test func latestReplyIdUsesInternalDateNotArrayPosition() {
-        let json = Data(#"""
-        {"messages":[
-          {"id":"newest","internalDate":"3000","payload":{"headers":[{"name":"From","value":"emma@org.example"}]}},
-          {"id":"self","internalDate":"1000","payload":{"headers":[{"name":"From","value":"dan@danwrightphotography.com"}]}},
-          {"id":"older","internalDate":"2000","payload":{"headers":[{"name":"From","value":"emma@org.example"}]}}
-        ]}
-        """#.utf8)
+        let json = gmail.thread([
+            .init(from: them, id: "newest", internalDateMillis: 3000),
+            .init(from: me, id: "self", internalDateMillis: 1000),
+            .init(from: them, id: "older", internalDateMillis: 2000),
+        ])
         #expect(ReplyDetection.latestReplyId(threadJSON: json, selfEmail: me) == "newest")
     }
 
@@ -83,7 +78,7 @@ struct ReplyCaptureTests {
     @Test func dismissedReplyIsNotReDetectedButANewReplyIs() throws {
         let ctx = ModelContext(try container())
         let p = sentLead(ctx)
-        let oneReply = Data(#"{"messages":[{"id":"s1","payload":{"headers":[{"name":"From","value":"dan@danwrightphotography.com"}]}},{"id":"r1","payload":{"headers":[{"name":"From","value":"emma@org.example"}]}}]}"#.utf8)
+        let oneReply = gmail.thread([.init(from: me, id: "s1"), .init(from: them, id: "r1")])
         _ = ReplyService.detectReplies(in: [p], selfEmail: me, now: Date(timeIntervalSince1970: 100),
                                        fetchThread: { _ in oneReply })
         // Phase F: detection + dismiss are per-contact now (no lead rollup).
@@ -99,7 +94,8 @@ struct ReplyCaptureTests {
         #expect(n2 == 0)
         #expect(p.recipients.first?.replied == false)
 
-        let twoReplies = Data(#"{"messages":[{"id":"s1","payload":{"headers":[{"name":"From","value":"dan@danwrightphotography.com"}]}},{"id":"r1","payload":{"headers":[{"name":"From","value":"emma@org.example"}]}},{"id":"r2","payload":{"headers":[{"name":"From","value":"emma@org.example"}]}}]}"#.utf8)
+        let twoReplies = gmail.thread([.init(from: me, id: "s1"), .init(from: them, id: "r1"),
+                                       .init(from: them, id: "r2")])
         let n3 = ReplyService.detectReplies(in: [p], selfEmail: me, now: Date(timeIntervalSince1970: 400),
                                             fetchThread: { _ in twoReplies })
         #expect(n3 == 1)
@@ -110,7 +106,7 @@ struct ReplyCaptureTests {
     @Test func doesNotFullFetchWhenThereIsNoReply() throws {
         let ctx = ModelContext(try container())
         let p = sentLead(ctx)
-        let selfOnly = Data(#"{"messages":[{"payload":{"headers":[{"name":"From","value":"dan@danwrightphotography.com"}]}}]}"#.utf8)
+        let selfOnly = gmail.thread([.init(from: me)])
         var fullFetched = false
         let n = ReplyService.detectReplies(in: [p], selfEmail: me, now: Date(),
                                            fetchThread: { _ in selfOnly },

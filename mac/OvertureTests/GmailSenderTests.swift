@@ -1,6 +1,9 @@
 import Testing
 import Foundation
 
+
+// #2928: the one Gmail fixture builder, at file scope.
+private let senderGmail = GmailFixture(selfEmail: "dan@x.org", threadId: "t1")
 // #84: the live send path (encode + POST, interpret success / api-error / auth-expired) is
 // now testable through an injected fetch and an injected auth-expired hook, no network.
 @Suite("Gmail send")
@@ -26,26 +29,27 @@ struct GmailSenderTests {
     // pointed at the wrong message.
     private func sendThenReadBack(sendBody: String,
                                   readBackStatus: Int = 200,
-                                  readBackBody: String) -> @Sendable (URLRequest) async throws -> (Data, URLResponse) {
+                                  readBackBody: Data) -> @Sendable (URLRequest) async throws -> (Data, URLResponse) {
         { req in
             let isSend = req.httpMethod == "POST"
-            let body = isSend ? sendBody : readBackBody
+            let body = isSend ? Data(sendBody.utf8) : readBackBody
             let status = isSend ? 200 : readBackStatus
-            return (Data(body.utf8),
+            return (body,
                     HTTPURLResponse(url: req.url!, statusCode: status, httpVersion: nil, headerFields: nil)!)
         }
     }
 
     // The shape Gmail actually returns for
-    // users/me/messages/<id>?format=metadata&metadataHeaders=Message-ID.
-    private func metadata(messageID: String) -> String {
-        #"{"id":"m1","payload":{"headers":[{"name":"Message-ID","value":"\#(messageID)"}]}}"#
+    // users/me/messages/<id>?format=metadata&metadataHeaders=Message-ID. #2928: through the one builder,
+    // so it carries the `labelIds`, `threadId` and `internalDate` every real `messages.get` returns.
+    private func metadata(messageID: String) -> Data {
+        senderGmail.message(.init(from: "dan@x.org", messageID: messageID, id: "m1"))
     }
 
     // A plain successful read back, for the tests whose subject is the SEND request and which only
     // need the second call answered.
     private func readBackResponse(for req: URLRequest) -> (Data, URLResponse) {
-        (Data(metadata(messageID: "<real@mail.gmail.com>").utf8),
+        (metadata(messageID: "<real@mail.gmail.com>"),
          HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
     }
 
@@ -134,9 +138,9 @@ struct GmailSenderTests {
             fetch: { req in
                 if req.httpMethod != "POST" { seen.record(req.url?.absoluteString ?? "") }
                 let body = req.httpMethod == "POST"
-                    ? #"{"threadId":"t1","id":"gmail-id-42"}"#
+                    ? Data(#"{"threadId":"t1","id":"gmail-id-42"}"#.utf8)
                     : self.metadata(messageID: "<real@mail.gmail.com>")
-                return (Data(body.utf8),
+                return (body,
                         HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
             },
             onAuthExpired: {})
@@ -153,7 +157,8 @@ struct GmailSenderTests {
         let receipt = try await GmailSender.performSend(
             mail: mail, fromName: "Dan Wright", fromEmail: "dan@danwrightphotography.com", token: "tok",
             fetch: sendThenReadBack(sendBody: #"{"threadId":"t1","id":"m1"}"#,
-                                    readBackStatus: 404, readBackBody: #"{"error":"not found"}"#),
+                                    readBackStatus: 404,
+                                    readBackBody: Data(#"{"error":"not found"}"#.utf8)),
             onAuthExpired: {})
         #expect(receipt.threadId == "t1")   // the send itself succeeded, so this is not a send failure
         #expect(receipt.messageID == nil)
@@ -165,7 +170,8 @@ struct GmailSenderTests {
         let receipt = try await GmailSender.performSend(
             mail: mail, fromName: "Dan", fromEmail: "dan@x.org", token: "tok",
             fetch: sendThenReadBack(sendBody: #"{"threadId":"t1","id":"m1"}"#,
-                                    readBackBody: #"{"id":"m1","payload":{"headers":[{"name":"Subject","value":"Hello"}]}}"#),
+                                    readBackBody: senderGmail.message(
+                                        .init(from: "dan@x.org", subject: "Hello", id: "m1"))),
             onAuthExpired: {})
         #expect(receipt.messageID == nil)
         #expect(receipt.messageIDDegraded == true)
@@ -177,7 +183,10 @@ struct GmailSenderTests {
         let receipt = try await GmailSender.performSend(
             mail: mail, fromName: "Dan", fromEmail: "dan@x.org", token: "tok",
             fetch: sendThenReadBack(sendBody: #"{"threadId":"t1","id":"m1"}"#,
-                                    readBackBody: #"{"payload":{"headers":[{"name":"Message-Id","value":"<mixed@mail.gmail.com>"}]}}"#),
+                                    readBackBody: senderGmail.message(
+                                        .init(from: "dan@x.org", id: "m1",
+                                              extraHeaders: [(name: "Message-Id",
+                                                              value: "<mixed@mail.gmail.com>")]))),
             onAuthExpired: {})
         #expect(receipt.messageID == "<mixed@mail.gmail.com>")
         #expect(receipt.messageIDDegraded == false)
@@ -193,9 +202,9 @@ struct GmailSenderTests {
             fetch: { req in
                 if req.httpMethod == "POST" { captured.body = req.httpBody }
                 let body = req.httpMethod == "POST"
-                    ? #"{"threadId":"t1","id":"m1"}"#
+                    ? Data(#"{"threadId":"t1","id":"m1"}"#.utf8)
                     : self.metadata(messageID: "<real@mail.gmail.com>")
-                return (Data(body.utf8),
+                return (body,
                         HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
             },
             onAuthExpired: {})
