@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1405 sentences**.
+Every sentence Overture can say to Dan: **1408 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -2111,6 +2111,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ShowOutcome.swift`
 "They said not now"
     `Domain/ShowOutcome.swift`
+"They said the price was too high"
+    `Domain/ShowOutcome.swift`
 "This address is already in play on another show at this venue within a few days, so Overture is holding it rather than writing to the same person twice. If they are different bookings, clear the duplicate flag on the contact and it is sendable again."
     `Domain/Reachability.swift`
 "This adds \(addresses.count) contacts."
@@ -2674,6 +2676,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ShowOutcome.swift`
 "\(org) closed out: they said not now."
     `Domain/ShowOutcome.swift`
+"\(org) closed out: they said the price was too high."
+    `Domain/ShowOutcome.swift`
 "\(org) closed out: you turned them down."
     `Domain/ShowOutcome.swift`
 "\(org) dismissed as a duplicate."
@@ -3095,6 +3099,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "they said no"
     `Domain/ShowOutcome.swift`
 "they said not now"
+    `Domain/ShowOutcome.swift`
+"they said the price was too high"
     `Domain/ShowOutcome.swift`
 "to be emailed."
     `Domain/FormOutreach.swift`

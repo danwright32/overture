@@ -137,11 +137,14 @@ struct ClosingAPitchOutFromTheRowTests {
 
     // #2395: the endings come from the one vocabulary. #2396: and how each READS as a show status, which is
     // the reader-side mapping that replaced the contact-level copy this phase removed.
-    @Test func themenuOffersTheFiveWaysAPitchEnds() {
+    // #2863 added a sixth, "They said the price was too high", which reads as `lostDoorOpen`: an org that
+    // wanted the work and could not pay this time is not one to stop pitching.
+    @Test func themenuOffersTheSixWaysAPitchEnds() {
         #expect(ShowOutcome.pitched.map(\.label)
-                == ["Booked", "Never heard back", "They said not now", "They said no", "I turned them down"])
+                == ["Booked", "Never heard back", "They said not now", "They said no",
+                    "They said the price was too high", "I turned them down"])
         #expect(ShowOutcome.pitched.map(\.asPerformanceStatus)
-                == [.booked, .lostDoorOpen, .lostDoorOpen, .lostNotInterested, .stoodDown])
+                == [.booked, .lostDoorOpen, .lostDoorOpen, .lostNotInterested, .lostDoorOpen, .stoodDown])
     }
 
     // MARK: - recording it

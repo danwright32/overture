@@ -19,6 +19,12 @@ enum InquiryMutations {
         // #2400: the legacy outcome, still written so every existing reader of `isOpen` and the year-end
         // query keeps working. Their refusal is the hard case; Dan's own pass and a silence both leave the
         // door open, which is what the soft case means.
+        //
+        // #2863: `theySaidPriceTooHigh` takes the SOFT branch, and it is named here because this is the one
+        // reader of the vocabulary the compiler cannot make anybody look at: it is a comparison against a
+        // single value, not an exhaustive switch, so a new ending arrives at the soft case with nothing
+        // going red. Soft is the right answer, matching `lostDoorOpen` on the show side, because an
+        // inquirer who could not meet the rate has not refused the work. `LostOnPriceOutcomeTests` pins it.
         var outcome: Outcome {
             switch self {
             case .booked: return .booked
