@@ -16,7 +16,7 @@ struct ProbeDurationHistoryTests {
 
     private func history(_ runs: [(lookups: Int, streams: Int, seconds: Double)]) -> ProbeDurationHistory {
         ProbeDurationHistory(runs: runs.map {
-            ProbeDurationHistory.Run(lookups: $0.lookups, streams: $0.streams, seconds: $0.seconds)
+            ProbeDurationHistory.Run(lookups: $0.lookups, streams: $0.streams, seconds: $0.seconds, contended: false)
         })
     }
 
@@ -26,20 +26,20 @@ struct ProbeDurationHistoryTests {
     // check says nothing about the next one: the three lookups inside the one recorded check on this Mac
     // took 146s, 390s and 150s, a spread of nearly three to one.
     @Test func nothingIsLearnedUntilAHandfulOfChecksExist() {
-        #expect(ProbeDurationHistory().learnedSecondsPerRound == nil)                       // fresh install
-        #expect(history([(3, 3, 300)]).learnedSecondsPerRound == nil)                       // one
-        #expect(history([(3, 3, 300), (3, 3, 300)]).learnedSecondsPerRound == nil)          // two
-        #expect(history([(3, 3, 300), (3, 3, 300), (3, 3, 300)]).learnedSecondsPerRound == 300)
+        #expect(ProbeDurationHistory().learnedSecondsPerRound(contended: false) == nil)                       // fresh install
+        #expect(history([(3, 3, 300)]).learnedSecondsPerRound(contended: false) == nil)                       // one
+        #expect(history([(3, 3, 300), (3, 3, 300)]).learnedSecondsPerRound(contended: false) == nil)          // two
+        #expect(history([(3, 3, 300), (3, 3, 300), (3, 3, 300)]).learnedSecondsPerRound(contended: false) == 300)
     }
 
     // The whole point: what the bar quotes moves once there is evidence, and until then it is exactly
     // what it was.
     @Test func theEstimateFallsBackToTheConstantUntilThereIsEnoughHistory() {
-        #expect(ProbeSelection.secondsPerRound(learnedFrom: ProbeDurationHistory())
+        #expect(ProbeSelection.secondsPerRound(learnedFrom: ProbeDurationHistory(), contended: false)
                 == ProbeSelection.fallbackSecondsPerRound)
-        #expect(ProbeSelection.secondsPerRound(learnedFrom: history([(3, 3, 300), (3, 3, 300)]))
+        #expect(ProbeSelection.secondsPerRound(learnedFrom: history([(3, 3, 300), (3, 3, 300)]), contended: false)
                 == ProbeSelection.fallbackSecondsPerRound)
-        #expect(ProbeSelection.secondsPerRound(learnedFrom: history([(4, 4, 240), (4, 4, 240), (4, 4, 240)]))
+        #expect(ProbeSelection.secondsPerRound(learnedFrom: history([(4, 4, 240), (4, 4, 240), (4, 4, 240)]), contended: false)
                 == 240)
     }
 
@@ -50,16 +50,16 @@ struct ProbeDurationHistoryTests {
     // two predict neither, so a run that did not fan out is never pooled.
     @Test func aRunThatDidNotFanOutIsNeverPooled() {
         // Three lookups down one stream: the old sequential shape, 471 seconds for three shows.
-        #expect(history([(3, 1, 471), (3, 1, 471), (3, 1, 471)]).learnedSecondsPerRound == nil)
+        #expect(history([(3, 1, 471), (3, 1, 471), (3, 1, 471)]).learnedSecondsPerRound(contended: false) == nil)
         // And one lookup on its own is not a round of ten competing for the machine either.
-        #expect(history([(1, 1, 157), (1, 1, 157), (1, 1, 157)]).learnedSecondsPerRound == nil)
+        #expect(history([(1, 1, 157), (1, 1, 157), (1, 1, 157)]).learnedSecondsPerRound(contended: false) == nil)
     }
 
     // A sequential sample sitting beside real ones must not drag the pooled figure toward a number that
     // describes neither shape.
     @Test func aSequentialSampleDoesNotDragTheLearnedPace() {
         let mixed = history([(3, 3, 300), (3, 3, 300), (3, 3, 300), (3, 1, 471)])
-        #expect(mixed.learnedSecondsPerRound == 300)
+        #expect(mixed.learnedSecondsPerRound(contended: false) == 300)
     }
 
     // MARK: - The pace itself
@@ -78,11 +78,11 @@ struct ProbeDurationHistoryTests {
     @Test func thePaceIsPooledAcrossTheStoredChecks() {
         // 300s over 1 round, 600s over 2 rounds, 900s over 3 rounds: 1800 seconds over 6 rounds.
         let h = history([(5, 5, 300), (20, 10, 600), (25, 10, 900)])
-        #expect(h.learnedSecondsPerRound == 300)
+        #expect(h.learnedSecondsPerRound(contended: false) == 300)
     }
 
     @Test func theLearnedPaceReachesTheQuotedWait() {
-        let learned = ProbeSelection.secondsPerRound(learnedFrom: history([(4, 4, 240), (4, 4, 240), (4, 4, 240)]))
+        let learned = ProbeSelection.secondsPerRound(learnedFrom: history([(4, 4, 240), (4, 4, 240), (4, 4, 240)]), contended: false)
         #expect(ProbeSelection.estimatedSeconds(forLookups: 4, secondsPerRound: learned) == 240)
         #expect(ProbeSelection.estimatedSeconds(forLookups: 25, secondsPerRound: learned) == 720)
         #expect(ProbeSelectionCopy.durationLabel(
@@ -93,7 +93,7 @@ struct ProbeDurationHistoryTests {
 
     @Test func recordingAppendsAndCapsAtTheLastTen() {
         var h = ProbeDurationHistory()
-        for i in 1...13 { h = h.recording(lookups: 3, streams: 3, seconds: 100 + Double(i) * 10) }
+        for i in 1...13 { h = h.recording(lookups: 3, streams: 3, seconds: 100 + Double(i) * 10, contended: false) }
         #expect(h.runs.count == 10)
         #expect(h.runs.first?.seconds == 140)   // the first three fell off the front
         #expect(h.runs.last?.seconds == 230)
@@ -103,13 +103,13 @@ struct ProbeDurationHistoryTests {
     // so ten one-show rechecks can never push the real evidence off the front of the file.
     @Test func degenerateAndIncomparableSamplesAreNeverStored() {
         var h = ProbeDurationHistory()
-        h = h.recording(lookups: 0, streams: 3, seconds: 300)      // no lookups
-        h = h.recording(lookups: 3, streams: 0, seconds: 300)      // no streams
-        h = h.recording(lookups: 3, streams: 3, seconds: 0)        // no duration
-        h = h.recording(lookups: 3, streams: 3, seconds: -50)      // clock skew
-        h = h.recording(lookups: 1, streams: 1, seconds: 157)      // one lookup, no round to measure
-        h = h.recording(lookups: 3, streams: 1, seconds: 471)      // sequential
-        h = h.recording(lookups: 3, streams: 9, seconds: 300)      // more streams than lookups: impossible
+        h = h.recording(lookups: 0, streams: 3, seconds: 300, contended: false)      // no lookups
+        h = h.recording(lookups: 3, streams: 0, seconds: 300, contended: false)      // no streams
+        h = h.recording(lookups: 3, streams: 3, seconds: 0, contended: false)        // no duration
+        h = h.recording(lookups: 3, streams: 3, seconds: -50, contended: false)      // clock skew
+        h = h.recording(lookups: 1, streams: 1, seconds: 157, contended: false)      // one lookup, no round to measure
+        h = h.recording(lookups: 3, streams: 1, seconds: 471, contended: false)      // sequential
+        h = h.recording(lookups: 3, streams: 9, seconds: 300, contended: false)      // more streams than lookups: impossible
         #expect(h.runs.isEmpty)
     }
 
@@ -117,9 +117,9 @@ struct ProbeDurationHistoryTests {
     // of those in the file would double every wait the bar quotes afterwards.
     @Test func anAbsurdlyLongRoundIsNeverStored() {
         var h = ProbeDurationHistory()
-        h = h.recording(lookups: 3, streams: 3, seconds: RunTimeouts.reachabilityProbe + 1)
+        h = h.recording(lookups: 3, streams: 3, seconds: RunTimeouts.reachabilityProbe + 1, contended: false)
         #expect(h.runs.isEmpty)
-        h = h.recording(lookups: 20, streams: 10, seconds: RunTimeouts.reachabilityProbe * 2)   // 2 rounds
+        h = h.recording(lookups: 20, streams: 10, seconds: RunTimeouts.reachabilityProbe * 2, contended: false)   // 2 rounds
         #expect(h.runs.count == 1)
     }
 
@@ -136,15 +136,15 @@ struct ProbeDurationHistoryTests {
 
         let loaded = ProbeDurationHistoryStore.load(from: url)
         #expect(loaded.runs.isEmpty)
-        #expect(loaded.learnedSecondsPerRound == nil)
-        #expect(ProbeSelection.secondsPerRound(learnedFrom: loaded) == ProbeSelection.fallbackSecondsPerRound)
+        #expect(loaded.learnedSecondsPerRound(contended: false) == nil)
+        #expect(ProbeSelection.secondsPerRound(learnedFrom: loaded, contended: false) == ProbeSelection.fallbackSecondsPerRound)
     }
 
     // A file that parses but holds nonsense (an older shape, a hand edit, a zero written by a bug) is the
     // same answer: every stored run is re-judged on the way out, not trusted for having been written.
     @Test func storedRunsAreReJudgedOnRead() {
         let poisoned = history([(3, 3, 300), (3, 3, 300), (3, 3, 300), (3, 3, 0), (0, 0, 99_999)])
-        #expect(poisoned.learnedSecondsPerRound == 300)
+        #expect(poisoned.learnedSecondsPerRound(contended: false) == 300)
     }
 
     @Test func aMissingFileReadsAsNoHistoryNotAnError() {
@@ -158,13 +158,13 @@ struct ProbeDurationHistoryTests {
             .appendingPathComponent("probe-duration-\(UUID().uuidString).json")
         defer { try? FileManager.default.removeItem(at: url) }
 
-        ProbeDurationHistoryStore.record(.init(lookups: 4, streams: 4, seconds: 240), at: url)
-        ProbeDurationHistoryStore.record(.init(lookups: 4, streams: 4, seconds: 240), at: url)
+        ProbeDurationHistoryStore.record(.init(lookups: 4, streams: 4, seconds: 240, contended: false), at: url)
+        ProbeDurationHistoryStore.record(.init(lookups: 4, streams: 4, seconds: 240, contended: false), at: url)
         #expect(ProbeDurationHistoryStore.load(from: url).runs.count == 2)
-        #expect(ProbeDurationHistoryStore.load(from: url).learnedSecondsPerRound == nil)
+        #expect(ProbeDurationHistoryStore.load(from: url).learnedSecondsPerRound(contended: false) == nil)
 
-        ProbeDurationHistoryStore.record(.init(lookups: 4, streams: 4, seconds: 240), at: url)
-        #expect(ProbeDurationHistoryStore.load(from: url).learnedSecondsPerRound == 240)
+        ProbeDurationHistoryStore.record(.init(lookups: 4, streams: 4, seconds: 240, contended: false), at: url)
+        #expect(ProbeDurationHistoryStore.load(from: url).learnedSecondsPerRound(contended: false) == 240)
     }
 
     @Test func recordingNothingIsANoOp() {
@@ -223,11 +223,11 @@ struct RecordedRunCostTests {
 @Suite("What a finished check teaches (#1616)")
 struct ProbeRunPaceRecordingTests {
 
-    private let good = RecordedRunCost(seconds: 300, streams: 3)
+    private let good = RecordedRunCost(seconds: 300, streams: 3, contended: false)
 
     @Test func aCompleteUncancelledCheckIsRecorded() throws {
         let sample = try #require(ProbeRunPaceRecording.sample(lookups: 3, cost: good, cancelled: false))
-        #expect(sample == ProbeDurationHistory.Run(lookups: 3, streams: 3, seconds: 300))
+        #expect(sample == ProbeDurationHistory.Run(lookups: 3, streams: 3, seconds: 300, contended: false))
     }
 
     // A check Dan stopped did not finish its work, so its wall clock is not a pace. The recorded cost is
@@ -248,9 +248,9 @@ struct ProbeRunPaceRecordingTests {
     }
 
     @Test func anIncomparableRunTeachesNothing() {
-        #expect(ProbeRunPaceRecording.sample(lookups: 1, cost: RecordedRunCost(seconds: 157, streams: 1),
+        #expect(ProbeRunPaceRecording.sample(lookups: 1, cost: RecordedRunCost(seconds: 157, streams: 1, contended: false),
                                              cancelled: false) == nil)
-        #expect(ProbeRunPaceRecording.sample(lookups: 3, cost: RecordedRunCost(seconds: 471, streams: 1),
+        #expect(ProbeRunPaceRecording.sample(lookups: 3, cost: RecordedRunCost(seconds: 471, streams: 1, contended: false),
                                              cancelled: false) == nil)
     }
 }

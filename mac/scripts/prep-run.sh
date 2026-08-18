@@ -19,6 +19,9 @@ PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)/.."   # the Overture repo root
 # an older app that names none launches exactly the run it always did.
 . "$(dirname "$0")/lib/run-slot.sh"
 resolve_run_slot
+# #2762: whether another run slot was alive while this one worked, latched as it goes. Sourced after
+# run-slot.sh, whose slot_others it derives the answer from, and read by record_run_cost below.
+. "$(dirname "$0")/lib/run-contention.sh"
 # #804: which model this run uses, and the helper that records it. One place, so a model choice
 # cannot be right in two runners and wrong in the third.
 . "$(dirname "$0")/lib/models.sh"
@@ -127,6 +130,12 @@ STALL_STATE="$SLOT_STALL_STATE"
 STALL_LIMIT="${PREP_STALL_LIMIT_SECONDS:-1200}"
 rm -f "$STALL_STATE" 2>/dev/null || true
 
+# #2762: and where this run records whether it shared the machine. Cleared here as well as in the trap for
+# the same reason the stall state is: a previous run's contention must never be reported as this run's
+# (assume-it-runs-twice).
+CONTENDED_STATE="$SLOT_CONTENDED"
+rm -f "$CONTENDED_STATE" 2>/dev/null || true
+
 require_queue "$QUEUE" "prep"
 
 # #1682: the scope needs the claude binary, because it asks it which plugins are installed on this Mac in
@@ -145,6 +154,12 @@ PREP_SCOPE="$(prep_claude_scope "$CLAUDE")" || { echo "prep: aborting, unsafe ru
 
 # In-flight marker the app can watch (issue #44); removed on exit no matter what.
 : > "$MARKER"
+
+# #2762: the first contention reading, taken BEFORE the work starts, because a run already going when
+# this one launches is the commonest way the machine gets shared and a first look only at the 60 second
+# tick would miss a short one entirely. Taken AFTER this run's own marker exists, deliberately: the
+# observer skips its own slot, so this also proves it is doing so on every real run.
+contention_observe "$CONTENDED_STATE"
 
 # #354: seed a fresh progress file every run (never trust a leftover one from a prior run) so
 # the app's "N of M" display starts correct even before any result has landed.
@@ -191,6 +206,10 @@ MARKER_INTERVAL=60
       # during a sequential one. A no-op when there are no chunk files (every normal Prep run).
       # #2109: non-fatal. A run whose progress count failed to update is still ALIVE and
       # must keep beating; killing a paid run over a counting hiccup is the wrong trade.
+      # #2762: latch whether another slot is alive right now. On the marker branch rather than the short
+      # cancel poll, because a 60 second sample is plenty to catch a run measured in minutes and the
+      # cancel poll's whole point is that it does no work.
+      contention_observe "$CONTENDED_STATE" || true
       merge_chunk_results "$QUEUE" "$CHUNKDIR" "$RESULTS" naturalKey 6 || true
       update_progress_from_results "$QUEUE" "$RESULTS" "$PROGRESS" || true
       # #2506: and the question the touch above cannot answer. Deliberately NOT guarded with `|| true`
@@ -216,7 +235,7 @@ SLEEP_GUARD_PID="$(arm_sleep_guard)"
 # #2764: `slot_check_foreign_results` is in the TRAP, not at the end of the script, because the script
 # ends with `exit "$CLAUDE_STATUS"` and a line after that is dead code. The trap is the only place that
 # runs on every exit path there is: finished, cancelled, stalled out, killed with the app.
-trap 'kill "$HEARTBEAT_PID" 2>/dev/null; [ -n "$CLAUDE_PID" ] && kill "$CLAUDE_PID" 2>/dev/null; stop_sleep_guard "$SLEEP_GUARD_PID"; rm -f "$MARKER"; clear_cancel "$CANCEL"; rm -f "$CLAUDE_PID_FILE"; rm -f "$STALL_STATE"; slot_check_foreign_results || true' EXIT
+trap 'kill "$HEARTBEAT_PID" 2>/dev/null; [ -n "$CLAUDE_PID" ] && kill "$CLAUDE_PID" 2>/dev/null; stop_sleep_guard "$SLEEP_GUARD_PID"; rm -f "$MARKER"; clear_cancel "$CANCEL"; rm -f "$CLAUDE_PID_FILE"; rm -f "$STALL_STATE"; rm -f "$CONTENDED_STATE"; slot_check_foreign_results || true' EXIT
 
 # #1013: the last run's results are spent, and leaving them here lets them masquerade as this run's.
 # scout-extract-run.sh learned this in #1011 (a run that wrote nothing inherited the previous run's
@@ -446,6 +465,18 @@ record_model "$RESULTS" "${RUN_MODEL}"
 # cancelled leaves no envelope, and that is recorded as "not recorded" rather than as zero, so a batch
 # ceiling can never be sized against a number nobody measured.
 # Quoted "$@", so a path containing a space stays ONE argument.
+#
+# #2762: and whether this run had the machine to itself, which is the other half of what makes the wall
+# clock above comparable with the next run's. Always set to one value or the other, never left absent: the
+# app reads an ABSENT flag as "this runner predates the flag" and refuses to pool the sample at all, which
+# is right for an old script and wrong for this one.
+if contention_observed "$CONTENDED_STATE"; then
+  echo "prep: this run shared the machine with: $(contention_names "$CONTENDED_STATE")"
+  OVERTURE_RUN_CONTENDED=1
+else
+  OVERTURE_RUN_CONTENDED=0
+fi
+export OVERTURE_RUN_CONTENDED
 record_run_cost "$RESULTS" "$@"
 
 # #1721: and how many times it actually reached the web, counted from the SAME streams rather than taken

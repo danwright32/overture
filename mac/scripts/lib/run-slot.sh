@@ -51,6 +51,10 @@ resolve_run_slot() {
   SLOT_CHUNKDIR="${SUPPORT}/${RUN_SLOT}-chunks"
   SLOT_CLAUDE_PID="${SUPPORT}/${RUN_SLOT}-claude-pid"
   SLOT_STALL_STATE="${SUPPORT}/${RUN_SLOT}-stall-state"
+  # #2762: where this run latches whether another slot was alive while it worked. Runner-only: the app
+  # never reads it, because the fact reaches the app inside `runCost` in the results file, beside the wall
+  # clock it qualifies. Named here with everything else so no runner spells out a handoff path itself.
+  SLOT_CONTENDED="${SUPPORT}/${RUN_SLOT}-contended"
   SLOT_EVENTS="${SUPPORT}/${RUN_SLOT}-run-events.jsonl"
   SLOT_EVENTS_FIFO="${SUPPORT}/${RUN_SLOT}-run-events.fifo"
   # open_run_log takes a NAME rather than a path, so this one is not absolute.

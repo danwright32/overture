@@ -55,7 +55,8 @@
     "streams": 3,
     "streamsRecorded": 2,
     "partialUsd": 3.600917,
-    "partialDurationMs": 389906
+    "partialDurationMs": 389906,
+    "contended": false
   },
   "webCalls": {
     "recorded": false,

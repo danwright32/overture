@@ -354,8 +354,19 @@ record_run_cost() {
     const durationMs = envelopes.reduce((a, e) => Math.max(a, e.duration_ms || 0), 0);
     const complete = eventFiles.length > 0 && envelopes.length === eventFiles.length;
 
+    // #2762: whether another run slot was alive while this one worked, as the runner latched it. Written
+    // as a key only when the caller SAID, because the three states are different facts: true and false are
+    // measurements, and absent means a runner that predates the flag. The app refuses to pool an absent
+    // one rather than reading it as solo, which is what stops a co-run inside the update window (a new app
+    // meeting the older script still in the checkout) from teaching the solo estimate.
+    //
+    // No apostrophes anywhere in this block: the whole program is a single-quoted shell string, and one
+    // would end it.
+    const said = process.env.OVERTURE_RUN_CONTENDED;
+    const contention = said === "1" ? { contended: true } : said === "0" ? { contended: false } : {};
+
     if (complete) {
-      json.runCost = { recorded: true, usd, durationMs, streams: eventFiles.length };
+      json.runCost = { recorded: true, usd, durationMs, streams: eventFiles.length, ...contention };
     } else {
       // No `usd` key at all on the incomplete path, so nothing downstream can read a partial total as
       // the real one by reaching for the field it always reads.
@@ -363,6 +374,7 @@ record_run_cost() {
         recorded: false,
         streams: eventFiles.length,
         streamsRecorded: envelopes.length,
+        ...contention,
       };
       if (envelopes.length > 0) {
         json.runCost.partialUsd = usd;

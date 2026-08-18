@@ -84,11 +84,38 @@ which for a check is how many lookups ran at once. So the app accumulates its ow
 (`overture-probe-duration-history.json`) from that reading plus the size stamped in the check's marker, and
 never treats the results file as a record of more than the last run.
 
+#2762 adds one more key to `runCost`, on BOTH the complete and the incomplete path: `contended`, whether
+another RUN SLOT was alive at any point while this run worked. Three states, and they are three different
+facts. `true` and `false` are measurements the runner latched (`lib/run-contention.sh`, sampled before the
+work starts and again on every marker tick, derived from `slot_others` so a third slot cannot be missed, and
+never counting the run's own marker). ABSENT means a runner that predates the flag, which is a real state
+rather than a defensive one: the script is resolved out of the git checkout and `update-overture.sh`
+fast-forwards that checkout BEFORE the rebuild, so a new app meets an older script for a couple of minutes
+on every update and permanently for anyone who only pulls. The app refuses to record a sample whose
+contention is absent, rather than reading it as solo, because reading it as solo would file exactly the
+co-run the flag exists to measure as evidence about a run that had the machine to itself.
+
+`contended` deliberately does NOT mean "the machine was busy". A scout extract (up to four claudes, fired
+hourly on its own) or a reply classify can be running too. Folding those in would give one stored field two
+meanings depending on which version wrote the row, since every row already on disk predates the wider
+reading, so #2762's measurement session counts concurrent processes directly instead.
+
+The latch itself, `<slot>-contended`, is runner-only and never reaches the app: it is cleared on entry and
+in the trap, exactly as `<slot>-stall-state` is, and the fact travels to the app inside `runCost`, beside
+the wall clock it qualifies. One observer for both facts about one run rather than two that can disagree.
+
 #1616: `overture-probe-duration-history.json` is app-internal telemetry on the same footing as
 `overture-run-duration-history.json` above (the last 10 completed reachability CHECKS, as lookups, streams
 and wall-clock seconds, for the wait the selection bar quotes before Dan spends anything). The app writes and
 reads it, no script touches it, and a missing or malformed file reads as no history at all, which puts the
 bar back on its hand-set constant rather than on a number nobody measured.
+
+#2762: each stored run now also carries `contended`, copied from the results file above, and the two classes
+are POOLED SEPARATELY and never together. A row with no `contended` key was written before #2762 and every
+one of those ran while the prep/check exclusion was still in force, so it reads as solo; every row this
+version writes carries the key, which is what makes that reading a fact about the writer rather than an
+assumption about the data. A class holding fewer than three comparable runs answers nothing and the bar falls
+back to its constant, rather than borrowing the other class's pace.
 
 #2188: `update-result.json` is the return channel for the Update button. Pressing it opens a Terminal window
 the app cannot see, so until this file existed a refused update and a successful one were the same thing from

@@ -32,15 +32,33 @@ enum ProbeSelection {
 
     // #1616: the figure the bar should quote, learned where there is evidence and hand-set where there is
     // not. One named place, so no surface can consult the history and another the constant.
-    static func secondsPerRound(learnedFrom history: ProbeDurationHistory) -> TimeInterval {
-        history.learnedSecondsPerRound ?? fallbackSecondsPerRound
+    //
+    // #2762: which MACHINE the question is about. A check sharing the machine with a Prep run and one that
+    // has it to itself are two paces, and the history refuses to pool them, so the caller has to say which
+    // it is asking for. No evidence for that class means the constant, exactly as no evidence at all did.
+    static func secondsPerRound(learnedFrom history: ProbeDurationHistory,
+                                contended: Bool) -> TimeInterval {
+        history.learnedSecondsPerRound(contended: contended) ?? fallbackSecondsPerRound
     }
 
     // The live read, and the only impure entry point here. Called from the two places Dan is shown a wait
     // (the selection bar, and the two confirms QueueView raises), never from a pure summarize, so a test
     // can exercise every sentence without reaching a file.
-    static func liveSecondsPerRound() -> TimeInterval {
-        secondsPerRound(learnedFrom: ProbeDurationHistoryStore.load())
+    //
+    // #2762: this is also where the contention question is ANSWERED, rather than in the three surfaces that
+    // ask for a wait. They call this one entry point, so the wait Dan is quoted cannot depend on which of
+    // them he happened to be looking at, and a check about to start beside a live Prep run is quoted the
+    // contended pace wherever it is started from (L46 wants the field's reader named; this is it).
+    //
+    // The prep slot's marker, not a stored flag: what matters is whether the OTHER slot is alive at the
+    // moment the wait is quoted. Under the exclusion #2765 lifts this is always false, which is correct
+    // rather than dormant, and it starts answering true the moment two runs can genuinely overlap.
+    // @MainActor because the marker read is: `PrepQueueService.isRunning` is main-actor isolated, and the
+    // three surfaces that call this are all view bodies, so nothing has to move to reach it.
+    @MainActor
+    static func liveSecondsPerRound(now: Date = Date()) -> TimeInterval {
+        secondsPerRound(learnedFrom: ProbeDurationHistoryStore.load(),
+                        contended: PrepQueueService.isRunning(slot: .prep, now: now))
     }
 
     // Lookups run concurrently, so the wait is the number of ROUNDS, not the number of lookups. MUST
