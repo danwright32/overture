@@ -19,7 +19,12 @@ enum LaunchMigrations {
     static func run(in context: ModelContext,
                     possibleMatchInputs: ([Prospect]) -> PossibleMatchRecheck.Inputs? = {
                         PossibleMatchRecheck.load(prospects: $0)
-                    }) -> Bool {
+                    },
+                    // #2988: seams for the same reason `possibleMatchInputs` is one. The boundary this pass
+                    // reads is stamped on first launch and then never moves, so a test that could not
+                    // supply its own would be asserting against whatever this Mac happened to record.
+                    defaults: UserDefaults = .standard,
+                    now: Date = Date()) -> Bool {
         // #418 A1 / #416: copy the lead thread down to act recipients contacted via the old lead-level
         // send path, so per-recipient reply detection has a thread to watch. Idempotent; no-op once
         // every contacted recipient carries its own thread.
@@ -197,6 +202,16 @@ enum LaunchMigrations {
         // #1238: retire shows in a town Dan has blocked (or a built-in seed far-town), so a blocked town's
         // shows stay gone across launches. Mirrors WentByRetirement: Overture's own cut, its own reason.
         ExcludedTownRetirement.run(in: context)
+        // #2988: offer the shows whose contact answer was reached while #2983 was still withholding the
+        // producing organisation the app already held. Sets #2261's re-check REQUEST flag and nothing else,
+        // so the recorded verdict survives (L5) and no paid lookup happens because this ran: the rows
+        // simply become offerable again and Dan still chooses what to check. Idempotent twice over, by the
+        // flag already being set and by the stamped boundary, so a row checked since the fix is never
+        // re-offered and this cannot become a standing charge.
+        PresenterWithheldRecheck.run(in: context,
+                                     presenterCarriedSince: PresenterWithheldRecheck.boundary(
+                                        defaults: defaults, now: now),
+                                     now: now)
         return persist(context.save, report: { reportSaveFailure($0) })
     }
 
