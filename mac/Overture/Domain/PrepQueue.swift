@@ -151,6 +151,30 @@ struct PrepQueueItem: Codable, Equatable, Sendable {
     // ABSENT on the overwhelming majority of items and deliberately not an empty array, so the run is not
     // asked to reason about a list that is almost always nothing.
     var refusedEmails: [String]? = nil
+    // v13 (#2983): the producing organisation the APP already holds for this show, by name, straight from
+    // the stored `presenter`.
+    //
+    // Until this field the only thing either builder derived from `presenter` was `onlyTheActIsNamed`, a
+    // boolean ABOUT the fact. So a show credited to a real company handed the run "a producing
+    // organisation IS named here" and withheld which one, and the run went looking for a producer it had
+    // no name for. On "Punk Goes Broadway!" at The Green Room 42, credited on Dan's own card to Underbelly
+    // Theatre Company since 2026-07-22, the check spent 22 web calls, never searched that name once,
+    // drifted onto a different production of a similarly titled show at another venue, and recorded
+    // `nothing_published` about a company publishing its address on its own contact page. Measured on the
+    // live store the same day: 12 of the 23 cards reading "No email found" were in that state, and four of
+    // those companies appear in no check transcript on this Mac at all.
+    //
+    // Distinct from `organisationNamedOnListing` (v11, #2259), which answers a different question with a
+    // different provenance: that one is what the app READ off this show's listing page, and it is only
+    // ever read for `onlyTheActIsNamed == true` items, so it cannot reach a show whose producer is named.
+    // This one is what the app was already told by whatever put the presenter there (a scout, a feed, or
+    // Dan). Where both are present they are both worth having, and the runbook says which wins.
+    //
+    // ABSENT, never an empty string, on a show that names nobody: absent is the state the runbook already
+    // has a sentence for, and an empty value would read as a named nobody (L138, L67). A presenter that is
+    // an individual rather than a company is still carried, because the run's job is to reach whoever is
+    // in charge and a solo producer is exactly that.
+    var presenterOnRecord: String? = nil
 }
 
 // What the app read at a show's own listing URL, handed to the Prep run as material for the draft.
@@ -208,7 +232,7 @@ enum PrepRunIntent: Equatable, Sendable {
 }
 
 enum PrepQueueBuilder {
-    static let version = 12
+    static let version = 13
 
     // #1666: the wire vocabulary of a queue item's `reprepMode` (#367), named rather than written out at
     // each use, so the string that crosses to the run and the string a surface reads back are one spelling.

@@ -74,14 +74,15 @@ const OPENER_ARCHETYPE = ["reason-first", "direct-intent"] as const;
 const REPLY_INTENT = ["interested", "wants_to_book", "has_question", "declined"] as const;
 const PROVENANCE = ["act", "performer", "presenter"] as const;
 
-// overture-prep-queue.json (versions 1-12, additive: production at v2+ #586, reprepMode at v3+ #367,
+// overture-prep-queue.json (versions 1-13, additive: production at v2+ #586, reprepMode at v3+ #367,
 // runEndDate + openingNightPassed at v4+ #1122, experimentArmInstruction at v5+ #5,
 // alsoAnswersFor at v6+ #1597, run-level houses at v7+ #1720, showListing at v8+ #1824,
 // onlyTheActIsNamed at v9+ #1856, venueHistory at v10+ #1887,
-// organisationNamedOnListing at v11+ #2259, refusedEmails at v12+ #2392)
+// organisationNamedOnListing at v11+ #2259, refusedEmails at v12+ #2392,
+// presenterOnRecord at v13+ #2983)
 export function assertPrepQueueShape(data: unknown, file: string, expectedVersion: number): void {
   const root = requireObject(data, file, "(root)");
-  const version = requireVersion(root.version, file, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+  const version = requireVersion(root.version, file, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
   if (version !== expectedVersion) fail(file, `version ${version} does not match filename version ${expectedVersion}`);
   requireString(root.generatedAt, file, "generatedAt");
   // #1720 v7: the RUN-LEVEL house list, the organisations the app has judged to be the building rather
@@ -135,6 +136,7 @@ export function assertPrepQueueShape(data: unknown, file: string, expectedVersio
   // every field above: a runner predating the rule would ignore it and go on spending on an address he
   // had already refused.
   const refusedEmailsFieldAllowed = version >= 12;
+  const presenterOnRecordFieldAllowed = version >= 13;
   items.forEach((item, i) => {
     const o = requireObject(item, file, `items[${i}]`);
     requireString(o.naturalKey, file, `items[${i}].naturalKey`);
@@ -226,6 +228,28 @@ export function assertPrepQueueShape(data: unknown, file: string, expectedVersio
       }
     } else if (o.refusedEmails !== undefined) {
       fail(file, `items[${i}].refusedEmails must not be present before version 12`);
+    }
+    // v13 (#2983): the producing organisation the app already holds. A blank is refused for the reason
+    // the field exists: an empty value reads to the run as a named nobody, which is the same withholding
+    // the field was added to end (L138, L67).
+    if (presenterOnRecordFieldAllowed) {
+      if (o.presenterOnRecord !== undefined) {
+        requireString(o.presenterOnRecord, file, `items[${i}].presenterOnRecord`);
+        const name = o.presenterOnRecord as string;
+        if (name.trim() === "") {
+          fail(file, `items[${i}].presenterOnRecord must be absent rather than blank`);
+        }
+        if (name.trim() !== name) {
+          fail(file, `items[${i}].presenterOnRecord must be trimmed`);
+        }
+        // The flag and the name are one fact, so an item claiming the act is all there is while naming a
+        // producer is the contradiction the field removes, arriving back through the fixture door.
+        if (o.onlyTheActIsNamed === true) {
+          fail(file, `items[${i}] names presenterOnRecord while claiming onlyTheActIsNamed`);
+        }
+      }
+    } else if (o.presenterOnRecord !== undefined) {
+      fail(file, `items[${i}].presenterOnRecord must not be present before version 13`);
     }
   });
 }

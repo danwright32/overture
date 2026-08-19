@@ -17,6 +17,23 @@ enum OrganiserNaming {
     // extraction boundary writes an empty string rather than nil when it drains a room's own name, so a
     // nil-only test would miss the commonest row in this class.
     static func onlyTheActIsNamed(presenter: String?) -> Bool {
-        (presenter ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        namedOrganiser(presenter: presenter) == nil
+    }
+
+    // #2983: the organiser's NAME, on exactly the terms the flag above answers about it.
+    //
+    // Derived one from the other rather than written twice, because the defect this fixes was precisely a
+    // flag about a fact standing in for the fact: a queue saying "an organisation IS named here" while
+    // carrying no name is the same failure again, one layer down, and two spellings of the same trim is
+    // how that comes about. So there is one predicate, and `onlyTheActIsNamed` is now defined as "this
+    // returned nothing".
+    //
+    // Trimmed, and nil rather than empty for a blank, for the reason the flag already gave: the extraction
+    // boundary writes an empty string when it drains a room's own name (#1787), so a nil-only test would
+    // miss the commonest row in this class. Returning the TRIMMED value also means no reader ever receives
+    // a name padded with the whitespace that made it look present.
+    static func namedOrganiser(presenter: String?) -> String? {
+        let trimmed = (presenter ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }

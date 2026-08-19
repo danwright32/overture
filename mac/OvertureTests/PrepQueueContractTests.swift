@@ -83,9 +83,36 @@ struct PrepQueueContractTests {
         #expect(roundTripped == expected)
     }
 
-    @Test func theBuilderNowStampsVersion12() {
+    @Test func theBuilderNowStampsVersion13() {
         let q = PrepQueueBuilder.build(from: [], generatedAt: "2026-06-25T00:00:00.000Z", houses: [])
-        #expect(q.version == 12)
+        #expect(q.version == 13)
+    }
+
+    // v13 (#2983): an item may name the producing organisation the APP already holds, which until this
+    // version was reduced to the boolean `onlyTheActIsNamed` and dropped. Additive, so every earlier
+    // fixture still decodes with the field absent.
+    //
+    // The two answers must agree inside one item, which is the defect one layer down: the item that says
+    // `onlyTheActIsNamed: true` carries no name, and the item carrying a name does not claim the act is all
+    // there is. Asserted across EVERY fixture, not just this one, so a later fixture cannot introduce the
+    // contradiction the field exists to remove.
+    @Test func theV13FixtureNamesTheProducingOrganisationTheAppHolds() throws {
+        let decoded = try JSONDecoder().decode(PrepQueue.self, from: try fixture("v13.json"))
+        #expect(decoded.version == 13)
+        #expect(decoded.items[0].presenterOnRecord == "Halyard Theatre Company")
+        #expect(decoded.items[1].presenterOnRecord == nil)      // this one names nobody but the act
+        #expect(decoded.items[1].onlyTheActIsNamed == true)
+        // The earlier fixture, unchanged, still decodes and says nothing about a producer on record.
+        let v12 = try JSONDecoder().decode(PrepQueue.self, from: try fixture("v12.json"))
+        #expect(v12.items.allSatisfy { $0.presenterOnRecord == nil })
+    }
+
+    @Test(arguments: 1...13)
+    func noFixtureEverClaimsTheActIsAllThereIsWhileNamingAProducer(version: Int) throws {
+        let decoded = try JSONDecoder().decode(PrepQueue.self, from: try fixture("v\(version).json"))
+        for item in decoded.items where item.onlyTheActIsNamed == true {
+            #expect(item.presenterOnRecord == nil)
+        }
     }
 
     // v12 (#2392): an item may name the addresses Dan struck on that show before the run, which the run
