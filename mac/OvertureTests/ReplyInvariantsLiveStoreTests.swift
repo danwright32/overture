@@ -76,12 +76,25 @@ struct ReplyInvariantsLiveStoreTests {
         shows.flatMap { p in p.recipients.filter(\.replied).map { (p, $0) } }
     }
 
+    // #2985: the rows a reply is still OPEN on, which is a narrower set than `replied` and the only set
+    // `ReplyIdentity.answering` makes any claim about. Its first guard returns the row itself once
+    // `hasUnhandledReply` is false, because a handled reply has nothing left to answer.
+    //
+    // The writer-resolution invariant below used to run over every `replied` row. On 2026-08-19 Dan handled
+    // a reply at 13:56 and the suite went red forty minutes later, asserting a resolution the code had
+    // never promised for that state, and blocking every merge that touches the Mac app. A test that fails
+    // when the workflow SUCCEEDS is the defect, not the handled reply: answering a reply is the outcome
+    // this whole queue exists to produce.
+    private func openReplyRows(in shows: [Prospect]) -> [(Prospect, Recipient)] {
+        repliedRows(in: shows).filter { $0.1.hasUnhandledReply }
+    }
+
     // #2122/#2125, as an invariant. The panel resolves a reply to the peer whose address matches the
     // recorded writer; the row the LIST stands on is picked by sorted id and is routinely somebody else.
     // The defect was that resolution silently landing on the wrong person. It cannot be caught by asking
     // "did it resolve", only by asking "did it resolve to the RIGHT one when a right one exists".
     //
-    // LIVE-STORE-CLAIM verified=2026-08-05 measure="replied rows whose recorded writer is held by some contact on the show, and whether the reply resolves to that contact"
+    // LIVE-STORE-CLAIM verified=2026-08-19 measure="rows whose reply is still OPEN and whose recorded writer is held by some contact on the show, and whether the reply resolves to that contact. Re-measured 2026-08-19 after #2985 narrowed the scope from every replied row: 4 replied rows in the store, 0 of them still open, so this rule currently runs over nothing and the corpus test says so"
     // Measured 2026-08-05: 2 replied rows, both on the Pumpkin Singalong send group, both recording
     // nicolebecker@everyvoicechoirs.org, which no contact on that show held. Asserted as the rule rather
     // than as that shape, because the shape changes with every reply and the rule does not.
@@ -89,7 +102,8 @@ struct ReplyInvariantsLiveStoreTests {
     func aReplyResolvesToTheContactHoldingTheWritersAddressWheneverOneExists() async throws {
         try await withLiveShows { shows in
             var wrong: [String] = []
-            for (p, r) in repliedRows(in: shows) {
+            // #2985: only the rows whose reply is still open. See `openReplyRows`.
+            for (p, r) in openReplyRows(in: shows) {
                 guard let writer = r.replyFromAddress, !writer.isEmpty else { continue }
                 guard let holder = ReplyPanel.contact(holding: writer, of: p) else { continue }
                 let answering = ReplyIdentity.answering(for: r, in: p)
@@ -179,7 +193,7 @@ struct ReplyInvariantsLiveStoreTests {
     // The reached-out queue itself, over the real rows: every row it offers has SOME way to reach the
     // person, or it is a card about somebody who cannot be contacted at all.
     //
-    // LIVE-STORE-CLAIM verified=2026-08-05 measure="reached-out rows with no email address, and whether each has a contact form to reach instead"
+    // LIVE-STORE-CLAIM verified=2026-08-19 measure="reached-out rows with no email address, and whether each has a contact form to reach instead. Re-measured 2026-08-19: all 14 recipients ever sent to belong to shows carrying a showOutcome, so isInPlay excludes every one and there are 0 rows in play, which #2986 made a reported number rather than a failure"
     // Written first as "every row has an email address", which FAILED on three real rows: Alex Syiek,
     // Battle of the Siblings, and Eva Noblezada & Reeve Carney. Measured rather than assumed: all three
     // are contact_method form_or_dm and all three carry a contactFormURL, so they are reachable and the
@@ -188,9 +202,26 @@ struct ReplyInvariantsLiveStoreTests {
     @Test(.enabled(if: liveStoreExists, "no live store on this machine"))
     func everyReachedOutRowHasSomeWayToReachThePerson() async throws {
         try await withLiveShows { shows in
-            let now = Date(timeIntervalSince1970: 1_754_400_000)   // pinned, so the run is reproducible
-            let rows = ReachedOutQueue.activeWithDates(from: shows, now: now)
-            #expect(!rows.isEmpty, "no reached-out rows at all, so this measured nothing")
+            // #2986: the REAL clock, and NO tripwire on an empty selection.
+            //
+            // Two separate corrections. The clock was pinned to 2025-08-05 "so the run is reproducible",
+            // which bought nothing: the other input is the LIVE store, so the run was never reproducible,
+            // and pinning one end of a comparison whose other end keeps walking is L130. A bare `Date()`
+            // is right here precisely BECAUSE the data is live, so both ends move together and the
+            // question stays the same question every day.
+            //
+            // The `!rows.isEmpty` tripwire that used to sit here is gone, and that was the actual cause of
+            // the red run. Measured 2026-08-19: all 14 recipients Dan has ever sent to belong to shows he
+            // has since closed out, so `ReachedOutQueue.isInPlay` correctly excludes every one and the
+            // selection is legitimately empty. Finishing your pitches is not a regression. It contradicted
+            // this file's own stated design too (see `repliedRows`: "a tripwire on it would cry wolf every
+            // time he finished a conversation").
+            //
+            // Emptiness is NOT thereby swept under the carpet, which would be L98: it is reported out loud,
+            // every run, by `theSuiteReportsHowManyRowsEachInvariantCouldMeasure` below. That is the whole
+            // point of separating the two: this test asks "is any live row unreachable", and that one asks
+            // "how many rows was that asked of".
+            let rows = ReachedOutQueue.activeWithDates(from: shows, now: Date())
             var unreachable: [String] = []
             for row in rows {
                 let hasEmail = row.recipient.email?.isEmpty == false
@@ -200,6 +231,45 @@ struct ReplyInvariantsLiveStoreTests {
                 }
             }
             #expect(unreachable.isEmpty, Comment(rawValue: unreachable.prefix(5).joined(separator: "\n")))
+        }
+    }
+
+    // #2985/#2986: how much this suite actually measured, reported every run.
+    //
+    // Both invariants above are now allowed to find NOTHING, because both of their corpora legitimately
+    // empty when Dan finishes his work: closing out a show takes its contacts out of play, and answering a
+    // reply closes the only state the writer-resolution rule speaks about. Neither emptiness is a
+    // regression, and a tripwire on either fires on the workflow succeeding.
+    //
+    // But an invariant that examined zero rows and an invariant that examined every row must not look
+    // alike (L98), and with the tripwires gone the only thing left to tell them apart is a number nobody
+    // has. So this test IS that number. It prints the three corpus sizes on every run, so "these rules were
+    // exercised" and "these rules had nothing to run over" are different lines of output rather than the
+    // same silent green.
+    //
+    // It is deliberately a MEASUREMENT rather than a threshold. Any floor here would be the tripwire again
+    // under a new name, and would fire on exactly the state this issue exists to stop failing on. What it
+    // does assert is the containment that must hold whatever the sizes are, so it is not merely a print
+    // statement: an open reply is a replied row, and a row in play was sent to. Those cannot go wrong
+    // quietly.
+    @Test(.enabled(if: liveStoreExists, "no live store on this machine"))
+    func theSuiteReportsHowManyRowsEachInvariantCouldMeasure() async throws {
+        try await withLiveShows { shows in
+            let replied = repliedRows(in: shows)
+            let open = openReplyRows(in: shows)
+            let inPlay = ReachedOutQueue.activeWithDates(from: shows, now: Date())
+            print("LIVE STORE CORPUS: \(shows.count) shows, \(replied.count) replied rows, "
+                  + "\(open.count) with a reply still open, \(inPlay.count) reached-out rows in play. "
+                  + "A zero here means the invariants in this suite ran over nothing.")
+            // An open reply is a replied row, by construction, so the narrower set can never be the larger.
+            #expect(open.count <= replied.count)
+            // A row in play was sent to: `ReachedOutQueue.isInPlay` refuses a recipient with no `sentAt`,
+            // so a row here without one means that gate stopped holding.
+            #expect(inPlay.allSatisfy { $0.recipient.sentAt != nil })
+            // Every open reply is one of the replied rows, by identity and not merely by count, so a
+            // filter that started selecting something else entirely cannot pass on the sizes alone.
+            let repliedIds = Set(replied.map { "\($0.0.naturalKey)|\($0.1.id)" })
+            #expect(open.allSatisfy { repliedIds.contains("\($0.0.naturalKey)|\($0.1.id)") })
         }
     }
 }
