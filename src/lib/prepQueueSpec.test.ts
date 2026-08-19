@@ -76,15 +76,15 @@ describe("the guard catches each way the two sides can drift (#1908)", () => {
   });
 
   it("catches a field the payload carries that the runbook never lists", () => {
-    const stale = runbook.replace(/,\s*`refusedEmails`\)/, ")");
+    const stale = runbook.replace(/,\s*`presenterOnRecord`\)/, ")");
     expect(stale).not.toEqual(runbook);
     expect(compareItemFields(runbookItemFields(stale), swiftItemFields(queueSwift)))
-      .toEqual({ missingFromRunbook: ["refusedEmails"], namedButNotInPayload: [] });
+      .toEqual({ missingFromRunbook: ["presenterOnRecord"], namedButNotInPayload: [] });
   });
 
   it("catches a brand new Swift field nobody added to the runbook", () => {
     const withNewField = queueSwift.replace(
-      /(\n    var refusedEmails: \[String\]\? = nil\n)/,
+      /(\n    var presenterOnRecord: String\? = nil\n)/,
       "$1    var rehearsalNote: String? = nil\n");
     expect(withNewField).not.toEqual(queueSwift);
     expect(compareItemFields(runbookItemFields(runbook), swiftItemFields(withNewField)))
@@ -94,8 +94,8 @@ describe("the guard catches each way the two sides can drift (#1908)", () => {
   // The direction that made the model invent a field's contents (#1824): the prompt names something
   // the payload does not carry, so the model supplies it.
   it("catches a field the runbook names that the payload does not carry", () => {
-    const invented = runbook.replace(/`refusedEmails`\)/,
-                                     "`refusedEmails`, `rehearsalNote`)");
+    const invented = runbook.replace(/`presenterOnRecord`\)/,
+                                     "`presenterOnRecord`, `rehearsalNote`)");
     expect(invented).not.toEqual(runbook);
     expect(compareItemFields(runbookItemFields(invented), swiftItemFields(queueSwift)))
       .toEqual({ missingFromRunbook: [], namedButNotInPayload: ["rehearsalNote"] });

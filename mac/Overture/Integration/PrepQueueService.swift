@@ -110,7 +110,11 @@ enum PrepQueueService {
                     // #2392: addresses Dan struck on this show, so the run does not pay to research or
                     // draft to one he already refused. Absent, never an empty list, on the shows with
                     // nothing struck. Sorted so the same store always writes byte-identical JSON.
-                    refusedEmails: struckAddresses(for: p, refusals: refusals)
+                    refusedEmails: struckAddresses(for: p, refusals: refusals),
+                    // #2983: and WHO, not merely that there is a who. Through the same predicate
+                    // `onlyTheActIsNamed` above uses, so the two can never disagree. A drafted pitch has
+                    // the same reason to name the producing company as a check has to search for it.
+                    presenterOnRecord: OrganiserNaming.namedOrganiser(presenter: p.presenter)
                 )
             }
         return PrepQueueBuilder.build(from: items, generatedAt: generatedAt, houses: houses(from: context))
@@ -167,7 +171,12 @@ enum PrepQueueService {
                     // #2392: a probe hunts contacts too, so it needs the same list. Left off it, a check
                     // would find and report the address Dan struck, the importer would refuse it, and he
                     // would have paid for the lookup twice over.
-                    refusedEmails: struckAddresses(for: p, refusals: refusals))
+                    refusedEmails: struckAddresses(for: p, refusals: refusals),
+                    // #2983: the name behind that flag. Without it a check on a show credited to a real
+                    // company was told a producer existed and never told which one, so it hunted a
+                    // nameless organisation and reported `nothing_published` about one publishing its
+                    // address. This is the field that failure was missing.
+                    presenterOnRecord: OrganiserNaming.namedOrganiser(presenter: p.presenter))
             }
         return PrepQueueBuilder.build(from: items, generatedAt: generatedAt, houses: houses(from: context))
     }

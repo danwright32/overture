@@ -63,6 +63,8 @@ describe("prep-runbook judgment rules are present (#591)", () => {
       "performer-misidentification-low",
       "pitch-names-the-shows-date",
       "portfolio-is-mine-not-the",
+      "presenter-on-record-blocks-nothing-published",
+      "presenter-on-record-searched-first",
       "press-media-disqualified",
       "pursue-each-named-performer",
       "rate-answer-add-ons-are-named",
@@ -93,7 +95,7 @@ describe("prep-runbook judgment rules are present (#591)", () => {
       "venue-address-disqualified",
       "venue-history-absent-means-silent",
       "venue-history-clause-is-familiarity",
-      "venue-history-never-a-count",
+      "venue-history-never-a-count"
     ]);
   });
 

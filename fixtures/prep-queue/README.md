@@ -81,3 +81,29 @@ every show has nothing to say here, and the run should not be handed a list to r
 refuses the same addresses again at ingest through the record the strike wrote, so a run that ignores
 the field costs money rather than putting somebody back on Dan's card. Asserted by
 `PrepQueueContractTests`.
+
+`v13.json` (#2983) adds an optional `presenterOnRecord` to each item: the producing organisation THE APP
+ALREADY HOLDS for the show, by name, straight from the stored `presenter`.
+
+It is the fact `onlyTheActIsNamed` had been the flag for. Until v13 that boolean was the ONLY thing either
+builder derived from the presenter, so an item saying "a producing organisation IS named here" carried no
+name and the run went hunting a producer it could not search for. On a cabaret show credited to a real
+theatre company since 2026-07-22, a check spent 22 web calls, never searched that company's name once,
+drifted onto a different production of a similarly titled show at another venue, and recorded
+`nothing_published` about a company publishing its address on its own contact page. Measured on the live
+store the same day, 12 of the 23 shows reading "No email found" were in that state, and four of those
+companies appear in no check transcript on the machine at all.
+
+Distinct from `organisationNamedOnListing` (v11) by PROVENANCE, and the two are complementary rather than
+alternatives: that one is what the app READ off this show's listing page, and it is only ever read for
+`onlyTheActIsNamed == true` items, so it could never reach a show whose producer is named. This one is what
+the app was already told by whatever wrote the presenter (a scout, a feed, or Dan).
+
+Note what the fixture's items do. Item 0 carries a name and no `onlyTheActIsNamed`. Item 1 carries
+`onlyTheActIsNamed: true` and NO name. That pairing is the point: the flag and the name come from one
+predicate (`OrganiserNaming.namedOrganiser`, which `onlyTheActIsNamed` is now defined in terms of), so an
+item asserting both is the original defect one layer down, and both `fixtureShape.ts` and
+`PrepQueueContractTests` refuse it across every fixture version rather than only this one.
+
+Additive, and absent is not a claim: it means the app holds no producer for that row, which is exactly
+`onlyTheActIsNamed`. Never an empty string, because an empty value reads to the run as a named nobody.

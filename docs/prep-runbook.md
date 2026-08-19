@@ -20,12 +20,12 @@ these files (see `RunSlot`), so a written path can name the other, still-running
 destroy the drafts it has already paid for.
 
 - **Read:** the WORK-LIST the prompt names
-  (`PrepQueue` version `12`: a run-level `houses[]` (see "The queue names the houses" in §1),
+  (`PrepQueue` version `13`: a run-level `houses[]` (see "The queue names the houses" in §1),
   plus `items[]` each with `naturalKey`, `groupName`, `venue`,
   `performanceDate`, `runEndDate`, `discipline`, `websiteURL`, `sourceListingURL`,
   `possibleMatchName`, `priorRelationship`, `production`, `reprepMode`,
   `openingNightPassed`, `experimentArmInstruction`, `alsoAnswersFor`, `showListing`, `onlyTheActIsNamed`,
-  `venueHistory`, `organisationNamedOnListing`, `refusedEmails`). `production` is `self` / `agency` / `unknown`; a v1 item omits it
+  `venueHistory`, `organisationNamedOnListing`, `refusedEmails`, `presenterOnRecord`). `production` is `self` / `agency` / `unknown`; a v1 item omits it
   (treat as `unknown`). `reprepMode` is `draft_only` / `contacts_only`; absent (the normal case
   for a fresh, never-drafted prospect) means do both, exactly as today. See "Re-prep mode" under
   "Per prospect" below for what each value means for that item. `runEndDate` is the run's closing
@@ -64,6 +64,24 @@ destroy the drafts it has already paid for.
   you still read the text yourself. On a rental room this is the common case: measured across 54 Below's 61 listings on
   2026-08-11, 17 bill a producer and 16 of those name an individual, whom the app's rule does not accept
   as a company and leaves for you. See §1's route.
+  `presenterOnRecord` (v13, #2983) is the producing organisation THE APP ALREADY HOLDS for this show, by
+  name. It is the same fact `onlyTheActIsNamed` is the flag for, and the two always agree: a name here
+  means that flag is `false` or absent, and `onlyTheActIsNamed: true` means there is no name to give you.
+  Where it is present **you have been handed the answer to who is producing, and searching for it BY NAME
+  is your first move, before anything else on the item.** You were not given it before v13, and the cost
+  of that was measured: on a cabaret show credited to a real theatre company, a check spent 22 web calls,
+  never searched the company's name once, drifted onto a different production of a similarly titled show
+  at another venue, and reported `nothing_published` about a company publishing its address on its own
+  contact page. Twelve of twenty three empty answers on the live store were that same failure.
+  It may name a COMPANY OR A PERSON, and either is a real research target, a legitimate
+  `provenance: "presenter"`, and a `primary` contact, on exactly the terms `organisationNamedOnListing`
+  already sets out. It is never the room: the app removes a presenter that is only the venue's own name
+  before storing it. The two fields cannot BOTH reach you today, because the app renders a listing page
+  only for a show that names no producer, so an item carrying `presenterOnRecord` carries no
+  `organisationNamedOnListing`; should that ever change, the page's own credit wins on who is producing
+  THIS show and `presenterOnRecord` is still researched alongside it rather than dropped.
+  **`nothing_published` is not available to you on an item carrying this field unless you actually searched
+  that name**, which is the claim the failure above never tested.
   `refusedEmails` (v12, #2392) is a list of addresses DAN HAS ALREADY STRUCK on this show. Do not
   research them, do not write to them, and do not report them back as contacts. He struck them from the
   card BEFORE this run precisely so it would not spend on them: the case that produced the field was a
@@ -260,6 +278,15 @@ item's `production` field first:
     confidence per above, never dropped for a weak contact; never block trying to find
     every one. Dan reviews every draft and can hand-add anyone genuinely absent from the
     listing via the manual-recipient path.
+- **`presenterOnRecord` present (#2983), whatever `production` says:** the app has already told you who
+  is producing this show. Search that name FIRST, before the act, before the performers, and before
+  anything you might infer from the title: it is the one target on the item you did not have to work out.
+  Run the full waterfall below on it, emit it with `provenance: "presenter"` at `primary`, and pursue the
+  people named IN ADDITION, never instead. The organisation's own site is the first fetch (its name plus a
+  canonical domain guess is one lookup), then its contact page.
+  You may not answer `nothing_published` on such an item without having searched that name, and if the
+  name led nowhere say so about the search you ran rather than about the show. A search query that merely
+  names the organisation is not a visit; the visit rule below applies here in full.
 - **`onlyTheActIsNamed == true` (#1856), whatever `production` says:** no producing organisation
   reached the app for this show. The room it plays in is not the producer (the app has
   already removed the room's own name where one was billed), so `groupName` is usually the show's
@@ -531,7 +558,10 @@ in order, stop at the first that works:
    run read that source mid-run, concluded "`formUrl` is optional, so a `form_or_dm` contact can carry
    no `formUrl`", and emitted two such contacts; the app discarded both and the card told Dan the show
    had no way in while he found one himself in seconds.
-4. **A genuine presenting org** (the presenter named for the show, NOT the venue). Find its
+4. **A genuine presenting org** (the presenter named for the show, NOT the venue). You may not have to
+   FIND it: `presenterOnRecord` (v13) names it outright where the app already holds it, and
+   `organisationNamedOnListing` (v11) where the page credits one. Where either is present this step starts
+   from that name rather than from a search for who the producer might be. Find its
    contact the SAME way, running steps 1-3 above once more with the presenting org itself as
    the target (so it too can carry a named decision-maker, a generic inbox with a named
    contact behind it per #610, or a form/DM). Emit the presenter as an ADDITIONAL entry in

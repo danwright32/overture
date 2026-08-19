@@ -52,6 +52,15 @@ export const RUNBOOK_RULES: RunbookRule[] = [
     pattern: /never\s+judge\s+for\s+yourself\s+whether\s+an\s+organisation\s+is\s+really\s+the\s+venue/i },
   { name: "named-organisation-must-be-visited",
     pattern: /Naming\s+it\s+in\s+a\s+search\s+query\s+is\s+not\s+visiting\s+it/i },
+  // #2983: the run is handed the producing organisation the app already holds, and must search that name
+  // FIRST. Two separate rules, guarded separately, because dropping either one alone reproduces the
+  // failure: without the search-first instruction the field is present and ignored (the run has its own
+  // habits and this is a new field competing with them), and without the refusal the run can still search
+  // nothing and report `nothing_published`, which is the exact sentence that reached Dan's card.
+  { name: "presenter-on-record-searched-first",
+    pattern: /Search\s+that\s+name\s+FIRST,\s+before\s+the\s+act/i },
+  { name: "presenter-on-record-blocks-nothing-published",
+    pattern: /may\s+not\s+answer\s+`nothing_published`\s+on\s+such\s+an\s+item\s+without\s+having\s+searched\s+that\s+name/i },
   // #1723: a house's fuller name. The store spells it "Jalopy Theatre"; its own site says "Jalopy Theatre
   // and School of Music", and an exact lookup misses, so the run reads the house as a pitchable presenter.
   // Measured on the live store: two of the eight verdicts this phase pins failed on exactly this. The
