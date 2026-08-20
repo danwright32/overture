@@ -50,6 +50,7 @@ run_resolver() {
     echo "VOICEGUIDANCE=${SHARED_VOICE_GUIDANCE}"
     echo "RECENTOPENERS=${SHARED_RECENT_OPENERS}"
     echo "NAMED=${RUN_SLOT_WAS_NAMED}"
+    echo "COVERS=$(basename "${SLOT_COVERS}")"
   )
 }
 
@@ -63,6 +64,7 @@ assert_contains "the progress file keeps its name" "${OUT}" "PROGRESS=overture-p
 assert_contains "the marker keeps its name" "${OUT}" "MARKER=prep-running"
 assert_contains "the cancel sentinel keeps its name" "${OUT}" "CANCEL=prep-cancel"
 assert_contains "the chunk dir keeps its name" "${OUT}" "CHUNKDIR=prep-chunks"
+assert_contains "the covers file is named per slot" "${OUT}" "COVERS=prep-covers.json"
 assert_contains "the pid file keeps its name" "${OUT}" "PIDFILE=prep-claude-pid"
 assert_contains "the stall state keeps its name" "${OUT}" "STALL=prep-stall-state"
 assert_contains "the log keeps its name" "${OUT}" "LOG=prep-run.log"
@@ -98,6 +100,7 @@ assert_contains "the check queue is its own" "${OUT}" "QUEUE=overture-check-queu
 assert_contains "the check results are its own" "${OUT}" "RESULTS=overture-check-results.json"
 assert_contains "the check marker is its own" "${OUT}" "MARKER=check-running"
 assert_contains "the check chunk dir is its own" "${OUT}" "CHUNKDIR=check-chunks"
+assert_contains "the check covers file is its own" "${OUT}" "COVERS=check-covers.json"
 assert_not_contains "the check slot takes no prep path" "${OUT}" "prep-"
 
 # --- the voice artifacts are shared on purpose, and are the same file whichever slot asks ---------
@@ -215,6 +218,21 @@ rm -f "${SUPPORT_DIR}"/overture-*-results.json "${SUPPORT_DIR}/run-boundary-viol
 # version of this went.
 TRAP_LINE="$(grep -n "^trap " "${HERE}/../prep-run.sh")"
 assert_contains "the boundary check runs on every exit path" "${TRAP_LINE}" "slot_check_foreign_results"
+
+# --- #3010: the covers file is released on exit, and AFTER the marker --------------------------
+# The order is the guard, not decoration. Overture reads a slot's coverage only when that slot's marker
+# says it is LIVE, so marker-then-covers leaves an inert state if the run dies between the two removals
+# (the read answers "no live run"), while covers-then-marker leaves marker-live-plus-covers-absent, which
+# is the REFUSAL state and would block the next launch for a run that has already ended.
+assert_contains "the covers file is released on every exit path" "${TRAP_LINE}" "SLOT_COVERS"
+MARKER_AT="$(awk '{print index($0, "rm -f \"$MARKER\"")}' <<<"${TRAP_LINE}")"
+COVERS_AT="$(awk '{print index($0, "rm -f \"$SLOT_COVERS\"")}' <<<"${TRAP_LINE}")"
+if [[ "${MARKER_AT}" -gt 0 && "${COVERS_AT}" -gt 0 && "${MARKER_AT}" -lt "${COVERS_AT}" ]]; then
+  pass "the marker is removed BEFORE the covers file"
+else
+  fail "the marker is removed BEFORE the covers file" \
+    "marker at ${MARKER_AT}, covers at ${COVERS_AT}: covers-first leaves a live-looking slot with no coverage"
+fi
 assert_contains "and the fingerprint is taken before the run" \
   "$(grep -c 'slot_record_foreign_results' "${HERE}/../prep-run.sh")" "1"
 

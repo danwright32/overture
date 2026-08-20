@@ -53,6 +53,12 @@ struct RunSlotFilesAreCataloguedTests {
             slot.runLogURL(in: base),
             slot.eventsURL(in: base),
             slot.archivesDirectory(in: base),
+            // #3010. Added here as well as to `allPaths`, because this list is a HAND-WRITTEN subset and
+            // omits 12 of the 30 names `allPaths` produces (the pid file, the stall state, the FIFOs and
+            // the chunk families), so a path added only to `allPaths` is exempt from the very check meant
+            // to catch it (L96). Widening it to be derived needs those 12 documented first, which is its
+            // own change: filed as #3018.
+            slot.coversURL(in: base),
         ].map(\.lastPathComponent)
     }
 

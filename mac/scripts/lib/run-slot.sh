@@ -70,6 +70,10 @@ resolve_run_slot() {
   # never reads it, because the fact reaches the app inside `runCost` in the results file, beside the wall
   # clock it qualifies. Named here with everything else so no runner spells out a handoff path itself.
   SLOT_CONTENDED="${SUPPORT}/${RUN_SLOT}-contended"
+  # #3010: which shows this run holds, published by the APP at launch and removed here on exit. The app
+  # is the only writer; the runner only ever releases it. Named here with every other slot path so no
+  # runner spells out a handoff path itself.
+  SLOT_COVERS="${SUPPORT}/${RUN_SLOT}-covers.json"
   SLOT_EVENTS="${SUPPORT}/${RUN_SLOT}-run-events.jsonl"
   SLOT_EVENTS_FIFO="${SUPPORT}/${RUN_SLOT}-run-events.fifo"
   # open_run_log takes a NAME rather than a path, so this one is not absolute.
