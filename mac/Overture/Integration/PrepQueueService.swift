@@ -248,6 +248,24 @@ enum PrepQueueService {
         }
         try? FileManager.default.removeItem(at: cancelURL)
 
+        // #3010: publish WHICH SHOWS this run holds, immediately after the lock and before the slow
+        // listing read below, so the other launch can drop the overlap rather than both runs taking one
+        // show. Fail-loud: a run whose coverage did not publish holds shows nobody can see, so the
+        // exclusion would be silently off for the whole of it (L12). The key set is the one
+        // `ReachabilityProbeMarker.write` already uses further down, derived once rather than spelled out
+        // twice, because two copies of one definition drift (L107).
+        //
+        // Nothing CONSUMES this yet: the subtraction is #2765 and the launch serialisation is #3011. It is
+        // written now so that phase has a published fact to read rather than an empty file (L90/L46), and
+        // the reader it already has is `RunCoverage.read`.
+        let coveredKeys = Set(queue.items.flatMap { [$0.naturalKey] + ($0.alsoAnswersFor ?? []) })
+        do {
+            try RunCoverage.write(keys: coveredKeys, slot: .check, in: support)
+        } catch {
+            try? FileManager.default.removeItem(at: markerURL)
+            throw error
+        }
+
         do {
             // #1856: read the show's own page for the shows that name no producer, and ONLY those. The
             // check's target on one of them is the act, and on a title-billed show ("Broadway's Bad
@@ -288,6 +306,9 @@ enum PrepQueueService {
             announce()
         } catch {
             try? FileManager.default.removeItem(at: markerURL)   // release the lock if we never launched
+            // #3010: and the coverage with it. A hold published for a run that never started would take
+            // shows away from the other run for nothing, and only the marker's disappearance releases it.
+            RunCoverage.clear(slot: .check, in: support)
             ReachabilityProbeMarker.clear(at: probeRunURL)
             throw error
         }
@@ -636,6 +657,11 @@ enum PrepQueueService {
         // reply run so the three cannot drift. The check settle above is the only Prep-specific part.
         DetachedRunner.sweepDeadRun(markerURL: markerURL, cancelURL: cancelURL, now: now,
                                     staleAfter: markerStaleAfter)
+        // #3010: a run that DIED never reached its own EXIT trap, so its coverage is still on disk saying
+        // it holds shows. AFTER the marker sweep above, never before: with the marker gone the read is
+        // `.noLiveRun` whatever is left here, while the reverse order would leave a live-looking slot whose
+        // coverage had vanished, which is the refusal state rather than a release.
+        RunCoverage.clear(slot: slot, in: support)
         return DeadRunOutcome(probeReport: report)
     }
 
@@ -945,6 +971,16 @@ enum PrepQueueService {
         // runner clears it too, as defence in depth.
         try? FileManager.default.removeItem(at: cancelURL)
 
+        // #3010: publish which shows this run holds, immediately after the lock and before the listing
+        // read, for the same reasons as the check's. A prep item is one show, so there is no
+        // `alsoAnswersFor` here. Fail-loud (L12), and consumed by #2765.
+        do {
+            try RunCoverage.write(keys: Set(queue.items.map(\.naturalKey)), slot: .prep, in: support)
+        } catch {
+            try? FileManager.default.removeItem(at: markerURL)
+            throw error
+        }
+
         do {
             // #1824: read what each show IS from its own listing page, and hand the text over in the queue.
             // Inside the lock and before the file is written, deliberately: the run opens the queue the
@@ -985,6 +1021,8 @@ enum PrepQueueService {
             markHandedToRun(keys: Set(queue.items.map(\.naturalKey)), in: context)
         } catch {
             try? FileManager.default.removeItem(at: markerURL)   // release the lock if we never launched
+            // #3010: and the coverage with it, for the same reason the check's launch does.
+            RunCoverage.clear(slot: .prep, in: support)
             throw error
         }
         return queue.items.count

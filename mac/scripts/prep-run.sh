@@ -249,7 +249,12 @@ SLEEP_GUARD_PID="$(arm_sleep_guard)"
 # #2764: `slot_check_foreign_results` is in the TRAP, not at the end of the script, because the script
 # ends with `exit "$CLAUDE_STATUS"` and a line after that is dead code. The trap is the only place that
 # runs on every exit path there is: finished, cancelled, stalled out, killed with the app.
-trap 'kill "$HEARTBEAT_PID" 2>/dev/null; [ -n "$CLAUDE_PID" ] && kill "$CLAUDE_PID" 2>/dev/null; stop_sleep_guard "$SLEEP_GUARD_PID"; rm -f "$MARKER"; clear_cancel "$CANCEL"; rm -f "$CLAUDE_PID_FILE"; rm -f "$STALL_STATE"; rm -f "$CONTENDED_STATE"; slot_check_foreign_results || true' EXIT
+# #3010: the covers file is removed AFTER the marker, and the order is load-bearing rather than
+# stylistic. Overture reads a slot's coverage only when that slot's marker says it is LIVE, so
+# marker-gone-then-covers-present is inert (the read answers "no live run"), while the reverse leaves a
+# window of marker-live-plus-covers-absent, which is the REFUSAL state. Removing the covers first would
+# therefore turn a crash here into a launch that cannot establish what this run holds.
+trap 'kill "$HEARTBEAT_PID" 2>/dev/null; [ -n "$CLAUDE_PID" ] && kill "$CLAUDE_PID" 2>/dev/null; stop_sleep_guard "$SLEEP_GUARD_PID"; rm -f "$MARKER"; rm -f "$SLOT_COVERS"; clear_cancel "$CANCEL"; rm -f "$CLAUDE_PID_FILE"; rm -f "$STALL_STATE"; rm -f "$CONTENDED_STATE"; slot_check_foreign_results || true' EXIT
 
 # #1013: the last run's results are spent, and leaving them here lets them masquerade as this run's.
 # scout-extract-run.sh learned this in #1011 (a run that wrote nothing inherited the previous run's

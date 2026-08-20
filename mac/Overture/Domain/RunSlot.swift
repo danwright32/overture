@@ -40,6 +40,10 @@ enum RunSlot: String, CaseIterable, Sendable {
     func chunkDirectoryURL(in support: URL) -> URL { support.appendingPathComponent("\(rawValue)-chunks") }
     func claudePIDURL(in support: URL) -> URL { support.appendingPathComponent("\(rawValue)-claude-pid") }
     func stallStateURL(in support: URL) -> URL { support.appendingPathComponent("\(rawValue)-stall-state") }
+    // #3010: which shows this slot's live run is holding, so the other launch can drop the overlap rather
+    // than two paid runs both taking one show. Deliberately NOT inside the marker: `prep-run.sh` truncates
+    // that at startup, so anything written there dies with the run's first second. See `RunCoverage`.
+    func coversURL(in support: URL) -> URL { support.appendingPathComponent("\(rawValue)-covers.json") }
     func runLogURL(in support: URL) -> URL { support.appendingPathComponent("\(rawValue)-run.log") }
     func eventsURL(in support: URL) -> URL { support.appendingPathComponent("\(rawValue)-run-events.jsonl") }
     func eventsFIFOURL(in support: URL) -> URL { support.appendingPathComponent("\(rawValue)-run-events.fifo") }
@@ -118,6 +122,7 @@ enum RunSlot: String, CaseIterable, Sendable {
             "chunkDirectory": chunkDirectoryURL(in: support),
             "claudePID": claudePIDURL(in: support),
             "stallState": stallStateURL(in: support),
+            "covers": coversURL(in: support),
             "runLog": runLogURL(in: support),
             "events": eventsURL(in: support),
             "eventsFIFO": eventsFIFOURL(in: support),
