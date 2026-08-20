@@ -245,6 +245,10 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // #939: the same production at OTHER venues nearby (a recurring Carnegie community-calendar
     // pattern), distinct from partOfRelatedRun above (which means the same venue, a separate run).
     var linkedEngagementMembers: [EngagementLink.Member] = []
+    // #3013: this show was left out of the last run Dan started, because another run was already on it.
+    // The slot named is the run he PRESSED, not the one holding it, because that is what makes the
+    // sentence actionable. nil for every show that was not left out, which is almost all of them.
+    var heldBackFrom: String?
     // The show dropped out of the feed across enough scouts to count as cancelled/pulled (#133).
     var disappearedFromFeed: Bool = false
     // The performance's recipients as flat snapshots for the per-contact conversation surface (#418 B1).
@@ -2454,6 +2458,24 @@ enum QueueModel {
     // one or more OTHER venues nearby, so two queue rows Dan might otherwise treat as separate leads are
     // actually one touring engagement. Each case is one complete sentence (not built by joining pieces),
     // so the copy-inventory (docs/copy-inventory.md) shows it as the one whole line Dan actually reads.
+    // #3013: why this show was not in the run Dan just started. A card note rather than only a launch
+    // message, because the launch message clears while the situation does not, and afterwards a skipped
+    // show is indistinguishable from one he never picked (L126). It stops appearing the moment a run
+    // carries the show, or the run holding it ends, both of which clear the stamp behind it.
+    static func heldBackNote(_ item: QueueItem) -> String? {
+        guard let slot = item.heldBackFrom else { return nil }
+        switch slot {
+        case RunSlot.prep.rawValue:
+            return "Left out of your last prep run: a contact check was already working on this one."
+        case RunSlot.check.rawValue:
+            return "Left out of your last contact check: a prep run was already working on this one."
+        default:
+            // An unrecognised slot is a store written by a newer build. Say the true half rather than
+            // guessing which run it was, and never drop the note entirely: the show really was skipped.
+            return "Left out of your last run: another run was already working on this one."
+        }
+    }
+
     static func linkedEngagementNote(_ item: QueueItem) -> String? {
         let members = item.linkedEngagementMembers
         guard !members.isEmpty else { return nil }
@@ -2612,6 +2634,7 @@ extension QueueItem {
             startTimesVary: p.startTimesVary,                 // #1699
             nightStartTimes: p.nightStartTimes,               // #1699
             partOfRelatedRun: p.partOfRelatedRun,
+            heldBackFrom: p.heldBackAt == nil ? nil : p.heldBackBySlot,
             disappearedFromFeed: p.disappearedFromFeed,
             contacts: p.recipients
                 .sorted { $0.sendOrderRank != $1.sendOrderRank ? $0.sendOrderRank < $1.sendOrderRank : $0.id < $1.id }

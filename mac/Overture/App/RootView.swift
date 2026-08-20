@@ -1384,6 +1384,10 @@ struct RootView: View {
         // nothing would re-derive the queue on its own (L175). Refreshed FIRST, so anything below that
         // triggers a rebuild sees the released state rather than the held one.
         defer { LiveRunHoldings.refresh() }
+        // #3013: a run ending is when a mark left by a run that never carried the show has to go. Without
+        // this a cancelled or died run leaves a card saying it was left out of a run that ended days ago,
+        // and nothing else would ever clear it (L200, L121).
+        defer { PrepQueueService.sweepStaleHeldBackMarks(now: Date(), in: context) }
         // #1878: keep this run's work-list and results before anything else. FIRST, and above the dead-run
         // sweep in particular, because that sweep RETURNS: a run that died is the one whose evidence is
         // worth the most, and archiving after it would be archiving every run except those.

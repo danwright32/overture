@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1428 sentences**.
+Every sentence Overture can say to Dan: **1431 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1030,6 +1030,12 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ProspectRowFactory.swift`
 "Learning from \(org)'s email again"
     `App/ActionFeedback.swift`
+"Left out of your last contact check: a prep run was already working on this one."
+    `UI/QueueView+Model.swift`
+"Left out of your last prep run: a contact check was already working on this one."
+    `UI/QueueView+Model.swift`
+"Left out of your last run: another run was already working on this one."
+    `UI/QueueView+Model.swift`
 "Lets Overture alert you when something needs you."
     `UI/OnboardingView.swift`
 "Lets Overture create your follow-up tasks."

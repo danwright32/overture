@@ -501,6 +501,27 @@ final class Prospect {
     // safe answer for every row that predates it.
     var reprepHandedToRun: Bool = false
 
+    // #3013: WHEN a launch last left this show out because another run was already on it, and WHICH slot
+    // that run was in.
+    //
+    // A STAMPED EVENT, never a standing "a live run holds this". That distinction is the whole design.
+    // A boolean asserting a run holds the show is simply FALSE the moment that run is cancelled or dies,
+    // and the only thing that would clear it is a future run taking the show, which for a show Dan never
+    // re-preps may never come (L200, which this repo filed as #3001 this month; L121). A stamp is a fact
+    // about the past and stays true: what it is used for is "was this left out of the run you started",
+    // and whether the holding run is STILL live is derived at read time from the same live-coverage
+    // predicate the launch itself uses, so the card and the launch cannot disagree (L144, L16).
+    //
+    // Optional with no default, and additive, exactly like every other change to this model
+    // (`AppSchema.swift`, and `reprepHandedToRun` above is the precedent): nil reads as "never left out",
+    // which is right for every row written before this existed.
+    var heldBackAt: Date?
+    // The slot of the run that LEFT IT OUT, which is the run Dan started, not the one that was holding
+    // it. That is the more useful of the two on a card ("left out of the prep run you started"), and
+    // naming the run he pressed is what makes the sentence actionable. A stuck mark is then legible
+    // rather than anonymous.
+    var heldBackBySlot: String?
+
     // The voice-learning pair (#240 / #119). originalDraft* is the AI's draft before Dan's first
     // SUBSTANTIVE edit, snapshotted once and never clobbered; sent* is the exact text emailed,
     // frozen at send so a later draft edit can't make the "sent" side lie. Together they let the

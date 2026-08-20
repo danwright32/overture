@@ -157,6 +157,7 @@ struct ProspectRowView: View {
                     tags
                     possibleMatchQuestion
                     relatedRunNote
+                    heldBackNote
                     linkedEngagementNote
                     orgDoNotContactFlag
                     bookingSuggestionFlag
@@ -535,6 +536,16 @@ struct ProspectRowView: View {
     }
 
     // #939: distinct from relatedRunNote above (same venue, a separate run).
+    // #3013: why this show was not in the run Dan just started.
+    @ViewBuilder private var heldBackNote: some View {
+        if let note = QueueModel.heldBackNote(item) {
+            Text(note)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
     @ViewBuilder private var linkedEngagementNote: some View {
         if let note = QueueModel.linkedEngagementNote(item) {
             Text(note)

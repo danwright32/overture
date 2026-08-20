@@ -319,6 +319,10 @@ enum PrepQueueService {
                 to: probeRunURL)
             try launch()
             recordRunStarted(slot: .check, at: now, defaults: defaults)
+            // #3013: AFTER the launch, like `markHandedToRun` and for the same reason: a launch that threw
+            // marks nothing, and the show is simply not in a run.
+            recordHeldBack(dropped: checkSelection.dropped, carried: coveredKeys, by: .check, at: now,
+                           in: context)
             // #1938: a check announces itself too. #2760: to its OWN activity, which is what makes it
             // followed and settled when it starts while a prep is live.
             announce()
@@ -906,6 +910,61 @@ enum PrepQueueService {
         return nil
     }
 
+    // #3013: record that these shows were left out, and clear the mark from the ones this run is carrying.
+    //
+    // ONE pass, both slots, over every key the run really encoded, and NOT through `markHandedToRun`.
+    // That was the first plan's answer and it is provably wrong: it is keyed
+    // `where keys.contains(...) && p.isReprepQueued`, so it touches only shows with a pending re-prep
+    // request, which is the minority, and `startReachabilityProbe` never calls it at all, so half the
+    // marked shows would have nothing to unmark them (L92, and the "clearing path that only runs on one of
+    // several routes" class).
+    //
+    // Best effort on the SAVE only. The run is already launching by the time this is called, so throwing
+    // here would unwind into a catch that releases a lock a real runner is holding. A mark that fails to
+    // save degrades to a card that does not mention it, never to a run that does not happen.
+    static func recordHeldBack(dropped: Set<String>, carried: Set<String>, by slot: RunSlot,
+                               at now: Date, in context: ModelContext) {
+        guard !dropped.isEmpty || !carried.isEmpty else { return }
+        let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        var changed = false
+        for p in all {
+            if dropped.contains(p.naturalKey) {
+                p.heldBackAt = now
+                p.heldBackBySlot = slot.rawValue
+                changed = true
+            } else if carried.contains(p.naturalKey), p.heldBackAt != nil {
+                // Unconditional over everything this run is carrying: a show that was left out before and
+                // is in the run now is no longer left out, whatever else is true of it.
+                p.heldBackAt = nil
+                p.heldBackBySlot = nil
+                changed = true
+            }
+        }
+        guard changed else { return }
+        try? context.save()
+    }
+
+    // #3013: and the sweep, for every mark whose holding run has since ended without this show ever being
+    // carried. Without it a run that is cancelled or dies leaves a mark describing a run that ended days
+    // ago, and nothing else would ever clear it.
+    static func sweepStaleHeldBackMarks(support: URL = StoreLocation.handoffDirectory, now: Date,
+                                        in context: ModelContext) {
+        let live = RunSlot.allCases.reduce(into: Set<String>()) { acc, slot in
+            if case .holds(let keys) = RunCoverage.read(slot: slot, in: support, now: now) {
+                acc.formUnion(keys)
+            }
+        }
+        let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        var changed = false
+        for p in all where p.heldBackAt != nil && !live.contains(p.naturalKey) {
+            p.heldBackAt = nil
+            p.heldBackBySlot = nil
+            changed = true
+        }
+        guard changed else { return }
+        try? context.save()
+    }
+
     // #2765: which shows the OTHER slot's live run is already on, so this launch can leave them out.
     //
     // The one genuine domain conflict between the two runs is a draft written against a contact a check is
@@ -1156,6 +1215,10 @@ enum PrepQueueService {
             // for the next run. Not inside the do/catch's throwing path either: the catch above releases
             // the runner lock, which would be wrong once a run is actually live.
             markHandedToRun(keys: Set(queue.items.map(\.naturalKey)), in: context)
+            // #3013: the same pass for the prep slot. Separate from `markHandedToRun` deliberately: that
+            // one answers a different question and only ever touches shows with a re-prep request pending.
+            recordHeldBack(dropped: prepSelection.dropped,
+                           carried: Set(queue.items.map(\.naturalKey)), by: .prep, at: now, in: context)
         } catch {
             try? FileManager.default.removeItem(at: markerURL)   // release the lock if we never launched
             // #3010: and the coverage with it, for the same reason the check's launch does.
