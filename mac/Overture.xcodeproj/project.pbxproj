@@ -1163,6 +1163,7 @@
 		A5697D31BC947F5B77CD59BC /* StagePillNavigationGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E4A5584CFB9ADE233B5895D /* StagePillNavigationGuardTests.swift */; };
 		A5AD8D5BA082FC4CA9E2F5AB /* AppleScriptOmniFocusClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 231902E5D155CC8939CF078E /* AppleScriptOmniFocusClient.swift */; };
 		A5D3F8893928319CA9F08C85 /* StoreLock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 780FA66ADB1FB483CA9CAEAB /* StoreLock.swift */; };
+		A5DE8D4824F221F650AD50E5 /* CancelNamesWhatItStopsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2E92FEB39497D24B51D6CD /* CancelNamesWhatItStopsTests.swift */; };
 		A6704E92D5B28FDEF903162A /* ScoutExtractWatchGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1337617F33D2466B2BBE3A9D /* ScoutExtractWatchGuardTests.swift */; };
 		A68770BD714DB89DD19A663C /* StoreLaunchOutcome.swift in Sources */ = {isa = PBXBuildFile; fileRef = B78AD6E161E510665CE7F4A8 /* StoreLaunchOutcome.swift */; };
 		A6A3C12B9F19A9A9C566ED21 /* DayOffMutations.swift in Sources */ = {isa = PBXBuildFile; fileRef = B52E28651578C127125B01B6 /* DayOffMutations.swift */; };
@@ -2209,6 +2210,7 @@
 		49696485F1B28C28A13D53E0 /* SendProgressStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendProgressStateTests.swift; sourceTree = "<group>"; };
 		49F5F8AA3F96586760B26AC8 /* OvertureDeepLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OvertureDeepLink.swift; sourceTree = "<group>"; };
 		4A236B3B4CD4B24D74ADE92D /* ProposedConversation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProposedConversation.swift; sourceTree = "<group>"; };
+		4A2E92FEB39497D24B51D6CD /* CancelNamesWhatItStopsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CancelNamesWhatItStopsTests.swift; sourceTree = "<group>"; };
 		4A61523B7DE866A08371D5ED /* UnfinishedCheckTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnfinishedCheckTests.swift; sourceTree = "<group>"; };
 		4A89BF9EF9678C118DD32E6E /* UpdateFailureSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateFailureSheet.swift; sourceTree = "<group>"; };
 		4AAC96C322499E916539DF69 /* SelfBookingConflictTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfBookingConflictTests.swift; sourceTree = "<group>"; };
@@ -3398,6 +3400,7 @@
 				20098B429BD893CC6491DA1C /* CalendarMonthIndexTests.swift */,
 				C9FC9E1C5111B79BE1410D53 /* CancelledCheckSpendTests.swift */,
 				55236A452237AC991BC6F53D /* CancelledReadDispositionTests.swift */,
+				4A2E92FEB39497D24B51D6CD /* CancelNamesWhatItStopsTests.swift */,
 				BCFA0A1F234AD58FA2148AA9 /* CandidateBuilderCarriesEveryAxisTests.swift */,
 				C10ACC26B40433CD7C6738CF /* CardContactPromiseTests.swift */,
 				EF37B14FFDF0EE45279B6BEB /* CardNamesWhoseAddressItIsTests.swift */,
@@ -5410,6 +5413,7 @@
 				AA80FB436C223AC4581CD0A0 /* CalendarIdentityTests.swift in Sources */,
 				82D6D14F8731410F72E78C46 /* CalendarMonthIndex.swift in Sources */,
 				D499B8A2391AED381CA4BD7D /* CalendarMonthIndexTests.swift in Sources */,
+				A5DE8D4824F221F650AD50E5 /* CancelNamesWhatItStopsTests.swift in Sources */,
 				05138E01B063878A2BA98F99 /* CancelledCheckSpendTests.swift in Sources */,
 				5A3818B7117928B1331C01AE /* CancelledReadDisposition.swift in Sources */,
 				2A89774E95689D024374C478 /* CancelledReadDispositionTests.swift in Sources */,
