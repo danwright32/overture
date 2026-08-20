@@ -33,7 +33,7 @@ struct OrgAnswerLedgerTests {
     @Test("a show by a qualifying organisation inherits an answer paid for on another of its shows")
     func aQualifyingOrganisationFansOut() {
         let map = OrgAnswerLedger.inherited(from: [answer("Tenet Vocal Artists", .emailFound)],
-                                            shows: tenetShows, now: now)
+                                            shows: tenetShows, now: now, heldKeys: [])
         #expect(map["free"]?.emails == ["hello@tenet.example"])
         #expect(map["free"]?.organisation == "Tenet Vocal Artists")
     }
@@ -45,7 +45,7 @@ struct OrgAnswerLedgerTests {
                                                          .weakContactOnly])
     func negativesNeverFanOut(_ result: Reachability.ProbeResult) {
         let map = OrgAnswerLedger.inherited(from: [answer("Tenet Vocal Artists", result)],
-                                            shows: tenetShows, now: now)
+                                            shows: tenetShows, now: now, heldKeys: [])
         #expect(map["free"] == nil)
     }
 
@@ -56,7 +56,7 @@ struct OrgAnswerLedgerTests {
         let shows = [show("paid", "The Green Room 42", at: "The Green Room 42"),
                      show("free", "The Green Room 42", at: "The Green Room 42")]
         let map = OrgAnswerLedger.inherited(from: [answer("The Green Room 42", .emailFound)],
-                                            shows: shows, now: now)
+                                            shows: shows, now: now, heldKeys: [])
         #expect(map["free"] == nil)
     }
 
@@ -67,7 +67,7 @@ struct OrgAnswerLedgerTests {
                      show("free", "Carnegie Hall Presents", at: "Zankel Hall"),
                      show("other", "The Masterwork Chorus", at: "Carnegie Hall")]
         let map = OrgAnswerLedger.inherited(from: [answer("Carnegie Hall Presents", .emailFound)],
-                                            shows: shows, now: now)
+                                            shows: shows, now: now, heldKeys: [])
         #expect(map["free"] == nil)
     }
 
@@ -85,8 +85,8 @@ struct OrgAnswerLedgerTests {
         let visibleOnly = [show("paid", "Taconic Opera", at: "Tarrytown Music Hall"),
                            show("free", "Taconic Opera", at: "Tarrytown Music Hall")]
         let wholeStore = visibleOnly + [show("gone", "Taconic Opera", at: "CV Rich Mansion")]
-        #expect(OrgAnswerLedger.inherited(from: ledger, shows: visibleOnly, now: now)["free"] == nil)
-        #expect(OrgAnswerLedger.inherited(from: ledger, shows: wholeStore, now: now)["free"] != nil)
+        #expect(OrgAnswerLedger.inherited(from: ledger, shows: visibleOnly, now: now, heldKeys: [])["free"] == nil)
+        #expect(OrgAnswerLedger.inherited(from: ledger, shows: wholeStore, now: now, heldKeys: [])["free"] != nil)
     }
 
     // 5.5: the inherited answer carries the ORIGINAL check date, so an organisation goes stale rather
@@ -94,13 +94,13 @@ struct OrgAnswerLedgerTests {
     @Test("an answer past the freshness window stops travelling")
     func staleAnswersStopTravelling() {
         let stale = answer("Tenet Vocal Artists", .emailFound, daysAgo: 120)
-        #expect(OrgAnswerLedger.inherited(from: [stale], shows: tenetShows, now: now)["free"] == nil)
+        #expect(OrgAnswerLedger.inherited(from: [stale], shows: tenetShows, now: now, heldKeys: [])["free"] == nil)
     }
 
     @Test("an inherited answer reports the date of the check that earned it, not today")
     func inheritedAnswerCarriesTheOriginalDate() {
         let old = answer("Tenet Vocal Artists", .emailFound, daysAgo: 30)
-        let map = OrgAnswerLedger.inherited(from: [old], shows: tenetShows, now: now)
+        let map = OrgAnswerLedger.inherited(from: [old], shows: tenetShows, now: now, heldKeys: [])
         #expect(map["free"]?.probedAt == now.addingTimeInterval(-30 * 86_400))
     }
 
@@ -112,7 +112,7 @@ struct OrgAnswerLedgerTests {
                      show("free", "Tenet Vocal Artists", at: "House of the Redeemer",
                           ownAnswer: .noEmailFound)]
         let map = OrgAnswerLedger.inherited(from: [answer("Tenet Vocal Artists", .emailFound)],
-                                            shows: shows, now: now)
+                                            shows: shows, now: now, heldKeys: [])
         #expect(map["free"] == nil)
     }
 
@@ -120,14 +120,14 @@ struct OrgAnswerLedgerTests {
     @Test("a positive answer with no address does not travel")
     func aPositiveWithNoAddressDoesNotTravel() {
         let empty = answer("Tenet Vocal Artists", .emailFound, emails: [])
-        #expect(OrgAnswerLedger.inherited(from: [empty], shows: tenetShows, now: now)["free"] == nil)
+        #expect(OrgAnswerLedger.inherited(from: [empty], shows: tenetShows, now: now, heldKeys: [])["free"] == nil)
     }
 
     @Test("a show with no presenter inherits nothing")
     func noPresenterInheritsNothing() {
         let shows = tenetShows + [show("bare", nil, at: "House of the Redeemer")]
         let map = OrgAnswerLedger.inherited(from: [answer("Tenet Vocal Artists", .emailFound)],
-                                            shows: shows, now: now)
+                                            shows: shows, now: now, heldKeys: [])
         #expect(map["bare"] == nil)
     }
 
@@ -140,7 +140,7 @@ struct OrgAnswerLedgerTests {
                      show("free", "Christ Church Cathedral", at: "A Hall"),
                      show("free2", "Christ Church Cathedral", at: "C Hall")]
         let map = OrgAnswerLedger.inherited(
-            from: [answer("Christ Church Cathedral, Oxford", .emailFound)], shows: shows, now: now)
+            from: [answer("Christ Church Cathedral, Oxford", .emailFound)], shows: shows, now: now, heldKeys: [])
         #expect(map["paid2"] != nil)
         #expect(map["free"] == nil)
         #expect(map["free2"] == nil)

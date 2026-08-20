@@ -2354,11 +2354,20 @@ enum QueueModel {
                       // Overture's day. Optional and last for the same reason `StageContext`'s is: the
                       // ordinary spelling derives it, and pinning one is what a test goes out of its way
                       // to do.
+                      // #3014: the shows a live run is already on, which take no INHERITED org answer
+                      // while it works (the fan-out would otherwise change a contact under a draft).
+                      // Defaulted to empty, unlike `OrgAnswerLedger.inherited`'s own parameter, and the
+                      // difference is deliberate: there the default would hide the block from the one
+                      // caller that matters, while here most callers (Archive, and every test not asking
+                      // about a live run) genuinely have no run state and "nothing held" is the right and
+                      // only answer for them. The production caller is asserted to pass a real value.
+                      heldKeys: Set<String> = [],
                       today: String? = nil) -> [QueueItem] {
         let day = today ?? EasternDate.today(now)
         let linked = EngagementLink.group(prospects.map(EngagementLink.Row.init))
         let inherited = inheritedAnswers(answers, corpus: corpus ?? prospects,
-                                         overrides: overrides, refusals: refusals, now: now)
+                                         overrides: overrides, refusals: refusals,
+                                         heldKeys: heldKeys, now: now)
         // #1687: built ONCE here from the same whole-store corpus the gate above judges against, never per
         // row. Deciding whether a presenter is really its building's brand walks every presenter in the
         // store against every venue spelling in it (roughly 400 by 114 on Dan's), which is a cost a card
@@ -2420,6 +2429,7 @@ enum QueueModel {
     private static func inheritedAnswers(_ answers: [OrgReachabilityAnswer], corpus: [Prospect],
                                          overrides: ProducerOverrides,
                                          refusals: ContactRefusal.Ledger,
+                                         heldKeys: Set<String>,
                                          now: Date) -> [String: OrgAnswerLedger.Inherited] {
         guard !answers.isEmpty else { return [:] }
         let flat = answers.compactMap { row -> OrgAnswerLedger.Answer? in
@@ -2436,7 +2446,8 @@ enum QueueModel {
             OrgAnswerLedger.Show(key: $0.naturalKey, presenter: $0.presenter, venue: $0.venue,
                                  hasOwnAnswer: $0.reachabilityProbedAt != nil)
         }
-        return OrgAnswerLedger.inherited(from: usable, shows: shows, now: now, overrides: overrides)
+        return OrgAnswerLedger.inherited(from: usable, shows: shows, now: now, heldKeys: heldKeys,
+                                         overrides: overrides)
     }
 
     // #939: distinct from relatedRunNote above (same venue, a separate run): this production also plays

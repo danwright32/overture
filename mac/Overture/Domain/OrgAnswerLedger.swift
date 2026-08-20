@@ -48,7 +48,22 @@ enum OrgAnswerLedger {
     // one-venue producer, and a producer can lose the second venue that qualifies it. Either way an
     // answer changes meaning because of an unrelated triage decision, with nothing on screen to say so,
     // and the bug would be invisible for weeks.
+    // #3014 (phase 6 of #2765): `heldKeys` is the shows a live run is already on, and this refuses to move
+    // an answer onto any of them.
+    //
+    // Dan's call, 2026-08-18: block the SPREADING, do not widen the run exclusion to the organisation. The
+    // conflict the org level was reaching for is real and show-level exclusion cannot see it: a check on
+    // org X's show A changes what is displayed on org X's show C while a prep drafts C, and neither run's
+    // key set contains C. Widening would take shows out of a paid run to guard against a fan-out measured
+    // at ZERO on the live store (0 of 724 shows on 2026-07-29). This closes the same hole precisely, costs
+    // no show its place in a run, and still works if the fan-out ever becomes live.
+    //
+    // NO DEFAULT, deliberately, unlike `overrides` below. A default standing for "nothing is held" would
+    // hand every existing caller the fail-open answer with the compiler never naming the one that forgot
+    // (L168). It is evaluated on every build rather than latched, so a run ending releases it with no
+    // separate step.
     static func inherited(from answers: [Answer], shows: [Show], now: Date,
+                          heldKeys: Set<String>,
                           overrides: ProducerOverrides = .none) -> [String: Inherited] {
         // Only positives, only fresh, and only with an address behind them. A positive with nothing to
         // show cannot claim there is somebody to email.
@@ -71,7 +86,10 @@ enum OrgAnswerLedger {
         var orgKeyByPresenter: [String: String?] = [:]
         var out: [String: Inherited] = [:]
 
-        for show in shows where !show.hasOwnAnswer {
+        // #3014: a show a live run is already on takes no inherited answer. Placed with the loop's own
+        // `hasOwnAnswer` skip because it is the same kind of fact: a reason this show is not the fan-out's
+        // to speak for.
+        for show in shows where !show.hasOwnAnswer && !heldKeys.contains(show.key) {
             guard let presenter = show.presenter else { continue }
             let cachedKey = orgKeyByPresenter[presenter] ?? {
                 let key = OrgKey.stored(for: presenter)

@@ -280,6 +280,9 @@ enum PrepQueueService {
             try? FileManager.default.removeItem(at: markerURL)
             throw error
         }
+        // #3014: a check starting is what makes the fan-out block apply at all, so the cached holdings are
+        // re-read here rather than waiting for some unrelated write to rebuild the queue.
+        LiveRunHoldings.refresh(support: support, now: now)
 
         do {
             // #1856: read the show's own page for the shows that name no producer, and ONLY those. The
@@ -677,6 +680,8 @@ enum PrepQueueService {
         // `.noLiveRun` whatever is left here, while the reverse order would leave a live-looking slot whose
         // coverage had vanished, which is the refusal state rather than a release.
         RunCoverage.clear(slot: slot, in: support)
+        // #3014: a run that DIED never reached its own end, so the block must be released here too.
+        LiveRunHoldings.refresh(support: support, now: now)
         return DeadRunOutcome(probeReport: report)
     }
 
@@ -1110,6 +1115,8 @@ enum PrepQueueService {
             try? FileManager.default.removeItem(at: markerURL)
             throw error
         }
+        // #3014: and a prep starting is what supplies the shows to protect.
+        LiveRunHoldings.refresh(support: support, now: now)
 
         do {
             // #1824: read what each show IS from its own listing page, and hand the text over in the queue.
