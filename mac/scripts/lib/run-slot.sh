@@ -23,6 +23,21 @@
 RUNNER_LAUNCH_LOG_NAME="runner-launch.log"
 
 resolve_run_slot() {
+  # #2980: whether the slot was NAMED, kept apart from what it resolved to. An absent value still means
+  # prep, but it means a build older than #2763, which is a DIFFERENT fact from a current build saying
+  # `prep`, and the runner needs the difference. Only the older build could launch a reachability check
+  # in the prep slot, with `reachability-probe-run.json` as the only thing saying so; a build that names
+  # `prep` is always the drafting run, whatever markers happen to be lying beside it. #2800 deletes the
+  # branch that reads this.
+  #
+  # An EMPTY value counts as unnamed, on the same reasoning that makes it resolve to prep below: a value
+  # that names nothing is not a name.
+  if [ -n "${OVERTURE_RUN_SLOT:-}" ]; then
+    RUN_SLOT_WAS_NAMED=1
+  else
+    RUN_SLOT_WAS_NAMED=0
+  fi
+
   RUN_SLOT="${OVERTURE_RUN_SLOT:-prep}"
   [ -n "${RUN_SLOT}" ] || RUN_SLOT="prep"
 

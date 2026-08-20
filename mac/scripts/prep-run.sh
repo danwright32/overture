@@ -81,15 +81,29 @@ MARKER="$SLOT_MARKER"
 # A check never drafts, so it does not need that step at all: the chunked prompt omits it, which
 # removes the race rather than trying to coordinate around it.
 #
-# The probe marker is the app's own authoritative "this run is a check" signal (the same file
-# settleReachabilityProbe reads), so the two can never disagree about which kind of run this is.
-# #2763: NOT slot-derived, deliberately, and the only run file that is not. This marker is how the app
-# and this script agree that the run is a check, and moving run identity onto the slot is #2760's job, not
-# this phase's. Deriving IS_PROBE from the slot here while the app still launches every run as `prep`
-# would make a check run unchunked on the drafting model, which is the opposite of behaviour unchanged.
+# #2980: which KIND of run this is comes from the SLOT the app launched it in, and from nothing else.
+#
+# It used to come from the mere PRESENCE of the probe marker, which is a file BOTH slots share: the app
+# writes it when a check launches and removes it when the check settles, so it sits in the support
+# directory for the whole life of a check. A Prep run started in that window read it and ran as a check,
+# chunked, on the cheaper model, drafting nothing, and reported success with nothing saying why. Observed
+# on 2026-08-18 during #2762's measurement session, where the PREP slot's own log said
+# "prep: reachability check split into 5 chunk(s), running concurrently". It is what #2765 would have
+# made permanent the moment it lifted the one-run-at-a-time exclusion.
+#
+# The marker is still read for exactly ONE case: a run that NAMES no slot at all. That is a build older
+# than #2763, and it is the only build that could put a check in the prep slot, with this marker as the
+# only thing saying so. #2800 deletes that branch on the evidence of the log line the app writes when it
+# is genuinely taken.
 PROBE_MARKER="$SUPPORT/reachability-probe-run.json"
-IS_PROBE=0
-[ -f "$PROBE_MARKER" ] && IS_PROBE=1
+if [ "$RUN_SLOT" = "check" ]; then
+  IS_PROBE=1
+elif [ "$RUN_SLOT_WAS_NAMED" = "1" ]; then
+  IS_PROBE=0
+else
+  IS_PROBE=0
+  if [ -f "$PROBE_MARKER" ]; then IS_PROBE=1; fi
+fi
 CHUNKDIR="$SLOT_CHUNKDIR"
 # Wipe before anything reads it: a leftover chunk-results file from a previous, larger check must never
 # be merged into this run as if it were this run's work. Assume-it-runs-twice.

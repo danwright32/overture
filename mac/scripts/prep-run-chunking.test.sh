@@ -233,6 +233,54 @@ assert_equals "and IS still told to do the once-per-run voice step, which only c
 assert_equals "a normal Prep run still drafts on opus" \
   "1" "$(grep -lx 'opus' "${STUB_LOG_DIR}"/model.* 2>/dev/null | wc -l | tr -d ' ')"
 
+# ---------------------------------------------------------------------------
+# #2980: what KIND of run this is comes from the SLOT, not from a file both slots share.
+#
+# The app writes reachability-probe-run.json when a check launches and removes it when the check settles,
+# so it sits in the SHARED support directory for the whole life of a check. Until this was fixed the
+# runner decided it was a check from that file's mere PRESENCE, so a Prep run started beside a live check
+# read the check's marker and ran as one: chunked, on sonnet, drafting nothing, and reporting success.
+# Observed on 2026-08-18 during #2762's measurement session, where the PREP slot's own log said
+# "prep: reachability check split into 5 chunk(s), running concurrently".
+#
+# The two scenarios below are the two halves of the derivation. A run that NAMES the prep slot is never a
+# check whatever files are lying around; a run that names the CHECK slot is always one, with no marker
+# needed. The scenarios above this one name no slot at all, which is the legacy upgrade-window branch
+# (#2800 deletes it), and they still read the marker.
+# ---------------------------------------------------------------------------
+rm -f "${RESULTS}"
+rm -f "${STUB_LOG_DIR}"/queue.* "${STUB_LOG_DIR}"/prompt.* "${STUB_LOG_DIR}"/model.*
+printf '%s' '{"keys":["k1"],"startedAt":"2026-07-27T00:00:00Z"}' \
+  > "${SUPPORT}/reachability-probe-run.json"
+
+HOME="${TMP}/home" OVERTURE_RUN_SLOT=prep /bin/sh "${SCRIPT_DIR}/prep-run.sh" >/dev/null 2>&1
+
+assert_equals "a run that NAMES the prep slot launches one claude even with a check's marker beside it" \
+  "1" "$(find "${STUB_LOG_DIR}" -name 'queue.*' | wc -l | tr -d ' ')"
+assert_equals "and hands it the whole queue rather than a chunk" \
+  "1" "$(grep -l 'overture-prep-queue.json' "${STUB_LOG_DIR}"/queue.* 2>/dev/null | wc -l | tr -d ' ')"
+assert_equals "and drafts on opus rather than the check's cheaper model" \
+  "1" "$(grep -lx 'opus' "${STUB_LOG_DIR}"/model.* 2>/dev/null | wc -l | tr -d ' ')"
+assert_equals "and is still told to do the once-per-run voice step, which only a check omits" \
+  "1" "$(grep -l 'voice-feedback' "${STUB_LOG_DIR}"/prompt.* 2>/dev/null | wc -l | tr -d ' ')"
+
+# The other half, and it is a separate claim: a check must chunk because it is IN the check slot, not
+# because a marker happens to be present. With the marker gone, the slot is the only thing left saying so.
+rm -f "${SUPPORT}/reachability-probe-run.json"
+rm -f "${STUB_LOG_DIR}"/queue.* "${STUB_LOG_DIR}"/prompt.* "${STUB_LOG_DIR}"/model.*
+cp "${SUPPORT}/overture-prep-queue.json" "${SUPPORT}/overture-check-queue.json"
+
+HOME="${TMP}/home" OVERTURE_RUN_SLOT=check /bin/sh "${SCRIPT_DIR}/prep-run.sh" >/dev/null 2>&1
+
+assert_equals "a run in the CHECK slot chunks on the slot alone, with no marker anywhere" \
+  "4" "$(find "${STUB_LOG_DIR}" -name 'queue.*' | wc -l | tr -d ' ')"
+assert_equals "and every chunk of it runs on sonnet" \
+  "4" "$(grep -lx 'sonnet' "${STUB_LOG_DIR}"/model.* 2>/dev/null | wc -l | tr -d ' ')"
+assert_equals "and no chunk of it was told to do the voice step" \
+  "0" "$(grep -l 'voice-feedback' "${STUB_LOG_DIR}"/prompt.* 2>/dev/null | wc -l | tr -d ' ')"
+assert_equals "and it wrote its answers into the check slot's own results file" \
+  "present" "$([ -e "${SUPPORT}/overture-check-results.json" ] && echo present || echo absent)"
+
 echo
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "prep-run-chunking.test.sh: all assertions passed"
