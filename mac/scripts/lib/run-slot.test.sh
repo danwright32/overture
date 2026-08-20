@@ -49,6 +49,7 @@ run_resolver() {
     echo "VOICEFEEDBACK=${SHARED_VOICE_FEEDBACK}"
     echo "VOICEGUIDANCE=${SHARED_VOICE_GUIDANCE}"
     echo "RECENTOPENERS=${SHARED_RECENT_OPENERS}"
+    echo "NAMED=${RUN_SLOT_WAS_NAMED}"
   )
 }
 
@@ -76,6 +77,19 @@ assert_contains "an empty slot is the prep slot too" "${OUT}" "SLOT=prep"
 
 OUT="$(OVERTURE_RUN_SLOT=prep run_resolver)"
 assert_contains "an explicit prep slot is the prep slot" "${OUT}" "SLOT=prep"
+
+# --- and whether the slot was NAMED, which is a different fact from what it resolved to -----------
+# #2980. Both of these resolve to prep, and prep-run.sh has to tell them apart: only a build older than
+# #2763 names nothing, and only that build could launch a reachability CHECK in the prep slot with
+# `reachability-probe-run.json` as the only thing saying so. A build that names `prep` is always the
+# drafting run, so the marker must not be consulted for it. Asserted here at the resolver, and driven
+# end to end through the runner itself in prep-run-chunking.test.sh.
+assert_contains "a slot the caller named says so" "${OUT}" "NAMED=1"
+assert_contains "an absent slot resolves to prep but is NOT named" \
+  "$(unset OVERTURE_RUN_SLOT; run_resolver)" "NAMED=0"
+assert_contains "and an empty value names nothing either" \
+  "$(OVERTURE_RUN_SLOT="" run_resolver)" "NAMED=0"
+assert_contains "the check slot is named too" "$(OVERTURE_RUN_SLOT=check run_resolver)" "NAMED=1"
 
 # --- the check slot takes none of them ----------------------------------------------------------
 OUT="$(OVERTURE_RUN_SLOT=check run_resolver)"
