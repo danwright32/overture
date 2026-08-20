@@ -231,6 +231,21 @@ enum PrepQueueService {
         if let refusal = runInFlightRefusal(now: now, support: support, checkMarkerURL: markerURL,
                                             defaults: defaults) { throw refusal }
 
+        // #2765: reduce the SELECTION before the queue is planned, never the built queue. A check item is
+        // a REPRESENTATIVE standing for N shows through `alsoAnswersFor`, so dropping a built item would
+        // silently cost the other N-1 their coverage, and keeping it would violate the exclusion for the
+        // held show (L66, L166). Subtracting here re-plans over what is left and picks a new
+        // representative for the shows nobody holds.
+        let checkSelection = selection(from: keys,
+                                       excluding: try heldByOtherRun(slot: .check, now: now,
+                                                                     support: support, defaults: defaults))
+        if checkSelection.isEmptyBecauseHeld {
+            let noun = runInFlight(slot: .prep, now: now, support: support, defaults: defaults)?.runNoun
+                ?? RunKind.prep.runNoun
+            throw PrepLaunchError.everyShowHeld(runNoun: noun)
+        }
+        let keys = checkSelection.kept
+
         let stamp = ISO8601DateFormatter().string(from: now)
         let queue = buildProbeQueue(from: context, generatedAt: stamp, keys: keys)
         // #1595: the probe's OWN error. This path is reached from Scout, over untriaged shows Dan has kept
@@ -725,6 +740,15 @@ enum PrepQueueService {
         // older build holds the prep slot. Naming a Prep run there sends Dan looking for a run he never
         // started.
         case checkAlreadyRunning
+        // #2765: every show this run would have covered is already in the OTHER run. Its own case rather
+        // than `nothingToPrep`, whose sentence ("Keep some prospects first") describes a different
+        // situation entirely and would send Dan to a control that is not the problem (L11). It names the
+        // run holding them, because that is the thing he has to wait for.
+        case everyShowHeld(runNoun: String)
+        // #2765: the other slot is LIVE and what it holds cannot be established. Fail CLOSED: treating it
+        // as "holds nothing" would be fail-open on the one control that stops two paid runs taking the
+        // same show (L42, L105), and an unreadable answer arrives exactly when something has gone wrong.
+        case holdingsUnreadable(runNoun: String)
 
         var errorDescription: String? {
             switch self {
@@ -738,6 +762,10 @@ enum PrepQueueService {
                 return "A Prep run is already in progress. Wait for it to finish."
             case .checkAlreadyRunning:
                 return "A contact check is already going. Wait for it to finish."
+            case .everyShowHeld(let runNoun):
+                return "Every show here is already in the \(runNoun) that is running. Wait for it to finish and try again."
+            case .holdingsUnreadable(let runNoun):
+                return "Overture cannot tell which shows the \(runNoun) is working on, so it will not start a run that might take the same ones. Wait for that run to finish and try again."
             }
         }
     }
@@ -873,6 +901,56 @@ enum PrepQueueService {
         return nil
     }
 
+    // #2765: which shows the OTHER slot's live run is already on, so this launch can leave them out.
+    //
+    // The one genuine domain conflict between the two runs is a draft written against a contact a check is
+    // midway through replacing. Dan's call, 2026-08-15: exclude the overlapping SHOWS and say so, never
+    // refuse the whole run. And 2026-08-20: whichever run starts SECOND yields, in both directions, so
+    // there is no kind-based priority here and this is the same call from either side.
+    //
+    // THROWS rather than returning empty when the other slot is live and its holdings cannot be read. That
+    // is the fail-closed direction and it is the whole reason `RunCoverage` has three cases: an empty
+    // answer would let both runs take the same show, and it arrives exactly when something has gone wrong
+    // (L42, L105, L98).
+    static func heldByOtherRun(slot: RunSlot, now: Date,
+                               support: URL = StoreLocation.handoffDirectory,
+                               defaults: UserDefaults = .standard) throws -> Set<String> {
+        var held: Set<String> = []
+        for other in RunSlot.allCases where other != slot {
+            switch RunCoverage.read(slot: other, in: support, now: now) {
+            case .noLiveRun:
+                continue
+            case .holds(let keys):
+                held.formUnion(keys)
+            case .unreadable:
+                let noun = runInFlight(slot: other, now: now, support: support,
+                                       defaults: defaults)?.runNoun ?? RunKind.prep.runNoun
+                throw PrepLaunchError.holdingsUnreadable(runNoun: noun)
+            }
+        }
+        return held
+    }
+
+    // #2765: what this run may take, and what it must leave to the run already on it.
+    //
+    // Pure and separate from both launches on purpose. The exclusion between the two runs is STILL IN
+    // FORCE until #3015 lifts it, so neither launch can reach this decision with the other slot live: a
+    // launch-level test would be refused by `runInFlightRefusal` before it ever got here. That makes this
+    // the only level at which the decision can be exercised today, and #3015 is where the end-to-end path
+    // becomes testable. Naming that rather than leaving the code with no reachable test (L3).
+    struct RunSelection: Equatable, Sendable {
+        var kept: Set<String>
+        var dropped: Set<String>
+        // Nothing survived AND something was taken away: the run has nothing to do BECAUSE of the other
+        // one, which is a different fact from an empty selection Dan simply made, and gets its own
+        // sentence (L11).
+        var isEmptyBecauseHeld: Bool { kept.isEmpty && !dropped.isEmpty }
+    }
+
+    static func selection(from candidates: Set<String>, excluding held: Set<String>) -> RunSelection {
+        RunSelection(kept: candidates.subtracting(held), dropped: candidates.intersection(held))
+    }
+
     // #3012: the SAME question, asked of ONE slot.
     //
     // `runInFlight` above returns a single `RunKind?` and so cannot describe two live runs. That is fine
@@ -977,11 +1055,34 @@ enum PrepQueueService {
         // no-op, so this changes nothing until Dan starts an experiment. Fail-loud: a save failure throws.
         // Assigned over the SAME eligible set buildQueue encodes (shared eligibleProspects), never the
         // probe path (buildProbeQueue), which must never consume an assignment.
+        // #2765: the selection is reduced FIRST, and `assignArms` runs over what survives.
+        //
+        // Two things ride on that order. The exclusion has to reach the built queue at all, and
+        // `assignArms` PERSISTS a sticky, forward-only arm onto every prospect it is handed. The old
+        // refusal (`runInFlightRefusal`) ran before it, but this one is computed from the selection and so
+        // necessarily lands after the queue is known, and a show this run then left out would keep an arm
+        // it never earned, permanently (L95).
+        //
+        // `includedKeys` is resolved to a concrete set here rather than subtracted from, because `nil`
+        // legitimately means "every eligible prospect" and there is nothing to subtract from. Resolving it
+        // through the same `eligibleProspects` both callers already use keeps one definition of eligible
+        // (L107), and with nothing held it reproduces today's set exactly.
+        let eligibleKeys = Set(eligibleProspects(from: context, includedKeys: includedKeys).map(\.naturalKey))
+        let prepSelection = selection(from: eligibleKeys,
+                                      excluding: try heldByOtherRun(slot: .prep, now: now,
+                                                                    support: support, defaults: defaults))
+        if prepSelection.isEmptyBecauseHeld {
+            let noun = runInFlight(slot: .check, now: now, support: support, defaults: defaults)?.runNoun
+                ?? RunKind.reachabilityCheck.runNoun
+            throw PrepLaunchError.everyShowHeld(runNoun: noun)
+        }
+        let selectedKeys = prepSelection.kept
+
+        // #5 Phase 1, continued: over the SURVIVING set, so an excluded show is never stamped.
         try ExperimentAssignment.assignArms(
-            to: eligibleProspects(from: context, includedKeys: includedKeys), in: context)
-        // #953: only the rows Dan checked in the Prep sheet. nil (the default) keeps every eligible
-        // prospect, so nothing but the sheet ever narrows the run.
-        let queue = buildQueue(from: context, generatedAt: stamp, includedKeys: includedKeys)
+            to: eligibleProspects(from: context, includedKeys: selectedKeys), in: context)
+        // #953: only the rows Dan checked in the Prep sheet, minus anything the other run is holding.
+        let queue = buildQueue(from: context, generatedAt: stamp, includedKeys: selectedKeys)
         guard !queue.items.isEmpty else { throw PrepLaunchError.nothingToPrep }
 
         // Take the lock ATOMICALLY (#480, mirrors ReplyClassifyService): clear any stale marker, then
