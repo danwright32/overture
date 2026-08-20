@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1417 sentences**.
+Every sentence Overture can say to Dan: **1426 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -352,17 +352,19 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Persistence/PrepImporter.swift`
 "1 client set aside"
     `Domain/ClientCoverage.swift`
+"1 later night"
+    `App/ActionFeedback.swift`
 "1 named producer answers for several of them; \(s.performerHuntCount) "
     `Domain/ProbeSelection.swift`
 "1 new show waiting for you"
     `Domain/SourceYield.swift`
 "1 of \(requested) shows never got an answer and is still unchecked"
     `Domain/ReachabilityRunSummary.swift`
+"1 of them is a run whose other nights already have their own cards, so it is closed as a duplicate"
+    `App/ActionFeedback.swift`
 "1 of them went through an earlier check and never got an answer."
     `Domain/ProbeSelection.swift`
 "1 run was left alone: Overture could not check whether its next night is free"
-    `App/ActionFeedback.swift`
-"1 run was left alone: it already has a separate card for a later night"
     `App/ActionFeedback.swift`
 "1 show on \(dateLabel) has no genre read. Set it before dismissing the night."
     `Domain/GenreGate.swift`
@@ -2522,6 +2524,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/EventLocationFill.swift`
 "\(clauses[cityIndex]), \(code)"
     `Domain/VenueDisplay.swift`
+"\(closed) of them are runs whose other nights already have their own cards, so they are closed as duplicates"
+    `App/ActionFeedback.swift`
 "\(conceptSummary(for: focus)) \(detail)"
     `Domain/AgentRoster.swift`
 "\(contacts.count) contacts"
@@ -2552,6 +2556,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceAttention.swift`
 "\(count) sources went quiet."
     `UI/ScoutSummaryView.swift`
+"\(date) is dismissed as \(reason.label). Every other night of \(org) already has its "
+    `App/ActionFeedback.swift`
+"\(date) is dismissed as \(reason.label). \(nights) of \(org) already \(has), so this "
+    `App/ActionFeedback.swift`
 "\(dates), \(shows)"
     `Domain/ProbeSelection.swift`
 "\(deferredCount) venues are still waiting to be checked."
@@ -2610,8 +2618,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AgentRoster.swift`
 "\(i.toTriage) to triage"
     `Domain/AgentRoster.swift`
-"\(kept) runs were left alone: they already have separate cards for later nights"
-    `App/ActionFeedback.swift`
 "\(kept) to prep"
     `Domain/PrepStatus.swift`
 "\(label), \(calendar.component(.year, from: date))"
@@ -2685,8 +2691,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReconcileSummary.swift`
 "\(opening) to \(closing)"
     `Domain/EventDateInDraft.swift`
-"\(org) already has a separate card for \(date), so this night was left alone"
-    `App/ActionFeedback.swift`
 "\(org) already moved on, so there was nothing to undo"
     `App/ActionFeedback.swift`
 "\(org) can be drafted despite the clash"
@@ -2791,6 +2795,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ScoutWarningCopy.swift`
 "\(readable) shows listed, down from the usual \(baseline), "
     `Domain/SourceReadability.swift`
+"\(released) later nights"
+    `App/ActionFeedback.swift`
 "\(runs[0]) runs past \(dateLabel), so dismissing it takes its later nights too."
     `Domain/BulkDismiss.swift`
 "\(s.alreadyAnsweredCount) more "
@@ -2992,10 +2998,18 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AppNotice.swift`
 "file before reopening Overture."
     `App/StoreSchemaGuard.swift`
+"gave it up"
+    `App/ActionFeedback.swift`
+"gave them up"
+    `App/ActionFeedback.swift`
 "get seats"
     `Domain/TicketLink.swift`
 "got them wrong."
     `Domain/GenreCorrection.swift`
+"has its own card"
+    `App/ActionFeedback.swift`
+"have their own cards"
+    `App/ActionFeedback.swift`
 "have written to \(path). Nothing has been opened or changed. Check that "
     `App/StoreSchemaGuard.swift`
 "high confidence"
@@ -3046,6 +3060,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreSchemaGuard.swift`
 "or a DM. Gmail refused the request (HTTP \(status))."
     `Integration/GmailReplySearch.swift`
+"own card, so this run card is closed as a duplicate."
+    `App/ActionFeedback.swift`
 "page fetch"
     `Domain/WebCallRefusals.swift`
 "permission. A successful sync clears it."
@@ -3062,6 +3078,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreShrinkCheck.swift`
 "restored your guidance notes"
     `Domain/PrepRunSummary.swift`
+"run \(gave) and now opens on \(next)."
+    `App/ActionFeedback.swift`
 "send failed"
     `Integration/GmailSender.swift`
 "show is"

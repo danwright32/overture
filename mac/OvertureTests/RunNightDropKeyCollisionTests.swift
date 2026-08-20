@@ -47,30 +47,31 @@ struct RunNightDropKeyCollisionTests {
     // MARK: the collision
 
     // The live shape: the run (Oct 2 and Oct 3) beside a separate card for Oct 3 alone.
-    @Test("dropping a night whose next opening is another card's date refuses and writes nothing")
-    func refusesWhenTheKeyIsTaken() throws {
+    //
+    // #2997 changed what HAPPENS here (the night is released and the run closes, rather than the drop
+    // being refused). What must never change is the reason #2754 exists: the key is not written onto a
+    // row that already holds it, so both cards survive with everything only they knew. That is what this
+    // asserts, deliberately in terms of the STORE rather than of the outcome value, so a later change to
+    // the answer cannot quietly take the safety with it (L63).
+    @Test("a drop onto a date another card holds never merges the two rows")
+    func neverMergesTwoRows() throws {
         let ctx = ModelContext(try container())
         let run = card(ctx, night: "2026-10-02", nights: ["2026-10-02", "2026-10-03"])
         let separate = card(ctx, night: "2026-10-03")
         try ctx.save()
         let runKeyBefore = run.naturalKey
+        let separateKeyBefore = separate.naturalKey
 
-        let outcome = run.dropNight("2026-10-02", reason: .dateConflict, now: now, in: ctx)
-
-        #expect(outcome == .cannotMove(to: "2026-10-03"))
-        // Nothing is half-written: a refusal that had already emptied `runNights` would leave the row
-        // describing a run it no longer carries even though the dismiss visibly did nothing.
-        #expect(run.naturalKey == runKeyBefore)
-        #expect(run.performanceDate == "2026-10-02")
-        #expect(run.runNights == ["2026-10-02", "2026-10-03"])
-        #expect(run.droppedRunNights.isEmpty)
-        // And the OTHER card is still its own row with its own identity, which is the data-safety half:
-        // a merge would have taken one of these two away along with everything only it knew.
+        _ = run.dropNight("2026-10-02", reason: .dateConflict, now: now, in: ctx)
         try ctx.save()
+
         let rows = try ctx.fetch(FetchDescriptor<Prospect>())
-        #expect(rows.count == 2)
+        #expect(rows.count == 2, "a merge would have taken one of these away")
+        #expect(run.naturalKey == runKeyBefore, "the run did not take the other card's identity")
+        #expect(separate.naturalKey == separateKeyBefore)
         #expect(separate.performanceDate == "2026-10-03")
         #expect(separate.runNights.isEmpty)
+        #expect(separate.status != .dismissed, "the card the show still lives on is untouched")
     }
 
     // The ordinary path is unchanged: a run whose next night nobody else holds still moves.
@@ -82,7 +83,7 @@ struct RunNightDropKeyCollisionTests {
 
         let outcome = run.dropNight("2026-10-02", reason: .dateConflict, now: now, in: ctx)
 
-        #expect(outcome == .moved(to: "2026-10-03"))
+        #expect(outcome == .moved(to: "2026-10-03", releasing: []))
         #expect(run.performanceDate == "2026-10-03")
         #expect(run.naturalKey == Prospect.makeNaturalKey(groupName: run.groupName,
                                                           performanceDate: "2026-10-03",
@@ -98,7 +99,7 @@ struct RunNightDropKeyCollisionTests {
         let run = card(ctx, night: "2026-10-02", nights: ["2026-10-02", "2026-10-03"])
         try ctx.save()
 
-        #expect(run.dropNight("2026-10-02", reason: .tooSoon, now: now, in: ctx) == .moved(to: "2026-10-03"))
+        #expect(run.dropNight("2026-10-02", reason: .tooSoon, now: now, in: ctx) == .moved(to: "2026-10-03", releasing: []))
     }
 
     // MARK: a store that cannot answer
@@ -131,21 +132,24 @@ struct RunNightDropKeyCollisionTests {
         try ctx.save()
         _ = run.dropNight("2026-10-02", reason: .dateConflict, now: now, in: ctx)
 
-        #expect(run.restoreNight("2026-10-02", lookup: { _ in throw StoreUnreadable() }) == false)
+        #expect(run.restoreNights(["2026-10-02"], lookup: { _ in throw StoreUnreadable() }) == false)
         #expect(run.performanceDate == "2026-10-03")
         #expect(DroppedNight.all(on: run).map(\.night) == ["2026-10-02"])
     }
 
-    // The two refusals must not share a sentence: one names a card that was found, the other admits
-    // nothing was read. Naming a date here would send Dan looking for a card that does not exist.
+    // The two outcomes must not share a sentence: one describes cards that were FOUND, the other admits
+    // nothing was read. Claiming anything about another card here would send Dan looking for one that
+    // nobody saw (L11).
     @Test("the unreadable refusal says what it measured, which is nothing")
-    func theUnreadableRefusalNamesNoDate() {
-        let taken = ActionAck.runNightKeyTaken(org: "Gross Prophets", night: "2026-10-03")
+    func theUnreadableRefusalClaimsNothing() {
+        let closed = ActionAck.runClosedAsCovered(org: "Gross Prophets", night: "2026-10-02",
+                                                   reason: .dateConflict)
         let failed = ActionAck.runNightCheckFailed(org: "Gross Prophets")
 
-        #expect(taken.contains("Oct 3"))
-        #expect(failed.contains("Oct 3") == false, "no date was read, so none may be claimed: \(failed)")
-        #expect(failed != taken)
+        #expect(closed.contains("own card"))
+        #expect(failed.contains("own card") == false,
+                "no card was read, so none may be claimed: \(failed)")
+        #expect(failed != closed)
     }
 
     // MARK: the same defect on the way back (L30: the class, not the instance)
@@ -157,13 +161,13 @@ struct RunNightDropKeyCollisionTests {
         let ctx = ModelContext(try container())
         let run = card(ctx, night: "2026-10-02", nights: ["2026-10-02", "2026-10-03"])
         try ctx.save()
-        #expect(run.dropNight("2026-10-02", reason: .dateConflict, now: now, in: ctx) == .moved(to: "2026-10-03"))
+        #expect(run.dropNight("2026-10-02", reason: .dateConflict, now: now, in: ctx) == .moved(to: "2026-10-03", releasing: []))
         try ctx.save()
         // The scout mints a separate card for Oct 2 while the drop stands.
         _ = card(ctx, night: "2026-10-02")
         try ctx.save()
 
-        #expect(run.restoreNight("2026-10-02", in: ctx) == false)
+        #expect(run.restoreNights(["2026-10-02"], in: ctx) == false)
 
         // The drop stands rather than being half-undone: the night stays dropped and the key stays put.
         #expect(run.performanceDate == "2026-10-03")
@@ -181,7 +185,7 @@ struct RunNightDropKeyCollisionTests {
         _ = run.dropNight("2026-10-02", reason: .dateConflict, now: now, in: ctx)
         try ctx.save()
 
-        #expect(run.restoreNight("2026-10-02", in: ctx) == true)
+        #expect(run.restoreNights(["2026-10-02"], in: ctx) == true)
 
         #expect(run.performanceDate == "2026-10-02")
         #expect(run.runNights == ["2026-10-02", "2026-10-03"])
@@ -205,7 +209,7 @@ struct RunNightDropKeyCollisionTests {
 
         let entry = QueueUndoEntry(recording: "Dismiss", on: run, priorStatus: priorStatus,
                                    priorShowOutcomeRaw: nil, priorDismissedAt: nil,
-                                   priorConflictClearedKey: nil, droppedNight: "2026-10-02")
+                                   priorConflictClearedKey: nil, droppedNights: ["2026-10-02"])
         let outcome = QueueUndo.apply(entry, resolving: { _ in run }, in: ctx,
                                       export: (bookings: [], blockedDates: []))
 
@@ -216,12 +220,12 @@ struct RunNightDropKeyCollisionTests {
 
     // MARK: wired into both dismiss controls (L3: built is not wired)
 
-    // The refusal must not fall through to the ordinary dismiss, which would archive the whole run: that
-    // is the #2691 defect, arriving on the one path where Dan can see no reason for it.
-    @Test("the card's Dismiss menu leaves the run alone and says which date is in the way")
-    func theCardSaysWhyItRefused() throws {
+    // A run that keeps nights of its own must never be archived whole: that is the #2691 defect, and it
+    // is the case #2997's walk exists to protect, so it is pinned on this path too.
+    @Test("the card's Dismiss menu never archives a run that still has nights of its own")
+    func theCardKeepsARunThatHasNightsLeft() throws {
         let ctx = ModelContext(try container())
-        let run = card(ctx, night: "2026-10-02", nights: ["2026-10-02", "2026-10-03"])
+        let run = card(ctx, night: "2026-10-02", nights: ["2026-10-02", "2026-10-03", "2026-10-04"])
         _ = card(ctx, night: "2026-10-03")
         try ctx.save()
         let feedback = ActionFeedback()
@@ -230,16 +234,15 @@ struct RunNightDropKeyCollisionTests {
                                            feedback: feedback, offer: DayOffOfferRequest(), now: now)
 
         #expect(run.status != .dismissed, "the whole run was not archived")
-        #expect(run.runNights == ["2026-10-02", "2026-10-03"])
-        #expect(run.performanceDate == "2026-10-02")
-        #expect(feedback.message?.contains("Oct 3") == true,
-                "the date in the way is named: \(feedback.message ?? "no message at all")")
-        #expect(feedback.tone == .warning)
+        #expect(run.runNights == ["2026-10-04"])
+        #expect(run.performanceDate == "2026-10-04")
+        #expect(feedback.message?.contains("Oct 4") == true,
+                "says where the run now opens: \(feedback.message ?? "no message at all")")
     }
 
-    // The whole-night dismiss is the path where the run is one row among several, so the count Dan reads
-    // has to exclude it and the banner has to say a run was left behind.
-    @Test("a whole-night dismiss counts only what it dismissed and reports the run it kept")
+    // The whole-night dismiss is the path where the run is one row among several, and the count Dan reads
+    // has to be the rows that ACTUALLY went (L12). A closed run is among them, and is named besides.
+    @Test("a whole-night dismiss counts the closed run and says it carries another reason")
     func theNightDismissCountsHonestly() throws {
         let ctx = ModelContext(try container())
         let run = card(ctx, night: "2026-10-02", nights: ["2026-10-02", "2026-10-03"])
@@ -260,12 +263,11 @@ struct RunNightDropKeyCollisionTests {
                                      dateLabel: "Oct 2", prospects: [run, single], context: ctx,
                                      feedback: feedback, now: now)
 
-        #expect(single.status == .dismissed, "the ordinary show on that night still goes")
-        #expect(run.status != .dismissed)
-        #expect(run.runNights == ["2026-10-02", "2026-10-03"])
-        // "1 show" and not "2 shows": the run is not among what was dismissed.
-        #expect(feedback.message?.contains("The show on Oct 2 is dismissed") == true,
-                "counted only what went: \(feedback.message ?? "no message at all")")
-        #expect(feedback.message?.contains("left alone") == true)
+        #expect(single.status == .dismissed)
+        #expect(run.status == .dismissed)
+        #expect(run.showOutcome == .duplicate, "closed for what it is, not for the reason Dan picked")
+        let said = feedback.message ?? "no message at all"
+        #expect(said.contains("2 shows on Oct 2 are dismissed"), "counted both: \(said)")
+        #expect(said.contains("closed as a duplicate"), "named the odd one out: \(said)")
     }
 }
