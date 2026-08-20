@@ -467,6 +467,27 @@ enum PrepQueueService {
         let resultsURL = resultsURL ?? slot.resultsURL(in: support)
         let queueURL = queueURL ?? slot.queueURL(in: support)
         let cancelURL = cancelURL ?? slot.cancelURL(in: support)
+        // #3009: the probe marker is ONE file for both slots (RunSlot.swift), and it is also what decides
+        // what a finished PREP was. That held only while one run could be alive, which is the premise
+        // #2765 removes. A LIVE check OWNS this marker, so settling the prep slot through it reads the
+        // CHECK's keys against the PREP's results, ingests with `isProbe: true`, short circuits before
+        // draft handling and discards every draft the prep wrote, then clears the live check's record on
+        // the way out. That is the hazard the #2760 comment above names, arriving through concurrency
+        // rather than through a caller passing the wrong URL.
+        //
+        // Evidence, not inference: the check slot's own marker says a check is live. Run identity is
+        // CARRIED, never deduced from which files happen to be lying around, which is the same rule #2980
+        // applied to the runner.
+        //
+        // Only the PREP slot asks. A check IS settled while it is live (its only callers sit inside
+        // `watchPrepRun`), so the same question asked of `.check` would refuse every real settle.
+        if slot == .prep,
+           isRunning(slot: .check, markerURL: RunSlot.check.markerURL(in: support), now: now) {
+            // copy-inventory:ignore-start  a diagnostic log line, not a sentence Overture says on screen
+            AgentLog.note("a check is live, so the shared probe marker is that check's: settling the prep slot as an ordinary prep run and leaving the marker alone (#3009).")
+            // copy-inventory:ignore-end
+            return nil
+        }
         guard let marker = (try? ReachabilityProbeMarker.read(from: markerURL)) ?? nil else { return nil }
         var stampSaveFailed = false
         // #1623: asked BEFORE the ingest below consumes the file, because afterwards the answer is always
@@ -640,6 +661,23 @@ enum PrepQueueService {
                                      onOrphanSettled: (ReachabilityRunReport) -> Void = { _ in })
         -> ReachabilityRunReport? {
         let probeRunURL = Self.probeRunURL(in: support)
+        // #3009: only a check that has ENDED is settled here, and only its record cleared. This gate used
+        // to be the marker merely EXISTING, which was right while a prep and a check could not both be
+        // alive. Without it, a prep launched during a live check settles that check against a results file
+        // it has not finished writing and then deletes the marker it needs, so its paid answers are never
+        // stamped, `OrgAnswerRecording` never runs, and every show it covered is paid for again. That is
+        // #1594 restored, and the clear below is unconditional, so the refusal has to be here rather than
+        // inside the settle.
+        //
+        // A check that ended CLEANLY removed its own marker, and one that DIED left a stale one, so both
+        // read as not running and both are still settled exactly as before. The only case this refuses is
+        // the one that is genuinely still working.
+        guard !isRunning(slot: .check, markerURL: RunSlot.check.markerURL(in: support), now: now) else {
+            // copy-inventory:ignore-start  a diagnostic log line, not a sentence Overture says on screen
+            AgentLog.note("a check is still running, so it is not a finished run to settle before this prep: left its record alone (#3009).")
+            // copy-inventory:ignore-end
+            return nil
+        }
         let report = settleOrphanedProbe(slot: .check, support: support, markerURL: probeRunURL,
                                          into: context, now: now, defaults: defaults)
         if let report { onOrphanSettled(report) }
