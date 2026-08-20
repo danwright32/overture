@@ -48,15 +48,15 @@ enum RunNightDrop {
         // left. The caller dismisses the whole show carrying that reason, exactly as it does today.
         case wholeShow
         case alreadyDropped
-        case moved(to: String)
-        // #2754: the night the run would move to is a night ANOTHER stored card already holds, so moving
-        // this row's key onto it would collide with `Prospect.naturalKey`'s uniqueness. Carries the night
-        // rather than a bare refusal so the caller can say WHICH date is in the way (L109: a refusal the
-        // person cannot be told is a control that does nothing).
-        case cannotMove(to: String)
-        // #2754: the store could not answer whether that night is free. Distinct from `cannotMove`, which
-        // names a card this code has SEEN: sending Dan to look for a card nobody found would be a message
-        // claiming more than its check measured (L11).
+        // #2997: the run landed on a free opening. `releasing` names the nights it gave up on the way,
+        // because another card already holds them, and it is empty on the ordinary drop.
+        case moved(to: String, releasing: [String])
+        // #2997: every night this row had left is already on another card, so it carries nothing of its
+        // own. The caller closes it; the nights are still in Dan's queue, on those cards.
+        case fullyCovered(releasing: [String])
+        // #2754: the store could not answer whether that night is free. Nothing is written at all, and
+        // it stays its own answer rather than folding into the release above: a release is a card this
+        // code has SEEN, and a message may claim only what its check measured (L11).
         case cannotCheck
     }
 
@@ -177,7 +177,7 @@ extension Prospect {
         // that cannot change an answer is worse than no condition (L29).
         guard runNights.contains(night) else { return .wholeShow }
         let remaining = runNights.filter { $0 != night }
-        guard let opening = remaining.min() else { return .wholeShow }
+        guard !remaining.isEmpty else { return .wholeShow }
 
         // #2754: settled BEFORE the first write, so a refusal leaves the row exactly as it was rather
         // than describing a run it no longer carries. MEASURED on the live store 2026-08-15: 8 of 98
@@ -188,23 +188,59 @@ extension Prospect {
         // an in-memory store: `save()` succeeds and SwiftData MERGES the two rows into one, taking some
         // fields from each, so a card's keep decision, its contacts and its outreach record go with no
         // error raised anywhere (L5).
-        let candidate = Prospect.makeNaturalKey(groupName: groupName, performanceDate: opening,
-                                                venue: venue)
-        switch keyAvailability(candidate, lookup: lookup) {
-        case .taken: return .cannotMove(to: opening)
-        case .unreadable: return .cannotCheck
-        case .free: break
+        //
+        // #2997: a taken night is RELEASED rather than refused, and the walk goes on to the next one.
+        // That night is not lost, it is on the card that holds it, which is exactly why the key is
+        // taken. Refusing instead left all four one-night reasons permanently dead on such a card and
+        // gave Dan nothing he could act on (L109).
+        //
+        // Walked one night at a time rather than judged on the first, because the 9 live runs in this
+        // state are two different shapes (measured 2026-08-19): 6 have nothing of their own left, and 3
+        // keep nights a close-the-run answer would have destroyed, one of them 14 of them.
+        var released: [String] = []
+        var landing: String?
+        for opening in remaining.sorted() {
+            let candidate = Prospect.makeNaturalKey(groupName: groupName, performanceDate: opening,
+                                                    venue: venue)
+            switch keyAvailability(candidate, lookup: lookup) {
+            // Fails closed on ANY night of the walk, not just the first: a read that dies half way
+            // through has measured nothing about the rest, and the write below is all or nothing.
+            case .unreadable: return .cannotCheck
+            case .taken: released.append(opening)
+            case .free: landing = opening
+            }
+            if landing != nil { break }
         }
 
+        // The first write. Everything above is lookups.
+        //
+        // Dan's reason goes on HIS night and on no other. A released night is recorded as `.duplicate`,
+        // which is what it is: this row's claim on it duplicates a card that already holds it. Writing
+        // Dan's reason across all of them is the #2691 defect, and #16 reads these records (L163).
         droppedRunNights.append(DroppedNight(night: night, reason: reason, at: now).stored)
-        runNights = remaining
+        droppedRunNights.append(contentsOf: released.map {
+            DroppedNight(night: $0, reason: .duplicate, at: now).stored
+        })
+
+        // Nothing of this row's own is left. The key does NOT move: there is no free night to move it
+        // to, and the whole point of the walk was that those nights belong to other cards. The caller
+        // closes the row (`ProspectMutations`), so the decision about Dan's data stays where every other
+        // status write lives rather than being made here.
+        guard let opening = landing else {
+            runNights = []
+            runEndDate = nil
+            return .fullyCovered(releasing: released)
+        }
+
+        let kept = remaining.filter { !released.contains($0) }
+        runNights = kept
         performanceDate = opening
-        runEndDate = remaining.max()
+        runEndDate = kept.max()
         // The natural key IS the opening night, so it has to move with it. Re-keyed IN PLACE, keeping
         // this row's whole history, never inserted as a second card beside the old one: the URL arms
         // (`matchByAnyRunURL`) exist so the next scout finds this row again under its new key.
-        naturalKey = candidate
-        return .moved(to: opening)
+        naturalKey = Prospect.makeNaturalKey(groupName: groupName, performanceDate: opening, venue: venue)
+        return .moved(to: opening, releasing: released)
     }
 
     // Cmd+Z. Puts the night back and restores the key, so an undo leaves the row exactly where it was
@@ -215,16 +251,21 @@ extension Prospect {
     // a scout run between the drop and the undo can mint a separate card on exactly that night. Answers
     // whether the night came back, so a caller cannot report a restore that did not happen (L12).
     @discardableResult
-    func restoreNight(_ night: String, in context: ModelContext) -> Bool {
-        restoreNight(night, lookup: { try Prospect.stored(key: $0, in: context) })
+    func restoreNights(_ nights: [String], in context: ModelContext) -> Bool {
+        restoreNights(nights, lookup: { try Prospect.stored(key: $0, in: context) })
     }
 
+    // #2997: SEVERAL nights, put back in ONE operation, because one dismiss can release several and they
+    // have to come back together. Restoring them one at a time cannot work: each call recomputes the
+    // opening and its key, so the released night would be offered its own date first, which is precisely
+    // the date another card holds, and the undo would refuse the very night it exists to give back.
     @discardableResult
-    func restoreNight(_ night: String, lookup: (String) throws -> Prospect?) -> Bool {
+    func restoreNights(_ nights: [String], lookup: (String) throws -> Prospect?) -> Bool {
         let all = DroppedNight.all(on: self)
-        let kept = all.filter { $0.night != night }
+        let wanted = Set(nights)
+        let kept = all.filter { !wanted.contains($0.night) }
         guard kept.count != all.count else { return false }
-        let restored = runNights.contains(night) ? runNights : (runNights + [night]).sorted()
+        let restored = (runNights + nights.filter { !runNights.contains($0) }).sorted()
         guard let opening = restored.min() else { return false }
         let candidate = Prospect.makeNaturalKey(groupName: groupName, performanceDate: opening,
                                                 venue: venue)

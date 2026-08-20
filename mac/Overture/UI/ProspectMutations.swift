@@ -631,10 +631,14 @@ enum ProspectMutations {
             .filter { !($0.status == .dismissed && $0.showOutcome == reason) }
         guard !targets.isEmpty else { return }
 
-        // #2754: a run whose next night is another card's date is left ENTIRELY alone, neither moved nor
+        // #2754: a run the store could not answer about is left ENTIRELY alone, neither moved nor
         // dismissed, and counted here so the acknowledgment can say so. Dismissing it whole instead would
         // be the #2691 defect, silently, on the path where Dan is looking at a count rather than a card.
-        var keptWholeRuns = 0
+        //
+        // #2997: a run with nothing of its own left is CLOSED rather than left alone, and it counts among
+        // what was dismissed, because it genuinely was. Counted separately as well, so the banner can say
+        // why one of them carries a reason Dan did not pick.
+        var closedRuns = 0
         var uncheckedRuns = 0
         let rows = targets.compactMap { model -> QueueUndoEntry.Row? in
             let priorStatus = model.status
@@ -654,22 +658,29 @@ enum ProspectMutations {
             let drop = RunNightDrop.isAboutOneNight(reason)
                 ? night.map { model.dropNight($0, reason: reason, now: now, in: context) }
                 : nil
-            if case .cannotMove = drop {
-                keptWholeRuns += 1
-                return nil
-            }
-            // Skipped for the same reason and counted apart: this row is left exactly as it was, and the
-            // banner may not say a card was found when none was read (L11).
+            // This row is left exactly as it was, and the banner may not say a card was found when none
+            // was read (L11).
             if case .cannotCheck = drop {
                 uncheckedRuns += 1
                 return nil
             }
-            if let night, case .moved = drop {
+            // #2997: the same rule as the card's own menu, reached the same way, so a bulk press and a
+            // per-card press cannot close a run for two different reasons.
+            if let night, case .fullyCovered(let releasing) = drop {
+                model.markDismissed(reason: .duplicate)
+                ConflictSweep.reapply(model, export: export, in: context)
+                closedRuns += 1
+                return QueueUndoEntry.Row(recording: model, priorStatus: priorStatus,
+                                          priorShowOutcomeRaw: priorReason, priorDismissedAt: priorExit,
+                                          priorConflictClearedKey: priorClearedConflict,
+                                          droppedNights: [night] + releasing)
+            }
+            if let night, case .moved(_, let releasing) = drop {
                 ConflictSweep.reapply(model, export: export, in: context)
                 return QueueUndoEntry.Row(recording: model, priorStatus: priorStatus,
                                           priorShowOutcomeRaw: priorReason, priorDismissedAt: priorExit,
                                           priorConflictClearedKey: priorClearedConflict,
-                                          droppedNight: night)
+                                          droppedNights: [night] + releasing)
             }
             // #16: the model's own setter, so the exit date is stamped here exactly as a per-card dismiss
             // stamps it, and a show dismissed twice keeps its FIRST exit date.
@@ -682,8 +693,8 @@ enum ProspectMutations {
         // there is nothing to save and nothing to undo. Dan is still told, because a press that changed
         // nothing and a press that did the work look identical from the keyboard.
         guard !rows.isEmpty else {
-            if keptWholeRuns > 0 || uncheckedRuns > 0 {
-                feedback.acknowledge(ActionAck.nightDismissedSomeKept(count: 0, kept: keptWholeRuns,
+            if uncheckedRuns > 0 {
+                feedback.acknowledge(ActionAck.nightDismissedSomeKept(count: 0, closed: 0,
                                                                       unchecked: uncheckedRuns,
                                                                       reason: reason,
                                                                       dateLabel: dateLabel),
@@ -702,11 +713,20 @@ enum ProspectMutations {
             undo.record(entry)
         }
         // The count is the rows that ACTUALLY went, never the targets asked for (L12).
-        if keptWholeRuns > 0 || uncheckedRuns > 0 {
-            feedback.acknowledge(ActionAck.nightDismissedSomeKept(count: rows.count, kept: keptWholeRuns,
+        //
+        // #2997: a closed run counts among what went AND is named, because it is the one row in the batch
+        // carrying a reason Dan did not pick, and the count alone cannot say that. Its tone is `.info`,
+        // not `.warning`: nothing was refused and nothing needs him.
+        if uncheckedRuns > 0 {
+            feedback.acknowledge(ActionAck.nightDismissedSomeKept(count: rows.count, closed: closedRuns,
                                                                   unchecked: uncheckedRuns,
                                                                   reason: reason, dateLabel: dateLabel),
                                  tone: .warning)
+        } else if closedRuns > 0 {
+            feedback.acknowledge(ActionAck.nightDismissedSomeKept(count: rows.count, closed: closedRuns,
+                                                                  unchecked: 0,
+                                                                  reason: reason, dateLabel: dateLabel),
+                                 tone: .info)
         } else {
             feedback.acknowledge(ActionAck.nightDismissed(count: rows.count, reason: reason,
                                                           dateLabel: dateLabel))
@@ -742,21 +762,42 @@ enum ProspectMutations {
             // second case of the same answer would be a second drop.
             let night = model.performanceDate
             let drop = night.map { model.dropNight($0, reason: reason, now: now, in: context) }
-            // #2754: this returns rather than falling through, and that is the point of it. Falling
-            // through would dismiss the whole run, which is precisely what #2691 exists to prevent, and
-            // it would do it in the one case where Dan can see no reason for it.
-            if case .cannotMove(let taken) = drop {
-                feedback.acknowledge(ActionAck.runNightKeyTaken(org: item.groupName, night: taken),
-                                     tone: .warning)
-                return
-            }
-            // A store that could not answer gets its own sentence, not the one naming a date: nothing was
-            // read, so there is no date to name (L11).
+            // A store that could not answer says so and changes nothing. It returns rather than falling
+            // through, and that is the point of it: falling through would dismiss the whole run, which is
+            // precisely what #2691 exists to prevent, in the one case where Dan can see no reason for it.
             if case .cannotCheck = drop {
                 feedback.acknowledge(ActionAck.runNightCheckFailed(org: item.groupName), tone: .warning)
                 return
             }
-            if let night, case .moved = drop {
+            // #2997: the run has nothing left that is not already on another card, so the card closes.
+            // The status write lives HERE rather than in `dropNight`, beside every other status write.
+            //
+            // `.duplicate`, never Dan's reason (his call, 2026-08-19). His reason is a statement about the
+            // night he named and it is recorded there; this row is closed for what the row IS, which is a
+            // second copy of nights other cards hold. Writing his reason across the run is #2691's defect.
+            if let night, case .fullyCovered(let releasing) = drop {
+                model.markDismissed(reason: .duplicate)
+                ConflictSweep.reapply(model, export: export, in: context)
+                if let undo {
+                    undo.record(QueueUndoEntry(recording: "Dismiss", on: model,
+                                               priorStatus: priorStatus, priorShowOutcomeRaw: priorReason,
+                                               priorDismissedAt: priorExit,
+                                               priorConflictClearedKey: priorClearedConflict,
+                                               droppedNights: [night] + releasing))
+                }
+                guard context.saveOrWarn(org: item.groupName, feedback: feedback) else { return }
+                // Said, never silent. The whole card going is a bigger event than the one night Dan
+                // named, and a press that removed the card must not look like a press that dropped a
+                // night (L152). Nothing else on screen reports it: the card is simply gone.
+                feedback.acknowledge(ActionAck.runClosedAsCovered(org: item.groupName, night: night,
+                                                                  reason: reason),
+                                     tone: .info)
+                guard let o = DayOffOffer.offer(reason: reason, performanceDate: night,
+                                                alreadyBlocked: item.hasUnclearedConflict) else { return }
+                offer.request(key: model.naturalKey, org: item.groupName, start: o.start, end: o.end)
+                return
+            }
+            if let night, case .moved(let opening, let releasing) = drop {
                 // #2691 trap 5: the badge reports the earliest blocked night of the run, so dropping the
                 // blocked one has to re-ask. Through the shared sweep, so the badge after a drop and the
                 // badge after a day off edit cannot be computed two different ways (L16).
@@ -768,9 +809,19 @@ enum ProspectMutations {
                                                priorStatus: priorStatus, priorShowOutcomeRaw: priorReason,
                                                priorDismissedAt: priorExit,
                                                priorConflictClearedKey: priorClearedConflict,
-                                               droppedNight: night))
+                                               droppedNights: [night] + releasing))
                 }
                 context.saveOrWarn(org: item.groupName, feedback: feedback)
+                // #2997: silent when the drop was only Dan's night, which is the ordinary case and
+                // exactly today's behaviour. It speaks only when the run ALSO gave up nights he never
+                // named, because those left the card without him asking.
+                if !releasing.isEmpty {
+                    feedback.acknowledge(ActionAck.runNightsReleased(org: item.groupName, night: night,
+                                                                      reason: reason,
+                                                                      released: releasing.count,
+                                                                      opening: opening),
+                                         tone: .info)
+                }
                 // The day off offer is unchanged, and pre-filled with the night he DROPPED rather than
                 // the one the card moved to. Dan's call: "it should function no differently than any
                 // other dismiss in that regard."

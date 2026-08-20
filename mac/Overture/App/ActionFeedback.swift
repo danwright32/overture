@@ -174,14 +174,32 @@ enum ActionAck {
             : "\(Plural.count(count, "show")) on \(dateLabel) are dismissed as \(reason.label)"
     }
 
-    // #2754: the night was NOT dropped, because the date the run would have moved to is a date this show
-    // already has its own separate card for, and one card cannot take another's identity.
+    // #2997: the run gave up every night it had left, because each one already has its own card, so the
+    // card itself is closed.
     //
-    // Names that date rather than saying the dismiss failed, because the date is the whole of what Dan
-    // needs: the show is still in his queue on it, on the other card, which is where he can act.
-    static func runNightKeyTaken(org: String, night: String) -> String {
+    // Two sentences because two things happened and only one of them is what Dan asked for. His night and
+    // his reason come first, then why the whole card went and what it is filed as, so he can find it.
+    // "Every other night" reads correctly whether there was one or nine, which is why it is not a count.
+    static func runClosedAsCovered(org: String, night: String, reason: ShowOutcome) -> String {
         let date = EasternDate.dayLabel(night) ?? night
-        return "\(org) already has a separate card for \(date), so this night was left alone"
+        return "\(date) is dismissed as \(reason.label). Every other night of \(org) already has its "
+            + "own card, so this run card is closed as a duplicate."
+    }
+
+    // #2997: the run moved, but it gave up nights on the way that Dan never named. Said because those
+    // nights left the card without him asking; the card is still here, which is why this is not the
+    // sentence above.
+    static func runNightsReleased(org: String, night: String, reason: ShowOutcome,
+                                  released: Int, opening: String) -> String {
+        let date = EasternDate.dayLabel(night) ?? night
+        let next = EasternDate.dayLabel(opening) ?? opening
+        let nights = released == 1 ? "1 later night" : "\(released) later nights"
+        let has = released == 1 ? "has its own card" : "have their own cards"
+        let gave = released == 1 ? "gave it up" : "gave them up"
+        // "gave it up" is the clause that earns its place: without it the sentence says another card
+        // exists but never says this run stopped carrying the night, which is the part that changed.
+        return "\(date) is dismissed as \(reason.label). \(nights) of \(org) already \(has), so this "
+            + "run \(gave) and now opens on \(next)."
     }
 
     // #2754: the store could not be read to check, so nothing was changed. Says only what was actually
@@ -192,15 +210,20 @@ enum ActionAck {
 
     // #2754: the same refusal inside a whole-night dismiss, where it is one row among several and the
     // count Dan reads has to exclude it (L12).
-    static func nightDismissedSomeKept(count: Int, kept: Int, unchecked: Int, reason: ShowOutcome,
+    //
+    // #2997: and the same closure, where the count INCLUDES it and so cannot say it happened. A run
+    // closed as a duplicate is the only row in a batch carrying a reason Dan did not pick, so it is named
+    // rather than folded into the number.
+    static func nightDismissedSomeKept(count: Int, closed: Int, unchecked: Int, reason: ShowOutcome,
                                        dateLabel: String) -> String {
-        // Two reasons a run was left behind, kept apart on purpose: one names a card that was found, the
-        // other admits nothing could be read (L11). Both can happen in one press, so both are said.
+        // Two things worth saying, kept apart on purpose: one names rows that WENT for another reason,
+        // the other admits nothing could be read about a row that stayed (L11). Both can happen in one
+        // press, so both are said.
         var sentences: [String] = []
-        if kept > 0 {
-            sentences.append(kept == 1
-                ? "1 run was left alone: it already has a separate card for a later night"
-                : "\(kept) runs were left alone: they already have separate cards for later nights")
+        if closed > 0 {
+            sentences.append(closed == 1
+                ? "1 of them is a run whose other nights already have their own cards, so it is closed as a duplicate"
+                : "\(closed) of them are runs whose other nights already have their own cards, so they are closed as duplicates")
         }
         if unchecked > 0 {
             sentences.append(unchecked == 1

@@ -86,7 +86,7 @@ struct RunNightDropTests {
 
         let outcome = p.dropNight("2026-08-19", reason: .dateConflict, now: now, in: ctx)
 
-        #expect(outcome == .moved(to: "2026-09-30"))
+        #expect(outcome == .moved(to: "2026-09-30", releasing: []))
         #expect(p.performanceDate == "2026-09-30")
         #expect(p.runEndDate == "2026-10-21")
         #expect(p.runNights == ["2026-09-30", "2026-10-21"])
@@ -252,7 +252,7 @@ struct RunNightDropTests {
         let key = p.naturalKey
         _ = p.dropNight("2026-08-19", reason: .dateConflict, now: now, in: ctx)
 
-        p.restoreNight("2026-08-19", in: ctx)
+        p.restoreNights(["2026-08-19"], in: ctx)
 
         #expect(p.runNights == ["2026-08-19", "2026-09-30", "2026-10-21"])
         #expect(p.performanceDate == "2026-08-19")

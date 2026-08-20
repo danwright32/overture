@@ -68,7 +68,10 @@ struct QueueUndoEntry: Equatable, Sendable {
         // row's `naturalKey` is recorded AFTER the drop: it is what the row is keyed on by the time
         // Cmd+Z is pressed, and recording the old key would look up something nothing holds and make the
         // press silently do nothing while looking exactly like a working undo (#1415).
-        var droppedNight: String? = nil
+        // #2997: a LIST, because one dismiss can take Dan's night AND release every later night another
+        // card already holds, and an undo that gave back only his would leave the rest dropped with
+        // nothing anywhere able to put them back (L97).
+        var droppedNights: [String] = []
 
         // Is the row still exactly how this action left it? If anything moved it since (a background
         // writer, a later action of Dan's, a scout import), undoing would clobber something newer, so this
@@ -150,7 +153,7 @@ struct QueueUndoEntry: Equatable, Sendable {
          priorStatus: ReviewStatus, priorShowOutcomeRaw: String?, priorDismissedAt: Date?,
          priorConflictClearedKey: String?,
          resultingStatus: ReviewStatus, resultingShowOutcomeRaw: String?,
-         droppedNight: String? = nil) {
+         droppedNights: [String] = []) {
         self.init(actionLabel: actionLabel, batchLabel: nil,
                   primaryRow: Row(naturalKey: naturalKey, groupName: groupName,
                                   priorStatus: priorStatus, priorShowOutcomeRaw: priorShowOutcomeRaw,
@@ -158,7 +161,7 @@ struct QueueUndoEntry: Equatable, Sendable {
                                   priorConflictClearedKey: priorConflictClearedKey,
                                   resultingStatus: resultingStatus,
                                   resultingShowOutcomeRaw: resultingShowOutcomeRaw,
-                                  droppedNight: droppedNight),
+                                  droppedNights: droppedNights),
                   otherRows: [])
     }
 
@@ -188,7 +191,7 @@ extension QueueUndoEntry.Row {
     @MainActor
     init(recording prospect: Prospect,
          priorStatus: ReviewStatus, priorShowOutcomeRaw: String?, priorDismissedAt: Date?,
-         priorConflictClearedKey: String?, droppedNight: String? = nil) {
+         priorConflictClearedKey: String?, droppedNights: [String] = []) {
         self.init(naturalKey: prospect.naturalKey,
                   groupName: prospect.groupName,
                   priorStatus: priorStatus,
@@ -197,7 +200,7 @@ extension QueueUndoEntry.Row {
                   priorConflictClearedKey: priorConflictClearedKey,
                   resultingStatus: prospect.status,
                   resultingShowOutcomeRaw: prospect.showOutcomeRaw,
-                  droppedNight: droppedNight)
+                  droppedNights: droppedNights)
     }
 }
 
@@ -205,17 +208,17 @@ extension QueueUndoEntry {
     @MainActor
     init(recording actionLabel: String, on prospect: Prospect,
          priorStatus: ReviewStatus, priorShowOutcomeRaw: String?, priorDismissedAt: Date?,
-         priorConflictClearedKey: String?, droppedNight: String? = nil) {
+         priorConflictClearedKey: String?, droppedNights: [String] = []) {
         let row = Row(recording: prospect, priorStatus: priorStatus,
                       priorShowOutcomeRaw: priorShowOutcomeRaw, priorDismissedAt: priorDismissedAt,
-                      priorConflictClearedKey: priorConflictClearedKey, droppedNight: droppedNight)
+                      priorConflictClearedKey: priorConflictClearedKey, droppedNights: droppedNights)
         self.init(naturalKey: row.naturalKey, groupName: row.groupName, actionLabel: actionLabel,
                   priorStatus: row.priorStatus, priorShowOutcomeRaw: row.priorShowOutcomeRaw,
                   priorDismissedAt: row.priorDismissedAt,
                   priorConflictClearedKey: row.priorConflictClearedKey,
                   resultingStatus: row.resultingStatus,
                   resultingShowOutcomeRaw: row.resultingShowOutcomeRaw,
-                  droppedNight: row.droppedNight)
+                  droppedNights: row.droppedNights)
     }
 }
 
@@ -281,7 +284,7 @@ enum QueueUndo {
         // the writes cannot disagree, and `restoreNight` stays the one place that knows the rule (L16).
         var blocked = 0
         for (prospect, row) in applicable {
-            if let night = row.droppedNight, prospect.restoreNight(night, in: context) == false {
+            if !row.droppedNights.isEmpty, prospect.restoreNights(row.droppedNights, in: context) == false {
                 blocked += 1
                 continue
             }
