@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1426 sentences**.
+Every sentence Overture can say to Dan: **1428 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -810,6 +810,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/AddLeadSheet.swift`
 "Every show Overture has ever tracked: past its window, booked, closed, or dismissed"
     `App/RootView.swift`
+"Every show here is already in the \(runNoun) that is running. Wait for it to finish and try again."
+    `Integration/PrepQueueService.swift`
 "Everyone found here is on the show without running it: a co-performer, a music director or a guest. Nobody with a say over the booking was found. The listing's credits are usually where the producer is named, and you can add them by hand."
     `Domain/Reachability.swift`
 "Everything found here represents them rather than runs the show: a manager, an agent, a publicist or a booking agency. That may still get you an answer, but nobody who owns the show was found. The listing's credits are usually where the producer is named."
@@ -1396,6 +1398,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/BuildFreshnessPanel.swift`
 "Overture cannot tell whether anything is missing"
     `App/StoreShrinkCheck.swift`
+"Overture cannot tell which shows the \(runNoun) is working on, so it will not start a run that might take the same ones. Wait for that run to finish and try again."
+    `Integration/PrepQueueService.swift`
 "Overture contact: "
     `Domain/OmniFocusSync.swift`
 "Overture could not open its data file to check it at \(path). Nothing has been "
