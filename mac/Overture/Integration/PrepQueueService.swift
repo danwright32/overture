@@ -873,6 +873,35 @@ enum PrepQueueService {
         return nil
     }
 
+    // #3012: the SAME question, asked of ONE slot.
+    //
+    // `runInFlight` above returns a single `RunKind?` and so cannot describe two live runs. That is fine
+    // for a reader asking "is anything going", and wrong for any control that ACTS on a particular run:
+    // the label and the action then come from different lookups and can disagree. They did. The Cancel
+    // button's label read `runInFlight`, which asks the prep slot first and, through `RunKind.of`'s
+    // `sameRunTolerance`, resolves a check started after a live prep to `.reachabilityCheck`, while
+    // `cancelPrep()` targets `takeover.presented`, the run that started FIRST. So the button said "Cancel
+    // reachability check" and stopped the PREP, and the check carried on spending.
+    //
+    // The fix is not a second lookup that happens to agree, it is asking OF the slot being acted on. The
+    // prep slot still goes through the legacy rule, so #2614's wording stays right for the upgrade window
+    // where a check started by a build older than #2760 sits in the prep slot and must not be called a
+    // prep run.
+    static func runInFlight(slot: RunSlot, now: Date, support: URL = StoreLocation.handoffDirectory,
+                            markerURL: URL? = nil, defaults: UserDefaults = .standard) -> RunKind? {
+        guard isRunning(slot: slot, markerURL: markerURL ?? slot.markerURL(in: support), now: now) else {
+            return nil
+        }
+        switch slot {
+        case .check:
+            return .reachabilityCheck
+        case .prep:
+            let marker = (try? ReachabilityProbeMarker.read(from: probeRunURL(in: support))) ?? nil
+            return prepSlotRunKind(runStartedAt: lastRunStartedAt(slot: .prep, defaults: defaults),
+                                   probeMarkerStartedAt: marker?.startedAt)
+        }
+    }
+
     // #2760: the exclusion, in ONE place, spoken by both launches.
     //
     // It is STILL IN FORCE after this phase, deliberately. Making the state per slot is what makes running

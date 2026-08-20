@@ -588,7 +588,18 @@ struct RootView: View {
                         // whichever is going (one lock, one runner, one cancel sentinel), but while a
                         // reachability check held the slot this was the only stop control on screen and it
                         // called that check a prep run.
-                        if let kind = PrepQueueService.runInFlight(now: Date()) {
+                        // #3012: bound to the run `cancelPrep()` will ACTUALLY stop, and labelled by
+                        // asking that same slot what kind of run it is. Before this the label came from
+                        // the whole-app `runInFlight`, which cannot describe two live runs, while the
+                        // action targeted `takeover.presented`: with a prep running and a check started
+                        // after it the button read "Cancel reachability check" and stopped the prep.
+                        //
+                        // It also removes a dead control. `cancelPrep()` has always returned early when
+                        // nothing is presented, so a button shown on the old condition could do nothing at
+                        // all and say nothing about why (L109). Now the control exists exactly when it has
+                        // something to stop.
+                        if let slot = takeover.presented,
+                           let kind = PrepQueueService.runInFlight(slot: slot, now: Date()) {
                             Divider()
                             Button(kind.cancelLabel, role: .destructive) { cancelPrep() }
                         }
