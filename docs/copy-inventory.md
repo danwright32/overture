@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1424 sentences**.
+Every sentence Overture can say to Dan: **1426 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -360,7 +360,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceYield.swift`
 "1 of \(requested) shows never got an answer and is still unchecked"
     `Domain/ReachabilityRunSummary.swift`
-"1 of them was a run whose other nights are already on their own cards, so it is closed as a duplicate"
+"1 of them is a run whose other nights already have their own cards, so it is closed as a duplicate"
     `App/ActionFeedback.swift`
 "1 of them went through an earlier check and never got an answer."
     `Domain/ProbeSelection.swift`
@@ -2524,7 +2524,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/EventLocationFill.swift`
 "\(clauses[cityIndex]), \(code)"
     `Domain/VenueDisplay.swift`
-"\(closed) of them were runs whose other nights are already on their own cards, so they are closed as duplicates"
+"\(closed) of them are runs whose other nights already have their own cards, so they are closed as duplicates"
     `App/ActionFeedback.swift`
 "\(conceptSummary(for: focus)) \(detail)"
     `Domain/AgentRoster.swift`
@@ -2556,7 +2556,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceAttention.swift`
 "\(count) sources went quiet."
     `UI/ScoutSummaryView.swift`
-"\(date) is dismissed as \(reason.label). Every other night of \(org) is already on its "
+"\(date) is dismissed as \(reason.label). Every other night of \(org) already has its "
     `App/ActionFeedback.swift`
 "\(date) is dismissed as \(reason.label). \(nights) of \(org) already \(has), so this "
     `App/ActionFeedback.swift`
@@ -2998,6 +2998,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AppNotice.swift`
 "file before reopening Overture."
     `App/StoreSchemaGuard.swift`
+"gave it up"
+    `App/ActionFeedback.swift`
+"gave them up"
+    `App/ActionFeedback.swift`
 "get seats"
     `Domain/TicketLink.swift`
 "got them wrong."
@@ -3074,7 +3078,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreShrinkCheck.swift`
 "restored your guidance notes"
     `Domain/PrepRunSummary.swift`
-"run now opens on \(next)."
+"run \(gave) and now opens on \(next)."
     `App/ActionFeedback.swift`
 "send failed"
     `Integration/GmailSender.swift`
