@@ -47,18 +47,31 @@ enum RunCoverage: Equatable, Sendable {
     // already on the main actor.
     @MainActor
     static func read(slot: RunSlot, in support: URL, now: Date,
-                     markerURL: URL? = nil, coversURL: URL? = nil) -> RunCoverage {
+                     markerURL: URL? = nil, coversURL: URL? = nil,
+                     recorder: HandoffReadFailures = .shared) -> RunCoverage {
         // The marker first and always. Coverage is a claim ABOUT a run, so it means nothing without one,
         // and asking the file first is what would let a leftover hold shows for ever.
         guard PrepQueueService.isRunning(slot: slot,
                                          markerURL: markerURL ?? slot.markerURL(in: support),
                                          now: now) else { return .noLiveRun }
         let url = coversURL ?? slot.coversURL(in: support)
-        guard let data = try? Data(contentsOf: url),
-              let keys = try? JSONDecoder().decode(Set<String>.self, from: data) else {
-            return .unreadable
+        // Through the shared reader, not a hand-rolled `try? Data(contentsOf:)`. #2879 made that rule
+        // repo-wide, and `HandoffFileReadTests.noAppSourceSwallowsAFileRead` caught this file breaking it:
+        // a `try?` makes a file the app COULD NOT READ identical to one that is not there at every caller,
+        // which is the same collapse this type exists to prevent, one level down. It also routes the
+        // reason into `HandoffReadFailures`, so a corrupt covers file is REPORTED rather than only
+        // refused.
+        //
+        // Absent and corrupt both answer `.unreadable` here, and that is not the collapse #2879 forbids:
+        // this read is already inside `isRunning`, so both mean the same single fact, that a LIVE run's
+        // coverage cannot be established. What #2879 requires is that the two be told apart where the
+        // difference exists, and `HandoffFile` does exactly that on the way past, recording the reason.
+        switch HandoffFile.read(at: url, recorder: recorder, decode: { data in
+            try JSONDecoder().decode(Set<String>.self, from: data)
+        }) {
+        case .read(let keys): return .holds(keys)
+        case .absent, .unreadable: return .unreadable
         }
-        return .holds(keys)
     }
 
     // MARK: - Writing
