@@ -209,6 +209,51 @@ assert_contains "a same-length rewrite is still a violation" "${OUT}" "BOUNDARY 
 
 # 6. This run's OWN results file is not foreign to it: writing it is the job.
 rm -f "${SUPPORT_DIR}"/overture-*-results.json "${SUPPORT_DIR}/run-boundary-violation.log"
+# --- #3016: a change while the two runs SHARED the machine is undecidable, not a violation ---------
+# Once #3015 lets both run at once, the other slot's results file changing during this run is the
+# ORDINARY case: it is that run writing its own answers. From here that is indistinguishable from this
+# run having written them, so the guard must say it cannot tell rather than accuse (L11, L93). A guard
+# that fires on the ordinary case gets switched off within a day.
+rm -f "${SUPPORT_DIR}"/overture-*-results.json "${SUPPORT_DIR}/run-boundary-violation.log"
+printf 'before' > "${SUPPORT_DIR}/overture-check-results.json"
+OUT="$(
+  SUPPORT="${SUPPORT_DIR}"
+  . "${HERE}/run-slot.sh"
+  . "${HERE}/run-contention.sh"
+  OVERTURE_RUN_SLOT=prep resolve_run_slot
+  # A check was alive at some point during this run, which is what contention_observe latches.
+  printf 'check\n' > "${SLOT_CONTENDED}"
+  slot_record_foreign_results
+  printf 'after' > "${SUPPORT_DIR}/overture-check-results.json"
+  slot_check_foreign_results
+)"
+assert_not_contains "a change under contention is not called a violation" "${OUT}" "BOUNDARY VIOLATION"
+assert_contains "and it says which run it shared the machine with" "${OUT}" "check"
+assert_contains "and refuses to call the run clean either" "${OUT}" "neither blamed nor cleared"
+if [[ -f "${SUPPORT_DIR}/run-boundary-violation.log" ]]; then
+  fail "an undecidable change was written to the violations log" "the log must hold accusations only"
+else
+  pass "nothing was written to the violations log"
+fi
+
+# THE POSITIVE CONTROL, same change, same files, with NO contention recorded: still a violation. Without
+# this the assertions above pass on a guard that has simply stopped working (L159).
+rm -f "${SUPPORT_DIR}/run-boundary-violation.log"
+printf 'before' > "${SUPPORT_DIR}/overture-check-results.json"
+OUT="$(
+  SUPPORT="${SUPPORT_DIR}"
+  . "${HERE}/run-slot.sh"
+  . "${HERE}/run-contention.sh"
+  OVERTURE_RUN_SLOT=prep resolve_run_slot
+  : > "${SLOT_CONTENDED}"
+  slot_record_foreign_results
+  printf 'after' > "${SUPPORT_DIR}/overture-check-results.json"
+  slot_check_foreign_results
+)"
+assert_contains "the same change with nothing else running IS still a violation" "${OUT}" "BOUNDARY VIOLATION"
+assert_contains "and says why nothing else can account for it" "${OUT}" "No other run slot was alive"
+rm -f "${SUPPORT_DIR}"/overture-*-results.json "${SUPPORT_DIR}/run-boundary-violation.log"
+
 OUT="$(boundary_run prep "printf '{}' > \"${SUPPORT_DIR}/overture-prep-results.json\"")"
 assert_not_contains "writing its own results is never a violation" "${OUT}" "BOUNDARY VIOLATION"
 rm -f "${SUPPORT_DIR}"/overture-*-results.json "${SUPPORT_DIR}/run-boundary-violation.log"

@@ -150,6 +150,9 @@ slot_record_foreign_results() {
 slot_check_foreign_results() {
   checked=0
   violated=0
+  # #3016: changes this run cannot be exonerated of and cannot be blamed for, counted separately so
+  # neither reading swallows the other.
+  undecidable=0
   for other in $(slot_others); do
     before="$(printf '%s' "${FOREIGN_RESULTS_BEFORE}" | grep "^${other}|" | cut -d'|' -f2-)"
     after="$(slot_results_fingerprint "${SUPPORT}/overture-${other}-results.json")"
@@ -158,16 +161,34 @@ slot_check_foreign_results() {
     fi
     checked=$((checked + 1))
     if [ "${before}" != "${after}" ]; then
-      violated=$((violated + 1))
-      {
-        echo "$(date -u '+%Y-%m-%dT%H:%M:%SZ') run-slot: BOUNDARY VIOLATION."
-        echo "  This run is the '${RUN_SLOT}' slot, and the '${other}' slot's results file CHANGED while"
-        echo "  it was running: ${SUPPORT}/overture-${other}-results.json"
-        echo "  before: ${before}"
-        echo "  after:  ${after}"
-        echo "  Something followed a path it was not given. Another run's answers may have been"
-        echo "  overwritten, and that run cannot tell."
-      } | tee -a "${SUPPORT}/run-boundary-violation.log"
+      # #3016: three outcomes here, not two, and the third is the whole point.
+      #
+      # This guard accuses when another slot's results file changed during this run. That is sound only
+      # while the two runs cannot both be alive, which is exactly the premise #3015 removes. Once they can,
+      # the other slot's results file changing during this one is the ORDINARY case: it is that run writing
+      # its own answers. A guard that fires on the ordinary case is ignored, then switched off, within a
+      # day (L93).
+      #
+      # And it genuinely cannot tell the two apart. "The other run wrote its own results" and "this run
+      # wrote the other run's results" look identical from here: one changed file. So when this run shared
+      # the machine, it says it CANNOT TELL rather than picking the accusing reading, which is the honest
+      # answer and keeps the log's accusations meaning something (L11, L93).
+      if contention_observed "${SLOT_CONTENDED}" 2>/dev/null; then
+        undecidable=$((undecidable + 1))
+        echo "prep: the '${other}' slot's results changed while this run shared the machine with $(contention_names "${SLOT_CONTENDED}"), which is what a run writing its own answers looks like from here. Not reported as a violation, and not confirmed as clean."
+      else
+        violated=$((violated + 1))
+        {
+          echo "$(date -u '+%Y-%m-%dT%H:%M:%SZ') run-slot: BOUNDARY VIOLATION."
+          echo "  This run is the '${RUN_SLOT}' slot, and the '${other}' slot's results file CHANGED while"
+          echo "  it was running: ${SUPPORT}/overture-${other}-results.json"
+          echo "  before: ${before}"
+          echo "  after:  ${after}"
+          echo "  No other run slot was alive at any point during this one, so nothing else can account"
+          echo "  for the change. Something followed a path it was not given. Another run's answers may"
+          echo "  have been overwritten, and that run cannot tell."
+        } | tee -a "${SUPPORT}/run-boundary-violation.log"
+      fi
     fi
   done
   if [ "${violated}" -gt 0 ]; then
@@ -176,6 +197,11 @@ slot_check_foreign_results() {
   fi
   if [ "${checked}" -eq 0 ]; then
     echo "prep: no other slot had a results file to check against (nothing was compared)."
+    return 0
+  fi
+  # #3016: an undecidable change is NOT a clean bill of health, and must not be reported as one (L98).
+  if [ "${undecidable}" -gt 0 ]; then
+    echo "prep: ${undecidable} of ${checked} other slot results file(s) changed while runs shared the machine, so this run can be neither blamed nor cleared."
     return 0
   fi
   echo "prep: stayed in its own lane (${checked} other slot results file(s) unchanged)."
