@@ -200,7 +200,12 @@ struct QueueView: View {
                          overrides: ProducerOverrides(promotedRows: promotedProducers,
                                                       demotedRows: demotedHouses),
                          sources: watchedSources,
-                         refusals: ContactRefusal.ledger(from: refusedAddresses))
+                         refusals: ContactRefusal.ledger(from: refusedAddresses),
+                         // #3014: shows a live prep is drafting take no inherited org answer while a
+                         // check is running, so a check on a sibling show cannot change the contact
+                         // under a draft. Cached (LiveRunHoldings), never read from disk here: this
+                         // body re-derives on every render.
+                         heldKeys: LiveRunHoldings.current)
     }
 
     private var today: String { QueueModel.easternToday() }

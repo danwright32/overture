@@ -1380,6 +1380,10 @@ struct RootView: View {
     // #1938: the waiting itself moved to DetachedRunActivity.followUntilFinished, which polls only while a
     // run is in flight. What is left here is the settling, which is what this always really was.
     private func settleFinishedRun(slot: RunSlot) async {
+        // #3014: a run ending is the moment the fan-out block must lift, and it is not a store write, so
+        // nothing would re-derive the queue on its own (L175). Refreshed FIRST, so anything below that
+        // triggers a rebuild sees the released state rather than the held one.
+        defer { LiveRunHoldings.refresh() }
         // #1878: keep this run's work-list and results before anything else. FIRST, and above the dead-run
         // sweep in particular, because that sweep RETURNS: a run that died is the one whose evidence is
         // worth the most, and archiving after it would be archiving every run except those.

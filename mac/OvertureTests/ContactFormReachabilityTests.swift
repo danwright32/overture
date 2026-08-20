@@ -123,7 +123,7 @@ struct ContactFormReachabilityTests {
             OrgAnswerLedger.Show(key: "free", presenter: "Tenet Vocal Artists",
                                  venue: "House of the Redeemer", hasOwnAnswer: false),
         ]
-        #expect(OrgAnswerLedger.inherited(from: [answer], shows: shows, now: now)["free"] == nil)
+        #expect(OrgAnswerLedger.inherited(from: [answer], shows: shows, now: now, heldKeys: [])["free"] == nil)
     }
 
     // LIVE-STORE-CLAIM verified=2026-07-27 measure="rows from the 2026-07-27 probe run stamped no_email_found before the #1626 upgrade pass"
