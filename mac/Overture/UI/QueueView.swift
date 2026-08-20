@@ -215,7 +215,16 @@ struct QueueView: View {
     // #2760: EITHER slot, because the exclusion between a prep and a check is still in force. Reading only
     // the prep slot would offer the Prep button while a check holds the machine and every press would be
     // refused. #2765 is what makes the two independent; #2761 is where the wording follows.
-    private var prepRunning: Bool { PrepQueueService.anyRunIsRunning(now: Date()) }
+    // #3015: TWO questions, because the two runs no longer exclude each other. `anyRunIsRunning` was the
+    // right answer while either run blocked the other; asking it now hides the Prep button whenever a
+    // check is going, and greys the Check control whenever a prep is, which is the whole feature not
+    // happening. Each control asks about the slot it would actually start.
+    private var prepRunning: Bool {
+        PrepQueueService.isRunning(slot: .prep, markerURL: RunSlot.prep.markerURL(in: StoreLocation.handoffDirectory), now: Date())
+    }
+    private var checkRunning: Bool {
+        PrepQueueService.isRunning(slot: .check, markerURL: RunSlot.check.markerURL(in: StoreLocation.handoffDirectory), now: Date())
+    }
 
     // #1121: every heavy derived collection, built ONCE per render and threaded down, instead of a
     // half-dozen computed properties each re-running QueueModel.items(from:) (a full map that faults
@@ -441,7 +450,7 @@ struct QueueView: View {
             today: today, stage: focusedStage,
             overrides: ProducerOverrides(promotedRows: promotedProducers, demotedRows: demotedHouses),
             geo: geo,
-            prepRunning: prepRunning,
+            checkRunning: checkRunning,
             onRun: { keys, title, message in
                 pendingProbe = ProbeConfirm(keys: keys, dateLabel: "", title: title, message: message)
             })
@@ -713,7 +722,7 @@ struct QueueView: View {
                 ReachabilityProbeControl(
                     items: group.items, dateLabel: group.monthDay,
                     geo: geo,
-                    isRunning: prepRunning,
+                    isRunning: checkRunning,
                     onTap: { keys, label in pendingProbe = ProbeConfirm(keys: keys, dateLabel: label) })
             }
             .padding(.bottom, OVSpacing.xxs)
@@ -1413,7 +1422,7 @@ struct QueueView: View {
                                           // through the SAME confirm sheet the date selection raises,
                                           // rather than a second sentence about the same spend.
                                           onRecheckNow: { requestRecheckNow($0) },
-                                          prepRunning: prepRunning,
+                                          checkRunning: checkRunning,
                                           probeRunning: data.probeRunning,
                                           undoStack: undoStack,
                                           highlightedKey: highlightedKey, outboundSendSince: sendingSince,

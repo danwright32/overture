@@ -322,8 +322,12 @@ struct RootView: View {
     // to PrepStartGate so it is reachable from a test at all (#863); this reads it twice, for the
     // sentence in the menu and for the item's disabled state, and both are the same answer (L109).
     private var prepRefusal: String? {
+        // #3015: the PREP slot's own question. It used to ask the whole-app one, which refuses for ANY
+        // live run, so a check going meant the menu item was disabled and Cmd+P refused. That is one of
+        // the four gates that had to lift together: lifting only the throw would have shipped the feature
+        // invisible, with the control still greyed out.
         PrepStartGate.reason(keptToPrep: toPrep.count,
-                             runInFlight: PrepQueueService.runInFlight(now: Date()))
+                             ownSlotRunInFlight: PrepQueueService.runInFlight(slot: .prep, now: Date()))
     }
 
     // #367/#733: shares ProspectMutations.bulkReprepEligible with bulkReprep itself, so the

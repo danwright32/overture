@@ -23,7 +23,7 @@ enum ProspectRowFactory {
                     // no run machinery (Archive) simply passes nothing and the control marks the show
                     // for the next check instead, which is what #2261 shipped.
                     onRecheckNow: ((QueueItem) -> Void)? = nil,
-                    prepRunning: Bool = false,
+                    checkRunning: Bool = false,
                     probeRunning: Bool = false,
                     // #1414: optional so a surface that does not offer undo (and any future caller)
                     // simply passes nothing rather than every call site growing a parameter it ignores.
@@ -154,7 +154,7 @@ enum ProspectRowFactory {
                                                              context: context, feedback: feedback)
                 onRecheckNow?(item)
             },
-            prepRunning: prepRunning,
+            checkRunning: checkRunning,
             probeRunning: probeRunning,
             onConfirmBooking: { ProspectMutations.confirmBooking(item, prospects: prospects, context: context, feedback: feedback) },
             onDismissBookingSuggestion: { ProspectMutations.dismissBookingSuggestion(item, prospects: prospects, context: context, feedback: feedback) },

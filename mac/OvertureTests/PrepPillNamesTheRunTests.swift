@@ -8,7 +8,7 @@ import Foundation
 // naming 4 shows, `prep-run.log` ending in "reachability check split into 4 chunk(s)", and no scout
 // marker at all. A check, not a Prep run.
 //
-// The cause was one boolean. `AgentInputs.prepRunning` was `PrepQueueService.isRunning`, the presence of
+// The cause was one boolean. `AgentInputs.checkRunning` was `PrepQueueService.isRunning`, the presence of
 // a beating `prep-running` marker, and THREE kinds of detached run take that marker: a Prep drafting run,
 // a per-row re-prep, and a reachability check. Every one of them rendered as "Prep: Running now…" over a
 // count belonging to work that had not started (L11: a message may claim only what its check measured).
@@ -111,8 +111,8 @@ struct EverySurfaceNamesTheRunTests {
     // inside the open menu where the toolbar's own correct label is not in view. During a check it said
     // "A prep run is already going", which is simply false.
     @Test func therefusalNamesTheRunThatIsActuallyHoldingTheSlot() {
-        let duringACheck = PrepStartGate.reason(keptToPrep: 3, runInFlight: .reachabilityCheck)
-        let duringAPrep = PrepStartGate.reason(keptToPrep: 3, runInFlight: .prep)
+        let duringACheck = PrepStartGate.reason(keptToPrep: 3, ownSlotRunInFlight: .reachabilityCheck)
+        let duringAPrep = PrepStartGate.reason(keptToPrep: 3, ownSlotRunInFlight: .prep)
 
         #expect(duringACheck == "A reachability check is already going")
         #expect(duringAPrep == "A prep run is already going")
@@ -122,12 +122,12 @@ struct EverySurfaceNamesTheRunTests {
     // The other two branches are untouched: nothing running and nothing kept still says what to do about
     // it, and a run in flight is still named first when both are true.
     @Test func thegateStillRefusesForTheOtherReasons() {
-        #expect(PrepStartGate.refusal(keptToPrep: 0, runInFlight: nil) == .nothingKept)
-        #expect(PrepStartGate.refusal(keptToPrep: 0, runInFlight: .reachabilityCheck)
+        #expect(PrepStartGate.refusal(keptToPrep: 0, ownSlotRunInFlight: nil) == .nothingKept)
+        #expect(PrepStartGate.refusal(keptToPrep: 0, ownSlotRunInFlight: .reachabilityCheck)
                 == .runInFlight(.reachabilityCheck))
-        #expect(PrepStartGate.refusal(keptToPrep: 3, runInFlight: nil) == nil)
-        #expect(PrepStartGate.canStart(keptToPrep: 3, runInFlight: nil))
-        #expect(!PrepStartGate.canStart(keptToPrep: 3, runInFlight: .reachabilityCheck))
+        #expect(PrepStartGate.refusal(keptToPrep: 3, ownSlotRunInFlight: nil) == nil)
+        #expect(PrepStartGate.canStart(keptToPrep: 3, ownSlotRunInFlight: nil))
+        #expect(!PrepStartGate.canStart(keptToPrep: 3, ownSlotRunInFlight: .reachabilityCheck))
     }
 
     // The stop control said "Cancel prep" while a check was running. It stops the right thing (one lock,

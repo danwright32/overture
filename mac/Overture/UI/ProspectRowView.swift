@@ -75,7 +75,7 @@ struct ProspectRowView: View {
     // control greys out instead of failing after the press. Handed in like `gmailConnected` rather than
     // read here: it is one fact about the app, identical for every row, and reading it per card is the
     // #1770 defect.
-    var prepRunning: Bool = false
+    var checkRunning: Bool = false
     // #2267: whether a reachability check specifically is in flight. Separate from the line above because
     // a Prep run occupying the slot must grey the control WITHOUT making the card claim its own check is
     // under way, which would be a running label over work that is not happening.
@@ -1047,9 +1047,9 @@ struct ProspectRowView: View {
             // press with "something is already running" (#1323). A probe and a Prep share that slot.
             Button(ReachabilityCopy.checkAgain) { onRequestRecheck() }
                 .buttonStyle(.plain).font(OVType.meta)
-                .foregroundStyle(prepRunning ? OVColor.inkFaint : OVColor.forestText)
-                .disabled(prepRunning)
-                .help(prepRunning ? ReachabilityCopy.checkAgainBusyHelp : ReachabilityCopy.checkAgainHelp)
+                .foregroundStyle(checkRunning ? OVColor.inkFaint : OVColor.forestText)
+                .disabled(checkRunning)
+                .help(checkRunning ? ReachabilityCopy.checkAgainBusyHelp : ReachabilityCopy.checkAgainHelp)
                 .padding(.top, 2)
         case .running:
             // #2267: counting from when the check actually began, not from this redraw, and carrying its
@@ -1071,8 +1071,8 @@ struct ProspectRowView: View {
                     .fixedSize(horizontal: false, vertical: true)
                 Button(ReachabilityCopy.checkAgainRetry) { onRequestRecheck() }
                     .buttonStyle(.plain).font(OVType.meta)
-                    .foregroundStyle(prepRunning ? OVColor.inkFaint : OVColor.forestText)
-                    .disabled(prepRunning)
+                    .foregroundStyle(checkRunning ? OVColor.inkFaint : OVColor.forestText)
+                    .disabled(checkRunning)
             }
             .padding(.top, 2)
         }
