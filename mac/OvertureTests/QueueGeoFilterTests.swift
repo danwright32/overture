@@ -128,10 +128,9 @@ struct QueueGeoFilterCountTests {
         #expect(shown.union(hidden) == Set(items.map(\.id)))
     }
 
-    @Test func theChipNamesItsCount() {
-        #expect(QueueModel.tooFarLabel(count: 11) == "Too far (11)")
-        #expect(QueueModel.tooFarLabel(count: 1) == "Too far (1)")
-    }
+    // #2707: `theChipNamesItsCount` stood here. The chip it named went with #1134's removal of the four
+    // queue filters, so the label it asserted was one no screen could render. The GATE below is what
+    // survived and is still tested: it decides which rows a stage shows.
 
     // The four real rows from the first scout of Smoke Ring Quartet, with their real dates, read on the
     // day Dan saw #996: the chip said "Too far (4)" and showed ONE row, because three of them were also
@@ -190,27 +189,11 @@ struct QueueGeoFilterCountTests {
         #expect(items.filter(QueueModel.isTooFar).count == revealed.count)
     }
 
-    // #996: the chip is the only way back out of its own filter, so it must not disappear underneath
-    // Dan while it is on. Changing the discipline filter with it active empties its set, and a chip that
-    // vanished then would strand him looking at an empty queue with nothing to click.
-    @Test func theChipStaysClickableWhileItIsOnEvenWithNothingLeftToShow() {
-        #expect(QueueModel.chipIsShown(count: 0, showingOnly: true))
-        #expect(QueueModel.chipIsShown(count: 4, showingOnly: false))
-        // Nothing out of range and the filter is off: the chip says nothing, which is the #887 promise
-        // that a quiet queue looks quiet.
-        #expect(!QueueModel.chipIsShown(count: 0, showingOnly: false))
-    }
-
-    // The help text is the only thing standing between "Overture hid rows" and "where did my rows go?",
-    // so the two states must say genuinely different things (#843: a distinction real in the code that
-    // collapses to one sentence on screen is the defect).
-    @Test func theHelpSaysSomethingDifferentInEachState() {
-        let off = QueueModel.tooFarHelp(showingOnly: false, count: 11)
-        let on = QueueModel.tooFarHelp(showingOnly: true, count: 11)
-        #expect(off != on)
-        #expect(on.contains("11 shows"))
-        #expect(on.contains("show the whole queue again"))
-    }
+    // #2707: `theChipStaysClickableWhileItIsOnEvenWithNothingLeftToShow` (#996) and
+    // `theHelpSaysSomethingDifferentInEachState` stood here. Both asserted real rules about a chip #1134
+    // removed, and both went on passing over a surface that could not appear, which is what let their
+    // copy sit in docs/copy-inventory.md to be cold-read. The rules themselves are not lost: if the chip
+    // ever comes back it comes back with them.
 }
 
 // #992. The chip says HOW MANY were hidden; a hidden row must also say WHY it in particular was hidden,

@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1460 sentences**.
+Every sentence Overture can say to Dan: **1452 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -476,8 +476,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "Add an email address, or a link to a contact form or profile. No contact was added"
     `App/ActionFeedback.swift`
-"Add an email address. No contact was added"
-    `App/ActionFeedback.swift`
 "Add another"
     `UI/AddLeadSheet.swift`
 "Add contact"
@@ -661,8 +659,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "Confirm booking"
     `UI/ProspectRowView.swift`
-"Confirm bookings (\(count))"
-    `UI/QueueView+Model.swift`
 "Connect Gmail"
     `App/RootView.swift`
     `UI/OnboardingView.swift`
@@ -1891,10 +1887,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/StoreShrinkNoticeSheet.swift`
 "Show name"
     `UI/ProspectRowView.swift`
-"Show only prospects where Downbeat detected a booking, to confirm or dismiss each one"
-    `UI/QueueView+Model.swift`
-"Show only the shows that are too far away to shoot"
-    `UI/QueueView+Model.swift`
 "Show the scout that's running. Hiding its window doesn't stop it."
     `App/RootView.swift`
 "Show the whole \(what), then send it"
@@ -1903,10 +1895,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DraftReviewNotes.swift`
 "Show which bookings were auto-detected"
     `UI/OutcomePatternsView.swift`
-"Showing only the \(Plural.count(count, "pending booking")). Click to show the whole queue again."
-    `UI/QueueView+Model.swift`
-"Showing only the \(Plural.count(count, "show")) that are too far away. Click to show the whole queue again."
-    `UI/QueueView+Model.swift`
 "Shows in \(town) can appear again"
     `App/ActionFeedback.swift`
 "Shows land here once Overture has tracked at least one."
@@ -2264,8 +2252,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "Too far"
     `Domain/ShowOutcome.swift`
-"Too far (\(count))"
-    `UI/QueueView+Model.swift`
 "Too few sends to call anything yet. Both styles need at least \(experimentCallThreshold) sends before the reply rates mean much."
     `Domain/ExperimentReport.swift`
 "Too soon"
@@ -2830,8 +2816,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "\(piece) is not an email address"
     `App/ActionFeedback.swift`
 "\(piece) is not an email address or a link. No contact was added"
-    `App/ActionFeedback.swift`
-"\(piece) is not an email address. No contact was added"
     `App/ActionFeedback.swift`
 "\(piece) is not an email address. Nothing was saved"
     `App/ActionFeedback.swift`

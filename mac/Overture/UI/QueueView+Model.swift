@@ -1026,22 +1026,11 @@ enum QueueModel {
     // called either one, so they went with it. The gate itself (`isTooFar`, above) is unchanged and is
     // still the one place the question is asked.
 
-    // #996: the chip must stay clickable while it is ON, even when it now reveals nothing. Changing a
-    // discipline filter with the chip active can empty its set, and a chip that vanished at that moment
-    // would strand Dan in a queue showing no rows with nothing left to click to get back.
-    static func chipIsShown(count: Int, showingOnly: Bool) -> Bool { count > 0 || showingOnly }
-
-    static func tooFarLabel(count: Int) -> String { "Too far (\(count))" }
-
-    // Why rows have vanished, which is the one thing a filter must never leave Dan guessing about, and
-    // what turning it on would do when it is off. Mirrors pendingBookingsHelp, deliberately: it is the
-    // same job, and the queue should not have two voices for it.
-    static func tooFarHelp(showingOnly: Bool, count: Int) -> String {
-        guard showingOnly else {
-            return "Show only the shows that are too far away to shoot"
-        }
-        return "Showing only the \(Plural.count(count, "show")) that are too far away. Click to show the whole queue again."
-    }
+    // #2707: `chipIsShown` (#996), `tooFarLabel` and `tooFarHelp` stood here, the "Too far" chip's
+    // visibility, its label and its two explaining sentences. #1134 removed the four queue filters when
+    // navigation became stage-only, and `ToolbarConsolidationGuardTests` pins that they stay gone, so
+    // nothing had been able to render any of it since. The gate itself (`isTooFar` / `tooFarReason`,
+    // above) is unchanged and still live: it decides which rows a stage shows.
 
     // #308: the heading on the focused view a multi-lead away alert lands on. It names how many leads it
     // is about to show, so it is a promise about the rows directly beneath it.
@@ -1049,15 +1038,11 @@ enum QueueModel {
         "\(Plural.count(count, "new lead")) while you were away"
     }
 
-    // Why rows have vanished, which is the one thing a filter must never leave Dan guessing about, and
-    // what turning it on would do when it is off. Two entirely different sentences, chosen by a ternary
-    // in the view body.
-    static func pendingBookingsHelp(showingOnly: Bool, count: Int) -> String {
-        guard showingOnly else {
-            return "Show only prospects where Downbeat detected a booking, to confirm or dismiss each one"
-        }
-        return "Showing only the \(Plural.count(count, "pending booking")). Click to show the whole queue again."
-    }
+    // #2707: `pendingBookingsHelp` stood here, the pending-bookings chip's two explaining sentences, and
+    // it went the same way as its "Too far" twin: #1134 removed the toggle and left the copy. It hid one
+    // step longer than the others because the only thing naming it was the COMMENT above `tooFarHelp`
+    // saying the two mirrored each other, so it read as reachable until that comment was deleted with the
+    // code it described.
 
     static func fitLabel(isHighFit: Bool) -> String { isHighFit ? "HIGH FIT" : "LONG SHOT" }
 
@@ -1071,7 +1056,10 @@ enum QueueModel {
     //
     // Only its punctuation is touched: the model writes machine tokens ("wants_to_book"), and an underscore
     // on screen is the one part of that Dan should not have to read.
-    static func confirmBookingsLabel(count: Int) -> String { "Confirm bookings (\(count))" }
+    // #2707: `confirmBookingsLabel` stood here. Removed by the same #1134 pass, and
+    // `ToolbarConsolidationGuardTests.theBookingsFilterToggleIsGone` already asserted that QueueView must
+    // not name it, which is the sharpest version of this whole class: a guard pinned the screen as gone
+    // while its sentence stayed in the inventory for Dan to read.
 
     static func aiReadNote(hint: String) -> String {
         "AI read: \(hint.replacingOccurrences(of: "_", with: " "))"
