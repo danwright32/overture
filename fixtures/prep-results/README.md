@@ -60,6 +60,24 @@ which is unbounded free text; the run has the page in front of it and the app do
 `v1.json` through `v8.json` still decode with it absent, and an absent or unrecognised value reads as
 "nobody has said", never as a tier.
 
+## What the sample bodies are held to (#2955)
+
+Every `draft.body` here is an EXAMPLE, not filler: this directory is what the runbook points the Prep
+workflow at, and the salutation-free rule above (#393) is already a copy rule applied to a fixture. So a
+body showing a rule that has since been REVERSED teaches the reversed rule. Three had gone that way, and a
+guard written to find them found sixteen: every committed body stated the rate (reversed 2026-07-31),
+linked a gallery path (retired 2026-07-30, and BLOCKING at send since #1832), or closed on "let me know
+how that lands" (rejected 2026-07-18). They were rewritten together.
+
+`SampleDraftsFollowCurrentRulesTests` holds them there from now on. It enumerates whatever is committed
+rather than naming files, so a fixture added later is judged too.
+
+One thing it deliberately leaves alone: five results still carry `"variant": "rate_stated"`, a token from
+the retired offer A/B (#612), beside bodies that now state no rate. The token is not a description of the
+body, it is the experiment arm the run echoed back, and it is the reason `fixtureShape.ts` parses `variant`
+as a plain string rather than an enum. Removing the last of them would leave that looseness with nothing
+proving it is needed, while a real results file from that period still carries one.
+
 ## The run metadata fixtures (#1678)
 
 `run-metadata-complete-v8.json` and `run-metadata-partial-v8.json` are a different KIND of fixture from the
