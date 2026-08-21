@@ -60,6 +60,44 @@ enum OmniFocusSync {
         enum Kind: String, Equatable, Sendable {
             case postEventPrompt   // record how this show ended. Only Dan holds that fact.
             case replyTriage       // somebody wrote and nobody has answered them.
+
+            // #2901: what actually retires a task of this kind, in the note itself.
+            //
+            // The note used to name the lead, the contact, the due day, the venue, the date and a deep
+            // link, and say nothing about what clears it. Ticking it off in OmniFocus does not (#2899),
+            // and the obvious thing to reach for instead, closing the show out, does not either (#2900).
+            // On 2026-08-17 that cost a session's diagnosis: the only way to learn the answer was to read
+            // `Recipient.hasUnhandledReply` and work backwards to its writers.
+            //
+            // It lives HERE, on the kind, rather than being written into the note by hand, so it sits
+            // beside the thing that decides which kind a task is and moves with it. Exhaustive, so a
+            // third kind cannot ship without somebody answering this question (L113).
+            var whatClearsIt: String {
+                switch self {
+                case .replyTriage:
+                    return "Clears when: you answer them in Overture, or stand this contact down. "
+                        + "Ticking this off here counts too: Overture reads it back and marks their reply "
+                        + "answered."
+                case .postEventPrompt:
+                    return "Clears when: you record how the show ended in Overture. Ticking this off here "
+                        + "only stops OmniFocus asking; Overture still needs the ending from you."
+                }
+            }
+
+            // Whether ticking a task of this kind off in OmniFocus WRITES anything back (#2899).
+            //
+            // It exists so the sentence above cannot contradict the behaviour. The two used to be one
+            // hand-written line for both kinds, and the first draft of it said ticking off does nothing,
+            // which is true of the post-event prompt and false of reply triage: a completed triage task
+            // is read back and stamps the reply answered. A note that is confidently wrong about this is
+            // worse than the silence #2901 was filed about, so it is stated once and asserted against
+            // what `recordCompletions` actually does (L16).
+            var completionIsCarriedBack: Bool {
+                switch self {
+                case .replyTriage: return true
+                case .postEventPrompt: return false
+                }
+            }
         }
         let kind: Kind
         let naturalKey: String
@@ -143,7 +181,7 @@ enum OmniFocusSync {
                    PostEventPrompt.prompt(for: r, of: p, now: now) != nil, due <= cutoff {
                     let dueDate = easternTime(hour: dueHour, onDayOf: due)
                     earned.append((r, DesiredTask(kind: .postEventPrompt, naturalKey: p.naturalKey, recipientId: r.id, title: title(for: p, r),
-                                                  note: note(for: p, r, dueDate: dueDate),
+                                                  note: note(for: p, r, kind: .postEventPrompt, dueDate: dueDate),
                                                   deferDate: easternTime(hour: deferHour, onDayOf: due),
                                                   dueDate: dueDate)))
                     continue
@@ -158,7 +196,7 @@ enum OmniFocusSync {
                     let anchor = r.replyArrivedAt ?? r.sentAt ?? now
                     let dueDate = easternTime(hour: dueHour, onDayOf: anchor)
                     earned.append((r, DesiredTask(kind: .replyTriage, naturalKey: p.naturalKey, recipientId: r.id, title: triageTitle(for: p, r),
-                                                  note: note(for: p, r, dueDate: dueDate),
+                                                  note: note(for: p, r, kind: .replyTriage, dueDate: dueDate),
                                                   deferDate: easternTime(hour: deferHour, onDayOf: anchor),
                                                   dueDate: dueDate)))
                 }
@@ -288,9 +326,23 @@ enum OmniFocusSync {
     // must not change.
     static let notePrefix = "Overture lead: "
     static let contactNotePrefix = "Overture contact: "
-    private static func note(for p: Prospect, _ r: Recipient, dueDate: Date) -> String {
+    private static func note(for p: Prospect, _ r: Recipient, kind: DesiredTask.Kind,
+                             dueDate: Date) -> String {
+        // The first three are LOAD BEARING: the client reads them back verbatim to match a task to its
+        // contact, so nothing goes above or between them.
         var parts = ["\(notePrefix)\(p.naturalKey)", "\(contactNotePrefix)\(r.id)",
                      "\(dueNotePrefix)\(EasternDate.dayString(from: dueDate))"]
+        parts.append(kind.whatClearsIt)
+        // #2952: on a follow-up, say that a conversation already happened.
+        //
+        // Once a reply is answered the triage task completes and what remains is "follow up with Name",
+        // whose note carried only the venue, the date and a link. This is the one surface Dan reads away
+        // from the Mac, so arriving at a follow-up with no idea a negotiation is already under way costs
+        // most here. Read off `replyIsAnswered`, the predicate that already means exactly this, rather
+        // than a second reading of the same three fields that could disagree with it.
+        if r.replyIsAnswered {
+            parts.append("You have already been in touch with them about this and answered their reply.")
+        }
         if let v = p.venue, !v.isEmpty { parts.append("Venue: \(v)") }
         if let d = p.performanceDate, !d.isEmpty { parts.append("Performance: \(d)") }
         // #231 / #307: a clickable link back to Overture, built by the single OvertureDeepLink builder

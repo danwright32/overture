@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1438 sentences**.
+Every sentence Overture can say to Dan: **1443 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -631,6 +631,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SourceFixConfirmActions.swift`
 "Clearing out shows in towns you blocked"
     `Domain/ScoutSweepStep.swift`
+"Clears when: you answer them in Overture, or stand this contact down. "
+    `Domain/OmniFocusSync.swift`
+"Clears when: you record how the show ended in Overture. Ticking this off here "
+    `Domain/OmniFocusSync.swift`
 "Close this out"
     `Domain/ReachedOutClose.swift`
 "Close this out without sending"
@@ -2230,6 +2234,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "Those were \(named[0]) and \(named[1])."
     `Domain/SourceReadability.swift`
+"Ticking this off here counts too: Overture reads it back and marks their reply "
+    `Domain/OmniFocusSync.swift`
 "Timed out waiting for Google. Close any old browser tabs and try Connect Gmail again."
     `Integration/GmailAuthManager.swift`
 "Times vary"
@@ -2410,6 +2416,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/DaysOffView.swift`
 "You have \(pointerPhrase(for: target, count: n)) next."
     `Domain/StageEmptyState.swift`
+"You have already been in touch with them about this and answered their reply."
+    `Domain/OmniFocusSync.swift`
 "You linked a conversation to this pitch, so Overture can't take the send record back. "
     `Domain/FormOutreach.swift`
 "You linked their reply. It's waiting on you."
@@ -3074,6 +3082,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/FollowUp.swift`
     `Domain/ReplyIdentity.swift`
     `UI/FollowUpsView.swift`
+"only stops OmniFocus asking; Overture still needs the ending from you."
+    `Domain/OmniFocusSync.swift`
 "opened on. Paste \(one ? "that month's" : "a month's") own link and I'll "
     `UI/LeadIntakeModel.swift`
 "opened or changed. The file may be in use by another program, or its permissions may have "
