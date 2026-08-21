@@ -1306,8 +1306,37 @@ enum PrepQueueService {
         return stored
     }
 
-    static func lastRunStartedAt(slot: RunSlot, defaults: UserDefaults = .standard) -> Date? {
-        sanitizedLastRun(defaults.object(forKey: slot.lastRunStartedAtKey) as? Date)
+    // #1881: while a run is LIVE, its start comes from the marker that makes it live.
+    //
+    // "A run is live" has always come from the marker; "when it started" came only from the default
+    // below, which is written after the detached runner launches. Between the lock being taken and that
+    // write, the app truthfully reported a live run beside the PREVIOUS run's start, and the takeover
+    // showed an elapsed counter of 23:47:46 on a run seconds old.
+    //
+    // Writing the default earlier would close today's gap and leave two sources free to disagree again.
+    // The marker is the one thing that makes a run live, so while it exists it is also what says when the
+    // run began, and the disagreement stops being representable (L16).
+    //
+    // With no marker there is no live run and the stored value stands: that is what "the last run started
+    // at" means once a run is over, which is the question `prepSlotRunKind` and the freshness readers ask.
+    //
+    // The same sanitiser applies to both. One of two sources being sanitised is how they come to disagree,
+    // and a marker carrying an implausible date is no more believable than a stored one.
+    static func lastRunStartedAt(slot: RunSlot, defaults: UserDefaults = .standard,
+                                 support: URL = StoreLocation.handoffDirectory) -> Date? {
+        if let live = markerCreatedAt(slot: slot, in: support) { return sanitizedLastRun(live) }
+        return sanitizedLastRun(defaults.object(forKey: slot.lastRunStartedAtKey) as? Date)
+    }
+
+    /// When this slot's marker was created, or nil when there is none, so no run is live.
+    ///
+    /// Creation date, not modification: `prep-run.sh` truncates the marker as a heartbeat, so the
+    /// modification date is when the run last breathed rather than when it began, and using it would
+    /// report every live run as having started moments ago (L106 is the same signal read the other way).
+    private static func markerCreatedAt(slot: RunSlot, in support: URL) -> Date? {
+        let marker = slot.markerURL(in: support)
+        guard let values = try? marker.resourceValues(forKeys: [.creationDateKey]) else { return nil }
+        return values.creationDate
     }
 
     static func recordRunStarted(slot: RunSlot, at now: Date, defaults: UserDefaults = .standard) {
