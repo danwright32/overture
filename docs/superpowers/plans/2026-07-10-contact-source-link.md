@@ -137,6 +137,14 @@ Create `fixtures/prep-results/v6.json`:
 }
 ```
 
+> **The email body above is superseded and must not be copied (#2955).** This plan is dated 2026-07-10
+> and the sample was correct then. Three rules changed after it: a cold pitch carries no rate and no
+> turnaround (Dan, 2026-07-31), a draft links `danwrightphotography.com` and never a gallery path
+> (#1832, 2026-07-30, and the app now REFUSES to send a body carrying one), and "let me know how that
+> lands" is retired (2026-07-18). The plan is left as the record of what was planned; the current
+> examples are in `fixtures/prep-results/`, held to the current rules by
+> `SampleDraftsFollowCurrentRulesTests`.
+
 - [ ] **Step 5: Run the test to verify it passes**
 
 Run: `cd "mac" && ./scripts/run-tests-locked.sh -only-testing:OvertureTests/PrepResultsContractTests`
