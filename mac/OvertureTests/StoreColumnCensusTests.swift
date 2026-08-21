@@ -157,32 +157,36 @@ struct StoreColumnCensusTests {
         #expect(reading == .unreadable(.noFileAtPath(missing.path)))
     }
 
-    // The mechanism behind the flake this suite spent two runs producing, made deterministic (#2930).
+    // A store whose PAGES are damaged but whose header still opens: the open succeeds and the first
+    // query faults. That is the shape #2930 was really about, and the one this reader used to answer
+    // wrongly: the first version turned SQLite's fault into `.tableNotInStore(table: "ZPROSPECT")`, a
+    // definite fact about Dan's data manufactured out of not knowing.
     //
-    // A WAL-mode database whose `-shm` is not there cannot be read: a read-only connection may not create
-    // the shared-memory file it would need. That state exists on disk for a moment every time a writer
-    // closes, which is why it arrived as a nil under load and never in a scoped re-run. It is reproduced
-    // here by deleting the `-shm` while the `-wal` stands.
-    //
-    // What it must answer is a FAULT, carrying SQLite's own code and message. Measured 2026-08-20: the
-    // open succeeds and the very next query fails with a disk I/O error, and the first version of this
-    // reader turned that into "ZPROSPECT is not in the store", which is a definite fact about Dan's data
-    // manufactured out of not knowing. That is the same defect as the nil, one level down, so it is
-    // asserted against by name rather than left to the shape of the answer.
-    @Test func saysItCouldNotReadAWalStoreMissingItsSharedMemoryFile() throws {
+    // Built by damaging a COPY, so nothing owns the file and no connection is lied to. An earlier
+    // version of this test built its state by deleting the `-shm` a live container still held, which is
+    // an API violation SQLite names in its own log and which depends on release timing rather than on
+    // any state: it passed scoped and failed a full run the same evening (#3043).
+    @Test func saysItCouldNotReadAStoreWhosePagesAreDamaged() throws {
         let store = try makeStore(count: 3, withMode: 1)
         let fm = FileManager.default
-        // Both sidecars are the writer's, so the state is built while it is open and read after it is gone.
-        try withExtendedLifetime(store.container) {
-            #expect(fm.fileExists(atPath: store.url.path + "-wal"))
-            try fm.removeItem(atPath: store.url.path + "-shm")
-        }
+        let dir = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("census-damaged-\(UUID().uuidString)")
+        try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: dir) }
+        let copied = dir.appendingPathComponent("Overture.store")
+
+        var bytes = try withExtendedLifetime(store.container) { try Data(contentsOf: store.url) }
+        #expect(bytes.count > 4096, "the fixture store is too small to damage past its header")
+        // The first page carries the header SQLite reads at open. Everything after it is where the
+        // schema lives, so this opens and then cannot answer.
+        for i in 4096..<bytes.count { bytes[i] = 0xFF }
+        try bytes.write(to: copied)
 
         let reading = StoreColumnCensus.nonNullRows(table: "ZPROSPECT",
                                                     column: "ZSENDSTOGETHEROVERRIDE",
-                                                    inSQLiteFileAt: store.url.path)
+                                                    inSQLiteFileAt: copied.path)
         guard case .unreadable(let why) = reading else {
-            Issue.record("a store SQLite cannot read must not answer a count, and this answered \(reading)")
+            Issue.record("a damaged store must not answer a count, and this answered \(reading)")
             return
         }
         #expect(why != .tableNotInStore(table: "ZPROSPECT"),
