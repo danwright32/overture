@@ -1172,6 +1172,7 @@
 		A42A6B6B2AD9B99BD56E4C06 /* NoRouteFoundAdoptionMeasurementTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC009FDC57BB7D61BAA89C91 /* NoRouteFoundAdoptionMeasurementTests.swift */; };
 		A43BCBF2AB575B6C5BBEE86C /* WatchGap.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55B59614D6EEB6280F56DBD7 /* WatchGap.swift */; };
 		A4B68CDC97718352386E3C4E /* OvationTixExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 021E561B34845298133474F8 /* OvationTixExtractor.swift */; };
+		A4BC4E94E421F28E79CE2C73 /* AnsweredShowsOnTheCardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 972CC8AF91DFF02416C791D7 /* AnsweredShowsOnTheCardTests.swift */; };
 		A4F2CA120578B5DC5E777B3C /* ProbeResultVocabulariesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E62E1A333EED90335FCCBE9 /* ProbeResultVocabulariesTests.swift */; };
 		A54B7C711B316D36AF752E7D /* LostOnPriceOutcomeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE785F2EBEEB24B16B99A3BB /* LostOnPriceOutcomeTests.swift */; };
 		A550FEC46DD00BFE33EEFF35 /* AnsweredReplyNote.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEF8FA94B2435C4C51F38EFE /* AnsweredReplyNote.swift */; };
@@ -2674,6 +2675,7 @@
 		969A41B567557D7AC7AE7B4E /* LeadIntakeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeadIntakeTests.swift; sourceTree = "<group>"; };
 		96B240AD82A5B280E1AA7B55 /* DraftEditCaptureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DraftEditCaptureTests.swift; sourceTree = "<group>"; };
 		96F2023776607C6C57394D07 /* SubVenueDisplayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubVenueDisplayTests.swift; sourceTree = "<group>"; };
+		972CC8AF91DFF02416C791D7 /* AnsweredShowsOnTheCardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnsweredShowsOnTheCardTests.swift; sourceTree = "<group>"; };
 		973A2EC8D67BB0AF24543FC4 /* OvationTixCalendarTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OvationTixCalendarTests.swift; sourceTree = "<group>"; };
 		974057A370C1D10DB865BCB7 /* ReplyReachLabelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReplyReachLabelTests.swift; sourceTree = "<group>"; };
 		9762A5CFBB99DBC1CC75B811 /* QueueItemVoiceLearningTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueItemVoiceLearningTests.swift; sourceTree = "<group>"; };
@@ -3416,6 +3418,7 @@
 				77502199D20CF2BA2FFC9659 /* AnsweredReplyBackfillTests.swift */,
 				A4007CBB59A3FEB2408F3C66 /* AnsweredReplyNoteTests.swift */,
 				B8310326F71A2E1858E7B010 /* AnsweredReplyNoteWiringTests.swift */,
+				972CC8AF91DFF02416C791D7 /* AnsweredShowsOnTheCardTests.swift */,
 				E2DE0329E8A4FB664484CB07 /* AnsweringAnInquiryKeepsTheReplyTests.swift */,
 				BE57AD6028D677626774BB9B /* AnsweringAnInquiryWiringTests.swift */,
 				F3607211B9223AB5C5387C39 /* AnsweringAReplyMarksItAnsweredTests.swift */,
@@ -5441,6 +5444,7 @@
 				A550FEC46DD00BFE33EEFF35 /* AnsweredReplyNote.swift in Sources */,
 				232F0B556EA6F1800EA3990A /* AnsweredReplyNoteTests.swift in Sources */,
 				D1649355D505643E2CB29C1D /* AnsweredReplyNoteWiringTests.swift in Sources */,
+				A4BC4E94E421F28E79CE2C73 /* AnsweredShowsOnTheCardTests.swift in Sources */,
 				87D170CCEEF8B3363F920C2B /* AnsweringAReplyMarksItAnsweredTests.swift in Sources */,
 				D1DF4398F8A6D0D5B2E0F0FA /* AnsweringAnInquiryKeepsTheReplyTests.swift in Sources */,
 				12382A0B99278EF252ED86D4 /* AnsweringAnInquiryWiringTests.swift in Sources */,

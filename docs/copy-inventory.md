@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1459 sentences**.
+Every sentence Overture can say to Dan: **1460 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -2426,6 +2426,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SelfBookingConflict.swift`
 "You already watch \(org) at that address."
     `UI/SourceFixConfirmActions.swift`
+"You answered them"
+    `UI/QueueView+Model.swift`
 "You asked for this reply draft \(ago(requestedAt, now: now)) and it never arrived."
     `Domain/StalledReplyDraft.swift`
 "You blocked \(day) (\(name))."
