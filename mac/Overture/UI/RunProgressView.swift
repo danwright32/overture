@@ -101,6 +101,10 @@ struct RunProgressView: View {
     // Just the ticking content, sized to its content. The presentation chrome (the takeover's fixed
     // frame and canvas background) is applied by the caller, so the SAME view drops into RootView's
     // full-screen sheet and inline into AddLeadSheet (#1036) without one imposing the other's size.
+    // #2872: one per rendered run, held across ticks. Not `@State`: it carries no observable and is
+    // never read by the view's identity, so it must not take part in invalidation.
+    @State private var finishingWatch = FinishingWatch()
+
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             content(now: context.date)
@@ -120,9 +124,14 @@ struct RunProgressView: View {
         // advancing-count evidence, folded to beating or stale exactly as before.
         let beat = heartbeat?()
             ?? (RunProgress.sweepIsAlive(lastProgressAt: snap.advancedAt, now: now) ? .beating : .stale)
+        // #2872: when this tick first saw the marker gone, so "Finishing up" is a handover and not a
+        // permanent state. Asked from the same snapshot as the verdict, so the two cannot answer from
+        // different instants.
+        let absentSince = finishingWatch.observe(beat, now: now)
         let state = RunProgress.liveness(since: since, now: now, timeout: timeout, heartbeat: beat,
                                          cancelRequested: cancelRequested?() ?? false,
-                                         waitingOnAnswer: waitingOnAnswer?() ?? false)
+                                         waitingOnAnswer: waitingOnAnswer?() ?? false,
+                                         markerAbsentSince: absentSince)
         VStack(spacing: OVSpacing.md) {
             switch state {
             case .stalled(let elapsed):

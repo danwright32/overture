@@ -78,16 +78,35 @@ enum RunProgress {
     // definition, so its heartbeat goes stale and the wall clock runs on, and it was reported as stuck
     // with a Retry beside it. Nothing was stuck: it was waiting, and the message pointed Dan away from
     // the one action that would have delivered the answer (L11).
+    // #2872: `markerAbsentSince` is when absence was first OBSERVED. A deleted marker carries no
+    // timestamp, so the instant cannot be read back and has to be watched for; `FinishingWatch` is that
+    // observation. `nil` means the caller is not watching, and keeps the unbounded behaviour exactly, so
+    // a surface nobody has wired cannot be silently given a bound it never asked for.
     static func liveness(since start: Date?, now: Date, timeout: TimeInterval,
                          heartbeat: RunHeartbeat? = nil,
                          cancelRequested: Bool = false,
-                         waitingOnAnswer: Bool = false) -> RunLiveness {
+                         waitingOnAnswer: Bool = false,
+                         markerAbsentSince: Date? = nil) -> RunLiveness {
         guard let start, let elapsed = elapsedLabel(since: start, now: now) else { return .idle }
         // A marker that is GONE ends the run whatever the clock says: a runner deletes it in its exit
         // trap, so this is the last thing a healthy run does, not a symptom. Checked BEFORE the stop
         // below, because a stopped run whose marker has already gone is over, and "Stopping" there would
         // be a screen claiming work is still winding down after it has ended.
-        if heartbeat == .absent { return .finishing(elapsed: elapsed) }
+        if heartbeat == .absent {
+            // #2872: bounded. The reasoning above is right for the ordinary case and it made the state
+            // ABSOLUTE: a run that tidied up its marker and then died before delivering left this
+            // sentence on screen for ever, with its counter still ticking, which reads as alive and had
+            // nothing to press (L110). Past the handover window it falls through to `.stalled`, which
+            // already carries the Retry, rather than to a second presentation of the same idea.
+            //
+            // A run Dan STOPPED is deliberately exempt: `.stalled` accuses a run of being stuck and
+            // offers a Retry, and nothing went wrong there. `stoppedRunIsOver` is what closes those out.
+            if let markerAbsentSince, !cancelRequested,
+               now.timeIntervalSince(markerAbsentSince) >= RunTimeouts.finishingGrace {
+                return .stalled(elapsed: elapsed)
+            }
+            return .finishing(elapsed: elapsed)
+        }
         // #1684: Dan asked this run to stop, so the screen says so. It outranks both remaining verdicts.
         // Not `running`, because a spinner identical to a working run is what made him press Cancel three
         // more times and call it broken. Not `stalled` either: past the timeout a stopped run would
@@ -175,6 +194,29 @@ enum RunLiveness: Equatable {
 // so absence means FINISHED while staleness means WEDGED. Collapsing those into one "not alive" is what
 // made every Prep run long enough to pass its timeout accuse itself of being stuck in the seconds
 // between the runner exiting and the screen noticing.
+// #2872: when did the marker go? A deleted file carries no timestamp, so the instant absence began is
+// only knowable by having WATCHED for it. One of these is held per rendering surface and asked on every
+// tick; it answers the FIRST instant it saw absence, never the current one, because answering `now` each
+// time would restart the window on every tick and the bound could never be reached.
+//
+// A class rather than a value, so a surface can ask it from inside a body evaluation without that being
+// a mutation of view state. It holds no observable, so asking it invalidates nothing.
+@MainActor
+final class FinishingWatch {
+    private var since: Date?
+
+    @discardableResult
+    func observe(_ heartbeat: RunHeartbeat?, now: Date) -> Date? {
+        guard heartbeat == .absent else {
+            since = nil
+            return nil
+        }
+        let first = since ?? now
+        since = first
+        return first
+    }
+}
+
 enum RunHeartbeat: Equatable {
     case beating
     case stale
