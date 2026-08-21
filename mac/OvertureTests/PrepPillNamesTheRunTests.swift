@@ -128,8 +128,11 @@ struct EverySurfaceNamesTheRunTests {
         let duringACheck = PrepStartGate.reason(keptToPrep: 3, ownSlotRunInFlight: .reachabilityCheck)
         let duringAPrep = PrepStartGate.reason(keptToPrep: 3, ownSlotRunInFlight: .prep)
 
-        #expect(duringACheck == "A reachability check is already going")
-        #expect(duringAPrep == "A prep run is already going")
+        // #2761: "A <noun> is already going" became "Your <noun> is still going". The old phrasing was
+        // right when ANY run blocked this control; after #3015 only a run in its own slot does, so the
+        // sentence names the run Dan himself started rather than reporting a coincidence.
+        #expect(duringACheck == "Your reachability check is still going")
+        #expect(duringAPrep == "Your prep run is still going")
         #expect(duringACheck != duringAPrep)
     }
 
