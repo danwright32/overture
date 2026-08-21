@@ -230,6 +230,14 @@ struct RecordedRunCost: Equatable, Sendable {
     // that window would file exactly the co-run this issue measures as evidence about a solo one.
     let contended: Bool?
 
+    // #3004: what KIND of run wrote the file this reading came out of, as the runner stamped it.
+    //
+    // nil is a third state for the same reason `contended`'s is (the runner script is fast-forwarded out
+    // of the git checkout before the app is rebuilt, so a new app meets an older script on every update),
+    // and additionally for a value this app does not recognise. Both mean "this file does not say", and
+    // neither may be read as a kind.
+    let kind: RunKind?
+
     // Decoded, never subscripted. `JSONSerialization` hands back an NSNumber for both `true` and `1`, so a
     // hand-written `as? Double` would read `"recorded": true` as a duration of one millisecond; Codable
     // refuses the type outright, which is the behaviour this needs.
@@ -241,6 +249,10 @@ struct RecordedRunCost: Equatable, Sendable {
             var contended: Bool?
         }
         var runCost: Cost?
+        // #3004: at the TOP LEVEL, beside `version`, not inside `runCost`. It is true of the file whether
+        // or not the cost reading completed, and a fact filed under a key that can go absent is a fact
+        // that disappears exactly when the run went wrong.
+        var runKind: String?
     }
 
     // nil for anything that is not a complete, usable reading: not JSON, no `runCost`, a run that reported
@@ -268,7 +280,8 @@ struct RecordedRunCost: Equatable, Sendable {
         // the guard above: a run that measured itself perfectly well and simply predates the flag has a
         // complete cost reading, and whether that reading may be POOLED is a separate decision belonging
         // to `ProbeRunPaceRecording`.
-        return RecordedRunCost(seconds: durationMs / 1000, streams: streams, contended: cost.contended)
+        return RecordedRunCost(seconds: durationMs / 1000, streams: streams, contended: cost.contended,
+                               kind: envelope.runKind.flatMap(RunKind.init(resultsFileValue:)))
     }
 
     static func complete(contentsOf url: URL) -> RecordedRunCost? {
@@ -309,6 +322,16 @@ enum ProbeRunPaceRecording {
         // the history can only ever mean "written before the flag existed", which is what lets the decoder
         // read those as solo on the strength of the exclusion that was in force.
         guard let contended = cost.contended else { return nil }
+        // #3004: a run that SAYS it was not a check teaches the check estimate nothing. #2978 fixed which
+        // FILE is read; this is the other half, and it holds even when the file read is the right one,
+        // because a check running in the prep slot reads the prep slot's file and what sits in it may be
+        // an actual Prep run from an hour ago.
+        //
+        // A file that does not say keeps today's behaviour and is pooled on the slot's trust, rather than
+        // ending the pace learning for everyone during the update window. The slot was the only evidence
+        // there has ever been and it is right for a check's own file; the stamp only ever adds a way to
+        // be sure (L90).
+        if let kind = cost.kind, kind != .reachabilityCheck { return nil }
         guard ProbeDurationHistory.isComparable(lookups: lookups, streams: cost.streams,
                                                 seconds: cost.seconds) else { return nil }
         return ProbeDurationHistory.Run(lookups: lookups, streams: cost.streams, seconds: cost.seconds,

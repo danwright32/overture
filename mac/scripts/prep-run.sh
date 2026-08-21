@@ -496,6 +496,17 @@ else
   OVERTURE_RUN_CONTENDED=0
 fi
 export OVERTURE_RUN_CONTENDED
+# #3004: and WHAT this run was, beside where it ran. The runner has held both since #2980 (identity comes
+# from OVERTURE_RUN_SLOT) and simply did not record them, so a finished results file could not say whether
+# a check or a Prep run produced it. That is the fact #2762's session 1 got wrong, and the only thing that
+# caught it was a person reading this script's log by eye (L46, L78).
+if [ "$IS_PROBE" = "1" ]; then
+  OVERTURE_RUN_KIND=check
+else
+  OVERTURE_RUN_KIND=prep
+fi
+OVERTURE_RUN_SLOT="$RUN_SLOT"
+export OVERTURE_RUN_KIND OVERTURE_RUN_SLOT
 record_run_cost "$RESULTS" "$@"
 
 # #1721: and how many times it actually reached the web, counted from the SAME streams rather than taken

@@ -79,5 +79,7 @@
     "allowance": 45,
     "overCap": true,
     "streams": 3
-  }
+  },
+  "runKind": "check",
+  "runSlot": "check"
 }

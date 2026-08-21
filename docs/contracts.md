@@ -28,7 +28,7 @@ the workflow's runbook is its spec.
 | `overture-history.json` | Importer (`scripts/import-history.ts`) | App (`[HistoryRecord]`) | none (plain array; `email` added additively in #762) | `fixtures/local-history/` | `LocalHistoryContractTests.swift` |
 | `overture-shoot-history.json` | Importer (`scripts/import-shoot-history.ts`) | App (`ShootHistory`) | 1 | `fixtures/shoot-history/` | `ShootHistoryContractTests.swift` |
 | `overture-prep-queue.json` | App (`PrepQueueBuilder.encode`) | Prep run (workflow) | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 | `fixtures/prep-queue/` | `PrepQueueContractTests.swift` |
-| `overture-prep-results.json` | Prep run (workflow) writes the results; then **`prep-run.sh`** adds three top-level keys of its own (`model`, `runCost`, `webCalls`, all via `lib/models.sh`, after the workflow has finished). See the note below the table. | App (`PrepImporter` / `PrepResultsDecoder`; it ignores all three of those keys) | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 | `fixtures/prep-results/` (`run-metadata-complete-v8.json` and `run-metadata-partial-v8.json` carry the three keys) | `PrepResultsContractTests.swift`, `PrepResultsRunMetadataContractTests.swift`, `lib/models.test.sh` |
+| `overture-prep-results.json` | Prep run (workflow) writes the results; then **`prep-run.sh`** adds five top-level keys of its own (`model`, `runCost`, `webCalls`, `runKind`, `runSlot`, all via `lib/models.sh`, after the workflow has finished). See the note below the table. | App (`PrepImporter` / `PrepResultsDecoder`; it ignores all five of those keys. `RecordedRunCost` reads `runCost` and `runKind`) | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 | `fixtures/prep-results/` (`run-metadata-complete-v8.json` and `run-metadata-partial-v8.json` carry all five) | `PrepResultsContractTests.swift`, `PrepResultsRunMetadataContractTests.swift`, `ResultsFileNamesItsRunKindTests.swift`, `lib/models.test.sh` |
 | `overture-prep-progress.json` | `prep-run.sh` **only**: seeds it, then derives every update from `overture-prep-results.json` itself (`lib/progress-watcher.sh`'s `update_progress_from_results`, the same helper scout uses). #1023: the workflow never writes this file; it rewrites the results file incrementally and the script counts its entries, so a run that forgets to self-report can no longer leave the count wrong. | App (`PrepProgressDecoder`) | 1 | `fixtures/prep-progress/` | `PrepProgressContractTests.swift`, `lib/progress-watcher.test.sh` |
 | `prep-run-archives/<yyyyMMdd-HHmmss>/` | App (`PrepRunArchive.archiveFinishedRun`, #1878: on every run completion, and at launch for a run that ended while Overture was closed) | By hand today (the evidence for "did the run do what the runbook told it to"), and the intended source of history for #1616's wait estimate | n/a: the folder holds byte copies of the two files above under their live names, so each keeps its own version | `fixtures/prep-queue/`, `fixtures/prep-results/` (the same fixtures, read by the archive's own tests) | `PrepRunArchiveTests.swift` |
 | `prep-running`, `prep-chunks/`, `prep-run.log`, `prep-run-events.jsonl` | `prep-run.sh` (the heartbeat marker, the per-chunk working directory it wipes on entry, and the two logs), plus the App, which writes the marker at launch so the double-run guard is immediate (`PrepQueueService`) | App (`DetachedRunner.heartbeat` reads the marker for live, stale or gone; the logs and the chunk directory are read by hand and by `RunEventsReader`) | none (the marker's CONTENTS are never read: its modification time is the whole signal, exactly as `prep-cancel`'s presence is) | none | `DetachedRunnerTests.swift`, `prep-run-chunking.test.sh`, `lib/run-slot.test.sh` |
@@ -95,6 +95,27 @@ fast-forwards that checkout BEFORE the rebuild, so a new app meets an older scri
 on every update and permanently for anyone who only pulls. The app refuses to record a sample whose
 contention is absent, rather than reading it as solo, because reading it as solo would file exactly the
 co-run the flag exists to measure as evidence about a run that had the machine to itself.
+
+#3004 adds two more keys, and they sit at the TOP LEVEL rather than inside `runCost`: `runKind` (what kind
+of run wrote this file) and `runSlot` (which slot it ran in). Both are spelled `prep` or `check`, the same
+strings `RunSlot`'s raw values use, and `RunKind.resultsFileValue` / `RunKind.init(resultsFileValue:)` are
+the only mapping in the app.
+
+They are two facts and not one: a check may legitimately run in the prep slot, and that is exactly the case
+a reader has to be able to see. Before this, a finished results file recorded `version`, `generatedAt` and
+`results` and nothing about its own provenance, so a check's file and a Prep run's were indistinguishable
+once written. That is the fact #2762's session 1 got wrong, and the only thing that caught it was a person
+reading `prep-run.log` by eye.
+
+Top level, deliberately: the provenance is true of the file whether or not the cost reading completed, and a
+fact filed under a key that can go absent is a fact that disappears exactly when the run went wrong. The
+PARTIAL fixture carries them for that reason.
+
+Additive and optional, exactly like `contended`: a runner that says nothing writes no key, and so does one
+whose value the reader would not recognise (only `prep` and `check` are written, so an environment typo
+cannot become a permanent refusal with nothing naming its cause). The reader,
+`ProbeRunPaceRecording.sample`, refuses to pool a reading that SAYS it was a Prep run, and pools an
+unstamped one on the slot's trust exactly as before, which is what keeps the update window working.
 
 `contended` deliberately does NOT mean "the machine was busy". A scout extract (up to four claudes, fired
 hourly on its own) or a reply classify can be running too. Folding those in would give one stored field two
