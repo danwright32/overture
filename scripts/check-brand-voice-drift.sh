@@ -149,6 +149,83 @@ _line_negates() {
      || "${line}" == *"don't"* || "${line}" == *"no longer"* ]]
 }
 
+# #2961: the FACTS the skill states about the same subject in two places, compared as VALUES.
+#
+# #1227 asked for exactly this ("a citable fact stated in two places inside the skill must agree, catching
+# a stale summary line that contradicts the authoritative detail") and what shipped was narrower: a loop
+# over a hand-maintained list of superseded PHRASES, which catches the case it was built from and nothing
+# else. That is L96: a guard driven by a hand-written registry checks only what the registry lists, so
+# anything missing from it is exempt from the very check meant to catch it.
+#
+# So this is keyed on the SUBJECT, not on a phrase. Each entry is `label|pattern`, where the pattern's
+# first capture group is the fact's VALUE wherever either file states it. A file that does not mention the
+# subject at all is not a disagreement, because silence is not a claim; two files stating DIFFERENT values
+# is, and that is the whole rule.
+# SINGLE quoted, every one. In a double-quoted bash string `\$` collapses to a bare `$`, which grep -E
+# then reads as the end-of-line anchor, so the rate pattern matched NOTHING and the rate was silently
+# unchecked while the check reported OK. Caught by this change's own fixture on its first run, which is
+# the L100 shape (a pattern that matches nothing leaves everything looking fine).
+BRAND_VOICE_SKILL_FACTS=(
+  'the hourly rate|\$([0-9]+)'
+  'the minimum booking|minimum of ([a-z]+) hour'
+  'the gallery turnaround|within ([0-9a-z]+) weeks'
+  'the portfolio link|(danwrightphotography\.com[a-z/-]*)'
+)
+
+# A fact's value in ONE spelling, so two ways of writing the same number are one value rather than a
+# disagreement. Found by running this against the real skill, which states "delivery of the full gallery
+# within 2 weeks" in SKILL.md and "within two weeks" in the references: the same fact, and comparing the
+# raw forms accused on the first run (L185, which is exactly this: group by the normalized form, never the
+# raw one). Case-folded for the same reason.
+_normalize_fact_value() {
+  local v
+  v="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//')"
+  # A whole-value mapping, not a word-boundary substitution: BSD sed has no \b and GNU's spelling is not
+  # BSD's, so a regex here would work on one of the two seds this repo meets and silently not the other.
+  # Every value these patterns capture is a single token, so this is enough.
+  case "${v}" in
+    one) v=1 ;; two) v=2 ;; three) v=3 ;; four) v=4 ;; five) v=5 ;; six) v=6 ;;
+    seven) v=7 ;; eight) v=8 ;; nine) v=9 ;; ten) v=10 ;; eleven) v=11 ;; twelve) v=12 ;;
+  esac
+  printf '%s' "${v}"
+}
+
+# Every VALUE a text states for one fact, normalized and deduplicated, one per line.
+_fact_values() {
+  local pattern="$1" text="$2" raw
+  while IFS= read -r raw; do
+    [[ -n "${raw}" ]] || continue
+    _normalize_fact_value "${raw}"
+    echo
+  done < <(printf '%s' "${text}" | grep -oiE "${pattern}" 2>/dev/null | sed -E "s/${pattern}/\1/I" 2>/dev/null || true) \
+    | sort -u | grep -v '^$' || true
+}
+
+# The two skill files disagreeing about one fact's value. Pure: takes the two texts, so the fixture drives
+# it directly with no skill installed.
+intra_skill_fact_drift() {
+  local md="$1" refs="$2"
+  local entry label pattern md_values refs_values joined disagreements=0
+  for entry in "${BRAND_VOICE_SKILL_FACTS[@]}"; do
+    label="${entry%%|*}"
+    pattern="${entry#*|}"
+    md_values="$(_fact_values "${pattern}" "${md}")"
+    refs_values="$(_fact_values "${pattern}" "${refs}")"
+    # Silence is not a claim. A fact only one file mentions cannot contradict the other, and demanding
+    # both state everything would fire on the ordinary case: the references are the detail, SKILL.md is
+    # the summary, and neither is meant to repeat all of the other (L93).
+    [[ -n "${md_values}" && -n "${refs_values}" ]] || continue
+    joined="$(comm -3 <(printf '%s\n' "${md_values}") <(printf '%s\n' "${refs_values}") | tr -d '\t')"
+    if [[ -n "${joined}" ]]; then
+      echo "FACT DRIFT: the skill states two different values for ${label}."
+      echo "  SKILL.md says: $(printf '%s' "${md_values}" | tr '\n' ' ')"
+      echo "  references say: $(printf '%s' "${refs_values}" | tr '\n' ' ')"
+      disagreements=$((disagreements + 1))
+    fi
+  done
+  return "${disagreements}"
+}
+
 # #1227: catch a contradiction WITHIN the skill, not just runbook-vs-skill drift. The skill states its
 # guidance in two places, SKILL.md's quick reference and references/*.md, and during #1215 SKILL.md still
 # ENDORSED the "let me know how that lands" soft close that its own references (and the runbook, and Dan)
@@ -198,6 +275,7 @@ main() {
 
   local runbook_text skill_md_text skill_email_text skill_text
   local drift_lines drift_status contradiction_lines contradiction_status
+  local fact_drift_lines fact_drift_status
   runbook_text="$(cat "${runbook}")"
   skill_md_text="$(cat "${skill_md}")"
   skill_email_text="$(cat "${skill_email}")"
@@ -210,15 +288,22 @@ main() {
   # so an endorsement in one and a rejection in the other is visible.
   contradiction_lines="$(intra_skill_contradiction "${skill_md_text}" "${skill_email_text}")"
   contradiction_status=$?
+  # #2961: and the same two files compared on the FACTS they state, which is what #1227 actually asked
+  # for. The phrase check above and this one are kept separate rather than folded together: they answer
+  # different questions (is a retired phrase being endorsed, versus do the two files disagree about a
+  # number), and one message covering both would be true of neither (L11).
+  fact_drift_lines="$(intra_skill_fact_drift "${skill_md_text}" "${skill_email_text}")"
+  fact_drift_status=$?
   set -e
 
-  if [[ "${drift_status}" -eq 0 && "${contradiction_status}" -eq 0 ]]; then
-    echo "OK: docs/prep-runbook.md and the dan-wright-brand-voice skill agree on all ${#BRAND_VOICE_ANCHORS[@]} anchor facts, and the skill is internally consistent."
+  if [[ "${drift_status}" -eq 0 && "${contradiction_status}" -eq 0 && "${fact_drift_status}" -eq 0 ]]; then
+    echo "OK: docs/prep-runbook.md and the dan-wright-brand-voice skill agree on all ${#BRAND_VOICE_ANCHORS[@]} anchor facts, the skill is internally consistent, and its two halves agree on all ${#BRAND_VOICE_SKILL_FACTS[@]} citable facts."
     exit 0
   fi
 
   [[ -n "${drift_lines}" ]] && echo "${drift_lines}"
   [[ -n "${contradiction_lines}" ]] && echo "${contradiction_lines}"
+  [[ -n "${fact_drift_lines}" ]] && echo "${fact_drift_lines}"
   echo
   echo "The brand-voice sources are out of sync. Update them so the fact matches; the skill is the"
   echo "authoritative source (docs/prep-runbook.md §2 says the skill always wins), and its own SKILL.md"
