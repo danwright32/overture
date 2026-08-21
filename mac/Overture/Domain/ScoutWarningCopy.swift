@@ -69,6 +69,23 @@ enum ScoutWarningCopy {
         return parts.joined(separator: " ")
     }
 
+    // #3071: the run read less of the store than it holds, so what it produced is thinner than it looks.
+    //
+    // Deliberately NOT worded as a failure of the run: nothing was dropped and no show was lost, which is
+    // why these reads were not made to throw. What Dan needs is that this run's judgements were made
+    // against less than the whole picture, and which part was missing, because the answer differs by
+    // read: a missing watchlist means it scanned nothing, a missing venue list means it matched loosely.
+    // Running it again is the whole remedy, and it is the only thing named.
+    static func degradedReads(_ labels: [String]) -> String {
+        let list = labels.joined(separator: ", ")
+        return labels.count == 1
+            ? "The scout couldn't read \(list), so this run judged against less than Overture actually "
+                + "holds. Nothing was lost. Run it again to get the full picture."
+            : "The scout couldn't read \(labels.count) parts of its own store (\(list)), so this run "
+                + "judged against less than Overture actually holds. Nothing was lost. Run it again to "
+                + "get the full picture."
+    }
+
     static func unqueued(ids: [String]) -> String {
         let list = ids.joined(separator: ", ")
         return ids.count == 1

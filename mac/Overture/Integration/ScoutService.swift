@@ -44,6 +44,68 @@ enum ScoutService {
         }
     }
 
+    // #3071: a read the run makes ABOUT ITS OWN STORE that is not part of the upsert decision above.
+    //
+    // #2758 / #2999 fixed the one swallowed read that could DESTROY data. Four more folded "could not
+    // read" into "nothing there". None of those destroys anything, which is why that fix was scoped
+    // rather than swept, but each invents an emptiness that is itself a claim about Dan's data (L98, L11).
+    //
+    // NAMED rather than counted, because which read failed is the whole of what is wrong with the answer.
+    // An unreadable watchlist means the run scanned nothing; an unreadable brand corpus means it matched
+    // against less than it holds. One word covering both would say neither.
+    enum StoreRead: String, Equatable, Sendable, CaseIterable {
+        case repeatClientHistory
+        case sourceWatchlist
+        case reconcileStoredShows
+        case venueBrandCorpus
+
+        // What Dan reads. Named for the thing rather than the symbol, because the sentence has to send
+        // him somewhere and "venueBrands" sends him nowhere.
+        var label: String {
+            switch self {
+            case .repeatClientHistory: return "the record of who you have shot before"
+            case .sourceWatchlist: return "the list of calendars it watches"
+            case .reconcileStoredShows: return "the shows it already had"
+            case .venueBrandCorpus: return "the venue names it matches against"
+            }
+        }
+    }
+
+    // A read the run cannot honestly proceed without. It THROWS, naming the read, so the run stops
+    // before it spends anything and RootView's own catch reports it.
+    //
+    // Both uses sit at the very top of `run`, before any work: a store that cannot answer there cannot
+    // answer the upsert's reads either, so stopping costs a run that was going to be wrong anyway. The
+    // watchlist is the one that matters most and is the one #2999's sweep missed. An empty watchlist
+    // plans zero sources, so the scout scanned nothing and reported an ordinary quiet run: a run that
+    // could not read its own watchlist was indistinguishable from a night with no shows on it, which is
+    // precisely the shape L98 is about.
+    struct StoreReadFailure: Error, CustomStringConvertible {
+        let read: StoreRead
+        let underlying: Error
+        // Says ONLY the new fact: which read failed. `ScoutFailure.presentation` already wraps whatever
+        // reaches RootView's catch in "The scout couldn't run... Try again; if it keeps failing, something
+        // is wrong with the local store", and prints this after "Details:". Restating that here put two
+        // sentences on one alert each saying the run stopped and each telling him to try again, which is
+        // #843's defect: correct alone, redundant where he meets them.
+        var description: String { "couldn't read \(read.label). (\(underlying))" }
+    }
+
+    static func required<T>(_ read: StoreRead, _ fetch: () throws -> [T]) throws -> [T] {
+        do { return try fetch() } catch { throw StoreReadFailure(read: read, underlying: error) }
+    }
+
+    // A read taken MID RUN, where throwing would discard work already done and the store's silence makes
+    // the answer thinner rather than wrong.
+    //
+    // It answers nil for unreadable, never an empty array, which is the whole difference from
+    // `(try? fetch) ?? []`: the caller is made to say what it met, and the read names itself on the run
+    // so the outcome can report what it judged against less of.
+    static func readOrRecord<T>(_ read: StoreRead, into degraded: inout [StoreRead],
+                                _ fetch: () throws -> [T]) -> [T]? {
+        do { return try fetch() } catch { degraded.append(read); return nil }
+    }
+
     struct Outcome: Equatable, Sendable {
         var found: Int
         var inserted: Int
@@ -65,6 +127,11 @@ enum ScoutService {
         // shows is indistinguishable from a run that found none (L98, L11).
         var storeUnreadable: Int = 0
         var storeUnreadableKeys: [String] = []
+
+        // #3071: the reads above that could not answer this run. Not a count of shows: nothing was
+        // dropped, the run simply judged against less than the store really holds, and the point is that
+        // it SAYS so instead of reporting an ordinary run (L98, L11).
+        var degradedReads: [StoreRead] = []
         // Set when the Downbeat past-client export was missing, unreadable, or stale, so
         // warm/repeat matching ran degraded and Dan should be told (#22/#23).
         var clientListWarning: String? = nil
@@ -129,7 +196,9 @@ enum ScoutService {
             // named, every run, for as long as it keeps failing. A dead source and a quiet season must
             // never look alike. #857: a run that rebuilt an id (returned work under a source we never
             // queued) is shown alongside, not masked by, the failures, because both can happen in one run.
-            let parts = [failureWarning, unqueuedWarning].compactMap { $0 }
+            // #3071: alongside the two above rather than instead of either, because all three can
+            // happen in one run and each names a different thing that went wrong.
+            let parts = [failureWarning, unqueuedWarning, degradedReadWarning].compactMap { $0 }
             if !parts.isEmpty { return parts.joined(separator: "\n\n") }
             if !silentlyEmptySources.isEmpty {
                 return ScoutWarningCopy.silentlyEmptyFeed(sources: silentlyEmptySources.map { ($0.orgName, $0.droppedRowCount) })
@@ -143,6 +212,13 @@ enum ScoutService {
         private var unqueuedWarning: String? {
             guard !unqueuedResultIds.isEmpty else { return nil }
             return ScoutWarningCopy.unqueued(ids: unqueuedResultIds)
+        }
+
+        // #3071: the reads that could not answer, in Dan's words. This is the READER that stops
+        // `degradedReads` being a field written and never read (L46).
+        private var degradedReadWarning: String? {
+            guard !degradedReads.isEmpty else { return nil }
+            return ScoutWarningCopy.degradedReads(degradedReads.map(\.label))
         }
 
         private var failureWarning: String? {
@@ -177,6 +253,7 @@ enum ScoutService {
             collapsedIntoRun += other.collapsedIntoRun
             storeUnreadable += other.storeUnreadable
             storeUnreadableKeys.append(contentsOf: other.storeUnreadableKeys)
+            degradedReads.append(contentsOf: other.degradedReads)
             saveFailed = saveFailed || other.saveFailed
             sources.append(contentsOf: other.sources)
             unqueuedResultIds.append(contentsOf: other.unqueuedResultIds)
@@ -325,11 +402,15 @@ enum ScoutService {
         let loaded = DownbeatBridge.loadWithHealth(now: now)
         // History the matcher sees = any one-time legacy import + Overture's own activity,
         // so repeat-client recognition stays current as Dan sends and books (#19).
-        let existing = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        // #3071: REQUIRED, not swallowed. An empty answer here means a repeat client is not recognised
+        // as one, so a show Dan has already shot reads as cold and gets pitched as a stranger.
+        let existing = try required(.repeatClientHistory) { try context.fetch(FetchDescriptor<Prospect>()) }
         let history = LocalHistory.forMatching(existing: existing)
         let blocked = blockedCalendar(export: (loaded.bookings, loaded.blockedDates), context: context)
 
-        let watchlist = (try? context.fetch(FetchDescriptor<WatchedSource>())) ?? []
+        // #3071: the one that matters most. An empty watchlist plans zero sources, so the scout scans
+        // nothing and reports an ordinary quiet run (L98).
+        let watchlist = try required(.sourceWatchlist) { try context.fetch(FetchDescriptor<WatchedSource>()) }
         let plan = SourceSchedule.plan(sources: watchlist, depth: depth, only: only, budget: budget, now: now)
 
         // The real paginating fetch, built PER SOURCE, unless a test injected its own. A known client's own
@@ -931,11 +1012,16 @@ enum ScoutService {
         sourceIds: [String] = [],
         into context: ModelContext
     ) -> Outcome {
-        let outcome = apply(events: events, clients: clients, history: history, blocked: blocked,
+        var outcome = apply(events: events, clients: clients, history: history, blocked: blocked,
                             feed: feed, today: today, sourceIds: sourceIds, into: context)
         if let report = outcome.report {
-            let allStored = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
-            FeedReconcile.reconcile(stored: allStored, reports: [report], today: today)
+            // #3071: a reconcile handed an invented empty marks nothing gone and says nothing about it,
+            // so a run that could not read its own shows looks exactly like one where none had dropped
+            // out. It is skipped and NAMED instead.
+            if let allStored = readOrRecord(.reconcileStoredShows, into: &outcome.degradedReads,
+                                            { try context.fetch(FetchDescriptor<Prospect>()) }) {
+                FeedReconcile.reconcile(stored: allStored, reports: [report], today: today)
+            }
         }
         return outcome
     }
@@ -983,9 +1069,14 @@ enum ScoutService {
         // "possible match", or one past record asks the same question on every show in the building.
         // #1719: and Dan's own corrections alongside the corpus, read here for the same reason the
         // corpus is: so no caller can forget to supply them.
+        // #3071: a corpus built from an invented empty is a THINNER brand list, so a hall's own brand
+        // can raise a fuzzy match it should not. The run still proceeds (the answer is degraded, not
+        // wrong, and throwing here would discard the classify work already done), but it says so.
+        var degradedReads: [StoreRead] = []
+        let brandShows = readOrRecord(.venueBrandCorpus, into: &degradedReads,
+                                      { try context.fetch(FetchDescriptor<Prospect>()) }) ?? []
         let venueBrands = ProducerGate.VenueBrands(
-            shows: ((try? context.fetch(FetchDescriptor<Prospect>())) ?? [])
-                .map { ProducerGate.Show(presenter: $0.presenter, venue: $0.venue) },
+            shows: brandShows.map { ProducerGate.Show(presenter: $0.presenter, venue: $0.venue) },
             overrides: ProducerOverrideEditing.overrides(in: context))
         // Natural keys actually present in this run's feed, so the post-upsert reconcile can
         // tell which stored prospects dropped out (#133).
@@ -1264,6 +1355,9 @@ enum ScoutService {
                                   skipped: skipped,
                                   collapsedIntoRun: collapsedIntoRun, saveFailed: true)
             outcome.suppressedOrgs = suppressed
+            // #3071: carried even onto a run that failed to save. The brand corpus was read (or not)
+            // before any of this, and a save failure does not make that read any more readable.
+            outcome.degradedReads = degradedReads
             return outcome
         }
         var outcome = Outcome(found: events.count, inserted: inserted, updated: updated, skipped: skipped,
@@ -1271,6 +1365,7 @@ enum ScoutService {
         outcome.storeUnreadable = unreadableStore
         outcome.storeUnreadableKeys = unreadableKeys
         outcome.suppressedOrgs = suppressed
+        outcome.degradedReads = degradedReads
         outcome.report = report
         return outcome
     }
