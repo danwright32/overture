@@ -41,14 +41,14 @@ struct ProspectRowViewSendStateTests {
     @Test func aRowWithNoDraftShowsNoSendButtonAtAll() throws {
         let view = ProspectRowView(item: approvedItemWithNoDraft(), today: "2026-07-09", onKeep: {}, onDismiss: { _ in })
 
-        #expect((try? view.inspect().find(button: "Send")) == nil)
+        #expect((try? view.inspect().find(button: SendConfirmCopy.openReview)) == nil)
     }
 
     @Test func aRowWithADraftAndNoInFlightSendShowsTheSendButton() throws {
         let view = ProspectRowView(item: approvedItemWithDraft(), today: "2026-07-09", onKeep: {}, onDismiss: { _ in },
                                    outboundSendSince: nil)
 
-        _ = try view.inspect().find(button: "Send")   // throws (fails the test) if not present
+        _ = try view.inspect().find(button: SendConfirmCopy.openReview)   // throws (fails the test) if not present
     }
 
     // The end-to-end integration check: proves the prop actually threads ProspectRowView ->
@@ -59,7 +59,7 @@ struct ProspectRowViewSendStateTests {
         let view = ProspectRowView(item: approvedItemWithDraft(), today: "2026-07-09", onKeep: {}, onDismiss: { _ in },
                                    outboundSendSince: since)
 
-        #expect((try? view.inspect().find(button: "Send")) == nil)
+        #expect((try? view.inspect().find(button: SendConfirmCopy.openReview)) == nil)
         let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
         #expect(texts.contains { $0.hasPrefix("Sending") })
     }

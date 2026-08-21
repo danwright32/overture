@@ -46,6 +46,12 @@ enum SendConfirmCopy {
     // #2575: the same promise, said over a box he can change. "Will send" is the load-bearing half and it
     // stays: the words in this box are the words that leave.
     static let editLabel = "The email that will send, edit it here"
+    // #2876: the FIRST button, on the surface where Dan is still reading his own words. It OPENS this
+    // sheet; nothing leaves when it is pressed. Kept here beside `send` on purpose, so nobody can change
+    // one of the pair without reading the other: the whole defect was the two promising the same thing,
+    // which spent the weight the final one needs. Dan, 2026-08-17: "it feels final when it's not."
+    static let openReview = "Review and send"
+    static func openReviewHelp(_ what: String) -> String { "Show the whole \(what), then send it" }
     static let send = "Send"
     static let cancel = "Cancel"
     // #361: the gold seal on a just-sent row as it leaves the queue.

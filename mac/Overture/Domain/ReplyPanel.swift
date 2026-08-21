@@ -468,10 +468,12 @@ enum ReplyPanelCopy {
     static let useTheDraft = "Use it instead"
     static let useTheDraftHelp = "Replace what you've written here with the AI's draft"
 
-    static let send = "Send reply"
+    // #2876: shared with the other two surfaces that open the send review, rather than a fourth copy of
+    // the same rule about what that button may claim.
+    static let send = SendConfirmCopy.openReview
     static let sending = "Sending"
     static let cancel = "Cancel"
-    static let sendHelp = "Send this reply on the thread they wrote on"
+    static let sendHelp = SendConfirmCopy.openReviewHelp("reply")
 
     // #2155: the audience, now one address per row so each can be marked and taken off.
     static let audienceHeading = "Your reply goes to"

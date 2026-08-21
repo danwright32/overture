@@ -483,14 +483,16 @@ struct DraftReviewView: View {
                                  font: OVType.meta, color: OVColor.inkSoft, onRetry: { onSend() })
                 } else {
                     Button { onSend() } label: {
-                        Label("Send", systemImage: "paperplane")
+                        // #2876: this opens the send review, it does not send. Named for what it does.
+                        Label(SendConfirmCopy.openReview, systemImage: "paperplane")
                             .font(OVType.meta).foregroundStyle(OVColor.onForest)
                             .padding(.horizontal, OVSpacing.md).padding(.vertical, 5)
                             .background(Capsule().fill(OVColor.forest))
                     }
                     .buttonStyle(.plain)
                     .disabled(!gmailConnected || !item.hasPendingRecipient)
-                    .help(GmailCopy.sendHelp(connected: gmailConnected, whenConnected: "Send this email now"))
+                    .help(GmailCopy.sendHelp(connected: gmailConnected,
+                                             whenConnected: SendConfirmCopy.openReviewHelp("email")))
                     Button("Unapprove") { onUnapprove() }
                         .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
                     // #2073: the missing-subject note beside Send says "Edit the draft", so the control
@@ -555,8 +557,13 @@ struct DraftReviewView: View {
                 // it opens the confirmation sheet that shows the whole email and who it reaches, and THAT
                 // sheet's Send commits. A button naming an act it does not perform is the thing this
                 // screen can least afford.
+                // #2876: that rule was right and covered only THIS branch. The approved branch above ran
+                // the same `onSend()` under the label "Send", so one action carried two labels on one
+                // screen and the honest one was the one Dan met less often. Both now use the shared
+                // constant, whose wording says the send that follows as well as the review that comes
+                // first, which "Final review" left him to infer.
                 Button { onSend() } label: {
-                    Text("Final review").font(OVType.meta).foregroundStyle(OVColor.onForest)
+                    Text(SendConfirmCopy.openReview).font(OVType.meta).foregroundStyle(OVColor.onForest)
                         .padding(.horizontal, OVSpacing.md).padding(.vertical, 5)
                         .background(Capsule().fill(OVColor.forest))
                 }
