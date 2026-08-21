@@ -353,6 +353,81 @@ SRC="$(cat "${MUTATE}")"
 assert_not_contains "the runner is never piped into tail" "${SRC}" "RUNNER}\" | tail"
 assert_contains "pipefail is set, so a pipe elsewhere cannot lie either" "${SRC}" "set -uo pipefail"
 
+# --- #3080: the aim is a LITERAL locator, not a regex ------------------------------------------------
+# Both `--at` and the perl expression were regexes and neither said so at the point of use. Measured
+# 2026-08-21, six occurrences in one session, each costing a rerun of a scoped Swift suite: an aim like
+# `Text(SendConfirmCopy.openReview)` reported LANDED ELSEWHERE because the parentheses GROUPED rather than
+# matched, and `guard let x = try? f` did the same because the `?` made `try` optional.
+#
+# The tool was right every time, which is the point: it refused rather than reporting a verdict. What it
+# cost was that the refusal arrives after the aim is already wrong, and the fix was always the same
+# mechanical escaping. `--at` is a locator, so it now matches literally.
+write_subject
+printf 'struct Subject {\n    static let answer = value(from: other)\n}\n' > "${SUBJECT}"
+OUT="$(OVERTURE_MUTATE_RUNNER="${RED_RUNNER}" "${MUTATE}" --at 'value(from: other)' "${SUBJECT}" 's/value\(from: other\)/nothing/' 2>&1)"
+STATUS=$?
+assert_contains "an aim holding parentheses matches the text it names" "${OUT}" "CAUGHT"
+assert_not_contains "and is not read as a regex group" "${OUT}" "LANDED ELSEWHERE"
+assert_equals "and exits 0" "0" "${STATUS}"
+
+# The same for a `?`, which as a regex makes the character before it optional and so names lines the
+# author never meant.
+printf 'struct Subject {\n    let a = try? one()\n    let b = tr = 2\n}\n' > "${SUBJECT}"
+OUT="$(OVERTURE_MUTATE_RUNNER="${RED_RUNNER}" "${MUTATE}" --at 'try? one()' "${SUBJECT}" 's/try\? one\(\)/nil/' 2>&1)"
+STATUS=$?
+assert_contains "an aim holding a question mark matches literally" "${OUT}" "CAUGHT"
+assert_not_contains "and does not read the ? as optional" "${OUT}" "LANDED ELSEWHERE"
+
+# A literal aim still REFUSES a mutation that lands elsewhere, so the change cannot have turned the check
+# into one that accepts everything (a guard that accepts every input is indistinguishable from one that
+# works, L1).
+printf 'struct Subject {\n    static let answer = value(from: other)\n}\n' > "${SUBJECT}"
+OUT="$(OVERTURE_MUTATE_RUNNER="${RED_RUNNER}" "${MUTATE}" --at 'value(from: other)' "${SUBJECT}" 's/struct Subject/struct Other/' 2>&1)"
+STATUS=$?
+assert_contains "a literal aim still refuses a mutation that lands elsewhere" "${OUT}" "LANDED ELSEWHERE"
+assert_not_contains "and never reports it as caught" "${OUT}" "CAUGHT"
+assert_equals "and does not exit 0" "1" "$([ "${STATUS}" -ne 0 ] && echo 1 || echo 0)"
+
+# The regex behaviour is still reachable, opt in, for an aim that genuinely wants one. It is a separate
+# flag rather than a mode on `--at`, so which reading is in force is visible at the call site.
+printf 'struct Subject {\n    static let answer = "yes"\n}\n' > "${SUBJECT}"
+OUT="$(OVERTURE_MUTATE_RUNNER="${RED_RUNNER}" "${MUTATE}" --at-regex 'answer|absent' "${SUBJECT}" 's/"yes"/"no"/' 2>&1)"
+STATUS=$?
+assert_contains "--at-regex still reads its pattern as a regex" "${OUT}" "CAUGHT"
+assert_equals "and exits 0" "0" "${STATUS}"
+
+# And the two are not silently the same flag: an alternation handed to the LITERAL aim names no line, so
+# it is refused rather than quietly matching.
+printf 'struct Subject {\n    static let answer = "yes"\n}\n' > "${SUBJECT}"
+OUT="$(OVERTURE_MUTATE_RUNNER="${RED_RUNNER}" "${MUTATE}" --at 'answer|absent' "${SUBJECT}" 's/"yes"/"no"/' 2>&1)"
+assert_contains "a regex handed to the literal aim is refused" "${OUT}" "LANDED ELSEWHERE"
+
+# `--at-regex` after the expression is the same misplaced flag `--at` already is (#2993), and has to be
+# refused the same way rather than falling into the trailing scopes.
+printf 'struct Subject {\n    static let answer = "yes"\n}\n' > "${SUBJECT}"
+OUT="$(OVERTURE_MUTATE_RUNNER="${RED_RUNNER}" "${MUTATE}" "${SUBJECT}" 's/"yes"/"no"/' --at-regex 'answer' 2>&1)"
+assert_contains "--at-regex after the expression is refused too" "${OUT}" "MISPLACED FLAG"
+assert_contains "and names the argument it refused" "${OUT}" "--at-regex"
+
+# --- #3080: an unapplied substitution names the character that is being read as a regex ---------------
+# The expression is genuinely a perl expression and stays one, but the refusal used to leave the reader to
+# spot the metacharacter. `PERL VARIABLE` (#2995) already names `$0`; this does the same for the ones that
+# make a pattern unmatchable. It only speaks when it has EVIDENCE: the search text, read literally, really
+# is in the file, so "it is being read as a regex" is measured rather than guessed.
+printf 'struct Subject {\n    static let answer = value(from: other)\n}\n' > "${SUBJECT}"
+OUT="$(OVERTURE_MUTATE_RUNNER="${GREEN_RUNNER}" "${MUTATE}" "${SUBJECT}" 's/value(from: other)/nothing/' 2>&1)"
+STATUS=$?
+assert_contains "an unapplied substitution is still refused" "${OUT}" "NOT APPLIED"
+assert_contains "and says the text is there literally" "${OUT}" "literally"
+assert_contains "and names the character to escape" "${OUT}" "("
+assert_equals "and does not exit 0" "1" "$([ "${STATUS}" -ne 0 ] && echo 1 || echo 0)"
+
+# It must not accuse when the text is simply absent, which is the ordinary typo and a different problem.
+write_subject
+OUT="$(OVERTURE_MUTATE_RUNNER="${GREEN_RUNNER}" "${MUTATE}" "${SUBJECT}" 's/nowhere(in: this)/x/' 2>&1)"
+assert_contains "a search text that is genuinely absent is still NOT APPLIED" "${OUT}" "NOT APPLIED"
+assert_not_contains "and is not blamed on escaping" "${OUT}" "literally"
+
 if [[ "${FAILURES:-0}" -ne 0 ]]; then
   echo "${FAILURES} failure(s)"
   exit 1

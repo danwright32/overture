@@ -79,8 +79,13 @@ red, when the runner is not something this shell can run, when the code stopped 
 instruction itself is malformed: every one of those looks like a result and means nothing about any
 guard.
 
-  --at <pattern>      an extended regex naming the lines the mutation is aimed at. Every line the
-                      mutation touches must match it, or the run is refused as LANDED ELSEWHERE.
+  --at <text>         LITERAL text naming the lines the mutation is aimed at. Every line the mutation
+                      touches must contain it, or the run is refused as LANDED ELSEWHERE. Literal
+                      because an aim is a LOCATOR, not a pattern: `Text(Copy.openReview)` names the
+                      line it looks like it names, and its parentheses do not group (#3080).
+  --at-regex <re>     the same check, reading its argument as an extended regex. Opt in, and a separate
+                      flag rather than a mode on --at, so which reading is in force is visible at the
+                      call site.
   --breaks-the-build  this mutation is MEANT to stop the code compiling, so the compiler refusing it is
                       the guard firing. Without this, a run that did not build is refused as DID NOT
                       BUILD rather than reported as any verdict.
@@ -106,6 +111,13 @@ USAGE
 # The declared aim, empty when none was given. Read before the positional arguments, so `--at` cannot be
 # mistaken for the file (the fixture proved that first: without this the refusal read "no file at --at").
 AIM=""
+# #3080: whether that aim is read as a regex. FALSE by default, because an aim is a locator and the
+# regex reading is what cost six reruns in one session: `Text(SendConfirmCopy.openReview)` reported
+# LANDED ELSEWHERE naming a line the author never wrote, because the parentheses grouped rather than
+# matched, and `try?` made the `y` optional. The tool was RIGHT every time, which is why this is a
+# usability fix and not a correctness one: what it cost was a rerun of a scoped Swift suite, and
+# AGENTS.md requires a mutation per guard in every PR body.
+AIM_IS_REGEX="false"
 # #2995: whether the compiler refusing this IS the finding. Declared, never inferred: the two cases look
 # identical from here and only the author knows which one this is.
 BREAKS_THE_BUILD="false"
@@ -117,10 +129,22 @@ while [[ $# -gt 0 ]]; do
       ;;
     --at)
       AIM="${2:-}"
+      AIM_IS_REGEX="false"
       shift 2
       ;;
     --at=*)
       AIM="${1#--at=}"
+      AIM_IS_REGEX="false"
+      shift
+      ;;
+    --at-regex)
+      AIM="${2:-}"
+      AIM_IS_REGEX="true"
+      shift 2
+      ;;
+    --at-regex=*)
+      AIM="${1#--at-regex=}"
+      AIM_IS_REGEX="true"
       shift
       ;;
     *)
@@ -159,7 +183,8 @@ for scope in "$@"; do
   if [[ "${scope}" == --* ]]; then
     echo "MISPLACED FLAG - ${scope} was passed where a test scope goes, so it was never read."
     echo
-    echo "  Flags come BEFORE the file: scripts/mutate.sh [--at <pattern>] [--breaks-the-build] \\"
+    echo "  Flags come BEFORE the file: scripts/mutate.sh [--at <text> | --at-regex <re>] \\"
+    echo "      [--breaks-the-build] \\"
     echo "      <file> <perl-expression> [test-scope ...]"
     echo
     echo "  Nothing was mutated and nothing was run. Forwarded to the runner it reaches xcodebuild as an"
@@ -247,6 +272,36 @@ fi
 # gives undef while the same read on the next line of the same block gives "wor". That also means a
 # multi-statement expression will not compile here, which is why this reports "unknown" rather than
 # refusing: it is an extra reading, and the declared `--at` aim is the check that does not guess.
+# #3080: the SEARCH half of a plain `s/a/b/` expression, with its regex escaping undone, so it can be
+# looked for in the file as literal text. Empty for anything that is not that shape (a different
+# delimiter, flags this does not understand, a multi-statement expression), which is deliberate: the
+# caller only speaks when it has evidence, and no answer is better than a wrong one.
+search_half_of() {
+  local expression="$1"
+  [[ "${expression}" =~ ^s/(([^/\\]|\\.)*)/(([^/\\]|\\.)*)/[a-z]*$ ]] || { echo ""; return 0; }
+  # `\(` in the pattern means a literal `(`, so unescaping is what turns the pattern back into the text
+  # the author was aiming at.
+  printf '%s' "${BASH_REMATCH[1]}" | perl -pe 's/\\(.)/$1/g'
+}
+
+# The extended-regex metacharacters left unescaped in that half, deduplicated and in the order met. A
+# character preceded by a backslash is the author already saying "literally this", so it is not reported.
+unescaped_metacharacters() {
+  local text="$1"
+  printf '%s' "${text}" | perl -ne '
+    my @found;
+    my %seen;
+    my @c = split //, $_;
+    for my $i (0 .. $#c) {
+      next unless $c[$i] =~ /[(){}\[\]?*+|.^\$]/;
+      next if $i > 0 && $c[$i - 1] eq "\\";
+      next if $seen{$c[$i]}++;
+      push @found, $c[$i];
+    }
+    print join(" ", @found);
+  '
+}
+
 probe_matched_length() {
   local file="$1" expression="$2"
   local prog report copy status out
@@ -336,6 +391,10 @@ restore() {
 trap restore EXIT INT TERM
 
 BEFORE="$(cksum < "${TARGET}")"
+# #3080: read from the expression BEFORE it runs, so the refusal below can say whether the text it was
+# looking for is in the file literally.
+SEARCH_HALF="$(search_half_of "${EXPRESSION}")"
+
 perl -0pi -e "${EXPRESSION}" "${TARGET}"
 AFTER="$(cksum < "${TARGET}")"
 
@@ -347,6 +406,22 @@ if [[ "${BEFORE}" == "${AFTER}" ]]; then
   echo "  Nothing was run, because there is nothing to learn from it: an unapplied mutation leaves the"
   echo "  suite green for the ordinary reason, and reading that as a surviving guard is how a vacuous"
   echo "  guard gets signed off (L100)."
+  # #3080: name the metacharacter, the way PERL VARIABLE (#2995) already names $0, instead of leaving
+  # the reader to spot it. The expression is genuinely a perl expression and stays one; what is being
+  # fixed is that the refusal said only that nothing matched.
+  #
+  # It speaks only with EVIDENCE, never on the mere presence of a metacharacter. The search half, read
+  # LITERALLY, has to actually be in the file: then "the pattern is being read as a regex" is measured,
+  # not guessed. Without that it would fire on the ordinary typo, where the text is simply absent, and
+  # send the reader to escape characters in a pattern that names nothing (L93).
+  UNESCAPED="$(unescaped_metacharacters "${SEARCH_HALF}")"
+  if [[ -n "${SEARCH_HALF}" && -n "${UNESCAPED}" ]] \
+     && grep -qF -- "${SEARCH_HALF}" "${TARGET}" 2>/dev/null; then
+    echo
+    echo "  That text IS in ${TARGET} literally, so the pattern is being read as a regex and these"
+    echo "  characters are not matching themselves: ${UNESCAPED}"
+    echo "  Escape each of them (\\( for a literal parenthesis, \\? for a literal question mark)."
+  fi
   exit 2
 fi
 
@@ -372,7 +447,13 @@ if [[ "${MATCHED_LENGTH}" == "0" ]]; then
 fi
 
 if [[ -n "${AIM}" ]]; then
-  AIMED_LINES="$(grep -nE -- "${AIM}" "${BACKUP}" 2>/dev/null | cut -d: -f1)"
+  # #3080: -F unless --at-regex asked for a pattern. Both spellings go through ONE grep so the two
+  # readings cannot drift into different line-numbering or different quoting rules.
+  if [[ "${AIM_IS_REGEX}" == "true" ]]; then
+    AIMED_LINES="$(grep -nE -- "${AIM}" "${BACKUP}" 2>/dev/null | cut -d: -f1)"
+  else
+    AIMED_LINES="$(grep -nF -- "${AIM}" "${BACKUP}" 2>/dev/null | cut -d: -f1)"
+  fi
   TOUCHED_LINES="$(mutation_touched_original_lines "${BACKUP}" "${TARGET}")"
   OUTSIDE_LINES=""
   while IFS= read -r touched_line; do

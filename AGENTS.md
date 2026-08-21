@@ -277,8 +277,8 @@ already drifting from the Swift version it mirrored.
   says how to read what it prints.
 
 - **Seeing a guard fail, which every guard here is supposed to have been (L1): `scripts/mutate.sh`
-  (#2755).** `scripts/mutate.sh [--at <pattern>] [--breaks-the-build] <file> <perl-expression>
-  [test-scope ...]` breaks the code on purpose,
+  (#2755).** `scripts/mutate.sh [--at <text> | --at-regex <re>] [--breaks-the-build] <file>
+  <perl-expression> [test-scope ...]` breaks the code on purpose,
   runs the suite, restores the file through a trap, and reports which tests went red. Roughly 1600 of the
   suite's declarations are source-text guards, so this is done constantly, and it was hand-rolled every
   time. Use it rather than a fresh one-liner, for the two reasons the hand-rolled version has already
@@ -299,9 +299,18 @@ already drifting from the Swift version it mirrored.
   now confirms the change landed where it was aimed BEFORE it will run anything. A match that consumed no
   characters is refused outright, which needs nothing declared and catches that incident exactly where a
   diff-based rule cannot (the prepend happened on the first line, so the diff reads as an ordinary
-  one-line change). `--at <pattern>` declares the aim explicitly and refuses a mutation touching any line
-  the pattern does not name, which is the only way the tool can know where a mutation was SUPPOSED to
-  land. And a run in which nearly everything went red reads as the instrument misfiring rather than as
+  one-line change). `--at <text>` declares the aim explicitly and refuses a mutation touching any line
+  the text does not name, which is the only way the tool can know where a mutation was SUPPOSED to
+  land. Since #3080 that aim is LITERAL, because an aim is a LOCATOR rather than a pattern: it used to be
+  a regex and said so nowhere at the point of use, so `--at 'Text(SendConfirmCopy.openReview)'` reported
+  LANDED ELSEWHERE naming a line nobody wrote, its parentheses having grouped rather than matched. That
+  happened six times in one session, each costing a rerun of a scoped Swift suite. `--at-regex` is the
+  opt in for an aim that genuinely wants a pattern; it is a separate flag rather than a mode on `--at`
+  so which reading is in force is visible at the call site. The perl expression is still genuinely perl
+  and is unchanged, but a `NOT APPLIED` whose search text IS in the file literally now NAMES the
+  metacharacters being read as a regex, the way `PERL VARIABLE` already names `$0`. It says that only
+  with that evidence, never on the mere presence of a metacharacter, so the ordinary typo (text that is
+  simply absent) is not blamed on escaping. And a run in which nearly everything went red reads as the instrument misfiring rather than as
   proof. A SCOPED run is exempt from that last one on purpose: a scope naming the one suite holding the
   guard is expected to go entirely red, and a rule condemning it would fire on the common case and be
   switched off within a day (L93).
