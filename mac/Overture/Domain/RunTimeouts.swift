@@ -31,6 +31,19 @@ enum RunTimeouts {
     // so a long batch never goes stale, and lengthening that would only make a DEAD run look alive longer.
     static let reachabilityProbe: TimeInterval = 10 * 60
 
+    // #2872: how long "Finishing up" may stand before it becomes an actionable state.
+    //
+    // Not a run window at all, which is why it is the shortest here: it covers the HANDOVER between the
+    // runner deleting its marker (its exit trap's last act) and the app noticing what landed. That gap is
+    // bounded by the app's own follow poll, `RootView.followUntilFinished`, which reads every 3 seconds,
+    // so a delivered result is in hand within a few of those. Thirty seconds is ten poll cycles, which
+    // leaves a slow import room and still turns "for ever" into half a minute.
+    //
+    // Measured from when absence was first OBSERVED, never from the run's start: a run that legitimately
+    // overran its window and then finished cleanly would otherwise be accused the moment its marker went,
+    // which is a false alarm on the commonest slow case (L93).
+    static let finishingGrace: TimeInterval = 30
+
     // #1684: how long a run Dan STOPPED may stay on screen before the app calls it over.
     //
     // Sized from the runner's own behaviour, not guessed. `prep-run.sh` touches its marker every 60s

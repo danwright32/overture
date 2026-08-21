@@ -35,6 +35,11 @@ struct LiveRunLabel: View {
     // reply drafter, Prep and Gmail connect all have room for the words.
     var compact: Bool = false
 
+    // #2872: one per rendered run, held across ticks. See RunProgressView for why it is a class.
+
+    @State private var finishingWatch = FinishingWatch()
+
+
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             content(now: context.date)
@@ -131,7 +136,11 @@ struct LiveRunLabel: View {
             // No timeout configured: never stalls, just reflect whether a counter is running.
             return since == nil ? .idle : .running(elapsed: "")
         }
-        return RunProgress.liveness(since: since, now: now, timeout: timeout, heartbeat: heartbeat?())
+        // #2872: read once and handed to both the verdict and the watch, so a single tick cannot answer
+        // "is it alive" and "when did it stop" from two different readings.
+        let beat = heartbeat?()
+        return RunProgress.liveness(since: since, now: now, timeout: timeout, heartbeat: beat,
+                                    markerAbsentSince: finishingWatch.observe(beat, now: now))
     }
 
     @ViewBuilder private func stalled(elapsed: String) -> some View {
