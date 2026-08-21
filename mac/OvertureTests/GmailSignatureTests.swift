@@ -106,9 +106,26 @@ struct GmailSignatureTests {
 
     // MARK: - Fetch (failure paths return nil so the caller falls back, never blocks a send)
 
-    private func fetch(_ status: Int, _ body: String) -> @Sendable (URLRequest) async throws -> (Data, URLResponse) {
-        { _ in (Data(body.utf8), HTTPURLResponse(url: URL(string: "https://gmail.googleapis.com")!,
-                                                 statusCode: status, httpVersion: nil, headerFields: nil)!) }
+    // #2947: the fake ANSWERS THE REQUEST rather than the same blob whatever it was handed.
+    //
+    // This endpoint takes no field selection, so there is nothing to narrow the way #2928's message fetch
+    // does. What there is to honour is WHICH endpoint was asked for and with what credential: a fake that
+    // replies 200 to any URL cannot tell a correct call from one aimed at the wrong path, and the test
+    // would go on passing while the service asked Google for something else (L52, L143).
+    private func fetch(_ status: Int, _ body: String,
+                       file: StaticString = #filePath, line: UInt = #line)
+    -> @Sendable (URLRequest) async throws -> (Data, URLResponse) {
+        { req in
+            let url = req.url?.absoluteString ?? ""
+            #expect(url == "https://gmail.googleapis.com/gmail/v1/users/me/settings/sendAs",
+                    Comment(rawValue: "the signature read asked for \(url), which is not the sendAs settings"),
+                    sourceLocation: SourceLocation(fileID: "\(file)", filePath: "\(file)",
+                                                   line: Int(line), column: 1))
+            #expect(req.value(forHTTPHeaderField: "Authorization") == "Bearer tok",
+                    "the request has to carry the token it was given")
+            return (Data(body.utf8),
+                    HTTPURLResponse(url: req.url!, statusCode: status, httpVersion: nil, headerFields: nil)!)
+        }
     }
 
     @Test func fetchReturnsTheSignatureOn200() async {
