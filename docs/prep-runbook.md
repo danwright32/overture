@@ -472,13 +472,13 @@ in order, stop at the first that works:
    2026-08-07 run, where 2 of 3 shows reported "no email" while a freely published address sat one
    fetch away.
 
-   **(a) A social profile is a pointer, not a destination.** Reaching an Instagram, Facebook or X
-   profile does NOT satisfy step 3. If the page you fetched carries an outbound link to the target's
-   own site, or to a link hub (Linktree, Beacons, Carrd, Milkshake), OPEN it and run steps 1 and 2
-   there. That is where a small independent act publishes its address, and you have already paid for
-   the fetch that revealed the link.
+   **(a) A profile is not where the search stops.** Reaching an Instagram, Facebook or X profile is
+   the middle of step 3, not the end of it. If the page you fetched carries an outbound link to the
+   target's own site, or to a link hub (Linktree, Beacons, Carrd, Milkshake), OPEN it and run steps 1
+   and 2 there. That is where a small independent act publishes its address, you have already paid for
+   the fetch that revealed the link, and an address Dan can write to beats a DM he has to send by hand.
 
-   **But when that comes back with nothing, the profile itself is the answer, and you emit it (#2612).**
+   **And when that comes back with nothing, the profile itself is the answer, and you emit it (#2612).**
    Dan DMs an act on Instagram by hand, so a handle is a route rather than a dead end: report it as a
    `form_or_dm` contact with the profile URL in `formUrl`. What you must never do is find a profile,
    fail to get past it, and then report `nothing_published`: that says this show's people publish no

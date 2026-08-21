@@ -1,6 +1,6 @@
 {
   "name": "social-profile-is-not-the-destination",
-  "rule": "A social profile is a pointer, not a destination (#2265). Reaching one does not satisfy the form-or-DM step: the run must follow what the profile links to, and when search has not surfaced the act's own site it must fetch the canonical guess directly before concluding nothing is published. An address read off a page a fetch returned is READ, so it qualifies as high with a sourceUrl; a guessed DOMAIN is not a guessed ADDRESS.",
+  "rule": "A profile is not where the search stops (#2265, reworded by #2948). Reaching one is the middle of the form-or-DM step rather than the end of it: the run must follow what the profile links to, and when search has not surfaced the act's own site it must fetch the canonical guess directly before concluding nothing is published. An address read off a page a fetch returned is READ, so it qualifies as high with a sourceUrl; a guessed DOMAIN is not a guessed ADDRESS.",
   "input": {
     "naturalKey": "an-evening-of-songs|2026-08-11|the-supper-room",
     "groupName": "An Evening of Songs",
