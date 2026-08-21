@@ -7,6 +7,43 @@ import SwiftData
 
 @MainActor
 enum ScoutService {
+    // #2758 / #2999: which stored row an incoming show belongs to, decided in ONE place so the refusal
+    // cannot be forgotten by one arm.
+    //
+    // Every arm below the first WRITES the incoming key onto a stored row, and each is safe only because
+    // the first arm proved nobody holds it. A key collision does not throw: measured under #2754,
+    // `save()` succeeds and SwiftData MERGES the two rows, taking some fields from each, so a card's keep
+    // decision, its contacts and its outreach record go with no error raised anywhere (L5).
+    enum UpsertTarget: Equatable {
+        case updateInPlace(Prospect)
+        case reKey(Prospect)
+        case insert
+        // The store could not answer, so nobody knows whether the key is free. Refusing costs this row
+        // one run and it comes back on the next; guessing costs a card that does not come back (L105).
+        case storeUnreadable
+    }
+
+    // The four reads the upsert makes, in the order it makes them, as closures.
+    //
+    // Closures rather than a ModelContext for the reason RunNightDrop's `lookup:` seam exists: a healthy
+    // in-memory store never throws, so a fixture that only ever asks one proves nothing about the branch
+    // this whole thing is about (L140). The order IS the rule (a concert identity beats a shared run URL
+    // beats a stable source listing), so it is expressed here rather than repeated at the call site.
+    static func upsertTarget(storedByKey: () throws -> Prospect?,
+                             byConcert: () throws -> Prospect?,
+                             byAnyRunURL: () throws -> Prospect?,
+                             byStableSource: () throws -> Prospect?) -> UpsertTarget {
+        do {
+            if let existing = try storedByKey() { return .updateInPlace(existing) }
+            if let match = try byConcert() { return .reKey(match) }
+            if let match = try byAnyRunURL() { return .reKey(match) }
+            if let match = try byStableSource() { return .reKey(match) }
+            return .insert
+        } catch {
+            return .storeUnreadable
+        }
+    }
+
     struct Outcome: Equatable, Sendable {
         var found: Int
         var inserted: Int
@@ -16,10 +53,18 @@ enum ScoutService {
         // NOT counted as `skipped`, which means "decided not to pursue" (a blocked date, a
         // do-not-contact org); a collapsed night was pursued, as part of its run. Kept separate so
         // every event the scout found is accounted for exactly once:
-        //     found == inserted + updated + skipped + collapsedIntoRun
+        //     found == inserted + updated + skipped + collapsedIntoRun + storeUnreadable
         // That identity is what makes a silently vanished show impossible to miss (it was the bug
         // this counter was added to catch), so it is asserted directly in the tests.
         var collapsedIntoRun: Int = 0
+
+        // #2758 / #2999: shows this run refused to touch because the store could not answer whether
+        // their key was free. A fifth term in the identity above rather than a fold into `skipped`,
+        // which means Dan's rules decided against the show: this one nobody decided anything about, and
+        // it comes back on the next run. Naming it is the whole point, because a run that quietly drops
+        // shows is indistinguishable from a run that found none (L98, L11).
+        var storeUnreadable: Int = 0
+        var storeUnreadableKeys: [String] = []
         // Set when the Downbeat past-client export was missing, unreadable, or stale, so
         // warm/repeat matching ran degraded and Dan should be told (#22/#23).
         var clientListWarning: String? = nil
@@ -122,14 +167,16 @@ enum ScoutService {
         }
 
         // Folds one source's ingest into the run's totals. The counts stay additive so the #797 identity
-        // (found == inserted + updated + skipped + collapsedIntoRun) still holds across the whole run,
-        // which is what makes a silently vanished show impossible to miss.
+        // (found == inserted + updated + skipped + collapsedIntoRun + storeUnreadable) still holds across
+        // the whole run, which is what makes a silently vanished show impossible to miss.
         mutating func merge(_ other: Outcome) {
             found += other.found
             inserted += other.inserted
             updated += other.updated
             skipped += other.skipped
             collapsedIntoRun += other.collapsedIntoRun
+            storeUnreadable += other.storeUnreadable
+            storeUnreadableKeys.append(contentsOf: other.storeUnreadableKeys)
             saveFailed = saveFailed || other.saveFailed
             sources.append(contentsOf: other.sources)
             unqueuedResultIds.append(contentsOf: other.unqueuedResultIds)
@@ -923,6 +970,11 @@ enum ScoutService {
         // already have broken the upcoming-only guard above it.
         let scoutNow = EasternDate.date(from: today) ?? Date()
         var inserted = 0, updated = 0, skipped = 0, collapsedIntoRun = 0
+        // #2758: rows this run refused to touch because the store could not answer whether their key was
+        // free. Kept apart from `skipped`, which means "decided not to pursue": this one was pursued and
+        // could not be settled, and the two need different words on the summary.
+        var unreadableStore = 0
+        var unreadableKeys: [String] = []
         var suppressedShows: [String] = []      // #802: by org name, folded into one line each below
         // #1702: which presenter names read as their building's own brand, judged over the store as it
         // stands and computed ONCE per sweep rather than per event. Read here rather than passed in, so
@@ -1096,44 +1148,57 @@ enum ScoutService {
 
             let key = Prospect.makeNaturalKey(groupName: enriched.groupName, performanceDate: enriched.performanceDate, venue: enriched.venue)
             seenKeys.insert(key)
-            if let existing = try? Prospect.stored(key: key, in: context) {
+            // #2758 / #2999: ONE decision, taken before anything is written, so a store that cannot answer
+            // refuses this row instead of falling through to an arm that would re-key or insert onto a key
+            // somebody else may hold. The comments on each arm are below, at the point it is acted on.
+            switch upsertTarget(
+                storedByKey: { try Prospect.stored(key: key, in: context) },
+                byConcert: { try matchByConcertIdentity(enriched.seriesId, groupName: enriched.groupName,
+                                                        openingNight: enriched.performanceDate,
+                                                        runEndDate: enriched.runEndDate,
+                                                        venue: enriched.venue, in: context) },
+                byAnyRunURL: { try matchByAnyRunURL(enriched.runSourceURLs, groupName: enriched.groupName,
+                                                    venue: enriched.venue, in: context) },
+                byStableSource: { try matchByStableSource(url: enriched.sourceListingURL,
+                                                          date: enriched.performanceDate,
+                                                          venue: enriched.venue, in: context) }
+            ) {
+            case .updateInPlace(let existing):
                 // Exact natural-key match: update in place.
                 apply(enriched, to: existing, now: scoutNow)
                 updated += 1
-            } else if let byConcert = matchByConcertIdentity(enriched.seriesId, groupName: enriched.groupName,
-                                                             openingNight: enriched.performanceDate,
-                                                             runEndDate: enriched.runEndDate,
-                                                             venue: enriched.venue, in: context) {
-                // #1260 Phase 2: no exact key match, but a stored merged prospect carries the SAME synthetic
-                // concert id (samedatevenue:DATE|VENUE). The name and the representative URL both shifted
-                // because the scout re-listed the per-conductor rows in a new order or with refreshed links,
-                // so the two URL-based arms below would miss and INSERT A DUPLICATE, stranding Dan's
-                // keep/dismiss. Re-key to the new name and update in place. Gated on isMerged, and the
-                // synthetic id is minted only for a mergeSameDateVenue source, so this can NEVER fuse two
-                // genuinely different shows (a normal matinee/evening never gets an id to match on).
-                byConcert.naturalKey = key
-                apply(enriched, to: byConcert, now: scoutNow)
+            case .reKey(let match):
+                // No exact key match, but a stored row is this same show under a key that has moved. Three
+                // reads can say so, and they are asked in `upsertTarget` in this order:
+                //
+                //   #1260 Phase 2, a merged prospect carrying the SAME synthetic concert id
+                //   (samedatevenue:DATE|VENUE), whose name and representative URL both shifted because the
+                //   scout re-listed the per-conductor rows in a new order or with refreshed links. The two
+                //   URL arms would miss and INSERT A DUPLICATE, stranding Dan's keep/dismiss. Gated on
+                //   isMerged, and the synthetic id is minted only for a mergeSameDateVenue source, so it can
+                //   NEVER fuse two genuinely different shows (a normal matinee/evening gets no id to match).
+                //
+                //   #132, a stored record sharing one of this run's member URLs, so the keep/dismiss
+                //   decision survives a run-window shift.
+                //
+                //   #29, the same source listing and date, where the venue tweaked the title between runs.
+                //
+                // All three do the same thing here: re-key to the new key and update in place. Safe only
+                // because the exact-key read above proved nobody holds it, which is why a read that could
+                // not answer refuses the row below rather than arriving here (#2758).
+                match.naturalKey = key
+                apply(enriched, to: match, now: scoutNow)
                 updated += 1
-            } else if let anyMatch = matchByAnyRunURL(enriched.runSourceURLs, groupName: enriched.groupName,
-                                                      venue: enriched.venue, in: context) {
-                // No exact key match, but a stored record shares one of this run's member
-                // URLs: re-key to the new opening-night key and update in place so Dan's
-                // keep/dismiss decision survives across run-window shifts (#132).
-                anyMatch.naturalKey = key
-                apply(enriched, to: anyMatch, now: scoutNow)
-                updated += 1
-            } else if let drifted = matchByStableSource(url: enriched.sourceListingURL,
-                                                       date: enriched.performanceDate,
-                                                       venue: enriched.venue, in: context) {
-                // No exact key match, but the same source listing + date already exists:
-                // the venue tweaked the title between runs. Re-key to the new title and
-                // update in place so Dan's keep/dismiss decision survives (#29).
-                drifted.naturalKey = key
-                apply(enriched, to: drifted, now: scoutNow)
-                updated += 1
-            } else {
+            case .insert:
                 context.insert(make(enriched, key: key))
                 inserted += 1
+            case .storeUnreadable:
+                // The store could not answer whether this key is free, so this row is left alone entirely.
+                // A show missing from one run comes back on the next; a merged card does not come back at
+                // all (L105). Counted, and named on the summary, because a run that quietly drops shows is
+                // indistinguishable from a run that found none (L98).
+                unreadableStore += 1
+                unreadableKeys.append(key)
             }
         }
 
@@ -1201,6 +1266,8 @@ enum ScoutService {
         }
         var outcome = Outcome(found: events.count, inserted: inserted, updated: updated, skipped: skipped,
                               collapsedIntoRun: collapsedIntoRun)
+        outcome.storeUnreadable = unreadableStore
+        outcome.storeUnreadableKeys = unreadableKeys
         outcome.suppressedOrgs = suppressed
         outcome.report = report
         return outcome
@@ -1219,11 +1286,12 @@ enum ScoutService {
     // The act and the venue must agree too. That is exactly what a genuine #132 run-window shift
     // preserves (the same act, at the same venue, on moved dates), so the case this exists for still
     // matches, while a season page full of strangers no longer does.
+    // #2758: throws, for the reason above.
     private static func matchByAnyRunURL(_ urls: [String], groupName: String, venue: String?,
-                                         in context: ModelContext) -> Prospect? {
+                                         in context: ModelContext) throws -> Prospect? {
         let candidates = Set(urls)
         guard !candidates.isEmpty else { return nil }
-        let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        let all = try context.fetch(FetchDescriptor<Prospect>())
         return all.first { p in
             let sharesURL = (p.sourceListingURL.map { candidates.contains($0) } ?? false)
                 || !Set(p.runSourceURLs).isDisjoint(with: candidates)
@@ -1273,11 +1341,14 @@ enum ScoutService {
     // Friedman drifted) still overlaps its own stored dates. The same production remounted next season
     // does not, so it correctly becomes a new card Dan is asked about rather than silently inheriting an
     // old dismissal and vanishing.
+    // #2758: THROWS rather than swallowing. A `(try? fetch) ?? []` here answers "no match" for a store
+    // that could not answer, which sends the chain to the final insert, the most destructive of the five
+    // arms: it puts a new row on a key another row may already hold.
     private static func matchByConcertIdentity(_ seriesId: String?, groupName: String,
                                                openingNight: String?, runEndDate: String?, venue: String?,
-                                               in context: ModelContext) -> Prospect? {
+                                               in context: ModelContext) throws -> Prospect? {
         guard let seriesId, !seriesId.isEmpty else { return nil }
-        let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        let all = try context.fetch(FetchDescriptor<Prospect>())
         let sharing = all.filter { $0.seriesId == seriesId && sameVenue($0.venue, venue) }
 
         // A synthetic same-date id already encodes date and venue and is minted only for a
@@ -1318,10 +1389,11 @@ enum ScoutService {
     // + date alone would re-key one show onto a DIFFERENT act that happens to play the same night.
     // The title is deliberately NOT checked here: recognizing a drifted title is this matcher's
     // entire purpose, so the act name is the one thing it cannot rely on.
+    // #2758: throws, for the reason above.
     private static func matchByStableSource(url: String?, date: String?, venue: String?,
-                                            in context: ModelContext) -> Prospect? {
+                                            in context: ModelContext) throws -> Prospect? {
         guard let url, !url.isEmpty else { return nil }
-        let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
+        let all = try context.fetch(FetchDescriptor<Prospect>())
         return all.first {
             $0.sourceListingURL == url && $0.performanceDate == date && sameVenue($0.venue, venue)
         }

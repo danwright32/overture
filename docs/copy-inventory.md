@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1430 sentences**.
+Every sentence Overture can say to Dan: **1438 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -438,6 +438,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/ScoutExtractService.swift`
 "A separate email each"
     `UI/SendConfirmSheet.swift`
+"A show was left out this run because the local store stopped answering. Run the scout again."
+    `Domain/ScoutWarnings.swift`
 "A show you kept lands here if a clash with your calendar turns up later."
     `Domain/StageEmptyState.swift`
 "A source \"\(sourceName)\" may be them: check its name, or tag it a returning client."
@@ -1356,6 +1358,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "One of the addresses is blank. Nothing was saved"
     `App/ActionFeedback.swift`
+"One show was left out of this run. The local store stopped answering, so Overture could not "
+    `Domain/ScoutWarningCopy.swift`
 "One source couldn't be checked."
     `UI/ScoutSummaryView.swift`
 "One source couldn't be checked. \(lines[0])"
@@ -2562,6 +2566,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/HandoffShortfall.swift`
 "\(count) shows on \(dateLabel) have no genre read. Set them before dismissing the night."
     `Domain/GenreGate.swift`
+"\(count) shows were left out of this run. The local store stopped answering, so Overture "
+    `Domain/ScoutWarningCopy.swift`
+"\(count) shows were left out this run because the local store stopped answering. Run the scout again."
+    `Domain/ScoutWarnings.swift`
 "\(count) sources couldn't be checked."
     `UI/ScoutSummaryView.swift`
 "\(count) sources need"
@@ -2986,6 +2994,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AppNotice.swift`
 "contact back on the card first if you want to use it."
     `Domain/AttachConversation.swift`
+"could not tell whether they were new shows or cards you have already decided on, and it "
+    `Domain/ScoutWarningCopy.swift`
 "couldn't save the producer answers, so other shows by them won't reuse this one"
     `Domain/ReachabilityRunSummary.swift`
 "couldn't save what this check found, so it isn't finished and those shows may be checked again"
@@ -3078,6 +3088,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AppNotice.swift`
 "prep run"
     `Domain/RunKind.swift`
+"rather skip it than write over one. Run the scout again to pick it up."
+    `Domain/ScoutWarningCopy.swift`
 "reachability check"
     `Domain/RunKind.swift`
 "read it."
@@ -3110,6 +3122,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "still couldn't save what this check found, so it has stopped trying and those shows will be checked again"
     `Domain/ReachabilityRunSummary.swift`
+"tell whether it was a new show or a card you have already decided on, and it would "
+    `Domain/ScoutWarningCopy.swift`
 "ten are kept."
     `App/StoreShrinkCheck.swift`
 "the Downbeat client export couldn't be read"
@@ -3171,6 +3185,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/PossibleMatchFanOut.swift`
 "would have read \(count) show\(count == 1 ? "" : "s") as \(discipline.label)"
     `Domain/GenreCorrection.swift`
+"would rather skip them than write over one. Run the scout again to pick them up."
+    `Domain/ScoutWarningCopy.swift`
 "wrote this"
     `Domain/ReplyPanel.swift`
 "you stopped this check after 1 of \(requested) shows got an answer, and the lookups that were already under way still counted as spent"

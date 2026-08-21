@@ -10,6 +10,23 @@ enum ScoutWarningCopy {
     static let saveFailed =
         "The scout ran but couldn't save its results. Run it again; if this keeps happening, something's wrong with the local store."
 
+    // #2758 / #2999: says what was left out and why it was left out on purpose.
+    //
+    // The alternative is what used to happen: the scout could not tell a key nobody holds from a store
+    // that would not answer, and wrote anyway, which merges two shows into one row and takes a card's
+    // keep decision, its contacts and its outreach record with it. Leaving the show out costs one run;
+    // that costs the card. So this reads as a deliberate choice rather than a fault, and names the one
+    // thing Dan can do about it.
+    static func storeUnreadable(count: Int) -> String {
+        count == 1
+            ? "One show was left out of this run. The local store stopped answering, so Overture could not "
+                + "tell whether it was a new show or a card you have already decided on, and it would "
+                + "rather skip it than write over one. Run the scout again to pick it up."
+            : "\(count) shows were left out of this run. The local store stopped answering, so Overture "
+                + "could not tell whether they were new shows or cards you have already decided on, and it "
+                + "would rather skip them than write over one. Run the scout again to pick them up."
+    }
+
     // #1531: NAMES the calendar that went quiet, because that is the only actionable fact in the warning
     // and the run has always known it. It used to name nothing ("the scout reached the calendar feed"),
     // leaving Dan to work out which of 62 sources it meant, and it used to explain the surprise with a
