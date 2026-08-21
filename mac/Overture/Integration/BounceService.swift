@@ -41,7 +41,11 @@ enum BounceService {
             for r in p.replyWatchRecipients {
                 guard let threadId = r.gmailThreadId, !threadId.isEmpty else { continue }
                 if r.replyWatchManualOutcome { continue }
-                if r.bounced || r.replied || r.replyWatchIsBooked { continue }
+                // #2829: `replied` is no longer a blanket skip. It still refuses to MARK (see the
+                // replied branch below), which is the protection it was there for, but the bounce
+                // notice is in hand and dropping it left a dead address reporting as a live
+                // conversation with no symptom but silence (L12).
+                if r.bounced || r.replyWatchIsBooked { continue }
                 guard let data = fetchThread(threadId) else { continue }
                 if let bounceId = BounceDetection.hardBounceMessageId(threadJSON: data, selfEmail: selfEmail),
                    bounceId != r.dismissedBounceId {
@@ -57,6 +61,24 @@ enum BounceService {
                     // address is not made invisible by the refusal to attribute it (L13). Filtering
                     // automated senders at SEARCH time cannot cover this, because the classification
                     // happens here, later, over the whole thread.
+                    // #2829: this contact has written back, so the conversation is demonstrably live.
+                    // `bounced` would close the show through PerformanceStatus and drop the contact out
+                    // of follow-ups, writing off a conversation on the strength of one failed delivery,
+                    // which is a worse defect than the one being fixed. Reported instead, through the
+                    // same channel and the same once-only `lastBounceId` as the two cases below, so the
+                    // two states stay distinguishable: a conversation that bounced once is not a
+                    // conversation that is over (L11).
+                    //
+                    // Checked BEFORE the two attribution cases: those decide WHO to blame, and here the
+                    // answer is nobody whatever the thread looks like.
+                    if r.replied {
+                        if !reportedThreads.contains(threadId), r.lastBounceId != bounceId {
+                            reportedThreads.insert(threadId)
+                            reportProblem("An email to \(p.replyWatchDisplayName) bounced, and they have replied on that thread, so Overture has not written the address off. Check the bounce in Gmail before you write back")
+                        }
+                        r.lastBounceId = bounceId
+                        continue
+                    }
                     if onThread.count == 1, r.replyWatchConversationIsAttached {
                         if !reportedThreads.contains(threadId), r.lastBounceId != bounceId {
                             reportedThreads.insert(threadId)
@@ -87,6 +109,10 @@ enum BounceService {
                     count += 1
                     continue   // superseded by a hard bounce; no need to also flag a delay
                 }
+                // #2829: unchanged for a replied contact. `hasRecentDeliveryDelay` already refuses to
+                // show a delay notice once anyone has replied, so recording one here would be a value
+                // written and never read (L46).
+                if r.replied { continue }
                 if let delayId = BounceDetection.delayMessageId(threadJSON: data, selfEmail: selfEmail),
                    delayId != r.lastDelayMessageId {
                     r.lastDelayMessageId = delayId
