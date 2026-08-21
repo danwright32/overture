@@ -164,7 +164,7 @@ struct RunNightDropTests {
         _ = p.dropNight("2026-08-19", reason: .dateConflict, now: now, in: ctx)
 
         // What the next scout hands back: the feed still lists all three nights.
-        let refolded = DroppedNight.keeping(["2026-08-19", "2026-09-30", "2026-10-21"], on: p)
+        let refolded = DroppedNight.keeping(["2026-08-19", "2026-09-30", "2026-10-21"], on: p, lookup: { _ in nil })
 
         #expect(refolded == ["2026-09-30", "2026-10-21"])
     }
@@ -174,7 +174,7 @@ struct RunNightDropTests {
         let ctx = ModelContext(try container())
         let p = sandler(ctx)
 
-        #expect(DroppedNight.keeping(["2026-08-19", "2026-09-30"], on: p) == ["2026-08-19", "2026-09-30"])
+        #expect(DroppedNight.keeping(["2026-08-19", "2026-09-30"], on: p, lookup: { _ in nil }) == ["2026-08-19", "2026-09-30"])
     }
 
     // MARK: the clash badge

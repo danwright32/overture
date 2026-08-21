@@ -1165,7 +1165,8 @@ enum ScoutService {
             ) {
             case .updateInPlace(let existing):
                 // Exact natural-key match: update in place.
-                apply(enriched, to: existing, now: scoutNow)
+                apply(enriched, to: existing, now: scoutNow,
+                      storedByKey: { try Prospect.stored(key: $0, in: context) })
                 updated += 1
             case .reKey(let match):
                 // No exact key match, but a stored row is this same show under a key that has moved. Three
@@ -1187,7 +1188,8 @@ enum ScoutService {
                 // because the exact-key read above proved nobody holds it, which is why a read that could
                 // not answer refuses the row below rather than arriving here (#2758).
                 match.naturalKey = key
-                apply(enriched, to: match, now: scoutNow)
+                apply(enriched, to: match, now: scoutNow,
+                      storedByKey: { try Prospect.stored(key: $0, in: context) })
                 updated += 1
             case .insert:
                 context.insert(make(enriched, key: key))
@@ -1472,7 +1474,10 @@ enum ScoutService {
         existing.fitReason = derived.fitReason
     }
 
-    private static func apply(_ p: AssembledProspect, to existing: Prospect, now: Date) {
+    // #3001: `storedByKey` is how a night RELEASED to another card is re-checked at fold time. Required
+    // rather than defaulted, so a caller cannot quietly get the old subtract-forever behaviour (L168).
+    private static func apply(_ p: AssembledProspect, to existing: Prospect, now: Date,
+                              storedByKey: (String) throws -> Prospect?) {
         // #1274: track the latest scout-emitted name always, so a "reset to scout name" restores the
         // real current name even for a show Dan renamed several scouts ago. But only write it to the
         // DISPLAY groupName when Dan has not overridden it; once he renames a show, his name stands and
@@ -1516,7 +1521,8 @@ enum ScoutService {
         // prevents, one field over. `keeping` answers the feed's own date whenever nothing was dropped,
         // so an ordinary show is untouched.
         if let fed = p.performanceDate, DroppedNight.all(on: existing).contains(where: { $0.night == fed }) {
-            existing.performanceDate = DroppedNight.keeping(p.runNights, on: existing).min()
+            existing.performanceDate = DroppedNight.keeping(p.runNights, on: existing,
+                                                            lookup: storedByKey).min()
                 ?? existing.performanceDate
         } else {
             existing.performanceDate = p.performanceDate
@@ -1621,7 +1627,8 @@ enum ScoutService {
         // the night straight back and quietly undo his decision on the next scout. That is L92 exactly: a
         // removal recorded against nothing recurs. `DroppedNight.keeping` is the one place that
         // subtraction happens, so the queue and the scout cannot disagree about which nights this run has.
-        existing.runNights = DroppedNight.keeping(p.runNights, on: existing)
+        // #3001: with a lookup, so a night released to another card comes back if that card has gone.
+        existing.runNights = DroppedNight.keeping(p.runNights, on: existing, lookup: storedByKey)
         // And the span has to follow the nights, or a run whose opening night was dropped keeps claiming
         // to start on a date it no longer plays.
         if !existing.runNights.isEmpty, !DroppedNight.all(on: existing).isEmpty {

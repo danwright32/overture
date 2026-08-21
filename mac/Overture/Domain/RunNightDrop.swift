@@ -113,10 +113,39 @@ struct DroppedNight: Equatable, Sendable {
     // What the scout's re-fold is allowed to keep. `runNights` is rebuilt from the venue's feed on every
     // run and the feed still lists the dropped night, so without subtracting here a drop lasts until the
     // next scout and then quietly undoes itself (L92: a removal recorded against nothing recurs).
-    static func keeping(_ nights: [String], on p: Prospect) -> [String] {
-        let dropped = Set(all(on: p).map(\.night))
-        guard !dropped.isEmpty else { return nights }
-        return nights.filter { !dropped.contains($0) }
+    // #3001: a night RELEASED to another card is re-checked here, every fold.
+    //
+    // #2997 lets a run give up a night on the grounds that a stored card already holds it, recorded with
+    // reason `.duplicate`. Subtracting that forever leaves the exclusion standing over a card that may
+    // since have been dismissed or dropped out of the venue's listings, and then the night is on NO card
+    // and nothing says it went. Dan never chose to give it up, which is what separates it from a night he
+    // dropped himself (L200: an exclusion granted because another record covers it has to re-check that
+    // record at READ time).
+    //
+    // Dan's own drops are never re-checked. His decision does not depend on another card's fate, and
+    // asking would be a way to undo it.
+    //
+    // A read that FAILED leaves the release alone. It is not evidence the twin is gone, and resurrecting
+    // a night on a hiccup would flip the run's nights back and forth between scouts; the claim would also
+    // be one the check never measured (L11).
+    static func keeping(_ nights: [String], on p: Prospect,
+                        lookup: (String) throws -> Prospect?) -> [String] {
+        let drops = all(on: p)
+        guard !drops.isEmpty else { return nights }
+        let stillDropped = Set(drops.filter { drop in
+            guard drop.reason == .duplicate else { return true }   // Dan's own: never re-checked
+            let key = Prospect.makeNaturalKey(groupName: p.groupName, performanceDate: drop.night,
+                                              venue: p.venue)
+            // `keyAvailability` is the same three-answer read the release itself used, so the two cannot
+            // disagree about what "another card holds this" means, including that a row is never its own
+            // cover (L16).
+            switch p.keyAvailability(key, lookup: lookup) {
+            case .taken: return true          // the twin is there, so the release stands
+            case .free: return false          // the twin is gone, so the night comes back
+            case .unreadable: return true     // no evidence either way; leave it as it was
+            }
+        }.map(\.night))
+        return nights.filter { !stillDropped.contains($0) }
     }
 }
 
