@@ -240,6 +240,15 @@ struct FollowUpsView: View {
                 if let answered = AnsweredReplyNote.line(for: r, in: p, now: now) {
                     Text(answered).font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
                 }
+                // #3068: built by #1740 for this row and never rendered. The row asks how the show ended
+                // and offers the endings; on a show Dan already walked away from, asking that with no
+                // sign of the decision reads as a nudge about an event he is finished with. Reachable
+                // through `reopenOutcome`, which clears the ending and leaves the stand-down stamp, so
+                // the row comes back months after the decision with nothing recalling it.
+                if let stoodDown = StandDownCopy.closingNoteOnStoodDownShow(
+                    stoodDownAt: p.outreachStoodDownAt, now: now) {
+                    Text(stoodDown).font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
+                }
                 // #316: the durable failure surface. A real send failure persists on the recipient
                 // (SendService sets sendError), so it stays visible here until the next successful
                 // send clears it, unlike the fading banner a later success can overwrite first.

@@ -36,13 +36,13 @@ struct UnreachedCopyTests {
     // one somebody added to make a failure go away (L65). Empty today: every entry the measurement found
     // was really dead and was deleted rather than allowed.
     //
-    // The two entries are the measurement's own finding, and neither is a leftover: both were built on
-    // purpose and never wired, so deleting them would delete an intent rather than a remnant. Each names
-    // the issue that activates it, which is this repo's rule for a value nothing reaches yet.
+    // The remaining entry is the measurement's own finding and is not a leftover: it was built on purpose
+    // and never wired, so deleting it would delete an intent rather than a remnant. It names the issue
+    // that activates it, which is this repo's rule for a value nothing reaches yet.
+    //
+    // #3068 closed the other one by wiring it: `closingNoteOnStoodDownShow` is on the post-event row now,
+    // so it leaves this list by being reached rather than by being allowed.
     private static let unreachedOnPurpose: [String: [String: String]] = [
-        "Domain/FollowUp.swift": [
-            "closingNoteOnStoodDownShow": "#3068: built by #1740 for the follow-up row and never rendered",
-        ],
         "Domain/FormOutreach.swift": [
             "undoRefusalReason": "#3069: built by #2719 to say why Didn't send is greyed, never rendered",
         ],
