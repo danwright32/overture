@@ -176,6 +176,15 @@ struct QueueView: View {
     // RootView's existing #953 selection-sheet flow (mirrors the readOne closure SourcesView receives),
     // so a first-time user need not know the Cmd+P shortcut or the toolbar menu.
     var onStartPrep: () -> Void = {}
+    // #1880: how a per-row Re-prep LAUNCHES its run. Supplied by RootView, which owns the takeover, so the
+    // Re-prep gets the same "Reading show pages" phase the batch launch has instead of falling through to
+    // "Prepping" for the whole time the app renders the show's listing page.
+    //
+    // The default is the unwired behaviour, kept so this view stays constructible in previews and tests
+    // without a takeover. It is NOT the shipping path: `ReprepListingPhaseWiringTests` asserts RootView
+    // passes a real one, because a default that silently stands in for the wiring is how the phase went
+    // missing on one of three entry points in the first place (L46).
+    var onLaunchPrep: (@MainActor (ModelContext, Date, Set<String>) async throws -> Void)? = nil
     var onProbeReachability: (Set<String>) -> Void = { _ in }   // #1308 Layer 2
 
     // #1597/#1774: the dates Dan has ticked for one multi-date reachability check. An object, not @State,
@@ -1450,8 +1459,13 @@ struct QueueView: View {
         guardSelfBooking(item, title: SelfBookingCopy.prepConfirmTitle,
                          proceedLabel: SelfBookingCopy.prepConfirmProceed) {
             Task { @MainActor in
-                await ProspectMutations.reprep(item, mode: mode, prospects: prospects, context: context,
-                                               feedback: feedback)
+                if let onLaunchPrep {
+                    await ProspectMutations.reprep(item, mode: mode, prospects: prospects, context: context,
+                                                   feedback: feedback, startPrep: onLaunchPrep)
+                } else {
+                    await ProspectMutations.reprep(item, mode: mode, prospects: prospects, context: context,
+                                                   feedback: feedback)
+                }
             }
         }
     }
