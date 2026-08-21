@@ -313,7 +313,7 @@ function assertPrepContact(
 // nameMatchOnly per contact, #2912)
 export function assertPrepResultsShape(data: unknown, file: string, expectedVersion: number): void {
   const root = requireObject(data, file, "(root)");
-  const version = requireVersion(root.version, file, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  const version = requireVersion(root.version, file, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
   if (version !== expectedVersion) fail(file, `version ${version} does not match filename version ${expectedVersion}`);
   requireString(root.generatedAt, file, "generatedAt");
   const results = requireArray(root.results, file, "results");

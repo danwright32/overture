@@ -166,6 +166,20 @@ final class Recipient {
     var heldDownToUnverified: Bool = false
     var heldDownToUnverifiedDismissed: Bool = false
 
+    // #2895: WHICH rule held it down, so the badge's sentence can say. There are two ways to be overruled
+    // and they ask different things of Dan: an address that may be perfectly good and was never cited, or
+    // one cited against a page that does not establish the person. One sentence cannot cover both (L11).
+    //
+    // Re-derived on EVERY ingest beside `heldDownToUnverified`, never latched, for that field's reason: a
+    // later run that cites a corroborating page must clear it. NIL on every row written before this, which
+    // there was exactly one reason for at the time, so reading a missing one as `namedNoPage` is a fact
+    // about the code that wrote those rows rather than a guess about them (L90).
+    var heldDownReasonRaw: String?
+
+    var heldDownReason: ContactConfidenceGuard.HoldDown? {
+        heldDownReasonRaw.flatMap(ContactConfidenceGuard.HoldDown.init(rawValue:))
+    }
+
     // Whether the hold is IN FORCE, which is not the same as whether it was ever applied. One definition,
     // so the card, the review panel and the merge cannot each spell the pair differently.
     var isHeldDownToUnverified: Bool { heldDownToUnverified && !heldDownToUnverifiedDismissed }

@@ -58,6 +58,9 @@ struct OutreachFieldClassificationTests {
         "nameMatchOnly": "the check saying only the NAME matched, a fact about the route it found",
         "heldDownToUnverified": "a guard's opinion of how the address was cited",
         "heldDownToUnverifiedDismissed": "Dan waving that guard off, an answer about the address",
+        // #2895: WHICH guard's opinion, which is the same family as the flag it qualifies. It says
+        // something about how the check cited an address and nothing about anybody being written to.
+        "heldDownReasonRaw": "which citation rule held the address down, a fact about the check's evidence",
 
         // Drafted, not sent. A body exists on a contact nobody has written to yet, which is exactly the
         // state the merge is for.

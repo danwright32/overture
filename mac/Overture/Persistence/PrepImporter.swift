@@ -339,9 +339,14 @@ enum PrepImporter {
                                           // #2912: and a declared name match may never be high whatever
                                           // it cites, so the card is never handed two answers to "how
                                           // sure are we".
+                                          // #2895: and a named performer's citation has to corroborate
+                                          // THIS performance, which the runbook has always required and
+                                          // nothing enforced.
                                           contactConfidenceRaw: ContactConfidenceGuard.confidence(
                                               raw: c.confidence, sourceURL: c.sourceUrl,
-                                              nameMatchOnly: c.nameMatchOnly == true),
+                                              nameMatchOnly: c.nameMatchOnly == true,
+                                              provenance: c.provenance,
+                                              performanceCorroborated: c.performanceCorroborated),
                                           contactFormURL: c.formUrl,
                                           contactSourceURL: c.sourceUrl)
                 // #2912: the run's own declaration that only the NAME matched, kept so the card can mark
@@ -351,8 +356,13 @@ enum PrepImporter {
                 // things put it there. Written here rather than derived at read time because the guard
                 // rewrites the confidence in place: once `high` has become `low` the row no longer holds
                 // what the run actually claimed, so nothing downstream could work it out again.
-                recipient.heldDownToUnverified = ContactConfidenceGuard.heldDown(raw: c.confidence,
-                                                                                 sourceURL: c.sourceUrl)
+                // #2895: and WHICH rule fired, from the same call, so the record and the confidence it
+                // describes can never come from two different readings (L16).
+                let hold = ContactConfidenceGuard.holdDown(raw: c.confidence, sourceURL: c.sourceUrl,
+                                                           provenance: c.provenance,
+                                                           performanceCorroborated: c.performanceCorroborated)
+                recipient.heldDownToUnverified = hold != nil
+                recipient.heldDownReasonRaw = hold?.rawValue
                 // overrideBody is only ever meaningful for a .performer recipient (#640); see apply()'s
                 // matching guard for why a non-performer contact never carries one.
                 recipient.overrideBody = provenance == .performer ? c.overrideBody : nil
@@ -463,8 +473,15 @@ enum PrepImporter {
         // the three guesses below. A later run that finally names the page clears this along with the
         // downgrade it explains; a re-run that still cites nothing keeps saying so, which is the live case
         // (the run does not know Overture downgraded it, so it reports `high` again every time).
-        let heldDown = ContactConfidenceGuard.heldDown(raw: r.contactConfidenceRaw,
-                                                       sourceURL: r.contactSourceURL)
+        // #2895: the corroboration declaration is re-derived from THIS run rather than falling back to
+        // what the row held, for `nameMatchOnly`'s reason below: it describes whether the page tied the
+        // PERSON to this performance, and a run that emits the same contact without declaring it has not
+        // repeated that claim. Latching it would also hold a genuinely corroborated find down for ever.
+        let hold = ContactConfidenceGuard.holdDown(raw: r.contactConfidenceRaw,
+                                                   sourceURL: r.contactSourceURL,
+                                                   provenance: c.provenance,
+                                                   performanceCorroborated: c.performanceCorroborated)
+        let heldDown = hold != nil
         // #2912: re-derived from THIS run's declaration rather than falling back to what the row held,
         // unlike the method, confidence and tier above. Those describe a finding a later run can decline
         // to repeat; this describes whether the person on the end of a route was ever established, and a
@@ -474,12 +491,15 @@ enum PrepImporter {
         r.nameMatchOnly = c.nameMatchOnly == true
         r.contactConfidenceRaw = ContactConfidenceGuard.confidence(raw: r.contactConfidenceRaw,
                                                                    sourceURL: r.contactSourceURL,
-                                                                   nameMatchOnly: r.nameMatchOnly)
+                                                                   nameMatchOnly: r.nameMatchOnly,
+                                                                   provenance: c.provenance,
+                                                                   performanceCorroborated: c.performanceCorroborated)
         // Dan's overrule is a judgement about THIS address, so a genuinely different address gets it asked
         // again: the same reset-on-real-change convention the venue and duplicate guesses use below. Placed
         // here rather than in that block because the guard itself runs on every contact, manual included.
         if r.email != priorEmail { r.heldDownToUnverifiedDismissed = false }
         r.heldDownToUnverified = heldDown
+        r.heldDownReasonRaw = hold?.rawValue
         // overrideBody is only ever meaningful for a .performer recipient (#640): unlike the fields
         // above, a reclassification AWAY from .performer must CLEAR it rather than preserve it, or a
         // recipient now treated as a generic act/presenter contact would keep stale second-person

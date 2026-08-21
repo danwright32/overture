@@ -31,11 +31,52 @@ enum ContactConfidenceGuard {
     //
     // Defaulted so every existing caller keeps asking exactly the question it asked before, and so
     // `heldDown` below goes on meaning the ONE thing it was defined to mean: the citation rule fired.
-    static func confidence(raw: String?, sourceURL: String?, nameMatchOnly: Bool = false) -> String? {
+    // #2895: and a NAMED PERFORMER whose run declared that the page it cited does NOT tie that person to
+    // this performance may not be high either. The runbook has always said so in its own words ("only use
+    // `high` if the source page corroborates that person against THIS SPECIFIC performance"), and nothing
+    // enforced it, which is the same gap this guard was built to close for the citation itself.
+    //
+    // Performer only, because the runbook's rule is performer only. The citation rule above is universal
+    // for the opposite reason, that the runbook states IT universally: this guard enforces the runbook
+    // deterministically and does not invent a stricter rule than the one the run was given.
+    //
+    // `nil` means the run said NOTHING and changes nothing, Dan's call on 2026-08-21, the same answer
+    // #2912 gave for `nameMatchOnly`. It keeps his queue as it is and lets the check work on runs that
+    // declare it; what it costs is that the rule is dormant until they do, which is why
+    // `PerformerCorroborationAdoption` measures adoption rather than leaving it to be discovered (L128).
+    static func confidence(raw: String?, sourceURL: String?, nameMatchOnly: Bool = false,
+                           provenance: String? = nil,
+                           performanceCorroborated: Bool? = nil) -> String? {
         if nameMatchOnly { return raw == nil ? nil : "low" }
         guard raw == "high" else { return raw }
+        return holdDown(raw: raw, sourceURL: sourceURL, nameMatchOnly: nameMatchOnly,
+                        provenance: provenance,
+                        performanceCorroborated: performanceCorroborated) == nil ? raw : "low"
+    }
+
+    // #2895: WHICH rule moved the answer.
+    //
+    // #1866 recorded THAT the guard moved it, because "Unverified email found" alone could not tell Dan
+    // whether the check was unsure or whether it was sure and Overture overruled it. There are two ways to
+    // be overruled now and they ask different things of him: one is an address that may be perfectly good
+    // and was never cited, the other is an address cited against a page that does not establish the person.
+    // One sentence cannot honestly cover both (L11), so the record says which.
+    //
+    // A declared name match is deliberately NOT one of these, unchanged from #2912: the card says that in
+    // its own words from its own field, and folding it in would give one record two meanings (L118).
+    enum HoldDown: String, CaseIterable, Equatable, Sendable {
+        case namedNoPage
+        case pageDoesNotCorroborate
+    }
+
+    static func holdDown(raw: String?, sourceURL: String?, nameMatchOnly: Bool = false,
+                         provenance: String? = nil,
+                         performanceCorroborated: Bool? = nil) -> HoldDown? {
+        guard raw == "high", !nameMatchOnly else { return nil }
         let cited = (sourceURL ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        return cited.isEmpty ? "low" : raw
+        if cited.isEmpty { return .namedNoPage }
+        if provenance == "performer", performanceCorroborated == false { return .pageDoesNotCorroborate }
+        return nil
     }
 
     // #1866: whether the guard actually CHANGED the answer, which is the fact the row has to record.
@@ -47,7 +88,9 @@ enum ContactConfidenceGuard {
     //
     // Defined as "the answer moved" rather than restating the citation rule, so it can never disagree with
     // the rewrite it describes (L16: one predicate behind a claim and the thing it promises).
-    static func heldDown(raw: String?, sourceURL: String?) -> Bool {
-        confidence(raw: raw, sourceURL: sourceURL) != raw
+    static func heldDown(raw: String?, sourceURL: String?, provenance: String? = nil,
+                         performanceCorroborated: Bool? = nil) -> Bool {
+        holdDown(raw: raw, sourceURL: sourceURL, provenance: provenance,
+                 performanceCorroborated: performanceCorroborated) != nil
     }
 }

@@ -99,7 +99,7 @@ destroy the drafts it has already paid for.
   must not guess between (no history there, no history imported at all, or a Carnegie show, where
   the tenure credential already covers that exact room). See §2's rule on saying Dan knows the room.
 - **Write:** the RESULTS FILE the prompt names
-  (`PrepResults` version `10`: `results[]` each with `naturalKey`, `contacts[]`, `draft`, an
+  (`PrepResults` version `11`: `results[]` each with `naturalKey`, `contacts[]`, `draft`, an
   optional `alreadyCoveredNote` (see the already-covered fit-risk flag in §1 below), an
   optional `emptyReason` REQUIRED on any entry whose `contacts` is absent, see "Say WHY an
   entry has no contacts" in §1, and (v8, #1824) an optional `showSummary` with a
@@ -110,7 +110,9 @@ destroy the drafts it has already paid for.
   `provenance` of `act`, `performer`, or `presenter` (never the host venue), and (v9, #2622)
   a `tier` saying WHO they are to the show, see "Say who the contact is" in §1, and (v10, #2912)
   an optional `nameMatchOnly` saying the only thing tying this route to that party is the NAME,
-  see step 3(c) in §1. Emit either
+  see step 3(c) in §1, and (v11, #2895) an optional `performanceCorroborated` saying whether the page
+  in `sourceUrl` ties that PERSON to THIS performance, see "Say whether the page you cited
+  corroborates the performance" in §1. Emit either
   the act OR its named lead performer(s), never both, see §1 below, plus at most one
   real presenting org; the app sends one separate email per contact. A `provenance:
   "performer"` contact MAY also carry its own `overrideBody`, a direct second-person
@@ -615,6 +617,27 @@ medium, form/DM or inferred = low. **For a named performer specifically**, only 
 (name plus instrument/role/context match, e.g. their own site lists this date/venue or
 names this group); a bare name match with no such corroboration is a misidentification
 risk, so mark it `low` instead, same as any other unverified guess.
+
+**Say whether the page you cited corroborates the performance (`performanceCorroborated`, v11,
+#2895).** For a `performer` contact you are emitting at `high`, add
+`performanceCorroborated: true` when the page in `sourceUrl` ties THAT PERSON to THIS performance
+(it lists this date or venue, names this group, or credits them on this bill), and
+`performanceCorroborated: false` when it does not. It is the rule directly above, said out loud, so
+the app can hold the claim down instead of taking it on trust.
+
+The live case, 2026-08-17: a run emitted a named performer at `high` as `Playwright`, citing their own
+portfolio site. That page describes them as "an actor and writer", contains the word "playwright"
+exactly once inside the NAME OF A THEATRE in an unrelated regional credit, and never mentions this
+show, this venue or this festival. The address really was on the page, so every check that asks about
+the ADDRESS passed it. The claim happened to be true, from a source the run never read, which is a
+correct conclusion with the wrong evidence behind it on a route that would have recorded an incorrect
+one identically. The next thing that happens to such a contact is a pitch under Dan's name addressing a
+stranger by a role Overture asserted.
+
+A page you cannot corroborate against is not a failure and is not a reason to emit nothing: emit the
+contact with `confidence: "low"` and `performanceCorroborated: false`, exactly as the rule above already
+says. Saying nothing is also allowed and is what an older run did, so it changes nothing, but it means
+the check cannot help you.
 
 **`confidence` and `nameMatchOnly` (v10, #2912) answer two different questions, and only one of them
 is about the PERSON.** `confidence` says how good the ROUTE is, and it is close to mechanical: a form
