@@ -24,6 +24,85 @@ const fixture = JSON.parse(
   readFileSync(join(__dirname, "..", "..", "fixtures", "draft-ask", "cases.json"), "utf8"),
 ) as { version: number; cases: Case[] };
 
+// #2954: every body here is a COPY of one that lives in `fixtures/prep-eval`, and each case names its
+// source in `from`. Nothing checked the copy still matched it, so the two could drift and this corpus
+// would go on judging text no fixture actually contains, while passing. It nearly did: while building
+// #2807 the same sentence had to be hand-edited on both sides to keep them in step (L41).
+//
+// `from` is a slash path into the named fixture, followed by a note saying how the body was DERIVED from
+// what sits there. Two derivations are in use, and they are what the rejecting half of the corpus is
+// built from: none of it is invented, so none of it can describe a draft the run could not produce (L48).
+const REMOVED = " (ask sentence removed)";
+const REMOVED_AND_REWRITTEN = " (ask sentence removed) plus the rewrite named in the runbook";
+const DERIVATIONS = [REMOVED_AND_REWRITTEN, REMOVED];
+
+function resolve(path: string): unknown {
+  const [file, ...rest] = path.split(".json/");
+  const source = JSON.parse(
+    readFileSync(join(__dirname, "..", "..", `${file}.json`), "utf8"),
+  ) as unknown;
+  let node: unknown = source;
+  for (const step of rest.join(".json/").split("/")) {
+    if (node === undefined || node === null) return undefined;
+    node = Array.isArray(node) ? node[Number(step)] : (node as Record<string, unknown>)[step];
+  }
+  return node;
+}
+
+// Sentences, split the way a reader meets them. Only used to check that a derived body is the source
+// MINUS one sentence, never to judge the ask itself.
+function sentences(body: string): string[] {
+  return body
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
+describe("every case still matches the fixture it was copied from (#2954)", () => {
+  for (const testCase of fixture.cases) {
+    it(`${testCase.name} still matches ${testCase.from}`, () => {
+      const derivation = DERIVATIONS.find((d) => testCase.from.endsWith(d));
+      const sourcePath =
+        derivation === undefined ? testCase.from : testCase.from.slice(0, -derivation.length);
+      const source = resolve(sourcePath);
+
+      expect(typeof source, `${sourcePath} does not resolve to a body any more`).toBe("string");
+
+      if (derivation === undefined) {
+        expect(source).toBe(testCase.body);
+        return;
+      }
+
+      // Each derivation is asserted as a real RELATIONSHIP to the source, never as "it is different",
+      // which any edit to either side would satisfy while the copy drifted (L63).
+      const sourceSentences = sentences(source as string);
+      const caseSentences = sentences(testCase.body);
+      const carriedOver = caseSentences.filter((s) => sourceSentences.includes(s));
+
+      if (derivation === REMOVED) {
+        // One sentence taken out and nothing put back: every sentence left is the source's.
+        expect(caseSentences.length).toBe(sourceSentences.length - 1);
+        expect(carriedOver.length).toBe(caseSentences.length);
+        return;
+      }
+
+      // One sentence taken out and one of the runbook's named rewrites put in its place, so the count
+      // holds and exactly one sentence is new.
+      expect(caseSentences.length).toBe(sourceSentences.length);
+      expect(caseSentences.length - carriedOver.length).toBe(1);
+    });
+  }
+
+  // The derivation vocabulary is closed. A `from` carrying some other parenthetical would fall into the
+  // exact-match branch above and fail confusingly; this says what is actually wrong.
+  it("names no derivation this test cannot check", () => {
+    for (const testCase of fixture.cases) {
+      const note = testCase.from.match(/\.json\/\S+?(\s.*)$/)?.[1];
+      if (note !== undefined) expect(DERIVATIONS).toContain(note);
+    }
+  });
+});
+
 describe("the shared ask corpus (#2531)", () => {
   it("is the corpus both languages judge, and is not empty", () => {
     // A fixture that came back empty would pass every case below it, which is the shape where a guard
