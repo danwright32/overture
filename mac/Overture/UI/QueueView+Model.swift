@@ -744,6 +744,14 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     // hours earlier). And the default is the QUIET direction: a snapshot built without it draws no
     // drafting label, where carrying the raw stamps would have made a forgotten field draw a phantom one.
     var awaitedReplyDraftRequestedAt: Date? = nil
+    // #2934: the two facts the reply block's mode is decided from, CARRIED rather than re-derived, for the
+    // same reason as the line above. The queue's Answer control and the classify run both read
+    // `Recipient.hasUnhandledReply`; a second reading of the same fields on the snapshot is how the
+    // Archive card came to offer a paid drafting run on a conversation the run itself refuses (L16, L70).
+    // Both default to the QUIET direction: a snapshot built without them offers nothing and claims
+    // nothing, rather than offering a control the run would find nothing for.
+    var hasUnhandledReply: Bool = false
+    var replyIsAnswered: Bool = false
     var intentHint: String? = nil
     var replyDraftEditedByDan: Bool = false
     var replyDraftWrittenByDan: Bool = false   // #2131: he wrote it himself, with nothing to edit
@@ -854,6 +862,12 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     // A draft was requested, hasn't arrived, and belongs to an exchange nobody has answered: show
     // progress. #2966: from the shared rule, carried on the snapshot, never re-derived here.
     var isDraftingReply: Bool { awaitedReplyDraftRequestedAt != nil }
+
+    // #2934: what the reply block may offer for this conversation, from the one shared rule.
+    var replyConversationMode: ReplyConversationMode {
+        ReplyConversationMode.of(hasUnhandledReply: hasUnhandledReply, replyIsAnswered: replyIsAnswered,
+                                 hasReplyDraft: hasReplyDraft, isDrafting: isDraftingReply)
+    }
 
     var displayName: String {
         if let name, !name.trimmingCharacters(in: .whitespaces).isEmpty { return name }
@@ -2667,6 +2681,8 @@ extension RecipientSnapshot {
                   // #2966: the shared rule's answer, so the card and the reply panel cannot disagree about
                   // whether a run is still going.
                   awaitedReplyDraftRequestedAt: r.awaitedReplyDraftRequestedAt,
+                  hasUnhandledReply: r.hasUnhandledReply,
+                  replyIsAnswered: r.replyIsAnswered,
                   intentHint: r.intentHint,
                   replyDraftEditedByDan: r.replyDraftEditedByDan,
                   replyDraftWrittenByDan: r.replyDraftWrittenByDan,

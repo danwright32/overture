@@ -98,6 +98,10 @@ struct DraftModelTraceDisplayTests {
         c.replyDraftSubject = "Re: Photographs of your concert"
         c.replyDraftBody = "Thanks for writing back."
         c.replyDraftModel = replyDraftModel
+        // #2934: the case this suite is about is a reply still owed an answer, which is what puts the
+        // draft on screen with its controls. Said rather than inherited from a default: the default is
+        // the quiet direction, and a fixture that does not declare it is describing the archived record.
+        c.hasUnhandledReply = true
         return c
     }
 
