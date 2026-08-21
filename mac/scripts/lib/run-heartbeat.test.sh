@@ -187,13 +187,21 @@ done
 #
 # Driven as real processes rather than asserted on the source, because the notice comes from the SHELL
 # and no reading of the script can tell you whether it appears.
+#
+# The job is a BOUNDED `sleep`, not a `while :` loop, and that is not cosmetic. `kill` signals the
+# subshell and not the `sleep` it is currently blocked in, so a LOOPING job leaves a fresh orphan behind
+# on every iteration. Measured 2026-08-21 on the first real merge of #2981: under the parallel fixture
+# runner this fixture stopped reporting for over two minutes and tripped the runner's own stall guard,
+# with orphaned sleeps still alive minutes later. One bounded sleep leaves at most one orphan, which exits
+# by itself in five seconds and holds no descriptor the runner waits on. The job's body still CONTAINS the
+# marker text, which is all the notice needs in order to render it: the echo never has to run.
 HB_WORK="$(mktemp -d)"
 
 cat > "${HB_WORK}/with-stop.sh" <<'STOPSH'
 #!/bin/sh
 set -eu
 . "$(dirname "$0")/run-heartbeat.sh"
-( while :; do sleep 1; echo "the marker text a grep would look for"; done ) >/dev/null 2>&1 &
+( sleep 5; echo "the marker text a grep would look for" ) >/dev/null 2>&1 &
 HB=$!
 sleep 0.2
 heartbeat_stop "$HB"
@@ -204,7 +212,7 @@ STOPSH
 cat > "${HB_WORK}/bare-kill.sh" <<'KILLSH'
 #!/bin/sh
 set -eu
-( while :; do sleep 1; echo "the marker text a grep would look for"; done ) >/dev/null 2>&1 &
+( sleep 5; echo "the marker text a grep would look for" ) >/dev/null 2>&1 &
 HB=$!
 sleep 0.2
 kill "$HB" 2>/dev/null || true
