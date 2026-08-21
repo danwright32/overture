@@ -19,14 +19,14 @@ import Foundation
 struct ANoticeCarriesItsActionTests {
 
     @Test func theOmniFocusFailureCarriesItsRetry() {
-        let notices = AppNotices.current(omniFocusFailing: true, status: StatusLine())
+        let notices = AppNotices.current(omniFocusFailure: (.unexplained, "a reason nobody classified"), status: StatusLine())
         #expect(notices.first?.action == .retryOmniFocusSync)
     }
 
     // The remedy moves out of the tooltip and into the line, because that is the complaint. What stays in
     // the tooltip is the part that explains rather than instructs.
     @Test func theRemedyIsInTheLineNotOnlyInAHover() {
-        let notice = AppNotices.current(omniFocusFailing: true, status: StatusLine()).first
+        let notice = AppNotices.current(omniFocusFailure: (.unexplained, "a reason nobody classified"), status: StatusLine()).first
         #expect(notice?.action?.title.isEmpty == false)
     }
 
@@ -34,7 +34,7 @@ struct ANoticeCarriesItsActionTests {
     @Test func aPlainReceiptCarriesNoAction() {
         var status = StatusLine()
         status.set("Scouted 12 shows")
-        let notices = AppNotices.current(omniFocusFailing: false, status: status)
+        let notices = AppNotices.current(status: status)
         #expect(notices.count == 1)
         #expect(notices.first?.action == nil)
     }
@@ -43,7 +43,7 @@ struct ANoticeCarriesItsActionTests {
     @Test func eachNoticeKeepsItsOwnAction() {
         var status = StatusLine()
         status.set("Scouted 12 shows")
-        let notices = AppNotices.current(omniFocusFailing: true, status: status)
+        let notices = AppNotices.current(omniFocusFailure: (.unexplained, "a reason nobody classified"), status: status)
         #expect(notices.count == 2)
         #expect(notices.first?.action == .retryOmniFocusSync)
         #expect(notices.last?.action == nil)

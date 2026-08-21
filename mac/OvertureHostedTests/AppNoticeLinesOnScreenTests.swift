@@ -31,13 +31,13 @@ struct AppNoticeLinesOnScreenTests {
     // Both, in order, on separate lines. One slot could only ever show one of them.
     @Test func afaultAndTheLastRunsNoteBothRender() {
         let notices = AppNotices.current(
-            omniFocusFailing: true,
+            omniFocusFailure: (.unexplained, "a reason nobody classified"),
             status: { var s = StatusLine(); s.set("Prep finished", priority: .info); return s }())
 
         // #2250: the fault's own line, the control it carries, then the run's note. The control being in
         // this list is the point: a remedy that renders only as a tooltip is one nobody reads (L49), so it
         // is proven to reach the screen rather than merely defined.
-        #expect(lines(notices) == [AppNotices.omniFocusFailing.text,
+        #expect(lines(notices) == [AppNotices.omniFocusFailing(.unexplained, reason: "a reason nobody classified").text,
                                    AppNoticeAction.retryOmniFocusSync.title,
                                    "Prep finished"])
     }
@@ -45,7 +45,6 @@ struct AppNoticeLinesOnScreenTests {
     // #2250: and a receipt grows no control, so an ordinary run's note never sprouts a button beside it.
     @Test func areceiptCarriesNoControl() {
         let notices = AppNotices.current(
-            omniFocusFailing: false,
             status: { var s = StatusLine(); s.set("Prep finished", priority: .info); return s }())
         #expect(lines(notices) == ["Prep finished"])
     }
@@ -56,7 +55,7 @@ struct AppNoticeLinesOnScreenTests {
     @Test func abrokenBookingExportIsOnScreenWithItsControl() {
         let vanished = DownbeatBookingFeed.Vanished(
             bookingCount: 15, evidence: .theExportCarriedThemUntil("2027-06-13"))
-        let notices = AppNotices.current(omniFocusFailing: false, bookingsVanished: vanished,
+        let notices = AppNotices.current(bookingsVanished: vanished,
                                          status: StatusLine())
         #expect(lines(notices) == [AppNotices.downbeatShootsVanished(vanished).text,
                                    AppNoticeAction.recheckDownbeatExport.title])

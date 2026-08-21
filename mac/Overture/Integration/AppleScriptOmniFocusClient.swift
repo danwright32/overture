@@ -23,7 +23,10 @@ struct AppleScriptOmniFocusClient: OmniFocusClient {
     // new per-recipient task gets created fresh on the first sync after this ships.
     static let legacyRecipientId = "__legacy-pre-653__"
 
-    enum OmniFocusError: Error { case scriptFailed(String), notPermitted }
+    // #2883: `notRunning` is its own case rather than a `scriptFailed` carrying AppleScript's wording.
+    // The code is known HERE, at the only place that has it, so the classification is typed at its source
+    // instead of being re-derived downstream from a message substring (L35).
+    enum OmniFocusError: Error, Equatable { case scriptFailed(String), notPermitted, notRunning }
 
     // Incomplete Overture-tagged tasks, each as (naturalKey, recipientId, due day rebuilt to the
     // canonical 6pm Eastern) so the due compares exactly against OmniFocusSync.desired. Reads the key,
@@ -161,14 +164,34 @@ struct AppleScriptOmniFocusClient: OmniFocusClient {
 
     // MARK: - AppleScript plumbing
 
+    // Which OmniFocusError an AppleScript failure IS, decided from its CODE.
+    //
+    // Extracted and static (#2883) so the mapping can be tested: `run` executes real AppleScript, so
+    // nothing could reach this decision in a test, and a mapping nothing exercises is one that can be
+    // deleted with every test still green. Measured with `scripts/mutate.sh`: removing the -600 line
+    // while it lived inline was reported SURVIVED.
+    //
+    // Typed HERE, at the only place the code is known, rather than left for a reader downstream to infer
+    // from the message text (L35).
+    static func error(forAppleScriptCode code: Int, message: String?) -> OmniFocusError {
+        // Automation not allowed.
+        if code == -1743 || code == -1744 { return .notPermitted }
+        // "Application isn't running", the one failure a retry genuinely clears once Dan opens OmniFocus.
+        if code == -600 { return .notRunning }
+        // No ignore markers here: this whole file is already inside the region opened at the top, and a
+        // nested one closes the outer early, leaking every sentence after it into the inventory. The
+        // guard says so by name, which is how this was found.
+        return .scriptFailed(message ?? "code \(code)")
+    }
+
     private func run(_ source: String) throws -> String {
         guard let script = NSAppleScript(source: source) else { throw OmniFocusError.scriptFailed("compile") }
         var err: NSDictionary?
         let result = script.executeAndReturnError(&err)
         if let err {
             let code = (err[NSAppleScript.errorNumber] as? Int) ?? 0
-            if code == -1743 || code == -1744 { throw OmniFocusError.notPermitted }  // Automation not allowed
-            throw OmniFocusError.scriptFailed((err[NSAppleScript.errorMessage] as? String) ?? "code \(code)")
+            throw Self.error(forAppleScriptCode: code,
+                             message: err[NSAppleScript.errorMessage] as? String)
         }
         return result.stringValue ?? ""
     }

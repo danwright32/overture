@@ -408,6 +408,10 @@ extension OmniFocusSync {
     // nil when nothing failed, so there is no sentence for a state that cannot happen: a fallback
     // naming no show at all would be a line Dan could never be shown, and dead copy in the inventory
     // reads exactly like live copy (L29, L132).
+    // #2883: the phrase `OmniFocusFailureKind` recognises this message by. One constant, read by the
+    // writer and the classifier, so a reworded sentence cannot silently stop being classified (L26).
+    static let couldNotUpdatePhrase = "It could not update "
+
     static func partialFailureMessage(failures: [TaskFailure], attempted: Int) -> String? {
         let names = failures.map { showName(fromNaturalKey: $0.naturalKey) }.reduce(into: [String]()) {
             if !$0.contains($1) { $0.append($1) }   // one show, not one per contact on it
@@ -420,7 +424,7 @@ extension OmniFocusSync {
         case 2: named = "\(first) and \(names[1])"
         default: named = "\(first), \(names[1]) and \(names.count - 2) more"
         }
-        return "OmniFocus updated \(updated) of \(attempted) reminders. It could not update \(named)."
+        return "OmniFocus updated \(updated) of \(attempted) reminders. \(couldNotUpdatePhrase)\(named)."
     }
 
     // The show's own name, read off the first field of its natural key (`group|date|venue`), which is

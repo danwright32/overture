@@ -112,12 +112,22 @@ enum AppNotices {
     //
     // What stays in the tooltip is the part that EXPLAINS rather than instructs: the retry is the control,
     // and the permission check is what to look at if the retry does not clear it.
-    static let omniFocusFailing = AppNotice(
-        text: "OmniFocus sync failing, so follow-up tasks may not be getting created.",
-        tone: .warning,
-        help: "If a sync doesn't clear this, check that OmniFocus is installed and has Automation "
-            + "permission. A successful sync clears it.",
-        action: .retryOmniFocusSync)
+    // #2883 / #2884: the sentence, the help and the button all come from the KIND of failure.
+    //
+    // It used to be one static notice for every failure, always carrying "Sync now". For a deterministic
+    // fault that button re-runs identical work against identical state, fails identically, and leaves the
+    // line unchanged, so from Dan's side it looks like it did nothing (L148). And the stored reason,
+    // which names the shows OmniFocus refused, was reachable only from a terminal (L80).
+    //
+    // The action is withheld ONLY where the kind says a retry cannot clear it. Everywhere else it stays,
+    // including the unexplained case: nothing there established that a retry would fail, and taking away
+    // the one remedy on a guess is the worse error.
+    static func omniFocusFailing(_ kind: OmniFocusFailureKind, reason: String) -> AppNotice {
+        AppNotice(text: kind.line(reason: reason),
+                  tone: .warning,
+                  help: kind.help(reason: reason),
+                  action: kind.aRetryCouldClearIt ? .retryOmniFocusSync : nil)
+    }
 
     // #1805: an offer nothing can serve is not shown. Whether a shortfall report still has shows left to
     // finish depends on the queue's rows, which the writer of that report does not have, so the decision
@@ -231,14 +241,17 @@ enum AppNotices {
     // `shootHistory` is OPTIONAL, and nil means nothing has looked yet rather than a clean bill of
     // health. A verdict is a measurement, and defaulting to `.ok` before the read would put the
     // reassuring answer on the one state nobody has checked (L11).
-    static func current(omniFocusFailing isFailing: Bool,
+    // #2884: the FAILURE, not a Bool. A Bool could only ever produce one sentence, which is the defect.
+    static func current(omniFocusFailure: (kind: OmniFocusFailureKind, reason: String)? = nil,
                         bookingsVanished: DownbeatBookingFeed.Vanished? = nil,
                         shootHistory: ShootHistory.Health? = nil,
                         unreadableFiles: [HandoffReadFailures.Failure] = [],
                         status: StatusLine) -> [AppNotice] {
         var notices: [AppNotice] = []
         if let bookingsVanished { notices.append(downbeatShootsVanished(bookingsVanished)) }
-        if isFailing { notices.append(omniFocusFailing) }
+        if let omniFocusFailure {
+            notices.append(omniFocusFailing(omniFocusFailure.kind, reason: omniFocusFailure.reason))
+        }
         if let notice = couldNotRead(unreadableFiles) { notices.append(notice) }
         if let shootHistory, let notice = shootHistoryWarning(shootHistory) { notices.append(notice) }
         if let text = status.text {

@@ -21,13 +21,13 @@ import Foundation
 struct ShootHistoryWarningReachesDanTests {
 
     private func texts(_ health: ShootHistory.Health?) -> [String] {
-        AppNotices.current(omniFocusFailing: false, shootHistory: health, status: StatusLine())
+        AppNotices.current(shootHistory: health, status: StatusLine())
             .map(\.text)
     }
 
     // No import has ever been run, so the whole feature is doing nothing.
     @Test func aMissingHistoryIsSaidOutLoud() {
-        let notices = AppNotices.current(omniFocusFailing: false, shootHistory: .missing,
+        let notices = AppNotices.current(shootHistory: .missing,
                                          status: StatusLine())
         #expect(notices.map(\.text) == [ShootHistory.warningText(for: .missing)])
         #expect(notices.map(\.tone) == [.warning])
@@ -36,7 +36,7 @@ struct ShootHistoryWarningReachesDanTests {
     // Present but broken. A different fault with a different remedy, so it must not arrive in the
     // same words as the one above.
     @Test func anUnreadableHistoryIsSaidOutLoud() {
-        let notices = AppNotices.current(omniFocusFailing: false, shootHistory: .unreadable,
+        let notices = AppNotices.current(shootHistory: .unreadable,
                                          status: StatusLine())
         #expect(notices.map(\.text) == [ShootHistory.warningText(for: .unreadable)])
         #expect(notices.map(\.tone) == [.warning])
@@ -45,7 +45,7 @@ struct ShootHistoryWarningReachesDanTests {
     // Readable and old. The line states the age, because "old" is what Dan has to judge against his
     // own season, and 121 days and 400 days are not the same news.
     @Test func aStaleHistoryNamesItsAge() {
-        let notices = AppNotices.current(omniFocusFailing: false, shootHistory: .stale(ageDays: 214),
+        let notices = AppNotices.current(shootHistory: .stale(ageDays: 214),
                                          status: StatusLine())
         #expect(notices.count == 1)
         #expect(notices.first?.text.contains("214") == true)
@@ -74,7 +74,7 @@ struct ShootHistoryWarningReachesDanTests {
     // reports the fault carries the one remedy the app owns (L80). Without it the warning would stand
     // until the next launch even after he had fixed it.
     @Test func theWarningCarriesTheOneRemedyTheAppOwns() {
-        let notices = AppNotices.current(omniFocusFailing: false, shootHistory: .stale(ageDays: 214),
+        let notices = AppNotices.current(shootHistory: .stale(ageDays: 214),
                                          status: StatusLine())
         #expect(notices.first?.action == .recheckShootHistory)
         #expect(notices.first?.action?.title.isEmpty == false)
@@ -86,10 +86,10 @@ struct ShootHistoryWarningReachesDanTests {
     @Test func itNeverHidesTheAppsOtherStandingFaults() {
         var status = StatusLine()
         status.set("Prep finished")
-        let notices = AppNotices.current(omniFocusFailing: true, shootHistory: .missing, status: status)
+        let notices = AppNotices.current(omniFocusFailure: (.unexplained, "a reason nobody classified"), shootHistory: .missing, status: status)
         #expect(notices.count == 3)
         #expect(notices.contains { $0.text == ShootHistory.warningText(for: .missing) })
-        #expect(notices.contains { $0.text == AppNotices.omniFocusFailing.text })
+        #expect(notices.contains { $0.text == AppNotices.omniFocusFailing(.unexplained, reason: "a reason nobody classified").text })
         #expect(notices.contains { $0.text == "Prep finished" })
     }
 

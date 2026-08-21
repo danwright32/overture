@@ -418,7 +418,7 @@ struct DownbeatShootsVanishedNoticeTests {
     // It reaches the stack Dan reads, ahead of the other standing fault: everything else on the screen is
     // derived from the picture of the world this line says is wrong.
     @Test func itisTheFirstThingTheMastheadSays() {
-        let notices = AppNotices.current(omniFocusFailing: true, bookingsVanished: vanished,
+        let notices = AppNotices.current(omniFocusFailure: (.unexplained, "a reason nobody classified"), bookingsVanished: vanished,
                                          status: StatusLine())
         #expect(notices.first?.text.contains("15") == true)
         #expect(notices.first?.action == .recheckDownbeatExport)
@@ -427,7 +427,7 @@ struct DownbeatShootsVanishedNoticeTests {
 
     // And a healthy feed adds no line at all.
     @Test func ahealthyFeedSaysNothing() {
-        #expect(AppNotices.current(omniFocusFailing: false, bookingsVanished: nil,
+        #expect(AppNotices.current(bookingsVanished: nil,
                                    status: StatusLine()).isEmpty)
     }
 }

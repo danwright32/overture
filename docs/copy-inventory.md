@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1445 sentences**.
+Every sentence Overture can say to Dan: **1457 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -41,6 +41,8 @@ What is not, and why:
 - `Domain/LaunchMigrations.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Domain/ListingOrganiser.swift`: parser tokens matched against ticketing pages, never Overture's voice
 - `Domain/NaturalKeyVenueMigration.swift`: developer diagnostic log, not the app's own voice (#915)
+- `Domain/OmniFocusFailureKind.swift`: the enum case's own name, as `"\(error)"` renders it. Read, never said.
+- `Domain/OmniFocusFailureKind.swift`: AppleScript's own wordings, kept only for failures RECORDED BEFORE
 - `Domain/OrgReachabilityAnswer.swift`: a diagnostic log line, not a sentence Overture says on screen
 - `Domain/OutboundSignature.swift`: outbound-email: the sign-off a recipient reads, not Overture's own voice to Dan (#915, #2650)
 - `Domain/ProducerGate.swift`: Words matched inside an organisation's own name, never said to Dan (#1749)
@@ -446,6 +448,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ClientCoverage.swift`
 "A source couldn't be checked. Open Sources to fix or confirm it."
     `Domain/ScoutWarnings.swift`
+"A sync may clear it. If it does not, the stored reason is: \(reason)"
+    `Domain/OmniFocusFailureKind.swift`
 "A test tried to launch a real Claude run. Inject the launch seam instead."
     `Integration/ScoutExtractService.swift`
 "AI read: \(hint.replacingOccurrences(of: "_", with: " "))"
@@ -502,6 +506,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/OnboardingView.swift`
 "Allow OmniFocus control"
     `UI/OnboardingView.swift`
+"Allow Overture to control OmniFocus in System Settings, Privacy and Security, "
+    `Domain/OmniFocusFailureKind.swift`
 "Allow contact again"
     `UI/ProspectRowView.swift`
 "Allow notifications"
@@ -564,6 +570,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ClientTagCopy.swift`
 "Automatic sync pushes due follow-ups into the OmniFocus Outreach project. \"Sync now\" force-runs it immediately; the first time, macOS will ask permission to control OmniFocus."
     `App/RootView.swift`
+"Automation. Then sync again."
+    `Domain/OmniFocusFailureKind.swift`
 "Awaiting reply"
     `UI/QueueView+Model.swift`
 "Awaiting your first reply"
@@ -956,8 +964,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ScoutSummaryView.swift`
 "I've run the import"
     `Domain/AppNotice.swift`
-"If a sync doesn't clear this, check that OmniFocus is installed and has Automation "
-    `Domain/AppNotice.swift`
 "If another Overture window is open, use that one. Otherwise quit and reopen Overture."
     `App/StoreUnavailableView.swift`
 "If they asked you to stop emailing them, Overture will keep every future show from this org out of your queue. You can undo it from the row."
@@ -976,6 +982,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ProbeSelectionBar.swift`
 "Is this their reply?"
     `Domain/ProposedConversation.swift`
+"It could not update "
+    `Domain/OmniFocusSync.swift`
 "It fetches the page, then follows each show's own link to get the venue and date."
     `UI/AddLeadSheet.swift`
 "It leaves your queue, filed as \(reason.label)."
@@ -1022,6 +1030,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/MenuBarStatus.swift`
 "Last day"
     `UI/DayOffRangeFields.swift`
+"Last failure"
+    `Domain/OmniFocusFailureSection.swift`
 "Last lines of the run log:"
     `Domain/SourceNote.swift`
 "Learn from this email again"
@@ -1338,17 +1348,25 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OmniFocusSyncStatus.swift`
 "OmniFocus permission granted."
     `Domain/OnboardingState.swift`
+"OmniFocus refused those shows, and it will refuse them the same way next time. The "
+    `Domain/OmniFocusFailureKind.swift`
 "OmniFocus sync"
     `UI/OmniFocusSettingsView.swift`
 "OmniFocus sync failed"
     `Domain/OmniFocusSyncStatus.swift`
+"OmniFocus sync failed and recorded no reason, which is itself worth reporting."
+    `Domain/OmniFocusFailureSection.swift`
 "OmniFocus sync failed: \(reason)"
     `Domain/OmniFocusSync.swift`
-"OmniFocus sync failing, so follow-up tasks may not be getting created."
-    `Domain/AppNotice.swift`
+"OmniFocus sync is failing because OmniFocus is not open, so follow-up tasks are not "
+    `Domain/OmniFocusFailureKind.swift`
+"OmniFocus sync is failing because Overture is not allowed to control OmniFocus, so "
+    `Domain/OmniFocusFailureKind.swift`
+"OmniFocus sync is failing, so follow-up tasks may not be getting created."
+    `Domain/OmniFocusFailureKind.swift`
 "OmniFocus sync needs attention"
     `App/MenuBarStatus.swift`
-"OmniFocus updated \(updated) of \(attempted) reminders. It could not update \(named)."
+"OmniFocus updated \(updated) of \(attempted) reminders. \(couldNotUpdatePhrase)\(named)."
     `Domain/OmniFocusSync.swift`
 "On this email"
     `UI/SendConfirmSheet.swift`
@@ -1380,6 +1398,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/Reachability.swift`
 "Only the venue's address"
     `Domain/Reachability.swift`
+"Open OmniFocus, then sync again."
+    `Domain/OmniFocusFailureKind.swift`
 "Open Overture"
     `App/MenuBarContent.swift`
 "Open Settings"
@@ -2825,6 +2845,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ScoutWarningCopy.swift`
 "\(readable) shows listed, down from the usual \(baseline), "
     `Domain/SourceReadability.swift`
+"\(reason) Those reminders are not there, and running the sync again will not change it."
+    `Domain/OmniFocusFailureKind.swift`
 "\(released) later nights"
     `App/ActionFeedback.swift`
 "\(runs[0]) runs past \(dateLabel), so dismissing it takes its later nights too."
@@ -2990,6 +3012,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AttachConversation.swift`
 "backup before working."
     `App/StoreShrinkCheck.swift`
+"being created."
+    `Domain/OmniFocusFailureKind.swift`
 "book now"
     `Domain/TicketLink.swift`
 "both of these people"
@@ -3030,6 +3054,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AppNotice.swift`
 "file before reopening Overture."
     `App/StoreSchemaGuard.swift`
+"follow-up tasks are not being created."
+    `Domain/OmniFocusFailureKind.swift`
 "gave it up"
     `App/ActionFeedback.swift`
 "gave them up"
@@ -3098,8 +3124,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "page fetch"
     `Domain/WebCallRefusals.swift`
-"permission. A successful sync clears it."
-    `Domain/AppNotice.swift`
 "prep run"
     `Domain/RunKind.swift`
 "rather skip it than write over one. Run the scout again to pick it up."
@@ -3136,6 +3160,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "still couldn't save what this check found, so it has stopped trying and those shows will be checked again"
     `Domain/ReachabilityRunSummary.swift`
+"stored reason is: \(reason)"
+    `Domain/OmniFocusFailureKind.swift`
 "tell whether it was a new show or a card you have already decided on, and it would "
     `Domain/ScoutWarningCopy.swift`
 "ten are kept."
