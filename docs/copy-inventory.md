@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1459 sentences**.
+Every sentence Overture can say to Dan: **1460 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -539,6 +539,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "An earlier check included this show but never got an answer for it, so it's still unchecked. Nothing re-checks it on its own."
     `Domain/Reachability.swift`
 "An email to \(p.replyWatchDisplayName) bounced, and it went to more than one person (\(addresses)), so Overture cannot tell which address failed. Check the bounce in Gmail and fix or remove the dead address"
+    `Integration/BounceService.swift`
+"An email to \(p.replyWatchDisplayName) bounced, and they have replied on that thread, so Overture has not written the address off. Check the bounce in Gmail before you write back"
     `Integration/BounceService.swift`
 "An organization that asked"
     `Domain/SuppressionReport.swift`

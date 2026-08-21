@@ -1436,6 +1436,7 @@
 		CB425D3C4C85C18D2925EED7 /* ReplyCandidateMatch.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4EB0A5943463E1ED115DF80 /* ReplyCandidateMatch.swift */; };
 		CB5A089F01B10360E03F9392 /* OmniFocusSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = A84298B6C8EA1E8A89770772 /* OmniFocusSync.swift */; };
 		CB71BCBA394AA9919C56087D /* StatusLineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EB8F741695A58397E5B03FE /* StatusLineTests.swift */; };
+		CB96A5A7B861CFC9327B0D22 /* BounceAfterAReplyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9751B2F287B59219F4D7F513 /* BounceAfterAReplyTests.swift */; };
 		CBD6612E504AF46D7E454D5F /* RecentOpenersService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9044C76CAA661C328A7266BC /* RecentOpenersService.swift */; };
 		CBD7B9D223770F84181D4967 /* ScoutRunSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD7BEF849E26DF36D758F934 /* ScoutRunSummary.swift */; };
 		CBE17D0C0927264923D1B026 /* AppSourceWalk.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D44FDB98EA5D69CD2384B13 /* AppSourceWalk.swift */; };
@@ -2682,6 +2683,7 @@
 		972CC8AF91DFF02416C791D7 /* AnsweredShowsOnTheCardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnsweredShowsOnTheCardTests.swift; sourceTree = "<group>"; };
 		973A2EC8D67BB0AF24543FC4 /* OvationTixCalendarTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OvationTixCalendarTests.swift; sourceTree = "<group>"; };
 		974057A370C1D10DB865BCB7 /* ReplyReachLabelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReplyReachLabelTests.swift; sourceTree = "<group>"; };
+		9751B2F287B59219F4D7F513 /* BounceAfterAReplyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BounceAfterAReplyTests.swift; sourceTree = "<group>"; };
 		9762A5CFBB99DBC1CC75B811 /* QueueItemVoiceLearningTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueItemVoiceLearningTests.swift; sourceTree = "<group>"; };
 		976998798673F1D7648B4B8A /* OmniFocusSyncRunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmniFocusSyncRunnerTests.swift; sourceTree = "<group>"; };
 		9770AD5500CD3C34029F42ED /* ManualIsProvenanceNotOwnershipTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualIsProvenanceNotOwnershipTests.swift; sourceTree = "<group>"; };
@@ -3455,6 +3457,7 @@
 				1942D70A38A419E78AF4D91D /* BookingMatchTests.swift */,
 				7CD8CF06FEC682753DB693AF /* BothRunsAreVisibleTests.swift */,
 				2122AECCF09C677FA86AFB27 /* BothRunsMayGoAtOnceTests.swift */,
+				9751B2F287B59219F4D7F513 /* BounceAfterAReplyTests.swift */,
 				41C68E20A6CC3E50634FB0E5 /* BounceDetectionTests.swift */,
 				7D0698923BDAE4642DF51C75 /* BounceServiceDelayDetectionTests.swift */,
 				2F71D1818DF0A4CE05CCAEF8 /* BounceServiceHardBounceTests.swift */,
@@ -5495,6 +5498,7 @@
 				D75EFEE48885EBE67F64E3D7 /* BookingMatchable.swift in Sources */,
 				4D5FB4621D14AC5C3838096E /* BothRunsAreVisibleTests.swift in Sources */,
 				6E1453FC814526C263BD5F3B /* BothRunsMayGoAtOnceTests.swift in Sources */,
+				CB96A5A7B861CFC9327B0D22 /* BounceAfterAReplyTests.swift in Sources */,
 				C4DC4074895D246E56883FF1 /* BounceDetection.swift in Sources */,
 				26C7A3EC195C48B08A70F1FE /* BounceDetectionTests.swift in Sources */,
 				64049EAA96A61BB04694A1B7 /* BounceService.swift in Sources */,
