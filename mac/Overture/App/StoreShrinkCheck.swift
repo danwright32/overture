@@ -22,6 +22,12 @@ enum StoreShrinkCheck {
         case none
         case count(Int)
         case unreadable(String)   // the folder name, so the warning can name what it could not read
+        // #3036: the backups folder ITSELF could not be listed. Different from `.none` (there is no
+        // history yet) and from `.unreadable` (one backup could not be counted), because the next move
+        // differs: nothing here names a backup to check, only a folder Overture could not open at all.
+        // No payload, unlike `.unreadable`: the folder's full path is already on screen under the
+        // sentence, selectable, so naming it in the sentence would be the same fact twice (#843).
+        case backupsUnreadable
     }
 
     // Below half, and at least this many rows gone. The absolute floor is what keeps a new store going
@@ -44,6 +50,8 @@ enum StoreShrinkCheck {
             return nil
         case .unreadable(let folder):
             return Finding(title: unreadableTitle, message: unreadableBackupWarning(folder: folder))
+        case .backupsUnreadable:
+            return Finding(title: unreadableTitle, message: unreadableBackupsWarning)
         case .count(let previousCount):
             guard previousCount - live >= minimumDrop, live * 2 < previousCount else { return nil }
             return Finding(title: shrankTitle, message: shrankWarning(live: live, previous: previousCount))
@@ -63,7 +71,15 @@ enum StoreShrinkCheck {
     // app's file; counting one here would compare Dan's shows against iCloud Mail's rows.
     static func previousCount(dataDirectory: URL, fileManager: FileManager = .default) -> Previous {
         let backups = StoreBackup.backupsDirectory(dataDirectory: dataDirectory)
-        let folders = ((try? fileManager.contentsOfDirectory(atPath: backups.path)) ?? [])
+        // #3036: a listing that FAILED used to fall to an empty array and then to `.none`, so a folder
+        // Overture could not open read as a first launch with no history. Absent really is no history;
+        // present and unlistable is a refusal, and the launch where that happens is exactly the one this
+        // check exists for (L105, L42).
+        guard fileManager.fileExists(atPath: backups.path) else { return .none }
+        guard let entries = try? fileManager.contentsOfDirectory(atPath: backups.path) else {
+            return .backupsUnreadable
+        }
+        let folders = entries
             .filter { StoreBackup.isRotatableBackupFolder($0) }
             .sorted()
         guard let newest = folders.last else { return .none }
@@ -110,6 +126,10 @@ enum StoreShrinkCheck {
         "Its most recent backup (\(folder)) could not be read. Nothing has been changed. Check that "
             + "backup before working."
     }
+
+    static let unreadableBackupsWarning =
+        "Overture could not open its backup folder, so there is nothing to compare against. Nothing has "
+            + "been changed. Check that folder before working."
 
     // Where they are, said once, for the sheet to show under the sentence above.
     static func backupsPath(dataDirectory: URL) -> String {
