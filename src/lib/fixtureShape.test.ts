@@ -222,8 +222,8 @@ describe("prep-results fixture shapes", () => {
   it("covers exactly the known prep-results files", () => {
     // Lexicographic, because the assertion compares against files.sort(): "v10" sorts next to "v1".
     expect(files.sort()).toEqual(["run-metadata-complete-v8.json", "run-metadata-partial-v8.json",
-                                  "v1.json", "v10.json", "v2.json", "v3.json", "v4.json", "v5.json",
-                                  "v6.json", "v7.json", "v8.json", "v9.json"]);
+                                  "v1.json", "v10.json", "v11.json", "v2.json", "v3.json", "v4.json",
+                                  "v5.json", "v6.json", "v7.json", "v8.json", "v9.json"]);
   });
 
   for (const file of files) {
