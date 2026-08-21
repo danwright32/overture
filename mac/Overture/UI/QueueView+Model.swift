@@ -908,7 +908,10 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
             }
         }
         if bounced { return "Bounced" }
-        if replied { return "In conversation" }
+        // #2951: an answered exchange used to read exactly like one waiting on him, forever. The facts
+        // #2934 carried onto the snapshot are what let the label tell them apart; it reads the carried
+        // answer rather than forming a second one from the stamps (L16).
+        if replied { return replyIsAnswered ? "You answered them" : "In conversation" }
         switch sendState {
         case .sent: return "Awaiting reply"
         case .pending: return (email?.isEmpty == false) ? "Not sent yet" : "No email yet"
