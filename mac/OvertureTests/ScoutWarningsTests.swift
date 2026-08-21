@@ -73,6 +73,51 @@ struct ScoutWarningsTests {
         ])
     }
 
+    // #2758 / #2999: a run that refused rows because the store stopped answering must SAY so. The
+    // refusal is the right call (writing anyway merges two shows into one row and takes a card's keep
+    // decision, its contacts and its outreach record with it), but a run that quietly leaves shows out
+    // is indistinguishable from a run that found none (L98).
+    @Test func refusedRowsSurfaceAsTheirOwnWarning() {
+        var native = outcome()
+        native.storeUnreadable = 2
+
+        let w = ScoutWarnings.from(native: native, extract: nil, finishedEmpty: nil)
+        #expect(!w.isEmpty)
+        #expect(w.sections == [.storeUnreadable(2)])
+        #expect(w.quietLine == "2 shows were left out this run because the local store stopped answering. Run the scout again.")
+    }
+
+    // It counts across both halves, so which half met the unreadable store is not a fact about Dan's run.
+    @Test func refusedRowsFromBothHalvesAreSummed() {
+        var native = outcome()
+        native.storeUnreadable = 1
+        var extract = outcome()
+        extract.storeUnreadable = 3
+
+        let w = ScoutWarnings.from(native: native, extract: extract, finishedEmpty: nil)
+        #expect(w.sections == [.storeUnreadable(4)])
+    }
+
+    // And a run that refused nothing says nothing, which is what keeps this from being a section Dan
+    // learns to scroll past.
+    @Test func aRunThatRefusedNothingCarriesNoSuchWarning() {
+        let w = ScoutWarnings.from(native: outcome(), extract: nil, finishedEmpty: nil)
+        #expect(!w.sections.contains { if case .storeUnreadable = $0 { return true } else { return false } })
+    }
+
+    // It ranks with the app-level warnings, above the actionable per-source ones: nothing is wrong with
+    // any source, and there is nothing to fix per-source.
+    @Test func refusedRowsRankWithTheAppLevelWarnings() {
+        var native = outcome()
+        native.saveFailed = true
+        native.storeUnreadable = 1
+        var extract = outcome()
+        extract.sources = [failed("kaufman", "Kaufman", .verdict(.noDatedContent))]
+
+        let w = ScoutWarnings.from(native: native, extract: extract, finishedEmpty: nil)
+        #expect(w.sections == [.saveFailed, .storeUnreadable(1), .failures(w.failedSources)])
+    }
+
     // The reader-finished-empty signal is not dropped in the rework: it is its own section.
     @Test func readerFinishedEmptyIsItsOwnSection() {
         let w = ScoutWarnings.from(native: outcome(), extract: nil,

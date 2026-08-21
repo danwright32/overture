@@ -46,6 +46,12 @@ struct ScoutWarnings: Equatable, Sendable {
     // defers nothing by design.
     var deferredCount: Int = 0
 
+    // #2758 / #2999: shows the run refused to touch because the store could not answer whether their key
+    // was free. App-level like `saveFailed`, and for the same reason: nothing is wrong with any source,
+    // and there is nothing to fix per-source. It must be SAID, because a run that quietly leaves shows
+    // out is indistinguishable from a run that found none (L98).
+    var storeUnreadableCount: Int = 0
+
     static func from(native: ScoutService.Outcome, extract: ScoutService.Outcome?,
                      finishedEmpty: String?) -> ScoutWarnings {
         // Union the per-source failures from both halves and dedupe by id: html verdict failures reach
@@ -81,7 +87,10 @@ struct ScoutWarnings: Equatable, Sendable {
             unqueuedIds: native.unqueuedResultIds + (extract?.unqueuedResultIds ?? []),
             silentlyEmptySources: empties,
             clientListWarning: native.clientListWarning ?? extract?.clientListWarning,
-            deferredCount: deferred)
+            deferredCount: deferred,
+            // Summed across both halves for the same reason the deferred count is: which half refused a
+            // row is not a fact about Dan's run.
+            storeUnreadableCount: native.storeUnreadable + (extract?.storeUnreadable ?? 0))
     }
 
     // #1190: deferred venues make a run NOT clean even when nothing failed. A run that checked 20 of 38
@@ -95,6 +104,7 @@ struct ScoutWarnings: Equatable, Sendable {
     // hold two messages.
     enum Section: Equatable, Sendable {
         case saveFailed
+        case storeUnreadable(Int)
         case extractLaunchFailure(String)
         case readerFinishedEmpty(String)
         case failures([ScoutService.SourceResult])
@@ -112,6 +122,10 @@ struct ScoutWarnings: Equatable, Sendable {
         switch first {
         case .saveFailed:
             return "The scout couldn't save its results. Run it again."
+        case .storeUnreadable(let count):
+            return count == 1
+                ? "A show was left out this run because the local store stopped answering. Run the scout again."
+                : "\(count) shows were left out this run because the local store stopped answering. Run the scout again."
         case .extractLaunchFailure:
             return "Some changed calendars couldn't be read this run."
         case .readerFinishedEmpty:
@@ -136,6 +150,7 @@ struct ScoutWarnings: Equatable, Sendable {
     var sections: [Section] {
         var out: [Section] = []
         if saveFailed { out.append(.saveFailed) }
+        if storeUnreadableCount > 0 { out.append(.storeUnreadable(storeUnreadableCount)) }
         if let extractLaunchFailure { out.append(.extractLaunchFailure(extractLaunchFailure)) }
         if let extractRunFinishedEmpty { out.append(.readerFinishedEmpty(extractRunFinishedEmpty)) }
         if !failedSources.isEmpty { out.append(.failures(failedSources)) }

@@ -50,7 +50,11 @@ struct ScoutRunIdentityTests {
 
         // The books have to balance: every event is accounted for exactly once, never silently
         // dropped. This is the assertion that would have caught the bug in the first place.
+        // #2758: the identity gains a fifth term. A row the store could not be read for is left
+        // untouched, and it has to be accounted for here or a refused show reads as one that
+        // vanished, which is the exact bug this identity was added to catch.
         #expect(outcome.inserted + outcome.updated + outcome.skipped + outcome.collapsedIntoRun
+                + outcome.storeUnreadable
                 == outcome.found)
         #expect(outcome.collapsedIntoRun == 0)      // three separate shows, not one run
     }
@@ -79,7 +83,11 @@ struct ScoutRunIdentityTests {
 
         // The second night was folded in, not lost, and the books say so.
         #expect(outcome.collapsedIntoRun == 1)
+        // #2758: the identity gains a fifth term. A row the store could not be read for is left
+        // untouched, and it has to be accounted for here or a refused show reads as one that
+        // vanished, which is the exact bug this identity was added to catch.
         #expect(outcome.inserted + outcome.updated + outcome.skipped + outcome.collapsedIntoRun
+                + outcome.storeUnreadable
                 == outcome.found)
     }
 
