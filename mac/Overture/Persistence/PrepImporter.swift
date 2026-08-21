@@ -497,7 +497,16 @@ enum PrepImporter {
         // Dan's overrule is a judgement about THIS address, so a genuinely different address gets it asked
         // again: the same reset-on-real-change convention the venue and duplicate guesses use below. Placed
         // here rather than in that block because the guard itself runs on every contact, manual included.
-        if r.email != priorEmail { r.heldDownToUnverifiedDismissed = false }
+        // #3082: and when the ACCUSATION changes, not only the address. His dismissal answers ONE
+        // question, and #2895 gave the hold-down two of them: "is this address really theirs" and "is
+        // this the right person". Letting an answer to the first stand as an answer to the second is the
+        // defect #2895 exists to fix, handed back through the overrule (L11).
+        //
+        // A row held down with NO recorded reason was written before #2895, when there was exactly one
+        // reason, so its effective prior reason is `namedNoPage`. Without that, the first ingest after
+        // this shipped would silently throw away every overrule Dan has ever made (L90).
+        let priorReason = r.heldDownToUnverified ? (r.heldDownReason ?? .namedNoPage) : nil
+        if r.email != priorEmail || priorReason != hold { r.heldDownToUnverifiedDismissed = false }
         r.heldDownToUnverified = heldDown
         r.heldDownReasonRaw = hold?.rawValue
         // overrideBody is only ever meaningful for a .performer recipient (#640): unlike the fields
