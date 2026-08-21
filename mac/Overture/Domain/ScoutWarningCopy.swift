@@ -17,6 +17,22 @@ enum ScoutWarningCopy {
     // keep decision, its contacts and its outreach record with it. Leaving the show out costs one run;
     // that costs the card. So this reads as a deliberate choice rather than a fault, and names the one
     // thing Dan can do about it.
+    // #3074: and WHICH shows, when the run recorded them. The count alone tells Dan a run left three shows
+    // out; the keys are the only thing that can say which three, which is what #2999 recorded them for.
+    //
+    // The natural key is printed as it is STORED, not prettified into a title, because this is evidence
+    // for a diagnosis: a rendered guess at what the key means is a different fact from the key (L192), and
+    // the key is what whoever looks into it will be searching for.
+    //
+    // Nothing is appended when the list is empty, which is not merely tidiness: a run's extract half can
+    // carry a count with no keys, and a heading over no rows is a promise about rows that are not there
+    // (#863).
+    static func storeUnreadable(count: Int, keys: [String]) -> String {
+        let base = storeUnreadable(count: count)
+        guard !keys.isEmpty else { return base }
+        return base + "\n\nLeft out: " + keys.joined(separator: "\n")
+    }
+
     static func storeUnreadable(count: Int) -> String {
         count == 1
             ? "One show was left out of this run. The local store stopped answering, so Overture could not "

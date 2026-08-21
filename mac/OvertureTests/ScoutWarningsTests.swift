@@ -83,7 +83,7 @@ struct ScoutWarningsTests {
 
         let w = ScoutWarnings.from(native: native, extract: nil, finishedEmpty: nil)
         #expect(!w.isEmpty)
-        #expect(w.sections == [.storeUnreadable(2)])
+        #expect(w.sections == [.storeUnreadable(2, [])])
         #expect(w.quietLine == "2 shows were left out this run because the local store stopped answering. Run the scout again.")
     }
 
@@ -95,7 +95,7 @@ struct ScoutWarningsTests {
         extract.storeUnreadable = 3
 
         let w = ScoutWarnings.from(native: native, extract: extract, finishedEmpty: nil)
-        #expect(w.sections == [.storeUnreadable(4)])
+        #expect(w.sections == [.storeUnreadable(4, [])])
     }
 
     // And a run that refused nothing says nothing, which is what keeps this from being a section Dan
@@ -115,7 +115,7 @@ struct ScoutWarningsTests {
         extract.sources = [failed("kaufman", "Kaufman", .verdict(.noDatedContent))]
 
         let w = ScoutWarnings.from(native: native, extract: extract, finishedEmpty: nil)
-        #expect(w.sections == [.saveFailed, .storeUnreadable(1), .failures(w.failedSources)])
+        #expect(w.sections == [.saveFailed, .storeUnreadable(1, []), .failures(w.failedSources)])
     }
 
     // The reader-finished-empty signal is not dropped in the rework: it is its own section.

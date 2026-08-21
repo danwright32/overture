@@ -52,6 +52,11 @@ struct ScoutWarnings: Equatable, Sendable {
     // out is indistinguishable from a run that found none (L98).
     var storeUnreadableCount: Int = 0
 
+    // #3074: WHICH shows those were. The count says a run left three shows out; this is the only thing
+    // that can say which three when somebody comes to diagnose it, which is what #2999 kept it for. It
+    // had four writers in ScoutService and no reader at all until now (L46).
+    var storeUnreadableKeys: [String] = []
+
     static func from(native: ScoutService.Outcome, extract: ScoutService.Outcome?,
                      finishedEmpty: String?) -> ScoutWarnings {
         // Union the per-source failures from both halves and dedupe by id: html verdict failures reach
@@ -79,6 +84,13 @@ struct ScoutWarnings: Equatable, Sendable {
         let deferred = native.sources.filter { $0.state == .deferred }.count
             + (extract?.sources.filter { $0.state == .deferred }.count ?? 0)
 
+        var seenKeys = Set<String>()
+        var dedupedKeys: [String] = []
+        for key in native.storeUnreadableKeys + (extract?.storeUnreadableKeys ?? [])
+        where seenKeys.insert(key).inserted {
+            dedupedKeys.append(key)
+        }
+
         return ScoutWarnings(
             saveFailed: native.saveFailed || (extract?.saveFailed ?? false),
             extractLaunchFailure: native.extractLaunchFailure ?? extract?.extractLaunchFailure,
@@ -90,7 +102,12 @@ struct ScoutWarnings: Equatable, Sendable {
             deferredCount: deferred,
             // Summed across both halves for the same reason the deferred count is: which half refused a
             // row is not a fact about Dan's run.
-            storeUnreadableCount: native.storeUnreadable + (extract?.storeUnreadable ?? 0))
+            storeUnreadableCount: native.storeUnreadable + (extract?.storeUnreadable ?? 0),
+            // #3074: deduped rather than summed, unlike the count above, and the difference is real. The
+            // count is a tally of REFUSALS and a show refused in both halves was refused twice; this is
+            // the list of SHOWS, and naming one twice would read as two shows (the same rule the failures
+            // and the empties above follow).
+            storeUnreadableKeys: dedupedKeys)
     }
 
     // #1190: deferred venues make a run NOT clean even when nothing failed. A run that checked 20 of 38
@@ -104,7 +121,9 @@ struct ScoutWarnings: Equatable, Sendable {
     // hold two messages.
     enum Section: Equatable, Sendable {
         case saveFailed
-        case storeUnreadable(Int)
+        // #3074: the keys ride WITH the count rather than in a section of their own, because they are
+        // the detail of one fact and a second section would ask Dan to join two boxes up himself.
+        case storeUnreadable(Int, [String])
         case extractLaunchFailure(String)
         case readerFinishedEmpty(String)
         case failures([ScoutService.SourceResult])
@@ -122,7 +141,9 @@ struct ScoutWarnings: Equatable, Sendable {
         switch first {
         case .saveFailed:
             return "The scout couldn't save its results. Run it again."
-        case .storeUnreadable(let count):
+        case .storeUnreadable(let count, _):
+            // #3074: deliberately still just the count. This is ONE line in the masthead for a run Dan
+            // did not start, and a natural key is long; the summary he opens is where the list belongs.
             return count == 1
                 ? "A show was left out this run because the local store stopped answering. Run the scout again."
                 : "\(count) shows were left out this run because the local store stopped answering. Run the scout again."
@@ -150,7 +171,9 @@ struct ScoutWarnings: Equatable, Sendable {
     var sections: [Section] {
         var out: [Section] = []
         if saveFailed { out.append(.saveFailed) }
-        if storeUnreadableCount > 0 { out.append(.storeUnreadable(storeUnreadableCount)) }
+        if storeUnreadableCount > 0 {
+            out.append(.storeUnreadable(storeUnreadableCount, storeUnreadableKeys))
+        }
         if let extractLaunchFailure { out.append(.extractLaunchFailure(extractLaunchFailure)) }
         if let extractRunFinishedEmpty { out.append(.readerFinishedEmpty(extractRunFinishedEmpty)) }
         if !failedSources.isEmpty { out.append(.failures(failedSources)) }

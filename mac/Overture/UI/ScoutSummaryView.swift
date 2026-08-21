@@ -137,8 +137,8 @@ struct ScoutSummaryView: View {
         switch section {
         case .saveFailed:
             infoBlock(ScoutWarningCopy.saveFailed)
-        case .storeUnreadable(let count):
-            infoBlock(ScoutWarningCopy.storeUnreadable(count: count))
+        case .storeUnreadable(let count, let keys):
+            infoBlock(ScoutWarningCopy.storeUnreadable(count: count, keys: keys))
         case .extractLaunchFailure(let message):
             infoBlock(message)
         case .readerFinishedEmpty(let message):
