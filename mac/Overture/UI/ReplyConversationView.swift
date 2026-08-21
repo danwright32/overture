@@ -43,13 +43,24 @@ struct ReplyConversationView: View {
                 Text(QueueModel.aiReadNote(hint: hint))
                     .font(OVType.tag).foregroundStyle(OVColor.inkFaint)
             }
+            // #2934: which of these the conversation may have is decided by ReplyConversationMode, not
+            // here, so this view and the queue's Answer control cannot disagree about whether a
+            // conversation is still owed an answer. An answered one keeps its text as a record and
+            // offers nothing: the drafting run refuses it, so a button here could only ever fail.
+            let mode = contact.replyConversationMode
+            if let explanation = mode.explanation {
+                Text(explanation)
+                    .font(OVType.tag).foregroundStyle(OVColor.inkFaint)
+            }
             if isEditing {
                 editor
-            } else if contact.hasReplyDraft {
+            } else if mode.offersToSend {
                 draft
-            } else if contact.isDraftingReply {
+            } else if mode.showsDraftText {
+                draftAsRecord
+            } else if mode.showsDraftingProgress {
                 drafting
-            } else {
+            } else if mode.offersToDraft {
                 Button("Draft a reply") { onDraftReply(contact.id) }
                     .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forestText)
                     .padding(.horizontal, OVSpacing.sm).padding(.vertical, 4)
@@ -57,6 +68,25 @@ struct ReplyConversationView: View {
             }
         }
         .padding(.leading, 20)
+    }
+
+    // #2934: the draft as a RECORD. The same text, with none of the controls that would answer a second
+    // time. The Archive card is where Dan looks at what happened, so the text belongs; Send does not.
+    private var draftAsRecord: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let subject = contact.replyDraftSubject, !subject.isEmpty {
+                Text(subject).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+            }
+            Text(contact.replyDraftBody ?? "")
+                .font(OVType.body).foregroundStyle(OVColor.inkSoft)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+            // Who wrote it, exactly as the live draft says: the record is about what happened, and that
+            // is part of it.
+            if let trace = contact.replyDraftTraceLabel {
+                Text(trace).font(OVType.tag).foregroundStyle(OVColor.inkFaint)
+            }
+        }
     }
 
     private var editor: some View {
