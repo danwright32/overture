@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1457 sentences**.
+Every sentence Overture can say to Dan: **1459 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -438,6 +438,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/RunBoundaryViolations.swift`
 "A scout-extract run is already in progress. Wait for it to finish."
     `Integration/ScoutExtractService.swift`
+"A sentence says the same thing twice"
+    `Domain/DraftCheck.swift`
 "A separate email each"
     `UI/SendConfirmSheet.swift`
 "A show was left out this run because the local store stopped answering. Run the scout again."
@@ -1388,6 +1390,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/ScoutService.swift`
 "One source went quiet."
     `UI/ScoutSummaryView.swift`
+"One word is doing the same job in too many sentences"
+    `Domain/DraftCheck.swift`
 "Only a press address"
     `Domain/Reachability.swift`
 "Only a social profile"

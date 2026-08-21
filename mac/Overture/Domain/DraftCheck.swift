@@ -19,6 +19,8 @@ enum DraftIssue: Equatable, Hashable, Sendable, CaseIterable {
     case hedgedEffectClaim        // weakens the claim that the audience doesn't notice him (#2722)
     case asksForNothing           // admires the show and requests nothing (#1889, #2531)
     case repeatedSentenceShape    // two sentences in a row built the same way (#2807)
+    case restatesItself           // a sentence that says one thing twice, or padding (#2949)
+    case repeatsOneWord           // one word carrying the same idea across too many sentences (#2949)
 
     var label: String {
         switch self {
@@ -36,6 +38,8 @@ enum DraftIssue: Equatable, Hashable, Sendable, CaseIterable {
         case .hedgedEffectClaim: return "Hedges the claim that the audience doesn't notice Dan"
         case .asksForNothing: return "Asks for nothing: no request about their photography plans"
         case .repeatedSentenceShape: return "Two sentences in a row are built the same way"
+        case .restatesItself: return "A sentence says the same thing twice"
+        case .repeatsOneWord: return "One word is doing the same job in too many sentences"
         }
     }
 
@@ -71,9 +75,13 @@ enum DraftIssue: Equatable, Hashable, Sendable, CaseIterable {
         // CONSTRUCTION out of punctuation and connector words, and English lets a perfectly good pair of
         // sentences land on the same one; the cost of a wrong block is Dan's time on a draft that reads
         // fine.
+        // #2949: both advisory, for the reason above them. They are judgements about WORDING, which is
+        // not the bar #789 set for a blocker, and the cost of a wrong block is Dan's time on a draft that
+        // reads fine.
         case .performativeEnthusiasm, .emDash, .presumesBooking, .coldHedge,
              .asksForKnownFact, .concessionLanguage, .nonCanonicalRate,
-             .hedgedEffectClaim, .asksForNothing, .repeatedSentenceShape: return false
+             .hedgedEffectClaim, .asksForNothing, .repeatedSentenceShape,
+             .restatesItself, .repeatsOneWord: return false
         }
     }
 
@@ -134,6 +142,14 @@ enum DraftCheck {
     ]
 
     private static let venueRequests = ["what venue", "which venue", "what's the venue", "what is the venue", "let me know the venue", "name of the venue", "what location", "which location", "what's the location", "what is the location", "let me know the location", "let me know where", "send me the venue", "send me the location", "where is the show", "where's the show", "where is the performance", "where's the performance", "where is the concert", "where's the concert", "where is the event", "where's the event", "where is it being held", "where is it taking place", "where will it be held"]
+    // #2949: the two new rules' needles, here rather than beside their matchers, because a
+    // copy-inventory region opened inside this one would close it early and leak every sentence after it.
+    private static let paddingPhrases = ["other rooms around the city", "plenty of other rooms"]
+    private static let familiarityClaim = "familiar with"
+    private static let roomWords = ["room", "rooms", "space", "spaces"]
+    // The other half of the restatement: a claim in the same sentence that he has already worked there.
+    // Both verbs, since the runbook's own wordings use both.
+    private static let historyClaims = ["photograph", "shot ", "shoot at"]
     // copy-inventory:ignore-end
 
     // `knownsDate`/`knownsVenue` opt the caller into the #456 known-fact check: the flag fires ONLY
@@ -174,6 +190,8 @@ enum DraftCheck {
         if hasGalleryPathLink(body) { issues.append(.galleryPathLink) }
         if hasVenueHistoryCount(body) { issues.append(.venueHistoryCount) }
         if hasHedgedEffectClaim(text) { issues.append(.hedgedEffectClaim) }
+        if restatesItself(text) { issues.append(.restatesItself) }
+        if repeatsOneWord(text) { issues.append(.repeatsOneWord) }
         if hasRepeatedSentenceShape(body) { issues.append(.repeatedSentenceShape) }
         if isColdPitch, !asksAboutPhotographyPlans(body) { issues.append(.asksForNothing) }
         return issues
@@ -354,6 +372,50 @@ enum DraftCheck {
     // What it CANNOT do is judge the other effect claims (no flash, the performance not disturbed,
     // documentary rather than posed), because those have no single word to key on. The runbook and the
     // brand voice skill state the rule for all of them; this is the tripwire for the one already met.
+    // #2949: a sentence that says one thing twice, and the padding that says nothing at all.
+    //
+    // Dan, 2026-08-16, on a real cold pitch: "I've photographed a few shows in that room, so I'm familiar
+    // with the space." The second half restates the first, costing a beat and adding nothing. Same class
+    // as the audience-half rule above, on a different pair.
+    //
+    // Narrow on purpose, and MEASURED: "familiar with" appears in none of the 70 compliant bodies this
+    // repo holds, so a sentence that both claims the history and then claims familiarity is not a shape
+    // Dan's own drafts produce. The padding phrase is here rather than in its own case because its defect
+    // is the same one, a clause that adds nothing, and it appears in none of them either.
+    private static func restatesItself(_ text: String) -> Bool {
+        let lowered = text.lowercased()
+        if paddingPhrases.contains(where: { lowered.contains($0) }) { return true }
+        for sentence in text.components(separatedBy: CharacterSet(charactersIn: ".!?\n")) {
+            let s = sentence.lowercased()
+            guard s.contains(familiarityClaim) else { continue }
+            if historyClaims.contains(where: { s.contains($0) }) { return true }
+        }
+        return false
+    }
+
+    // #2949: one word doing the same job in too many sentences.
+    //
+    // Dan counted "room", "space" and "rooms" inside four sentences of one draft. Not a cadence problem,
+    // so `repeatedSentenceShape` cannot see it.
+    //
+    // THREE is the threshold, and it comes from the real distribution rather than from taste (L172).
+    // Measured across all 70 compliant bodies in `fixtures/prep-eval` and `fixtures/draft-ask`: 22 never
+    // mention the room, 40 mention it in one sentence, 8 in two, and NONE in three. So three is one clear
+    // of everything Dan's own drafts do, and the draft he objected to had four.
+    //
+    // Counted per SENTENCE, not per occurrence: twice in one sentence is the restatement rule's business,
+    // and counting occurrences would make a single compound sentence look like a pattern.
+    private static let mostSentencesOneWordMayCarry = 2
+
+    private static func repeatsOneWord(_ text: String) -> Bool {
+        let sentences = text.components(separatedBy: CharacterSet(charactersIn: ".!?\n"))
+            .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+        let carrying = sentences.filter { sentence in
+            roomWords.contains { containsWord($0, in: sentence) }
+        }
+        return carrying.count > mostSentencesOneWordMayCarry
+    }
+
     private static func hasHedgedEffectClaim(_ text: String) -> Bool {
         for sentence in text.components(separatedBy: CharacterSet(charactersIn: ".!?\n")) {
             guard sentence.contains("notice") else { continue }
