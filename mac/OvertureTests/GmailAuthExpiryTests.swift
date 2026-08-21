@@ -15,11 +15,24 @@ struct GmailAuthExpiryTests {
         try Data(#"{"clientId":"cid","clientSecret":"sec"}"#.utf8).write(to: url)
     }
 
+    // #2947: the fake ANSWERS THE REQUEST rather than the same blob whatever it was handed.
+    //
+    // There is no field selection to narrow here, so what there is to honour is that the refresh really
+    // is a refresh: the right endpoint, a POST, and a `grant_type=refresh_token` body. A fake that answers
+    // any request identically cannot tell a correct refresh from a call aimed somewhere else, and every
+    // test below would go on passing (L52, L143).
     private func fetch(_ status: Int, _ body: String) -> (URLRequest) async throws -> (Data, URLResponse) {
-        { _ in
-            (Data(body.utf8),
-             HTTPURLResponse(url: URL(string: "https://oauth2.googleapis.com/token")!,
-                             statusCode: status, httpVersion: nil, headerFields: nil)!)
+        { req in
+            #expect(req.url?.absoluteString == GoogleOAuth.tokenEndpoint,
+                    "the refresh has to go to Google's token endpoint")
+            #expect(req.httpMethod == "POST")
+            let sent = String(data: req.httpBody ?? Data(), encoding: .utf8) ?? ""
+            // copy-inventory:ignore-start  the OAuth form field Google reads, not a sentence (#915)
+            #expect(sent.contains("grant_type=refresh_token"),
+                    "a refresh that is not a refresh would be answered here regardless")
+            // copy-inventory:ignore-end
+            return (Data(body.utf8),
+                    HTTPURLResponse(url: req.url!, statusCode: status, httpVersion: nil, headerFields: nil)!)
         }
     }
 
