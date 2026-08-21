@@ -82,6 +82,124 @@ shift_dates() {
   '
 }
 
+# #2994: the OTHER way a fixture pins a moment, which the date shifter above cannot see.
+#
+# `Date(timeIntervalSince1970: 1_754_400_000)` is a date written as a number. #2986 was exactly that
+# defect (a pinned clock compared against data that moves on its own every day) and this check could not
+# have found it, because the shifter only recognises a `"yyyy-mm-dd"` literal.
+#
+# ONLY values that land inside the same 1980..2100 window the date shifter uses are moved. That window is
+# doing real work here rather than being copied for symmetry: the overwhelming majority of these literals
+# are `0`, `1`, `9_999`, `1_000`, arbitrary instants chosen because the test needed two moments in an
+# order, and moving those would change the thing rather than move the clock. Measured 2026-08-21: 283
+# test files carry such a literal and most are in that arbitrary shape.
+#
+# The shift is done as CALENDAR arithmetic (decompose to y/m/d, add the years, recompose) rather than by
+# adding a fixed number of seconds, so an epoch literal and a `"yyyy-mm-dd"` literal in the same test move
+# to the same day. Adding 3 * 365.25 days would drift them apart and the mismatch would be reported as a
+# year sensitivity that the shifter itself caused, which is the mistake the date shifter's own header
+# records making once already.
+#
+# Pure, so the fixture can drive it against throwaway text.
+shift_epochs() {
+  awk -v shift="$1" '
+    function days_from_civil(y, m, d,   era, yoe, doy, doe) {
+      y = (m <= 2) ? y - 1 : y
+      era = int((y >= 0 ? y : y - 399) / 400)
+      yoe = y - era * 400
+      doy = int((153 * (m + (m > 2 ? -3 : 9)) + 2) / 5) + d - 1
+      doe = yoe * 365 + int(yoe / 4) - int(yoe / 100) + doy
+      return era * 146097 + doe - 719468
+    }
+    function civil_from_days(z,   era, doe, yoe, y, doy, mp, d, m) {
+      z += 719468
+      era = int((z >= 0 ? z : z - 146096) / 146097)
+      doe = z - era * 146097
+      yoe = int((doe - int(doe / 1460) + int(doe / 36524) - int(doe / 146096)) / 365)
+      y = yoe + era * 400
+      doy = doe - (365 * yoe + int(yoe / 4) - int(yoe / 100))
+      mp = int((5 * doy + 2) / 153)
+      d = doy - int((153 * mp + 2) / 5) + 1
+      m = mp + (mp < 10 ? 3 : -9)
+      CY = (m <= 2) ? y + 1 : y
+      CM = m
+      CD = d
+      return 0
+    }
+    function shifted_epoch(v,   days, secs, out) {
+      days = int(v / 86400)
+      secs = v - days * 86400
+      if (secs < 0) { days -= 1; secs += 86400 }
+      civil_from_days(days)
+      if (CY < 1980 || CY > 2100) return -1
+      out = days_from_civil(CY + shift, CM, CD) * 86400 + secs
+      return out
+    }
+    {
+      out = ""
+      line = $0
+      while (match(line, /timeIntervalSince1970:[ ]*[0-9_]+/)) {
+        pre = substr(line, 1, RSTART - 1)
+        tok = substr(line, RSTART, RLENGTH)
+        digits = tok
+        sub(/^timeIntervalSince1970:[ ]*/, "", digits)
+        gsub(/_/, "", digits)
+        moved = shifted_epoch(digits + 0)
+        if (moved >= 0) {
+          tok = "timeIntervalSince1970: " sprintf("%d", moved)
+        }
+        out = out pre tok
+        line = substr(line, RSTART + RLENGTH)
+      }
+      print out line
+    }
+  '
+}
+
+# #2994: the tests that read Dan's REAL store and pin a clock while doing it. Reported, never shifted,
+# because there is nothing to shift: their data comes from
+# `~/Library/Application Support/Overture/Overture.store`, which no rewrite of `mac/` can touch, so the
+# other side of every comparison moves on its own every single day while the fixture side does not.
+#
+# That is where a frozen clock does the most damage and it is the one shape this whole check is blind to.
+# #2986 spent an unknown period passing while examining zero rows and was caught by a separate emptiness
+# guard somebody had written, not by the tool built for this.
+#
+# A LIST for a person to look at, in the same spirit as this check's own "a new entrant is a test to look
+# at" rule, rather than a gate: pinning a clock in a live-store test is sometimes right (a test asserting
+# about a fixed historical row), and a gate nobody can go green on gets switched off (L93).
+live_store_tests_with_a_pinned_clock() {
+  local roots=("${REPO_ROOT}/mac/OvertureTests" "${REPO_ROOT}/mac/OvertureHostedTests")
+  local file
+  while IFS= read -r file; do
+    [[ -n "${file}" ]] || continue
+    # Reported per TEST, not per file. A live-store suite usually holds ordinary tests too, and naming a
+    # whole file sends the reader to functions that have nothing to do with the store, which is how an
+    # advisory gets ignored (L36). The numeric form only: that is the shape the shifter cannot see, which
+    # is what #2994 asked for.
+    awk -v path="${file#"${REPO_ROOT}/"}" '
+      /@Test[ ].*func[ ]/ {
+        if (name != "" && pinned) print path ": " name
+        pinned = 0
+        name = $0
+        sub(/^.*func[ ]+/, "", name)
+        sub(/[(<].*$/, "", name)
+        next
+      }
+      /timeIntervalSince1970:[ ]*[0-9_]{9,}/ {
+        # A pin BEFORE the first test is a suite property (`private let now = Date(...)`), which is the
+        # commonest way this is written here and which pins EVERY test in the suite. Reported as the
+        # suite rather than attributed to whichever test happens to come first.
+        if (name == "") suitePinned = 1; else pinned = 1
+      }
+      END {
+        if (name != "" && pinned) print path ": " name
+        if (suitePinned) print path ": the whole suite (a pinned clock declared beside the tests)"
+      }
+    ' "${file}"
+  done < <({ grep -rlE 'LiveStoreClone|StoreLocation\.storeURL' "${roots[@]}" 2>/dev/null || true; } | sort)
+}
+
 # The recorded baseline: the test functions known to be year-sensitive, one name per line, sorted.
 # Written by --record, so it is generated from the suite rather than maintained by hand (L96).
 # `|| true` on every grep in the pipeline, and it is load-bearing rather than defensive. This script runs
@@ -107,8 +225,12 @@ failing_test_names() {
 
 # The test files worth shifting: the ones that carry a literal performance date at all. Anything else has
 # no dated fixture for the clock to walk past.
+# #2994: and the ones that pin a moment as a NUMBER. `Date(timeIntervalSince1970: 1_754_400_000)` is a
+# date, and a test whose meaning is the relationship between it and the clock ages exactly like a dated
+# string does. Only 9-or-more-digit values, so the file list is not widened by every `Date(...: 0)` used
+# as an arbitrary early instant; `shift_epochs` applies the real 1980..2100 rule per value.
 candidate_files() {
-  { grep -rlE 'performanceDate[:=][[:space:]]*"[0-9]{4}-[0-9]{2}-[0-9]{2}"' \
+  { grep -rlE 'performanceDate[:=][[:space:]]*"[0-9]{4}-[0-9]{2}-[0-9]{2}"|timeIntervalSince1970:[ ]*[0-9_]{9,}' \
       "${REPO_ROOT}/mac/OvertureTests" "${REPO_ROOT}/mac/OvertureHostedTests" 2>/dev/null || true; } | sort
 }
 
@@ -138,6 +260,22 @@ main() {
     exit 1
   fi
 
+  # #2994: said BEFORE the run, because it is the one finding this check produces that costs nothing and
+  # does not depend on the suite completing. Advisory, never a gate: pinning a clock in a live-store test
+  # is sometimes right, and a rule condemning all of them would fire on the correct case (L93).
+  local pinned
+  pinned="$(live_store_tests_with_a_pinned_clock)"
+  if [[ -n "${pinned}" ]]; then
+    echo
+    echo "check-fixtures-do-not-age: these tests read the LIVE store and pin a clock as a number:"
+    printf '  %s\n' ${pinned}
+    echo
+    echo "  Nothing below can shift their data: it comes from the live store, which no rewrite of mac/"
+    echo "  touches, so the other side of every comparison moves on its own every day while the fixture"
+    echo "  side does not. Read each one and check it still asserts about the case it was written for."
+    echo
+  fi
+
   local count
   count="$(printf '%s\n' "${files}" | wc -l | tr -d ' ')"
   echo "check-fixtures-do-not-age: shifting every dated fixture in ${count} files forward ${SHIFT_YEARS} years."
@@ -147,7 +285,9 @@ main() {
 
   local file shifted
   while IFS= read -r file; do
-    shifted="$(shift_dates "${SHIFT_YEARS}" < "${file}")"
+    # #2994: both shapes, through one pipeline, so a test pairing a dated string with an epoch literal
+    # has BOTH ends moved. Moving one end is the mistake shift_dates' own header records making once.
+    shifted="$(shift_dates "${SHIFT_YEARS}" < "${file}" | shift_epochs "${SHIFT_YEARS}")"
     printf '%s\n' "${shifted}" > "${file}"
   done <<< "${files}"
 

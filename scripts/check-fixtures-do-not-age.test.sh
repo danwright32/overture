@@ -57,6 +57,99 @@ assert_equals "a format string is not a date" 'let fmt = "%Y-%m-%d"' "${out}"
 out="$(printf 'no dates here at all\n' | shift_dates 3)"
 assert_equals "a line with no date is passed through byte for byte" 'no dates here at all' "${out}"
 
+# MARK: shift_epochs (#2994)
+
+# A date written as a NUMBER is still a date, and the string shifter cannot see one. #2986 was exactly
+# that defect and this check could not have found it.
+out="$(printf 'let now = Date(timeIntervalSince1970: 1_754_400_000)\n' | shift_epochs 3)"
+assert_equals "an epoch literal inside the window moves" \
+  'let now = Date(timeIntervalSince1970: 1849094400)' "${out}"
+
+# The shift is CALENDAR arithmetic, not a fixed number of seconds, so an epoch literal and a dated string
+# in the same test land on the same day. 1754400000 is 2025-08-05 13:20 UTC; 1849094400 is 2028-08-05
+# 13:20 UTC. Adding 3 * 365.25 days would miss by a day and the mismatch would be reported as a year
+# sensitivity the shifter itself caused, which is the mistake shift_dates' own header records making.
+assert_equals "and lands on the same calendar day three years on" "2028-08-05T13:20:00" \
+  "$(python3 -c 'import datetime; print(datetime.datetime.fromtimestamp(1849094400, datetime.UTC).strftime("%Y-%m-%dT%H:%M:%S"))')"
+
+# The overwhelming majority of these literals are arbitrary instants chosen because a test needed two
+# moments in an order. Moving those would change the thing rather than move the clock. Measured
+# 2026-08-21: 283 test files carry one and most are of this shape.
+out="$(printf 'let a = Date(timeIntervalSince1970: 0)\n' | shift_epochs 3)"
+assert_equals "a zero epoch is an arbitrary instant and stays put" \
+  'let a = Date(timeIntervalSince1970: 0)' "${out}"
+
+out="$(printf 'let b = Date(timeIntervalSince1970: 9_999)\n' | shift_epochs 3)"
+assert_equals "a small epoch stays put" 'let b = Date(timeIntervalSince1970: 9_999)' "${out}"
+
+out="$(printf 'x Date(timeIntervalSince1970: 1_000_000_000) y Date(timeIntervalSince1970: 1_100_000_000)\n' | shift_epochs 3)"
+assert_contains "two epochs on one line both move" "${out}" "1094694400"
+assert_contains "and the second one too" "${out}" "1194608000"
+
+out="$(printf 'no epoch here\n' | shift_epochs 3)"
+assert_equals "a line with no epoch is passed through byte for byte" 'no epoch here' "${out}"
+
+# The two shifters compose, which is the point: a test pairing a dated string with an epoch literal has
+# BOTH ends moved. Moving one end is the mistake the date shifter already made once.
+out="$(printf 'let d = "2026-07-01"; let n = Date(timeIntervalSince1970: 1_754_400_000)\n' \
+        | shift_dates 3 | shift_epochs 3)"
+assert_contains "the string end moves" "${out}" '"2029-07-01"'
+assert_contains "and the epoch end moves in the same pass" "${out}" "1849094400"
+
+# MARK: live_store_tests_with_a_pinned_clock (#2994)
+
+# Reported, never shifted, because there is nothing to shift: the data comes from the live store, which
+# no rewrite of mac/ can touch, so the other side of every comparison moves on its own every day.
+PINWORK="$(mktemp -d)"
+mkdir -p "${PINWORK}/mac/OvertureTests" "${PINWORK}/mac/OvertureHostedTests"
+cat > "${PINWORK}/mac/OvertureTests/PinnedLiveTests.swift" <<'SWIFT'
+struct PinnedLiveTests {
+    @Test func readsTheStoreWithAFrozenClock() {
+        let copy = try LiveStoreClone.makeClone(in: dir)
+        let now = Date(timeIntervalSince1970: 1_754_400_000)
+    }
+    @Test func anOrdinaryTestInTheSameFile() {
+        let x = 1
+    }
+}
+SWIFT
+cat > "${PINWORK}/mac/OvertureTests/NoStoreTests.swift" <<'SWIFT'
+struct NoStoreTests {
+    @Test func pinsAClockButNeverReadsTheStore() {
+        let now = Date(timeIntervalSince1970: 1_754_400_000)
+    }
+}
+SWIFT
+OUT="$(REPO_ROOT="${PINWORK}" live_store_tests_with_a_pinned_clock)"
+assert_contains "a live-store test with a pinned clock is named" "${OUT}" "readsTheStoreWithAFrozenClock"
+# Named per TEST, not per file: a live-store suite holds ordinary tests too, and sending the reader to
+# functions with nothing to do with the store is how an advisory gets ignored (L36).
+assert_not_contains "an ordinary test in the same file is not named" "${OUT}" "anOrdinaryTestInTheSameFile"
+# And a pinned clock with no live store is somebody else's problem: the shifter can see that one.
+assert_not_contains "a pinned clock outside a live-store file is not named" "${OUT}" "pinsAClockButNeverReadsTheStore"
+
+# A clock pinned as a SUITE PROPERTY, which is the commonest way this is written here, pins every test in
+# the suite. Attributing it to whichever test happens to come first would name the wrong one, so it is
+# reported as the suite.
+cat > "${PINWORK}/mac/OvertureTests/SuitePinnedTests.swift" <<'SWIFT'
+struct SuitePinnedTests {
+    private let now = Date(timeIntervalSince1970: 1_754_400_000)
+    let copy = try LiveStoreClone.makeClone(in: dir)
+    @Test func oneTest() { let x = 1 }
+    @Test func anotherTest() { let y = 2 }
+}
+SWIFT
+OUT="$(REPO_ROOT="${PINWORK}" live_store_tests_with_a_pinned_clock)"
+assert_contains "a suite-level pinned clock is reported" "${OUT}" "the whole suite"
+assert_not_contains "and is not blamed on the first test" "${OUT}" "SuitePinnedTests.swift: oneTest"
+rm -f "${PINWORK}/mac/OvertureTests/SuitePinnedTests.swift"
+
+# A tree with no such test reports nothing, so the check does not accuse by default (L1's other half).
+rm -f "${PINWORK}/mac/OvertureTests/PinnedLiveTests.swift"
+assert_empty "a tree with no pinned live-store test reports nothing" \
+  "$(REPO_ROOT="${PINWORK}" live_store_tests_with_a_pinned_clock)"
+rm -rf "${PINWORK}"
+
 # MARK: failing_test_names
 
 log="$(mktemp -t ageless-log)"

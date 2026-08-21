@@ -152,6 +152,17 @@ already drifting from the Swift version it mirrored.
   and the check names it. **A new entrant is not a defect, it is a test to look at**, which is the whole of
   what #2669 asked for. Either it still asserts what it meant to, and you re-record, or real time walked it
   into a different case.
+  **Since #2994 it also sees a date written as a NUMBER, and it reports the tests it cannot shift at all.**
+  `Date(timeIntervalSince1970: 1_754_400_000)` is a date, and the string shifter could not see one, which
+  is why #2986 (a pinned clock compared against live data that moves every day) was invisible to the tool
+  built for exactly that. Only values landing inside the same 1980..2100 window move, so the `0`, `1` and
+  `9_999` used as arbitrary instants are left alone, and the shift is CALENDAR arithmetic rather than a
+  fixed number of seconds so an epoch literal and a dated string in the same test land on the same day.
+  Separately it PRINTS, before the run, every test that reads the LIVE store while pinning a clock. Those
+  cannot be shifted at all (their data comes from the real store, which no rewrite of `mac/` touches), so
+  a list for a person to read is the honest answer rather than a gate. It names the TEST, or the SUITE
+  when the clock is a property beside the tests, never just the file.
+
   Two approaches were measured and rejected before this one, and both are worth knowing because they look
   reasonable. The issue's own proposal, a source-text guard flagging a file that pairs a literal
   `performanceDate` with a bare `Date()`, matches 70 of 783 test files, so it would fire on the common case
