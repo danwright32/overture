@@ -2546,6 +2546,41 @@ extension QueueItem {
     // ask it again from scratch: every ask filters the recipients through the sendable predicate, which
     // runs the draft lint over each contact's whole letter, for a card being built to be scrolled past.
     init(_ p: Prospect, sendGroups: SendGroup.CardGroups) {
+        // #1700: the closure-bearing answers are worked out HERE, one small expression each, rather than
+        // inside the memberwise call below.
+        //
+        // That call is one expression with about sixty arguments, and adding a single field to it in
+        // #1680 tipped it into "the compiler is unable to type-check this expression in reasonable time",
+        // which names no field and suggests no cause, so it reads as a broken toolchain rather than as one
+        // oversized expression. The workaround then was to assign the new field AFTER the init, which left
+        // the file with two conventions for the same job and only a comment explaining why.
+        //
+        // These eight are the expensive ones: each is a closure whose types the checker has to infer, and
+        // inference inside a sixty-argument call is where the cost compounds. Pulled out, each is checked
+        // on its own, and the three fields that had been exiled below are back where they belong.
+        let voiceLearningCandidate = p.sentAt != nil && p.originalDraftBody != nil
+        let nextRecipientIds = sendGroups.pending.map(\.id)
+        let weakContactHoldReason = p.recipients.compactMap(\.holdReason).first
+        let formPitch = FormPitch.state(of: p)
+        let draftGreetedContactName = p.recipients.first { $0.sendState == .pending && $0.greetingNamesSomeoneElse }?.name
+        let conflictBlockedDate = p.conflictKey.flatMap { BlockedCalendar.Day(key: $0) }?.date
+        let draftGreetedName = p.recipients
+            .first { $0.sendState == .pending && $0.greetingNamesSomeoneElse }
+            .flatMap { DraftGreeting.greetedName($0.effectiveBody) }
+        let draftLintBlockers = DraftIssue.orderedBlockers(
+            Set(p.recipients.filter { $0.sendState == .pending }.flatMap(\.draftLintBlockers)))
+        let contacts = p.recipients
+            .sorted { $0.sendOrderRank != $1.sendOrderRank ? $0.sendOrderRank < $1.sendOrderRank : $0.id < $1.id }
+            .map(RecipientSnapshot.init)
+        let offersSendModeChoice = p.recipients.filter { $0.email?.isEmpty == false }.count > 1
+        let hasWeakContactEmail = p.recipients.contains(where: \.isHeldByAGuard)
+        let hasAnyEmailContact = p.recipients.contains { $0.email?.isEmpty == false }
+        let draftMissingGreeting = p.recipients.contains { $0.sendState == .pending && $0.draftIsMissingGreeting }
+        let draftGreetingMisaddressed = p.recipients.contains { $0.sendState == .pending && $0.greetingMisaddressed }
+        let draftGreetingNamesSomeoneElse = p.recipients.contains { $0.sendState == .pending && $0.greetingNamesSomeoneElse }
+        let greetingOverridden = !p.recipients.contains { $0.sendState == .pending && $0.isBlockedByGreeting }
+        let draftLintBlocked = p.recipients.contains { $0.sendState == .pending && $0.isBlockedByDraftLint }
+
         self.init(
             id: p.naturalKey,
             groupName: p.groupName,
@@ -2575,6 +2610,12 @@ extension QueueItem {
             possibleMatchSource: p.possibleMatchSource,
             possibleMatchName: p.possibleMatchName,
             status: p.status,
+            // #1700: back inside the call, in declaration order, now that seventeen computed
+            // arguments are hoisted above it. They were assigned AFTER the init from #1680 and #2395
+            // onwards because adding any of them tipped the call into "unable to type-check in
+            // reasonable time"; the file carried two conventions for one job and a comment explaining
+            // why. One convention now.
+            showOutcome: p.showOutcome,
             draftSubject: p.draftSubject,
             draftBody: p.draftBody,
             draftEditedByDan: p.draftEditedByDan,
@@ -2586,22 +2627,23 @@ extension QueueItem {
             // #244/#1773: a sent show with the AI's original wording still recorded is something the
             // voice loop can learn from. Resolved once here, so the card is handed the answer instead
             // of searching the whole store for its own model to work it out.
-            voiceLearningCandidate: p.sentAt != nil && p.originalDraftBody != nil,
+            voiceLearningCandidate: voiceLearningCandidate,
             excludedFromVoiceLearning: p.excludedFromVoiceLearning,
             hasPendingRecipient: sendGroups.hasPending,
-            nextRecipientIds: sendGroups.pending.map(\.id),
+            nextRecipientIds: nextRecipientIds,
             sendsTogether: p.sendsTogether,
-            offersSendModeChoice: p.recipients.filter { $0.email?.isEmpty == false }.count > 1,
+            offersSendModeChoice: offersSendModeChoice,
             // #1324: a real address held by a guard, so the badge can say so rather than "No email found"
             // when that is all a check found. #1798: the same shared definition the stored verdict uses,
             // because these were two copies of one rule and both were missing the duplicate guard.
-            hasWeakContactEmail: p.recipients.contains(where: \.isHeldByAGuard),
+            hasWeakContactEmail: hasWeakContactEmail,
             // #1798: WHY it is held, so the sentence beside it is true of this row.
-            weakContactHoldReason: p.recipients.compactMap(\.holdReason).first,
-            formPitch: FormPitch.state(of: p),
+            weakContactHoldReason: weakContactHoldReason,
+            runSourceURLs: p.runSourceURLs,
+            formPitch: formPitch,
             // #1311: any recipient with a real address at all, so the Send surface can tell "no email to
             // send to" apart from "an email exists but is held for a review".
-            hasAnyEmailContact: p.recipients.contains { $0.email?.isEmpty == false },
+            hasAnyEmailContact: hasAnyEmailContact,
             blockedContactCount: p.blockedContactCount,
             hasEnteredSendHalf: p.hasEnteredSendHalf,   // #1797
             sendError: p.sendError,
@@ -2620,14 +2662,13 @@ extension QueueItem {
             performerMatchReviewed: p.performerMatchReviewed,
             // #2545: judged over the recipients that would actually receive this draft, the same way the
             // lint below is, so what the card says holds the send is what `isSendablePending` holds it on.
-            draftMissingGreeting: p.recipients.contains { $0.sendState == .pending && $0.draftIsMissingGreeting },
-            draftGreetingMisaddressed: p.recipients.contains { $0.sendState == .pending && $0.greetingMisaddressed },
+            draftMissingGreeting: draftMissingGreeting,
+            draftGreetingMisaddressed: draftGreetingMisaddressed,
             // #2579: the first pending recipient the greeting misnames, and the pair of names from THAT
             // recipient, so the card cannot show one contact's name beside another's greeting.
-            draftGreetingNamesSomeoneElse: p.recipients.contains { $0.sendState == .pending && $0.greetingNamesSomeoneElse },
-            draftGreetedName: p.recipients.first { $0.sendState == .pending && $0.greetingNamesSomeoneElse }
-                .flatMap { DraftGreeting.greetedName($0.effectiveBody) },
-            draftGreetedContactName: p.recipients.first { $0.sendState == .pending && $0.greetingNamesSomeoneElse }?.name,
+            draftGreetingNamesSomeoneElse: draftGreetingNamesSomeoneElse,
+            draftGreetedName: draftGreetedName,
+            draftGreetedContactName: draftGreetedContactName,
             greetingAudienceSize: p.greetingAudienceSize,
             // "nothing is held any more", NOT "somebody has an override", and the difference is the whole
             // safety of it: this flag both tones the warning down and REMOVES the Override button, so
@@ -2635,14 +2676,13 @@ extension QueueItem {
             // blocked. One contact overridden beside one added later and still held is reachable in
             // ordinary use, and it is the dead-end shape #2052 and #2012 were filed for. Same shape as
             // `draftLintBlocked` above: the finding stays reported, only the BLOCK clears.
-            greetingOverridden: !p.recipients.contains { $0.sendState == .pending && $0.isBlockedByGreeting },
-            draftLintBlockers: DraftIssue.orderedBlockers(
-                Set(p.recipients.filter { $0.sendState == .pending }.flatMap(\.draftLintBlockers))),
-            draftLintBlocked: p.recipients.contains { $0.sendState == .pending && $0.isBlockedByDraftLint },
+            greetingOverridden: greetingOverridden,
+            draftLintBlockers: draftLintBlockers,
+            draftLintBlocked: draftLintBlocked,
             outcomeSourceRaw: p.outcomeSourceRaw,
             hasUnclearedConflict: p.hasUnclearedConflict,
             conflictNote: p.conflictNote,
-            conflictBlockedDate: p.conflictKey.flatMap { BlockedCalendar.Day(key: $0) }?.date,
+            conflictBlockedDate: conflictBlockedDate,
             runEndDate: p.runEndDate,
             performanceStartTimes: p.performanceStartTimes,   // #1699
             startTimesVary: p.startTimesVary,                 // #1699
@@ -2650,21 +2690,11 @@ extension QueueItem {
             partOfRelatedRun: p.partOfRelatedRun,
             heldBackFrom: p.heldBackAt == nil ? nil : p.heldBackBySlot,
             disappearedFromFeed: p.disappearedFromFeed,
-            contacts: p.recipients
-                .sorted { $0.sendOrderRank != $1.sendOrderRank ? $0.sendOrderRank < $1.sendOrderRank : $0.id < $1.id }
-                .map(RecipientSnapshot.init),
+            contacts: contacts,
             reprepDraftRequested: p.reprepDraftRequested,
             reprepContactsRequested: p.reprepContactsRequested,
             reprepLastServedAt: p.reprepLastServedAt
         )
-        // #1680: assigned after the memberwise init rather than inside it. That call is already at the
-        // Swift type-checker's limit for one expression (adding this as an argument tips it into
-        // "unable to type-check in reasonable time"), and one more field is not worth restructuring it.
-        self.runSourceURLs = p.runSourceURLs
-        // #2395: here for the same reason, and it is the same limit: adding it as an argument above tipped
-        // that call into "unable to type-check in reasonable time".
-        self.wasPitched = p.wasPitched
-        self.showOutcome = p.showOutcome
     }
 }
 
