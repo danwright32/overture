@@ -174,6 +174,70 @@ for runner in prep-run.sh scout-extract-run.sh reply-classify-run.sh; do
   done
 done
 
+# --- #2981: stopping the heartbeat must not put the runner's own source into the log -----------------
+#
+# A killed background job makes the shell print a termination notice at the next command boundary, and
+# that notice renders the job's WHOLE command text. For these runners the job is the heartbeat subshell,
+# so every ordinary run ended by writing the heartbeat's body into its log, `echo "prep: STOPPING. ..."`
+# included. The log is then a record of what happened plus the program that could have happened.
+#
+# It cost a real measurement: `scripts/measure-concurrent-runs.sh` grepped for `STOPPING`, matched the
+# echo statement in both logs, and reported two healthy runs as stalled, into the measurement whose whole
+# purpose is deciding whether to change the stall limit (2026-08-18).
+#
+# Driven as real processes rather than asserted on the source, because the notice comes from the SHELL
+# and no reading of the script can tell you whether it appears.
+HB_WORK="$(mktemp -d)"
+
+cat > "${HB_WORK}/with-stop.sh" <<'STOPSH'
+#!/bin/sh
+set -eu
+. "$(dirname "$0")/run-heartbeat.sh"
+( while :; do sleep 1; echo "the marker text a grep would look for"; done ) >/dev/null 2>&1 &
+HB=$!
+sleep 0.2
+heartbeat_stop "$HB"
+sleep 0.5
+echo "finished"
+STOPSH
+
+cat > "${HB_WORK}/bare-kill.sh" <<'KILLSH'
+#!/bin/sh
+set -eu
+( while :; do sleep 1; echo "the marker text a grep would look for"; done ) >/dev/null 2>&1 &
+HB=$!
+sleep 0.2
+kill "$HB" 2>/dev/null || true
+sleep 0.5
+echo "finished"
+KILLSH
+
+cp "${SCRIPT_DIR}/run-heartbeat.sh" "${HB_WORK}/run-heartbeat.sh"
+chmod +x "${HB_WORK}/with-stop.sh" "${HB_WORK}/bare-kill.sh"
+
+STOP_OUT="$("${HB_WORK}/with-stop.sh" 2>&1)"
+assert_contains "a stopped heartbeat lets the script finish" "${STOP_OUT}" "finished"
+assert_not_contains "and prints no termination notice" "${STOP_OUT}" "Terminated"
+assert_not_contains "and does not echo the subshell's body into the log" "${STOP_OUT}" "the marker text a grep would look for"
+
+# The positive control. Without this the assertions above would pass on any shell that never prints the
+# notice at all, and would be proving nothing about the fix (L159).
+BARE_OUT="$("${HB_WORK}/bare-kill.sh" 2>&1)"
+assert_contains "a bare kill really does announce it on this shell" "${BARE_OUT}" "Terminated"
+assert_contains "and really does render the job's body" "${BARE_OUT}" "the marker text a grep would look for"
+
+# And every runner uses it, rather than one of the three keeping a bare kill. Derived from the runners
+# themselves, not a list here, so a fourth runner is covered without anybody remembering (L96).
+for runner in "${SCRIPT_DIR}/../"*-run.sh; do
+  [ -f "${runner}" ] || continue
+  name="$(basename "${runner}")"
+  grep -q 'HEARTBEAT_PID' "${runner}" || continue
+  assert_not_contains "${name} does not bare-kill its heartbeat" "$(cat "${runner}")" 'kill "$HEARTBEAT_PID"'
+  assert_contains "${name} stops it through the shared helper" "$(cat "${runner}")" 'heartbeat_stop "$HEARTBEAT_PID"'
+done
+
+rm -rf "${HB_WORK}"
+
 if [ "${FAILURES}" -ne 0 ]; then
   echo "${FAILURES} failure(s)"
   exit 1

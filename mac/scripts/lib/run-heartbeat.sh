@@ -53,6 +53,29 @@ heartbeat_stop_recorded_run() {
 # stopped claude too. Making it conditional would mean a flag somebody has to remember to set on a path
 # added later, which is the shape of the defect this is closing (L71: a watchdog must not share the
 # abort-on-error behaviour of the work it watches).
+# #2981: stop the heartbeat subshell WITHOUT the shell announcing it, which is what put the runner's own
+# source into every run log.
+#
+# A killed background job makes the shell print a termination notice at the next command boundary, and
+# that notice renders the job's whole command text. For these runners the job is the heartbeat subshell,
+# so every ordinary run ended by writing sixty-odd lines of the heartbeat's body into its log, including
+# the `echo "prep: STOPPING. ..."` statement. The log is then a record of what happened PLUS the program
+# that could have happened, and nothing about reading it warns you of that.
+#
+# It cost a real measurement. `scripts/measure-concurrent-runs.sh` grepped for `STOPPING` and matched the
+# echo statement in both logs, reporting two healthy runs as stalled, into the measurement whose whole
+# purpose is deciding whether to change the stall limit (#2981, observed 2026-08-18).
+#
+# `wait` reaps the job before the shell gets to report it, and that is the whole fix. Measured on this Mac
+# 2026-08-21: with a bare `kill` the notice and the body appear; with the `wait` after it, neither does.
+# Both are `|| true` because this runs inside an EXIT trap, where a non-zero status is not somebody's
+# problem to hear about and `set -e` would turn one into a different exit code than the run really had.
+heartbeat_stop() {
+  [ -n "${1:-}" ] || return 0
+  kill "$1" 2>/dev/null || true
+  wait "$1" 2>/dev/null || true
+}
+
 heartbeat_guard_exit() {
   trap "heartbeat_stop_recorded_run '$1'" EXIT
 }
