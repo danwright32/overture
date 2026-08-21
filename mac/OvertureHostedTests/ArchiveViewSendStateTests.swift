@@ -32,7 +32,7 @@ struct ArchiveViewSendStateTests {
         let view = ArchiveView()
 
         _ = try view.row(approvedItemWithDraft(), context: context(), feedback: ActionFeedback())
-            .inspect().find(button: "Send")
+            .inspect().find(button: SendConfirmCopy.openReview)
     }
 
     @Test func anInFlightOutboundSendShowsTheLiveLabelInsteadOfTheButton() throws {
@@ -41,7 +41,7 @@ struct ArchiveViewSendStateTests {
 
         let rendered = view.row(approvedItemWithDraft(), context: try context(), feedback: ActionFeedback(),
                                 outboundSendSince: since)
-        #expect((try? rendered.inspect().find(button: "Send")) == nil)
+        #expect((try? rendered.inspect().find(button: SendConfirmCopy.openReview)) == nil)
         let texts = try rendered.inspect().findAll(ViewType.Text.self).map { try $0.string() }
         #expect(texts.contains { $0.hasPrefix("Sending") })
     }

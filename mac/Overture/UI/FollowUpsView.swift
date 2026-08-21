@@ -197,7 +197,9 @@ struct FollowUpsView: View {
                     LiveRunLabel(base: "Sending", since: since, timeout: RunTimeouts.send,
                                  font: OVType.meta, color: OVColor.inkSoft)
                 } else {
-                    sendButton("Send nudge", hasAddress: SendGate.hasAddress(r.email)) { requestNudge(d) }
+                    // #2876: opens the follow-up's send review; nothing leaves until the sheet's own Send.
+                    sendButton(SendConfirmCopy.openReview,
+                               hasAddress: SendGate.hasAddress(r.email)) { requestNudge(d) }
                 }
                 standDownMenu(prospect: d.prospect, recipient: r)
                 // #686: reply text, AI reply drafter, and Mark… only exist on the full card in Archive.

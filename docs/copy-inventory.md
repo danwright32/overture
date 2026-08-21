@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1462 sentences**.
+Every sentence Overture can say to Dan: **1459 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -198,6 +198,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
 - "Redraft only"
   - `App/RootView.swift`
   - `UI/DraftReviewView.swift`
+- "Review and send"
+  - `UI/FollowUpsView.swift`
+  - `UI/SendConfirmSheet.swift`
 - "Send Anyway"
   - `UI/DraftReviewView.swift`
   - `UI/DraftReviewView.swift`
@@ -212,9 +215,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
   - `Domain/AgentRoster.swift`
   - `Domain/AgentRoster.swift`
   - `Domain/AgentRoster.swift`
-- "Send reply"
-  - `Domain/ReplyPanel.swift`
-  - `UI/ReplyConversationView.swift`
 - "Set up Overture"
   - `App/AppDelegate.swift`
   - `UI/OnboardingView.swift`
@@ -832,8 +832,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ExcludedTownsView.swift`
 "Filed as \(reason.label) either way."
     `Domain/BulkDismiss.swift`
-"Final review"
-    `UI/DraftReviewView.swift`
 "Find contacts only"
     `App/RootView.swift`
     `UI/DraftReviewView.swift`
@@ -1747,6 +1745,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ClientCoverage.swift`
 "Review and send"
     `UI/FollowUpsView.swift`
+    `UI/SendConfirmSheet.swift`
 "Rooms Overture can't place"
     `UI/SourcesView.swift`
 "Run reconcile now"
@@ -1829,13 +1828,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SendFailureLine.swift`
 "Send issues"
     `Domain/AgentRoster.swift`
-"Send nudge"
-    `UI/FollowUpsView.swift`
 "Send reply"
-    `Domain/ReplyPanel.swift`
     `UI/ReplyConversationView.swift`
-"Send this email now"
-    `UI/DraftReviewView.swift`
 "Send this email now?"
     `UI/SendConfirmSheet.swift`
 "Send this follow-up now?"
@@ -1844,8 +1838,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SendConfirmSheet.swift`
 "Send this reply on the contact's thread"
     `UI/ReplyConversationView.swift`
-"Send this reply on the thread they wrote on"
-    `Domain/ReplyPanel.swift`
 "Send to"
     `UI/ManualPrepSheet.swift`
 "Sending despite the draft warning you confirmed."
@@ -1903,6 +1895,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "Show the scout that's running. Hiding its window doesn't stop it."
     `App/RootView.swift`
+"Show the whole \(what), then send it"
+    `UI/SendConfirmSheet.swift`
 "Show this email the way a recipient reading in light or dark mode sees it."
     `Domain/DraftReviewNotes.swift`
 "Show which bookings were auto-detected"

@@ -33,7 +33,7 @@ struct DraftReviewViewSendStateTests {
     @Test func aDraftOffersOneButtonThatOpensTheFinalReview() throws {
         let view = DraftReviewView(item: draftedItem(), onUnapprove: {}, onSaveDraft: { _, _ in }, gmailConnected: true, outboundSendSince: nil)
 
-        _ = try view.inspect().find(button: "Final review")
+        _ = try view.inspect().find(button: SendConfirmCopy.openReview)
         #expect((try? view.inspect().find(button: "Approve")) == nil)
     }
 
@@ -57,14 +57,14 @@ struct DraftReviewViewSendStateTests {
     @Test func noOutboundSendShowsTheSendButton() throws {
         let view = DraftReviewView(item: approvedItem(), onUnapprove: {}, onSaveDraft: { _, _ in }, outboundSendSince: nil)
 
-        _ = try view.inspect().find(button: "Send")   // throws (fails the test) if not present
+        _ = try view.inspect().find(button: SendConfirmCopy.openReview)   // throws (fails the test) if not present
     }
 
     @Test func anInFlightOutboundSendShowsTheLiveLabelInsteadOfTheButton() throws {
         let since = Date(timeIntervalSince1970: 1000)
         let view = DraftReviewView(item: approvedItem(), onUnapprove: {}, onSaveDraft: { _, _ in }, outboundSendSince: since)
 
-        #expect((try? view.inspect().find(button: "Send")) == nil)
+        #expect((try? view.inspect().find(button: SendConfirmCopy.openReview)) == nil)
         let texts = try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
         #expect(texts.contains { $0.hasPrefix("Sending") })
     }

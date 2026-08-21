@@ -29,7 +29,7 @@ struct FollowUpsViewSendStateTests {
         let view = FollowUpsView()
         let d = FollowUp.DueRecipient(prospect: p, recipient: r)
 
-        _ = try view.row(d, since: nil, sourceCalendars: [:]).inspect().find(button: "Send nudge")
+        _ = try view.row(d, since: nil, sourceCalendars: [:]).inspect().find(button: SendConfirmCopy.openReview)
     }
 
     @Test func aRowWithAnInFlightSendShowsTheLiveLabelInsteadOfTheButton() throws {
@@ -38,7 +38,7 @@ struct FollowUpsViewSendStateTests {
         let d = FollowUp.DueRecipient(prospect: p, recipient: r)
         let since = Date(timeIntervalSince1970: 1000)
 
-        #expect((try? view.row(d, since: since, sourceCalendars: [:]).inspect().find(button: "Send nudge")) == nil)
+        #expect((try? view.row(d, since: since, sourceCalendars: [:]).inspect().find(button: SendConfirmCopy.openReview)) == nil)
         let texts = try view.row(d, since: since, sourceCalendars: [:]).inspect().findAll(ViewType.Text.self).map { try $0.string() }
         #expect(texts.contains { $0.hasPrefix("Sending") })
     }
