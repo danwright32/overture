@@ -269,15 +269,17 @@ already drifting from the Swift version it mirrored.
   says how to read what it prints.
 
 - **Seeing a guard fail, which every guard here is supposed to have been (L1): `scripts/mutate.sh`
-  (#2755).** `scripts/mutate.sh <file> <perl-expression> [test-scope ...]` breaks the code on purpose,
+  (#2755).** `scripts/mutate.sh [--at <pattern>] [--breaks-the-build] <file> <perl-expression>
+  [test-scope ...]` breaks the code on purpose,
   runs the suite, restores the file through a trap, and reports which tests went red. Roughly 1600 of the
   suite's declarations are source-text guards, so this is done constantly, and it was hand-rolled every
   time. Use it rather than a fresh one-liner, for the two reasons the hand-rolled version has already
   lied: a substitution that matched NOTHING leaves the suite green for the ordinary reason and reads as a
-  surviving guard, and a run piped through anything reports the PIPE's status. It keeps SIX outcomes
-  apart, and the last four are refusals rather than results: CAUGHT, SURVIVED, NOT APPLIED, NOTHING RAN,
-  LANDED ELSEWHERE and NOT PROOF. `OVERTURE_MUTATE_RUNNER` swaps the runner, which is how to drive the
-  shell fixtures or vitest instead of the Swift suite.
+  surviving guard, and a run piped through anything reports the PIPE's status. It keeps TEN outcomes
+  apart, and only the first two are results: CAUGHT, SURVIVED, NOT APPLIED, NOTHING RAN, LANDED
+  ELSEWHERE, NOT PROOF, NO RUNNER, DID NOT BUILD, MISPLACED FLAG and PERL VARIABLE.
+  `OVERTURE_MUTATE_RUNNER` swaps the runner, which is how to drive the shell fixtures or vitest instead
+  of the Swift suite.
   The last two are #2820 and are the ones that lied in the CAUGHT direction, which is the worse one,
   since CAUGHT is the verdict quoted as proof for each of those ~1600 guards. Measured 2026-08-16: an
   expression using a pipe as its perl delimiter had its `\|` read as an escaped DELIMITER, reached the
@@ -292,6 +294,18 @@ already drifting from the Swift version it mirrored.
   proof. A SCOPED run is exempt from that last one on purpose: a scope naming the one suite holding the
   guard is expected to go entirely red, and a rule condemning it would fire on the common case and be
   switched off within a day (L93).
+  The last three are #2995, #2859 and #2993, and all three are one thing: a MALFORMED INSTRUCTION being
+  reported as a verdict. A build failure used to be folded into CAUGHT, on the reasoning that the
+  compiler caught something, which is true of a mutation whose POINT is that the code stops type-checking
+  and false of every other one, where it means the guard never ran at all. That is `DID NOT BUILD` now,
+  and the deliberate case declares itself with `--breaks-the-build` rather than silently borrowing
+  another outcome's name. `PERL VARIABLE` refuses an unescaped `$0`, `$&` or a `$1` with no capture
+  group, which is how the build failures were produced twice in one session on #2988: in a `s///`
+  replacement `$0` is perl's own program-name variable, so `isCandidate($0, ...)` interpolates away.
+  Write `\$0` when you mean the characters. And `MISPLACED FLAG` refuses a `--` argument sitting where a
+  test scope goes: **put `--at` FIRST**, because after the expression it used to fall into the trailing
+  scopes, reach xcodebuild as an unrecognised option and send the runner to the PURE suite, so the aim
+  check was off and a targeted proof became a full-suite run.
 
 - **Which test entry points refuse to call an empty run a pass, and which cannot (#2541).** Zero subjects
   examined is its own outcome and must never read as "everything passed", because the empty result

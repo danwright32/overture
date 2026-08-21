@@ -15,7 +15,7 @@ set -uo pipefail
 #   2. A run was piped through a command that was not on PATH and exited 0 having tested nothing, so the
 #      pipe's status was read instead of the runner's (AGENTS.md's own warning, #2502).
 #
-# Seven outcomes, kept apart on purpose, because collapsing any two of them is how this lies:
+# Ten outcomes, kept apart on purpose, because collapsing any two of them is how this lies:
 #
 #   CAUGHT            the mutation applied where it was aimed and the suite went red. The guard is real.
 #   SURVIVED          the mutation applied and the suite stayed green. The guard protects nothing.
@@ -24,6 +24,18 @@ set -uo pipefail
 #   LANDED ELSEWHERE  the mutation applied somewhere other than where it was aimed (#2820).
 #   NOT PROOF         nearly everything in the run went red, so the instrument misfired (#2820).
 #   NO RUNNER         the runner is not something this shell can run, so nothing happened (#2846).
+#   DID NOT BUILD     the code stopped compiling, so no test ran (#2995, #2859). Says nothing either.
+#   MISPLACED FLAG    a flag was passed where a test scope goes, so it was never read (#2993).
+#   PERL VARIABLE     the expression carries an unescaped perl variable, which is almost never meant.
+#
+# The last three are the three ways a MALFORMED INSTRUCTION used to be reported as a verdict. Each was
+# measured: a build failure was folded into CAUGHT ("the compiler caught it"), which is true of a
+# mutation whose point is that the code stops type-checking and false of every other one, where it means
+# the guard under test never ran at all. A `--at` written after the expression fell into the trailing
+# scopes, reached xcodebuild as an unrecognised option, and sent the runner to the PURE suite, so the aim
+# check was off and a targeted proof became a full-suite run. And `$0` left unescaped in a replacement is
+# perl's own program-name variable, so it interpolates away and produces code that does not compile,
+# which is how the first of those was produced twice in one session (#2988).
 #
 # The last two are #2820, and they are the ones that lied in the CAUGHT direction, which is the worse
 # one: roughly 1600 of the suite's declarations are source-text guards and CAUGHT is the verdict quoted
@@ -63,11 +75,15 @@ guard protects nothing).
 
 Refuses, rather than reporting a result, when the expression matched nothing, when it landed somewhere
 other than where it was aimed, when the run executed no tests, when nearly everything in the run went
-red, or when the runner is not something this shell can run: every one of those looks like a result and
-means nothing about any guard.
+red, when the runner is not something this shell can run, when the code stopped compiling, or when the
+instruction itself is malformed: every one of those looks like a result and means nothing about any
+guard.
 
   --at <pattern>      an extended regex naming the lines the mutation is aimed at. Every line the
                       mutation touches must match it, or the run is refused as LANDED ELSEWHERE.
+  --breaks-the-build  this mutation is MEANT to stop the code compiling, so the compiler refusing it is
+                      the guard firing. Without this, a run that did not build is refused as DID NOT
+                      BUILD rather than reported as any verdict.
   <file>              the file to break, relative to the repo root or absolute
   <perl-expression>   passed to `perl -0pi -e`, so it sees the whole file at once
   [test-scope ...]    optional, passed straight through to the test runner
@@ -84,8 +100,15 @@ USAGE
 # The declared aim, empty when none was given. Read before the positional arguments, so `--at` cannot be
 # mistaken for the file (the fixture proved that first: without this the refusal read "no file at --at").
 AIM=""
+# #2995: whether the compiler refusing this IS the finding. Declared, never inferred: the two cases look
+# identical from here and only the author knows which one this is.
+BREAKS_THE_BUILD="false"
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --breaks-the-build)
+      BREAKS_THE_BUILD="true"
+      shift
+      ;;
     --at)
       AIM="${2:-}"
       shift 2
@@ -110,6 +133,63 @@ EXPRESSION="$1"; shift
 
 if [[ ! -f "${TARGET}" ]]; then
   echo "mutate: no file at ${TARGET}"
+  exit 2
+fi
+
+# #2993: a flag sitting where a test scope goes was never read as a flag.
+#
+# The usage is `[--at <pattern>] <file> <perl-expression> [test-scope ...]`, and the parse above only
+# looks BEFORE the positionals, which is right: `--at` must not be mistaken for the file. The cost was
+# that a `--at` written after the expression fell into the trailing scopes, was forwarded to
+# run-tests-locked.sh and from there to xcodebuild, which fails on the unrecognised option, and the
+# runner then fell back to the PURE suite, which takes no scope at all. Two things went silently: the
+# aim check was never active, so #2820's protection was off, and a proof that should take seconds ran
+# the whole pure suite. Measured 2026-08-19 across several proofs during #2983 and #2988.
+#
+# `-only-testing:` is the one shape a Swift scope takes, so anything starting with `--` here is a
+# misplaced flag rather than a scope. Refused rather than forwarded, and refused in a register that says
+# nothing about any guard.
+for scope in "$@"; do
+  if [[ "${scope}" == --* ]]; then
+    echo "MISPLACED FLAG - ${scope} was passed where a test scope goes, so it was never read."
+    echo
+    echo "  Flags come BEFORE the file: scripts/mutate.sh [--at <pattern>] [--breaks-the-build] \\"
+    echo "      <file> <perl-expression> [test-scope ...]"
+    echo
+    echo "  Nothing was mutated and nothing was run. Forwarded to the runner it reaches xcodebuild as an"
+    echo "  unrecognised option, which fails the run and sends it to the PURE suite, so the aim check is"
+    echo "  off and the scope you asked for is not the scope that runs."
+    exit 2
+  fi
+done
+
+# #2995: a perl variable left unescaped in the expression.
+#
+# In a `s///` replacement `$0` is perl's own program-name variable, so `isCandidate($0, ...)` interpolates
+# away and produces code that does not compile. Measured twice in one session on #2988, and both times the
+# result was reported as CAUGHT for a guard that had never run. `$&` is the same trap. `$1` through `$9`
+# are only flagged when the expression has no capture group for them to refer to, since with one they are
+# ordinary and correct.
+unescaped_perl_variable() {
+  local expression="$1"
+  if [[ "${expression}" =~ (^|[^\\])(\$[0&]) ]]; then
+    echo "${BASH_REMATCH[2]}"
+    return 0
+  fi
+  local without_escaped_parens="${expression//\\(/}"
+  if [[ "${without_escaped_parens}" != *"("* && "${expression}" =~ (^|[^\\])(\$[1-9]) ]]; then
+    echo "${BASH_REMATCH[2]}"
+    return 0
+  fi
+  return 1
+}
+
+if PERL_VARIABLE="$(unescaped_perl_variable "${EXPRESSION}")"; then
+  echo "PERL VARIABLE - ${EXPRESSION} carries an unescaped ${PERL_VARIABLE}, which perl reads as its own."
+  echo
+  echo "  Nothing was mutated and nothing was run. ${PERL_VARIABLE} interpolates away, so the text that"
+  echo "  lands is not the text you wrote, and what usually follows is code that does not compile."
+  echo "  To put the characters ${PERL_VARIABLE} into the file, escape it: write \\${PERL_VARIABLE}."
   exit 2
 fi
 
@@ -363,9 +443,49 @@ if [[ -n "${BREADTH}" ]]; then
     NEAR_TOTAL="true"
   fi
 fi
+# Did the run fail to COMPILE? (#2995, #2859)
+#
+# The tell is the compiler's own file:line:column shape, xcodebuild's build-commands banner, or the
+# runner's own sentence, NEVER the bare word "error": every run of this suite prints CoreData noise
+# carrying "error:". The same three tells run-tests-locked.sh reads (#1465), because it is the runner
+# this script is pointed at by default.
+#
+# BOTH other halves are required with it, and they are what keep this from stealing a real CAUGHT: no
+# test was NAMED, and no run total was printed. A build failure cannot produce either, because nothing
+# ran; a genuine test failure that happens to quote a compiler-shaped line produces at least one.
+DID_NOT_BUILD="false"
+if [[ "${RUN_STATUS}" -ne 0 && -z "${FAILED}" && -z "${BREADTH}" ]]; then
+  if grep -q '^The following build commands failed:' "${RUN_LOG}" 2>/dev/null \
+     || grep -q 'the code did not COMPILE' "${RUN_LOG}" 2>/dev/null \
+     || grep -qE '^[^[:space:]].*:[0-9]+:[0-9]+: (fatal )?error: ' "${RUN_LOG}" 2>/dev/null; then
+    DID_NOT_BUILD="true"
+  fi
+fi
+
 rm -f "${RUN_LOG}"
 
 if [[ "${RUN_STATUS}" -ne 0 ]]; then
+  # The mutation stopped the code compiling. Whether that is the FINDING or the instrument misfiring is
+  # not something this can read off the output: it depends entirely on what the author was trying to
+  # prove, so it is declared with --breaks-the-build and never inferred.
+  if [[ "${DID_NOT_BUILD}" == "true" ]]; then
+    if [[ "${BREAKS_THE_BUILD}" == "true" ]]; then
+      echo "CAUGHT - the compiler refused it, which is what you declared this mutation would do."
+      echo "  ${EXPRESSION}"
+      exit 0
+    fi
+    echo "DID NOT BUILD - the code stopped compiling, so no test ran and no guard was exercised."
+    echo "  ${EXPRESSION}"
+    echo
+    echo "  Refused rather than reported. A build failure used to count as CAUGHT, on the reasoning that"
+    echo "  the compiler caught something, which is true only of a mutation whose POINT is that the code"
+    echo "  stops type-checking. For an ordinary behavioural mutation it means the INSTRUCTION was"
+    echo "  malformed and the guard under test never ran at all (#2995)."
+    echo
+    echo "  If breaking the build IS the proof (a guard the type system enforces), say so with"
+    echo "  --breaks-the-build and it will be judged as a catch."
+    exit 2
+  fi
   # A SCOPED run is exempt and deliberately so: a scope naming the one suite that holds the guard is
   # expected to go entirely red, and that is the ordinary proof shape. Condemning it would fire on the
   # common case and be switched off within a day (L93).
@@ -387,7 +507,10 @@ if [[ "${RUN_STATUS}" -ne 0 ]]; then
     # real suite, which reported eleven "failing tests" that were the words of two.
     printf '%s\n' "${FAILED}" | sed 's/^/    /' 
   else
-    echo "  The run failed without naming a test (a build failure counts: the compiler caught it)."
+    # #2995: this no longer says "a build failure counts". A build failure is DID NOT BUILD above, so
+    # what is left here is a run that failed, named no test, and does not look like a build failure,
+    # which is genuinely unexplained and must read that way rather than borrowing a reason.
+    echo "  The run failed without naming a test, and its output does not carry a compiler error."
   fi
   # Say when the breadth could not be read rather than letting silence stand for "and only that failed".
   # An unmeasured breadth and a narrow one look identical from this line otherwise (L11).

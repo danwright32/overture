@@ -226,6 +226,90 @@ assert_contains "and the refusal names the value it was given" "${OUT}" "no-such
 SRC="$(cat "${MUTATE}")"
 assert_not_contains "the runner is never split into words" "${SRC}" "read -ra RUNNER"
 
+# --- a mutation that did not BUILD is its own outcome, never CAUGHT (#2995, #2859) -------------------
+#
+# A build failure used to be folded into CAUGHT, on the reasoning that the compiler caught something. That
+# holds for a mutation whose POINT is that the code stops type-checking. It does not hold for the ordinary
+# case, a behavioural mutation meant to make one test go red, where a build failure means the INSTRUCTION
+# was malformed and the guard under test never ran at all.
+#
+# Measured 2026-08-19, twice in one session on #2988: `$0` left unescaped in the REPLACEMENT is perl's own
+# program-name variable, so it interpolated away and produced code that does not compile. Both attempts
+# reported CAUGHT. The guard they claimed to prove had never run.
+BUILD_FAILED_RUNNER="$(make_runner buildfailed 65 '/tmp/Subject.swift:2:9: error: cannot find type "Nope" in scope
+The following build commands failed:
+	SwiftCompile normal arm64
+run-tests-locked.sh: the code did not COMPILE, so no test ran. The errors are above.')"
+write_subject
+OUT="$(OVERTURE_MUTATE_RUNNER="${BUILD_FAILED_RUNNER}" "${MUTATE}" "${SUBJECT}" 's/"yes"/"no"/' 2>&1)"
+STATUS=$?
+assert_contains "a mutation that did not compile says so" "${OUT}" "DID NOT BUILD"
+VERDICT="$(grep -E '^(CAUGHT|SURVIVED|NOT APPLIED|NOTHING RAN|LANDED ELSEWHERE|NOT PROOF|NO RUNNER|DID NOT BUILD|MISPLACED FLAG)' <<< "${OUT}" | head -1)"
+assert_not_contains "and the verdict is not a reading of any guard" "${VERDICT}" "CAUGHT"
+assert_equals "and does not exit 0" "1" "$([ "${STATUS}" -ne 0 ] && echo 1 || echo 0)"
+assert_equals "and the file is put back" 'struct Subject {
+    static let answer = "yes"
+}' "$(cat "${SUBJECT}")"
+
+# A mutation whose POINT is to stop the code compiling DECLARES itself, and is then judged. This is the
+# half that keeps the outcome above from being a rule nobody can satisfy: a guard enforced by the type
+# system is real and has to be provable.
+write_subject
+OUT="$(OVERTURE_MUTATE_RUNNER="${BUILD_FAILED_RUNNER}" "${MUTATE}" --breaks-the-build "${SUBJECT}" 's/"yes"/"no"/' 2>&1)"
+STATUS=$?
+assert_contains "a declared build break is a catch" "${OUT}" "CAUGHT"
+assert_not_contains "and is not refused" "${OUT}" "DID NOT BUILD"
+assert_contains "and says the compiler is what caught it" "${OUT}" "compiler"
+assert_equals "and exits 0" "0" "${STATUS}"
+
+# And the declaration does not become a way to launder any red run: a run that BUILT and failed a test is
+# still an ordinary catch, named by test, rather than being reported as the compiler refusing it.
+write_subject
+OUT="$(OVERTURE_MUTATE_RUNNER="${RED_RUNNER}" "${MUTATE}" --breaks-the-build "${SUBJECT}" 's/"yes"/"no"/' 2>&1)"
+assert_contains "a declared break that compiled is judged normally" "${OUT}" "the row draws a quiet exit"
+assert_not_contains "and is not reported as a compiler refusal" "${OUT}" "compiler"
+
+# --- a flag in the trailing scope position is refused, never forwarded (#2993) -----------------------
+#
+# `--at` must come BEFORE the file. Put it after the expression and it used to fall into the trailing
+# test-scope arguments, get forwarded to run-tests-locked.sh and from there to xcodebuild, which fails on
+# the unrecognised option; the runner then fell back to the PURE suite, which takes no scope, so the run
+# executed the entire pure suite instead of the tests asked for. Two things were lost silently: the aim
+# check was never active, and a targeted proof became a multi-minute full-suite run.
+write_subject
+OUT="$(OVERTURE_MUTATE_RUNNER="${RED_RUNNER}" "${MUTATE}" "${SUBJECT}" 's/"yes"/"no"/' --at 'static let answer' 2>&1)"
+STATUS=$?
+assert_contains "a flag after the expression is refused" "${OUT}" "MISPLACED FLAG"
+assert_contains "and names the argument it refused" "${OUT}" "--at"
+assert_not_contains "and is never reported as caught" "${OUT}" "CAUGHT"
+assert_equals "and does not exit 0" "1" "$([ "${STATUS}" -ne 0 ] && echo 1 || echo 0)"
+assert_contains "the subject is left exactly as it was" "$(cat "${SUBJECT}")" 'static let answer = "yes"'
+
+# A real Swift scope still passes, so the rule cannot simply refuse every trailing argument (L1).
+write_subject
+OUT="$(OVERTURE_MUTATE_RUNNER="${RED_RUNNER}" "${MUTATE}" "${SUBJECT}" 's/"yes"/"no"/' -only-testing:OvertureTests/SubjectTests 2>&1)"
+assert_contains "an ordinary scope is not refused" "${OUT}" "CAUGHT"
+assert_not_contains "and nothing is called misplaced" "${OUT}" "MISPLACED FLAG"
+
+# --- a perl variable left unescaped in the expression is refused (#2995) -----------------------------
+#
+# The measured cause of both CAUGHT-on-a-build-failure incidents. In a perl `s///` replacement `$0` is
+# perl's own program-name variable, so `isCandidate($0, ...)` interpolates away and produces code that
+# does not compile. It is almost never what the author meant, and the answer is to escape it.
+write_subject
+OUT="$(OVERTURE_MUTATE_RUNNER="${RED_RUNNER}" "${MUTATE}" "${SUBJECT}" 's/"yes"/String($0)/' 2>&1)"
+STATUS=$?
+assert_contains "an unescaped perl variable is refused" "${OUT}" "PERL VARIABLE"
+assert_contains "and says how to write it instead" "${OUT}" '\$0'
+assert_not_contains "and is never reported as caught" "${OUT}" "CAUGHT"
+assert_equals "and does not exit 0" "1" "$([ "${STATUS}" -ne 0 ] && echo 1 || echo 0)"
+
+# Escaped, it is exactly what the author meant, so it runs.
+write_subject
+OUT="$(OVERTURE_MUTATE_RUNNER="${RED_RUNNER}" "${MUTATE}" "${SUBJECT}" 's/"yes"/String(\$0)/' 2>&1)"
+assert_contains "an escaped one is left alone" "${OUT}" "CAUGHT"
+assert_not_contains "and is not refused" "${OUT}" "PERL VARIABLE"
+
 # --- it refuses what it cannot do --------------------------------------------------------------------
 OUT="$("${MUTATE}" "${WORK}/does-not-exist.swift" 's/a/b/' 2>&1)"
 assert_contains "a missing file is refused by name" "${OUT}" "does-not-exist.swift"
