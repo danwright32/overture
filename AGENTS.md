@@ -287,7 +287,10 @@ already drifting from the Swift version it mirrored.
   apart, and only the first two are results: CAUGHT, SURVIVED, NOT APPLIED, NOTHING RAN, LANDED
   ELSEWHERE, NOT PROOF, NO RUNNER, DID NOT BUILD, MISPLACED FLAG and PERL VARIABLE.
   `OVERTURE_MUTATE_RUNNER` swaps the runner, which is how to drive the shell fixtures or vitest instead
-  of the Swift suite.
+  of the Swift suite. Since #2972 the run's FULL log is KEPT at a named path and printed as `full log:`
+  (`/tmp/overture-mutate-run.log`, moved with `OVERTURE_MUTATE_LOG`): only the last 25 lines go to the
+  screen, and the exact failure text this file demands in a PR body routinely sits just above that cut,
+  which used to mean running the whole mutation again for evidence the run had already produced.
   The last two are #2820 and are the ones that lied in the CAUGHT direction, which is the worse one,
   since CAUGHT is the verdict quoted as proof for each of those ~1600 guards. Measured 2026-08-16: an
   expression using a pipe as its perl delimiter had its `\|` read as an escaped DELIMITER, reached the

@@ -89,6 +89,12 @@ guard.
   [test-scope ...]    optional, passed straight through to the test runner
                       (e.g. -only-testing:OvertureTests/RunSlotTests)
 
+  OVERTURE_MUTATE_LOG      where the run's full log is kept (default /tmp/overture-mutate-run.log).
+                           It is KEPT after the run and its path is printed, so the exact failure text a
+                           PR body needs is one `cat` away rather than a second full run (#2972). One
+                           fixed name, overwritten each run: two mutations going at once would share it,
+                           which is what this override is for.
+
   OVERTURE_MUTATE_RUNNER   the command to run instead of the Swift suite. The seam this script's own
                            fixture uses; also how to drive the shell fixtures or vitest instead. ONE
                            command, carrying no arguments of its own: to drive something that needs
@@ -402,11 +408,32 @@ fi
 # The runner's own status, captured directly. NOT through a pipe: `runner | tail -5` reports tail's
 # status, so a runner that died instantly and printed nothing reads as a clean pass (#2502). The output
 # goes to a file and is printed afterwards.
-RUN_LOG="$(mktemp)"
+# #2972: a NAMED path, kept after the run rather than a mktemp that is deleted.
+#
+# Only the last 25 lines are printed, and the text AGENTS.md requires in a PR body (the exact failure of
+# the guard) routinely sits just above that cut: on a 9 test scoped run during #2944 it was about 6 lines
+# above it. Recovering evidence the run had already produced then meant repeating the whole mutation,
+# another full build plus a wait on the shared xcodebuild lock. With roughly 1,600 source-text guards each
+# supposed to have been seen to fail, that is a tax on the most-used verification step here, and it pushes
+# toward quoting a summary instead of the real text.
+#
+# One fixed name, overwritten per run, rather than a dated file per run: the log is wanted for the run
+# that just happened, and a directory of them would need its own retention rule to stop growing.
+#
+# In /tmp rather than $TMPDIR, which is the point of keeping it at all: run-shell-fixtures.sh gives each
+# fixture a private TMPDIR and then FAILS a fixture that leaves anything in it, so a log written there is
+# swept away by the very mechanism this exists to survive. Its own guard caught that. /tmp is where this
+# repo already keeps cross-run artifacts (the shared xcodebuild lock).
+RUN_LOG="${OVERTURE_MUTATE_LOG:-/tmp/overture-mutate-run.log}"
+: > "${RUN_LOG}"
 "${RUNNER}" "$@" > "${RUN_LOG}" 2>&1
 RUN_STATUS=$?
 
 sed 's/^/  | /' "${RUN_LOG}" | tail -n 25
+echo
+# Named on EVERY outcome, not only a red one. A SURVIVED verdict is the one that most needs reading: it
+# is a finding about a guard rather than about the code.
+echo "  full log: ${RUN_LOG}"
 echo
 
 # How much actually ran, quoted back on a SURVIVED. A scope naming a suite that exists but does not hold
@@ -421,7 +448,6 @@ SHAPE="$(grep -oE "Test run with [0-9]+ tests? in [0-9]+ suites?" "${RUN_LOG}" |
 if grep -q "NOTHING RAN" "${RUN_LOG}"; then
   echo "NOTHING RAN - the run executed no tests, so this says nothing about any guard."
   echo "  Check the scope: $*"
-  rm -f "${RUN_LOG}"
   exit 2
 fi
 
@@ -462,7 +488,8 @@ if [[ "${RUN_STATUS}" -ne 0 && -z "${FAILED}" && -z "${BREADTH}" ]]; then
   fi
 fi
 
-rm -f "${RUN_LOG}"
+# #2972: deliberately NOT removed. Everything below has already read what it needs from it, and the file
+# is what makes the exact failure text available without a second run.
 
 if [[ "${RUN_STATUS}" -ne 0 ]]; then
   # The mutation stopped the code compiling. Whether that is the FINDING or the instrument misfiring is

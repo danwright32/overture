@@ -226,6 +226,34 @@ assert_contains "and the refusal names the value it was given" "${OUT}" "no-such
 SRC="$(cat "${MUTATE}")"
 assert_not_contains "the runner is never split into words" "${SRC}" "read -ra RUNNER"
 
+# --- the run log is KEPT, so the failure text does not need a second run (#2972) ---------------------
+#
+# It printed `tail -n 25` and then deleted the log. AGENTS.md requires the exact failure text of every
+# guard in the PR body, and that text routinely sits just outside the window: on a 9 test scoped run
+# during #2944 it was about 6 lines above the cut. Recovering evidence the run had ALREADY produced then
+# meant repeating the whole mutation, another full build plus a wait on the shared xcodebuild lock. With
+# roughly 1,600 source-text guards each supposed to have been seen to fail, that is a tax on the most-used
+# verification step in the repo, and it pushes toward quoting a summary rather than the real text.
+NOISY_BODY="$(printf 'the failing test is named right here\n'; for i in $(seq 1 40); do printf 'filler line %s\n' "${i}"; done)"
+NOISY_RUNNER="$(make_runner noisy 1 "${NOISY_BODY}")"
+write_subject
+OUT="$(OVERTURE_MUTATE_RUNNER="${NOISY_RUNNER}" "${MUTATE}" "${SUBJECT}" 's/"yes"/"no"/' 2>&1)"
+assert_not_contains "the interesting line really is outside the printed window" \
+  "${OUT}" "the failing test is named right here"
+assert_contains "so the run names where the whole log is" "${OUT}" "full log:"
+
+# And the log is actually there, holding the text the window cut off.
+KEPT_LOG="$(printf '%s\n' "${OUT}" | sed -n 's/.*full log: //p' | tail -1)"
+assert_equals "the named log exists after the run" "1" "$([ -f "${KEPT_LOG}" ] && echo 1 || echo 0)"
+assert_contains "and holds the line the window cut off" "$(cat "${KEPT_LOG}" 2>/dev/null)" \
+  "the failing test is named right here"
+
+# A GREEN run keeps it too. The reason to reach for the log is not always a failure: a SURVIVED verdict is
+# the one that most needs reading, since it is a finding about a guard rather than about the code.
+write_subject
+OUT="$(OVERTURE_MUTATE_RUNNER="${GREEN_RUNNER}" "${MUTATE}" "${SUBJECT}" 's/"yes"/"no"/' 2>&1)"
+assert_contains "a surviving guard names its log too" "${OUT}" "full log:"
+
 # --- a mutation that did not BUILD is its own outcome, never CAUGHT (#2995, #2859) -------------------
 #
 # A build failure used to be folded into CAUGHT, on the reasoning that the compiler caught something. That
