@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1453 sentences**.
+Every sentence Overture can say to Dan: **1463 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -2105,6 +2105,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ScoutResultAudit.swift`
 "The scheduled scout couldn't run. It'll try again later."
     `Domain/ScoutFailure.swift`
+"The scout couldn't read \(labels.count) parts of its own store (\(list)), so this run "
+    `Domain/ScoutWarningCopy.swift`
+"The scout couldn't read \(list), so this run judged against less than Overture actually "
+    `Domain/ScoutWarningCopy.swift`
 "The scout couldn't run. This stopped the whole run, so no source was checked. Try again; if it keeps failing, something is wrong with the local store rather than with any one calendar.\n\nDetails: \(message)"
     `Domain/ScoutFailure.swift`
 "The scout couldn't save its results. Run it again."
@@ -3024,6 +3028,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AttachConversation.swift`
 "could not tell whether they were new shows or cards you have already decided on, and it "
     `Domain/ScoutWarningCopy.swift`
+"couldn't read \(read.label). (\(underlying))"
+    `Integration/ScoutService.swift`
 "couldn't save the producer answers, so other shows by them won't reuse this one"
     `Domain/ReachabilityRunSummary.swift`
 "couldn't save what this check found, so it isn't finished and those shows may be checked again"
@@ -3054,6 +3060,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "get seats"
     `Domain/TicketLink.swift`
+"get the full picture."
+    `Domain/ScoutWarningCopy.swift`
 "got them wrong."
     `Domain/GenreCorrection.swift`
 "has its own card"
@@ -3064,6 +3072,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreSchemaGuard.swift`
 "high confidence"
     `Domain/ReviewStatus.swift`
+"holds. Nothing was lost. Run it again to get the full picture."
+    `Domain/ScoutWarningCopy.swift`
 "if an alert or an OmniFocus task went out for this reply, clear those yourself."
     `Domain/DetachConversation.swift`
 "if an alert went out for this reply, clear it yourself."
@@ -3082,6 +3092,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/HandoffDecodeFailure.swift`
 "it is version \(v), which this build of Overture does not read"
     `Domain/ReplyClassify.swift`
+"judged against less than Overture actually holds. Nothing was lost. Run it again to "
+    `Domain/ScoutWarningCopy.swift`
 "just now"
     `Domain/PrepStatus.swift`
 "last prep \(Self.relative(from: last, to: now))"
@@ -3171,6 +3183,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "the contact"
     `App/ActionFeedback.swift`
     `Domain/OmniFocusSync.swift`
+"the list of calendars it watches"
+    `Integration/ScoutService.swift`
 "the ones it emailed itself."
     `Domain/AttachConversation.swift`
 "the other \(leftover)"
@@ -3181,10 +3195,16 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "the queue"
     `UI/ProspectMutations.swift`
+"the record of who you have shot before"
+    `Integration/ScoutService.swift`
 "the show you checked never got an answer and is still unchecked"
     `Domain/ReachabilityRunSummary.swift`
+"the shows it already had"
+    `Integration/ScoutService.swift`
 "the venue"
     `UI/QueueView+Model.swift`
+"the venue names it matches against"
+    `Integration/ScoutService.swift`
 "their thread and unlinking wouldn't take it back."
     `Domain/DetachConversation.swift`
 "then re-read it here."
