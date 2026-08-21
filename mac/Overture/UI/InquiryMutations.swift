@@ -20,15 +20,42 @@ enum InquiryMutations {
         // query keeps working. Their refusal is the hard case; Dan's own pass and a silence both leave the
         // door open, which is what the soft case means.
         //
-        // #2863: `theySaidPriceTooHigh` takes the SOFT branch, and it is named here because this is the one
-        // reader of the vocabulary the compiler cannot make anybody look at: it is a comparison against a
-        // single value, not an exhaustive switch, so a new ending arrives at the soft case with nothing
-        // going red. Soft is the right answer, matching `lostDoorOpen` on the show side, because an
-        // inquirer who could not meet the rate has not refused the work. `LostOnPriceOutcomeTests` pins it.
+        // #2863: `theySaidPriceTooHigh` takes the SOFT branch. Soft is the right answer, matching
+        // `lostDoorOpen` on the show side, because an inquirer who could not meet the rate has not refused
+        // the work. `LostOnPriceOutcomeTests` pins it, and #2950 made the mapping below exhaustive so the
+        // compiler names the next ending rather than leaving it to be noticed.
         var outcome: Outcome {
             switch self {
             case .booked: return .booked
-            case .lost(let ending): return ending == .theySaidNo ? .lostHard : .lostSoft
+            case .lost(let ending): return Self.legacyOutcome(for: ending)
+            }
+        }
+
+        // #2950: EXHAUSTIVE, as every other reader of this vocabulary is (#2586, `countedPhrase`).
+        //
+        // It used to be `ending == .theySaidNo ? .lostHard : .lostSoft`, a comparison against one value,
+        // so every ending added later landed on the soft case with nothing going red and nobody asked.
+        // #2863's `theySaidPriceTooHigh` walked straight into it: soft was the right answer, but that was
+        // luck rather than a decision, and only a test written for that one case pinned it. A comparison
+        // answers for cases nobody has considered; a switch makes the compiler name them (L113).
+        private static func legacyOutcome(for ending: ShowOutcome) -> Outcome {
+            switch ending {
+            // The hard case is a refusal of the work itself, and it is the only one.
+            case .theySaidNo: return .lostHard
+            // Soft: a silence, a "not now", and a budget answer all leave the door open, and Dan's own
+            // refusal closes it from his side rather than theirs. Matches `lostDoorOpen` on the show side.
+            case .neverHeardBack, .theySaidNotNow, .theySaidPriceTooHigh, .turnedThemDown: return .lostSoft
+            // An ending that says the inquiry BOOKED is not a loss whatever it arrived wrapped in, so it
+            // answers what it says. `InquiryEnding.danCanChoose` filters it out of the menu, and the row
+            // has its own Booked control, so this is unreachable today rather than a second way in.
+            case .booked: return .booked
+            // The never-pitched half and Overture's own two. None can reach an inquiry close-out: the
+            // menu is `InquiryEnding.danCanChoose`, which is `ShowOutcome.pitched` minus booked. They are
+            // named rather than defaulted so that adding a case to EITHER half breaks the build here and
+            // this decision gets made again, which is the whole of what a comparison could not do.
+            case .dateConflict, .hadPaidWork, .pitchingOtherShows, .tooSoon, .notAFit, .dontWantToShoot,
+                 .noWayToReachThem, .duplicate, .wentBy, .tooFar:
+                return .lostSoft
             }
         }
 
