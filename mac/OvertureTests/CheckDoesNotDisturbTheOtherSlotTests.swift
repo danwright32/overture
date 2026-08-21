@@ -130,22 +130,35 @@ struct CheckDoesNotDisturbTheOtherSlotTests {
 
     // Phase 3 makes the state per slot; #2765 owns the one genuine domain conflict and is what lets the two
     // run at once. Until it lands, a check and a prep still exclude each other, and this is what says so.
-    @Test func aPrepIsStillRefusedWhileACheckIsRunning() async throws {
+    // #3015 REVERSED both of these, deliberately, and they are kept rather than deleted because the
+    // behaviour they pin is still the point of this suite: a run must not disturb the OTHER slot. What
+    // changed is that not disturbing it no longer means refusing to start (#2620). The exclusion each of
+    // these asserted was the thing #2620 existed to remove, and everything that made removing it safe is
+    // in: #2980, #3009, #3010, #3011, #3012, #2765, #3014, #3016.
+    @Test func aPrepNowStartsWhileACheckIsRunning() async throws {
         let ctx = try context()
         let dir = try tmpDir()
         defer { try? FileManager.default.removeItem(at: dir) }
-        drafted(ctx, key: "kept").status = .queued
+        // Genuinely prep-eligible: kept AND with no draft yet. `PrepQueue.needsPrep` requires both, and
+        // the `drafted` helper writes a draftBody, so clearing the status alone leaves nothing for the
+        // run to do and the launch answers `nothingToPrep` before it ever reaches the exclusion.
+        let kept = drafted(ctx, key: "kept")
+        kept.status = .queued
+        kept.draftBody = nil
         try ctx.save()
-        // The check slot holds a live run.
+        // The check slot holds a live run, and publishes that it is on a DIFFERENT show, so nothing the
+        // prep wants is held.
         try Data().write(to: RunSlot.check.markerURL(in: dir))
+        try RunCoverage.write(keys: ["some other show"], slot: .check, in: dir)
 
-        await #expect(throws: PrepQueueService.PrepLaunchError.checkAlreadyRunning) {
-            _ = try await PrepQueueService.startPrep(from: ctx, now: Date(), support: dir,
-                                                     render: { _ in "" }, launch: {})
-        }
+        var launched = false
+        let count = try await PrepQueueService.startPrep(from: ctx, now: Date(), support: dir,
+                                                         render: { _ in "" }, launch: { launched = true })
+        #expect(launched)
+        #expect(count == 1)
     }
 
-    @Test func aCheckIsStillRefusedWhileAPrepIsRunning() async throws {
+    @Test func aCheckNowStartsWhileAPrepIsRunning() async throws {
         let ctx = try context()
         let dir = try tmpDir()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -153,11 +166,33 @@ struct CheckDoesNotDisturbTheOtherSlotTests {
         p.status = .new
         try ctx.save()
         try Data().write(to: RunSlot.prep.markerURL(in: dir))
+        try RunCoverage.write(keys: ["some other show"], slot: .prep, in: dir)
+
+        var launched = false
+        let count = try await PrepQueueService.startReachabilityProbe(keys: [p.naturalKey], from: ctx,
+                                                                      now: Date(), support: dir,
+                                                                      render: { _ in "" },
+                                                                      launch: { launched = true })
+        #expect(launched)
+        #expect(count == 1)
+    }
+
+    // THE POSITIVE CONTROL for both, and it is what stops the two above reading as "the guard was simply
+    // deleted": a second run in the SAME slot is still refused, which is what that slot's lock has always
+    // meant and still means.
+    @Test func aSecondRunInTheSameSlotIsStillRefused() async throws {
+        let ctx = try context()
+        let dir = try tmpDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let kept = drafted(ctx, key: "kept")
+        kept.status = .queued
+        kept.draftBody = nil
+        try ctx.save()
+        try Data().write(to: RunSlot.prep.markerURL(in: dir))
 
         await #expect(throws: PrepQueueService.PrepLaunchError.alreadyRunning) {
-            _ = try await PrepQueueService.startReachabilityProbe(keys: [p.naturalKey], from: ctx,
-                                                                  now: Date(), support: dir,
-                                                                  render: { _ in "" }, launch: {})
+            _ = try await PrepQueueService.startPrep(from: ctx, now: Date(), support: dir,
+                                                     render: { _ in "" }, launch: {})
         }
     }
 

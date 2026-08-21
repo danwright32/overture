@@ -49,17 +49,21 @@ enum PrepStartGate {
 
     // A run in flight is named first when both are true. It is the state that clears itself, and telling
     // him to go and keep a show would have him queue work into a run that cannot start anyway.
-    static func refusal(keptToPrep: Int, runInFlight: RunKind?) -> Refusal? {
-        if let kind = runInFlight { return .runInFlight(kind) }
+    // #3015: `ownSlotRunInFlight` is the run in THIS control's own slot, never "any run". Renamed rather
+    // than just re-pointed, because the old name is what made the wrong caller look right: a gate that
+    // refuses whenever anything is running is correct only while the two runs exclude each other, and
+    // that premise is exactly what this phase removes (L176).
+    static func refusal(keptToPrep: Int, ownSlotRunInFlight: RunKind?) -> Refusal? {
+        if let kind = ownSlotRunInFlight { return .runInFlight(kind) }
         if keptToPrep == 0 { return .nothingKept }
         return nil
     }
 
-    static func reason(keptToPrep: Int, runInFlight: RunKind?) -> String? {
-        refusal(keptToPrep: keptToPrep, runInFlight: runInFlight)?.reason
+    static func reason(keptToPrep: Int, ownSlotRunInFlight: RunKind?) -> String? {
+        refusal(keptToPrep: keptToPrep, ownSlotRunInFlight: ownSlotRunInFlight)?.reason
     }
 
-    static func canStart(keptToPrep: Int, runInFlight: RunKind?) -> Bool {
-        refusal(keptToPrep: keptToPrep, runInFlight: runInFlight) == nil
+    static func canStart(keptToPrep: Int, ownSlotRunInFlight: RunKind?) -> Bool {
+        refusal(keptToPrep: keptToPrep, ownSlotRunInFlight: ownSlotRunInFlight) == nil
     }
 }

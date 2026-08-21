@@ -34,10 +34,10 @@ struct RecheckControlOnTheRowTests {
         return i
     }
 
-    private func texts(_ item: QueueItem, prepRunning: Bool = false,
+    private func texts(_ item: QueueItem, checkRunning: Bool = false,
                        probeRunning: Bool = false) throws -> [String] {
         let view = ProspectRowView(item: item, today: "2026-08-07", onKeep: {}, onDismiss: { _ in },
-                                   prepRunning: prepRunning, probeRunning: probeRunning)
+                                   checkRunning: checkRunning, probeRunning: probeRunning)
         return try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
     }
 
@@ -72,7 +72,7 @@ struct RecheckControlOnTheRowTests {
     // A Prep run holds the same single slot, so the control must be unpressable, but the card must NOT
     // claim its own check is under way: nothing is happening for this show.
     @Test func aPrepRunGreysTheControlWithoutClaimingACheck() throws {
-        let t = try texts(item(), prepRunning: true)
+        let t = try texts(item(), checkRunning: true)
         #expect(t.contains { $0.contains(ReachabilityCopy.checkAgain) })
         #expect(!t.contains { $0.contains(ReachabilityCopy.recheckRunning) })
     }

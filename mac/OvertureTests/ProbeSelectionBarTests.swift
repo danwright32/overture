@@ -51,7 +51,7 @@ struct ProbeSelectionBarTests {
     private func bar(_ selection: ProbeSelectionState) -> ProbeSelectionBar {
         let captured = rows
         return ProbeSelectionBar(selection: selection, rows: { captured }, allItems: captured,
-                                 today: today, stage: .scout, prepRunning: false,
+                                 today: today, stage: .scout, checkRunning: false,
                                  onRun: { _, _, _ in })
     }
 

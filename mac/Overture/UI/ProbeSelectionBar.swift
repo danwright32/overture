@@ -43,7 +43,7 @@ struct ProbeSelectionBar: View {
     var geo: GeoRefusals = .none
     // #1323: a probe and a normal Prep share the single detached-run slot, so the run control greys out
     // while any run is in flight rather than failing after the tap with alreadyRunning.
-    let prepRunning: Bool
+    let checkRunning: Bool
     // Reports the confirm up to QueueView, which owns the sheet. The bar never starts a run itself.
     let onRun: (_ keys: [String], _ title: String, _ message: String) -> Void
 
@@ -77,7 +77,7 @@ struct ProbeSelectionBar: View {
                     .font(OVType.meta)
                     .foregroundStyle(OVColor.inkSoft)
                     Button {
-                        guard !prepRunning else { return }
+                        guard !checkRunning else { return }
                         // #1765: the decision is ProbeSelection's, not this closure's. It used to be an
                         // early return that refused a large selection before the confirm sheet, which meant
                         // the one rule deciding whether Dan could run at all lived where no test could
@@ -91,12 +91,12 @@ struct ProbeSelectionBar: View {
                     } label: {
                         Text(ReachabilityProbeCopy.controlLabel)
                             .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(prepRunning ? OVColor.onForest.opacity(0.5) : OVColor.onForest)
+                            .foregroundStyle(checkRunning ? OVColor.onForest.opacity(0.5) : OVColor.onForest)
                             .padding(.horizontal, OVSpacing.sm).padding(.vertical, 3)
-                            .background(Capsule().fill(OVColor.forest.opacity(prepRunning ? 0.4 : 1)))
+                            .background(Capsule().fill(OVColor.forest.opacity(checkRunning ? 0.4 : 1)))
                     }
                     .buttonStyle(.plain)
-                    .help(prepRunning ? ReachabilityProbeCopy.controlBusyHelp : "")
+                    .help(checkRunning ? ReachabilityProbeCopy.controlBusyHelp : "")
                 }
             }
             .padding(.horizontal, OVSpacing.xl)

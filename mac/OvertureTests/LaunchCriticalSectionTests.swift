@@ -46,10 +46,10 @@ struct LaunchCriticalSectionTests {
 
     private static let launches = [
         (name: "the reachability check",
-         opening: "runInFlightRefusal(now: now, support: support, checkMarkerURL: markerURL",
+         opening: "runInFlightRefusal(slot: .check, now: now, support: support",
          closing: "RunCoverage.write(keys: coveredKeys, slot: .check"),
         (name: "the Prep run",
-         opening: "runInFlightRefusal(now: now, support: support, prepMarkerURL: markerURL",
+         opening: "runInFlightRefusal(slot: .prep, now: now, support: support",
          closing: "RunCoverage.write(keys: Set(queue.items.map(\\.naturalKey)), slot: .prep"),
     ]
 

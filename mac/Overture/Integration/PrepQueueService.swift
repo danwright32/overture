@@ -228,7 +228,8 @@ enum PrepQueueService {
         // the two runs sharing one marker. It asks about both slots, and it names which run is in the way,
         // including the upgrade case where a check started by an older build holds the PREP slot and the
         // check slot is empty (without this, that window is the one place two checks could run at once).
-        if let refusal = runInFlightRefusal(now: now, support: support, checkMarkerURL: markerURL,
+        if let refusal = runInFlightRefusal(slot: .check, now: now, support: support,
+                                            checkMarkerURL: markerURL,
                                             defaults: defaults) { throw refusal }
 
         // #2765: reduce the SELECTION before the queue is planned, never the built queue. A check item is
@@ -1053,14 +1054,49 @@ enum PrepQueueService {
     // The refusal names WHICH run is in the way. `alreadyRunning` names a Prep run, so it is wrong for
     // every case where a check is what holds the slot, including the upgrade window in which a legacy check
     // sits in the prep slot and a new check would otherwise find the check slot empty and start a second.
-    static func runInFlightRefusal(now: Date, support: URL = StoreLocation.handoffDirectory,
+    // #3015: THE EXCLUSION IS LIFTED. A launch is refused only by a run in its OWN slot, so a check and a
+    // Prep run may now go at once.
+    //
+    // What still refuses, and why each one is not the old rule in disguise:
+    //
+    //   * a second run in the SAME slot, which is what the slot's own lock has always meant. One drafting
+    //     run forever (the once-per-run voice step rewrites one file), one checking run (a second would
+    //     race its own results);
+    //   * a check while a LEGACY check holds the prep slot. That is a build older than #2760, whose check
+    //     is in the prep slot with only `reachability-probe-run.json` saying so, and without this the new
+    //     check slot reads as empty and two checks run at once. #2800 deletes it.
+    //
+    // Everything that made this safe to lift is already in: run identity carried rather than deduced
+    // (#2980, #3009), each run publishing what it holds (#3010), the decision and the claim indivisible
+    // (#3011), one Cancel that stops the run it names (#3012), the overlap excluded (#2765), the org
+    // fan-out blocked (#3014) and the cross-slot guard honest under contention (#3016).
+    static func runInFlightRefusal(slot: RunSlot, now: Date,
+                                   support: URL = StoreLocation.handoffDirectory,
                                    prepMarkerURL: URL? = nil, checkMarkerURL: URL? = nil,
                                    defaults: UserDefaults = .standard) -> PrepLaunchError? {
-        switch runInFlight(now: now, support: support, prepMarkerURL: prepMarkerURL,
-                           checkMarkerURL: checkMarkerURL, defaults: defaults) {
-        case .none: return nil
-        case .prep: return .alreadyRunning
-        case .reachabilityCheck: return .checkAlreadyRunning
+        switch slot {
+        case .prep:
+            let marker = prepMarkerURL ?? RunSlot.prep.markerURL(in: support)
+            guard isRunning(slot: .prep, markerURL: marker, now: now) else { return nil }
+            // The prep slot still goes through the legacy rule, so a legacy CHECK sitting there is named
+            // as a check rather than as a prep run Dan never started (#2614).
+            let probe = (try? ReachabilityProbeMarker.read(from: probeRunURL(in: support))) ?? nil
+            return prepSlotRunKind(runStartedAt: lastRunStartedAt(slot: .prep, defaults: defaults),
+                                   probeMarkerStartedAt: probe?.startedAt) == .reachabilityCheck
+                ? .checkAlreadyRunning : .alreadyRunning
+        case .check:
+            if isRunning(slot: .check, markerURL: checkMarkerURL ?? RunSlot.check.markerURL(in: support),
+                         now: now) {
+                return .checkAlreadyRunning
+            }
+            // The upgrade window: a check started by a build older than #2760 holds the PREP slot, and the
+            // check slot is empty. Without this, that is the one place two checks can run at once.
+            let prepMarker = prepMarkerURL ?? RunSlot.prep.markerURL(in: support)
+            guard isRunning(slot: .prep, markerURL: prepMarker, now: now) else { return nil }
+            let probe = (try? ReachabilityProbeMarker.read(from: probeRunURL(in: support))) ?? nil
+            return prepSlotRunKind(runStartedAt: lastRunStartedAt(slot: .prep, defaults: defaults),
+                                   probeMarkerStartedAt: probe?.startedAt) == .reachabilityCheck
+                ? .checkAlreadyRunning : nil
         }
     }
 
@@ -1103,7 +1139,8 @@ enum PrepQueueService {
         // #2760: the exclusion, still in force and now stated once for both launches. It names a CHECK when
         // a check is what is in the way, which the old `alreadyRunning` could not: that sentence names a
         // Prep run, and Dan would have gone looking for one that was not there.
-        if let refusal = runInFlightRefusal(now: now, support: support, prepMarkerURL: markerURL,
+        if let refusal = runInFlightRefusal(slot: .prep, now: now, support: support,
+                                            prepMarkerURL: markerURL,
                                             defaults: defaults) { throw refusal }
         // #1809: every Prep run passes through here, whichever surface started it, so this is the one place
         // that can guarantee no leftover check marker survives to relabel this run and discard its drafts.
