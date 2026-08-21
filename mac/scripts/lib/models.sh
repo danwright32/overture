@@ -365,6 +365,23 @@ record_run_cost() {
     const said = process.env.OVERTURE_RUN_CONTENDED;
     const contention = said === "1" ? { contended: true } : said === "0" ? { contended: false } : {};
 
+    // #3004: what KIND of run wrote this file, and which slot it ran in. Two facts, not one: a check may
+    // legitimately run in the prep slot, and that is precisely the case a reader must be able to see.
+    //
+    // At the TOP LEVEL rather than inside runCost, because it is true of the file whether or not the cost
+    // reading completed, and a fact filed under a key that can go absent is a fact that disappears exactly
+    // when the run went wrong.
+    //
+    // Only values the reader recognises are written. A typo in the environment would otherwise become a
+    // permanent refusal downstream with nothing naming its cause. Said nothing, claims nothing: the same
+    // update-window rule as contention above, since an old script meeting a new app must not be read as a
+    // Prep run just because that is the commoner kind.
+    const kinds = ["prep", "check"];
+    const kindSaid = process.env.OVERTURE_RUN_KIND;
+    const slotSaid = process.env.OVERTURE_RUN_SLOT;
+    if (kinds.indexOf(kindSaid) >= 0) { json.runKind = kindSaid; }
+    if (kinds.indexOf(slotSaid) >= 0) { json.runSlot = slotSaid; }
+
     if (complete) {
       json.runCost = { recorded: true, usd, durationMs, streams: eventFiles.length, ...contention };
     } else {

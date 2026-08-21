@@ -203,6 +203,67 @@ printf '%s' '{"version":2,"results":[]}' > "${TMP}/cost-unsaid.json"
 assert_not_contains "a caller that said nothing claims nothing" \
   "$(cat "${TMP}/cost-unsaid.json")" '"contended"'
 
+# #3004: the results file says what KIND of run wrote it, and which slot it ran in.
+#
+# A finished results file recorded version, generatedAt and results, and nothing about its own provenance,
+# so a check's file and a Prep run's file were indistinguishable once written. That is the fact #2762's
+# session 1 got wrong, and the only thing that caught it was a person reading prep-run.log by eye. The
+# runner HOLDS the fact when it writes the file (OVERTURE_RUN_SLOT since #2980), so it records it.
+#
+# At the TOP LEVEL, not inside runCost: it is true of the file whether or not the cost reading completed,
+# and a fact filed under a key that can be absent is a fact that disappears exactly when the run went
+# wrong.
+printf '%s' '{"version":2,"results":[]}' > "${TMP}/kind-check.json"
+OVERTURE_RUN_CONTENDED=0 OVERTURE_RUN_KIND=check OVERTURE_RUN_SLOT=check \
+  record_run_cost "${TMP}/kind-check.json" "${TMP}/events-ok.jsonl"
+assert_contains "a check says it was a check" \
+  "$(cat "${TMP}/kind-check.json")" '"runKind": "check"'
+assert_contains "and which slot it ran in" \
+  "$(cat "${TMP}/kind-check.json")" '"runSlot": "check"'
+
+printf '%s' '{"version":2,"results":[]}' > "${TMP}/kind-prep.json"
+OVERTURE_RUN_CONTENDED=0 OVERTURE_RUN_KIND=prep OVERTURE_RUN_SLOT=prep \
+  record_run_cost "${TMP}/kind-prep.json" "${TMP}/events-ok.jsonl"
+assert_contains "a prep run says it was a prep run" \
+  "$(cat "${TMP}/kind-prep.json")" '"runKind": "prep"'
+
+# A check running in the PREP slot is the case the stamp exists for: the two facts differ, and both are
+# recorded, so the file cannot be read as evidence about the slot it happens to sit in.
+printf '%s' '{"version":2,"results":[]}' > "${TMP}/kind-crossed.json"
+OVERTURE_RUN_CONTENDED=0 OVERTURE_RUN_KIND=check OVERTURE_RUN_SLOT=prep \
+  record_run_cost "${TMP}/kind-crossed.json" "${TMP}/events-ok.jsonl"
+assert_contains "a check sitting in the prep slot still says it is a check" \
+  "$(cat "${TMP}/kind-crossed.json")" '"runKind": "check"'
+assert_contains "and does not hide which slot that was" \
+  "$(cat "${TMP}/kind-crossed.json")" '"runSlot": "prep"'
+
+# Said nothing, claims nothing: the same update-window rule as `contended` above, and for the same reason.
+# An old script meeting a new app must not be read as a Prep run just because that is the commoner kind.
+printf '%s' '{"version":2,"results":[]}' > "${TMP}/kind-unsaid.json"
+(unset OVERTURE_RUN_KIND; unset OVERTURE_RUN_SLOT; \
+  OVERTURE_RUN_CONTENDED=0 record_run_cost "${TMP}/kind-unsaid.json" "${TMP}/events-ok.jsonl")
+assert_not_contains "a caller that said nothing claims no kind" \
+  "$(cat "${TMP}/kind-unsaid.json")" '"runKind"'
+assert_not_contains "and no slot" \
+  "$(cat "${TMP}/kind-unsaid.json")" '"runSlot"'
+
+# A value nobody recognises is not written either. The reader refuses an unknown kind, and writing one
+# would turn an environment typo into a permanent refusal nobody can see the cause of.
+printf '%s' '{"version":2,"results":[]}' > "${TMP}/kind-nonsense.json"
+OVERTURE_RUN_CONTENDED=0 OVERTURE_RUN_KIND=banana OVERTURE_RUN_SLOT=banana \
+  record_run_cost "${TMP}/kind-nonsense.json" "${TMP}/events-ok.jsonl"
+assert_not_contains "an unrecognised kind is not recorded" \
+  "$(cat "${TMP}/kind-nonsense.json")" '"runKind"'
+
+# The stamp survives the INCOMPLETE cost path, which is the whole reason it sits outside runCost.
+printf '%s' '{"version":2,"results":[]}' > "${TMP}/kind-incomplete.json"
+OVERTURE_RUN_KIND=check OVERTURE_RUN_SLOT=check \
+  record_run_cost "${TMP}/kind-incomplete.json" "${TMP}/no-such-events.jsonl"
+assert_contains "a run whose cost could not be read still says what it was" \
+  "$(cat "${TMP}/kind-incomplete.json")" '"runKind": "check"'
+assert_contains "the cost reading itself is still reported as not recorded" \
+  "$(cat "${TMP}/kind-incomplete.json")" '"recorded": false'
+
 # Failure path one: the event file never appeared, because claude died before writing anything.
 printf '%s' '{"version":2,"results":[]}' > "${TMP}/cost-missing.json"
 record_run_cost "${TMP}/cost-missing.json" "${TMP}/no-such-events.jsonl"

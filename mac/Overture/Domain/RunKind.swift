@@ -20,6 +20,30 @@ enum RunKind: Equatable, Sendable {
     // side of the run's start is still this run's. Only a marker clearly older than the run is refused.
     static let sameRunTolerance: TimeInterval = 120
 
+    // #3004: how this kind is spelled in a results file's `runKind` stamp.
+    //
+    // Deliberately the strings `RunSlot`'s raw values already use, which are the ones written into
+    // `prep-run.sh`, `docs/contracts.md` and Dan's Application Support folder. One vocabulary rather than
+    // a third: two spellings for one idea are correct read separately and contradict each other in the
+    // reading (L118). Built FROM the slot's raw value rather than retyped, so they cannot drift.
+    var resultsFileValue: String {
+        switch self {
+        case .prep: return RunSlot.prep.rawValue
+        case .reachabilityCheck: return RunSlot.check.rawValue
+        }
+    }
+
+    // nil for anything this app does not recognise, which is the same answer an ABSENT stamp gets. A value
+    // it cannot read is not a kind, and inventing one from a typo would be a definite claim built out of
+    // not knowing (L11).
+    init?(resultsFileValue: String) {
+        switch resultsFileValue {
+        case RunSlot.prep.rawValue: self = .prep
+        case RunSlot.check.rawValue: self = .reachabilityCheck
+        default: return nil
+        }
+    }
+
     // #2614: what Dan calls this run, in ONE place. Five surfaces named the run holding the single slot
     // and three of them said "prep" whatever was going, because they read a boolean that only knew the
     // slot was taken. A shared noun is what stops a sixth phrasing appearing beside them.

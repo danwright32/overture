@@ -223,7 +223,10 @@ struct RecordedRunCostTests {
 @Suite("What a finished check teaches (#1616)")
 struct ProbeRunPaceRecordingTests {
 
-    private let good = RecordedRunCost(seconds: 300, streams: 3, contended: false)
+    // #3004: stamped as a check, which is what these cases are about. Written out rather than defaulted,
+    // for the same reason `contended` is: a construction site that forgot it would file a Prep run's wall
+    // clock as a check's pace, which is the one mislabel the stamp exists to prevent (L168).
+    private let good = RecordedRunCost(seconds: 300, streams: 3, contended: false, kind: .reachabilityCheck)
 
     @Test func aCompleteUncancelledCheckIsRecorded() throws {
         let sample = try #require(ProbeRunPaceRecording.sample(lookups: 3, cost: good, cancelled: false))
@@ -248,9 +251,9 @@ struct ProbeRunPaceRecordingTests {
     }
 
     @Test func anIncomparableRunTeachesNothing() {
-        #expect(ProbeRunPaceRecording.sample(lookups: 1, cost: RecordedRunCost(seconds: 157, streams: 1, contended: false),
+        #expect(ProbeRunPaceRecording.sample(lookups: 1, cost: RecordedRunCost(seconds: 157, streams: 1, contended: false, kind: .reachabilityCheck),
                                              cancelled: false) == nil)
-        #expect(ProbeRunPaceRecording.sample(lookups: 3, cost: RecordedRunCost(seconds: 471, streams: 1, contended: false),
+        #expect(ProbeRunPaceRecording.sample(lookups: 3, cost: RecordedRunCost(seconds: 471, streams: 1, contended: false, kind: .reachabilityCheck),
                                              cancelled: false) == nil)
     }
 }

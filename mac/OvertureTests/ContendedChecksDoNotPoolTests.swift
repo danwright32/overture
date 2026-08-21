@@ -132,10 +132,10 @@ struct ContendedChecksDoNotPoolTests {
     // the co-run this issue exists to measure, and it cannot be filed as contended either, so it teaches
     // neither class and costs one sample inside a two minute update window.
     @Test func aSampleWhoseContentionIsUnknownIsNotRecorded() {
-        let unknown = RecordedRunCost(seconds: 300, streams: 10, contended: nil)
+        let unknown = RecordedRunCost(seconds: 300, streams: 10, contended: nil, kind: .reachabilityCheck)
         #expect(ProbeRunPaceRecording.sample(lookups: 10, cost: unknown, cancelled: false) == nil)
 
-        let known = RecordedRunCost(seconds: 300, streams: 10, contended: true)
+        let known = RecordedRunCost(seconds: 300, streams: 10, contended: true, kind: .reachabilityCheck)
         let sample = ProbeRunPaceRecording.sample(lookups: 10, cost: known, cancelled: false)
         #expect(sample?.contended == true)
     }

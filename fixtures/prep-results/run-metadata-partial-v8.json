@@ -80,5 +80,7 @@
     "streamsReported": 2,
     "partialTotal": 40,
     "partialDenied": 0
-  }
+  },
+  "runKind": "check",
+  "runSlot": "check"
 }

@@ -37,6 +37,13 @@ struct PrepResultsRunMetadataContractTests {
         for file in [try complete(), try partial()] {
             #expect(file["model"] != nil, "the model stamp is missing from a run metadata fixture")
             #expect(file["runCost"] != nil, "runCost is missing from a run metadata fixture")
+            // #3004: and the two provenance keys, on BOTH fixtures. They sit at the top level rather than
+            // inside `runCost` precisely so the PARTIAL fixture carries them too: a run whose cost could
+            // not be read still knows what it was.
+            #expect(file["runKind"] as? String == "check",
+                    "runKind is missing from a run metadata fixture")
+            #expect(file["runSlot"] as? String == "check",
+                    "runSlot is missing from a run metadata fixture")
             #expect(file["webCalls"] != nil, "webCalls is missing from a run metadata fixture")
             #expect(file["results"] != nil, "the metadata must sit on a real results file, not alone")
         }
