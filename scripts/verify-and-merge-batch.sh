@@ -199,6 +199,14 @@ verify_and_merge_batch() {
     return 1
   fi
 
+  # #2946: the copy documents are settled ONCE, on the whole combination, which is where a batch pays for
+  # this least. Two branches that each add a Dan-facing sentence conflict on those files by construction
+  # and neither side's text is anybody's to write.
+  if ! rebuild_copy_docs "${WORKTREE_DIR}"; then
+    release_verify_slot
+    return 1
+  fi
+
   local suite_exit_code=0
   run_full_suite "${WORKTREE_DIR}" || suite_exit_code=$?
 

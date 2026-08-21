@@ -32,6 +32,11 @@ source "${SCRIPT_DIR}/lib/pr-merge.sh"
 # gate_branch_project_freshness and judge_ref_project_freshness: the one implementation of "is this
 # ref's own committed project file fresh", shared with merge-when-green.sh (#2818).
 source "${SCRIPT_DIR}/lib/project-freshness.sh"
+# #2946: rebuild_copy_docs, which settles the three GENERATED copy documents on the combined tree so a
+# branch is not refused over a rebuild nobody decided. Sourced here and used by both merge paths, since
+# verify-and-merge-batch.sh sources this file.
+# shellcheck source=./lib/copy-docs-rebuild.sh
+source "${SCRIPT_DIR}/lib/copy-docs-rebuild.sh"
 # require_scratch_worktree: the one answer to "is this directory mine to scrub" (#2923). Sourced here
 # as well as by project-freshness.sh, so this script's own setup_worktree can ask it before it deletes
 # anything, whatever order the sources happen to be in.
@@ -304,6 +309,15 @@ verify_and_merge() {
   # blocked by it, but committing it keeps the two merge paths in one state rather than two, and leaves
   # the suite judging a tree whose HEAD says what its working files say.
   if ! commit_merge_regeneration "${WORKTREE_DIR}"; then
+    release_verify_slot
+    echo "Not merging PR #${PR_NUMBER} (${PR_BRANCH})." >&2
+    return 1
+  fi
+
+  # #2946: and settle the copy documents on the combined tree, for the same reason and with the same
+  # shape: the rebuild carries no decision, and refusing over it costs a whole extra suite run. Before
+  # the suite, so the suite judges a tree whose documents match its own source.
+  if ! rebuild_copy_docs "${WORKTREE_DIR}"; then
     release_verify_slot
     echo "Not merging PR #${PR_NUMBER} (${PR_BRANCH})." >&2
     return 1
