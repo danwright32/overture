@@ -695,11 +695,31 @@ enum ReachabilityCopy {
     // Written for the ROW, like the sentence above it, because this badge speaks for every address on the
     // card. It also carries the way out: naming what is wrong and giving Dan nowhere to go is the L80 half
     // of this defect, and the overrule is the whole reason the fact is now recorded.
+    // #2895: two ways to be overruled now, one sentence each. Both keep #1866's shape (what the check
+    // claimed, what Overture did about it, and the way out), because the overrule is the whole reason the
+    // fact is recorded and naming a problem with nowhere to go is the L80 half of the defect.
     static let confidenceHeldDownHelp =
         "The check said it had verified the address here but never named the page it read it off, so Overture isn't treating it as verified. It may well be right: if you recognise it, say so on the review panel and it stops being called unverified."
 
-    static func unverifiedEmailFoundHelp(heldDown: Bool) -> String {
-        heldDown ? confidenceHeldDownHelp : unverifiedEmailFoundHelp
+    // #2895: the page exists and is not in question. Who is on it is. A performer's own site can carry
+    // their address and say nothing about this booking, which is a misidentification risk rather than a
+    // weak address, so the sentence says what was and was not established.
+    static let citationDoesNotCorroborateHelp =
+        "The check named the page it read this address off, but that page doesn't tie this person to this performance, so Overture isn't treating it as verified. If you know it's them, say so on the review panel and it stops being called unverified."
+
+    // A row held down BEFORE #2895 recorded no reason, and there was exactly one reason then, so reading a
+    // missing one as that reason is a fact about the code that wrote those rows rather than a guess about
+    // them (L90).
+    static func confidenceHeldDownHelp(_ reason: ContactConfidenceGuard.HoldDown?) -> String {
+        switch reason {
+        case .pageDoesNotCorroborate: return citationDoesNotCorroborateHelp
+        case .namedNoPage, nil: return confidenceHeldDownHelp
+        }
+    }
+
+    static func unverifiedEmailFoundHelp(heldDown: Bool,
+                                         reason: ContactConfidenceGuard.HoldDown? = nil) -> String {
+        heldDown ? confidenceHeldDownHelp(reason) : unverifiedEmailFoundHelp
     }
 
     // #2657: the check found people and none of them can hire Dan.

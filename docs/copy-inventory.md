@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1452 sentences**.
+Every sentence Overture can say to Dan: **1453 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -2038,6 +2038,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "The calendars Overture re-checks on every scout."
     `UI/SourcesView.swift`
 "The check couldn't name anyone to research for this show, so it never got as far as looking for an address. If you know who puts this on, add a contact by hand and it's back in play."
+    `Domain/Reachability.swift`
+"The check named the page it read this address off, but that page doesn't tie this person to this performance, so Overture isn't treating it as verified. If you know it's them, say so on the review panel and it stops being called unverified."
     `Domain/Reachability.swift`
 "The check said it had verified the address here but never named the page it read it off, so Overture isn't treating it as verified. It may well be right: if you recognise it, say so on the review panel and it stops being called unverified."
     `Domain/Reachability.swift`

@@ -739,16 +739,17 @@ struct PrepImporterTests {
         #expect(decoded.results.count == 1)
         #expect(decoded.results[0].draft?.subject == "s")
 
-        // #2912 moved the ceiling to 10 (the contact `nameMatchOnly`), so the first rejected version is
-        // 11. The boundary is what matters here, not the literal number: a version ABOVE what this build
+        // #2895 moved the ceiling to 11 (the contact `performanceCorroborated`), so the first rejected
+        // version is 12. The boundary is what matters here, not the literal number: a version ABOVE what this build
         // understands must throw, because `PrepImporter.answeredKeys` decodes the same file with no
         // version gate at all and would otherwise stamp every show with the no-email floor while this
         // reader silently refused to upgrade it.
-        #expect(throws: PrepResultsError.unsupportedVersion(11)) {
-            try PrepResultsDecoder.decode(Data(#"{"version":11,"generatedAt":"x","results":[]}"#.utf8))
+        #expect(throws: PrepResultsError.unsupportedVersion(12)) {
+            try PrepResultsDecoder.decode(Data(#"{"version":12,"generatedAt":"x","results":[]}"#.utf8))
         }
-        // The version #2912 added decodes, so the ceiling really did move rather than the test being
-        // relaxed around it, and #2622's still does.
+        // The version #2895 added decodes, so the ceiling really did move rather than the test being
+        // relaxed around it, and #2912's and #2622's still do.
+        #expect(try PrepResultsDecoder.decode(Data(#"{"version":11,"generatedAt":"x","results":[]}"#.utf8)).version == 11)
         #expect(try PrepResultsDecoder.decode(Data(#"{"version":10,"generatedAt":"x","results":[]}"#.utf8)).version == 10)
         #expect(try PrepResultsDecoder.decode(Data(#"{"version":9,"generatedAt":"x","results":[]}"#.utf8)).version == 9)
         #expect(try PrepResultsDecoder.decode(Data(#"{"version":8,"generatedAt":"x","results":[]}"#.utf8)).version == 8)

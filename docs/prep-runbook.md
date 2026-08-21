@@ -616,6 +616,27 @@ medium, form/DM or inferred = low. **For a named performer specifically**, only 
 names this group); a bare name match with no such corroboration is a misidentification
 risk, so mark it `low` instead, same as any other unverified guess.
 
+**Say whether the page you cited corroborates the performance (`performanceCorroborated`, v11,
+#2895).** For a `performer` contact you are emitting at `high`, add
+`performanceCorroborated: true` when the page in `sourceUrl` ties THAT PERSON to THIS performance
+(it lists this date or venue, names this group, or credits them on this bill), and
+`performanceCorroborated: false` when it does not. It is the rule directly above, said out loud, so
+the app can hold the claim down instead of taking it on trust.
+
+The live case, 2026-08-17: a run emitted a named performer at `high` as `Playwright`, citing their own
+portfolio site. That page describes them as "an actor and writer", contains the word "playwright"
+exactly once inside the NAME OF A THEATRE in an unrelated regional credit, and never mentions this
+show, this venue or this festival. The address really was on the page, so every check that asks about
+the ADDRESS passed it. The claim happened to be true, from a source the run never read, which is a
+correct conclusion with the wrong evidence behind it on a route that would have recorded an incorrect
+one identically. The next thing that happens to such a contact is a pitch under Dan's name addressing a
+stranger by a role Overture asserted.
+
+A page you cannot corroborate against is not a failure and is not a reason to emit nothing: emit the
+contact with `confidence: "low"` and `performanceCorroborated: false`, exactly as the rule above already
+says. Saying nothing is also allowed and is what an older run did, so it changes nothing, but it means
+the check cannot help you.
+
 **`confidence` and `nameMatchOnly` (v10, #2912) answer two different questions, and only one of them
 is about the PERSON.** `confidence` says how good the ROUTE is, and it is close to mechanical: a form
 or a DM is `low` whether or not anybody established whose it is, so it cannot carry "I could not tell

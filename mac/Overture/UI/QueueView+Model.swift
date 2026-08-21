@@ -603,6 +603,26 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // sentence would be a true statement about half of what Dan is looking at, which is how the previous
     // wording came to say "this one" about a list. The general sentence stays true of everything shown.
     var unverifiedBecauseAGuardHeldItDown: Bool {
+        heldDownReasonForTheWholeRow != nil || unverifiedBecauseEveryShownAddressWasHeldDown
+    }
+
+    // #2895: WHICH reason, when every held-down address on the row agrees on one.
+    //
+    // nil when they DISAGREE, and that is the point of asking it over the whole row rather than per
+    // address: this badge speaks for the card, so naming one reason over a row holding both would be a
+    // true statement about half of what Dan is looking at, which is exactly how the previous wording came
+    // to say "this one" about a list (#1866's own note). A mixed row keeps #1866's general sentence, which
+    // stays true of everything shown.
+    var heldDownReasonForTheWholeRow: ContactConfidenceGuard.HoldDown? {
+        guard unverifiedBecauseEveryShownAddressWasHeldDown else { return nil }
+        let shown = displayedContactEmails
+        let reasons = Set(contacts.filter(\.isHeldDownToUnverified)
+            .filter { shown.contains($0.email?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "") }
+            .map { $0.heldDownReason ?? .namedNoPage })
+        return reasons.count == 1 ? reasons.first : nil
+    }
+
+    private var unverifiedBecauseEveryShownAddressWasHeldDown: Bool {
         guard onlyUnverifiedEmailsFound else { return false }
         let held = Set(contacts.filter(\.isHeldDownToUnverified).compactMap {
             $0.email?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -804,6 +824,10 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     // addresses unverified, and so the review panel can offer Dan the same overrule the three above have.
     var heldDownToUnverified: Bool = false
     var heldDownToUnverifiedDismissed: Bool = false
+    // #2895: WHICH of the two held it down, so the badge's sentence can say. Carried rather than re-derived
+    // here: the guard rewrites the confidence in place, so once `high` has become `low` the snapshot no
+    // longer holds what the run claimed and nothing on this side could work it out again.
+    var heldDownReason: ContactConfidenceGuard.HoldDown?
     // #2624: the fifth guard, carried the same way, so the review panel can name it and offer the overrule.
     var looksLikeAnotherPersons: Bool = false
     var looksLikeAnotherPersonsDismissed: Bool = false
@@ -2727,6 +2751,7 @@ extension RecipientSnapshot {
                   looksLikeDuplicateContactDismissed: r.looksLikeDuplicateContactDismissed,
                   heldDownToUnverified: r.heldDownToUnverified,
                   heldDownToUnverifiedDismissed: r.heldDownToUnverifiedDismissed,
+                  heldDownReason: r.heldDownReason,
                   looksLikeAnotherPersons: r.looksLikeAnotherPersons,
                   looksLikeAnotherPersonsDismissed: r.looksLikeAnotherPersonsDismissed)
     }

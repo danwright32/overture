@@ -29,9 +29,6 @@ import Foundation
 // at the time. Run this again after the next contact check.
 @Suite("How often real runs use no_route_found, and how often the refusal fires (#2925)")
 struct NoRouteFoundAdoptionMeasurementTests {
-    private var handoffDirectory: URL {
-        StoreLocation.dataDirectory(appSupport: StoreLocation.appSupport, isDebugBuild: false)
-    }
 
     // When #2893 shipped, in Eastern time. A run before this could not have used a value that did not
     // exist, so counting it as a failure to adopt would be reading the old behaviour as the new defect
@@ -49,29 +46,11 @@ struct NoRouteFoundAdoptionMeasurementTests {
         var byMethod: [String: Int] = [:]
     }
 
-    // Every real results file this Mac holds: the live pair and every archived run of both slots.
-    private func resultsFiles() -> [URL] {
-        let fm = FileManager.default
-        var out: [URL] = []
-        var directories = [handoffDirectory]
-        for archives in ["prep-run-archives", "check-run-archives"] {
-            let root = handoffDirectory.appendingPathComponent(archives)
-            let runs = (try? fm.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []
-            directories.append(contentsOf: runs.filter { $0.hasDirectoryPath })
-        }
-        for directory in directories {
-            let files = (try? fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
-            out.append(contentsOf: files.filter {
-                $0.lastPathComponent == "overture-prep-results.json"
-                    || $0.lastPathComponent == "overture-check-results.json"
-            })
-        }
-        return out
-    }
-
+    // #2895: the walk moved to `RealResultsFiles` when a second measurement needed the same set of
+    // files. Unchanged, and shared rather than copied, so two measurements cannot read different runs.
     private func census() -> Census {
         var c = Census()
-        for url in resultsFiles() {
+        for url in RealResultsFiles.urls() {
             guard let data = try? Data(contentsOf: url),
                   let results = try? PrepResultsDecoder.decode(data) else { continue }
             c.files += 1
@@ -97,8 +76,7 @@ struct NoRouteFoundAdoptionMeasurementTests {
             // the counts are kept per run and dated: a total that mixed the two would report the old
             // behaviour as a failure to adopt (L133 is the same shape).
             let day = url.deletingLastPathComponent().lastPathComponent
-            let written = (try? url.resourceValues(forKeys: [.contentModificationDateKey])
-                .contentModificationDate) ?? Date.distantPast
+            let written = RealResultsFiles.writtenAt(url)
             let after = written >= Self.valueShippedAt
             c.runs.append(NoRouteFoundAdoption.Run(label: day.isEmpty ? "live" : day,
                                                    contacts: runContacts, noRouteFound: runNoRoute,

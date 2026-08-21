@@ -181,6 +181,20 @@ struct PrepContact: Codable, Equatable, Sendable {
     // app never leaves the pair free to disagree: a contact carrying this may not be stored as `high`
     // (ContactConfidenceGuard), so the card reads ONE answer to "how sure are we" (L16).
     var nameMatchOnly: Bool?
+    // v11 (#2895): does the page named in `sourceUrl` tie THIS PERSON to THIS PERFORMANCE.
+    //
+    // Only meaningful for a `performer` contact at `high`, which is the only place the runbook's rule
+    // applies: "only use `high` if the source page corroborates that person against THIS SPECIFIC
+    // performance". The live case it comes from cited a performer's own portfolio site, which carried
+    // their address and never mentioned the show, the venue or the festival, so the address-against-page
+    // question was answered and the person-against-performance question was never asked.
+    //
+    // FALSE is the alarming value, deliberately, exactly like `nameMatchOnly`. Absent is what every
+    // contact written before this carried and what a run says when it has nothing to declare, so absence
+    // reads as "nobody has said" and changes nothing (Dan's call, 2026-08-21). What that costs is that
+    // the rule is dormant until runs emit it, which `PerformerCorroborationAdoption` measures rather than
+    // leaving to be discovered (L128).
+    var performanceCorroborated: Bool?
 }
 
 struct PrepDraft: Codable, Equatable, Sendable {
@@ -210,7 +224,7 @@ enum PrepResultsDecoder {
     // for exactly the reason the paragraph above gives.
     // #2912 raised this to 10 with the contact `nameMatchOnly` field, IN THE SAME COMMIT as
     // `fixtures/prep-results/v10.json`, for exactly the reason the paragraph above gives.
-    static let supportedVersion = 10
+    static let supportedVersion = 11
     static let minimumVersion = 1
 
     static func decode(_ data: Data) throws -> PrepResults {

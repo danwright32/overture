@@ -216,6 +216,33 @@ struct PrepResultsContractTests {
         #expect(v9.results.first?.contacts?.first?.nameMatchOnly == nil)
     }
 
+    // #2895: v11 adds `performanceCorroborated` to a contact. The version gate rose with it, in the same
+    // commit as the fixture, which is the rule the decoder's own comment states.
+    //
+    // The fixture is built from the REAL 2026-08-17 case and takes invented people (L48, L155): a named
+    // performer emitted at `high` off a page that establishes nobody, beside one whose cited page does tie
+    // them to this booking. That pair is what the guard has to tell apart, and it is the same reason the
+    // v10 fixture carries both of its shapes on one show.
+    @Test func decodesTheV11FixtureWithAcorroborationDeclaration() throws {
+        let results = try PrepResultsDecoder.decode(try fixture("v11.json"))
+        #expect(results.version == 11)
+
+        let contacts = try #require(results.results.first?.contacts)
+        #expect(contacts.first?.performanceCorroborated == false)
+        #expect(contacts.first?.provenance == "performer")
+        #expect(contacts.first?.confidence == "high", "what the RUN claimed; the guard is what lowers it")
+        #expect(contacts.last?.performanceCorroborated == true)
+    }
+
+    // Additive: an earlier fixture reads as nobody having said whether the page corroborates, which is not
+    // the same claim as somebody having said it does, and nothing asserts one from the other.
+    @Test func anearlierFixtureCarriesNoCorroborationDeclaration() throws {
+        let v10 = try PrepResultsDecoder.decode(try fixture("v10.json"))
+        for contact in v10.results.first?.contacts ?? [] {
+            #expect(contact.performanceCorroborated == nil)
+        }
+    }
+
     // MARK: - Negative paths (#747)
     //
     // The enumeration guard above only proves a POSITIVE: every committed fixture decodes. That

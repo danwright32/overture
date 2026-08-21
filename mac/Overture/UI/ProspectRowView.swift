@@ -670,7 +670,8 @@ struct ProspectRowView: View {
                              // and they wore one sentence.
                              help: item.onlyUnverifiedEmailsFound
                                  ? ReachabilityCopy.unverifiedEmailFoundHelp(
-                                     heldDown: item.unverifiedBecauseAGuardHeldItDown)
+                                     heldDown: item.unverifiedBecauseAGuardHeldItDown,
+                                     reason: item.heldDownReasonForTheWholeRow)
                                  : item.inheritedReachability.map {
                                      ReachabilityCopy.inheritedEmailFoundHelp(organisation: $0.organisation)
                                  } ?? ReachabilityCopy.emailFoundHelp)

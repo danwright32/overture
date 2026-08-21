@@ -1,0 +1,44 @@
+{
+  "version": 11,
+  "generatedAt": "2026-08-21T00:00:00.000Z",
+  "results": [
+    {
+      "naturalKey": "robin-vale|2026-11-14|east-village-playhouse",
+      "showSummary": "A new play in a 99 seat East Village house, one night, produced by the writer and a co-producer.",
+      "contacts": [
+        {
+          "name": "Robin Vale",
+          "role": "Playwright",
+          "tier": "primary",
+          "email": "robin@robinvale.example",
+          "method": "named_decision_maker",
+          "confidence": "high",
+          "provenance": "performer",
+          "sourceUrl": "https://robinvale.example/about",
+          "performanceCorroborated": false
+        },
+        {
+          "name": "Marlow Quist",
+          "role": "Producer",
+          "tier": "primary",
+          "email": "marlow@eastvillageplayhouse.example",
+          "method": "named_decision_maker",
+          "confidence": "high",
+          "provenance": "performer",
+          "sourceUrl": "https://robinvale.example/on-stage-november",
+          "performanceCorroborated": true
+        }
+      ],
+      "draft": {
+        "subject": "Photographing Paper Lanterns at The Lantern Room.",
+        "body": "I photograph performing arts in New York and saw Paper Lanterns is playing The Lantern Room on September 14. Carnegie Hall has been part of my work for nearly ten years, and the same unobtrusive, no-flash approach suits a room that size. My portfolio is at danwrightphotography.com. I would be glad to hear your photography plans for the evening. I look forward to hearing from you.",
+        "variant": "reason-first"
+      }
+    },
+    {
+      "naturalKey": "unlisted-ensemble|2026-09-20|community-hall",
+      "showSummaryAbsentReason": "no_listing_page",
+      "emptyReason": "nothing_published"
+    }
+  ]
+}

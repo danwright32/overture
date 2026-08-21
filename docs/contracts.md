@@ -28,7 +28,7 @@ the workflow's runbook is its spec.
 | `overture-history.json` | Importer (`scripts/import-history.ts`) | App (`[HistoryRecord]`) | none (plain array; `email` added additively in #762) | `fixtures/local-history/` | `LocalHistoryContractTests.swift` |
 | `overture-shoot-history.json` | Importer (`scripts/import-shoot-history.ts`) | App (`ShootHistory`) | 1 | `fixtures/shoot-history/` | `ShootHistoryContractTests.swift` |
 | `overture-prep-queue.json` | App (`PrepQueueBuilder.encode`) | Prep run (workflow) | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 | `fixtures/prep-queue/` | `PrepQueueContractTests.swift` |
-| `overture-prep-results.json` | Prep run (workflow) writes the results; then **`prep-run.sh`** adds five top-level keys of its own (`model`, `runCost`, `webCalls`, `runKind`, `runSlot`, all via `lib/models.sh`, after the workflow has finished). See the note below the table. | App (`PrepImporter` / `PrepResultsDecoder`; it ignores all five of those keys. `RecordedRunCost` reads `runCost` and `runKind`) | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 | `fixtures/prep-results/` (`run-metadata-complete-v8.json` and `run-metadata-partial-v8.json` carry all five) | `PrepResultsContractTests.swift`, `PrepResultsRunMetadataContractTests.swift`, `ResultsFileNamesItsRunKindTests.swift`, `lib/models.test.sh` |
+| `overture-prep-results.json` | Prep run (workflow) writes the results; then **`prep-run.sh`** adds five top-level keys of its own (`model`, `runCost`, `webCalls`, `runKind`, `runSlot`, all via `lib/models.sh`, after the workflow has finished). See the note below the table. | App (`PrepImporter` / `PrepResultsDecoder`; it ignores all five of those keys. `RecordedRunCost` reads `runCost` and `runKind`) | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 | `fixtures/prep-results/` (`run-metadata-complete-v8.json` and `run-metadata-partial-v8.json` carry all five) | `PrepResultsContractTests.swift`, `PrepResultsRunMetadataContractTests.swift`, `ResultsFileNamesItsRunKindTests.swift`, `lib/models.test.sh` |
 | `overture-prep-progress.json` | `prep-run.sh` **only**: seeds it, then derives every update from `overture-prep-results.json` itself (`lib/progress-watcher.sh`'s `update_progress_from_results`, the same helper scout uses). #1023: the workflow never writes this file; it rewrites the results file incrementally and the script counts its entries, so a run that forgets to self-report can no longer leave the count wrong. | App (`PrepProgressDecoder`) | 1 | `fixtures/prep-progress/` | `PrepProgressContractTests.swift`, `lib/progress-watcher.test.sh` |
 | `prep-run-archives/<yyyyMMdd-HHmmss>/` | App (`PrepRunArchive.archiveFinishedRun`, #1878: on every run completion, and at launch for a run that ended while Overture was closed) | By hand today (the evidence for "did the run do what the runbook told it to"), and the intended source of history for #1616's wait estimate | n/a: the folder holds byte copies of the two files above under their live names, so each keeps its own version | `fixtures/prep-queue/`, `fixtures/prep-results/` (the same fixtures, read by the archive's own tests) | `PrepRunArchiveTests.swift` |
 | `prep-running`, `prep-chunks/`, `prep-run.log`, `prep-run-events.jsonl` | `prep-run.sh` (the heartbeat marker, the per-chunk working directory it wipes on entry, and the two logs), plus the App, which writes the marker at launch so the double-run guard is immediate (`PrepQueueService`) | App (`DetachedRunner.heartbeat` reads the marker for live, stale or gone; the logs and the chunk directory are read by hand and by `RunEventsReader`) | none (the marker's CONTENTS are never read: its modification time is the whole signal, exactly as `prep-cancel`'s presence is) | none | `DetachedRunnerTests.swift`, `prep-run-chunking.test.sh`, `lib/run-slot.test.sh` |
@@ -545,6 +545,25 @@ history imported at all, and, deliberately, a show at Carnegie Hall, where the r
 requires the "nearly ten years at Carnegie Hall" tenure credential and a venue band beside it would
 be one fact stated twice (Dan's call, 2026-07-31). Additive; the reader's tolerant gate (1 through
 10) still accepts `v1.json` through `v9.json` unchanged, and `v10.json` is the venue-history spec.
+
+Results version 11 (#2895) adds an optional `performanceCorroborated` to each contact: does the page named
+in `sourceUrl` tie THAT PERSON to THIS performance. Only meaningful for a `performer` contact at `high`,
+which is the only place the runbook's rule applies ("only use `high` if the source page corroborates that
+person against THIS SPECIFIC performance").
+
+FALSE is the alarming value, deliberately, the same way `nameMatchOnly`'s TRUE is. `ContactConfidenceGuard`
+refuses to store such a contact as `high` and records WHICH rule fired, so the card's badge can say whether
+the check named no page at all or named one that establishes nobody. Those ask different things of Dan and
+one sentence cannot honestly cover both.
+
+ABSENT reads as "nobody has said" and changes nothing (Dan's call, 2026-08-21, matching #2912). That keeps
+his queue as it is and lets the check work on the runs that declare it; what it costs is that the rule is
+dormant until they do, and `PerformerCorroborationAdoptionTests` measures that rather than leaving it to be
+discovered. Measured on this Mac the day it shipped: 48 of 229 contacts are performer contacts claiming
+`high`, which is the population the rule can speak about at all.
+
+Additive; the reader's tolerant gate (1 through 11) still accepts `v1.json` through `v10.json` unchanged,
+and `v11.json` is the corroboration spec, built from the real 2026-08-17 case with invented people.
 
 ### `overture-shoot-history.json`
 
