@@ -25,13 +25,19 @@ struct PrepPillNamesTheRunTests {
         AgentRoster.statuses(inputs).first { $0.name == "Prep" }!
     }
 
-    // THE test: a check holds the slot, and the pill says so instead of claiming Prep is drafting.
-    @Test func acheckHoldingTheSlotIsNamedAsACheck() {
+    // #2761 REVERSED this. It used to assert "5 ready, held by a check", which was true while a check held
+    // the single slot and no Prep run could start. After #3015 a check holds nothing: Dan can start a Prep
+    // run while one is going, and the only shows it leaves out are the ones that check is actually on.
+    // So the pill shows his real, actionable backlog, and the old sentence would now be a lie about a
+    // state that no longer exists.
+    @Test func acheckNoLongerHoldsThePrepBacklog() {
         var i = calm; i.keptToPrep = 5; i.runInFlight = .reachabilityCheck
 
         let s = prep(i)
 
-        #expect(s.detail == "5 ready, held by a check")
+        #expect(s.detail == "5 ready to prep")
+        #expect(!s.detail.contains("held by a check"),
+                "the pill still says a check is holding the backlog, which after #3015 it is not")
         #expect(!s.detail.contains("Running now"))
     }
 
@@ -43,13 +49,15 @@ struct PrepPillNamesTheRunTests {
         #expect(prep(i).state == .working)
     }
 
-    // Not gold. A held backlog is not something Dan can act on, and gold is reserved for what he can,
-    // which also keeps it distinguishable from the date-clash case, which he CAN clear.
-    @Test func aheldBacklogIsWorkingNotSomethingToActOn() {
+    // #2761 REVERSED this too, and for the same reason the wording changed. Gold is reserved for what Dan
+    // can act on, which is why a HELD backlog was deliberately not gold. After #3015 he can act on it: the
+    // Prep button is live during a check. So gold is now the correct colour, and keeping it grey would
+    // hide the one thing he could do.
+    @Test func abacklogDuringACheckIsSomethingHeCanActOn() {
         var i = calm; i.keptToPrep = 5; i.runInFlight = .reachabilityCheck
 
-        #expect(prep(i).state == .working)
-        #expect(prep(i).state != .needsAttention)
+        #expect(prep(i).state == .needsAttention,
+                "a backlog he can now start a run on must read as actionable")
     }
 
     // The count and the tap stay on the backlog, which is the whole reason this wording was chosen over
@@ -94,10 +102,16 @@ struct PrepPillNamesTheRunTests {
     // single slot, so it is by definition also "running".
     @Test func thereIsOneValueSayingWhatHoldsTheSlot() {
         #expect(calm.runInFlight == nil)
-        for kind: RunKind in [.prep, .reachabilityCheck] {
-            var i = calm; i.keptToPrep = 5; i.runInFlight = kind
-            #expect(prep(i).state == .working, "\(kind) did not read as a run in flight")
-        }
+        // #2761: only a PREP run now changes what this pill says. A check no longer holds the prep
+        // backlog, so it reads exactly as it does with nothing running, which is the point.
+        var running = calm; running.keptToPrep = 5; running.runInFlight = .prep
+        #expect(prep(running).state == .working, "a live prep did not read as a run in flight")
+
+        var checking = calm; checking.keptToPrep = 5; checking.runInFlight = .reachabilityCheck
+        var idle = calm; idle.keptToPrep = 5
+        #expect(prep(checking).detail == prep(idle).detail,
+                "a check still changes what the Prep pill says, so something still treats it as holding the slot")
+        #expect(prep(checking).state == prep(idle).state)
     }
 }
 
@@ -114,8 +128,11 @@ struct EverySurfaceNamesTheRunTests {
         let duringACheck = PrepStartGate.reason(keptToPrep: 3, ownSlotRunInFlight: .reachabilityCheck)
         let duringAPrep = PrepStartGate.reason(keptToPrep: 3, ownSlotRunInFlight: .prep)
 
-        #expect(duringACheck == "A reachability check is already going")
-        #expect(duringAPrep == "A prep run is already going")
+        // #2761: "A <noun> is already going" became "Your <noun> is still going". The old phrasing was
+        // right when ANY run blocked this control; after #3015 only a run in its own slot does, so the
+        // sentence names the run Dan himself started rather than reporting a coincidence.
+        #expect(duringACheck == "Your reachability check is still going")
+        #expect(duringAPrep == "Your prep run is still going")
         #expect(duringACheck != duringAPrep)
     }
 

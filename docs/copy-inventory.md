@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1431 sentences**.
+Every sentence Overture can say to Dan: **1430 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -382,12 +382,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/PreviewBackground.swift`
 "A Gmail connection is already in progress. Finish it in the browser."
     `Integration/GmailAuthManager.swift`
-"A Prep run is already in progress. Wait for it to finish."
-    `Integration/PrepQueueService.swift`
 "A Prep run is already in progress. \(org) is queued to re-prep on the next run"
     `App/ActionFeedback.swift`
-"A \(kind.runNoun) is already going"
-    `Domain/PrepQueueButton.swift`
 "A booking was detected that needs your confirmation. Tap to confirm or dismiss."
     `UI/ProspectRowView.swift`
 "A check found a profile carrying the right name and nothing in its bio or recent posts tying it to this show, so who is on the end of it is not settled. If you recognise the handle below, the DM is yours to send."
@@ -402,8 +398,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/Reachability.swift`
 "A check worked out who is putting this on and found no way to reach any of them, so it kept none of them. The listing still names them, and a search by name often turns up an address the check missed."
     `Domain/Reachability.swift`
-"A contact check is already going. Wait for it to finish."
-    `Integration/PrepQueueService.swift`
 "A contact on this show is held back by a check (a venue guess, a press address, a duplicate, the salutation, or the draft lint). Look at it below: dismissing the check releases the email."
     `UI/DraftReviewView.swift`
 "A later night of this run is out: you blocked \(day) (\(name))."
@@ -438,8 +432,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReplyClassifyRunSummary.swift`
 "A reply-classify run is already in progress. Wait for it to finish."
     `Integration/ReplyClassifyService.swift`
-"A run is already in progress. This will be available once it finishes."
-    `Domain/Reachability.swift`
 "A run wrote into another run's results file, so answers you already paid for may have been overwritten."
     `Domain/RunBoundaryViolations.swift`
 "A scout-extract run is already in progress. Wait for it to finish."
@@ -2462,6 +2454,14 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DownbeatExport.swift`
 "Your Gmail access has expired or was revoked, so nothing was sent. Click Connect Gmail to reconnect, then try Send again."
     `UI/SendConfirmAndReconnectAlerts.swift`
+"Your Prep run is still going. Wait for it to finish before starting another."
+    `Integration/PrepQueueService.swift`
+"Your \(kind.runNoun) is still going"
+    `Domain/PrepQueueButton.swift`
+"Your contact check is still going. This will be available once it finishes."
+    `Domain/Reachability.swift`
+"Your contact check is still going. Wait for it to finish before starting another."
+    `Integration/PrepQueueService.swift`
 "Your reply goes to"
     `Domain/ReplyPanel.swift`
 "Your reply went out and answers to it are still watched. What couldn't be read is the id a later message would quote, so a nudge on this inquiry will arrive as a separate email rather than under the same conversation."
@@ -2617,8 +2617,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "\(i.followUpsDue) due"
     `Domain/AgentRoster.swift`
 "\(i.keptToPrep) ready to prep"
-    `Domain/AgentRoster.swift`
-"\(i.keptToPrep) ready, held by a check"
     `Domain/AgentRoster.swift`
 "\(i.reachedOutDue) due"
     `Domain/AgentRoster.swift`

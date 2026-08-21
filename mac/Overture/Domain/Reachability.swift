@@ -761,10 +761,13 @@ enum ReachabilityProbeCopy {
     // rest of the callout chrome. The control sits on all 169 of his dates, so a sentence there is noise on
     // 169 rows to earn its keep on one; and the stale sentence was a second telling of what the row's own
     // "Reachability may be out of date" badge already says beside it (#843).
-    // #1323: shown while a Prep or another probe already holds the single run slot, so the greyed-out
-    // control explains itself instead of failing after the tap.
+    // #1323: shown while the control's own run already holds its slot, so the greyed-out control explains
+    // itself instead of failing after the tap.
+    // #2761: it used to say "a run", which was right when any run held the single slot. After #3015 a Prep
+    // run does not grey this out at all, so the only thing that can is another contact check, and the
+    // sentence says so rather than describing a state Dan cannot see and would go looking for.
     static let controlBusyHelp =
-        "A run is already in progress. This will be available once it finishes."
+        "Your contact check is still going. This will be available once it finishes."
 
     // #1617: what a date says once every open show on it has an answer. It takes the button's own slot,
     // so Dan reads it exactly where he went looking for the control, and it names reachability rather

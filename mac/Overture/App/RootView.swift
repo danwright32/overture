@@ -605,7 +605,7 @@ struct RootView: View {
                         if let slot = takeover.presented,
                            let kind = PrepQueueService.runInFlight(slot: slot, now: Date()) {
                             Divider()
-                            Button(kind.cancelLabel, role: .destructive) { cancelPrep() }
+                            Button(kind.cancelLabel, role: .destructive) { cancelPrep(slot: slot) }
                         }
                     } label: {
                         if isScanning && !scoutIsManual {
@@ -1373,8 +1373,10 @@ struct RootView: View {
     // notices the marker clear and ingests whatever the run had already written.
     // #2760: the run on screen, not "the run". Cancel on the check's takeover has to reach the check's own
     // sentinel, or it would stop the prep run beside it while the check carried on spending.
-    private func cancelPrep() {
-        guard let slot = takeover.presented else { return }
+    // #2761: the slot is passed IN, by the block the button sits in, rather than looked up. With one line
+    // per live run there is no "the run on screen" to resolve against, and a lookup would be a second
+    // source of truth for which run a button means, which is the defect #3012 fixed one layer up.
+    private func cancelPrep(slot: RunSlot) {
         PrepQueueService.requestCancel(slot: slot)
     }
 
@@ -2312,14 +2314,35 @@ struct RootView: View {
     }
 
     private var prepProgressModal: some View {
-        VStack {
+        VStack(spacing: 20) {
             Spacer(minLength: 0)
+            // #2761: ONE LINE PER LIVE RUN, each named, each with its own Cancel. Dan's call, 2026-08-15.
+            //
+            // Until #3015 the two runs excluded each other, so "the run on screen" was the only run and a
+            // single block was the whole truth. Now both can be going, and macOS will not present a second
+            // sheet over the first, so one block meant the other run worked entirely unseen. A shared
+            // control also cannot say which run it stops, and stopping the wrong paid run is the expensive
+            // mistake here.
+            //
+            // `takeover.shown` rather than `presented`, so the sheet is the sum of what is live rather than
+            // whichever got there first.
+            ForEach(takeover.shown, id: \.self) { slot in
+                runProgressBlock(for: slot)
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(minWidth: 460, minHeight: 280)
+        .background(OVColor.canvas)
+    }
+
+    // #2761: one run's block. Everything in it was already per slot (#2760); what changed is that the
+    // caller now renders one of these for EVERY live run instead of only the first.
+    @ViewBuilder private func runProgressBlock(for slot: RunSlot) -> some View {
             // #1824: the launch's own first phase, the app rendering each kept show's listing page. It has
             // no marker file (it runs in process), so its still-alive evidence is the same as the scout
             // sweep's: a count that keeps advancing.
             // #2760: everything below is about the slot on screen, so a check's takeover reads the check's
             // own count, its own marker and its own start.
-            let slot = takeover.presented ?? .prep
             if let reading = takeover.listingProgress(slot) {
                 RunProgressView(phase: .readingListings,
                                 since: takeover.listingStartedAt(slot),
@@ -2339,15 +2362,11 @@ struct RootView: View {
                     },
                     heartbeat: { PrepQueueService.heartbeat(slot: slot, now: Date()) },
                     onHide: { takeover.hide(slot) },
-                    onCancel: { cancelPrep() },
+                    onCancel: { cancelPrep(slot: slot) },
                     // #1684: the panel acknowledges the click the instant the sentinel lands, rather than
                     // sitting on a spinner identical to a working run until the marker goes stale.
                     cancelRequested: { PrepQueueService.cancelRequested(slot: slot) })
-            }
-            Spacer(minLength: 0)
         }
-        .frame(minWidth: 460, minHeight: 280)
-        .background(OVColor.canvas)
     }
 
     // Reconcile bookings on launch (#41/#99): auto-book on an exact Downbeat booking match,
