@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1460 sentences**.
+Every sentence Overture can say to Dan: **1462 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -1432,6 +1432,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/PrepQueueService.swift`
 "Overture contact: "
     `Domain/OmniFocusSync.swift`
+"Overture could not open its backup folder, so there is nothing to compare against. Nothing has "
+    `App/StoreShrinkCheck.swift`
 "Overture could not open its data file to check it at \(path). Nothing has been "
     `App/StoreSchemaGuard.swift`
 "Overture could not update"
@@ -3017,6 +3019,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "back onto the contact. Add the address back on the card first if you want to use it."
     `Domain/AttachConversation.swift`
 "backup before working."
+    `App/StoreShrinkCheck.swift`
+"been changed. Check that folder before working."
     `App/StoreShrinkCheck.swift`
 "being created."
     `Domain/OmniFocusFailureKind.swift`
