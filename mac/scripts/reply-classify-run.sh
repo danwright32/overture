@@ -159,7 +159,7 @@ SLEEP_GUARD_PID="$(arm_sleep_guard)"
 # #1038: clear the cancel sentinel and the pid file on exit too, so a stopped run never leaves a sentinel
 # that would instantly kill the next run.
 # #1009: stop_sleep_guard releases the power assertion on every exit path (finish, cancel, crash-via-set-e).
-trap 'kill "$HEARTBEAT_PID" 2>/dev/null; [ -n "$CLAUDE_PID" ] && kill "$CLAUDE_PID" 2>/dev/null; stop_sleep_guard "$SLEEP_GUARD_PID"; rm -f "$MARKER"; clear_cancel "$CANCEL"; rm -f "$CLAUDE_PID_FILE"; rm -f "$STALL_STATE"' EXIT
+trap 'heartbeat_stop "$HEARTBEAT_PID"; [ -n "$CLAUDE_PID" ] && kill "$CLAUDE_PID" 2>/dev/null; stop_sleep_guard "$SLEEP_GUARD_PID"; rm -f "$MARKER"; clear_cancel "$CANCEL"; rm -f "$CLAUDE_PID_FILE"; rm -f "$STALL_STATE"' EXIT
 
 # #1013: the last run's results are spent, and leaving them here lets them masquerade as this run's.
 # scout-extract-run.sh learned this in #1011 (a run that wrote nothing inherited the previous run's

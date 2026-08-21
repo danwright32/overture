@@ -144,4 +144,39 @@ SAMPLES="$(ls "${SUPPORT_DIR}"/concurrency-samples-*.csv 2>/dev/null | head -1)"
 assert_contains "and the baseline is in the samples as its own row" \
   "$(cat "${SAMPLES}" 2>/dev/null)" "baseline"
 
+# --- #2981: a stall is judged from the run's own report, not from a phrase in the log -----------------
+#
+# A run log is not only a record of what happened. Killing the heartbeat subshell made the shell print a
+# termination notice rendering the job's whole body, so every log held the runner's own
+# `echo "prep: STOPPING. ..."` statement whether or not the guard ever fired. On 2026-08-18 this script's
+# bare `grep -q STOPPING` matched that in BOTH logs and reported two healthy runs as stalled, into the
+# measurement whose entire purpose is deciding whether to change the stall limit. Neither had stalled:
+# both exited 0 with a complete runCost and the longest took 320s against a 1200s limit.
+#
+# #2981 fixed the cause too (the notice is gone), so this asserts the reading is sound EVEN IF a log ever
+# carries the source again, which is the half that survives somebody reintroducing it.
+ECHOED_SOURCE='            echo "prep: STOPPING. Nothing new has landed for $(stall_stalled_seconds) s, so this run is not progressing."; exit;'
+REAL_REPORT='prep: STOPPING. Nothing new has landed for 1260s (limit 1200s), so this run is not progressing however fresh its marker is.'
+
+STALL_LOG="${WORK}/stall-probe.log"
+STALL_PATTERN="$(grep -oE '\^prep: STOPPING[^"]*' "${SCRIPT}" | head -1)"
+assert_equals "the stall reading is anchored to the start of a line" "1" \
+  "$([ -n "${STALL_PATTERN}" ] && echo 1 || echo 0)"
+
+printf '%s\n' "${ECHOED_SOURCE}" > "${STALL_LOG}"
+if grep -q "${STALL_PATTERN}" "${STALL_LOG}"; then MATCHED=1; else MATCHED=0; fi
+assert_equals "the runner's own echoed source is NOT read as a stall" "0" "${MATCHED}"
+
+# The positive control, in the same fixture: a log carrying the real report is still read as a stall, so
+# the anchoring narrowed the reading rather than switching it off (L159).
+printf '%s\n' "${REAL_REPORT}" > "${STALL_LOG}"
+if grep -q "${STALL_PATTERN}" "${STALL_LOG}"; then MATCHED=1; else MATCHED=0; fi
+assert_equals "a run that really reported a stall is still read as one" "1" "${MATCHED}"
+
+# And the bare pattern the old code used really would have matched the source, so the case above is a
+# defect that existed rather than one invented for the test.
+printf '%s\n' "${ECHOED_SOURCE}" > "${STALL_LOG}"
+if grep -q "STOPPING" "${STALL_LOG}"; then MATCHED=1; else MATCHED=0; fi
+assert_equals "the old unanchored pattern really did match the source" "1" "${MATCHED}"
+
 exit "${FAILURES:-0}"

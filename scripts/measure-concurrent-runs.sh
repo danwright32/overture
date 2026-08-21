@@ -223,7 +223,18 @@ report_run() {
     echo "    no results file: this run wrote nothing at all, which is what a stall stop leaves behind"
   fi
   log="${SUPPORT}/${slot}-run.log"
-  if [ -f "${log}" ] && grep -q "STOPPING" "${log}" 2>/dev/null; then
+  # #2981: ANCHORED, because a run log is not only a record of what happened. Until that issue's other
+  # half, killing the heartbeat subshell made the shell print a termination notice rendering the job's
+  # whole body, so every log held the runner's own `echo "prep: STOPPING. ..."` statement whether or not
+  # the guard ever fired. A bare `grep -q STOPPING` matched that and reported BOTH healthy runs as
+  # stalled, on 2026-08-18, into the measurement whose entire purpose is deciding whether to change the
+  # stall limit. Neither had stalled: both exited 0 with a complete runCost and the longest took 320s
+  # against a 1200s limit.
+  #
+  # The runner ECHOES this at column zero; the shell renders the same text indented inside the compound
+  # command. So the anchor is what tells the report apart from the program that could have made it, which
+  # is L156's remedy: match the shape of the real output, not a substring of what is being talked about.
+  if [ -f "${log}" ] && grep -q "^prep: STOPPING\." "${log}" 2>/dev/null; then
     echo "    STALL GUARD STOPPED THIS RUN. That is the reading #2762 exists for: check whether it was"
     echo "    genuinely stalled or parked waiting on a rate limit before re-deriving the limit."
   fi
