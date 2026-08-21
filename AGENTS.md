@@ -327,6 +327,17 @@ already drifting from the Swift version it mirrored.
     assertion fails, because that is what a fixture looks like when its body did not run (an early
     return, a loop over an empty list, a guard that skipped every case). All 61 fixtures print at least
     one, so the rule costs nothing and only fires on a fixture that stopped working.
+    Since #2929 it also says when the run has STOPPED MOVING, which that gate cannot: it can only speak
+    once a run has ended, and the run this exists for never ends. Output does not stream here (each
+    fixture's block prints after it finishes), so a fixture that hangs used to leave the runner silent
+    forever: measured 2026-08-17, one was still alive after roughly 8 minutes holding up the whole
+    parallel run and had to be killed by hand. `scripts/lib/fixture-stall-guard.sh` warns on a cadence
+    once nothing has STARTED OR FINISHED for the limit, and NAMES the fixtures still going. It reuses the
+    Swift runner's rules (`notice_due`, `humanize_seconds` from `mac/scripts/lib/test-progress-watch.sh`)
+    and deliberately not its WORDS, which are about xcodebuild and a shared lock this runner does not
+    have. Both ends are counted, not just finishes: with eight lanes, seven fast ones would otherwise mask
+    a hung one for as long as work remained. It WARNS rather than kills, for #2577's reason. Retune with
+    `OVERTURE_FIXTURE_STALL_LIMIT_SECONDS` and `OVERTURE_FIXTURE_STALL_CHECK_SECONDS`.
   - **A raw `xcodebuild`: NOT GATED, and cannot be.** It has no wrapper to hold the rule, which is the
     reason to scope through `mac/scripts/run-tests-locked.sh` rather than around it. A raw run also exits
     0 on a `-only-testing:` path that matches nothing.
