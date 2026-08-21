@@ -657,6 +657,20 @@ already drifting from the Swift version it mirrored.
   refused before anything regenerates, naming the branch rather than letting the failure surface later
   as a stale file on main. A genuine content conflict still refuses exactly as before. The commit is
   also refused, rather than made, if anything OTHER than the file the hook owns is staged.
+  **Since #2946 both merge paths also REBUILD the three generated copy documents on the combined tree**
+  (`docs/copy-inventory.md`, `docs/outbound-copy.md`, `docs/copy-surfaces.md`), through
+  `scripts/lib/copy-docs-rebuild.sh`, before the suite runs. Same shape and same reason as the project
+  file above: the instant any change adding a Dan-facing sentence merges, every other open branch holding
+  those files is stale, and the rebuild carries no decision because neither side's text is anybody's to
+  write. Measured 2026-08-18 across ten issues: three extra full suite runs plus two hand rebuilds. The
+  per-branch gate it leans on is NOT weakened and is not moved: a branch whose author changed the app's
+  wording and did not regenerate could never have had a green local `scripts/test-all.sh`, which is
+  mandatory before a push, so the only staleness that can survive to the combine is staleness another
+  branch caused. It commits ONLY those three paths and refuses when the run left any other TRACKED file
+  modified. An untracked stray is deliberately not a refusal, since only those three are ever staged and
+  refusing would block a merge over a log file a run happened to drop. And the cold read is untouched:
+  reading the new sentences is the author's step, on their own branch, where the change is theirs.
+
   **A merge is confirmed with GitHub, never assumed, and that is one shared implementation**
   (`scripts/lib/pr-merge.sh`, used by all three merge paths). Both halves of that come from the same
   incident, on the batch script's first real run, 2026-08-13: `gh pr merge 2609` exited 1 with
