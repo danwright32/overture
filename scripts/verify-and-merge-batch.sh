@@ -161,7 +161,7 @@ verify_and_merge_batch() {
       echo "Nothing was verified and nothing was merged." >&2
       return 1
     }
-    require_pr_completeness "${PR_NUMBER}" "${PR_BODY}"
+    require_pr_completeness "${PR_NUMBER}" "${PR_BODY}" "${PR_AUTHOR:-}" "${PR_FILES:-}"
 
     numbers+=("${PR_NUMBER}")
     branches+=("${PR_BRANCH}")

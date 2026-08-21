@@ -99,6 +99,49 @@ OUT_OK="$( ( require_pr_completeness 4243 "${COMPLETE_BODY}" ) 2>&1 )"
 assert_status "a complete body is not refused" "0" "$?"
 assert_empty "and says nothing" "${OUT_OK}"
 
+# --- the bot dependency exemption (#2822) ------------------------------------------------------------
+#
+# A bot-authored PR can never answer the enumeration, so dependabot's bumps accumulated unmerged and the
+# dependencies went stale. Measured 2026-08-16: #2752 and #2753, a `@types/node` bump and a `tsx` bump
+# touching only `package.json` and `pnpm-lock.yaml`, were both refused with all four items named.
+#
+# The exemption is narrow and BOTH halves are required, because a bot PR that touches source still has new
+# values in it and still needs the enumeration.
+LOCK_ONLY='package.json
+pnpm-lock.yaml'
+
+REASON="$(pr_completeness_exemption "dependabot[bot]" "${LOCK_ONLY}")"
+assert_contains "a bot bumping only manifests is exempt" "${REASON}" "dependabot[bot]"
+assert_contains "and the reason names what it looked at" "${REASON}" "pnpm-lock.yaml"
+
+assert_empty "a HUMAN touching only manifests is not exempt" \
+  "$(pr_completeness_exemption "danwright32" "${LOCK_ONLY}")"
+
+assert_empty "a bot touching source is not exempt" \
+  "$(pr_completeness_exemption "dependabot[bot]" 'package.json
+mac/Overture/Domain/Prospect.swift')"
+
+# The empty case is its own answer, and it is NOT exemption. A file list that came back empty is what a
+# failed `gh` call looks like, and it would otherwise exempt every bot PR whatever it touched (L98).
+assert_empty "an empty file list is never exempt" "$(pr_completeness_exemption "dependabot[bot]" "")"
+
+# End to end: the exemption must ANNOUNCE itself, so a mis-scoped rule is visible rather than quiet.
+OUT_EXEMPT="$( ( require_pr_completeness 4244 "" "dependabot[bot]" "${LOCK_ONLY}" ) 2>&1 )"
+assert_status "an exempt PR is not refused" "0" "$?"
+assert_contains "and says why it was exempt" "${OUT_EXEMPT}" "completeness enumeration"
+assert_contains "naming the author" "${OUT_EXEMPT}" "dependabot[bot]"
+
+# And the exemption cannot be reached by simply passing nothing: the ordinary two-argument call, which
+# every caller made before this, still refuses an empty body.
+OUT_STILL="$( ( require_pr_completeness 4245 "" ) 2>&1 )"
+assert_status "a PR with no body and no author is still refused" "1" "$?"
+assert_contains "and names the items" "${OUT_STILL}" "a writer for every new value"
+
+# A human PR with a complete body is unaffected by any of this.
+OUT_HUMAN="$( ( require_pr_completeness 4246 "${COMPLETE_BODY}" "danwright32" "mac/Overture/App/RootView.swift" ) 2>&1 )"
+assert_status "a complete human PR still passes" "0" "$?"
+assert_empty "and says nothing about exemptions" "${OUT_HUMAN}"
+
 # WIRING. Everything above proves the decision function decides correctly, and would keep passing if
 # no merge script ever called it, which is precisely how #2497 shipped a rule nothing enforced. Both
 # merge paths have to fold through this, or a PR is waved through by picking the other script.
@@ -107,6 +150,21 @@ for script in verify-and-merge-branch.sh merge-when-green.sh; do
   src="$(cat "${REPO_ROOT}/scripts/${script}" 2>/dev/null || echo "")"
   assert_contains "${script} sources the shared guard" "${src}" "lib/pr-completeness-guard.sh"
   assert_contains "${script} actually calls it" "${src}" "require_pr_completeness"
+done
+
+# The exemption is a value with no writer unless the callers HAND IT the two facts, and a guard whose
+# input nothing supplies would pass every test above while dependabot's PRs went on being refused (L46).
+# Read off the CALL itself, lowercased, rather than the file: "the word author appears somewhere in this
+# script" would be satisfied by an unrelated mention, and two of the three name the facts differently
+# (one carries them in globals, one inlines the gh calls).
+for script in verify-and-merge-branch.sh merge-when-green.sh verify-and-merge-batch.sh; do
+  src="$(cat "${REPO_ROOT}/scripts/${script}" 2>/dev/null || echo "")"
+  call="$(printf '%s' "${src}" | tr '[:upper:]' '[:lower:]' \
+  # Comment lines are skipped: one of the three explains the guard in prose above the call, and a
+  # needle satisfied by a comment ABOUT the thing is not a guard on the thing (L103).
+    | awk '/^[[:space:]]*#/{next} /require_pr_completeness/{found=1} found{print; if (!/\\$/) exit}')"
+  assert_contains "${script} hands the guard an author" "${call}" "author"
+  assert_contains "${script} hands the guard the changed files" "${call}" "files"
 done
 
 # It has to run BEFORE the expensive part, or a missing body costs two minutes of exclusive test lock

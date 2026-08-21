@@ -143,8 +143,13 @@ main() {
   # BEFORE the polling loop, deliberately. Placed after it, this waited out however long CI took and
   # only then refused, so the slowest possible feedback was attached to the cheapest possible fix.
   # verify-and-merge-branch.sh refuses before its worktree for the same reason.
+  # #2822: the author and the changed files come with the body, because the ONE exemption (a known bot
+  # bumping only dependency manifests) needs both halves. A `gh` call that fails yields an empty string
+  # for either, and empty is never exempt.
   require_pr_completeness "${PR_NUMBER}" \
-    "$(gh_as_danwright32 pr view "${PR_NUMBER}" -R "${REPO}" --json body --jq .body 2>/dev/null || echo "")"
+    "$(gh_as_danwright32 pr view "${PR_NUMBER}" -R "${REPO}" --json body --jq .body 2>/dev/null || echo "")" \
+    "$(gh_as_danwright32 pr view "${PR_NUMBER}" -R "${REPO}" --json author --jq .author.login 2>/dev/null || echo "")" \
+    "$(gh_as_danwright32 pr view "${PR_NUMBER}" -R "${REPO}" --json files --jq '.files[].path' 2>/dev/null || echo "")"
 
   START="$(date -u +%s)"
 

@@ -56,6 +56,14 @@ already drifting from the Swift version it mirrored.
 
   A gap named in the PR body is fine. An unnamed one is the defect.
 
+  **One exemption, and it is narrow (#2822).** A bot-authored PR can never answer this, so dependabot's
+  bumps piled up unmerged and the dependencies went stale (measured 2026-08-16: #2752 and #2753 were both
+  refused with all four items named). `scripts/lib/pr-completeness-guard.sh` exempts a PR when BOTH halves
+  hold: the author is one of the named bots AND the diff touches nothing but dependency manifests and
+  lockfiles. A bot PR that touches source still has new values in it and still needs the enumeration. The
+  exemption ANNOUNCES itself in the output naming why, rather than passing silently, so a mis-scoped rule
+  is visible. An empty file list is never exempt: empty is what a failed `gh` call returns.
+
   The check that enforces this matches four WORDS literally, `writer`, `reader`, `sibling` and `seen`,
   so write the enumeration using them. It cannot read an answer, only find a word: PR #2526 answered
   the first question in full under the heading "the code path that WRITES it" and was refused for
