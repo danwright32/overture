@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import SQLite3
 import SwiftData
 
 // #2054: the counting half of the joint-send rehearsal's replacement guard.
@@ -34,8 +35,24 @@ struct StoreColumnCensusTests {
                  possibleMatchSource: nil, possibleMatchName: nil)
     }
 
-    // Writes `count` shows, setting a send mode on the first `withMode` of them, and returns the store URL.
-    private func makeStore(count: Int, withMode: Int) throws -> URL {
+    // A written store and the connection that wrote it, handed back TOGETHER (#2930).
+    //
+    // The container is part of the fixture rather than a local that goes out of scope, because whether it
+    // is still alive decides what is on disk. SwiftData writes in WAL mode, and a WAL-mode database with
+    // no `-shm` beside it cannot be opened READ-ONLY at all: a read-only connection is not allowed to
+    // create the shared-memory file it would need (the same fact LiveStoreClone converts its clone to
+    // avoid). While the writer is open both sidecars exist and the census reads it; once the last
+    // connection closes they are removed and it reads the plain file. The failure is the moment BETWEEN,
+    // which is why letting the container fall out of scope made these flaky under load rather than
+    // broken: measured 2026-08-17 and again 2026-08-20, one full-suite run each time, passing on a
+    // scoped re-run both times.
+    private struct WrittenStore {
+        let url: URL
+        let container: ModelContainer
+    }
+
+    // Writes `count` shows, setting a send mode on the first `withMode` of them.
+    private func makeStore(count: Int, withMode: Int) throws -> WrittenStore {
         let url = tempStoreURL()
         let container = try ModelContainer(for: AppSchema.schema,
                                            configurations: [ModelConfiguration(url: url)])
@@ -46,46 +63,46 @@ struct StoreColumnCensusTests {
             ctx.insert(p)
         }
         try ctx.save()
-        return url
+        return WrittenStore(url: url, container: container)
+    }
+
+    private func census(_ store: WrittenStore,
+                        table: String = "ZPROSPECT",
+                        column: String = "ZSENDSTOGETHEROVERRIDE") -> StoreColumnCensus.Reading {
+        withExtendedLifetime(store.container) {
+            StoreColumnCensus.nonNullRows(table: table, column: column, inSQLiteFileAt: store.url.path)
+        }
     }
 
     @Test func countsOnlyTheRowsCarryingAValue() throws {
-        let url = try makeStore(count: 3, withMode: 1)
+        let store = try makeStore(count: 3, withMode: 1)
 
-        #expect(StoreColumnCensus.nonNullCount(table: "ZPROSPECT",
-                                               column: "ZSENDSTOGETHEROVERRIDE",
-                                               inSQLiteFileAt: url.path) == 1)
+        #expect(census(store) == .rows(1))
     }
 
     @Test func countsZeroWhenNoRowCarriesAValue() throws {
-        let url = try makeStore(count: 3, withMode: 0)
+        let store = try makeStore(count: 3, withMode: 0)
 
-        #expect(StoreColumnCensus.nonNullCount(table: "ZPROSPECT",
-                                               column: "ZSENDSTOGETHEROVERRIDE",
-                                               inSQLiteFileAt: url.path) == 0)
+        #expect(census(store) == .rows(0))
     }
 
     // The detector detecting: this is the shape the rehearsal relies on. A guard is only real once it has
     // been seen to report the thing it exists to report (L1), so a value appearing between two censuses
     // must change the number, not merely be readable.
     @Test func aValueWrittenAfterACensusChangesTheCount() throws {
-        let url = try makeStore(count: 3, withMode: 0)
-        let before = StoreColumnCensus.nonNullCount(table: "ZPROSPECT",
-                                                    column: "ZSENDSTOGETHEROVERRIDE",
-                                                    inSQLiteFileAt: url.path)
+        let store = try makeStore(count: 3, withMode: 0)
+        let before = census(store)
 
         // Reopen and set the mode on EVERY row, which is the shape of the failure the rehearsal guards:
         // a migration default reaches all of them at once.
         let ctx = ModelContext(try ModelContainer(for: AppSchema.schema,
-                                                  configurations: [ModelConfiguration(url: url)]))
+                                                  configurations: [ModelConfiguration(url: store.url)]))
         for p in try ctx.fetch(FetchDescriptor<Prospect>()) { p.sendsTogetherOverride = true }
         try ctx.save()
 
-        let after = StoreColumnCensus.nonNullCount(table: "ZPROSPECT",
-                                                   column: "ZSENDSTOGETHEROVERRIDE",
-                                                   inSQLiteFileAt: url.path)
-        #expect(before == 0)
-        #expect(after == 3)
+        let after = census(store)
+        #expect(before == .rows(0))
+        #expect(after == .rows(3))
         #expect(before != after)
     }
 
@@ -94,43 +111,118 @@ struct StoreColumnCensusTests {
     // A read that could not see the WAL would undercount the "before" side and report a change nobody made,
     // so the sidecar is asserted to be genuinely non-empty here rather than hoped to be.
     @Test func seesAWriteStillSittingInTheWriteAheadLog() throws {
-        let url = try makeStore(count: 3, withMode: 0)
+        let store = try makeStore(count: 3, withMode: 0)
 
         // Held open deliberately: nothing checkpoints the sidecar into the store while this container lives.
         let container = try ModelContainer(for: AppSchema.schema,
-                                           configurations: [ModelConfiguration(url: url)])
+                                           configurations: [ModelConfiguration(url: store.url)])
         let ctx = ModelContext(container)
         for p in try ctx.fetch(FetchDescriptor<Prospect>()) { p.sendsTogetherOverride = true }
         try ctx.save()
 
-        let wal = URL(fileURLWithPath: url.path + "-wal")
+        let wal = URL(fileURLWithPath: store.url.path + "-wal")
         let walSize = (try? FileManager.default.attributesOfItem(atPath: wal.path)[.size] as? Int) ?? 0
         #expect(walSize ?? 0 > 0, "the write landed in the main store, so this no longer covers the WAL at all")
 
-        #expect(StoreColumnCensus.nonNullCount(table: "ZPROSPECT",
-                                               column: "ZSENDSTOGETHEROVERRIDE",
-                                               inSQLiteFileAt: url.path) == 3)
-        _ = container
+        #expect(withExtendedLifetime(container) { census(store) } == .rows(3))
     }
 
     // A census that cannot be taken must say so, never answer zero: zero is indistinguishable from a clean
     // store and would make the rehearsal pass by measuring nothing (L11).
-    @Test func reportsNothingRatherThanZeroForAColumnItCannotRead() throws {
-        let url = try makeStore(count: 2, withMode: 1)
+    //
+    // And it must say WHICH of its refusals it made (#2930). Every one of them used to be the same nil, so
+    // "no row carries a value" and "this could not be read at all" were one answer to every caller, and the
+    // conditions that produce the second are exactly the busy machine where the first matters (L90).
+    @Test func namesTheColumnItCouldNotFind() throws {
+        let store = try makeStore(count: 2, withMode: 1)
 
-        #expect(StoreColumnCensus.nonNullCount(table: "ZPROSPECT",
-                                               column: "ZNOSUCHCOLUMN",
-                                               inSQLiteFileAt: url.path) == nil)
-        #expect(StoreColumnCensus.nonNullCount(table: "ZNOSUCHTABLE",
-                                               column: "ZSENDSTOGETHEROVERRIDE",
-                                               inSQLiteFileAt: url.path) == nil)
+        #expect(census(store, column: "ZNOSUCHCOLUMN")
+                == .unreadable(.columnNotInTable(column: "ZNOSUCHCOLUMN", table: "ZPROSPECT")))
     }
 
-    @Test func reportsNothingForAFileThatIsNotThere() {
+    // A missing TABLE and a missing column are different states with different causes: one is a store that
+    // is not Overture's, the other is a column this build has and that one does not.
+    @Test func namesTheTableItCouldNotFind() throws {
+        let store = try makeStore(count: 2, withMode: 1)
+
+        #expect(census(store, table: "ZNOSUCHTABLE") == .unreadable(.tableNotInStore(table: "ZNOSUCHTABLE")))
+    }
+
+    @Test func namesTheFileThatIsNotThere() {
         let missing = tempStoreURL()
 
-        #expect(StoreColumnCensus.nonNullCount(table: "ZPROSPECT",
-                                               column: "ZSENDSTOGETHEROVERRIDE",
-                                               inSQLiteFileAt: missing.path) == nil)
+        let reading = StoreColumnCensus.nonNullRows(table: "ZPROSPECT",
+                                                    column: "ZSENDSTOGETHEROVERRIDE",
+                                                    inSQLiteFileAt: missing.path)
+        #expect(reading == .unreadable(.noFileAtPath(missing.path)))
+    }
+
+    // The mechanism behind the flake this suite spent two runs producing, made deterministic (#2930).
+    //
+    // A WAL-mode database whose `-shm` is not there cannot be read: a read-only connection may not create
+    // the shared-memory file it would need. That state exists on disk for a moment every time a writer
+    // closes, which is why it arrived as a nil under load and never in a scoped re-run. It is reproduced
+    // here by deleting the `-shm` while the `-wal` stands.
+    //
+    // What it must answer is a FAULT, carrying SQLite's own code and message. Measured 2026-08-20: the
+    // open succeeds and the very next query fails with a disk I/O error, and the first version of this
+    // reader turned that into "ZPROSPECT is not in the store", which is a definite fact about Dan's data
+    // manufactured out of not knowing. That is the same defect as the nil, one level down, so it is
+    // asserted against by name rather than left to the shape of the answer.
+    @Test func saysItCouldNotReadAWalStoreMissingItsSharedMemoryFile() throws {
+        let store = try makeStore(count: 3, withMode: 1)
+        let fm = FileManager.default
+        // Both sidecars are the writer's, so the state is built while it is open and read after it is gone.
+        try withExtendedLifetime(store.container) {
+            #expect(fm.fileExists(atPath: store.url.path + "-wal"))
+            try fm.removeItem(atPath: store.url.path + "-shm")
+        }
+
+        let reading = StoreColumnCensus.nonNullRows(table: "ZPROSPECT",
+                                                    column: "ZSENDSTOGETHEROVERRIDE",
+                                                    inSQLiteFileAt: store.url.path)
+        guard case .unreadable(let why) = reading else {
+            Issue.record("a store SQLite cannot read must not answer a count, and this answered \(reading)")
+            return
+        }
+        #expect(why != .tableNotInStore(table: "ZPROSPECT"),
+                "a query that FAILED is not evidence the table is absent")
+        #expect(why != .columnNotInTable(column: "ZSENDSTOGETHEROVERRIDE", table: "ZPROSPECT"),
+                "nor evidence the column is absent")
+        let failure = try #require(why.sqliteFailure,
+                                   "a fault must carry SQLite's own answer, or it says as little as nil did")
+        #expect(failure.code != SQLITE_OK)
+        #expect(!failure.message.isEmpty)
+    }
+
+    // Every refusal this reader can answer must have a test that PRODUCES it, or a case nothing ever
+    // reaches reads exactly like one that cannot happen (L151). This is the open failing: a store the
+    // process is not allowed to read at all.
+    @Test func saysItCouldNotOpenAFileItIsNotAllowedToRead() throws {
+        let store = try makeStore(count: 2, withMode: 1)
+        let fm = FileManager.default
+        try withExtendedLifetime(store.container) {
+            try fm.setAttributes([.posixPermissions: 0], ofItemAtPath: store.url.path)
+        }
+        defer { try? fm.setAttributes([.posixPermissions: 0o644], ofItemAtPath: store.url.path) }
+
+        let reading = StoreColumnCensus.nonNullRows(table: "ZPROSPECT",
+                                                    column: "ZSENDSTOGETHEROVERRIDE",
+                                                    inSQLiteFileAt: store.url.path)
+        guard case .unreadable(.couldNotOpen(let failure)) = reading else {
+            Issue.record("expected SQLite's own refusal to open, got \(reading)")
+            return
+        }
+        #expect(failure.code != SQLITE_OK)
+        #expect(!failure.message.isEmpty)
+    }
+
+    // Interpolated into the SQL rather than bound, so the names are checked before anything is opened.
+    @Test func refusesANameThatIsNotAPlainIdentifier() throws {
+        let store = try makeStore(count: 1, withMode: 1)
+
+        #expect(census(store, table: "ZPROSPECT; DROP TABLE ZPROSPECT")
+                == .unreadable(.notAPlainIdentifier("ZPROSPECT; DROP TABLE ZPROSPECT")))
+        #expect(census(store, column: "") == .unreadable(.notAPlainIdentifier("")))
     }
 }

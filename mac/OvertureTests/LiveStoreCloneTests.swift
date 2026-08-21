@@ -60,9 +60,15 @@ struct LiveStoreCloneTests {
         defer { try? FileManager.default.removeItem(at: dir) }
 
         let clone = try #require(try LiveStoreClone.makeClone(in: dir))
-        #expect(StoreColumnCensus.nonNullCount(table: "ZPROSPECT", column: "Z_PK",
-                                               inSQLiteFileAt: clone.path) != nil,
-                "the clone could not be read read-only, so every census against it would report nothing")
+        // #2930: the census names its own refusal now, so a clone that cannot be read read-only reports
+        // WHICH refusal (the WAL-without-shm one this conversion exists for reads as couldNotOpen) rather
+        // than an absent number that could equally have been a missing column.
+        let reading = StoreColumnCensus.nonNullRows(table: "ZPROSPECT", column: "Z_PK",
+                                                    inSQLiteFileAt: clone.path)
+        if case .unreadable(let why) = reading {
+            Issue.record(Comment(rawValue: "the clone could not be read read-only (\(why)), so every "
+                                 + "census against it would report nothing"))
+        }
     }
 
     // THE refusal. It can only fire if the directory handed in resolves to the live store's own, and the

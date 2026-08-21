@@ -38,15 +38,19 @@ struct ReplyAudienceMigrationDryRunTests {
         // than racing three file copies against a live writer. See LiveStoreClone.
         guard let copy = try LiveStoreClone.makeClone(in: tmpDir) else { return }
 
-        // Z_PK is on every CoreData table and never null, so a nil here means the counting is broken rather
-        // than that a column is absent. Those must never be confused: one is a defect in this test, the
-        // other is the state the rehearsal is about.
-        #expect(StoreColumnCensus.nonNullCount(table: "ZRECIPIENT", column: "Z_PK",
-                                               inSQLiteFileAt: copy.path) != nil,
-                "the clone could not be counted at all, so nothing below measured anything")
+        // Z_PK is on every CoreData table and never null, so an unreadable answer here means the counting
+        // is broken rather than that a column is absent. Those must never be confused: one is a defect in
+        // this test, the other is the state the rehearsal is about.
+        let probe = StoreColumnCensus.nonNullRows(table: "ZRECIPIENT", column: "Z_PK",
+                                                  inSQLiteFileAt: copy.path)
+        if case .unreadable(let why) = probe {
+            Issue.record(Comment(rawValue: "the clone could not be counted at all (\(why)), so nothing "
+                                 + "below measured anything"))
+            return
+        }
 
         let before = Self.addedColumns.map {
-            StoreColumnCensus.nonNullCount(table: $0.table, column: $0.column, inSQLiteFileAt: copy.path)
+            StoreColumnCensus.nonNullRows(table: $0.table, column: $0.column, inSQLiteFileAt: copy.path)
         }
 
         let container = try ModelContainer(for: AppSchema.schema,
@@ -62,22 +66,30 @@ struct ReplyAudienceMigrationDryRunTests {
         #expect(recipients.contains { $0.email?.isEmpty == false })
 
         for (i, spec) in Self.addedColumns.enumerated() {
-            let after = StoreColumnCensus.nonNullCount(table: spec.table, column: spec.column,
-                                                       inSQLiteFileAt: copy.path)
-            guard let after else {
-                let missing = "\(spec.label) could not be counted after the migration, so the column the "
-                    + "migration is supposed to add is not there"
+            let reading = StoreColumnCensus.nonNullRows(table: spec.table, column: spec.column,
+                                                        inSQLiteFileAt: copy.path)
+            guard case .rows(let after) = reading else {
+                let missing = "\(spec.label) could not be counted after the migration: \(reading)"
                 Issue.record(Comment(rawValue: missing))
                 continue
             }
-            if let was = before[i] {
+            // #2930: the two ways `before` can carry no number are told apart here rather than folded
+            // together. A column that was ABSENT going in must come out empty, which is the forward
+            // migration's whole claim. A column that could not be READ going in says nothing about what
+            // the migration did, and asserting the absent-column claim on it would be a pass measuring
+            // nothing (L90).
+            switch before[i] {
+            case .rows(let was):
                 let invented = "\(spec.label): \(was) rows carried a value going in and \(after) came out, "
                     + "so the migration wrote values nobody chose"
                 #expect(after == was, Comment(rawValue: invented))
-            } else {
+            case .unreadable(.columnNotInTable), .unreadable(.tableNotInStore):
                 let notEmpty = "\(spec.label): the column did not exist going in, so every row must come out "
                     + "of the migration empty, and \(after) did not"
                 #expect(after == 0, Comment(rawValue: notEmpty))
+            case .unreadable(let why):
+                Issue.record(Comment(rawValue: "\(spec.label) could not be counted BEFORE the migration "
+                                     + "(\(why)), so this column measured nothing either side"))
             }
         }
 
