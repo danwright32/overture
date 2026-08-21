@@ -541,6 +541,12 @@ struct RootView: View {
                   // #1129: the Prep stage's discoverable "Prep these N" button opens the same #953 per-run
                   // selection sheet the toolbar menu and Cmd+P do, so there is one Prep-start path, not two.
                   onStartPrep: { showPrepSelection = true },
+                  // #1880: the per-row Re-prep launches through the SAME core the batch does, so it shows
+                  // "Reading show pages" while the app renders the show's listing page rather than
+                  // "Prepping" for that whole stretch.
+                  onLaunchPrep: { ctx, now, keys in
+                      try await launchPrep(context: ctx, now: now, includedKeys: keys)
+                  },
                   // #1308 Layer 2: the date-header "Check reachability" control launches an opt-in probe
                   // over that date's still-open candidates.
                   onProbeReachability: { keys in startReachabilityProbe(keys: keys) })
@@ -1385,33 +1391,47 @@ struct RootView: View {
         }
     }
 
+    // #1880: the launch's awaitable core, so a per-row Re-prep can use the SAME one.
+    //
+    // A Re-prep reaches `PrepQueueService.startPrep` directly, which left `listingProgress` unset, so the
+    // takeover fell through to "Prepping" for the whole time the app was rendering the show's listing page
+    // in a hidden browser. #1824 added that phase precisely so a launch spending tens of seconds there
+    // would not read as a dead button, and one of the three ways a run starts still read that way.
+    //
+    // Everything the phase needs lives on this view, so the wiring goes OUT to the callers rather than the
+    // takeover coming in: `QueueView` and the row factory take this closure and hand it to
+    // `ProspectMutations.reprep`'s existing `startPrep:` seam, which already has this exact shape.
+    @MainActor
+    func launchPrep(context ctx: ModelContext, now: Date, includedKeys: Set<String>) async throws {
+        takeover.show(.prep)
+        takeover.startListingRead(.prep, at: now)
+        defer { takeover.finishListingRead(.prep) }
+        _ = try await PrepQueueService.startPrep(
+            from: ctx, now: now, includedKeys: includedKeys,
+            onOrphanSettled: { reportReachabilityRun($0) },
+            onListingProgress: { done, total in
+                takeover.recordListingProgress(.prep, completed: done, total: total, at: Date())
+            })
+    }
+
     private func startPrep(includedKeys: Set<String>) {
         // #1130: show the takeover so the run's working state is unmistakable from the moment it starts,
         // the same as a manual scout, rather than a subtle toolbar label a first-time user misses.
         // #1824: raised to BEFORE the launch, because the launch now renders each kept show's listing page
         // first (seconds of real work). Left where it was, that whole phase happened behind a button that
         // looked like it had done nothing.
-        takeover.show(.prep)
-        takeover.startListingRead(.prep, at: Date())
         Task { @MainActor in
-            defer { takeover.finishListingRead(.prep) }
             do {
                 // #1809: the orphan settle lives in PrepQueueService.startPrep, so every way a Prep run
-                // begins is covered (a per-row Re-prep never reaches this function). This only supplies
-                // somewhere to SAY what that settle found.
+                // begins is covered. This only supplies somewhere to SAY what that settle found.
                 // #353: no separate "started" message. The button's own "Prepping…" state and
                 // QueueView's masthead count already say a run is in progress; a second message
                 // saying the same thing was redundant.
                 // #1143: the continuous watchPrepRuns task follows this run to completion (ingest, or a
                 // clear empty-run notice), so it is not started per-launch here; one watcher owns every run.
-                _ = try await PrepQueueService.startPrep(
-                    from: context, now: Date(), includedKeys: includedKeys,
-                    onOrphanSettled: { reportReachabilityRun($0) },
-                    onListingProgress: { done, total in
-                        // A fresh stamp on every step: it is what tells the takeover this phase is still
-                        // alive, since an in-process read has no marker file to heartbeat.
-                        takeover.recordListingProgress(.prep, completed: done, total: total, at: Date())
-                    })
+                // #1880: through `launchPrep`, the same core a per-row Re-prep now uses, so all three
+                // entry points show one phase label rather than two of three.
+                try await launchPrep(context: context, now: Date(), includedKeys: includedKeys)
             } catch {
                 // The run never started, so the takeover must not sit there implying it did.
                 takeover.hide(.prep)
