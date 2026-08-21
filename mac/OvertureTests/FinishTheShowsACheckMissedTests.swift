@@ -91,7 +91,6 @@ struct ShortfallReportCarriesItsActionTests {
 
     @Test func aShortfallReportCarriesTheOfferToFinishIt() {
         let notices = AppNotices.current(
-            omniFocusFailing: false,
             status: status("Reachability: 8 of 77 shows never got an answer and are still unchecked",
                            action: .finishShowsACheckMissed))
         #expect(notices.first?.action == .finishShowsACheckMissed)
@@ -100,7 +99,7 @@ struct ShortfallReportCarriesItsActionTests {
     // An ordinary receipt still carries nothing, so the queue never grows a control beside a run that
     // finished cleanly.
     @Test func aCleanRunsReceiptOffersNothing() {
-        let notices = AppNotices.current(omniFocusFailing: false,
+        let notices = AppNotices.current(
                                          status: status("Prep finished", priority: .info))
         #expect(notices.first?.action == nil)
     }

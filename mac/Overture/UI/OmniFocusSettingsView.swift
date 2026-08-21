@@ -17,6 +17,11 @@ struct OmniFocusSettingsView: View {
     private var omniFocusEnabled = OmniFocusSyncConfig().enabled
     @AppStorage(OmniFocusSyncConfig.Keys.horizon)
     private var omniFocusHorizon = OmniFocusSyncConfig().horizonDays
+    // #2884: the last failure, exactly as it was stored. The masthead line says which KIND of failure it
+    // is, in Dan's words; this is the raw text OmniFocus or AppleScript actually produced, which is what
+    // a diagnosis needs and what used to require reading the app's preferences from a terminal.
+    @AppStorage(OmniFocusSyncStatus.failedAtKey) private var omniFocusFailedAt: Double = 0
+    @AppStorage(OmniFocusSyncStatus.errorKey) private var omniFocusLastError: String = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: OVSpacing.md) {
@@ -31,6 +36,17 @@ struct OmniFocusSettingsView: View {
                 // no window to look ahead through, and the control that turns it on is not on this sheet.
                 Text("Sync is off. Turn it on from the OmniFocus menu in the toolbar, and the look-ahead window appears here.")
                     .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            // Shown only when there IS a failure. A section that renders an empty box on a healthy sync
+            // would be a heading over nothing, which is the shape #1547 was.
+            if let reason = OmniFocusFailureSection.reasonLine(failedAt: omniFocusFailedAt,
+                                                               storedReason: omniFocusLastError) {
+                Divider()
+                Text(OmniFocusFailureSection.heading).font(OVType.meta).foregroundStyle(OVColor.ink)
+                Text(reason)
+                    .font(OVType.body).foregroundStyle(OVColor.inkSoft)
+                    .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }

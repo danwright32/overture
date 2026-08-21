@@ -147,13 +147,12 @@ struct HandoffFileReadTests {
 
     @Test func nothingUnreadableIsNoLineAtAll() {
         #expect(AppNotices.couldNotRead([]) == nil)
-        #expect(!AppNotices.current(omniFocusFailing: false, unreadableFiles: [], status: StatusLine())
+        #expect(!AppNotices.current(unreadableFiles: [], status: StatusLine())
             .contains { $0.text.contains("couldn't read") })
     }
 
     @Test func theNoticeListCarriesTheUnreadableLine() {
         let notices = AppNotices.current(
-            omniFocusFailing: false,
             unreadableFiles: [.init(file: "overture-results.json", reason: "why", count: 1)],
             status: StatusLine())
         #expect(notices.contains { $0.text.contains("overture-results.json") && $0.tone == .warning })

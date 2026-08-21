@@ -20,16 +20,16 @@ struct AppNoticeTests {
 
     // A quiet app says nothing at all, so the masthead grows no permanent row of reassurance.
     @Test func aquietAppAddsNoLines() {
-        #expect(AppNotices.current(omniFocusFailing: false, status: StatusLine()).isEmpty)
+        #expect(AppNotices.current(status: StatusLine()).isEmpty)
     }
 
     // A warning and a receipt are different things and are drawn differently. They were one faint grey
     // line in one slot, so "your contact guard stopped an email" and "12 sources couldn't be checked"
     // arrived identically.
     @Test func awarningIsNotDrawnLikeAReceipt() {
-        let warned = AppNotices.current(omniFocusFailing: false,
+        let warned = AppNotices.current(
                                         status: status("12 sources couldn't be checked", .warning))
-        let receipt = AppNotices.current(omniFocusFailing: false,
+        let receipt = AppNotices.current(
                                          status: status("Skipped 2 shows for an organisation that asked not to be contacted"))
 
         #expect(warned.map(\.tone) == [.warning])
@@ -40,36 +40,52 @@ struct AppNoticeTests {
     // drawn at all, so an unattended scout's warning could be hidden by an unrelated sync problem: the
     // same silent erasure StatusLine's priority rule exists to prevent, reaching it from outside the rule.
     @Test func asyncFailureNeverHidesWhatTheLastRunHadToSay() {
-        let notices = AppNotices.current(omniFocusFailing: true,
+        let notices = AppNotices.current(omniFocusFailure: (.unexplained, "a reason nobody classified"),
                                          status: status("12 sources couldn't be checked", .warning))
 
         #expect(notices.count == 2)
-        #expect(notices.map(\.text) == [AppNotices.omniFocusFailing.text, "12 sources couldn't be checked"])
+        #expect(notices.map(\.text)
+                == [AppNotices.omniFocusFailing(.unexplained, reason: "a reason nobody classified").text,
+                    "12 sources couldn't be checked"])
         #expect(notices.allSatisfy { $0.tone == .warning })
     }
 
     // The standing fault reads first: it is true until something is done about it, where the line below
     // it is about one run that has already finished.
     @Test func thestandingFaultIsReadFirst() {
-        let notices = AppNotices.current(omniFocusFailing: true, status: status("Prep finished"))
-        #expect(notices.first?.text == AppNotices.omniFocusFailing.text)
+        let notices = AppNotices.current(omniFocusFailure: (.unexplained, "a reason nobody classified"), status: status("Prep finished"))
+        #expect(notices.first?.text
+                == AppNotices.omniFocusFailing(.unexplained, reason: "a reason nobody classified").text)
     }
 
     // The sync failure says what to do, not just that something is wrong (L80). #2250 moved the remedy
     // out of the tooltip: the retry is now a CONTROL on the line, and the line itself states what is at
     // stake, so neither depends on Dan hovering. What stays in the tooltip is what to look at if the
     // retry does not clear it, which explains rather than instructs.
+    //
+    // #2883/#2884: the sentence and the button now come from the KIND. The unexplained case is the one
+    // this test was written about and keeps every property it asserted; the kinds' own differences are
+    // pinned in `OmniFocusFailureKindTests`.
     @Test func thesyncFailureSaysWhatToDoAboutIt() throws {
-        #expect(AppNotices.omniFocusFailing.action == .retryOmniFocusSync)
-        #expect(AppNotices.omniFocusFailing.text.contains("follow-up tasks"))
-        let help = try #require(AppNotices.omniFocusFailing.help)
-        #expect(help.contains("Automation permission"))
+        let unexplained = AppNotices.omniFocusFailing(.unexplained, reason: "AppleEvent timed out")
+        #expect(unexplained.action == .retryOmniFocusSync)
+        #expect(unexplained.text.contains("follow-up tasks"))
+        let help = try #require(unexplained.help)
+        #expect(help.contains("AppleEvent timed out"), "the stored reason has to reach a surface (#2884)")
+
+        // The deterministic one withholds the control that cannot work, and says so rather than going
+        // quiet (#2883, L109).
+        let refused = AppNotices.omniFocusFailing(
+            .refusedSomeShows, reason: "OmniFocus updated 3 of 4 reminders. It could not update Aurora Strings.")
+        #expect(refused.action == nil)
+        #expect(refused.text.contains("Aurora Strings"))
+        #expect(refused.text.contains("will not change it"))
     }
 
     // A run's own line carries no tooltip: whatever it had to say is the sentence itself. A notice that
     // hid half of what it meant behind a hover would be a caveat nobody reads (L49).
     @Test func arunsOwnLineSaysEverythingInTheLineItself() {
-        let notices = AppNotices.current(omniFocusFailing: false, status: status("Prep finished"))
+        let notices = AppNotices.current(status: status("Prep finished"))
         #expect(notices.first?.help == nil)
     }
 }
@@ -103,7 +119,7 @@ struct AppNoticePlacementGuardTests {
         // Deliberately not one exact line any more: it was pinned as a two-line rendering, and the third
         // argument re-wrapped it, so the guard went red on a change it exists to permit while the wiring
         // it protects was intact (L103).
-        for argument in ["notices: AppNotices.current(omniFocusFailing: omniFocusFailedAt > 0",
+        for argument in ["notices: AppNotices.current(omniFocusFailure: omniFocusFailure",
                          "bookingsVanished: bookingsVanished",
                          "shootHistory: shootHistoryHealth",
                          "status: status)"] {

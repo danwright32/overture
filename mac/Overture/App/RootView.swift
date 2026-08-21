@@ -72,6 +72,11 @@ struct RootView: View {
     @State private var cancelledScoutRead: Int?
     // #239: reactively reflect a failed OmniFocus sync in the masthead (0 = no failure on record).
     @AppStorage(OmniFocusSyncStatus.failedAtKey) private var omniFocusFailedAt: Double = 0
+    // #2884: the stored reason and the permission flag, read reactively beside the timestamp, so the
+    // masthead can say WHY rather than only THAT. Both were already on disk and reachable only from a
+    // terminal.
+    @AppStorage(OmniFocusSyncStatus.errorKey) private var omniFocusLastError: String = ""
+    @AppStorage(OmniFocusSyncStatus.permissionNeededKey) private var omniFocusPermissionNeeded: Bool = false
     // #469: when the current sync began (nil = not syncing), for the live "Syncing… m:ss" state,
     // consistent with scout/prep/connect/send.
     @State private var omniFocusSyncStartedAt: Date?
@@ -478,6 +483,16 @@ struct RootView: View {
     // toolbars, the lifecycle work, the alerts, the sheets, and what has to sit outermost. `body` is
     // deliberately untouched, which is what keeps the three guards that read it (the search bar's
     // position above the queue) pointing at the same text.
+    // #2883 / #2884: the failure as a KIND plus its stored reason, or nothing when the last sync was
+    // clean. Derived here, from the three defaults the sync writes, so the masthead's sentence and its
+    // button both follow from one classification instead of each surface reading the raw text (L35).
+    private var omniFocusFailure: (kind: OmniFocusFailureKind, reason: String)? {
+        guard omniFocusFailedAt > 0 else { return nil }
+        return (OmniFocusFailureKind.of(message: omniFocusLastError,
+                                        permissionNeeded: omniFocusPermissionNeeded),
+                omniFocusLastError)
+    }
+
     private var queueContent: some View {
         withOutermostWrappers(withSheets(withAlerts(withLifecycle(queueSurface))))
     }
@@ -491,7 +506,7 @@ struct RootView: View {
                   // #1900: and whether the shoot history behind "you've photographed this room before"
                   // is still worth drafting from. It is refreshed by hand, so nothing else on this
                   // screen would ever say it had gone stale.
-                  notices: AppNotices.current(omniFocusFailing: omniFocusFailedAt > 0,
+                  notices: AppNotices.current(omniFocusFailure: omniFocusFailure,
                                               bookingsVanished: bookingsVanished,
                                               shootHistory: shootHistoryHealth,
                                               // #2879: and any handoff file the app is reading and
