@@ -111,7 +111,14 @@ export const RUNBOOK_RULES: RunbookRule[] = [
   // first try). Dropping the pointer rule lets a DM keep satisfying step 3, which is what made the run
   // stop looking at all.
   { name: "try-the-canonical-domain", pattern: /fetch the canonical guess directly/i },
-  { name: "social-profile-is-a-pointer", pattern: /a social profile is a pointer, not a destination/i },
+  // #2948: guarded on the INSTRUCTION rather than on the slogan it used to open with. The slogan said a
+  // profile "is a pointer, not a destination" and that reaching one "does NOT satisfy step 3", which
+  // #2612 reversed two paragraphs later: a handle IS a route Dan uses, and he DMs an act by hand. The
+  // section therefore opened with a refusal its own continuation contradicted, and a run reading top down
+  // met the refusal first. What survives is the ORDER, which is the part that was never wrong: keep
+  // looking past the profile for an address, and emit the handle only when that comes back with nothing.
+  { name: "a-profile-is-not-where-the-search-stops",
+    pattern: /profile is not where the search stops/i },
   // #2892: the pointer rule above and the canonical-domain rule are both conditional on the run having
   // ALREADY landed somewhere. Neither sends it looking, so for the show whose only route is a DM the
   // route was the one thing the procedure could not reach, and the run reported a finished search.
