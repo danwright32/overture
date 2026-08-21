@@ -12,6 +12,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+# #2929: whether this run is still MOVING. Output does not stream here (each fixture's block is printed
+# after it finishes), so without this a fixture that never returns leaves the runner silent forever.
+# shellcheck source=./lib/fixture-stall-guard.sh
+source "${SCRIPT_DIR}/lib/fixture-stall-guard.sh"
 
 # The shape bash prints when a name resolves to nothing: "line 12: assert_contains: command not
 # found". A fixture that hits this keeps going, its assertion silently does nothing, and it exits 0
@@ -239,13 +243,19 @@ run_shell_fixtures() {
   # and the read-out below would score it off a missing file rather than its real exit code. The
   # wrapper itself always exits 0, because xargs would stop dispatching on 255 and treat any other
   # nonzero as its own verdict; the fixtures' verdicts live in the status files, nowhere else.
+  # #2929: the wrapper records both ends of each fixture in one progress file, which is what the stall
+  # guard reads. Appended with >> from eight lanes at once: each write is a single short line, which
+  # POSIX keeps atomic on a file opened for append, and the guard only ever COUNTS lines and compares
+  # names, so an interleaved pair would cost nothing anyway.
   cat > "${scratch}/run-one.sh" <<'WRAPPER'
 #!/usr/bin/env bash
 scratch="$1"; pair="$2"
 idx="${pair%%$'\t'*}"
 fixture="${pair#*$'\t'}"
 mkdir -p "${scratch}/tmp-${idx}"
+echo "started ${fixture}" >> "${scratch}/progress"
 ( set +e; TMPDIR="${scratch}/tmp-${idx}" "${fixture}" >"${scratch}/log-${idx}" 2>&1; echo "$?" > "${scratch}/status-${idx}" )
+echo "finished ${fixture}" >> "${scratch}/progress"
 echo "finished ${fixture}"
 exit 0
 WRAPPER
@@ -253,11 +263,19 @@ WRAPPER
 
   # Index and path travel as one null-delimited argument (tab-split by the wrapper), because the
   # index is what ties a fixture to its log file when completion order is nobody's to predict.
+  # Started before the fan-out and stopped after it, including on the way out through the trap: a
+  # watcher that outlived its run would sit warning about a file nobody is writing.
+  : > "${scratch}/progress"
+  start_fixture_watch "${scratch}/progress"
+  trap 'stop_fixture_watch "${FIXTURE_WATCH_PID}"' EXIT
+
   local i=0
   for fixture in "$@"; do
     printf '%d\t%s\0' "${i}" "${fixture}"
     i=$((i + 1))
   done | xargs -0 -n 1 -P "${jobs}" "${scratch}/run-one.sh" "${scratch}"
+
+  stop_fixture_watch "${FIXTURE_WATCH_PID}"
 
   # Every fixture has finished; now read each one's verdict, in list order.
   i=0

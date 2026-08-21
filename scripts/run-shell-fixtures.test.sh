@@ -389,6 +389,25 @@ chmod +x "${FIXED}"
 fixture_sources_avoid_short_circuit_pipes "${FIXED}" >/dev/null 2>&1
 assert_equals "the herestring remedy is accepted" "0" "$?"
 
+# --- the stall guard is actually WIRED IN (#2929) -----------------------------------------------------
+#
+# `scripts/lib/fixture-stall-guard.test.sh` proves the guard decides correctly, and would keep passing if
+# this runner never recorded a thing for it to read. Measured with `scripts/mutate.sh`: deleting the
+# wrapper's "started" line was reported SURVIVED. A guard whose input nothing supplies is a value with no
+# writer (L46), so the wiring is asserted here, where the runner is.
+RUNNER_SRC="$(cat "${SCRIPT_DIR}/run-shell-fixtures.sh" 2>/dev/null || echo "")"
+assert_contains "the runner sources the stall guard" "${RUNNER_SRC}" "lib/fixture-stall-guard.sh"
+assert_contains "and starts a watch on the progress file" "${RUNNER_SRC}" "start_fixture_watch"
+assert_contains "and stops it" "${RUNNER_SRC}" "stop_fixture_watch"
+
+# Both ENDS, which is the half a lane full of fast fixtures would otherwise hide.
+assert_contains "each fixture records that it started" "${RUNNER_SRC}" 'echo "started ${fixture}" >> "${scratch}/progress"'
+assert_contains "and that it finished" "${RUNNER_SRC}" 'echo "finished ${fixture}" >> "${scratch}/progress"'
+
+# The watch has to be stopped on the way OUT as well as on the happy path, or a watcher outlives its run
+# and sits warning about a file nobody is writing.
+assert_contains "the watch is stopped from a trap too" "${RUNNER_SRC}" "trap 'stop_fixture_watch"
+
 echo
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All run-shell-fixtures.sh fixtures passed."
