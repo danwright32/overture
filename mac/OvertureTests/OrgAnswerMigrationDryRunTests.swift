@@ -17,16 +17,23 @@ struct OrgAnswerMigrationDryRunTests {
     @Test func addingTheLedgerPreservesEveryProspectInACloneOfTheLiveStore() throws {
         let fm = FileManager.default
         let live = releaseStoreURL
-        guard fm.fileExists(atPath: live.path) else { return }
 
         let tmpDir = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("org-ledger-dryrun-\(UUID().uuidString)")
         try fm.createDirectory(at: tmpDir, withIntermediateDirectories: true)
         defer { try? fm.removeItem(at: tmpDir) }
 
-        // #1672: through the ONE shared clone, which takes the copy via SQLite's online backup
-        // rather than racing three file copies against a live writer. See LiveStoreClone.
-        guard let copy = try LiveStoreClone.makeClone(in: tmpDir) else { return }
+        // #1672: through the ONE shared clone, which takes the copy via SQLite's online backup rather
+        // than racing three file copies against a live writer. See LiveStoreClone.
+        // #3035: and through MigrationRehearsal, which SAYS when it rehearsed nothing. Both of the exits
+        // this used to take were silent, so a run against Dan's real store and a run that never opened a
+        // file left the same green tick (L98).
+        let start = try MigrationRehearsal.begin("the org reachability ledger", liveStore: live, into: tmpDir)
+        guard case let .rehearse(copy) = start else {
+            if case let .skipped(said) = start { MigrationRehearsal.report(said) }
+            if case let .cloneFailed(said) = start { MigrationRehearsal.report(said) }
+            return
+        }
 
         // Baseline under the OLD schema (no ledger): what must survive.
         var prospects = 0

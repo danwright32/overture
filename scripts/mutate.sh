@@ -526,7 +526,16 @@ SHAPE="$(grep -oE "Test run with [0-9]+ tests? in [0-9]+ suites?" "${RUN_LOG}" |
 # A run that executed nothing is its own outcome. It is the one most likely to be believed, because it
 # arrives looking exactly like a suite with no complaints (L98), and here it would be read as a guard
 # that survived, which is the opposite of what happened.
-if grep -q "NOTHING RAN" "${RUN_LOG}"; then
+# Anchored, not a bare substring. A Swift test failure prints the SOURCE around it, comments included, so
+# any file whose comment MENTIONS "NOTHING RAN" (this repo has several, since the rule is written down in
+# AGENTS.md and cited in tests) put the phrase in the log and every mutation touching that file reported
+# NOTHING RAN while the suite had really run and gone red. Measured 2026-08-21 while proving #3035's own
+# guards. That is L156 exactly: a check looking for a substring of the thing being talked about also
+# matches the discussion of it, and here it turned a CAUGHT into a refusal.
+#
+# The runner emits it as `<script>: NOTHING RAN. <detail>`, so the phrase is required to open a line or to
+# follow a `: ` prefix. A mention inside prose or a comment is preceded by something else.
+if grep -qE "(^|: )NOTHING RAN\b" "${RUN_LOG}"; then
   echo "NOTHING RAN - the run executed no tests, so this says nothing about any guard."
   echo "  Check the scope: $*"
   exit 2

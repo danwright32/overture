@@ -33,8 +33,13 @@ make_runner() {
   echo "${path}"
 }
 
-RED_RUNNER="$(make_runner red 1 '✘ Test "the row draws a quiet exit" failed after 0.01 seconds with 1 issue.
-✘ Test run with 12 tests in 2 suites failed after 0.1 seconds with 1 issue.')"
+# The mark Swift Testing prints for a failing test, built from its UTF-8 bytes rather than typed, on
+# mac/scripts/lib/suite-stats.test.sh's precedent (#2193). The pre-push style gate blocks a new line
+# holding one and cannot tell a line that USES the character from a line that must QUOTE it, which is the
+# gate working correctly, so the file holds no literal mark and there is nothing for it to catch.
+X="$(printf '\xe2\x9c\x98')"
+RED_RUNNER="$(make_runner red 1 "${X} Test \"the row draws a quiet exit\" failed after 0.01 seconds with 1 issue.
+${X} Test run with 12 tests in 2 suites failed after 0.1 seconds with 1 issue.")"
 GREEN_RUNNER="$(make_runner green 0 '✔ Test run with 12 tests in 2 suites passed after 0.1 seconds.')"
 EMPTY_RUNNER="$(make_runner empty 1 'run-tests-locked.sh: NOTHING RAN. The scope matched no tests.')"
 
@@ -427,6 +432,28 @@ write_subject
 OUT="$(OVERTURE_MUTATE_RUNNER="${GREEN_RUNNER}" "${MUTATE}" "${SUBJECT}" 's/nowhere(in: this)/x/' 2>&1)"
 assert_contains "a search text that is genuinely absent is still NOT APPLIED" "${OUT}" "NOT APPLIED"
 assert_not_contains "and is not blamed on escaping" "${OUT}" "literally"
+
+# --- a MENTION of NOTHING RAN is not a run that executed nothing ------------------------------------
+# A Swift test failure prints the source around it, comments included, so a file whose comment mentions
+# the phrase puts it in the log. This repo has several, because the rule is written down in AGENTS.md and
+# cited in tests. Before this, every mutation touching such a file reported NOTHING RAN while the suite
+# had really run and really gone red, turning a CAUGHT into a refusal (L156). Measured 2026-08-21.
+write_subject
+MENTION_RUNNER="$(make_runner mention 1 "  | > // this repo already refuses it at three other entry points (\`NOTHING RAN\` in run-tests-locked.sh)
+${X} Test \"the row draws a quiet exit\" failed after 0.01 seconds with 1 issue.
+${X} Test run with 12 tests in 2 suites failed after 0.1 seconds with 1 issue.")"
+OUT="$(OVERTURE_MUTATE_RUNNER="${MENTION_RUNNER}" "${MUTATE}" "${SUBJECT}" 's/"yes"/"no"/' 2>&1)"
+STATUS=$?
+assert_contains "a log that merely MENTIONS the phrase is judged on the run" "${OUT}" "CAUGHT"
+assert_not_contains "and is not refused as an empty run" "${OUT}" "NOTHING RAN - the run executed no tests"
+assert_equals "and exits 0" "0" "${STATUS}"
+
+# And a run that genuinely executed nothing is still refused, so the anchoring did not simply switch the
+# check off (L1).
+write_subject
+OUT="$(OVERTURE_MUTATE_RUNNER="${EMPTY_RUNNER}" "${MUTATE}" "${SUBJECT}" 's/"yes"/"no"/' 2>&1)"
+assert_contains "a run that really executed nothing is still refused" "${OUT}" "NOTHING RAN"
+assert_not_contains "and is never reported as caught" "${OUT}" "CAUGHT"
 
 if [[ "${FAILURES:-0}" -ne 0 ]]; then
   echo "${FAILURES} failure(s)"
