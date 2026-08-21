@@ -128,6 +128,7 @@
 		12BDF9CEF05FEE3F6C3D72C3 /* ExcludedTownsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C50A45B444DA50BE4AD1A50 /* ExcludedTownsView.swift */; };
 		1307B6A3046AB97CE70510A1 /* ScoutExtractCurrentSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08BA0F4504495B3318601218 /* ScoutExtractCurrentSource.swift */; };
 		1350BAE659D07E237A7CECB0 /* StoreBackupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AFA49345C432E2C82606573 /* StoreBackupTests.swift */; };
+		1360BD0A418B3A50FEA4F03D /* RealRunOutputStillDecodesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51270E854D7DAE15071870DB /* RealRunOutputStillDecodesTests.swift */; };
 		136FF08F14AC8AEA11307B5C /* DetachedRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E57D965CBEDF36F107333EB /* DetachedRunner.swift */; };
 		137F0FFB0B89CAC9D00D9B99 /* StageOverlapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D679AAB5771C8553186C8594 /* StageOverlapTests.swift */; };
 		13C40551127F2BCA9FA1D470 /* LinkReplyPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = E29A29EB0D7BCCD401045D0F /* LinkReplyPicker.swift */; };
@@ -2259,6 +2260,7 @@
 		50569449C10E9C4F6B69BD48 /* MatchingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MatchingTests.swift; sourceTree = "<group>"; };
 		506D734A84A056EAEF4C60B0 /* VoiceGuidanceGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceGuidanceGuardTests.swift; sourceTree = "<group>"; };
 		509E65317079CDE9B3FF3061 /* GeoRefusals.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeoRefusals.swift; sourceTree = "<group>"; };
+		51270E854D7DAE15071870DB /* RealRunOutputStillDecodesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealRunOutputStillDecodesTests.swift; sourceTree = "<group>"; };
 		513DB732FDE78DAFF21B9C48 /* DockPresence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockPresence.swift; sourceTree = "<group>"; };
 		5178D84B81F3C41DC943DF9F /* ReachabilityProbeMarker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReachabilityProbeMarker.swift; sourceTree = "<group>"; };
 		51D9BD15AB20C621AEB9FCA6 /* UnaccountedAddressGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnaccountedAddressGuardTests.swift; sourceTree = "<group>"; };
@@ -3870,6 +3872,7 @@
 				AEE0F8ED75F6FC8F1ED1A0DA /* ReachedOutStageTests.swift */,
 				B966354A2072AE792FCC4E3C /* ReachedOutTimingSlotTests.swift */,
 				23D99AA2372E7E6CABBD50A7 /* ReadingHalfVisibleGuardTests.swift */,
+				51270E854D7DAE15071870DB /* RealRunOutputStillDecodesTests.swift */,
 				715A592582E20C4B877A8C4B /* RealStoreLockPairingTests.swift */,
 				18C833C90E3A64756068B92C /* RealStoreTestLock.swift */,
 				F78E4201FD7A26BF690E34E1 /* RealStoreTestLockTests.swift */,
@@ -6145,6 +6148,7 @@
 				35BE1EC49FEEF54F0B664022 /* ReachedOutStageTests.swift in Sources */,
 				3C047BDD719CFBD7624D8C9A /* ReachedOutTimingSlotTests.swift in Sources */,
 				C81262BCC9A17467710060AE /* ReadingHalfVisibleGuardTests.swift in Sources */,
+				1360BD0A418B3A50FEA4F03D /* RealRunOutputStillDecodesTests.swift in Sources */,
 				0B29C14ABF9533D1B13778EB /* RealStoreLockPairingTests.swift in Sources */,
 				044ED92FA470C7ACF6CD944C /* RealStoreTestLock.swift in Sources */,
 				75EC4A977F5C81D47FABA927 /* RealStoreTestLockTests.swift in Sources */,
