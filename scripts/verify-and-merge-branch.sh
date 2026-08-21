@@ -45,6 +45,9 @@ usage() {
 # Resolves the gh identifier (a PR number or a branch name both work with `gh pr view`) into the
 # globals verify_and_merge and check_mergeable need: PR_NUMBER, PR_BRANCH, PR_MERGEABLE. Named and
 # extracted, rather than inlined, so a test can stub it instead of calling gh for real.
+#
+# #2822: PR_AUTHOR and PR_FILES come back too, for the completeness guard's one exemption (a known bot
+# bumping only dependency manifests). A failed call leaves either empty, and empty is never exempt.
 resolve_pr() {
   local identifier="$1"
   local info
@@ -52,6 +55,8 @@ resolve_pr() {
   IFS=$'\t' read -r PR_NUMBER PR_BRANCH PR_MERGEABLE <<< "${info}"
   # Fetched separately because a body is multi-line and would break the tab-separated read above.
   PR_BODY="$(gh_as_danwright32 pr view "${identifier}" -R "${REPO}" --json body --jq .body 2>/dev/null || echo "")"
+  PR_AUTHOR="$(gh_as_danwright32 pr view "${identifier}" -R "${REPO}" --json author --jq .author.login 2>/dev/null || echo "")"
+  PR_FILES="$(gh_as_danwright32 pr view "${identifier}" -R "${REPO}" --json files --jq '.files[].path' 2>/dev/null || echo "")"
 }
 
 # Fetches the branch and points the PERSISTENT verify worktree at its tip, setting WORKTREE_DIR.
@@ -265,7 +270,7 @@ verify_and_merge() {
   check_mergeable "${PR_MERGEABLE}" || return 1
   # BEFORE the suite, deliberately: a body missing the enumeration is refused in seconds rather
   # than after two minutes of exclusive test lock, and the fix does not need a re-run of anything.
-  require_pr_completeness "${PR_NUMBER}" "${PR_BODY}"
+  require_pr_completeness "${PR_NUMBER}" "${PR_BODY}" "${PR_AUTHOR:-}" "${PR_FILES:-}"
 
   echo "Verifying PR #${PR_NUMBER} (${PR_BRANCH}) in the verify worktree..."
   # Checked, not left to errexit: every caller of verify_and_merge invokes it somewhere errexit is
