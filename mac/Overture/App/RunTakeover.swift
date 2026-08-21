@@ -25,6 +25,11 @@ struct RunTakeover: Equatable {
 
     var presented: RunSlot? { order.first }
 
+    // #2761: EVERY run with a takeover up, in the order they went up. The sheet shows one line per live
+    // run now, so `presented` is no longer "the one on screen": it is only which one a control aimed at
+    // the sheet as a whole means, and the ordering rule above is what keeps that stable.
+    var shown: [RunSlot] { order }
+
     func isShown(_ slot: RunSlot) -> Bool { order.contains(slot) }
 
     // Idempotent: a run that announces itself twice (the launch, then the watcher noticing it) is one

@@ -260,11 +260,12 @@ enum AgentRoster {
         //
         // Said only when there IS a backlog. "0 ready, held by a check" would promise rows the tap cannot
         // land on, and with nothing kept the fact that Prep cannot start costs him nothing.
-        if i.runInFlight == .reachabilityCheck, i.keptToPrep > 0 {
-            return AgentStatus(name: "Prep", state: .working,
-                               detail: "\(i.keptToPrep) ready, held by a check",
-                               focus: .prep, count: i.keptToPrep)
-        }
+        // #2761: DELETED, not reworded. This described a backlog that could not move because a check held
+        // the single slot, and after #3015 a check holds nothing: Dan can start a Prep run while one is
+        // going, and the only shows it leaves out are the ones that check is actually on. So the sentence
+        // is now false in the ordinary case, and the state it named no longer exists. The plain backlog
+        // status below is the true one (L152: the change is reported by the surface that showed what was
+        // outstanding, and resolving it correctly makes that surface go quiet).
         // #1583/#1691: a show Dan kept and a booking then landed on. It outranks the ordinary backlog for
         // the same reason a send problem outranks an approved email waiting on a click: the routine case
         // resolves itself (the next Prep run picks those shows up), while this one is stuck until he

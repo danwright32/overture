@@ -39,7 +39,10 @@ enum PrepStartGate {
             // Not "Prepping", which is what the toolbar already says while a run is going. This is the
             // answer to a different question (why this item will not start another one), and it is read
             // from inside the open menu where that label is not in view.
-            case .runInFlight(let kind): return "A \(kind.runNoun) is already going"
+            // #2761: "already going" was true when any run blocked this one. After #3015 only a run in
+            // this control's OWN slot refuses it, so the sentence has to say that rather than name a
+            // coincidence: a check being live is no longer a reason Prep cannot start.
+            case .runInFlight(let kind): return "Your \(kind.runNoun) is still going"
             // Names the step that clears it. Keeping a show is one click away in the Queue behind this
             // menu, so this is advice that actually changes the state he is stuck in (L111).
             case .nothingKept: return "Keep a show first, then prep it"

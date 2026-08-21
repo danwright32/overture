@@ -769,9 +769,12 @@ enum PrepQueueService {
             case .runnerUnavailable(let reason):
                 return reason
             case .alreadyRunning:
-                return "A Prep run is already in progress. Wait for it to finish."
+                // #2761: names the Prep run specifically, because after #3015 that is the ONLY thing this
+                // case can mean. It used to be thrown by the check's launch too, where it was simply
+                // wrong, and `checkAlreadyRunning` has carried that case since #2760.
+                return "Your Prep run is still going. Wait for it to finish before starting another."
             case .checkAlreadyRunning:
-                return "A contact check is already going. Wait for it to finish."
+                return "Your contact check is still going. Wait for it to finish before starting another."
             case .everyShowHeld(let runNoun):
                 return "Every show here is already in the \(runNoun) that is running. Wait for it to finish and try again."
             case .holdingsUnreadable(let runNoun):
