@@ -855,7 +855,10 @@ struct DraftReviewView: View {
             // #1137: a still-pending contact no longer gets its own indented "Remove" row. Its leading
             // glyph is the X that removes it (leadingGlyph / #399: Prospect.removeOrSuppressRecipient
             // hard-deletes a still-pending row).
-            if c.replied { replyDraftBlock(c) }
+            // #2934: `replied` is not the question. An answered conversation is still `replied`, and the
+            // block used to come up on this card with its "Draft a reply" button, for a run that refuses
+            // it. The mode decides, and a conversation with nothing to show draws nothing.
+            if c.replied && c.replyConversationMode != .closedNothingToShow { replyDraftBlock(c) }
         }
         .padding(.vertical, 3)
         .padding(.horizontal, OVSpacing.sm)

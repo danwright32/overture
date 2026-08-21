@@ -465,7 +465,24 @@ struct RootView: View {
         }
     }
 
+    // #2803: the modifier chain is split into expressions the compiler type-checks separately.
+    //
+    // It was ONE chain of about thirty modifiers hanging off `QueueView`, at the Swift type checker's
+    // practical limit: adding a single `.task` during #2760 made the whole thing fail with "unable to
+    // type-check this expression in reasonable time", which names no line worth reading, and #2760
+    // worked around it twice rather than fixing it. Each group below is its own generic function, so
+    // the next modifier anybody adds is checked against one small expression instead of the whole
+    // surface.
+    //
+    // Grouped by WHAT a modifier does, not by where its line happened to fall: the surface and its
+    // toolbars, the lifecycle work, the alerts, the sheets, and what has to sit outermost. `body` is
+    // deliberately untouched, which is what keeps the three guards that read it (the search bar's
+    // position above the queue) pointing at the same text.
     private var queueContent: some View {
+        withOutermostWrappers(withSheets(withAlerts(withLifecycle(queueSurface))))
+    }
+
+    private var queueSurface: some View {
         QueueView(deepLinkedKey: $deepLinkedKey, deepLinkedKeys: $deepLinkedKeys, onConnectGmail: connectGmail,
                   // #2204: out of the toolbar's status slot, which macOS hides in the overflow chevron at
                   // Dan's ordinary window width, and onto the masthead he reads.
@@ -842,6 +859,11 @@ struct RootView: View {
                 }
                 #endif
             }
+    }
+
+    // The attended launch work and the watchers that follow it.
+    private func withLifecycle<Content: View>(_ content: Content) -> some View {
+        content
             .task {
                 // The ATTENDED launch work (window present). The SAFE reconciles (booking detection,
                 // reply detection, and the OmniFocus push) and the Downbeat-export watcher now live on
@@ -947,6 +969,11 @@ struct RootView: View {
                     autoScoutIfDue()
                 }
             }
+    }
+
+    // Everything that stops Dan with a question or a failure.
+    private func withAlerts<Content: View>(_ content: Content) -> some View {
+        content
             .alert("Something went wrong", isPresented: errorBinding) {
                 Button("OK", role: .cancel) { errorMessage = nil }
             } message: {
@@ -993,6 +1020,11 @@ struct RootView: View {
             // run finishes with something to say it becomes #1027's ScoutSummaryView, in the same sheet,
             // so there is no dismiss-then-present flicker between two separate sheets. A run with nothing
             // to report just closes it.
+    }
+
+    // Every sheet this window can present.
+    private func withSheets<Content: View>(_ content: Content) -> some View {
+        content
             .sheet(isPresented: $scoutSheetShown, onDismiss: { scoutWarnings = nil }) {
                 if let scoutWarnings {
                     // Fires once, at the true end of a manual run; lets Dan fix or confirm a source inline.
@@ -1047,6 +1079,11 @@ struct RootView: View {
             // #2202: the presenter cannot reach this view's own @State, so it is handed the way to
             // close it. Here rather than in a .task, because a question can be raised by a launch-time
             // reattach before any task has run.
+    }
+
+    // Injected outermost, so the sheets above inherit them too (#285).
+    private func withOutermostWrappers<Content: View>(_ content: Content) -> some View {
+        content
             .onAppear { modals.closesSheetsWith { closeEveryPresentedSheet() } }
             .actionFeedbackBanner()
             // Injected outermost so the sheets above inherit it too (#285).
@@ -1056,6 +1093,7 @@ struct RootView: View {
             // the context, the live rows and the feedback banner all exist.
             .onChange(of: undoRequest.token) { _, _ in performQueueUndo() }
     }
+
 
     // One press, one whole action reversed (#1414), INCLUDING a day off the dismiss led to (#1473), which
     // is why the store is passed: the block is a row of its own and the sweep it triggered flagged other
