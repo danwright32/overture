@@ -115,15 +115,35 @@ struct LiveStoreCopyGuardTests {
                 """)
     }
 
-    // And the four suites that rehearse a migration really do go through it, so the rule above is not
-    // being satisfied by nobody cloning at all (L1).
+    // And the suites that rehearse a migration really do go through it, so the rule above is not being
+    // satisfied by nobody cloning at all (L1).
+    //
+    // #3035: TWO sanctioned routes now, not one. The four dry runs reach the clone through
+    // `MigrationRehearsal.begin`, which exists so a rehearsal that rehearsed NOTHING says so instead of
+    // leaving the same green tick as one that examined Dan's whole store. That is an indirection, and an
+    // indirection is exactly how a rule like this gets quietly satisfied by nobody, so the helper's own
+    // use of `makeClone` is asserted below rather than assumed: without that line, "route through the
+    // helper" would be a check on a name and not on what the name does.
     @Test func thesuitesThatRehearseAMigrationUseTheHelper() throws {
         for name in ["OrgAnswerMigrationDryRunTests", "InquiryMigrationDryRunTests",
+                     "JointSendMigrationDryRunTests", "ReplyAudienceMigrationDryRunTests",
                      "CatchAllFitReasonRetirementTests", "ContactFormReachabilityTests"] {
             let url = Self.testsRoot.appendingPathComponent("\(name).swift")
             let text = try String(contentsOf: url, encoding: .utf8)
-            #expect(text.contains("LiveStoreClone.makeClone(in:"),
+            #expect(text.contains("LiveStoreClone.makeClone(in:")
+                        || text.contains("MigrationRehearsal.begin("),
                     "\(name) no longer clones the live store through the shared helper")
         }
+    }
+
+    // #3035: and the indirection really does end at `makeClone`. Asserted separately rather than folded
+    // into the loop above, because a single check written as two conditions over one body of text is
+    // satisfied by two unrelated places in it and so proves neither half (L178).
+    @Test func theRehearsalHelperItselfClonesThroughTheSharedHelper() throws {
+        let url = Self.testsRoot.appendingPathComponent("MigrationRehearsal.swift")
+        let text = try String(contentsOf: url, encoding: .utf8)
+
+        #expect(text.contains("LiveStoreClone.makeClone(in:"))
+        #expect(!text.contains("copyItem("))
     }
 }

@@ -27,7 +27,6 @@ struct ReplyAudienceMigrationDryRunTests {
     @Test func addingTheReplyAudienceColumnsPreservesACloneOfTheLiveStore() throws {
         let fm = FileManager.default
         let live = releaseStoreURL
-        guard fm.fileExists(atPath: live.path) else { return }   // no live store here: nothing to rehearse
 
         let tmpDir = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("reply-audience-dryrun-\(UUID().uuidString)")
@@ -36,7 +35,15 @@ struct ReplyAudienceMigrationDryRunTests {
 
         // #1672: through the ONE shared clone, which takes the copy via SQLite's online backup rather
         // than racing three file copies against a live writer. See LiveStoreClone.
-        guard let copy = try LiveStoreClone.makeClone(in: tmpDir) else { return }
+        // #3035: and through MigrationRehearsal, which SAYS when it rehearsed nothing. Both of the exits
+        // this used to take were silent, so a run against Dan's real store and a run that never opened a
+        // file left the same green tick (L98).
+        let start = try MigrationRehearsal.begin("the reply-audience columns", liveStore: live, into: tmpDir)
+        guard case let .rehearse(copy) = start else {
+            if case let .skipped(said) = start { MigrationRehearsal.report(said) }
+            if case let .cloneFailed(said) = start { MigrationRehearsal.report(said) }
+            return
+        }
 
         // Z_PK is on every CoreData table and never null, so an unreadable answer here means the counting
         // is broken rather than that a column is absent. Those must never be confused: one is a defect in
