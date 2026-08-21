@@ -189,7 +189,18 @@ struct ToolbarConsolidationGuardTests {
     @Test func theBookingsFilterToggleIsGone() {
         #expect(!queueView.isEmpty)
         #expect(!queueView.contains("showPendingBookingsOnly"))
-        #expect(!queueView.contains("QueueModel.confirmBookingsLabel"))
+        // #2707: the label itself is gone now too. This guard pinned the SCREEN as removed while its
+        // sentence stayed in docs/copy-inventory.md, which is that issue in one line, so the check is
+        // now that neither the view nor the model names it.
+        //
+        // Over CODE, comments stripped. The model file carries a note saying what stood there and why,
+        // which a raw text search reads as the declaration coming back: a mention is not a use, and that
+        // is the same distinction #2707's own guard had to make before it could see anything.
+        for file in ["Overture/UI/QueueView.swift", "Overture/UI/QueueView+Model.swift"] {
+            let code = SwiftSource.scannableLines(in: source(file), skipping: [])
+                .map(\.code).joined(separator: "\n")
+            #expect(!code.contains("confirmBookingsLabel"), "\(file) names a label #1134 removed")
+        }
     }
 
     // #901 (Dan's walk, 2026-07-14): the toolbar is icon-only, names on hover. Animating a button's width

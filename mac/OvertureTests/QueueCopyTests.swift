@@ -34,22 +34,10 @@ struct QueueCopyTests {
 
     // MARK: - The pending-bookings filter
     //
-    // Two entirely different sentences depending on whether the filter is on, and the ON one carries a
-    // count. It explains why rows have disappeared, which is the one thing a filter must never leave Dan
-    // guessing about.
-
-    @Test func theBookingFilterExplainsWhyRowsAreHiddenWhenItIsOn() {
-        let help = QueueModel.pendingBookingsHelp(showingOnly: true, count: 2)
-
-        #expect(help == "Showing only the 2 pending bookings. Click to show the whole queue again.")
-    }
-
-    @Test func theBookingFilterExplainsWhatItWouldDoWhenItIsOff() {
-        let help = QueueModel.pendingBookingsHelp(showingOnly: false, count: 2)
-
-        #expect(help.contains("Show only prospects where Downbeat detected a booking"))
-        #expect(!help.contains("Click to show the whole queue again"))
-    }
+    // #2707: two tests stood here, asserting real rules about the filter's two explaining sentences.
+    // #1134 removed the toggle when navigation became stage-only, and both went on passing over a
+    // surface that could not appear, which is what let their copy sit in docs/copy-inventory.md to be
+    // cold-read. The masthead's "N to confirm" count is unaffected and still shown.
 
     // MARK: - The filter feeding the "To send" count
     //

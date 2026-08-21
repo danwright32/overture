@@ -447,8 +447,9 @@ enum ReplyPanelCopy {
     static let preparing = "Getting your reply ready"
     // #2154: the two things Dan can do about Overture's guess, beside the message it was read from. The
     // same words the queue row has always used for them, since they are the same two acts.
-    static let confirmGuess = "Confirm"
-    static let changeGuess = "Change"
+    // #2707: `confirmGuess` and `changeGuess` stood here, unnamed by anything in the app. One word each,
+    // so neither was ever an inventory entry, which is why the sweep found them only as their neighbours'
+    // company: the guard reports SENTENCES, and dead copy shorter than that is invisible to it.
     static let draftWithAI = "Draft with AI"
     // #2177: whose words are in the compose box, said only in the state where it adds something. The
     // Archive card names the same three states through `RecipientSnapshot.replyAuthorLabel` ("Written by
