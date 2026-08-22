@@ -96,7 +96,27 @@ run_foreground_check "scripts/run-shell-fixtures.sh" "${REPO_ROOT}/scripts/run-s
 # ran it, and 17 entries had accumulated by 2026-08-21; all 17 were answered, so zero is reachable and
 # this keeps it there. A new entrant is a test to LOOK AT, not automatically a defect, and the remedy is
 # one line either way: name the occurrence instead of searching the file.
-run_foreground_check "pnpm find-vacuous-guards" pnpm find-vacuous-guards
+# ADVISORY, never blocking, on the same footing as check-branch-backlog.sh below. Dan's standing rule is
+# that he wants the override on anything, with the reason named in the message, and a check nobody can
+# get past on his own machine is the shape he has asked not to have. It was written as a hard gate first;
+# this is the correction.
+#
+# What it gives up is real and is why the number is printed either way: nothing now STOPS the list growing
+# back, which is how 17 accumulated after #2773 shipped the tool with nothing running it. What it keeps is
+# that the list is in front of somebody on every single run rather than in a command nobody types, and the
+# remedy is one line. Set OVERTURE_VACUOUS_GUARDS_STRICT=1 to have it fail the run instead.
+echo "==> pnpm find-vacuous-guards"
+if pnpm find-vacuous-guards; then
+  :
+elif [ "${OVERTURE_VACUOUS_GUARDS_STRICT:-0}" = "1" ]; then
+  TEST_ALL_CHEAP_FAILURES+=("pnpm find-vacuous-guards")
+  echo "FAILED - pnpm find-vacuous-guards (OVERTURE_VACUOUS_GUARDS_STRICT=1)"
+else
+  echo "  Advisory, so this does NOT fail the run. Each one is a source-text guard that can be answered by"
+  echo "  an occurrence it is not about, so it may be green while protecting nothing (L135). The fix is to"
+  echo "  name the site instead of searching the whole file. Re-run with OVERTURE_VACUOUS_GUARDS_STRICT=1"
+  echo "  to make it blocking."
+fi
 
 # Warns if docs/prep-runbook.md and the external dan-wright-brand-voice skill have drifted apart
 # (#731). Skips cleanly (exit 0) on any machine without the skill installed, since it lives outside
