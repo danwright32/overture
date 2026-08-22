@@ -46,8 +46,8 @@ enum AppSourceWalk {
     // The refusal is recorded as a test issue from in here, so a guard that forgets to assert its own
     // floor still cannot pass on an empty walk. It returns what it found rather than halting, so one
     // broken path reports itself once instead of taking down the whole run.
-    static func urls(under root: URL, floor: Int = appFloor) -> [URL] {
-        let found = walk(root)
+    static func urls(under root: URL, floor: Int = appFloor, extensions: Set<String> = ["swift"]) -> [URL] {
+        let found = walk(root, extensions: extensions)
         if let refusal = refusal(found: found.count, floor: floor, directory: root.path) {
             Issue.record(Comment(rawValue: refusal))
         }
@@ -57,8 +57,8 @@ enum AppSourceWalk {
     // The same walk with each file's text already read, for the guards that scan contents. A file
     // that cannot be read is dropped from the list and counted against the floor, so a directory of
     // unreadable files refuses exactly like an empty one.
-    static func files(under root: URL, floor: Int = appFloor) -> [File] {
-        let found = walk(root).compactMap { url -> File? in
+    static func files(under root: URL, floor: Int = appFloor, extensions: Set<String> = ["swift"]) -> [File] {
+        let found = walk(root, extensions: extensions).compactMap { url -> File? in
             guard let text = try? String(contentsOf: url, encoding: .utf8) else { return nil }
             return File(url: url, name: url.lastPathComponent, text: text)
         }
@@ -72,11 +72,15 @@ enum AppSourceWalk {
     static func appURLs(floor: Int = appFloor) -> [URL] { urls(under: RepoRoot.app, floor: floor) }
     static func appFiles(floor: Int = appFloor) -> [File] { files(under: RepoRoot.app, floor: floor) }
 
-    private static func walk(_ root: URL) -> [URL] {
+    // #2839: the extensions are a parameter rather than a hard-coded "swift", because a guard over TEST
+    // DATA has to read the fixtures too (.json, .txt, .md, .html) and the alternative was that guard
+    // declaring its own enumerator, which is exactly what noTestFileDeclaresItsOwnAppSourceWalker forbids
+    // and what #2311 consolidated. Defaulted to swift, so every existing caller is unchanged.
+    private static func walk(_ root: URL, extensions: Set<String> = ["swift"]) -> [URL] {
         guard let walker = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil)
         else { return [] }
         return walker.compactMap { $0 as? URL }
-            .filter { $0.pathExtension == "swift" }
+            .filter { extensions.contains($0.pathExtension) }
             .sorted { $0.path < $1.path }
     }
 }

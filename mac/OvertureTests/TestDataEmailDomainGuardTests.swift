@@ -86,18 +86,19 @@ struct TestDataEmailDomainGuardTests {
         let allowedByApp = domainsAppSourceNames()
         var out: [Finding] = []
         var scanned = 0
+        // Through AppSourceWalk, never a private enumerator: a guard that walks a directory itself does
+        // not inherit the refusal on an empty walk, and passes silently when the path resolves to
+        // nothing (#2311). The extensions argument exists for this caller.
         for root in ["mac/OvertureTests", "mac/OvertureHostedTests", "mac/TestSupport", "fixtures"] {
             let dir = RepoRoot.url.appendingPathComponent(root)
-            guard let e = FileManager.default.enumerator(at: dir, includingPropertiesForKeys: nil) else { continue }
-            for case let url as URL in e {
-                guard ["swift", "json", "txt", "md", "html"].contains(url.pathExtension) else { continue }
-                guard url.lastPathComponent != "test-data-email-domains.txt" else { continue }
-                guard let text = try? String(contentsOf: url, encoding: .utf8) else { continue }
+            for file in AppSourceWalk.files(under: dir, floor: 1,
+                                            extensions: ["swift", "json", "txt", "md", "html"]) {
+                guard file.name != "test-data-email-domains.txt" else { continue }
                 scanned += 1
-                for m in text.matches(of: addressPattern) {
+                for m in file.text.matches(of: addressPattern) {
                     let d = String(m.1).lowercased()
                     if isReserved(d) || allowedByApp.contains(d) { continue }
-                    out.append(Finding(domain: d, file: url.lastPathComponent))
+                    out.append(Finding(domain: d, file: file.name))
                 }
             }
         }
@@ -163,15 +164,14 @@ struct TestDataEmailDomainGuardTests {
         var hits: [String] = []
         for root in ["mac", "fixtures", "src", "docs"] {
             let dir = RepoRoot.url.appendingPathComponent(root)
-            guard let e = FileManager.default.enumerator(at: dir, includingPropertiesForKeys: nil) else { continue }
-            for case let url as URL in e {
-                guard ["swift", "json", "txt", "md", "html", "sh", "ts"].contains(url.pathExtension) else { continue }
-                guard !url.path.contains("Overture.xcodeproj") else { continue }
-                guard url.lastPathComponent != "TestDataEmailDomainGuardTests.swift" else { continue }
-                guard let raw = try? String(contentsOf: url, encoding: .utf8) else { continue }
-                let text = raw.lowercased()
+            for file in AppSourceWalk.files(under: dir, floor: 1,
+                                            extensions: ["swift", "json", "txt", "md", "html", "sh", "ts"]) {
+                guard !file.url.path.contains("Overture.xcodeproj") else { continue }
+                // Its own source has to NAME what it forbids, so it is the one file it cannot police.
+                guard file.name != "TestDataEmailDomainGuardTests.swift" else { continue }
+                let text = file.text.lowercased()
                 for name in scrubbed where text.contains(name) {
-                    hits.append("\(name) in \(url.lastPathComponent)")
+                    hits.append("\(name) in \(file.name)")
                 }
             }
         }

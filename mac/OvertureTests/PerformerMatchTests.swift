@@ -271,7 +271,7 @@ struct PerformerMatchTests {
     }
 
     @Test func personNameMatchingIgnoresTokenOrderButNotExtraTokens() {
-        #expect(GroupNameMatch.isConfidentPersonName("Vega, Larkin", "Larkin Sable"))
+        #expect(GroupNameMatch.isConfidentPersonName("Sable, Larkin", "Larkin Sable"))
         #expect(GroupNameMatch.isConfidentPersonName("larkin sable", "Larkin Sable"))
         #expect(!GroupNameMatch.isConfidentPersonName("Larkin Sable", "Larkin Sable Quartet"))
         #expect(!GroupNameMatch.isConfidentPersonName("", "Larkin Sable"))

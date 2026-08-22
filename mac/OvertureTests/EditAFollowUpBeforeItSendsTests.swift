@@ -39,7 +39,7 @@ struct EditAFollowUpBeforeItSendsTests {
         p.sentAt = Date(timeIntervalSince1970: 1_780_000_000)
         ctx.insert(p)
         let r = Recipient(id: "devin@devinmarlowe.example", email: "devin@devinmarlowe.example",
-                          name: "Ryan", provenance: .act)
+                          name: "Devin", provenance: .act)
         r.sendState = .sent
         r.sentAt = p.sentAt
         r.gmailMessageId = "m1"
@@ -59,10 +59,10 @@ struct EditAFollowUpBeforeItSendsTests {
         let sender = CapturingSender()
 
         let sent = await SendService.sendFollowUp(r, of: p, now: Date(), sender: sender,
-                                                  body: "Ryan, one more thought about August 11.")
+                                                  body: "Devin, one more thought about August 11.")
 
         #expect(sent)
-        #expect(sender.last?.body.contains("Ryan, one more thought about August 11.") == true)
+        #expect(sender.last?.body.contains("Devin, one more thought about August 11.") == true)
         #expect(sender.last?.body.contains("I wanted to follow up on my earlier note") == false)
     }
 
@@ -121,7 +121,7 @@ struct SendConfirmSheetEditingTests {
     @Test func anemptyBodyIsNotSendable() {
         #expect(!SendConfirmEditing.bodyIsSendable(""))
         #expect(!SendConfirmEditing.bodyIsSendable("   \n\t "))
-        #expect(SendConfirmEditing.bodyIsSendable("Hi Ryan,\n\nOne more thought."))
+        #expect(SendConfirmEditing.bodyIsSendable("Hi Devin,\n\nOne more thought."))
     }
 
     // The edit surface and the contact picker are mutually exclusive by construction. A rebuild for a

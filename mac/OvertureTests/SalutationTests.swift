@@ -16,7 +16,7 @@ struct SalutationTests {
     }
 
     @Test func firstNameTrimsWhitespace() {
-        #expect(Salutation.firstName("  Nora Calder  ") == "Anna")
+        #expect(Salutation.firstName("  Nora Calder  ") == "Nora")
     }
 
     @Test func firstNameFallsBackToThereWhenMissing() {

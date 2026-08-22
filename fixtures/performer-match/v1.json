@@ -131,14 +131,14 @@
     },
     {
       "name": "surname-first program listings still match (token order is not significant)",
-      "performerName": "Vega, Larkin",
+      "performerName": "Sable, Larkin",
       "performerEmail": "",
       "production": "self",
       "expect": {
         "relationship": "booked",
         "downbeatClientId": "client-larkin",
         "matchedClientName": "Larkin Sable",
-        "matchedPerformerName": "Vega, Larkin",
+        "matchedPerformerName": "Sable, Larkin",
         "emailCorroborated": false
       }
     },

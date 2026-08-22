@@ -623,7 +623,7 @@ struct SourceFetcherTests {
         """)
         #expect(PageNormalizer.contentHash(monday) == PageNormalizer.contentHash(tuesday))
 
-        let wednesday = PageNormalizer.normalize("<div>Aurora Strings</div><div>Vega Quartet</div>")
+        let wednesday = PageNormalizer.normalize("<div>Aurora Strings</div><div>Sable Quartet</div>")
         #expect(PageNormalizer.contentHash(monday) != PageNormalizer.contentHash(wednesday))
     }
 
