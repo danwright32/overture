@@ -44,6 +44,11 @@ resolve_run_slot
 # work is progressing, so the heartbeat also asks whether anything new has landed lately and stops a run
 # that has stood still too long. See lib/run-stall-guard.sh.
 . "$(dirname "$0")/lib/run-stall-guard.sh"
+
+# #3007: stuck_tool_call_seconds, which measures how long ONE tool call has been in flight, so a single
+# hung web request cannot hold a paid run until the RUN-level stall limit notices twenty minutes later.
+# shellcheck source=./lib/stuck-tool-call.sh
+. "$(dirname "$0")/lib/stuck-tool-call.sh"
 # #1097: the fail-closed tool scope for this detached run, shared with scout-extract and reply-classify.
 # --allowedTools alone only PRE-approves; the --permission-mode manual this carries is what actually
 # denies Edit and everything else the inherited "auto" default would otherwise grant a headless run.
@@ -238,6 +243,10 @@ MARKER_INTERVAL=60
     fi
   done ) &
 HEARTBEAT_PID=$!
+# #3007: filled in below once the chunks launch, and empty for a single-claude run, which has no chunk to
+# kill. Declared here so the EXIT trap can name it whether or not it was ever set (the script runs under
+# `set -u`).
+STUCK_WATCHDOG_PID=""
 # CLAUDE_PID is filled in below once claude launches; killing it on exit stops a killed script (Dan
 # quits the app, a crash) from leaving an orphaned claude running against the queue.
 CLAUDE_PID=""
@@ -254,7 +263,7 @@ SLEEP_GUARD_PID="$(arm_sleep_guard)"
 # marker-gone-then-covers-present is inert (the read answers "no live run"), while the reverse leaves a
 # window of marker-live-plus-covers-absent, which is the REFUSAL state. Removing the covers first would
 # therefore turn a crash here into a launch that cannot establish what this run holds.
-trap 'heartbeat_stop "$HEARTBEAT_PID"; [ -n "$CLAUDE_PID" ] && kill "$CLAUDE_PID" 2>/dev/null; stop_sleep_guard "$SLEEP_GUARD_PID"; rm -f "$MARKER"; rm -f "$SLOT_COVERS"; clear_cancel "$CANCEL"; rm -f "$CLAUDE_PID_FILE"; rm -f "$STALL_STATE"; rm -f "$CONTENDED_STATE"; slot_check_foreign_results || true' EXIT
+trap 'heartbeat_stop "$HEARTBEAT_PID"; heartbeat_stop "${STUCK_WATCHDOG_PID:-}"; [ -n "$CLAUDE_PID" ] && kill "$CLAUDE_PID" 2>/dev/null; stop_sleep_guard "$SLEEP_GUARD_PID"; rm -f "$MARKER"; rm -f "$SLOT_COVERS"; clear_cancel "$CANCEL"; rm -f "$CLAUDE_PID_FILE"; rm -f "$STALL_STATE"; rm -f "$CONTENDED_STATE"; slot_check_foreign_results || true' EXIT
 
 # #1013: the last run's results are spent, and leaving them here lets them masquerade as this run's.
 # scout-extract-run.sh learned this in #1011 (a run that wrote nothing inherited the previous run's
@@ -427,6 +436,25 @@ if [ "${CHUNK_COUNT:-0}" -ge 1 ]; then
   printf '%s' "$CHUNK_PIDS" > "$CLAUDE_PID_FILE"
   CLAUDE_PID="$CHUNK_PIDS"   # so the EXIT trap kills every chunk, not just one
 
+  # #3007: one stuck REQUEST, ended without waiting for the whole run to look stalled.
+  #
+  # Measured 2026-08-20: chunk 10 of a check sat on one WebFetch for the entire run, alive and reporting
+  # the whole time, and only PREP_STALL_LIMIT_SECONDS (1200) ended it. The run-level guard reads whether
+  # RESULTS are landing, so a worker waiting on one page is not stalled by that definition until its
+  # whole run is; that is why this is a separate watch rather than a tighter limit on the existing one.
+  #
+  # It kills the ONE chunk, which is the heaviest thing reachable from outside the process: Claude Code
+  # exposes no per-request timeout, so there is no way to fail just that lookup and let the worker carry
+  # on. The trade is stated rather than assumed. `split_queue_into_chunks` makes min(items, MAX_PARALLEL)
+  # chunks, so a chunk holds one or two shows; killing one loses at most those, and loses them anyway,
+  # since the alternative measured was losing the same show twenty minutes later with the run's cost
+  # unrecorded. Every OTHER chunk is untouched, which is the part the old behaviour could not offer.
+  #
+  # Started AFTER the chunks, unlike the heartbeat, because it needs their pids. It is killed by the same
+  # trap, through heartbeat_stop, so it leaves no job notice behind (#2981).
+  stuck_watchdog_run "$CHUNK_COUNT" "$CHUNK_PIDS" &
+  STUCK_WATCHDOG_PID=$!
+
   # Wait for every chunk, capturing each status so one failure is recorded without hiding the others.
   # The first non-zero becomes the run's status. Written as `||` so a chunk exiting non-zero cannot trip
   # `set -e` and take down the merge, which is what carries home the work the OTHER chunks completed.
@@ -435,6 +463,10 @@ if [ "${CHUNK_COUNT:-0}" -ge 1 ]; then
     wait "$pid" || st=$?
     if [ "$st" != "0" ] && [ "$CLAUDE_STATUS" = "0" ]; then CLAUDE_STATUS="$st"; fi
   done
+  # #3007: the watch ends with the work it was watching, before the reaping below, so it can never fire
+  # at a chunk that has already exited and whose pid may since have been reused.
+  heartbeat_stop "${STUCK_WATCHDOG_PID:-}"
+  STUCK_WATCHDOG_PID=""
   for tpid in $CHUNK_TEE_PIDS; do wait "$tpid" 2>/dev/null || true; done
   # The pipe paths are REBUILT from the chunk number, never carried in a space-separated string. Held as
   # a string they word-split inside "Application Support" and every removal missed, leaving a named pipe
