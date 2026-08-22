@@ -294,9 +294,10 @@ already drifting from the Swift version it mirrored.
   suite's declarations are source-text guards, so this is done constantly, and it was hand-rolled every
   time. Use it rather than a fresh one-liner, for the two reasons the hand-rolled version has already
   lied: a substitution that matched NOTHING leaves the suite green for the ordinary reason and reads as a
-  surviving guard, and a run piped through anything reports the PIPE's status. It keeps TEN outcomes
+  surviving guard, and a run piped through anything reports the PIPE's status. It keeps ELEVEN outcomes
   apart, and only the first two are results: CAUGHT, SURVIVED, NOT APPLIED, NOTHING RAN, LANDED
-  ELSEWHERE, NOT PROOF, NO RUNNER, DID NOT BUILD, MISPLACED FLAG and PERL VARIABLE.
+  ELSEWHERE, NOT PROOF, NO RUNNER, DID NOT BUILD, MISPLACED FLAG, PERL VARIABLE and SCOPE MISSED THE
+  FILE.
   `OVERTURE_MUTATE_RUNNER` swaps the runner, which is how to drive the shell fixtures or vitest instead
   of the Swift suite. Since #2972 the run's FULL log is KEPT at a named path and printed as `full log:`
   (`/tmp/overture-mutate-run.log`, moved with `OVERTURE_MUTATE_LOG`): only the last 25 lines go to the
@@ -337,6 +338,25 @@ already drifting from the Swift version it mirrored.
   test scope goes: **put `--at` FIRST**, because after the expression it used to fall into the trailing
   scopes, reach xcodebuild as an unrecognised option and send the runner to the PURE suite, so the aim
   check was off and a targeted proof became a full-suite run.
+
+  **`SCOPE MISSED THE FILE` is #3098, and it is the one that lied in the SURVIVED direction.** Hit for
+  real on 2026-08-21 while proving #2726: a sentence in `ScoutService.swift` was reworded, scoped to
+  `-only-testing:OvertureTests/ScoutStartGateTests`, and mutate.sh reported SURVIVED. The guard was
+  fine. The test lives in a SECOND suite in that same FILE, `ScoutStartGateWiringTests`, so the scope
+  ran nine real, unrelated tests and never the one under test; re-run against the right suite, CAUGHT.
+  `NOTHING RAN` structurally cannot catch that, because something did run, and the caution mutate.sh
+  used to print about it was a rule living only in prose (L27). Before believing a SURVIVED, mutate.sh
+  now asks whether any suite that NAMES the mutated file actually ran, refuses when none did, and lists
+  the suites that do name it so the right scope is in front of you (capped at 15, saying how many of how
+  many it dropped, because ScoutService is named by 65 suites and StoreRelocation by 1). The unit is the
+  SUITE and not the file, which is the whole of why it works: both suites in that incident live in one
+  file, and a per-file rule would have passed it. The other signature #3098 floated, a scope naming a
+  suite whose file declares more than one `@Suite`, was measured and rejected: it fires just as hard when
+  the scope named the RIGHT suite of the two, which is the common case (L93). Three states are
+  deliberately NOT refusals, and each says which it was rather than letting silence stand for a
+  measurement (L11): an unscoped run (it ran everything there is), a file no suite anywhere names
+  (SURVIVED is then a real finding about the code), and a log with no suite lines at all, which is what
+  `OVERTURE_MUTATE_RUNNER` pointed at the shell fixtures or vitest produces.
 
 - **Which test entry points refuse to call an empty run a pass, and which cannot (#2541).** Zero subjects
   examined is its own outcome and must never read as "everything passed", because the empty result
