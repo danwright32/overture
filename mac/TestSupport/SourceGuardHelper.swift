@@ -24,8 +24,20 @@ enum SourceGuardHelper {
     //
     // A line carrying a brace is a computed property or an accessor, never storage. `@Attribute`-prefixed
     // declarations count, since the macro decorates a stored property.
+    // #2433: only lines at the TYPE's own indentation, which is what tells a stored property from a
+    // local variable inside one of its methods. Both read `var name = ...` with no brace, so nothing else
+    // in the line distinguishes them, and over a model with methods the difference is not academic:
+    // `Prospect` declares `var s`, `var i`, `var result`, `var decoded` and `var ids` inside its own
+    // helpers, and without this they arrive as five stored properties that a classification guard would
+    // then demand somebody classify.
+    //
+    // Four spaces because that is one level in, which is where a type's own members sit in this codebase.
+    // Under-reporting is the dangerous direction here (a field nobody classifies is the whole defect), so
+    // every caller asserts a floor on the count it gets back.
     static func storedPropertyNames(inClassBody body: String) -> [String] {
         body.components(separatedBy: "\n").compactMap { line in
+            let indented = line.hasPrefix("    ") && !line.hasPrefix("     ")
+            guard indented else { return nil }
             let code = line.trimmingCharacters(in: .whitespaces)
             guard !code.contains("{") else { return nil }
             guard let varRange = code.range(of: "var ") else { return nil }
