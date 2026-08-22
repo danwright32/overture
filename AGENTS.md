@@ -364,7 +364,15 @@ already drifting from the Swift version it mirrored.
   another outcome's name. `PERL VARIABLE` refuses an unescaped `$0`, `$&` or a `$1` with no capture
   group, which is how the build failures were produced twice in one session on #2988: in a `s///`
   replacement `$0` is perl's own program-name variable, so `isCandidate($0, ...)` interpolates away.
-  Write `\$0` when you mean the characters. And `MISPLACED FLAG` refuses a `--` argument sitting where a
+  Write `\$0` when you mean the characters. **Since #3109 it refuses the other sigil too**, an unescaped
+  `@` followed by a name, because `@name` is a perl ARRAY and is interpolated in the REPLACEMENT and in
+  the PATTERN alike. That one lied in the SURVIVED direction, which is the worse one: measured
+  2026-08-22 proving #2839's guard, the expression asked for `"someone@arealpersonsite.com"`,
+  `@arealpersonsite` interpolated away, the text that landed was `"someone.com"`, a guard that judges an
+  address by its DOMAIN correctly said nothing about a string holding no `@`, and the verdict printed
+  was SURVIVED for a guard that works. The aim check structurally cannot catch it, since the
+  substitution lands on exactly the line it was aimed at. E-mail addresses are ordinary test data here,
+  so write `\@` whenever you mean the character. And `MISPLACED FLAG` refuses a `--` argument sitting where a
   test scope goes: **put `--at` FIRST**, because after the expression it used to fall into the trailing
   scopes, reach xcodebuild as an unrecognised option and send the runner to the PURE suite, so the aim
   check was off and a targeted proof became a full-suite run.
