@@ -174,7 +174,7 @@ SLEEP_GUARD_PID="$(arm_sleep_guard)"
 # #1037: clear the cancel sentinel and the pids file on exit too, so a stopped run never leaves a
 # sentinel that would instantly kill the next run.
 # #1009: stop_sleep_guard releases the power assertion on every exit path (finish, cancel, crash-via-set-e).
-trap 'heartbeat_stop "$HEARTBEAT_PID"; [ -n "$CHUNK_PIDS" ] && kill $CHUNK_PIDS 2>/dev/null; stop_sleep_guard "$SLEEP_GUARD_PID"; rm -f "$MARKER"; clear_cancel "$CANCEL"; rm -f "$CHUNK_PIDS_FILE"; rm -f "$STALL_STATE"' EXIT
+trap 'heartbeat_stop "$HEARTBEAT_PID"; heartbeat_stop_all "$CHUNK_PIDS"; stop_sleep_guard "$SLEEP_GUARD_PID"; rm -f "$MARKER"; clear_cancel "$CANCEL"; rm -f "$CHUNK_PIDS_FILE"; rm -f "$STALL_STATE"' EXIT
 
 # #1011: the last run's results are spent, and leaving them here lets them masquerade as this run's.
 # Before this, a run that wrote nothing inherited the previous run's file wholesale, generatedAt and

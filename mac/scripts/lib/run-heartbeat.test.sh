@@ -244,6 +244,141 @@ for runner in "${SCRIPT_DIR}/../"*-run.sh; do
   assert_contains "${name} stops it through the shared helper" "$(cat "${runner}")" 'heartbeat_stop "$HEARTBEAT_PID"'
 done
 
+# --- #3099: the same notice, from the jobs the EXIT traps kill besides the heartbeat -----------------
+#
+# #2981 fixed the heartbeat and left the CHUNK and CLAUDE kills in the same traps alone, on the reasoning
+# that they had not been observed to produce a notice. That reasoning was wrong and was never checked.
+# Measured 2026-08-21 over the real logs in ~/Library/Application Support/Overture: 67 termination
+# notices, 56 of them the heartbeat, and the rest other jobs, including
+#   scout-extract-run.sh: line 297: 26119 Terminated: 15  run_claude_on_chunk "$CHUNKD...
+# in scout-extract-run.log. The consequence is #2981's: a log holding the program as well as the events
+# is one where a grep for a phrase can match code that never ran, and grepping a run log is the obvious
+# thing to reach for.
+#
+# heartbeat_stop_all is heartbeat_stop over a LIST, because that is the shape these sites hold: the pids
+# of every chunk. Driven as real processes, for #2981's reason: the notice comes from the SHELL and no
+# reading of the script can tell you whether it appears. Bounded `sleep` jobs, not loops, for the reason
+# recorded above this.
+ALL_WORK="$(mktemp -d)"
+
+cat > "${ALL_WORK}/with-stop-all.sh" <<'STOPALLSH'
+#!/bin/sh
+set -eu
+. "$(dirname "$0")/run-heartbeat.sh"
+PIDS=""
+for i in 1 2 3; do
+  ( sleep 5; echo "the chunk body a grep would look for" ) >/dev/null 2>&1 &
+  PIDS="${PIDS} $!"
+done
+sleep 0.2
+heartbeat_stop_all "$PIDS"
+sleep 0.5
+echo "finished"
+STOPALLSH
+
+cat > "${ALL_WORK}/bare-kill-all.sh" <<'KILLALLSH'
+#!/bin/sh
+set -eu
+PIDS=""
+for i in 1 2 3; do
+  ( sleep 5; echo "the chunk body a grep would look for" ) >/dev/null 2>&1 &
+  PIDS="${PIDS} $!"
+done
+sleep 0.2
+kill $PIDS 2>/dev/null || true
+sleep 0.5
+echo "finished"
+KILLALLSH
+
+# Empty, and a single pid, on the same helper: the traps name a variable that is empty for a run that
+# never launched a chunk, and prep's single-claude path holds exactly one. Run under `set -eu`, which is
+# what the runners run under, so a helper that returned non-zero on empty would end the trap early and
+# silently skip every cleanup after it.
+cat > "${ALL_WORK}/edges.sh" <<'EDGESH'
+#!/bin/sh
+set -eu
+. "$(dirname "$0")/run-heartbeat.sh"
+heartbeat_stop_all ""
+heartbeat_stop_all "   "
+( sleep 5; echo "the single body a grep would look for" ) >/dev/null 2>&1 &
+ONE=$!
+sleep 0.2
+heartbeat_stop_all "$ONE"
+# A pid already reaped, and one that was never ours: both must be survivable, because the traps run on
+# every exit path including the ones where the work was already reaped.
+heartbeat_stop_all "$ONE"
+sleep 0.5
+echo "finished"
+EDGESH
+
+cp "${SCRIPT_DIR}/run-heartbeat.sh" "${ALL_WORK}/run-heartbeat.sh"
+chmod +x "${ALL_WORK}/with-stop-all.sh" "${ALL_WORK}/bare-kill-all.sh" "${ALL_WORK}/edges.sh"
+
+ALL_OUT="$("${ALL_WORK}/with-stop-all.sh" 2>&1)"
+assert_contains "a list of stopped jobs lets the script finish" "${ALL_OUT}" "finished"
+assert_not_contains "and prints no termination notice" "${ALL_OUT}" "Terminated"
+assert_not_contains "and does not echo the chunk bodies into the log" "${ALL_OUT}" "the chunk body a grep would look for"
+
+# The positive control, for the same reason as the one above: without it these would pass on a shell that
+# never prints the notice at all and would be proving nothing about the fix (L159).
+BARE_ALL_OUT="$("${ALL_WORK}/bare-kill-all.sh" 2>&1)"
+assert_contains "a bare kill of a list really does announce it on this shell" "${BARE_ALL_OUT}" "Terminated"
+assert_contains "and really does render the chunk bodies" "${BARE_ALL_OUT}" "the chunk body a grep would look for"
+
+EDGE_OUT="$("${ALL_WORK}/edges.sh" 2>&1)"
+assert_contains "empty, blank, single and already-reaped all survive under set -eu" "${EDGE_OUT}" "finished"
+assert_not_contains "and the single stop prints no notice either" "${EDGE_OUT}" "Terminated"
+assert_not_contains "and does not echo the single body" "${EDGE_OUT}" "the single body a grep would look for"
+
+# And every runner's EXIT trap stops its processes through the helper rather than with a bare kill.
+# Read off the trap line itself and derived from the runners present, not from a list here, so a fourth
+# runner and a fourth kill site are both covered without anybody remembering (L96, L30).
+#
+# The rule is the whole trap line, not the three sites #3099 happened to name: `stop_sleep_guard` and the
+# `rm -f`s are function calls and file removals, so a `kill` anywhere on that line is a process being
+# ended outside the helper, which is precisely what leaves a notice.
+for runner in "${SCRIPT_DIR}/../"*-run.sh; do
+  [ -f "${runner}" ] || continue
+  name="$(basename "${runner}")"
+  grep -q 'HEARTBEAT_PID' "${runner}" || continue
+  trap_line="$(grep -n "^trap .*' EXIT$" "${runner}" | head -1)"
+  assert "${name} has an EXIT trap the guard can read" test -n "${trap_line}"
+  assert_not_contains "${name}'s EXIT trap bare-kills nothing" "${trap_line}" "kill"
+done
+
+# prep held a SECOND defect on exactly this line, found while fixing the first (#3099). Its trap read
+# `kill "$CLAUDE_PID"`, quoted, while line 437 sets CLAUDE_PID to the space-separated list of every chunk
+# pid with the comment "so the EXIT trap kills every chunk, not just one". A quoted list is one argument:
+# measured on this Mac, `kill "111 222"` exits 1 with "arguments must be process or job IDs" and kills
+# NOTHING, so on a crash or an app quit a parallel prep run orphaned every chunk it had launched, which
+# is the whole thing that line exists to prevent. Asserted on the behaviour rather than the spelling, so
+# a helper that word-splits is what passes it.
+QUOTED_WORK="$(mktemp -d)"
+cat > "${QUOTED_WORK}/list.sh" <<'LISTSH'
+#!/bin/sh
+set -eu
+. "$(dirname "$0")/run-heartbeat.sh"
+PIDS=""
+for i in 1 2; do
+  ( sleep 30 ) &
+  PIDS="${PIDS} $!"
+done
+sleep 0.2
+heartbeat_stop_all "$PIDS"
+for p in $PIDS; do
+  if kill -0 "$p" 2>/dev/null; then echo "STILL ALIVE $p"; fi
+done
+echo "done"
+LISTSH
+cp "${SCRIPT_DIR}/run-heartbeat.sh" "${QUOTED_WORK}/run-heartbeat.sh"
+chmod +x "${QUOTED_WORK}/list.sh"
+LIST_OUT="$("${QUOTED_WORK}/list.sh" 2>&1)"
+assert_contains "the list stop ran to the end" "${LIST_OUT}" "done"
+assert_not_contains "and every pid in the list really was stopped, not just the first" "${LIST_OUT}" "STILL ALIVE"
+rm -rf "${QUOTED_WORK}"
+
+rm -rf "${ALL_WORK}"
+
 rm -rf "${HB_WORK}"
 
 if [ "${FAILURES}" -ne 0 ]; then
