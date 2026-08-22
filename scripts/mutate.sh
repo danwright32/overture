@@ -208,6 +208,21 @@ unescaped_perl_variable() {
     echo "${BASH_REMATCH[2]}"
     return 0
   fi
+  # #3109: the same trap wearing the other sigil. `@name` is a perl ARRAY, interpolated in the
+  # replacement AND in the pattern, so `"someone@arealpersonsite.com"` lands as `"someone.com"`. That
+  # one was measured on 2026-08-22 proving #2839's guard: the guard judges an address by its domain,
+  # the landed text holds no `@` and so is not an address, the guard rightly said nothing, and the
+  # verdict printed was SURVIVED. SURVIVED is the verdict quoted as evidence that a guard is fake and
+  # should be deleted, so this lies in the worse of the two directions. The aim check cannot see it
+  # (the substitution lands on exactly the line it was aimed at), which is why it is refused here.
+  #
+  # Narrower than the character on purpose (L93): an `@` with no identifier after it is not a variable,
+  # and e-mail addresses are ordinary test data in this repo, so a rule firing on every `@` would fire
+  # on the ordinary case and be switched off within a day.
+  if [[ "${expression}" =~ (^|[^\\])(@[A-Za-z_][A-Za-z0-9_]*) ]]; then
+    echo "${BASH_REMATCH[2]}"
+    return 0
+  fi
   local without_escaped_parens="${expression//\\(/}"
   if [[ "${without_escaped_parens}" != *"("* && "${expression}" =~ (^|[^\\])(\$[1-9]) ]]; then
     echo "${BASH_REMATCH[2]}"
@@ -217,10 +232,13 @@ unescaped_perl_variable() {
 }
 
 if PERL_VARIABLE="$(unescaped_perl_variable "${EXPRESSION}")"; then
-  echo "PERL VARIABLE - ${EXPRESSION} carries an unescaped ${PERL_VARIABLE}, which perl reads as its own."
+  echo "PERL VARIABLE - ${EXPRESSION} carries an unescaped ${PERL_VARIABLE}, which perl reads as a variable."
   echo
   echo "  Nothing was mutated and nothing was run. ${PERL_VARIABLE} interpolates away, so the text that"
-  echo "  lands is not the text you wrote, and what usually follows is code that does not compile."
+  echo "  lands is not the text you wrote. In the replacement half what follows is usually code that does"
+  echo "  not compile, or worse a verdict passed on text nobody authored. In the pattern half the search"
+  echo "  is not the one you asked for, so it misses and the run answers about an expression you did not"
+  echo "  write."
   echo "  To put the characters ${PERL_VARIABLE} into the file, escape it: write \\${PERL_VARIABLE}."
   exit 2
 fi

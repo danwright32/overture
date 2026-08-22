@@ -343,6 +343,48 @@ OUT="$(OVERTURE_MUTATE_RUNNER="${RED_RUNNER}" "${MUTATE}" "${SUBJECT}" 's/"yes"/
 assert_contains "an escaped one is left alone" "${OUT}" "CAUGHT"
 assert_not_contains "and is not refused" "${OUT}" "PERL VARIABLE"
 
+# --- an unescaped array sigil in the expression is refused (#3109) -----------------------------------
+#
+# Measured 2026-08-22 while proving #2839's guard. The expression asked for
+# "someone@arealpersonsite.com", `@arealpersonsite` interpolated away, and the text that landed was
+# "someone.com", which is not an address at all. The guard under test judges an address by its domain,
+# correctly said nothing about a string with no `@` in it, and mutate.sh reported SURVIVED: a real,
+# working guard reported as protecting nothing. That is a lie in the direction SURVIVED is quoted in,
+# which is as evidence that a guard is fake and should be deleted. The aim check cannot catch it,
+# because the substitution lands on exactly the line it was aimed at.
+write_subject
+OUT="$(OVERTURE_MUTATE_RUNNER="${GREEN_RUNNER}" "${MUTATE}" "${SUBJECT}" 's/"yes"/"someone@arealpersonsite.com"/' 2>&1)"
+STATUS=$?
+assert_contains "an unescaped array sigil is refused" "${OUT}" "PERL VARIABLE"
+# Asserted on the ESCAPED spelling the message hands back, not on the bare name: the bare name is in
+# the expression the refusal quotes, so an assertion on it would pass whatever the message said.
+assert_contains "and says how to write the characters instead" "${OUT}" '\@arealpersonsite'
+assert_not_contains "and is never reported as survived" "${OUT}" "SURVIVED"
+assert_equals "and does not exit 0" "1" "$([ "${STATUS}" -ne 0 ] && echo 1 || echo 0)"
+assert_contains "the subject is left exactly as it was" "$(cat "${SUBJECT}")" 'static let answer = "yes"'
+
+# The PATTERN half interpolates too, so it is refused there as well. Measured: `s/someone@site\.com/x/`
+# reaches the regex as `someone\.com` and matches nothing, so the verdict is NOT APPLIED, reported about
+# an expression nobody wrote. Quieter than the SURVIVED above and still an answer about the wrong text.
+write_subject
+OUT="$(OVERTURE_MUTATE_RUNNER="${GREEN_RUNNER}" "${MUTATE}" "${SUBJECT}" 's/someone@arealpersonsite\.com/"x"/' 2>&1)"
+assert_contains "an unescaped array sigil in the pattern half is refused too" "${OUT}" "PERL VARIABLE"
+assert_not_contains "and is never reported as not applied" "${OUT}" "NOT APPLIED"
+
+# Escaped, it is exactly what the author meant, so it runs. This is the whole of the remedy the message
+# names, so it has to work.
+write_subject
+OUT="$(OVERTURE_MUTATE_RUNNER="${RED_RUNNER}" "${MUTATE}" "${SUBJECT}" 's/"yes"/"someone\@arealpersonsite.com"/' 2>&1)"
+assert_contains "an escaped array sigil is left alone" "${OUT}" "CAUGHT"
+assert_not_contains "and is not refused" "${OUT}" "PERL VARIABLE"
+
+# An @ perl cannot read as a variable is not one. The rule has to be narrower than the character, or it
+# fires on the ordinary case and gets switched off within a day (L93).
+write_subject
+OUT="$(OVERTURE_MUTATE_RUNNER="${RED_RUNNER}" "${MUTATE}" "${SUBJECT}" 's/"yes"/"@ "/' 2>&1)"
+assert_contains "an @ with no name after it is left alone" "${OUT}" "CAUGHT"
+assert_not_contains "and that one is not refused either" "${OUT}" "PERL VARIABLE"
+
 # --- it refuses what it cannot do --------------------------------------------------------------------
 OUT="$("${MUTATE}" "${WORK}/does-not-exist.swift" 's/a/b/' 2>&1)"
 assert_contains "a missing file is refused by name" "${OUT}" "does-not-exist.swift"
