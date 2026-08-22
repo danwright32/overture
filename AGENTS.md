@@ -642,6 +642,17 @@ already drifting from the Swift version it mirrored.
   cannot catch that, because the sentence it would have him read is the one that never appeared: the
   question to ask of each conditional is what this surface says when the list is EMPTY, when it holds
   one, and when the branch that carries the explanation is the one not taken.
+  **Since #2945 that document has a second half, keyed to where a sentence RENDERS rather than where its
+  words are written.** Both generated documents key a sentence to the file holding its LITERAL text, so
+  moving an EXISTING sentence onto a BRAND NEW surface produced no diff at all and therefore got no cold
+  read, which is exactly when placement most needs reading. Measured while building #2816: "Source
+  listing" and "Venue calendar" arrived on three rows they had never appeared on and both documents came
+  out byte for byte identical. `copy-surfaces.md` now also lists, per file, the copy CONSTANTS that file
+  names, so a view that renders words it does not contain shows up in the diff. What it still cannot see
+  is copy that reaches a view as a VALUE rather than as a symbol, which is the #2816 case itself: the
+  sentence is returned by a private function, put on a struct and handed to the row that draws it, so no
+  file outside the declaring one names anything a source-text reader can match. That gap is #3118 rather
+  than something to discover by trusting the section.
   Read the OTHER generated diff in the same pass: `docs/copy-surfaces.md` (#2210) says which surfaces
   each file renders into, so the cold read answers where a new sentence LANDS as well as what it says.
   A message in a toolbar item, a menu bar item, an OS alert or an info block can be correct, tested,

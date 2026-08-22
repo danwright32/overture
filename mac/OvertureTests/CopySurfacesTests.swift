@@ -56,6 +56,103 @@ struct CopySurfacesTests {
         #expect(CopySurfaces.containers(in: source).isEmpty)
     }
 
+    // MARK: - Which sentences a file RENDERS, as opposed to declares (#2945)
+
+    // The measured gap. Both generated documents key a sentence to the file holding its LITERAL text,
+    // so moving an EXISTING sentence onto a BRAND NEW surface produces no diff at all, and therefore
+    // gets no cold read. Measured while building #2816: the words "Source listing" and "Venue calendar"
+    // were put onto three rows they had never appeared on (the reached out row and both Follow-ups
+    // rows) and both documents came out byte for byte identical, because the literals stayed in
+    // QueueView+Model.swift and the new view renders them through a constant.
+    //
+    // A sentence arriving on a new screen is exactly when placement needs reading, and that is the case
+    // the documents could not show.
+
+    @Test func aCopyConstantIsFoundWithItsDeclaringType() {
+        let source = """
+        enum QueueCopy {
+            static let sourceListing = "Source listing"
+        }
+        """
+        let found = CopySurfaces.copyConstants(in: source)
+        #expect(found.count == 1)
+        #expect(found.first?.qualified == "QueueCopy.sourceListing")
+        #expect(found.first?.sentence == "Source listing")
+    }
+
+    // A `static let` holding something that is not a sentence is not copy. The same predicate the
+    // inventory uses decides, so the two documents cannot disagree about what counts (L16).
+    @Test func aNonSentenceConstantIsNotCopy() {
+        let source = """
+        enum Keys {
+            static let storeFile = "Overture.store"
+            static let identifier = "com.danwright.overture"
+        }
+        """
+        #expect(CopySurfaces.copyConstants(in: source).isEmpty)
+    }
+
+    @Test func aConstantNamedOnlyInACommentIsNotADeclaration() {
+        let source = """
+        enum QueueCopy {
+            // static let sourceListing = "Source listing"
+            static let venueCalendar = "Venue calendar"
+        }
+        """
+        #expect(CopySurfaces.copyConstants(in: source).map(\.qualified) == ["QueueCopy.venueCalendar"])
+    }
+
+    // THE CASE THE ISSUE IS ABOUT. A view that holds none of the words still renders them.
+    @Test func aFileRenderingAConstantDeclaredElsewhereIsFound() {
+        let declaring = """
+        enum QueueCopy {
+            static let sourceListing = "Source listing"
+            static let venueCalendar = "Venue calendar"
+        }
+        """
+        let known = Set(CopySurfaces.copyConstants(in: declaring))
+        let view = """
+        struct FollowUpsView: View {
+            var body: some View { Text(QueueCopy.sourceListing) }
+        }
+        """
+        #expect(CopySurfaces.renderedConstants(in: view, known: known).map(\.qualified) == ["QueueCopy.sourceListing"])
+    }
+
+    // A constant whose name is a PREFIX of another must not answer for it, or the report names a
+    // sentence the file never renders and the cold read is spent on the wrong words.
+    // BOTH names here are copy in their own right. The first version of this case used
+    // `static let source = "Source"` as the shorter name, and a single word is not a sentence, so
+    // `CopyInventory.isCopy` refused it, it never entered the known set, and the case could not fail
+    // however the matching behaved. Caught by mutating the boundary check away and watching this report
+    // SURVIVED.
+    @Test func aPrefixOfALongerConstantNameIsNotAMatch() {
+        let declaring = """
+        enum QueueCopy {
+            static let sourceListing = "Source listing"
+            static let sourceListingLink = "Source listing link"
+        }
+        """
+        let known = Set(CopySurfaces.copyConstants(in: declaring))
+        #expect(known.count == 2, "both names must be copy, or this case cannot fail")
+        let view = "Text(QueueCopy.sourceListingLink)"
+        #expect(CopySurfaces.renderedConstants(in: view, known: known).map(\.qualified) == ["QueueCopy.sourceListingLink"])
+    }
+
+    @Test func aReferenceInsideACommentIsNotARendering() {
+        let declaring = """
+        enum QueueCopy {
+            static let sourceListing = "Source listing"
+        }
+        """
+        let known = Set(CopySurfaces.copyConstants(in: declaring))
+        let view = """
+        // QueueCopy.sourceListing used to be rendered here, and is not any more.
+        Text("something else")
+        """
+        #expect(CopySurfaces.renderedConstants(in: view, known: known).isEmpty)
+    }
+
     // MARK: - Which containers the platform can take away
 
     // The whole point of separating these: a sentence in one of them can be correct, tested, and still
@@ -119,5 +216,28 @@ struct CopySurfacesTests {
         let built = try CopySurfaces.build()
         #expect(built.filesScanned > 100, "the app has far more than 100 source files")
         #expect(built.byFile.isEmpty == false, "no file renders any container, which cannot be true")
+    }
+
+    // #2945: and the render-site half has to have found something, for the same reason. An empty answer
+    // here and a correct answer about an app whose copy is all inline are the same document, and the
+    // empty one arrives exactly when the reference matching has quietly stopped working (L98).
+    @Test func theReportFoundSentencesRenderedAwayFromWhereTheyAreWritten() throws {
+        let built = try CopySurfaces.build()
+        #expect(built.renderedByFile.isEmpty == false,
+                "no file names a copy constant, which cannot be true of this app")
+
+        // Measured 2026-08-22: 48 files. Asserted as a floor rather than a number, because an exact
+        // count moves whenever any view starts or stops naming a constant and would go red on main for
+        // a reason nobody chose (#2349).
+        #expect(built.renderedByFile.count >= 20)
+
+        // And at least one of them renders a sentence whose words it does not contain, which is the
+        // whole case this half exists for.
+        let carried = built.renderedByFile.contains { file, constants in
+            guard let source = try? String(contentsOf: CopyInventory.appRoot.appendingPathComponent(file),
+                                           encoding: .utf8) else { return false }
+            return constants.contains { !source.contains("\"\($0.sentence)\"") }
+        }
+        #expect(carried, "every reported render site also writes the words, so nothing new is covered")
     }
 }
