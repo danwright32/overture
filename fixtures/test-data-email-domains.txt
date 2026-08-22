@@ -11,7 +11,7 @@
 # when the guard was written, measured 2026-08-22. Refusing all of them at once would have meant either a
 # rewrite of a thousand lines of unrelated fixtures in the same change, or a guard nobody could go green
 # on, which gets switched off within a day (L93). Recording the backlog is what lets the rule bite NOW on
-# everything new while the backlog is worked down. #3109 tracks emptying it.
+# everything new while the backlog is worked down. #3111 tracks emptying it, and #3110 the identity half this rule cannot see.
 #
 # Nothing here is a real private individual: those were scrubbed in #2839. What remains is placeholder
 # shapes (x.org, e.com, b.com), Google's own infrastructure domains that appear in Gmail API fixtures
