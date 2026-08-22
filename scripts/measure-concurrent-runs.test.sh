@@ -49,9 +49,28 @@ queue_of check 3 "${WORK}/small-check-queue.json"
 # A runner that records that it was asked to run and exits, so every path below can be driven without
 # launching claude or spending anything.
 STUB="${WORK}/stub-runner.sh"
+# #3005: the stub now writes the results file its slot really writes, because the harness refuses to
+# report a measurement of the wrong CONFIGURATION and reads that answer out of these files. The two
+# environment overrides are what let a fixture drive the wrong shapes without a real run.
 cat > "${STUB}" <<'STUBEOF'
 #!/usr/bin/env bash
-echo "${OVERTURE_RUN_SLOT:-prep}" >> "${OVERTURE_SUPPORT_DIR}/stub-launches.txt"
+slot="${OVERTURE_RUN_SLOT:-prep}"
+echo "${slot}" >> "${OVERTURE_SUPPORT_DIR}/stub-launches.txt"
+if [[ "${slot}" == "check" ]]; then
+  model="${STUB_CHECK_MODEL:-sonnet}"
+  streams="${STUB_CHECK_STREAMS:-8}"
+else
+  model="${STUB_PREP_MODEL:-opus}"
+  streams="${STUB_PREP_STREAMS:-1}"
+fi
+# Production clears the previous results before it starts (`discard_previous_results` in prep-run.sh), so
+# the stub does too. Without it, a case driving "this half wrote nothing" would silently read the file the
+# PREVIOUS case left behind and be answered by a run that is not the one under test (L58).
+rm -f "${OVERTURE_SUPPORT_DIR}/overture-${slot}-results.json"
+if [[ "${STUB_WRITE_RESULTS:-1}" == "1" ]]; then
+  printf '{"model":"%s","runCost":{"recorded":true,"durationMs":1000,"streams":%s}}\n' \
+    "${model}" "${streams}" > "${OVERTURE_SUPPORT_DIR}/overture-${slot}-results.json"
+fi
 sleep 1
 STUBEOF
 chmod +x "${STUB}"
@@ -178,5 +197,64 @@ assert_equals "a run that really reported a stall is still read as one" "1" "${M
 printf '%s\n' "${ECHOED_SOURCE}" > "${STALL_LOG}"
 if grep -q "STOPPING" "${STALL_LOG}"; then MATCHED=1; else MATCHED=0; fi
 assert_equals "the old unanchored pattern really did match the source" "1" "${MATCHED}"
+
+# --- #3005: it refuses to REPORT a measurement of the wrong configuration ----------------------------
+#
+# On 2026-08-18 the peak, both wall clocks and both cost readings all looked healthy while half the
+# session was running the wrong KIND of run entirely (#2980): 15 sonnet lookups rather than 10 lookups
+# beside 1 opus drafting run. Nothing here said so, and a person found it by reading prep-run.log. That is
+# an instrument that cannot tell you it measured the wrong thing, which is the L98 shape in the place it
+# costs most: the reassuring output arrives exactly when the work was not what you asked for.
+#
+# Each case drives ONE wrong fact and asserts the refusal NAMES it, because a refusal that says only
+# "something was wrong" sends the reader back to the logs this exists to save them reading.
+
+measure_queues() {
+  echo --prep-queue "${WORK}/prep-queue.json" --check-queue "${WORK}/check-queue.json"
+}
+
+# #2980 itself: the drafting half ran as a check, so it was on the lookup model.
+# shellcheck disable=SC2046
+OUT="$(STUB_PREP_MODEL=sonnet OVERTURE_SUPPORT_DIR="${SUPPORT_DIR}" \
+  run_harness --yes --sample-seconds 1 $(measure_queues))"
+STATUS=$?
+assert_contains "a drafting half on the lookup model is refused" "${OUT}" "REFUSED to report"
+assert_contains "and the refusal names which half" "${OUT}" "the prep half ran on sonnet"
+assert_not_contains "and no peak is printed beside it" "${OUT}" "peak concurrent"
+assert_equals "and it does not exit 0" "1" "$([ "${STATUS}" -ne 0 ] && echo 1 || echo 0)"
+
+# The other direction: a check half that never fanned out measures one lookup beside a draft, which is a
+# different question from the one #2762 asks.
+# shellcheck disable=SC2046
+OUT="$(STUB_CHECK_STREAMS=1 OVERTURE_SUPPORT_DIR="${SUPPORT_DIR}" \
+  run_harness --yes --sample-seconds 1 $(measure_queues))"
+assert_contains "a check half that did not fan out is refused" "${OUT}" "REFUSED to report"
+assert_contains "and says the check half must fan out" "${OUT}" "must FAN OUT"
+
+# And the drafting half fanning out is equally wrong, in the direction the plan cares about: it must stay
+# ONE opus stream or the pairing being measured is not the pairing that was asked for.
+# shellcheck disable=SC2046
+OUT="$(STUB_PREP_STREAMS=6 OVERTURE_SUPPORT_DIR="${SUPPORT_DIR}" \
+  run_harness --yes --sample-seconds 1 $(measure_queues))"
+assert_contains "a drafting half that fanned out is refused" "${OUT}" "REFUSED to report"
+assert_contains "and says it must stay one" "${OUT}" "must stay ONE"
+
+# A half that wrote nothing at all cannot be checked, and that is its own answer rather than a pass: an
+# unexaminable run and a correct one must never read alike (L98, L11).
+# shellcheck disable=SC2046
+OUT="$(STUB_WRITE_RESULTS=0 OVERTURE_SUPPORT_DIR="${SUPPORT_DIR}" \
+  run_harness --yes --sample-seconds 1 $(measure_queues))"
+assert_contains "a half that wrote no results is refused" "${OUT}" "REFUSED to report"
+assert_contains "and says nothing about it could be checked" "${OUT}" "wrote no results file"
+
+# The positive control, and the one that matters most: the RIGHT configuration still reports. Without it
+# every assertion above would pass on a harness that refuses everything, which is indistinguishable from
+# one that works (L1, L159).
+# shellcheck disable=SC2046
+OUT="$(OVERTURE_SUPPORT_DIR="${SUPPORT_DIR}" run_harness --yes --sample-seconds 1 $(measure_queues))"
+STATUS=$?
+assert_not_contains "the configuration it was built for is NOT refused" "${OUT}" "REFUSED to report"
+assert_contains "and its numbers are reported" "${OUT}" "peak concurrent"
+assert_equals "and it exits 0" "0" "${STATUS}"
 
 exit "${FAILURES:-0}"
