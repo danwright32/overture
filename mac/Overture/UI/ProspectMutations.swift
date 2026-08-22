@@ -500,10 +500,10 @@ enum ProspectMutations {
                                 prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }),
               let recipient = model.recipients.first(where: { $0.id == recipientId }) else { return }
-        // Covers both directions: backing out before recording, and undoing a record already made.
-        if model.undoFormOutreach(recipient) == false {
-            recipient.formOutreachStartedAt = nil
-        }
+        // ONE direction, and #3069 is why. This button is drawn only on `.awaitingConfirmation`, which
+        // proves the record has not been made yet, so backing out is all there ever is to do here. The
+        // "undo a record already made" half it used to call could never run and is gone.
+        recipient.formOutreachStartedAt = nil
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 

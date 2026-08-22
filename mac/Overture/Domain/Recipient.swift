@@ -297,12 +297,12 @@ final class Recipient {
     // #2719: that a conversation has EVER been attached here, which the detach deliberately does not
     // clear.
     //
-    // It is what `undoFormOutreach` refuses on, and it has to be permanent rather than "while one is
-    // attached". `undoFormOutreach` sets `sendState = .pending`, `sentAt = nil` and unfreezes the send
-    // snapshot while clearing none of the reply state, so with a saved address it would leave a pending
-    // recipient carrying a stranger's address, sendable the moment the pause clears, and Overture would
-    // queue the cold pitch to them. Refusing only while a conversation is attached would leave that door
-    // open behind a detach.
+    // #3069 removed what it was built for. It used to be the fact `undoFormOutreach` refused on, and that
+    // undo is gone, because no screen could ever reach it and a recorded form pitch is final (Dan, on
+    // 2026-08-22). The field is NOT gone with it: `wasWrittenTo` below reads it as proof a real exchange
+    // happened on this contact, and that answer stands between the launch merge and a deleted outreach
+    // record. Permanent rather than "while one is attached" for that reason now, which is the same reason
+    // it was permanent before: a detach must not make a row look untouched.
     var conversationEverAttachedAt: Date?
     // #2718: the conversation Overture is ASKING Dan about, stored in full because a SwiftUI row cannot
     // make a Gmail call and the question has to be answerable without one.

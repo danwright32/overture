@@ -62,10 +62,18 @@ struct HandMarkedReplyTests {
     }
 
     // Nothing to record a reply to. A contact that was never pitched cannot have answered.
+    //
+    // #3069: the unpitched state is BUILT here rather than reached by undoing a pitch. This used to call
+    // `Prospect.undoFormOutreach`, which was a convenient way to get there and is gone: it belonged to a
+    // "take back a recorded form pitch" direction no screen could reach, and Dan's call (2026-08-22) was
+    // that a recorded form pitch is final. What the test is about is the state, not the route to it.
     @Test func anUnpitchedContactCannotBeMarked() throws {
         let ctx = ModelContext(try container())
-        let (p, r) = dmPitched(ctx)
-        p.undoFormOutreach(r)
+        let (_, r) = dmPitched(ctx)
+        r.formOutreachRecordedAt = nil
+        r.outreachChannelRaw = nil
+        r.sendState = .pending
+        r.sentAt = nil
 
         #expect(!HandMarkedReply.isOffered(r))
     }

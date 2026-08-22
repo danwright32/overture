@@ -370,71 +370,46 @@ struct DetachConversationTests {
         #expect(couldNotUndo?.contains("alert") == true, "it still says what it could not reach")
     }
 
-    // MARK: the send record can never be taken back afterwards
+    // MARK: a recorded form pitch is final (#3069)
 
-    // The live-fire hazard the plan named. `undoFormOutreach` sets `sendState = .pending`, `sentAt = nil`
-    // and unfreezes the send snapshot, and clears NONE of the reply state. Combined with a saved address
-    // that leaves a pending recipient carrying a stranger's address, sendable the moment the pause
-    // clears, and Overture queues the cold pitch to them.
+    // These five tests used to drive `Prospect.undoFormOutreach` directly, and they passed while proving
+    // nothing a person could reach: no branch of DraftReviewView draws `.recorded`, so the "Didn't send"
+    // they were about does not exist, and everything past that function's first guard was dead code with
+    // a sentence written for it. Dan's call, 2026-08-22: a recorded form pitch is FINAL, so the undo, its
+    // permanent refusal and the sentence are gone (L29).
     //
-    // Refused PERMANENTLY once a conversation has ever been attached, not merely while one is attached,
-    // because detaching first would otherwise re-open exactly that door.
-    @Test("Didn't send is refused once a conversation has been attached")
-    func undoFormOutreachIsRefusedAfterAnAttach() throws {
+    // What replaces them asserts the DECISION rather than the deleted code, through the mutation layer a
+    // button actually calls, so it holds whether or not anybody re-adds a model-level undo later.
+    @Test("the button that exists cannot take back a record that was made")
+    func cancellingAFormPitchNeverUndoesARecordedOne() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx)
         let r = formPitch(ctx, on: p)
-        attached(ctx, on: p, to: r)
+        let recordedAt = try #require(r.formOutreachRecordedAt)
 
-        #expect(p.undoFormOutreach(r) == false)
-        #expect(r.formOutreachRecordedAt != nil, "the send record must be left exactly as it was")
+        ProspectMutations.cancelFormPitch(QueueItem(p), r.id, prospects: [p],
+                                          context: ctx, feedback: ActionFeedback())
+
+        #expect(r.formOutreachRecordedAt == recordedAt, "the send record must be left exactly as it was")
         #expect(r.sendState == .sent)
     }
 
-    @Test("Didn't send is still refused after the conversation is detached again")
-    func undoFormOutreachStaysRefusedAfterADetach() throws {
+    // And the direction that DOES occur still works: a pitch Dan started and did not record backs out.
+    @Test("a started but unrecorded pitch is backed out")
+    func cancellingAStartedPitchClearsIt() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx)
-        let r = formPitch(ctx, on: p)
-        attached(ctx, on: p, to: r)
-        _ = DetachConversation.detach(r, on: p, now: now.addingTimeInterval(60))
+        // Built rather than taken from `formPitch`, which makes a RECORDED one: this case is about the
+        // state before the record exists, which is the only one the button can be pressed in.
+        let r = Recipient(id: "form:\(route)", email: nil, name: "Corin Hale", provenance: .act)
+        r.contactFormURL = route
+        p.addRecipient(r)
+        r.formOutreachStartedAt = now
 
-        #expect(p.undoFormOutreach(r) == false, "detaching must not re-open the door the attach shut")
-        #expect(r.formOutreachRecordedAt != nil)
-    }
+        ProspectMutations.cancelFormPitch(QueueItem(p), r.id, prospects: [p],
+                                          context: ctx, feedback: ActionFeedback())
 
-    @Test("Didn't send still works on a pitch no conversation was ever attached to")
-    func undoFormOutreachStillWorksOnAnUntouchedPitch() throws {
-        let ctx = ModelContext(try container())
-        let p = show(ctx)
-        let r = formPitch(ctx, on: p)
-
-        #expect(p.undoFormOutreach(r))
+        #expect(r.formOutreachStartedAt == nil)
         #expect(r.formOutreachRecordedAt == nil)
-        #expect(r.sendState == .pending)
-    }
-
-    // The refusal is spoken by the function that DECIDES it, so the greyed control and the reason beside
-    // it cannot disagree (L109).
-    @Test("the refused Didn't send carries a sentence naming why")
-    func theRefusedUndoCarriesASentence() throws {
-        let ctx = ModelContext(try container())
-        let p = show(ctx)
-        let r = formPitch(ctx, on: p)
-        attached(ctx, on: p, to: r)
-
-        let reason = try #require(FormOutreachCopy.undoRefusalReason(for: r))
-
-        #expect(reason.count > 20)
-        #expect(reason.hasSuffix("."))
-    }
-
-    @Test("a pitch with no attach history offers Didn't send with no refusal to explain")
-    func anUntouchedPitchHasNoRefusalToExplain() throws {
-        let ctx = ModelContext(try container())
-        let p = show(ctx)
-        let r = formPitch(ctx, on: p)
-
-        #expect(FormOutreachCopy.undoRefusalReason(for: r) == nil)
     }
 }

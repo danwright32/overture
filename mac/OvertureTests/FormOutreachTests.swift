@@ -197,31 +197,36 @@ struct FormOutreachTests {
         #expect(p.sentAt == first)
     }
 
-    // He clicked "Copy pitch and open form", looked at the form, and decided not to send after all. The
-    // record has to come off cleanly, or the show reads as pitched forever on the strength of a misclick.
-    @Test func undoingAFormOutreachPutsTheShowBackWhereItWas() throws {
+    // #3069: what "Didn't send" actually does, which is back out a pitch that was STARTED and never
+    // recorded. That is the only direction any screen can reach: the button is drawn on
+    // `.awaitingConfirmation`, and reaching that state proves no record has been made.
+    //
+    // These two tests used to call `Prospect.undoFormOutreach` directly and assert that a RECORDED form
+    // outreach could be taken back, and that it was refused once a real email had also gone out. Both
+    // passed and neither described the product: `.recorded` is drawn by no branch of DraftReviewView, so
+    // that undo had no caller and everything past its first guard was dead. Dan's call, 2026-08-22, is
+    // that a recorded form pitch is FINAL, so the function is gone and these assert the decision through
+    // the layer a button calls.
+    @Test func cancellingAStartedFormPitchBacksItOut() throws {
         let ctx = ModelContext(try container())
         let p = formOnlyDrafted(ctx)
         let r = p.recipients[0]
-        p.recordFormOutreach(r, now: Date(timeIntervalSince1970: 1_000_000),
-                             formURL: "https://aurorastrings.example/contact")
+        r.formOutreachStartedAt = Date(timeIntervalSince1970: 1_000_000)
 
-        #expect(p.undoFormOutreach(r))
+        ProspectMutations.cancelFormPitch(QueueItem(p), r.id, prospects: [p],
+                                          context: ctx, feedback: ActionFeedback())
 
-        #expect(r.formOutreachRecordedAt == nil)
-        #expect(r.formOutreachURL == nil)
-        #expect(r.outreachChannel == .email)
+        #expect(r.formOutreachStartedAt == nil)
+        #expect(r.formOutreachRecordedAt == nil, "nothing was ever recorded to take back")
         #expect(r.sendState == .pending)
-        #expect(r.sentAt == nil)
-        #expect(p.sentAt == nil)
-        #expect(p.wasProvablyContacted == false)
-        #expect(p.status == .drafted)
+        #expect(p.status == .drafted, "the show is exactly where it was")
     }
 
-    // ...but never once a real email has also gone out on the show. The lead-level rollup (the send
-    // date, the frozen ranking features, the relationship captured at send) belongs to that email, and
-    // clearing it to unwind a form record would silently rewrite the history of a genuine send.
-    @Test func aFormOutreachCannotBeUndoneOnceAnEmailHasAlsoGoneOut() throws {
+    // And a RECORDED one is untouched, including on a show that also carries a real email. That was the
+    // hazard the deleted refusal existed for: the lead-level rollup (the send date, the frozen ranking
+    // features, the relationship captured at send) belongs to that email, and unwinding a form record
+    // would rewrite its history. Nothing can now, because there is no undo at all.
+    @Test func cancellingNeverTouchesARecordedFormPitchOrARealSendBesideIt() throws {
         let ctx = ModelContext(try container())
         let p = formOnlyDrafted(ctx)
         let formContact = p.recipients[0]
@@ -234,10 +239,12 @@ struct FormOutreachTests {
         emailed.sentAt = Date(timeIntervalSince1970: 2_000_000)
         emailed.gmailMessageId = "<mid-1@x.org>"
 
-        #expect(p.undoFormOutreach(formContact) == false)
+        ProspectMutations.cancelFormPitch(QueueItem(p), formContact.id, prospects: [p],
+                                          context: ctx, feedback: ActionFeedback())
 
         #expect(formContact.formOutreachRecordedAt != nil)
         #expect(p.sentAt == Date(timeIntervalSince1970: 1_000_000))
+        #expect(emailed.gmailMessageId == "<mid-1@x.org>")
     }
 
     // What Dan pastes into a form has to be the whole pitch, greeting included. The greeting is not in

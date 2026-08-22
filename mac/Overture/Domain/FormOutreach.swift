@@ -123,18 +123,16 @@ enum FormOutreachCopy {
     // it up then would have the card contradict the reply badge beside it (L118, #843). It says who
     // recorded it, because a reply Overture read and a reply Dan reported are different things and the
     // row must not blur them.
-    // #2719: why "Didn't send" is refused, from the same fact the refusal itself reads, so the greyed
-    // control and the reason beside it cannot disagree (L109). Nil when it is not refused, so an
-    // untouched pitch gains no sentence it does not need.
+    // #3069: there is deliberately NO sentence here explaining why "Didn't send" is refused.
     //
-    // It names the consequence rather than the rule, because "a conversation was attached" is not a
-    // reason Dan can act on and "it would leave a stranger's address on a contact Overture can email" is.
-    static func undoRefusalReason(for recipient: Recipient) -> String? {
-        guard recipient.conversationEverAttachedAt != nil else { return nil }
-        return "You linked a conversation to this pitch, so Overture can't take the send record back. "
-            + "Undoing it would leave this contact holding an address from that conversation and ready "
-            + "to be emailed."
-    }
+    // #2719 wrote one, for L109's reason, and it was never rendered because the state it explains cannot
+    // occur: `.recorded` is drawn by no branch of DraftReviewView, so once a form pitch is recorded there
+    // is no "Didn't send" anywhere to press. Dan's call, 2026-08-22, asked which way to close that: a
+    // recorded form pitch is FINAL, so the refusal, its sentence and the undo they belonged to are gone
+    // rather than a control being built to make them reachable (L29).
+    //
+    // `FormOutreachFinalityTests` is what holds that decision now, in behaviour rather than in this
+    // comment.
 
     static let markedLine = "Sent through their form. You told Overture they replied."
     static let markedLineSocial = "Sent as a DM. You told Overture they replied."
@@ -239,38 +237,19 @@ extension Prospect {
         return true
     }
 
-    // Unwind a form record Dan takes back ("Didn't send"), or a misclick. Refused once a real email has
-    // also gone out on this show: the lead-level rollup (the send date, the frozen ranking features, the
-    // relationship captured at send) then describes THAT send, and clearing it to unwind a form record
-    // would rewrite the history of a genuine one. Refusing is honest; a partial undo is not.
-    @discardableResult
-    func undoFormOutreach(_ recipient: Recipient) -> Bool {
-        guard recipient.formOutreachRecordedAt != nil else { return false }
-        guard !recipients.contains(where: { $0.gmailMessageId != nil }) else { return false }
-        // #2719: refused PERMANENTLY once a conversation has ever been attached here, not merely while
-        // one is attached.
-        //
-        // This routine sets `sendState = .pending`, `sentAt = nil` and unfreezes the send snapshot, and
-        // clears NONE of `replied`, `repliedAt`, `lastReplyText`, `replyAudience`, `replyFromAddress` or
-        // `pausedByReply`. Combined with an address an attach saved, that leaves a pending recipient
-        // carrying a stranger's address, sendable the moment the pause clears, and Overture queues the
-        // cold pitch to them. Refusing only WHILE a conversation is attached would leave that door open
-        // behind a detach, which is why the marker it reads is one the detach deliberately does not
-        // clear. The refusal and its sentence come from the same fact (`undoRefusalReason`), so a greyed
-        // control and the reason beside it cannot disagree (L109).
-        guard recipient.conversationEverAttachedAt == nil else { return false }
-
-        if let raw = recipient.formOutreachPriorStatusRaw, let prior = ReviewStatus(rawValue: raw) {
-            status = prior
-        }
-        recipient.formOutreachPriorStatusRaw = nil
-        recipient.formOutreachRecordedAt = nil
-        recipient.formOutreachURL = nil
-        recipient.outreachChannelRaw = nil
-        recipient.sentAt = nil
-        recipient.sendState = .pending
-        // Only this contact's record existed, so the show's whole send snapshot belongs to it.
-        unfreezeSendSnapshot()
-        return true
-    }
+    // #3069: and there is no way back. A recorded form pitch is FINAL, which is Dan's call, 2026-08-22.
+    //
+    // #2719 built an `undoFormOutreach` covering "undoing a record already made", with a permanent
+    // refusal once a conversation had ever been attached and a sentence explaining that refusal. None of
+    // it was reachable: `FormPitch.state(of:)` answers `.recorded` the moment any recipient carries a
+    // `formOutreachRecordedAt`, and no branch of DraftReviewView draws `.recorded`, so the only
+    // "Didn't send" that exists is the one on `.awaitingConfirmation`, where the record has not been made
+    // yet. Everything past that undo's first guard was dead, and the comment beside it claiming the
+    // refusal and its sentence could not disagree read as wiring that was not there.
+    //
+    // Building the control instead was the other option and was declined: a form pitch is Dan telling
+    // Overture something happened in the outside world, and there is no undoing that.
+    //
+    // `ProspectMutations.cancelFormPitch` still backs out a pitch that was STARTED and not recorded,
+    // which is the direction that does occur.
 }
