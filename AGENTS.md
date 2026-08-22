@@ -171,6 +171,36 @@ already drifting from the Swift version it mirrored.
   literal-to-literal pair and moving one end breaks it for a reason unrelated to the clock. Shifting the
   whole repo including the app's own source was worse again (69), because it moves constants that are not
   fixtures at all.
+- **Asking whether the suite cleans up after itself: `scripts/check-temp-dir-leaks.sh` (#3065).** The
+  Mac suite created scratch directories under the per-user temp folder and never removed them, and macOS
+  clears that folder only at boot. Measured on this Mac 2026-08-22, on an uptime of 8 days: 952
+  `debug-seed-test`, 560 `census`, 336 `prep-results`, 224 `prep-reply-cancel`, 224 `performer-failure`,
+  112 each of `scout-snapshot`, `scout-extract-cancel` and `overture-test`, and 56 each of
+  `venue-identity`, `no-repo`, `debug-seed-missing` and `debug-seed-gmail-missing`. Every count is a
+  multiple of 56, the number of suite runs, so the leak was about 52 directories per run, and this repo
+  amplifies the rate by running its suite from worktrees, many copies against one shared folder.
+  The fix is `mac/TestSupport/TemporarySandboxes.swift`, not a review: hold one as a property of a
+  `final class` suite and Swift Testing's per-test instance release makes its `deinit` real teardown that
+  no call site can forget. **Counting call sites will not find this defect**, which is worth knowing
+  before trying. Downbeat had it too and had 96 `createDirectory` calls against 95 `defer` cleanups,
+  which reads as balanced, while leaking 52 per run, because one private helper called by many tests
+  multiplies a single missing teardown. Overture has 166 such call sites across 136 files.
+  It is OPT IN and deliberately NOT in `scripts/test-all.sh`, for the same reason as
+  `check-fixtures-do-not-age.sh`: it runs the whole Mac suite to take its before and after. Its JUDGING
+  half rides along on every push through `scripts/check-temp-dir-leaks.test.sh`, which drives the
+  `--before/--after/--log-file` seam without paying for a run.
+  Read its answer correctly. It has THREE exit codes, not two, and the third is the one that matters: a
+  suite that cleans up perfectly and a suite that NEVER RAN leave the same empty before-and-after
+  difference, so judging on that difference alone reports the emptiest possible failure as the cleanest
+  possible pass (L98). Proof that tests ran comes from the run's own output, and 2 means unmeasured. The
+  prefixes it judges by are DERIVED from the test sources in four forms (`make(named:)`,
+  `reserve(named:)`, `inSandboxNamed:` and the not-yet-converted `appendingPathComponent` plus UUID
+  shape), because reading only the last would stop covering a suite at the exact moment that suite was
+  fixed (L96), and deriving none is reported as unmeasured rather than clean.
+  It found a real leak the moment it was first run, after every site #3065 named had been converted: six
+  `prep-results` files from `PrepResultsConsumedOnceTests`, which nothing in the issue mentioned. That is
+  the check working rather than the conversion having been careless.
+
 - Keeping the checkout tidy: `scripts/tidy-checkout.sh` (#2234) removes local branches and agent
   worktrees whose work has provably shipped. It is a DRY RUN by default and needs `--apply` to
   delete anything. Note WHY it exists rather than the one-line idiom: this repo squash-merges, so a

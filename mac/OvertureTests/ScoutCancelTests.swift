@@ -94,11 +94,12 @@ struct ScoutCancelTests {
 // fresh run so a leftover from a cancelled run can never stop the next one instantly.
 @MainActor
 @Suite("Cancelling the detached scout read (#1037)")
-struct ScoutExtractCancelServiceTests {
+// #3065: `final class` so the sandbox goes with each test. This suite was leaving 2 per run.
+final class ScoutExtractCancelServiceTests {
+    private let sandboxes = TemporarySandboxes()
+
     private func tempDir() throws -> URL {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("scout-extract-cancel-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir
+        try sandboxes.make(named: "scout-extract-cancel")
     }
     private func defaults() -> UserDefaults {
         UserDefaults(suiteName: "ScoutExtractCancelServiceTests-\(UUID().uuidString)")!

@@ -22,7 +22,12 @@ import SwiftData
 // One root cause, so one fix: a results file the app has already consumed is not consumed again.
 @MainActor
 @Suite("A Prep results file is consumed once, not re-read on every launch (#884)")
-struct PrepResultsConsumedOnceTests {
+// #3065: `final class` so the sandbox goes with each test. This suite was leaving 6 result files per
+// run, and it was found by scripts/check-temp-dir-leaks.sh AFTER the sites the issue named had been
+// converted, which is the check working rather than the conversion being incomplete by accident.
+final class PrepResultsConsumedOnceTests {
+    private let sandboxes = TemporarySandboxes()
+
 
     private func context() throws -> ModelContext {
         ModelContext(try ModelContainer(for: Schema([Prospect.self]),
@@ -51,8 +56,7 @@ struct PrepResultsConsumedOnceTests {
 
     // Writes a real results file, because the fingerprint is taken over the bytes on disk.
     private func writeResults(subject: String, generatedAt: String = "2026-07-13T10:00:00Z") throws -> URL {
-        let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("prep-results-\(UUID().uuidString).json")
+        let url = try sandboxes.makeFile(named: "prep-results.json", inSandboxNamed: "prep-results")
         let results = PrepResults(version: 2, generatedAt: generatedAt, results: [
             PrepResult(naturalKey: key, contacts: nil,
                        draft: PrepDraft(subject: subject, body: "Hi there", variant: "A")),
@@ -143,8 +147,8 @@ struct PrepResultsConsumedOnceTests {
 
     // No results file at all (a fresh install, or a run that never wrote one). Silent, and no crash.
     @Test func noResultsFileIsSimplyNothingToDo() throws {
-        let missing = FileManager.default.temporaryDirectory
-            .appendingPathComponent("prep-results-\(UUID().uuidString).json")
+        // Reserved, not created: the subject of this test is a results file that is NOT there.
+        let missing = sandboxes.reserve(named: "prep-results-missing")
 
         #expect(PrepImporter.consumeIfNew(slot: .prep, at: missing, into: try context(), defaults: defaults()) == nil)
     }
