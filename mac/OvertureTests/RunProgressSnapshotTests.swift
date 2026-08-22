@@ -6,12 +6,12 @@ import Foundation
 // RootView's takeover and AddLeadSheet's inline read, so there is ONE definition of "what is the reading
 // phase showing right now", not two that drift. Driven against temp files, no run.
 @Suite("Scout reading-phase snapshot (#1036)")
-struct RunProgressSnapshotTests {
+// #3065: `final class` so the sandbox goes with each test. This suite was leaving 2 per run.
+final class RunProgressSnapshotTests {
+    private let sandboxes = TemporarySandboxes()
+
     private func tempDir() throws -> URL {
-        let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("scout-snapshot-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir
+        try sandboxes.make(named: "scout-snapshot")
     }
 
     private func writeQueue(_ items: [ScoutExtractQueueItem], to dir: URL) throws -> URL {
@@ -73,7 +73,8 @@ struct RunProgressSnapshotTests {
 
     // Missing files read as an empty snapshot, never a crash (the run may not have written anything yet).
     @Test func missingFilesGiveAnEmptySnapshot() {
-        let missing = FileManager.default.temporaryDirectory.appendingPathComponent("nope-\(UUID().uuidString)")
+        // Reserved, not created: the subject of this test is a path that is NOT there.
+        let missing = sandboxes.reserve(named: "scout-snapshot-nope")
         let snap = RunProgressView.Snapshot.liveReading(queueURL: missing, resultsURL: missing, progressURL: missing)
         #expect(snap.sourceName == nil)
         #expect(snap.completed == 0)
