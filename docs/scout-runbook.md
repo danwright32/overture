@@ -11,12 +11,14 @@ earlier TypeScript reference pipeline once it was confirmed unused and drifting)
 1. **Extract (direct Algolia query, no browser).** Carnegie's public calendar
    (`/events`) is a thin front-end over an Algolia search index (`prod_Events`). The
    visible page only renders ~3 days at a time, but the index holds the whole season, so
-   the scout queries Algolia directly for the next 90 days in one paginated call instead
+   the scout queries Algolia directly for the next 120 days in one paginated call instead
    of scraping the DOM. This is a plain HTTPS POST using the public, search-only key the
    site ships in its own client JS (not a secret); no headless browser is involved.
    Implemented in `mac/Overture/Integration/CarnegieExtractor.swift` (+
-   `AlgoliaCalendar.swift`). The window opens at midnight New York today and runs 90 days
-   out (Eastern, not UTC). At parse time the feed is cleaned: cancelled performances (a
+   `AlgoliaCalendar.swift`). The window opens at midnight New York today and runs
+   `AlgoliaCalendar.windowDays` days out (Eastern, not UTC), which is 120: thirty days more than
+   the queue's own display window, on purpose, so a show is already in the store by the time Dan
+   can act on it (#2521). At parse time the feed is cleaned: cancelled performances (a
    `Cancelled:` title prefix) are dropped and embedded HTML / zero-width characters are
    stripped from text fields. Output: `ExtractedEvent`s with `title`, `presenter`,
    `venue`, `performanceDate`, `sourceUrl`. If Carnegie rotates the Algolia key or
@@ -67,7 +69,7 @@ earlier TypeScript reference pipeline once it was confirmed unused and drifting)
 ## Status
 
 - **Extraction: proven live against the Algolia index (2026-06-25).** The direct query
-  pulled 83 upcoming events over the 90-day window (clean title/date/venue/presenter/URL),
+  pulled 83 upcoming events over the then 90-day window (clean title/date/venue/presenter/URL),
   with cancelled shows and embedded HTML filtered out.
 - **Hands-off trigger: done.** The app runs the scout in-process on the "Run scout"
   button and auto-runs it about daily; it only reads, so it is safe unattended.

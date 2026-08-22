@@ -8,9 +8,10 @@ import SwiftData
 // takes nothing away: it never overwrites a decision he made after it first ran (a source he stopped
 // watching stays stopped), and it never drops a source id a prospect already carries.
 //
-// Carnegie KEEPS its Algolia extractor. Its index exposes 90 days; its rendered page exposes about
-// three. Forcing it down the generic HTML path to be rid of the special case would trade 87 days of
-// lead time for tidiness. #768 and #771 need Carnegie to have a ROW and a source id, not a shared
+// Carnegie KEEPS its Algolia extractor. Its index answers for the whole window the scout asks of it
+// ([[AlgoliaCalendar.windowDays]]); its rendered page exposes about three days. Forcing it down the
+// generic HTML path to be rid of the special case would trade nearly all of that lead time for
+// tidiness. #768 and #771 need Carnegie to have a ROW and a source id, not a shared
 // extractor.
 enum WatchedSourceBackfill {
     // Display only. Carnegie's real endpoint is a POST search API needing an app id, an api key and a

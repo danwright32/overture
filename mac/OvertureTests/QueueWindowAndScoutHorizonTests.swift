@@ -106,6 +106,36 @@ struct QueueWindowAndScoutHorizonTests {
                 "a client's calendar is read \(ClientHorizon.clientMonths) months and must never reach less far than the queue window")
     }
 
+    // #2521: the THIRD supply side, and the one that had no buffer at all.
+    //
+    // `AlgoliaCalendar.windowDays` is the FETCH window for Carnegie Hall's feed, the store's only
+    // `algolia` source, and it was 90: exactly the queue's own display window. So a Carnegie show became
+    // fetchable and became pitchable on the same day, and whether it was in the store by the time it
+    // entered Dan's triage window depended on a scout run landing in the right order rather than on any
+    // margin. Nothing absorbed a night the scout did not run, a read Dan deferred, or a feed that was
+    // briefly unreadable.
+    //
+    // Every other source has that margin, because a whole calendar month is a coarser unit than a day:
+    // four months reaches 89 to 122 days against a 90 day window. Carnegie's fetch is counted in days,
+    // so the margin has to be chosen rather than inherited, and this is the check that it was.
+    //
+    // Why this source in particular: Carnegie is 122 of 322 shoots in Dan's history, 38% of everything
+    // he has photographed, so it is where a show arriving late costs the most.
+    @Test("Carnegie's feed is fetched further ahead than the queue shows")
+    func theAlgoliaFetchWindowClearsTheQueueWindow() {
+        let fetch = AlgoliaCalendar.windowDays
+        let window = QueueModel.leadTimeWindowDays
+
+        #expect(fetch > window,
+                "the Carnegie fetch window (\(fetch)) must exceed the queue window (\(window)), or a show becomes fetchable and pitchable on the same day")
+
+        // Thirty days, which is the same family as the month-index sources' typical 32 day margin and
+        // is stated as a floor rather than an exact number so the fetch may be widened without editing
+        // this test. Narrowing it below a month is the thing that has to be a deliberate act.
+        #expect(fetch - window >= 30,
+                "the buffer is \(fetch - window) days; a month is the margin this pair was set with, and shrinking it means deciding a new one and saying so here")
+    }
+
     @Test("The sweep really examined every day, so an empty run cannot pass")
     func theSweepIsNotVacuous() {
         let days = everyStartDay()
