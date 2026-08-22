@@ -26,10 +26,10 @@ struct StrikeAnAddressAtTriageTests {
 
     @discardableResult
     private func show(_ ctx: ModelContext, presenter: String? = "Feinstein's/54 Below",
-                      emails: [String] = ["ryan@ryanjamesmonroe.com"]) -> Prospect {
-        let key = Prospect.makeNaturalKey(groupName: "Ryan James Monroe",
+                      emails: [String] = ["devin@devinmarlowe.example"]) -> Prospect {
+        let key = Prospect.makeNaturalKey(groupName: "Devin Marlowe",
                                           performanceDate: "2026-10-03", venue: "54 Below")
-        let p = Prospect(naturalKey: key, groupName: "Ryan James Monroe", discipline: "music",
+        let p = Prospect(naturalKey: key, groupName: "Devin Marlowe", discipline: "music",
                          venue: "54 Below", performanceDate: "2026-10-03",
                          sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
                          production: "self", profile: "strong", coverage: "likely_uncovered",
@@ -62,30 +62,30 @@ struct StrikeAnAddressAtTriageTests {
     // and the next import created it again, so the removal silently undid itself.
     @Test func aStruckAddressIsNotBroughtBackByTheNextPrepRun() throws {
         let ctx = try context()
-        let p = show(ctx, emails: ["ryan@ryanjamesmonroe.com", "ryansbrother@example.com"])
+        let p = show(ctx, emails: ["devin@devinmarlowe.example", "devinsbrother@example.com"])
 
-        ContactRefusal.refuse(email: "ryansbrother@example.com", scope: .show(p.naturalKey), in: ctx)
-        p.removeOrSuppressRecipient(id: ReplyDetection.email(from: "ryansbrother@example.com"))
+        ContactRefusal.refuse(email: "devinsbrother@example.com", scope: .show(p.naturalKey), in: ctx)
+        p.removeOrSuppressRecipient(id: ReplyDetection.email(from: "devinsbrother@example.com"))
         try ctx.save()
 
         _ = PrepImporter.ingest(results(p.naturalKey,
-                                        emails: ["ryan@ryanjamesmonroe.com", "ryansbrother@example.com"]),
+                                        emails: ["devin@devinmarlowe.example", "devinsbrother@example.com"]),
                                 into: ctx)
 
-        #expect(p.recipients.compactMap(\.email).sorted() == ["ryan@ryanjamesmonroe.com"])
+        #expect(p.recipients.compactMap(\.email).sorted() == ["devin@devinmarlowe.example"])
     }
 
     // The refusal is about the ADDRESS, however it is spelled on the way in. A run that reports it with
     // different case, or wrapped in a display name, is reporting the same person.
     @Test func aRefusalHoldsHoweverTheAddressIsSpelled() throws {
         let ctx = try context()
-        let p = show(ctx, emails: ["ryan@ryanjamesmonroe.com"])
+        let p = show(ctx, emails: ["devin@devinmarlowe.example"])
 
-        ContactRefusal.refuse(email: "RyansBrother@Example.com ", scope: .show(p.naturalKey), in: ctx)
+        ContactRefusal.refuse(email: "DevinsBrother@Example.com ", scope: .show(p.naturalKey), in: ctx)
 
-        _ = PrepImporter.ingest(results(p.naturalKey, emails: ["ryansbrother@example.com"]), into: ctx)
+        _ = PrepImporter.ingest(results(p.naturalKey, emails: ["devinsbrother@example.com"]), into: ctx)
 
-        #expect(p.recipients.compactMap(\.email).sorted() == ["ryan@ryanjamesmonroe.com"])
+        #expect(p.recipients.compactMap(\.email).sorted() == ["devin@devinmarlowe.example"])
     }
 
     // A refusal on ONE show says nothing about any other. It is the narrower of the two scopes on
@@ -93,7 +93,7 @@ struct StrikeAnAddressAtTriageTests {
     // not true of (L83).
     @Test func aShowRefusalDoesNotReachAnotherShow() throws {
         let ctx = try context()
-        let p = show(ctx, emails: ["ryan@ryanjamesmonroe.com"])
+        let p = show(ctx, emails: ["devin@devinmarlowe.example"])
         let other = Prospect(naturalKey: "other|2026-11-01|54-below", groupName: "Someone Else",
                              discipline: "music", venue: "54 Below", performanceDate: "2026-11-01",
                              sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
@@ -103,11 +103,11 @@ struct StrikeAnAddressAtTriageTests {
         ctx.insert(other)
         try ctx.save()
 
-        ContactRefusal.refuse(email: "ryansbrother@example.com", scope: .show(p.naturalKey), in: ctx)
+        ContactRefusal.refuse(email: "devinsbrother@example.com", scope: .show(p.naturalKey), in: ctx)
 
-        _ = PrepImporter.ingest(results(other.naturalKey, emails: ["ryansbrother@example.com"]), into: ctx)
+        _ = PrepImporter.ingest(results(other.naturalKey, emails: ["devinsbrother@example.com"]), into: ctx)
 
-        #expect(other.recipients.compactMap(\.email) == ["ryansbrother@example.com"])
+        #expect(other.recipients.compactMap(\.email) == ["devinsbrother@example.com"])
     }
 
     // MARK: - The reversal
@@ -123,17 +123,17 @@ struct StrikeAnAddressAtTriageTests {
         let ctx = try context()
         let p = show(ctx, emails: [])
 
-        ContactRefusal.refuse(email: "ryansbrother@example.com", scope: .show(p.naturalKey), in: ctx)
-        _ = PrepImporter.ingest(results(p.naturalKey, emails: ["ryansbrother@example.com"]), into: ctx)
+        ContactRefusal.refuse(email: "devinsbrother@example.com", scope: .show(p.naturalKey), in: ctx)
+        _ = PrepImporter.ingest(results(p.naturalKey, emails: ["devinsbrother@example.com"]), into: ctx)
         // The strike holds first, so the second half below is measuring the reversal and not simply an
         // importer that would have taken the address either way.
         #expect(p.recipients.isEmpty)
 
-        ContactRefusal.allow(email: "ryansbrother@example.com", showKey: p.naturalKey,
+        ContactRefusal.allow(email: "devinsbrother@example.com", showKey: p.naturalKey,
                              orgKey: OrgKey.stored(for: p.presenter ?? ""), in: ctx)
-        _ = PrepImporter.ingest(results(p.naturalKey, emails: ["ryansbrother@example.com"]), into: ctx)
+        _ = PrepImporter.ingest(results(p.naturalKey, emails: ["devinsbrother@example.com"]), into: ctx)
 
-        #expect(p.recipients.compactMap(\.email) == ["ryansbrother@example.com"])
+        #expect(p.recipients.compactMap(\.email) == ["devinsbrother@example.com"])
     }
 
     // Refusing twice is one refusal. A strike Dan repeats (or a second surface writing the same fact)
@@ -245,10 +245,10 @@ struct StrikeAnAddressAtTriageTests {
     // drop what it brings home. The queue is the only thing the run reads, so the refusals ride on it.
     @Test func theWorkListTellsTheRunWhichAddressesToLeaveAlone() throws {
         let ctx = try context()
-        let p = show(ctx, presenter: "Feinstein's/54 Below", emails: ["ryan@ryanjamesmonroe.com"])
+        let p = show(ctx, presenter: "Feinstein's/54 Below", emails: ["devin@devinmarlowe.example"])
         let orgKey = try #require(OrgKey.stored(for: "Feinstein's/54 Below"))
 
-        ContactRefusal.refuse(email: "ryansbrother@example.com", scope: .show(p.naturalKey), in: ctx)
+        ContactRefusal.refuse(email: "devinsbrother@example.com", scope: .show(p.naturalKey), in: ctx)
         ContactRefusal.refuse(email: "boxoffice@54below.com", scope: .organisation(orgKey), in: ctx)
 
         let queue = PrepQueueService.buildQueue(from: ctx, generatedAt: "2026-08-09T00:00:00Z",
@@ -256,7 +256,7 @@ struct StrikeAnAddressAtTriageTests {
                                                 venueHistory: VenueShootHistory(shoots: [], bookings: [], today: "2026-08-09"))
 
         let item = try #require(queue.items.first { $0.naturalKey == p.naturalKey })
-        #expect(item.refusedEmails?.sorted() == ["boxoffice@54below.com", "ryansbrother@example.com"])
+        #expect(item.refusedEmails?.sorted() == ["boxoffice@54below.com", "devinsbrother@example.com"])
     }
 
     // Absent, not empty, on the overwhelming majority of shows: a field present on every item would tell

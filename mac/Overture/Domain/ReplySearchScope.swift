@@ -7,7 +7,7 @@ import Foundation
 //
 // The shape of the search follows from the cost. There is no usable `from:` filter, because the
 // domain a form lives on is not a match key for the address the presenter answers from (measured
-// live 2026-08-14: a form on caseengaines.com, a reply from a gmail.com address). So the query
+// live 2026-08-14: a form on corinhale.example, a reply from a gmail.com address). So the query
 // degenerates to everything inbound since the pitch, `users.messages.list` returns only ids, and
 // every candidate needs its own `users.messages.get` to see who sent it. One search per CONTACT
 // would be roughly 1,200 gets per contact per tick against a normal inbox, every thirty minutes.

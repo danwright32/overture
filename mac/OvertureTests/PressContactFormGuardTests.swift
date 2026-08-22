@@ -69,7 +69,7 @@ struct PressContactFormGuardTests {
     // Every other form in the live store, which must all stay usable. Without these the rule could pass
     // by flagging everything.
     @Test func theOtherStoredFormsAreLeftAlone() {
-        for url in ["https://jakebergmagic.com/contact",
+        for url in ["https://sorrelmanemagic.com/contact",
                     "https://shop.copeland.band/pages/contact",
                     "https://www.french-american-piano.org/mailing-list",
                     "https://www.goldenclassicalmusicawards.com/contact-us",

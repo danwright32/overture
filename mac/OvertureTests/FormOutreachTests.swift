@@ -31,7 +31,7 @@ struct FormOutreachTests {
         p.draftBody = "Hello,\n\nI photograph performing arts in New York."
         ctx.insert(p)
         let r = Recipient(id: Recipient.makeId(email: nil, formURL: formURL)!, email: nil,
-                          name: "Jake Berg", provenance: .act,
+                          name: "Sorrel Mane", provenance: .act,
                           contactMethodRaw: ContactMethod.formOrDM.rawValue, contactFormURL: formURL)
         p.setRecipients([r])
         try? ctx.save()

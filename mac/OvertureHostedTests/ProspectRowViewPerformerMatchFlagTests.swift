@@ -10,7 +10,7 @@ import ViewInspector
 @MainActor
 @Suite("ProspectRowView performer-match flag (#753)")
 struct ProspectRowViewPerformerMatchFlagTests {
-    private let note = "Matched performer 'Marisol Vega' to Downbeat client Marisol Vega."
+    private let note = "Matched performer 'Larkin Sable' to Downbeat client Larkin Sable."
 
     private func item(corrected: Bool, reviewed: Bool = false, dismissed: Bool = false) -> QueueItem {
         QueueItem(id: "k", groupName: "Emerging Artists Series", discipline: "music",
@@ -34,7 +34,7 @@ struct ProspectRowViewPerformerMatchFlagTests {
     }
 
     @Test func aProspectWithNoPerformerMatchShowsNoFlag() throws {
-        #expect(!(try texts(row(item(corrected: false)))).contains { $0.contains("Marisol Vega") })
+        #expect(!(try texts(row(item(corrected: false)))).contains { $0.contains("Larkin Sable") })
     }
 
     // An unconfirmed match must ASK, not merely inform: until Dan confirms it, the warm tone is held
@@ -42,7 +42,7 @@ struct ProspectRowViewPerformerMatchFlagTests {
     @Test func anUnconfirmedMatchShowsTheNoteAndBothActions() throws {
         let view = row(item(corrected: true))
 
-        #expect(try texts(view).contains { $0.contains("Marisol Vega") })
+        #expect(try texts(view).contains { $0.contains("Larkin Sable") })
         _ = try view.inspect().find(button: "Looks right")    // throws if absent
         _ = try view.inspect().find(button: "Wrong match")
     }
@@ -52,7 +52,7 @@ struct ProspectRowViewPerformerMatchFlagTests {
     @Test func aConfirmedMatchKeepsTheNoteAndTheRejectAction() throws {
         let view = row(item(corrected: true, reviewed: true))
 
-        #expect(try texts(view).contains { $0.contains("Marisol Vega") })
+        #expect(try texts(view).contains { $0.contains("Larkin Sable") })
         _ = try view.inspect().find(button: "Wrong match")
         #expect(throws: (any Error).self) { try view.inspect().find(button: "Looks right") }
     }
@@ -60,6 +60,6 @@ struct ProspectRowViewPerformerMatchFlagTests {
     // A rejected match is gone from the row entirely: Phase 4 already reverted the score, so there is
     // nothing left to explain.
     @Test func aDismissedMatchShowsNoFlag() throws {
-        #expect(!(try texts(row(item(corrected: true, dismissed: true)))).contains { $0.contains("Marisol Vega") })
+        #expect(!(try texts(row(item(corrected: true, dismissed: true)))).contains { $0.contains("Larkin Sable") })
     }
 }

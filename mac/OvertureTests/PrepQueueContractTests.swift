@@ -108,7 +108,7 @@ struct PrepQueueContractTests {
     }
 
     @Test(arguments: 1...13)
-    func noFixtureEverClaimsTheActIsAllThereIsWhileNamingAProducer(version: Int) throws {
+    func noFixtualderrClaimsTheActIsAllThereIsWhileNamingAProducer(version: Int) throws {
         let decoded = try JSONDecoder().decode(PrepQueue.self, from: try fixture("v\(version).json"))
         for item in decoded.items where item.onlyTheActIsNamed == true {
             #expect(item.presenterOnRecord == nil)

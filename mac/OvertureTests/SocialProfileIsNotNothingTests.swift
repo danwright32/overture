@@ -4,11 +4,11 @@ import SwiftData
 
 // #2265: a check that reached a social profile and stopped there is NOT a check that found nothing.
 //
-// Measured on the 2026-08-07 run, on 2 of its 3 shows. For Ryan James Monroe the run spent nine web
-// calls, fetched instagram.com/ryanjamesmonroe/ successfully, and emitted a contact whose only route
+// Measured on the 2026-08-07 run, on 2 of its 3 shows. For Devin Marlowe the run spent nine web
+// calls, fetched instagram.com/example-performer-act/ successfully, and emitted a contact whose only route
 // was that profile. A social DM is a dead end by Dan's standing rule, so the ingest refused it and the
 // card rendered a plain "No email found", with no reason. Verified the same day: a plain fetch of
-// ryanjamesmonroe.com/contact-8-1 publishes ryan@ryanjamesmonroe.com and lindsay@ryanjamesmonroe.com.
+// devinmarlowe.example/contact-8-1 publishes devin@devinmarlowe.example and tessa@devinmarlowe.example.
 //
 // So "No email found" with no reason was a claim the run had not earned. `nothingPublished` is the one
 // verdict whose wording is documented as always true ("this show's people genuinely publish no address
@@ -28,9 +28,9 @@ struct SocialProfileIsNotNothingTests {
     }
 
     private func newProspect(_ ctx: ModelContext) -> String {
-        let key = Prospect.makeNaturalKey(groupName: "Ryan James Monroe",
+        let key = Prospect.makeNaturalKey(groupName: "Devin Marlowe",
                                           performanceDate: "2026-08-11", venue: "54 Below")
-        let p = Prospect(naturalKey: key, groupName: "Ryan James Monroe", discipline: "music",
+        let p = Prospect(naturalKey: key, groupName: "Devin Marlowe", discipline: "music",
                          venue: "54 Below", performanceDate: "2026-08-11", sourceListingURL: nil,
                          websiteURL: nil, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 6, tier: "mid",
@@ -47,9 +47,9 @@ struct SocialProfileIsNotNothingTests {
 
     /// The exact contact the 2026-08-07 run emitted for this show.
     private func socialOnlyContact() -> PrepContact {
-        PrepContact(name: "Ryan James Monroe", role: "Performer", email: nil,
+        PrepContact(name: "Devin Marlowe", role: "Performer", email: nil,
                     method: "form_or_dm", confidence: "low",
-                    formUrl: "https://www.instagram.com/ryanjamesmonroe/", provenance: "performer")
+                    formUrl: "https://www.instagram.com/example-performer-act/", provenance: "performer")
     }
 
     @Test func aRunThatOnlyReachedASocialProfileSaysSo() throws {
@@ -80,8 +80,8 @@ struct SocialProfileIsNotNothingTests {
         let key = newProspect(ctx)
         let now = Date(timeIntervalSince1970: 1_780_000_000)
 
-        let real = PrepContact(name: "Ryan James Monroe", role: "Performer",
-                               email: "ryan@ryanjamesmonroe.com", method: "named_decision_maker",
+        let real = PrepContact(name: "Devin Marlowe", role: "Performer",
+                               email: "devin@devinmarlowe.example", method: "named_decision_maker",
                                confidence: "high", formUrl: nil, provenance: "performer")
         _ = PrepImporter.ingest(PrepResults(version: 2, generatedAt: "now",
                                             results: [PrepResult(naturalKey: key, contacts: [real],
@@ -99,9 +99,9 @@ struct SocialProfileIsNotNothingTests {
         let key = newProspect(ctx)
         let now = Date(timeIntervalSince1970: 1_780_000_000)
 
-        let ownForm = PrepContact(name: "Ryan James Monroe", role: "Performer", email: nil,
+        let ownForm = PrepContact(name: "Devin Marlowe", role: "Performer", email: nil,
                                   method: "form_or_dm", confidence: "medium",
-                                  formUrl: "https://www.ryanjamesmonroe.com/contact-8-1",
+                                  formUrl: "https://www.devinmarlowe.example/contact-8-1",
                                   provenance: "performer")
         _ = PrepImporter.ingest(PrepResults(version: 2, generatedAt: "now",
                                             results: [PrepResult(naturalKey: key, contacts: [ownForm],

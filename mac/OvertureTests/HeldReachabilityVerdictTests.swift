@@ -45,14 +45,14 @@ struct HeldReachabilityVerdictTests {
     }
 
     private func formContact(_ url: String) -> Recipient {
-        let r = Recipient(id: url, email: nil, name: "Caseen Gaines", provenance: .act)
+        let r = Recipient(id: url, email: nil, name: "Corin Hale", provenance: .act)
         r.contactFormURL = url
         r.contactMethodRaw = "form_or_dm"
         return r
     }
 
     private func emailContact(_ address: String) -> Recipient {
-        Recipient(id: address, email: address, name: "Caseen Gaines", provenance: .act)
+        Recipient(id: address, email: address, name: "Corin Hale", provenance: .act)
     }
 
     // The live row, reconstructed: a check concludes form-only, then Dan deletes the contact carrying the
@@ -61,7 +61,7 @@ struct HeldReachabilityVerdictTests {
         let ctx = ModelContext(try container())
         let p = show(ctx)
         p.reachabilityProbedAt = Date()
-        p.setRecipients([formContact("https://caseengaines.com/contact")])
+        p.setRecipients([formContact("https://corinhale.example/contact")])
         p.reachabilityResult = .contactFormOnly
         #expect(QueueItem(p).reachabilityBadge() == .contactFormOnly)
 
@@ -91,7 +91,7 @@ struct HeldReachabilityVerdictTests {
         let ctx = ModelContext(try container())
         let p = show(ctx)
         p.reachabilityProbedAt = Date()
-        p.setRecipients([formContact("https://caseengaines.com/contact")])
+        p.setRecipients([formContact("https://corinhale.example/contact")])
         p.reachabilityResult = .contactFormOnly
 
         p.setRecipients([])
@@ -134,7 +134,7 @@ struct HeldReachabilityVerdictTests {
         let ctx = ModelContext(try container())
         let p = show(ctx, group: "Nothing Was Deleted Here")
         p.reachabilityProbedAt = Date()
-        p.setRecipients([formContact("https://caseengaines.com/contact")])
+        p.setRecipients([formContact("https://corinhale.example/contact")])
         p.reachabilityResult = .contactFormOnly
 
         #expect(p.reachabilityResultAsHeld == .contactFormOnly)

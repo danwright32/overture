@@ -46,11 +46,11 @@ struct AlgoliaCalendarParseTests {
 
     @Test func cleansHTMLAndZeroWidthFromTextFields() {
         let raw = "{\"results\":[{\"nbPages\":1,\"hits\":[{" +
-            "\"title\":\"Anna Pierre, Piano<br />\u{200B}Virgile Roche, Piano\"," +
+            "\"title\":\"Nora Calder, Piano<br />\u{200B}Virgile Roche, Piano\"," +
             "\"licenseename\":\"French-American Piano Society<br/>\"," +
             "\"facility\":\"Weill Recital Hall\",\"url\":\"/calendar/2026/07/07/z\"}]}]}"
         let e = AlgoliaCalendar.parse(Data(raw.utf8)).events[0]
-        #expect(e.title == "Anna Pierre, Piano Virgile Roche, Piano")
+        #expect(e.title == "Nora Calder, Piano Virgile Roche, Piano")
         #expect(e.presenter == "French-American Piano Society")
     }
 }

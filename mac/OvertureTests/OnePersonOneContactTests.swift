@@ -3,7 +3,7 @@ import Foundation
 import SwiftData
 
 // #2422, Dan on the live build 2026-08-10 looking at a prepped card: "and I've got two of the same
-// person." He had "Ryan James Monroe, No email yet" and "Ryan James Monroe, ryan@ryanjamesmonroe.com" as
+// person." He had "Devin Marlowe, No email yet" and "Devin Marlowe, devin@devinmarlowe.example" as
 // two rows on one show, and the draft composed a greeting for each.
 //
 // The importer matched an incoming contact to an existing recipient by id, which is the email or
@@ -59,18 +59,18 @@ struct OnePersonOneContactTests {
         let ctx = ModelContext(try container())
         let key = show(ctx)
 
-        ingest([contact("Ryan James Monroe", formUrl: "https://www.instagram.com/ryanjamesmonroe/"),
-                contact("Olivia Terpin", formUrl: "https://www.instagram.com/oliviaterpinofficial/")],
+        ingest([contact("Devin Marlowe", formUrl: "https://www.instagram.com/example-performer-act/"),
+                contact("Juno Faraday", formUrl: "https://www.instagram.com/example-performer-duo/")],
                key: key, into: ctx)
-        ingest([contact("Ryan James Monroe", email: "ryan@ryanjamesmonroe.example"),
-                contact("Olivia Terpin", email: "oliviaterpinmusic@example.test")],
+        ingest([contact("Devin Marlowe", email: "devin@devinmarlowe.example"),
+                contact("Juno Faraday", email: "junofaradaymusic@example.test")],
                key: key, into: ctx)
 
         let p = try prospect(ctx, key)
         #expect(p.recipients.count == 2, "the show has two people on it, not four")
-        let ryan = try #require(p.recipients.first { $0.name == "Ryan James Monroe" })
-        #expect(ryan.email == "ryan@ryanjamesmonroe.example", "the address is the better way in")
-        #expect(ryan.id == "ryan@ryanjamesmonroe.example", "and the row is keyed on it")
+        let ryan = try #require(p.recipients.first { $0.name == "Devin Marlowe" })
+        #expect(ryan.email == "devin@devinmarlowe.example", "the address is the better way in")
+        #expect(ryan.id == "devin@devinmarlowe.example", "and the row is keyed on it")
     }
 
     // The other order, which is the one that used to end up strictly worse: a performer with a booking
@@ -166,16 +166,16 @@ struct OnePersonOneContactTests {
     @Test func anAlreadySentContactIsNeverRewritten() throws {
         let ctx = ModelContext(try container())
         let key = show(ctx)
-        ingest([contact("Ryan James Monroe", email: "ryan@ryanjamesmonroe.example")], key: key, into: ctx)
+        ingest([contact("Devin Marlowe", email: "devin@devinmarlowe.example")], key: key, into: ctx)
         let p = try prospect(ctx, key)
         p.recipients.first?.sendState = .sent
         p.recipients.first?.sentAt = Date(timeIntervalSince1970: 1_780_000_000)
         try ctx.save()
 
-        ingest([contact("Ryan James Monroe", email: "different@example.test")], key: key, into: ctx)
+        ingest([contact("Devin Marlowe", email: "different@example.test")], key: key, into: ctx)
 
         let sent = try #require(try prospect(ctx, key).recipients.first { $0.sendState == .sent })
-        #expect(sent.email == "ryan@ryanjamesmonroe.example", "the address it went to is locked")
+        #expect(sent.email == "devin@devinmarlowe.example", "the address it went to is locked")
     }
 
     // Dan's own contact is not the importer's to rewrite (#388).
@@ -183,12 +183,12 @@ struct OnePersonOneContactTests {
         let ctx = ModelContext(try container())
         let key = show(ctx)
         let p = try prospect(ctx, key)
-        let mine = Recipient(id: "dan@typed.example", email: "dan@typed.example", name: "Ryan James Monroe",
+        let mine = Recipient(id: "dan@typed.example", email: "dan@typed.example", name: "Devin Marlowe",
                              provenance: .manual)
         p.addRecipient(mine)
         try ctx.save()
 
-        ingest([contact("Ryan James Monroe", email: "found@example.test")], key: key, into: ctx)
+        ingest([contact("Devin Marlowe", email: "found@example.test")], key: key, into: ctx)
 
         let after = try prospect(ctx, key)
         #expect(after.recipients.count == 2)
@@ -202,7 +202,7 @@ struct OnePersonOneContactTests {
 struct ContactIdentityTests {
 
     @Test func caseSpacingAndPunctuationDoNotMakeTwoPeople() {
-        #expect(ContactIdentity.isSamePerson("Ryan James Monroe", "ryan james monroe"))
+        #expect(ContactIdentity.isSamePerson("Devin Marlowe", "devin marlowe"))
         #expect(ContactIdentity.isSamePerson("Cydney McQuillan-Grace", "Cydney McQuillan Grace"))
         #expect(ContactIdentity.isSamePerson("Maggie  Stephens ", "Maggie Stephens"))
     }
@@ -225,7 +225,7 @@ struct ContactIdentityTests {
     }
 
     @Test func twoDifferentPeopleAreNotOne() {
-        #expect(!ContactIdentity.isSamePerson("Olivia Terpin", "Bethany Griffin"))
+        #expect(!ContactIdentity.isSamePerson("Juno Faraday", "Bethany Griffin"))
     }
 
     // Nothing to compare must never match anything, including another nothing.

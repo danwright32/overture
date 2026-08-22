@@ -132,13 +132,13 @@ struct PerformerMatchTests {
     // A conflicting address on a CLIENT is still fatal, unchanged (Dan's original call): there the
     // address genuinely is that client's own, so a mismatch really does say "different person".
     @Test func aDifferingClientAddressStillSuppressesTheMatch() {
-        let client = DownbeatClient(id: "c", displayName: "Marisol Vega", shortName: nil,
-                                    email: "marisol@vegaviolin.com", contractEmail: "",
+        let client = DownbeatClient(id: "c", displayName: "Larkin Sable", shortName: nil,
+                                    email: "larkin@sableviolin.example", contractEmail: "",
                                     phoneNumber: nil, isTaxExempt: nil, hasLeftReview: false,
                                     specialBehaviors: [], notes: nil, hostingSite: "")
 
         let verdict = HistoryMatch.matchPerformer(
-            performerName: "Marisol Vega", performerEmail: "someone.else@example.com",
+            performerName: "Larkin Sable", performerEmail: "someone.else@example.com",
             production: .selfProduced, clients: [client], history: [])
 
         #expect(verdict == .noMatch)
@@ -163,8 +163,8 @@ struct PerformerMatchTests {
     @Test func aCorroboratedMatchSaysSoInItsNote() throws {
         let fixture = try loadFixture()
         let verdict = HistoryMatch.matchPerformer(
-            performerName: "Marisol Vega",
-            performerEmail: "marisol@vegaviolin.com",
+            performerName: "Larkin Sable",
+            performerEmail: "larkin@sableviolin.example",
             production: .selfProduced,
             clients: fixture.clients,
             history: fixture.history
@@ -271,10 +271,10 @@ struct PerformerMatchTests {
     }
 
     @Test func personNameMatchingIgnoresTokenOrderButNotExtraTokens() {
-        #expect(GroupNameMatch.isConfidentPersonName("Vega, Marisol", "Marisol Vega"))
-        #expect(GroupNameMatch.isConfidentPersonName("marisol vega", "Marisol Vega"))
-        #expect(!GroupNameMatch.isConfidentPersonName("Marisol Vega", "Marisol Vega Quartet"))
-        #expect(!GroupNameMatch.isConfidentPersonName("", "Marisol Vega"))
-        #expect(!GroupNameMatch.isConfidentPersonName("Marisol Vega", ""))
+        #expect(GroupNameMatch.isConfidentPersonName("Sable, Larkin", "Larkin Sable"))
+        #expect(GroupNameMatch.isConfidentPersonName("larkin sable", "Larkin Sable"))
+        #expect(!GroupNameMatch.isConfidentPersonName("Larkin Sable", "Larkin Sable Quartet"))
+        #expect(!GroupNameMatch.isConfidentPersonName("", "Larkin Sable"))
+        #expect(!GroupNameMatch.isConfidentPersonName("Larkin Sable", ""))
     }
 }

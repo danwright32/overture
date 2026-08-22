@@ -199,9 +199,9 @@ struct ProducerCorrectionControlTests {
         #expect(factory.contains("ProspectMutations.correctProducer"))
     }
 
-    // #1823, Dan reading the card for Alex Syiek at The Green Room 42: the card carried
+    // #1823, Dan reading the card for Perri Vale at The Green Room 42: the card carried
     // "Couldn't tell who's putting this on: the listing named only the room." directly under the line
-    // naming Alex Syiek, which is two adjacent lines saying opposite things about one show (#843).
+    // naming Perri Vale, which is two adjacent lines saying opposite things about one show (#843).
     //
     // Dropped rather than narrowed, on Dan's call (2026-08-01). The line existed to send him looking for
     // a company the listing had not named. #1861 removed that errand: a show naming no organiser now has

@@ -131,7 +131,7 @@ struct ProspectRowViewReachabilityTests {
     // indicator when there is one... any and all emails including weak cases. I should see all of them."
     //
     // The badge says an address exists; it never says WHICH. That is the thing he needs while triaging,
-    // because "info@thevenue.com" and "anna@annapierre.com" are the same badge and completely different
+    // because "info@thevenue.com" and "nora@noracalder.example" are the same badge and completely different
     // decisions. ALL of them, not just the primary: a self-produced show with two named performers found
     // two people, and showing one silently hides the other.
     // #1628: `confidence` defaults to `.high` so these fixtures exercise the PLAIN badge. Left at nil (or
@@ -169,7 +169,7 @@ struct ProspectRowViewReachabilityTests {
     // One solid address is enough: a weaker sibling beside it must not drag the badge down, or it cries
     // wolf on a show Dan can act on.
     @Test func oneVerifiedContactKeepsThePlainBadge() throws {
-        var i = withContacts(["anna@annapierre.example"], result: .emailFound, confidence: .high)
+        var i = withContacts(["nora@noracalder.example"], result: .emailFound, confidence: .high)
         var weak = i.contacts[0]
         weak = RecipientSnapshot(id: "r1", name: nil, email: "info@venue.example", role: nil,
                                  provenance: .act, sendState: .pending, replied: false,
@@ -184,9 +184,9 @@ struct ProspectRowViewReachabilityTests {
     // Every one of them. Showing only the first would hide the second performer on exactly the shows
     // where finding both was the hard part (#366).
     @Test func everyAddressIsShownNotJustTheFirst() throws {
-        let t = try texts(withContacts(["anna@annapierre.com", "marc@marcduval.com"], result: .emailFound))
-        #expect(t.contains("anna@annapierre.com"))
-        #expect(t.contains("marc@marcduval.com"))
+        let t = try texts(withContacts(["nora@noracalder.example", "emery@emeryblake.example"], result: .emailFound))
+        #expect(t.contains("nora@noracalder.example"))
+        #expect(t.contains("emery@emeryblake.example"))
     }
 
     // The weak case too, and this is where it earns the most: the gold badge says an address exists but

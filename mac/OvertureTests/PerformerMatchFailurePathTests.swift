@@ -28,7 +28,7 @@ final class PerformerMatchFailurePathTests {
     // no-match, never a crash and never a false-positive default.
     @Test func aMatcherWithNoReferenceDataAtAllReturnsACleanNoMatch() {
         let verdict = HistoryMatch.matchPerformer(
-            performerName: "Marisol Vega", performerEmail: "marisol@vegaviolin.com",
+            performerName: "Larkin Sable", performerEmail: "larkin@sableviolin.example",
             production: .selfProduced, clients: [], history: [])
 
         #expect(verdict == .noMatch)
@@ -47,7 +47,7 @@ final class PerformerMatchFailurePathTests {
             HistoryRecord(groupName: ",,,", status: "warm"),
         ]
         let verdict = HistoryMatch.matchPerformer(
-            performerName: "Marisol Vega", performerEmail: "", production: .selfProduced,
+            performerName: "Larkin Sable", performerEmail: "", production: .selfProduced,
             clients: [], history: junk)
 
         #expect(verdict == .noMatch)
@@ -101,7 +101,7 @@ final class PerformerMatchFailurePathTests {
         let path = dir.appendingPathComponent("overture-prep-results.json")
         let json = """
         {"version":3,"generatedAt":"now","results":[{"naturalKey":"\(key)",
-        "contacts":[{"name":"Marisol Vega","role":"Violinist","email":"marisol@vegaviolin.com",
+        "contacts":[{"name":"Larkin Sable","role":"Violinist","email":"larkin@sableviolin.example",
         "method":"named_decision_maker","confidence":"high","provenance":"performer"}]}]}
         """
         try Data(json.utf8).write(to: path)
@@ -157,7 +157,7 @@ final class PerformerMatchFailurePathTests {
 
         let downbeat = dir.appendingPathComponent("downbeat-export.json")
         let export = """
-        {"version":2,"clients":[{"id":"client-marisol","displayName":"Marisol Vega","email":"",
+        {"version":2,"clients":[{"id":"client-larkin","displayName":"Larkin Sable","email":"",
         "contractEmail":"","hasLeftReview":false,"specialBehaviors":[],"hostingSite":""}],
         "venues":[],"bookings":[],"blockedDates":[]}
         """
@@ -181,6 +181,6 @@ final class PerformerMatchFailurePathTests {
         #expect(p.performerMatchPreviousFitScore == 7)     // still the SCOUT's score, not 27
         #expect(p.performerMatchPreviousRelationship == "none")
         #expect(p.fitScore == 27)
-        #expect(p.matchedPerformerName == "Marisol Vega")
+        #expect(p.matchedPerformerName == "Larkin Sable")
     }
 }

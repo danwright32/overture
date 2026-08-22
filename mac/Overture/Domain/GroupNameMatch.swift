@@ -259,7 +259,7 @@ enum GroupNameMatch {
     // it would match the person "Jane Doe" to the org "Jane Doe Ensemble", and warm a lead off a
     // group that merely bears her name. Full token-set equality instead, so every token on both
     // sides has to be accounted for. Order still doesn't matter, so a surname-first program listing
-    // ("Vega, Marisol") matches. Deliberately a SEPARATE entry point: the org call sites keep the
+    // ("Sable, Larkin") matches. Deliberately a SEPARATE entry point: the org call sites keep the
     // looser containment rule, unchanged.
     static func isConfidentPersonName(_ a: String, _ b: String) -> Bool {
         let ta = Set(personNameTokens(a))

@@ -32,7 +32,7 @@ struct SendConfirmSheetPickerTests {
         p.draftSubject = "Photographs of your September concert"
         p.draftBody = "Hello,\n\nI photograph performing arts in New York."
         ctx.insert(p)
-        let people = [("ann@org.example", "Ann Reeve"), ("ben@org.example", "Ben Ortiz")]
+        let people = [("ann@org.example", "Ann Alder"), ("ben@org.example", "Ben Ortiz")]
         for (email, name) in people.prefix(contacts) {
             let r = Recipient(id: email, email: email, name: name, provenance: .presenter)
             p.recipients.append(r)
@@ -56,7 +56,7 @@ struct SendConfirmSheetPickerTests {
         let view = try sheet(try show(contacts: 2), rebuildable: true)
 
         let text = try view.inspect().findAll(ViewType.Text.self).map { try? $0.string() }
-        #expect(text.contains("Ann Reeve"))
+        #expect(text.contains("Ann Alder"))
         #expect(text.contains("Ben Ortiz"))
         #expect(text.contains("ann@org.example"))
         #expect(text.contains("ben@org.example"))

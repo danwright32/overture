@@ -29,7 +29,7 @@ struct DetachConversationTests {
 
     private let me = "dan@danwrightphotography.com"
     private let now = Date(timeIntervalSince1970: 1_786_000_000)
-    private let route = "https://www.caseengaines.com/contact"
+    private let route = "https://www.corinhale.example/contact"
 
     private func show(_ ctx: ModelContext) -> Prospect {
         let p = Prospect(naturalKey: "k", groupName: "54 Sings Shuffle Along", discipline: "music",
@@ -44,7 +44,7 @@ struct DetachConversationTests {
 
     @discardableResult
     private func formPitch(_ ctx: ModelContext, on p: Prospect) -> Recipient {
-        let r = Recipient(id: "form:\(route)", email: nil, name: "Caseen Gaines", provenance: .act)
+        let r = Recipient(id: "form:\(route)", email: nil, name: "Corin Hale", provenance: .act)
         r.contactFormURL = route
         r.formOutreachURL = route
         r.outreachChannel = .contactForm

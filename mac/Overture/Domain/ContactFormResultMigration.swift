@@ -8,7 +8,7 @@ import SwiftData
 // checked before `contactFormOnly` existed keeps reading as a dead end until Dan pays to check it a
 // LIVE-STORE-CLAIM verified=2026-07-27 measure="rows from the 2026-07-27 probe run stamped no_email_found, and how many hold a usable contact form on the act's own site"
 // second time. On the live store that is the six shows from the 2026-07-27 run, three of which carry a
-// usable form (jakebergmagic.com/contact, shop.copeland.band, marcribler.com/contact).
+// usable form (sorrelmanemagic.com/contact, shop.copeland.band, marcribler.com/contact).
 //
 // Deliberately narrow, in one direction only: `no_email_found` becomes `contact_form_only`, and nothing
 // else is touched. A blanket re-derive would also move a badge whose venue warning Dan has since

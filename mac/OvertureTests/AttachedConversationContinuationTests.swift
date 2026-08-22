@@ -52,16 +52,16 @@ struct AttachedConversationContinuationTests {
         p.draftSubject = "Photographing 54 Sings Shuffle Along."
         p.draftBody = "Hello,"
         ctx.insert(p)
-        let form = "https://caseengaines.example/contact"
+        let form = "https://corinhale.example/contact"
         let r = Recipient(id: Recipient.makeId(email: nil, formURL: form)!, email: nil,
-                          name: "Caseen Gaines", provenance: .act,
+                          name: "Corin Hale", provenance: .act,
                           contactMethodRaw: ContactMethod.formOrDM.rawValue, contactFormURL: form)
         p.setRecipients([r])
         p.recordFormOutreach(r, now: now.addingTimeInterval(-20 * 86_400), formURL: form)
         r.gmailThreadId = "thread-abc"
         r.attachedThreadSubject = "Photography for the anniversary show"
         r.conversationAttachedAt = now.addingTimeInterval(-3600)
-        r.email = "caseen.gaines@gmail.example"
+        r.email = "corin.hale@gmail.example"
         r.replied = true
         r.repliedAt = now.addingTimeInterval(-86_400)
         r.inboundReplyMessageId = theirMessageId
@@ -81,7 +81,7 @@ struct AttachedConversationContinuationTests {
         p.draftBody = "Hello,"
         ctx.insert(p)
         let r = Recipient(id: "jake@aurorastrings.example", email: "jake@aurorastrings.example",
-                          name: "Jake Berg", provenance: .act)
+                          name: "Sorrel Mane", provenance: .act)
         r.sendState = .sent
         r.sentAt = now.addingTimeInterval(-20 * 86_400)
         r.gmailThreadId = "thread-real"

@@ -27,7 +27,7 @@ struct AttachConversationTests {
 
     private let me = "dan@danwrightphotography.com"
     private let now = Date(timeIntervalSince1970: 1_786_000_000)
-    private let route = "https://www.caseengaines.com/contact"
+    private let route = "https://www.corinhale.example/contact"
 
     private func show(_ ctx: ModelContext, key: String = "show-key") -> Prospect {
         let p = Prospect(naturalKey: key, groupName: "54 Sings Shuffle Along", discipline: "music",
@@ -42,7 +42,7 @@ struct AttachConversationTests {
 
     @discardableResult
     private func formPitch(_ ctx: ModelContext, on p: Prospect) -> Recipient {
-        let r = Recipient(id: "form:\(route)", email: nil, name: "Caseen Gaines", provenance: .act)
+        let r = Recipient(id: "form:\(route)", email: nil, name: "Corin Hale", provenance: .act)
         r.contactFormURL = route
         r.formOutreachURL = route
         r.outreachChannel = .contactForm
@@ -68,7 +68,7 @@ struct AttachConversationTests {
     }
 
     private func theirReply(subject: String = "Re: Photography for the anniversary celebration") -> Data {
-        threadJSON([(from: "Caseen Gaines <caseen.gaines@example.com>",
+        threadJSON([(from: "Corin Hale <corin.hale@example.com>",
                      at: Int64(now.timeIntervalSince1970) - 3600, subject: subject,
                      messageId: "<theirs@mail.gmail.com>")])
     }
@@ -84,14 +84,14 @@ struct AttachConversationTests {
         let outcome = AttachConversation.attach(
             threadId: "t1", threadJSON: theirReply(), fullThreadJSON: theirReply(),
             subject: "Re: Photography for the anniversary celebration",
-            fromAddress: "caseen.gaines@example.com", to: r, on: p,
+            fromAddress: "corin.hale@example.com", to: r, on: p,
             ledger: .none, selfEmail: me, now: now)
 
         guard case .attached = outcome else { Issue.record("expected an attach, got \(outcome)"); return }
         #expect(r.gmailThreadId == "t1")
         #expect(r.replied)
         // The four fields the answer path reads, all written by detection rather than by the attach.
-        #expect(r.replyFromAddress == "caseen.gaines@example.com")
+        #expect(r.replyFromAddress == "corin.hale@example.com")
         #expect(r.inboundReplyMessageId == "<theirs@mail.gmail.com>")
         #expect(r.lastReplyId != nil)
         #expect(r.replyAudience?.isEmpty == false)
@@ -107,7 +107,7 @@ struct AttachConversationTests {
         let r = formPitch(ctx, on: p)
 
         _ = AttachConversation.attach(threadId: "t1", threadJSON: theirReply(),
-                                      subject: "Re: hello", fromAddress: "caseen.gaines@example.com",
+                                      subject: "Re: hello", fromAddress: "corin.hale@example.com",
                                       to: r, on: p, ledger: .none, selfEmail: me, now: now)
 
         #expect(r.gmailMessageId == nil)
@@ -121,10 +121,10 @@ struct AttachConversationTests {
         let r = formPitch(ctx, on: p)
 
         _ = AttachConversation.attach(threadId: "t1", threadJSON: theirReply(),
-                                      subject: "Re: hello", fromAddress: "caseen.gaines@example.com",
+                                      subject: "Re: hello", fromAddress: "corin.hale@example.com",
                                       to: r, on: p, ledger: .none, selfEmail: me, now: now)
 
-        #expect(r.email == "caseen.gaines@example.com")
+        #expect(r.email == "corin.hale@example.com")
     }
 
     // #2438's key: `Recipient.id` is the canonical address when there is one, else `form:<url>`. Giving
@@ -139,7 +139,7 @@ struct AttachConversationTests {
         let r = formPitch(ctx, on: p)
 
         _ = AttachConversation.attach(threadId: "t1", threadJSON: theirReply(),
-                                      subject: "Re: hello", fromAddress: "caseen.gaines@example.com",
+                                      subject: "Re: hello", fromAddress: "corin.hale@example.com",
                                       to: r, on: p, ledger: .none, selfEmail: me, now: now)
 
         #expect(r.id == "form:\(route)")
@@ -152,7 +152,7 @@ struct AttachConversationTests {
         let r = formPitch(ctx, on: p)
 
         _ = AttachConversation.attach(threadId: "t1", threadJSON: theirReply(), subject: "Re: hello",
-                                      fromAddress: "caseen.gaines@example.com", to: r, on: p,
+                                      fromAddress: "corin.hale@example.com", to: r, on: p,
                                       ledger: .none, selfEmail: me, now: now)
         let second = AttachConversation.attach(threadId: "t2", threadJSON: theirReply(),
                                                subject: "Re: other", fromAddress: "someone@else.com",
@@ -163,7 +163,7 @@ struct AttachConversationTests {
             Issue.record("a second attach must be refused, got \(second)"); return
         }
         #expect(r.gmailThreadId == "t1")
-        #expect(r.email == "caseen.gaines@example.com")
+        #expect(r.email == "corin.hale@example.com")
     }
 
     // MARK: the subject Gmail will accept
@@ -183,7 +183,7 @@ struct AttachConversationTests {
 
         _ = AttachConversation.attach(
             threadId: "t1", threadJSON: theirReply(subject: "Our anniversary show"),
-            subject: "Our anniversary show", fromAddress: "caseen.gaines@example.com",
+            subject: "Our anniversary show", fromAddress: "corin.hale@example.com",
             to: r, on: p, ledger: .none, selfEmail: me, now: now)
 
         #expect(r.attachedThreadSubject == "Our anniversary show")
@@ -198,7 +198,7 @@ struct AttachConversationTests {
 
         _ = AttachConversation.attach(threadId: "t1", threadJSON: theirReply(),
                                       subject: "Re: Our anniversary show",
-                                      fromAddress: "caseen.gaines@example.com", to: r, on: p,
+                                      fromAddress: "corin.hale@example.com", to: r, on: p,
                                       ledger: .none, selfEmail: me, now: now)
 
         #expect(SendService.replySubject(for: r, of: p) == "Re: Our anniversary show")
@@ -219,14 +219,14 @@ struct AttachConversationTests {
         let r = formPitch(ctx, on: p)
         let base = Int64(now.timeIntervalSince1970)
         let thread = threadJSON([
-            (from: "Caseen Gaines <caseen.gaines@example.com>", at: base - 7200,
+            (from: "Corin Hale <corin.hale@example.com>", at: base - 7200,
              subject: "Our show", messageId: "<theirs@mail.gmail.com>"),
             (from: "Dan Wright <dan@danwrightphotography.com>", at: base - 3600,
              subject: "Re: Our show", messageId: "<mine@mail.gmail.com>"),
         ])
 
         _ = AttachConversation.attach(threadId: "t1", threadJSON: thread, fullThreadJSON: thread,
-                                      subject: "Our show", fromAddress: "caseen.gaines@example.com",
+                                      subject: "Our show", fromAddress: "corin.hale@example.com",
                                       to: r, on: p, ledger: .none, selfEmail: me, now: now)
 
         #expect(r.replied, "their message is still a reply that happened")
@@ -242,7 +242,7 @@ struct AttachConversationTests {
 
         _ = AttachConversation.attach(threadId: "t1", threadJSON: theirReply(),
                                       fullThreadJSON: theirReply(), subject: "Our show",
-                                      fromAddress: "caseen.gaines@example.com", to: r, on: p,
+                                      fromAddress: "corin.hale@example.com", to: r, on: p,
                                       ledger: .none, selfEmail: me, now: now)
 
         #expect(r.replyHandledAt == nil)
@@ -262,7 +262,7 @@ struct AttachConversationTests {
         r.resolution = .stoodDown
 
         _ = AttachConversation.attach(threadId: "t1", threadJSON: theirReply(), subject: "s",
-                                      fromAddress: "caseen.gaines@example.com", to: r, on: p,
+                                      fromAddress: "corin.hale@example.com", to: r, on: p,
                                       ledger: .none, selfEmail: me, now: now)
 
         #expect(r.resolution == nil, "detection cleared it, which is the behaviour being recorded")
@@ -279,7 +279,7 @@ struct AttachConversationTests {
         r.replyDraftEditedByDan = true
 
         _ = AttachConversation.attach(threadId: "t1", threadJSON: theirReply(), subject: "s",
-                                      fromAddress: "caseen.gaines@example.com", to: r, on: p,
+                                      fromAddress: "corin.hale@example.com", to: r, on: p,
                                       ledger: .none, selfEmail: me, now: now)
 
         #expect(r.originalReplyDraftBody == nil)
@@ -304,7 +304,7 @@ struct AttachConversationTests {
         p.addRecipient(pendingB)
 
         _ = AttachConversation.attach(threadId: "t1", threadJSON: theirReply(), subject: "s",
-                                      fromAddress: "caseen.gaines@example.com", to: r, on: p,
+                                      fromAddress: "corin.hale@example.com", to: r, on: p,
                                       ledger: .none, selfEmail: me, now: now)
 
         #expect(pendingA.pausedByReply)
@@ -323,18 +323,18 @@ struct AttachConversationTests {
         let ctx = ModelContext(try container())
         let p = show(ctx)
         let r = formPitch(ctx, on: p)
-        ContactRefusal.refuse(email: "caseen.gaines@example.com", scope: .show(p.naturalKey),
+        ContactRefusal.refuse(email: "corin.hale@example.com", scope: .show(p.naturalKey),
                               in: ctx, now: now)
         let ledger = ContactRefusal.ledger(in: ctx)
 
         let outcome = AttachConversation.attach(threadId: "t1", threadJSON: theirReply(), subject: "s",
-                                                fromAddress: "caseen.gaines@example.com", to: r, on: p,
+                                                fromAddress: "corin.hale@example.com", to: r, on: p,
                                                 ledger: ledger, selfEmail: me, now: now)
 
         guard case .refused(let reason) = outcome else {
             Issue.record("a struck address must refuse, got \(outcome)"); return
         }
-        #expect(reason.contains("caseen.gaines@example.com"), "the refusal must name the strike")
+        #expect(reason.contains("corin.hale@example.com"), "the refusal must name the strike")
         #expect(r.gmailThreadId == nil, "nothing may be written when the attach is refused")
         #expect(r.email == nil)
     }
@@ -351,7 +351,7 @@ struct AttachConversationTests {
         let ledger = ContactRefusal.ledger(in: ctx)
 
         let outcome = AttachConversation.attach(threadId: "t1", threadJSON: theirReply(), subject: "s",
-                                                fromAddress: "caseen.gaines@example.com", to: r, on: p,
+                                                fromAddress: "corin.hale@example.com", to: r, on: p,
                                                 ledger: ledger, selfEmail: me, now: now)
 
         guard case .refused = outcome else {
@@ -385,12 +385,12 @@ struct AttachConversationTests {
         let ctx = ModelContext(try container())
         let p = show(ctx)
         let r = formPitch(ctx, on: p)
-        ContactRefusal.refuse(email: "caseen.gaines@example.com", scope: .show(p.naturalKey),
+        ContactRefusal.refuse(email: "corin.hale@example.com", scope: .show(p.naturalKey),
                               in: ctx, now: now)
 
         let struck = AttachConversation.attach(
             threadId: "t1", threadJSON: theirReply(), subject: "s",
-            fromAddress: "caseen.gaines@example.com", to: r, on: p,
+            fromAddress: "corin.hale@example.com", to: r, on: p,
             ledger: ContactRefusal.ledger(in: ctx), selfEmail: me, now: now)
         _ = AttachConversation.attach(threadId: "t1", threadJSON: theirReply(), subject: "s",
                                       fromAddress: "other@else.com", to: r, on: p, ledger: .none,
@@ -417,7 +417,7 @@ struct AttachConversationTests {
         let r = formPitch(ctx, on: p)
 
         _ = AttachConversation.attach(threadId: "t1", threadJSON: theirReply(), subject: "s",
-                                      fromAddress: "caseen.gaines@example.com", to: r, on: p,
+                                      fromAddress: "corin.hale@example.com", to: r, on: p,
                                       ledger: .none, selfEmail: me, now: now)
 
         #expect(r.conversationAttachedAt == now)

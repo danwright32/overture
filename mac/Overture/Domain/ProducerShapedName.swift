@@ -120,7 +120,7 @@ enum ProducerShapedName {
     // a performer's biography. Measured across the 23 listing texts in the prep run archives, every
     // "produced by" in them falls into one of two shapes:
     //
-    //   the show's own       ". Produced by Amy Sapp", "this concert is produced and directed by Caseen Gaines"
+    //   the show's own       ". Produced by Amy Sapp", "this concert is produced and directed by Corin Hale"
     //   somebody's past      "\"Ghouls Just Wanna Have Fun!\" produced by Moore Productions",
     //                        "a compilation produced by Tito Pingolinis"
     //
@@ -195,7 +195,7 @@ enum ProducerShapedName {
     // hold one at all (`UserFacingDashGuardTests`), and its absence can only make this narrower.
     // copy-inventory:ignore-start  parser tokens matched against a listing page, never Overture's voice
     // #2554 adds the combined credit. It is not a variation worth skipping: "this concert is produced and
-    // directed by Caseen Gaines" is the exact line Dan hit, and searching for "produced by " inside it
+    // directed by Corin Hale" is the exact line Dan hit, and searching for "produced by " inside it
     // matches nothing at all. Listed longest first so the fuller phrase wins, which also matters to the
     // attachment test: matching "Produced by" inside "Directed & Produced by Desirée Dabney" would leave
     // it reading "&" and refusing a credit that opens its own line.

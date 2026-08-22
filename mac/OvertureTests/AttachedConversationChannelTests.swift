@@ -39,7 +39,7 @@ struct AttachedConversationChannelTests {
     // The live shape this milestone is about: a show reachable only through the act's own contact form,
     // pitched by hand, recorded by Dan. No address, no thread, no message id.
     private func formPitched(_ ctx: ModelContext, day: String? = "2026-08-20",
-                             formURL: String = "https://caseengaines.example/contact") -> (Prospect, Recipient) {
+                             formURL: String = "https://corinhale.example/contact") -> (Prospect, Recipient) {
         let p = Prospect(naturalKey: "54 Sings|\(day ?? "none")", groupName: "54 Sings Shuffle Along",
                          discipline: "theater", venue: "The Green Room 42", performanceDate: day,
                          sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
@@ -49,7 +49,7 @@ struct AttachedConversationChannelTests {
         p.draftSubject = "Photographing 54 Sings Shuffle Along."
         ctx.insert(p)
         let r = Recipient(id: Recipient.makeId(email: nil, formURL: formURL)!, email: nil,
-                          name: "Caseen Gaines", provenance: .act,
+                          name: "Corin Hale", provenance: .act,
                           contactMethodRaw: ContactMethod.formOrDM.rawValue, contactFormURL: formURL)
         p.setRecipients([r])
         p.recordFormOutreach(r, now: pitchedAt, formURL: formURL)
@@ -116,7 +116,7 @@ struct AttachedConversationChannelTests {
     @Test func anAttachedReplyIsDueNowAndTheSlotSaysSo() throws {
         let ctx = ModelContext(try container())
         let (p, r) = formPitched(ctx)
-        attach(r, repliedAt: now.addingTimeInterval(-3_600), from: "caseen.gaines@gmail.example")
+        attach(r, repliedAt: now.addingTimeInterval(-3_600), from: "corin.hale@gmail.example")
 
         #expect(ReachedOutQueue.isDueNow(for: r, of: p, now: now))
         // #2710: the slot reads as due, and now says WHAT is due rather than "Reach out now". This row
@@ -131,7 +131,7 @@ struct AttachedConversationChannelTests {
     @Test func anAttachedReplyAfterTheShowStillReadsAsDue() throws {
         let ctx = ModelContext(try container())
         let (p, r) = formPitched(ctx, day: "2026-08-12")
-        attach(r, repliedAt: EasternDate.date(from: "2026-08-13")!, from: "caseen.gaines@gmail.example")
+        attach(r, repliedAt: EasternDate.date(from: "2026-08-13")!, from: "corin.hale@gmail.example")
 
         #expect(ReachedOutQueue.timingLabel(for: r, of: p, now: now, today: today) == ReachedOutQueue.endingLabel)
     }
@@ -186,7 +186,7 @@ struct AttachedConversationChannelTests {
     @Test func anAttachedConversationReachesThePostEventTrack() throws {
         let ctx = ModelContext(try container())
         let (p, r) = formPitched(ctx, day: "2026-08-12")
-        attach(r, repliedAt: EasternDate.date(from: "2026-08-11")!, from: "caseen.gaines@gmail.example")
+        attach(r, repliedAt: EasternDate.date(from: "2026-08-11")!, from: "corin.hale@gmail.example")
 
         #expect(ReachedOutAction.of(r, in: p, now: now, today: today) == .sayHowItEnded)
     }
@@ -215,7 +215,7 @@ struct AttachedConversationChannelTests {
     @Test func anAttachedConversationNeverBecomesNudgeable() throws {
         let ctx = ModelContext(try container())
         let (_, r) = formPitched(ctx)
-        attach(r, from: "caseen.gaines@gmail.example")
+        attach(r, from: "corin.hale@gmail.example")
 
         #expect(r.email != nil)          // it now has an address...
         #expect(!r.isAwaitingFollowUp)   // ...and is still not somebody Overture may nudge
@@ -226,13 +226,13 @@ struct AttachedConversationChannelTests {
     // Two adjacent lines, each correct alone, contradicting each other on the surface Dan triages from
     // (L118, #843): the address on one line, "Overture cannot see a reply to this one" on the next.
     @Test func theCardStopsSayingItCannotSeeAReplyOnceItCan() {
-        let form = "https://caseengaines.example/contact"
+        let form = "https://corinhale.example/contact"
         #expect(FormOutreachCopy.channelLine(formURL: form, hasWatchableConversation: false)
                 == FormOutreachCopy.sentLine)
         #expect(FormOutreachCopy.channelLine(formURL: form, hasWatchableConversation: true)
                 == FormOutreachCopy.watchedLine)
         // A DM says the same thing about the route it actually went out on.
-        let dm = "https://instagram.com/caseengaines"
+        let dm = "https://instagram.com/example-performer-form"
         #expect(FormOutreachCopy.channelLine(formURL: dm, hasWatchableConversation: false)
                 == FormOutreachCopy.sentLineSocial)
         #expect(FormOutreachCopy.channelLine(formURL: dm, hasWatchableConversation: true)
@@ -246,9 +246,9 @@ struct AttachedConversationChannelTests {
     @Test func anAttachedButUnansweredRowNamesTheRouteNotAnAudience() throws {
         let ctx = ModelContext(try container())
         let (p, r) = formPitched(ctx)
-        attach(r, from: "caseen.gaines@gmail.example")
+        attach(r, from: "corin.hale@gmail.example")
 
-        #expect(ReplyIdentity.rowAudience(for: r, in: p).lines == ["caseengaines.example"])
+        #expect(ReplyIdentity.rowAudience(for: r, in: p).lines == ["corinhale.example"])
     }
 
     // Once they HAVE written back there is a real send, and it goes to the address they wrote from, so the
@@ -256,10 +256,10 @@ struct AttachedConversationChannelTests {
     @Test func anansweredRowNamesWhoTheReplyGoesBackTo() throws {
         let ctx = ModelContext(try container())
         let (p, r) = formPitched(ctx)
-        attach(r, repliedAt: now.addingTimeInterval(-3_600), from: "caseen.gaines@gmail.example")
+        attach(r, repliedAt: now.addingTimeInterval(-3_600), from: "corin.hale@gmail.example")
 
         let audience = ReplyIdentity.rowAudience(for: r, in: p)
-        #expect(audience.lines == ["caseen.gaines@gmail.example"])
-        #expect(audience.responder == "caseen.gaines@gmail.example")
+        #expect(audience.lines == ["corin.hale@gmail.example"])
+        #expect(audience.responder == "corin.hale@gmail.example")
     }
 }

@@ -8,7 +8,7 @@ import SwiftData
 // Measured on the first real multi-date run (#1603, 2026-07-27): the check identified the act on 14 of
 // 14 shows. 8 published an email; 6 published only a form or an Instagram, and every one of those six
 // was stored with a real contactFormURL and rendered as a dead end. Three of them were forms on the
-// act's own site (jakebergmagic.com/contact, shop.copeland.band, marcribler.com/contact), so on that
+// act's own site (sorrelmanemagic.com/contact, shop.copeland.band, marcribler.com/contact), so on that
 // one night Dan was being told to give up on three shows he could have written to.
 //
 // Dan's rule, 2026-07-27: a form on the act's OWN site counts and he will fill it in by hand. An
@@ -35,7 +35,7 @@ struct ContactFormReachabilityTests {
     }
 
     private func formContact(_ url: String) -> Recipient {
-        let r = Recipient(id: url, email: nil, name: "Jake Berg", provenance: .act)
+        let r = Recipient(id: url, email: nil, name: "Sorrel Mane", provenance: .act)
         r.contactFormURL = url
         r.contactMethodRaw = "form_or_dm"
         return r
@@ -45,20 +45,20 @@ struct ContactFormReachabilityTests {
     @Test func aFormOnTheActsOwnSiteIsReachable() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx)
-        p.setRecipients([formContact("https://jakebergmagic.com/contact")])
+        p.setRecipients([formContact("https://sorrelmanemagic.com/contact")])
 
         #expect(p.reachabilityResultFromRecipients == .contactFormOnly)
         var item = QueueItem(p)
         item.reachabilityProbedAt = Date()
         item.reachabilityResult = .contactFormOnly
         #expect(item.reachabilityBadge() == .contactFormOnly)
-        #expect(item.displayedContactForms.map(\.absoluteString) == ["https://jakebergmagic.com/contact"])
+        #expect(item.displayedContactForms.map(\.absoluteString) == ["https://sorrelmanemagic.com/contact"])
     }
 
     // The row labels the link with the site, because the pill above it already says "contact form" and
     // what this line owes Dan is who he would be writing to.
     @Test("the form link is labelled with the site, not with the words the pill already said",
-          arguments: [("https://jakebergmagic.com/contact", "jakebergmagic.com"),
+          arguments: [("https://sorrelmanemagic.com/contact", "sorrelmanemagic.com"),
                       ("https://shop.copeland.band/pages/contact", "shop.copeland.band"),
                       ("https://www.marcribler.com/contact", "marcribler.com")])
     func theFormLinkIsLabelledWithTheSite(_ pair: (String, String)) {
@@ -84,7 +84,7 @@ struct ContactFormReachabilityTests {
         let ctx = ModelContext(try container())
         let p = show(ctx)
         let email = Recipient(id: "e", email: "hello@example.org", name: "Someone", provenance: .act)
-        p.setRecipients([email, formContact("https://jakebergmagic.com/contact")])
+        p.setRecipients([email, formContact("https://sorrelmanemagic.com/contact")])
 
         #expect(p.reachabilityResultFromRecipients == .emailFound)
     }
@@ -102,7 +102,7 @@ struct ContactFormReachabilityTests {
     @Test func aFormIsNeverTheBestReachableContact() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx)
-        p.setRecipients([formContact("https://jakebergmagic.com/contact")])
+        p.setRecipients([formContact("https://sorrelmanemagic.com/contact")])
         var item = QueueItem(p)
         item.reachabilityResult = .contactFormOnly
         item.reachabilityProbedAt = Date()
@@ -133,7 +133,7 @@ struct ContactFormReachabilityTests {
     @Test func theMigrationUpgradesRowsAlreadyStampedNoEmailFound() throws {
         let ctx = ModelContext(try container())
         let ownSite = show(ctx, group: "Mind Games")
-        ownSite.setRecipients([formContact("https://jakebergmagic.com/contact")])
+        ownSite.setRecipients([formContact("https://sorrelmanemagic.com/contact")])
         ownSite.reachabilityProbedAt = Date()
         ownSite.reachabilityResult = .noEmailFound
 
@@ -228,7 +228,7 @@ struct ContactFormReachabilityTests {
         weak.reachabilityResult = .weakContactOnly
 
         let neverChecked = show(ctx, group: "Never checked")
-        neverChecked.setRecipients([formContact("https://jakebergmagic.com/contact")])
+        neverChecked.setRecipients([formContact("https://sorrelmanemagic.com/contact")])
 
         #expect(ContactFormResultMigration.run(in: ctx) == 0)
         #expect(weak.reachabilityResult == .weakContactOnly)

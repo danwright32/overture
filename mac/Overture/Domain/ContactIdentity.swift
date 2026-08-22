@@ -4,7 +4,7 @@ import Foundation
 // handle, and if so which of the two ways in is the better one?
 //
 // Dan, on the live build 2026-08-10, looking at a prepped card: "and I've got two of the same person."
-// He had "Ryan James Monroe, No email yet" and "Ryan James Monroe, ryan@ryanjamesmonroe.com" as two rows
+// He had "Devin Marlowe, No email yet" and "Devin Marlowe, devin@devinmarlowe.example" as two rows
 // on one show, with the draft composing a greeting for each. Six more pairs were sitting in the store,
 // including two where the LATER find was strictly worse: a performer with a booking page on her own site
 // gained an Instagram beside it, and the two now read as two people.

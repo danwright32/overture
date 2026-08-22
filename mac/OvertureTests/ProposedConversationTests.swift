@@ -23,7 +23,7 @@ struct ProposedConversationTests {
     }
 
     private let now = Date(timeIntervalSince1970: 1_786_000_000)
-    private let route = "https://www.caseengaines.com/contact"
+    private let route = "https://www.corinhale.example/contact"
 
     private func show(_ ctx: ModelContext, key: String = "k") -> Prospect {
         let p = Prospect(naturalKey: key, groupName: "54 Sings Shuffle Along", discipline: "music",
@@ -38,7 +38,7 @@ struct ProposedConversationTests {
 
     @discardableResult
     private func formPitch(_ ctx: ModelContext, on p: Prospect) -> Recipient {
-        let r = Recipient(id: "form:\(route)", email: nil, name: "Caseen Gaines", provenance: .act)
+        let r = Recipient(id: "form:\(route)", email: nil, name: "Corin Hale", provenance: .act)
         r.contactFormURL = route
         r.formOutreachURL = route
         r.outreachChannel = .contactForm
@@ -50,8 +50,8 @@ struct ProposedConversationTests {
     }
 
     private func candidate(_ id: String, score: Int = 9,
-                           from: String = "caseen.gaines@example.com",
-                           name: String? = "Caseen Gaines",
+                           from: String = "corin.hale@example.com",
+                           name: String? = "Corin Hale",
                            subject: String = "Re: the anniversary show",
                            thread: String? = nil) -> ProposedConversation.Candidate {
         ProposedConversation.Candidate(messageId: id, threadId: thread ?? "t-\(id)",
@@ -72,8 +72,8 @@ struct ProposedConversationTests {
         let stored = try #require(ProposedConversation.stored(on: r))
         #expect(stored.messageId == "m1")
         #expect(stored.threadId == "t-m1")
-        #expect(stored.fromAddress == "caseen.gaines@example.com")
-        #expect(stored.fromName == "Caseen Gaines")
+        #expect(stored.fromAddress == "corin.hale@example.com")
+        #expect(stored.fromName == "Corin Hale")
         #expect(stored.subject == "Re: the anniversary show")
         #expect(stored.score == 9)
         #expect(r.replyProposedAt == now)
@@ -366,7 +366,7 @@ struct ProposedConversationTests {
         let p = show(ctx)
         let r = formPitch(ctx, on: p)
         let found = [
-            inbound("real", from: "Caseen Gaines <caseen.gaines@example.com>", subject: "Re: the show"),
+            inbound("real", from: "Corin Hale <corin.hale@example.com>", subject: "Re: the show"),
             inbound("room", from: "54 Below <hello@54below.com>", subject: "About your enquiry"),
             inbound("press", from: "press@somewhere.org", subject: "Media guidelines"),
             inbound("bulk", from: "News <news@elsewhere.com>", subject: "This week",
@@ -405,7 +405,7 @@ struct ProposedConversationTests {
         let r = formPitch(ctx, on: p)
         ProposedConversation.propose(candidate("m1", thread: "t-real"), on: r, now: now)
         ProposedConversation.decline(on: r)
-        let found = [inbound("real", from: "Caseen Gaines <caseen.gaines@example.com>", subject: "Re: the show")]
+        let found = [inbound("real", from: "Corin Hale <corin.hale@example.com>", subject: "Re: the show")]
 
         let offered = ProposedConversation.pickable(found, for: r, on: p,
                                                     selfEmail: "dan@danwrightphotography.com")
@@ -421,9 +421,9 @@ struct ProposedConversationTests {
     // that matters.
     @Test("the confirmation says the address will be saved and used")
     func theConfirmationSaysWhatItDoes() {
-        let line = ProposedConversationCopy.confirmDetail(address: "caseen.gaines@example.com")
+        let line = ProposedConversationCopy.confirmDetail(address: "corin.hale@example.com")
 
-        #expect(line.contains("caseen.gaines@example.com"))
+        #expect(line.contains("corin.hale@example.com"))
         #expect(line.lowercased().contains("email"))
     }
 }

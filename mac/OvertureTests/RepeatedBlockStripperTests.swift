@@ -7,7 +7,7 @@ import Foundation
 // handed 3,999 characters with `truncated: true`. 1,950 of them, 49% of the whole budget, were 54 Below's
 // site chrome before the show block began: a hydration promo banner, the phone number, and then the same
 // navigation menu four times over for the mobile and toggle variants. The producer credit ("produced and
-// directed by Caseen Gaines") landed at character 3,060 and survived by roughly 900 characters, entirely
+// directed by Corin Hale") landed at character 3,060 and survived by roughly 900 characters, entirely
 // by luck of where the menu ended.
 //
 // The budget is not too small; it is being spent on a menu. So the fix is to stop paying for the menu

@@ -113,9 +113,9 @@ struct VenueGuardLeadingArticleTests {
 
     @Test("an unrelated address is still not the room's")
     func anUnrelatedAddressIsStillNotTheRoom() {
-        #expect(VenueContactGuard.looksLikeVenue(email: "caseen.gaines@example.com",
+        #expect(VenueContactGuard.looksLikeVenue(email: "corin.hale@example.com",
                                                  venue: "The Green Room 42") == false)
-        #expect(VenueContactGuard.looksLikeVenue(email: "alex@alexsyiek.com",
+        #expect(VenueContactGuard.looksLikeVenue(email: "perri@perrivale.example",
                                                  venue: "The Green Room 42") == false)
     }
 

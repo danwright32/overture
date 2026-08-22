@@ -19,7 +19,7 @@ struct DeadEndContactTests {
     // #2612: the reversal, at the predicate. A social profile is a route Dan works by hand.
     @Test func asocialProfileIsARouteAgain() {
         #expect(!DeadEndContact.hasNoUsableRoute(email: nil,
-                                                 formURL: "https://www.instagram.com/ryanjamesmonroe/"))
+                                                 formURL: "https://www.instagram.com/example-performer-act/"))
         #expect(!DeadEndContact.hasNoUsableRoute(email: "", formURL: "https://www.facebook.com/someone"))
     }
 
@@ -36,7 +36,7 @@ struct DeadEndContactTests {
     // their row.
     @Test func anAddressIsAlwaysAWayIn() {
         #expect(!DeadEndContact.hasNoUsableRoute(email: "ryan@example.test",
-                                                 formURL: "https://www.instagram.com/ryanjamesmonroe/"))
+                                                 formURL: "https://www.instagram.com/example-performer-act/"))
     }
 
     // Nothing at all is the clearest dead end of the lot.
@@ -56,9 +56,9 @@ struct DeadEndContactIngestTests {
     }
 
     private func show(_ ctx: ModelContext) -> String {
-        let key = Prospect.makeNaturalKey(groupName: "Ryan James Monroe", performanceDate: "2026-08-11",
+        let key = Prospect.makeNaturalKey(groupName: "Devin Marlowe", performanceDate: "2026-08-11",
                                           venue: "54 Below")
-        let p = Prospect(naturalKey: key, groupName: "Ryan James Monroe", discipline: "music",
+        let p = Prospect(naturalKey: key, groupName: "Devin Marlowe", discipline: "music",
                          venue: "54 Below", performanceDate: "2026-08-11", sourceListingURL: nil,
                          websiteURL: nil, priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
@@ -83,7 +83,7 @@ struct DeadEndContactIngestTests {
 
         _ = PrepImporter.ingest(PrepResults(version: 2, generatedAt: "now", results: [
             PrepResult(naturalKey: key, contacts: [
-                contact("Ryan James Monroe", email: "ryan@ryanjamesmonroe.example"),
+                contact("Devin Marlowe", email: "devin@devinmarlowe.example"),
                 contact("Eliah B. Johnson", formUrl: "https://www.eliahbjohnson.example/contact"),
                 contact("Zachary McIntyre", formUrl: "https://zachmcintyrehorn.example/?page_id=18"),
                 contact("Sunny Sheu", formUrl: "https://www.instagram.com/sunny.sheu/"),
@@ -95,7 +95,7 @@ struct DeadEndContactIngestTests {
         let p = try #require(try ctx.fetch(FetchDescriptor<Prospect>(predicate: #Predicate { $0.naturalKey == key })).first)
         #expect(p.recipients.count == 6, "one address, two forms and three Instagrams, all routes")
         #expect(Set(p.recipients.compactMap(\.name))
-                == ["Ryan James Monroe", "Eliah B. Johnson", "Zachary McIntyre",
+                == ["Devin Marlowe", "Eliah B. Johnson", "Zachary McIntyre",
                     "Sunny Sheu", "Mark Klett", "Sarah Overton"])
     }
 

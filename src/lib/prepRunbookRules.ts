@@ -106,8 +106,8 @@ export const RUNBOOK_RULES: RunbookRule[] = [
   // a freely published address sat one fetch away. Two rules, and they fail in different directions.
   //
   // Dropping the canonical-domain rule loses the case that was actually measured: search returned
-  // Facebook, Apple Music and LinkedIn for the literal string "ryanjamesmonroe.com", so search was
-  // never going to reach the site, and one direct fetch did (`ryan@ryanjamesmonroe.com`, 200 on the
+  // Facebook, Apple Music and LinkedIn for the literal string "devinmarlowe.example", so search was
+  // never going to reach the site, and one direct fetch did (`devin@devinmarlowe.example`, 200 on the
   // first try). Dropping the pointer rule lets a DM keep satisfying step 3, which is what made the run
   // stop looking at all.
   { name: "try-the-canonical-domain", pattern: /fetch the canonical guess directly/i },
@@ -173,7 +173,7 @@ export const RUNBOOK_RULES: RunbookRule[] = [
     pattern: /One portfolio link, always the site itself/i },
   // #1824: the three halves of "read what the show is", and each fails in its own direction.
   //
-  // Dropping the USE rule returns the drafter to the state that produced the Alex Syiek draft: the app
+  // Dropping the USE rule returns the drafter to the state that produced the Perri Vale draft: the app
   // renders the listing, the text rides in the queue, and nothing tells the run to read it, so a draft
   // describes a cabaret concert as "intimate, funny material" and names nothing.
   //

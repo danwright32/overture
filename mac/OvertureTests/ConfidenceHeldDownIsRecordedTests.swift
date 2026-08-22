@@ -71,7 +71,7 @@ struct ConfidenceHeldDownIsRecordedTests {
         let key = keptProspect(ctx, group: "Mind Games", date: "2026-09-18", venue: "SoHo Playhouse")
         _ = PrepImporter.ingest(PrepResults(version: 6, generatedAt: "now", results: [
             PrepResult(naturalKey: key, contacts: [
-                PrepContact(name: "Jake Berg", role: nil, email: "jake@jakebergmagic.example",
+                PrepContact(name: "Sorrel Mane", role: nil, email: "sorrel@sorrelmanemagic.example",
                             method: "named_decision_maker", confidence: "high", formUrl: nil,
                             provenance: "act", sourceUrl: nil)
             ])
@@ -103,12 +103,12 @@ struct ConfidenceHeldDownIsRecordedTests {
 
     @Test func aCitedFindIsNotRecordedAsHeldDown() throws {
         let ctx = ModelContext(try container())
-        let key = keptProspect(ctx, group: "Anna Pierre", date: "2026-09-20", venue: "Weill Recital Hall")
+        let key = keptProspect(ctx, group: "Nora Calder", date: "2026-09-20", venue: "Weill Recital Hall")
         _ = PrepImporter.ingest(PrepResults(version: 6, generatedAt: "now", results: [
             PrepResult(naturalKey: key, contacts: [
-                PrepContact(name: "Anna Pierre", role: nil, email: "anna@annapierre.example",
+                PrepContact(name: "Nora Calder", role: nil, email: "nora@noracalder.example",
                             method: "named_decision_maker", confidence: "high", formUrl: nil,
-                            provenance: "act", sourceUrl: "https://annapierre.example/contact")
+                            provenance: "act", sourceUrl: "https://noracalder.example/contact")
             ])
         ]), into: ctx)
 
@@ -122,7 +122,7 @@ struct ConfidenceHeldDownIsRecordedTests {
     @Test func aLaterRunThatNamesThePageClearsTheRecord() throws {
         let ctx = ModelContext(try container())
         let key = keptProspect(ctx, group: "Mind Games", date: "2026-09-18", venue: "SoHo Playhouse")
-        let uncited = PrepContact(name: "Jake Berg", role: nil, email: "jake@jakebergmagic.example",
+        let uncited = PrepContact(name: "Sorrel Mane", role: nil, email: "sorrel@sorrelmanemagic.example",
                                   method: "named_decision_maker", confidence: "high", formUrl: nil,
                                   provenance: "act", sourceUrl: nil)
         _ = PrepImporter.ingest(PrepResults(version: 6, generatedAt: "now",
@@ -131,9 +131,9 @@ struct ConfidenceHeldDownIsRecordedTests {
 
         _ = PrepImporter.ingest(PrepResults(version: 6, generatedAt: "later", results: [
             PrepResult(naturalKey: key, contacts: [
-                PrepContact(name: "Jake Berg", role: nil, email: "jake@jakebergmagic.example",
+                PrepContact(name: "Sorrel Mane", role: nil, email: "sorrel@sorrelmanemagic.example",
                             method: "named_decision_maker", confidence: "high", formUrl: nil,
-                            provenance: "act", sourceUrl: "https://jakebergmagic.example/booking")
+                            provenance: "act", sourceUrl: "https://sorrelmanemagic.example/booking")
             ])
         ]), into: ctx)
 
@@ -147,7 +147,7 @@ struct ConfidenceHeldDownIsRecordedTests {
     @Test func aReRunOfTheSameUncitedFindStillRecordsIt() throws {
         let ctx = ModelContext(try container())
         let key = keptProspect(ctx, group: "Mind Games", date: "2026-09-18", venue: "SoHo Playhouse")
-        let uncited = PrepContact(name: "Jake Berg", role: nil, email: "jake@jakebergmagic.example",
+        let uncited = PrepContact(name: "Sorrel Mane", role: nil, email: "sorrel@sorrelmanemagic.example",
                                   method: "named_decision_maker", confidence: "high", formUrl: nil,
                                   provenance: "act", sourceUrl: nil)
         for stamp in ["now", "later"] {
@@ -169,7 +169,7 @@ struct ConfidenceHeldDownIsRecordedTests {
         let key = keptProspect(ctx, group: "Mind Games", date: "2026-09-18", venue: "SoHo Playhouse")
         _ = PrepImporter.ingest(PrepResults(version: 6, generatedAt: "now", results: [
             PrepResult(naturalKey: key, contacts: [
-                PrepContact(name: "Jake Berg", role: nil, email: "jake@jakebergmagic.example",
+                PrepContact(name: "Sorrel Mane", role: nil, email: "sorrel@sorrelmanemagic.example",
                             method: "named_decision_maker", confidence: "high", formUrl: nil,
                             provenance: "act", sourceUrl: nil)
             ])
@@ -178,7 +178,7 @@ struct ConfidenceHeldDownIsRecordedTests {
         #expect(QueueItem(p).onlyUnverifiedEmailsFound)
 
         let feedback = ActionFeedback()
-        ProspectMutations.dismissConfidenceHeldDown(QueueItem(p), "jake@jakebergmagic.example",
+        ProspectMutations.dismissConfidenceHeldDown(QueueItem(p), "sorrel@sorrelmanemagic.example",
                                                     prospects: [p], context: ctx, feedback: feedback)
 
         #expect(p.recipients.first?.heldDownToUnverifiedDismissed == true)
@@ -194,7 +194,7 @@ struct ConfidenceHeldDownIsRecordedTests {
         let key = keptProspect(ctx, group: "Two Performers", date: "2026-09-21", venue: "The Owl")
         _ = PrepImporter.ingest(PrepResults(version: 6, generatedAt: "now", results: [
             PrepResult(naturalKey: key, contacts: [
-                PrepContact(name: "Jake Berg", role: nil, email: "jake@jakebergmagic.example",
+                PrepContact(name: "Sorrel Mane", role: nil, email: "sorrel@sorrelmanemagic.example",
                             method: "named_decision_maker", confidence: "high", formUrl: nil,
                             provenance: "act", sourceUrl: nil),
                 PrepContact(name: "Room Desk", role: nil, email: "info@theowl.example",
@@ -205,7 +205,7 @@ struct ConfidenceHeldDownIsRecordedTests {
         let p = try #require(try prospect(ctx, key: key))
 
         let feedback = ActionFeedback()
-        ProspectMutations.dismissConfidenceHeldDown(QueueItem(p), "jake@jakebergmagic.example",
+        ProspectMutations.dismissConfidenceHeldDown(QueueItem(p), "sorrel@sorrelmanemagic.example",
                                                     prospects: [p], context: ctx, feedback: feedback)
 
         let item = QueueItem(p)
@@ -221,7 +221,7 @@ struct ConfidenceHeldDownIsRecordedTests {
         let key = keptProspect(ctx, group: "Mind Games", date: "2026-09-18", venue: "SoHo Playhouse")
         _ = PrepImporter.ingest(PrepResults(version: 6, generatedAt: "now", results: [
             PrepResult(naturalKey: key, contacts: [
-                PrepContact(name: "Jake Berg", role: nil, email: "jake@jakebergmagic.example",
+                PrepContact(name: "Sorrel Mane", role: nil, email: "sorrel@sorrelmanemagic.example",
                             method: "named_decision_maker", confidence: "high", formUrl: nil,
                             provenance: "act", sourceUrl: nil)
             ])
@@ -232,7 +232,7 @@ struct ConfidenceHeldDownIsRecordedTests {
 
         _ = PrepImporter.ingest(PrepResults(version: 6, generatedAt: "later", results: [
             PrepResult(naturalKey: key, contacts: [
-                PrepContact(name: "Jake Berg", role: nil, email: "booking@mindgamesshow.example",
+                PrepContact(name: "Sorrel Mane", role: nil, email: "booking@mindgamesshow.example",
                             method: "named_decision_maker", confidence: "high", formUrl: nil,
                             provenance: "act", sourceUrl: nil)
             ])
@@ -252,7 +252,7 @@ struct ConfidenceHeldDownIsRecordedTests {
         let weakKey = keptProspect(ctx, group: "Copeland", date: "2026-09-19", venue: "Jalopy Theatre")
         _ = PrepImporter.ingest(PrepResults(version: 6, generatedAt: "now", results: [
             PrepResult(naturalKey: heldKey, contacts: [
-                PrepContact(name: "Jake Berg", role: nil, email: "jake@jakebergmagic.example",
+                PrepContact(name: "Sorrel Mane", role: nil, email: "sorrel@sorrelmanemagic.example",
                             method: "named_decision_maker", confidence: "high", formUrl: nil,
                             provenance: "act", sourceUrl: nil)
             ]),
@@ -276,12 +276,12 @@ struct ConfidenceHeldDownIsRecordedTests {
     // reach the held-down sentence from a plain "Email found" badge.
     @Test func aVerifiedShowMakesNoClaimAboutAGuard() throws {
         let ctx = ModelContext(try container())
-        let key = keptProspect(ctx, group: "Anna Pierre", date: "2026-09-20", venue: "Weill Recital Hall")
+        let key = keptProspect(ctx, group: "Nora Calder", date: "2026-09-20", venue: "Weill Recital Hall")
         _ = PrepImporter.ingest(PrepResults(version: 6, generatedAt: "now", results: [
             PrepResult(naturalKey: key, contacts: [
-                PrepContact(name: "Anna Pierre", role: nil, email: "anna@annapierre.example",
+                PrepContact(name: "Nora Calder", role: nil, email: "nora@noracalder.example",
                             method: "named_decision_maker", confidence: "high", formUrl: nil,
-                            provenance: "act", sourceUrl: "https://annapierre.example/contact")
+                            provenance: "act", sourceUrl: "https://noracalder.example/contact")
             ])
         ]), into: ctx)
 
@@ -299,7 +299,7 @@ struct ConfidenceHeldDownIsRecordedTests {
         let key = keptProspect(ctx, group: "Mixed Bill", date: "2026-09-22", venue: "The Owl")
         _ = PrepImporter.ingest(PrepResults(version: 6, generatedAt: "now", results: [
             PrepResult(naturalKey: key, contacts: [
-                PrepContact(name: "Jake Berg", role: nil, email: "jake@jakebergmagic.example",
+                PrepContact(name: "Sorrel Mane", role: nil, email: "sorrel@sorrelmanemagic.example",
                             method: "named_decision_maker", confidence: "high", formUrl: nil,
                             provenance: "act", sourceUrl: nil),
                 PrepContact(name: "Nina Ross", role: nil, email: "nina@ninaross.example",

@@ -5,10 +5,10 @@ import Foundation
 // would hire a photographer, and `ProducerShapedName` refused every one of them.
 //
 // Dan hit this on 2026-08-13 on "54 Sings Shuffle Along, Or... A 10th Anniversary Celebration" (54 Below,
-// 2026-08-17). The listing text handed to the run says "this concert is produced and directed by Caseen
-// Gaines", the run read that text (all 13 cast names came out of it), and it returned 13 contacts, every
+// 2026-08-17). The listing text handed to the run says "this concert is produced and directed by Corin
+// Hale", the run read that text (all 13 cast names came out of it), and it returned 13 contacts, every
 // one of them `provenance: "performer"` and `tier: "secondary"`. Zero primary. She was one fetch away:
-// caseengaines.com/contact publishes her address. He found it himself in seconds and asked why the check
+// corinhale.example/contact publishes her address. He found it himself in seconds and asked why the check
 // had not.
 //
 // ## What was measured before writing this, and what it changed
@@ -34,7 +34,7 @@ import Foundation
 //   ". Produced by Gabrielle Karyss"     "a compilation produced by Tito Pingolinis"
 //   ". Produced by Lindsay Wormser"
 //   ". Produced and directed by Cate Elise Goddard"
-//   "this concert is produced and directed by Caseen Gaines"
+//   "this concert is produced and directed by Corin Hale"
 //
 // The two halves are told apart by what the credit ATTACHES to, not by where it sits or how far in it is:
 // the false ones hang off another work (a quoted show title, an album), the real ones off the show itself,
@@ -51,9 +51,9 @@ struct IndividualBilledAsProducingTests {
     // The p0 case, verbatim from the run's own archived queue file.
     @Test func theCreditDanHitIsReadAsAProducer() {
         let prose = "Featuring an all-star cast, including select members from the 2016 original Broadway "
-            + "production, this concert is produced and directed by Caseen Gaines (author of When "
+            + "production, this concert is produced and directed by Corin Hale (author of When "
             + "Broadway Was Black)."
-        #expect(ProducerShapedName.billedInProse(prose) == "Caseen Gaines")
+        #expect(ProducerShapedName.billedInProse(prose) == "Corin Hale")
     }
 
     // The four other real credits in the archives, each the show's own, each an individual, each refused

@@ -311,7 +311,7 @@ describe("evaluatePrepResult - no producing organisation was named (#1856)", () 
 describe("evaluatePrepResult - self-produced duo surfaces BOTH performers (#366)", () => {
   const expected: PrepEvalExpectation = {
     description: "both named performers",
-    requiredPerformers: ["Virgile Roche", "Anna Pierre"],
+    requiredPerformers: ["Virgile Roche", "Nora Calder"],
     forbidActProvenance: true,
     performerOverrideBodyRequired: true,
   };
@@ -335,16 +335,16 @@ describe("evaluatePrepResult - self-produced duo surfaces BOTH performers (#366)
 
   it("passes when both performers appear as performer contacts with second-person overrideBody", () => {
     const r = evaluatePrepResult(
-      results([performer("Virgile Roche", "Anna Pierre"), performer("Anna Pierre", "Virgile Roche")]),
+      results([performer("Virgile Roche", "Nora Calder"), performer("Nora Calder", "Virgile Roche")]),
       expected,
     );
     expect(r.pass).toBe(true);
   });
 
   it("flags when only one of the two named performers is surfaced", () => {
-    const r = evaluatePrepResult(results([performer("Virgile Roche", "Anna Pierre")]), expected);
+    const r = evaluatePrepResult(results([performer("Virgile Roche", "Nora Calder")]), expected);
     expect(r.pass).toBe(false);
-    expect(r.failures.join(" ")).toMatch(/Anna Pierre/);
+    expect(r.failures.join(" ")).toMatch(/Nora Calder/);
   });
 
   it("flags provenance 'act' when the show is self-produced with named leads", () => {
@@ -354,9 +354,9 @@ describe("evaluatePrepResult - self-produced duo surfaces BOTH performers (#366)
   });
 
   it("flags a performer contact whose mailed overrideBody is written in the third person (#634)", () => {
-    const thirdPerson = performer("Virgile Roche", "Anna Pierre");
+    const thirdPerson = performer("Virgile Roche", "Nora Calder");
     thirdPerson.overrideBody = thirdPerson.overrideBody.replace("about your March 10 date", "about Virgile Roche's March 10 date");
-    const r = evaluatePrepResult(results([thirdPerson, performer("Anna Pierre", "Virgile Roche")]), expected);
+    const r = evaluatePrepResult(results([thirdPerson, performer("Nora Calder", "Virgile Roche")]), expected);
     expect(r.pass).toBe(false);
     expect(r.failures.join(" ")).toMatch(/second person|overrideBody/i);
   });
@@ -367,8 +367,8 @@ describe("evaluatePrepResult - stale artist site misnames co-performer: flag, do
   // corroboration against THIS performance is a misidentification risk -> mark low, not high (lines 156, 231-234).
   const expected: PrepEvalExpectation = {
     description: "uncorroborated performer kept but low confidence",
-    requiredPerformers: ["Virgile Roche", "Anna Pierre"],
-    lowConfidencePerformers: ["Anna Pierre"],
+    requiredPerformers: ["Virgile Roche", "Nora Calder"],
+    lowConfidencePerformers: ["Nora Calder"],
   };
 
   const keep = (name: string, confidence: string, sourceUrl?: string) => ({
@@ -382,7 +382,7 @@ describe("evaluatePrepResult - stale artist site misnames co-performer: flag, do
 
   it("passes when the uncorroborated performer is kept at low confidence", () => {
     const r = evaluatePrepResult(
-      results([keep("Virgile Roche", "high", "https://duo.example/bio"), keep("Anna Pierre", "low")]),
+      results([keep("Virgile Roche", "high", "https://duo.example/bio"), keep("Nora Calder", "low")]),
       expected,
     );
     expect(r.pass).toBe(true);
@@ -391,16 +391,16 @@ describe("evaluatePrepResult - stale artist site misnames co-performer: flag, do
   it("flags DROPPING the misnamed co-performer entirely", () => {
     const r = evaluatePrepResult(results([keep("Virgile Roche", "high", "https://duo.example/bio")]), expected);
     expect(r.pass).toBe(false);
-    expect(r.failures.join(" ")).toMatch(/Anna Pierre/);
+    expect(r.failures.join(" ")).toMatch(/Nora Calder/);
   });
 
   it("flags marking the uncorroborated performer 'high' instead of low", () => {
     const r = evaluatePrepResult(
-      results([keep("Virgile Roche", "high", "https://duo.example/bio"), keep("Anna Pierre", "high", "https://stale.example/bio")]),
+      results([keep("Virgile Roche", "high", "https://duo.example/bio"), keep("Nora Calder", "high", "https://stale.example/bio")]),
       expected,
     );
     expect(r.pass).toBe(false);
-    expect(r.failures.join(" ")).toMatch(/Anna Pierre.*confidence|confidence.*Anna Pierre|low/i);
+    expect(r.failures.join(" ")).toMatch(/Nora Calder.*confidence|confidence.*Nora Calder|low/i);
   });
 });
 

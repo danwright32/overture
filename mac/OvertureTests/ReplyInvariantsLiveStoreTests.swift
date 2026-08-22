@@ -194,8 +194,8 @@ struct ReplyInvariantsLiveStoreTests {
     // person, or it is a card about somebody who cannot be contacted at all.
     //
     // LIVE-STORE-CLAIM verified=2026-08-19 measure="reached-out rows with no email address, and whether each has a contact form to reach instead. Re-measured 2026-08-19: all 14 recipients ever sent to belong to shows carrying a showOutcome, so isInPlay excludes every one and there are 0 rows in play, which #2986 made a reported number rather than a failure"
-    // Written first as "every row has an email address", which FAILED on three real rows: Alex Syiek,
-    // Battle of the Siblings, and Eva Noblezada & Reeve Carney. Measured rather than assumed: all three
+    // Written first as "every row has an email address", which FAILED on three real rows: Perri Vale,
+    // Battle of the Siblings, and Eva Noblezada & Alder Bourne. Measured rather than assumed: all three
     // are contact_method form_or_dm and all three carry a contactFormURL, so they are reachable and the
     // assumption was wrong, not the app. Email is one route of two here (#1585's reachability work), and
     // an invariant that forgets the other would have failed forever on working software.

@@ -121,7 +121,7 @@ struct StoreLocationTests {
     // path is a published cross-language contract (docs/contracts.md, the prep and reply runbooks,
     // import-history.ts, runner-setup.sh), so moving the store into it left every one of those paths
     // untouched. Debug keeps its handoff files in a subfolder, exactly where they already were.
-    @Test func handoffDirectoryStaysWhereEveryContractSaysItIs() {
+    @Test func handoffDirectoryStaysWhealderryContractSaysItIs() {
         let release = StoreLocation.handoffDirectory(appSupport: appSupport, isDebugBuild: false)
         #expect(release == StoreLocation.dataDirectory(appSupport: appSupport, isDebugBuild: false))
 

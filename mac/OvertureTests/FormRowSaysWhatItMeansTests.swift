@@ -1,7 +1,7 @@
 import Testing
 import Foundation
 
-// #2169. Dan, reading the Alex Syiek row cold on 2026-08-05: "why does it say 'no contact' and 'sent
+// #2169. Dan, reading the Perri Vale row cold on 2026-08-05: "why does it say 'no contact' and 'sent
 // through their form'. Also, it says 1 day. what happens in 1 days?"
 //
 // Both questions are the row failing to describe a contact-form pitch, and they are separate faults.
@@ -27,11 +27,11 @@ struct FormRowSaysWhatItMeansTests {
     // MARK: part 1, where the pitch went
 
     @Test func theContactSlotNamesTheSiteItWasSentTo() {
-        #expect(FormOutreachCopy.routeLine(formURL: "https://www.alexsyiek.com/contact") == "alexsyiek.com")
-        #expect(FormOutreachCopy.routeLine(formURL: "https://jerrickcavagnaro.com/appointments")
-                == "jerrickcavagnaro.com")
-        #expect(FormOutreachCopy.routeLine(formURL: "https://www.reevecarney.com/booking")
-                == "reevecarney.com")
+        #expect(FormOutreachCopy.routeLine(formURL: "https://www.perrivale.example/contact") == "perrivale.example")
+        #expect(FormOutreachCopy.routeLine(formURL: "https://tobiaslund.example/appointments")
+                == "tobiaslund.example")
+        #expect(FormOutreachCopy.routeLine(formURL: "https://www.alderbourne.example/booking")
+                == "alderbourne.example")
     }
 
     // The failure path. A record with no usable route gets nothing rather than a plausible-looking
@@ -55,7 +55,7 @@ struct FormRowSaysWhatItMeansTests {
         #expect(ReachedOutQueue.formNightLabel(eventDay: "2026-08-10", today: today) == "in 4 days")
     }
 
-    // The live case that started this. Alex Syiek's night was 3 August and Dan was reading the row on
+    // The live case that started this. Perri Vale's night was 3 August and Dan was reading the row on
     // the 6th, so the row has to say the night has gone rather than count down to a send.
     @Test func aNightThatHasGoneSaysHowLongAgo() {
         #expect(ReachedOutQueue.formNightLabel(eventDay: "2026-08-05", today: today) == "yesterday")
