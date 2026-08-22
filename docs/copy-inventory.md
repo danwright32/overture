@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1469 sentences**.
+Every sentence Overture can say to Dan: **1466 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -2310,8 +2310,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/QueueUndoStack.swift`
 "Undo that"
     `Domain/HandMarkedReply.swift`
-"Undoing it would leave this contact holding an address from that conversation and ready "
-    `Domain/FormOutreach.swift`
 "Unknown contact"
     `UI/QueueView+Model.swift`
 "Unverified email found"
@@ -2448,8 +2446,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/StageEmptyState.swift`
 "You have already been in touch with them about this and answered their reply."
     `Domain/OmniFocusSync.swift`
-"You linked a conversation to this pitch, so Overture can't take the send record back. "
-    `Domain/FormOutreach.swift`
 "You linked their reply. It's waiting on you."
     `Domain/ProposedConversation.swift`
 "You linked this conversation. Overture didn't email them."
@@ -3229,8 +3225,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ShowOutcome.swift`
 "they said the price was too high"
     `Domain/ShowOutcome.swift`
-"to be emailed."
-    `Domain/FormOutreach.swift`
 "to confirm"
     `UI/QueueView.swift`
 "too few to tell"

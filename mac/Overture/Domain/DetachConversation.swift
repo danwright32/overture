@@ -74,8 +74,9 @@ enum DetachConversation {
         r.gmailThreadId = nil
         r.attachedThreadSubject = nil
         r.conversationAttachedAt = nil
-        // `conversationEverAttachedAt` is deliberately NOT cleared. It is what `undoFormOutreach`
-        // refuses on, and that refusal has to survive the detach.
+        // `conversationEverAttachedAt` is deliberately NOT cleared. #3069 removed the undo it was built
+        // to refuse, and `wasWrittenTo` reads it now: it is proof a real exchange happened here, and that
+        // has to survive the detach or the launch merge can delete the row as untouched.
 
         // Only the address this attach put there. One that was already on the contact was never the
         // detach's to remove, which is why the attach records which it was rather than leaving the two
