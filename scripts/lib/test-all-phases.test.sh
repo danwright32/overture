@@ -176,6 +176,86 @@ assert_equals "it can still be made blocking" "1" "$([ -n "${TA_BLOCK_LINE}" ] &
 TA_GUARD="$(printf '%s' "${TA_SRC}" | sed -n "$((TA_BLOCK_LINE - 1))p")"
 assert_contains "and that path is reachable only through the override" "${TA_GUARD}" "OVERTURE_VACUOUS_GUARDS_STRICT"
 
+# --- the background lane is REAPED, so it leaves no notice in the output (#3105) ---------------------
+#
+# A killed background job is announced by the shell at the next command boundary, and the notice renders
+# the job's WHOLE COMMAND TEXT. start_background_phase's job is a compound command, so a run cut short
+# used to print `{ "$@" > "${log}" 2>&1; echo "$?" > "${status_file}"; }` into its own output. Observed
+# live 2026-08-22: a `scripts/test-all.sh` run that ended early printed
+# `scripts/lib/test-all-phases.sh: line 80: 82854 Terminated: 15          sleep 0.5`.
+#
+# Why it matters is #2981's and #3099's reason, and it has cost a real measurement once already: a log
+# holding the PROGRAM as well as the EVENTS is one where a check reading it for a phrase matches code
+# that never ran, and grepping a run log is the obvious thing to reach for. #2981 lost a concurrency
+# measurement exactly that way, matching an `echo "... STOPPING ..."` statement rendered by one of these
+# notices and reporting two healthy runs as stalled.
+#
+# `wait` reaps the job before the shell gets to report it, which is the whole fix (measured on this Mac,
+# and the same remedy heartbeat_stop already applies in the detached runners).
+STOP_DIR="${TMP_DIR}/stop-background-phase"
+mkdir -p "${STOP_DIR}"
+
+# Written as a script and run as its OWN bash process on purpose: the notice is printed by the shell that
+# owns the job, so a subshell of this fixture would not show it the way a real run does.
+write_stopper() {
+  local path="$1" stop_line="$2"
+  cat > "${path}" <<STOPPER
+#!/usr/bin/env bash
+set -uo pipefail
+source "${SCRIPT_DIR}/test-all-phases.sh"
+LOG="\$(mktemp "\${TMPDIR:-/tmp}/stopper-log.XXXXXX")"
+start_background_phase "\${LOG}" sleep 300
+PID="\${BACKGROUND_PHASE_PID}"
+echo "\${PID}" > "${STOP_DIR}/\$(basename "\$0").pid"
+trap '${stop_line} rm -f "\${LOG}" "\${BACKGROUND_PHASE_STATUS_FILE}"' EXIT
+echo "the run ends early, the way a fatal cheap check ends one"
+exit 1
+STOPPER
+  chmod +x "${path}"
+}
+
+# The POSITIVE CONTROL first. Without it, "no notice was printed" is satisfied just as well by a fixture
+# that could never see one, and the test would pass hardest when it was measuring nothing (L159).
+write_stopper "${STOP_DIR}/bare-kill.sh" 'kill "${PID}" 2>/dev/null || true;'
+# Output goes to a FILE, never a command substitution. The background job inherits the stopper's
+# stderr, so `$(...)` would hold the pipe open until that job ended on its own, which both stalls the
+# fixture for the whole sleep and lets a natural expiry stand in for a reap that never happened.
+bash "${STOP_DIR}/bare-kill.sh" > "${STOP_DIR}/bare-kill.out" 2>&1
+BARE_OUT="$(cat "${STOP_DIR}/bare-kill.out")"
+assert_contains "a bare kill really does announce the job (the control)" "${BARE_OUT}" "Terminated"
+assert_contains "and the notice renders the job's own body" "${BARE_OUT}" "status_file"
+
+# The same script, stopped through the helper.
+write_stopper "${STOP_DIR}/reaped.sh" 'stop_background_phase "${PID}";'
+bash "${STOP_DIR}/reaped.sh" > "${STOP_DIR}/reaped.out" 2>&1
+REAPED_OUT="$(cat "${STOP_DIR}/reaped.out")"
+# Asserted BEFORE the quiet, because quiet is also what a trap whose command does not exist produces:
+# nothing is killed, so there is nothing for the shell to announce. Without this the whole case passes
+# hardest when the helper is missing entirely, which is the state it was written to fail on.
+REAPED_PID="$(cat "${STOP_DIR}/reaped.sh.pid" 2>/dev/null)"
+assert_not_contains "the helper resolved, rather than being reported missing" "${REAPED_OUT}" "command not found"
+assert_equals "and the phase it names is really gone" "0" "$(kill -0 "${REAPED_PID:-0}" 2>/dev/null && echo 1 || echo 0)"
+assert_not_contains "stopping through the helper announces nothing" "${REAPED_OUT}" "Terminated"
+assert_not_contains "so the job's body never reaches the output" "${REAPED_OUT}" "status_file"
+assert_contains "and the run's own line is still printed" "${REAPED_OUT}" "the run ends early"
+
+# An empty or already-gone pid is a no-op rather than an error, because the trap naming it runs on every
+# path, including ones where the phase was never started.
+STOP_STATUS_OUT="$(bash -c "source '${SCRIPT_DIR}/test-all-phases.sh'; stop_background_phase ''; echo \"status=\$?\"" 2>&1)"
+assert_contains "an empty pid is a no-op" "${STOP_STATUS_OUT}" "status=0"
+
+# Whatever the verdict, this fixture leaves no process of its own behind: on the path where the helper
+# is missing the phase is still running, and a red fixture must not leak one.
+for _pidfile in "${STOP_DIR}"/*.pid; do
+  [[ -f "${_pidfile}" ]] || continue
+  kill "$(cat "${_pidfile}")" 2>/dev/null || true
+done
+
+# The half that stops it coming back. test-all.sh is where the trap lives, and a later edit putting a
+# bare kill back would be invisible to every behavioural test above, which drives the helper directly.
+assert_contains "test-all.sh stops its Swift lane through the helper" "${TA_SRC}" 'stop_background_phase "${SWIFT_PID}"'
+assert_not_contains "and never bare-kills it" "${TA_SRC}" 'kill "${SWIFT_PID}"'
+
 echo
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "test-all-phases.test.sh: all assertions passed"

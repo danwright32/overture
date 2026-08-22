@@ -74,7 +74,10 @@ SWIFT_STATUS_FILE="${BACKGROUND_PHASE_STATUS_FILE}"
 
 # However this script leaves, the suite it started goes with it. An orphaned xcodebuild would hold the
 # shared lock and keep every other worktree's run queued behind a run nobody is reading.
-trap 'kill "${SWIFT_PID}" 2>/dev/null || true; rm -f "${TREE_SNAPSHOT}" "${SWIFT_LOG}" "${SWIFT_STATUS_FILE}"' EXIT
+# #3105: stopped through the helper, which reaps the job as well as killing it. A bare kill leaves the
+# shell to announce the job at the next command boundary, and that notice renders the job's whole body
+# into this run's own output.
+trap 'stop_background_phase "${SWIFT_PID}"; rm -f "${TREE_SNAPSHOT}" "${SWIFT_LOG}" "${SWIFT_STATUS_FILE}"' EXIT
 
 # Nothing in the cheap lane touches the Swift build. Audited 2026-08-13: the shell fixtures stub
 # xcodebuild and flock inside their own mktemp PATH dirs (so none reaches the real lock), no fixture

@@ -39,6 +39,33 @@ start_background_phase() {
   BACKGROUND_PHASE_PID=$!
 }
 
+# stop_background_phase <pid>
+#
+# #3105: ends the background phase and REAPS it, so the shell never announces the job.
+#
+# A killed background job is announced at the next command boundary, and the notice renders the job's
+# whole command text. start_background_phase's job is a compound command, so a run cut short printed
+# `{ "$@" > "${log}" 2>&1; echo "$?" > "${status_file}"; }` into its own output. Observed live on
+# 2026-08-22 from a `scripts/test-all.sh` run that ended early.
+#
+# Why that is worth a helper rather than a comment: a log holding the PROGRAM as well as the EVENTS is
+# one where a check reading it for a phrase matches code that never ran, and grepping a run log is the
+# obvious thing to reach for. It has already cost a real measurement (#2981: `measure-concurrent-runs.sh`
+# grepped for STOPPING, matched an `echo` statement rendered by one of these notices, and reported two
+# healthy runs as stalled). #3099 closed the same shape in the three detached runners; this is the lane
+# that was left.
+#
+# `wait` is the whole fix: it reaps the job before the shell gets to report it. Both calls are `|| true`
+# because this runs inside an EXIT trap, where a non-zero status is not somebody's problem to hear about
+# and would otherwise become a different exit code than the run really had. An empty pid is a no-op
+# returning 0, because the trap naming it is installed on paths where the phase was never started.
+stop_background_phase() {
+  [[ -n "${1:-}" ]] || return 0
+  kill "$1" 2>/dev/null || true
+  wait "$1" 2>/dev/null || true
+  return 0
+}
+
 # run_foreground_check <label> <command...>
 #
 # Runs one cheap check and records its label in TEST_ALL_CHEAP_FAILURES if it fails, WITHOUT exiting.
