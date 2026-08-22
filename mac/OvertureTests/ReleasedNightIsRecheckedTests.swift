@@ -104,7 +104,15 @@ struct ReleasedNightIsRecheckedTests {
         #expect(!source.isEmpty, "the guard read no source, so it asserts nothing")
         #expect(source.contains("DroppedNight.keeping(p.runNights, on: existing, lookup: storedByKey)"),
                 "the re-fold has to hand `keeping` a lookup, or a released night is subtracted forever")
-        #expect(source.contains("storedByKey: { try Prospect.stored(key: $0, in: context) }"),
-                "and the upsert has to supply a real store read, not a stub")
+        // #2726: BOTH arms that apply an enriched row, each named. The two calls are identical, so one
+        // search was answered by whichever survived, and the arm that re-keys a moved show could have
+        // dropped its lookup with this still green (L135).
+        for arm in ["apply(enriched, to: existing, now: scoutNow, "
+                        + "storedByKey: { try Prospect.stored(key: $0, in: context) })",
+                    "apply(enriched, to: match, now: scoutNow, "
+                        + "storedByKey: { try Prospect.stored(key: $0, in: context) })"] {
+            #expect(SourceGuardHelper.containsCode(arm, in: source),
+                    "the upsert has to supply a real store read, not a stub")
+        }
     }
 }

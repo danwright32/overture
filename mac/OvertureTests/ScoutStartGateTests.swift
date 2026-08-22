@@ -101,7 +101,9 @@ struct ScoutStartGateWiringTests {
     // the next step rather than leaving Dan to infer it.
     @Test func thehandOffMessageNamesTheNextStep() {
         let scout = SourceGuardHelper.source("Overture/Integration/ScoutService.swift")
-        #expect(scout.contains("press Run scout again once the reading finishes"))
-        #expect(scout.contains("Nothing was lost"))
+        // #2726: one clause, one message. `Nothing was lost` opens BOTH launch-failure sentences, so on
+        // its own it said nothing about the hand-off one this test is named for (L135).
+        #expect(scout.contains(
+            "Nothing was lost: press Run scout again once the reading finishes"))
     }
 }

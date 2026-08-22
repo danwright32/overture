@@ -10,7 +10,7 @@
 // goes red. That is the only thing that tells a coincidence from a defect.
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { findingsFor, positiveContainsAssertions, report, sourceBindings, type Finding } from "../src/lib/wholeFileGuards";
+import { builtNeedleCount, codeContainsAssertions, findingsFor, positiveContainsAssertions, report, sourceBindings, type Finding } from "../src/lib/wholeFileGuards";
 
 const repoRoot = join(__dirname, "..");
 const appRoot = join(repoRoot, "mac", "Overture");
@@ -50,12 +50,33 @@ if (testFiles.length < 100) {
 }
 
 let checked = 0;
+let built = 0;
 const findings: Finding[] = [];
 for (const file of testFiles) {
   const source = readFileSync(file, "utf8");
   const bindings = new Set(sourceBindings(source).map((b) => b.variable));
   checked += positiveContainsAssertions(source).filter((a) => bindings.has(a.variable)).length;
+  // #2726: containsCode guards count too. Before this they were invisible here, so converting a guard to
+  // that form quietly removed it from the report rather than answering it.
+  checked += codeContainsAssertions(source).filter((a) => bindings.has(a.variable)).length;
+  built += builtNeedleCount(source);
   findings.push(...findingsFor(file.replace(`${repoRoot}/`, ""), source, readAppFile));
 }
 
-console.log(report(findings, checked));
+console.log(report(findings, checked, built));
+
+// #2726: a RATCHET, not a report. Every one of the 17 entries this printed on 2026-08-21 was answered
+// (each guard now names the site it is about), so zero is reachable and staying at zero is cheap: the fix
+// is always to name the one occurrence rather than search the whole file.
+//
+// It exits non-zero so the list cannot quietly grow back. That matters more than it looks: L182 is that a
+// count driven to zero stops being read as a measurement and starts being read as proof the thing cannot
+// occur, and a list nobody runs is exactly how these 17 accumulated after #2773 shipped the tool without
+// anything enforcing it.
+//
+// A new entrant is a test to LOOK AT rather than automatically a defect, on the same rule
+// check-fixtures-do-not-age.sh follows: some are one wrapped statement counted twice. The remedy is the
+// same either way, and it is one line.
+if (findings.length > 0) {
+  process.exit(1);
+}

@@ -89,6 +89,15 @@ run_foreground_check "pnpm typecheck" pnpm typecheck
 run_foreground_check "pnpm test" pnpm test
 run_foreground_check "scripts/run-shell-fixtures.sh" "${REPO_ROOT}/scripts/run-shell-fixtures.sh"
 
+# #2726: fails when a source-text guard searches a WHOLE FILE for text that occurs in it more than once,
+# so the guard can be answered by an occurrence it is not about. Roughly 1,900 of this suite's
+# declarations are source-text guards and CAUGHT is the verdict quoted as proof of each, so a guard that
+# cannot go red is the most expensive kind of green there is (L135). #2773 shipped the tool and nothing
+# ran it, and 17 entries had accumulated by 2026-08-21; all 17 were answered, so zero is reachable and
+# this keeps it there. A new entrant is a test to LOOK AT, not automatically a defect, and the remedy is
+# one line either way: name the occurrence instead of searching the file.
+run_foreground_check "pnpm find-vacuous-guards" pnpm find-vacuous-guards
+
 # Warns if docs/prep-runbook.md and the external dan-wright-brand-voice skill have drifted apart
 # (#731). Skips cleanly (exit 0) on any machine without the skill installed, since it lives outside
 # this clone, so it never breaks CI or a fresh checkout; it only fails locally on genuine drift.

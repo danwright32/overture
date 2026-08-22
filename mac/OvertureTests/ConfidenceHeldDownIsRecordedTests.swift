@@ -357,7 +357,12 @@ struct ConfidenceHeldDownIsRecordedTests {
     // answer about a person is his work and must survive whichever duplicate row he gave it on.
     @Test func aDuplicateMergeKeepsTheOverruleWhicheverRowCarriedIt() throws {
         let source = SourceGuardHelper.source("Overture/Domain/DuplicateContactMerge.swift")
-        #expect(source.contains("heldDownToUnverifiedDismissed"),
+        // #2726: the STATEMENT, not the name. The bare name is satisfied by either half of the very
+        // assignment it is about, so it could not tell "the merge carries it across" from "the word
+        // appears somewhere in this file" (L135).
+        #expect(SourceGuardHelper.containsCode(
+            "winner.heldDownToUnverifiedDismissed = winner.heldDownToUnverifiedDismissed "
+                + "|| loser.heldDownToUnverifiedDismissed", in: source),
                 "Dan's overrule must survive a merge, like the three dismissals beside it")
     }
 }

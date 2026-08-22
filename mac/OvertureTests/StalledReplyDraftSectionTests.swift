@@ -243,7 +243,10 @@ struct StalledReplyDraftSectionTests {
 
         #expect(source.contains("StalledReplyDraftCopy.section"),
                 "FollowUpsView no longer draws a section for the stalled reply drafts it counts (#2878)")
-        #expect(source.contains("listed.stalledReplyDrafts"),
+        // #2726: the ForEach, since ITERATING is what this asserts. The bare name is satisfied by the
+        // `isEmpty` test above it, which is not the same claim (L135).
+        #expect(SourceGuardHelper.containsCode(
+            "ForEach(listed.stalledReplyDrafts, id: \\.recipient.id)", in: source),
                 "the stalled section no longer iterates the shared rows (#2878)")
         #expect(source.contains("DueWork.rows("),
                 "FollowUpsView no longer takes its rows from DueWork, so it can derive them a second way")

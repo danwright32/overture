@@ -303,6 +303,13 @@ struct ProbePaceWiringGuardTests {
         #expect(SourceGuardHelper.containsCode(
             "summarizeShowsACheckMissed( count: keys.count, secondsPerRound: ProbeSelection.liveSecondsPerRound())",
             in: queue))
-        #expect(queue.contains("secondsPerRound: ProbeSelection.liveSecondsPerRound())"))
+        // #2726: the line above already pins the multi-date call as CODE. This one was a bare repeat of
+        // its tail, answered by that very call, so it added nothing and could not go red on its own. It
+        // names the OTHER entry point instead, the per-card Check again, which nothing else pinned.
+        #expect(SourceGuardHelper.containsCode(
+            "summarizeOneShowRecheck( previouslyMissed: item.reachabilityUnansweredAt != nil,", in: queue))
+        let recheck = SourceGuardHelper.bodyOfFunction(named: "requestRecheckNow", in: queue) ?? ""
+        #expect(!recheck.isEmpty, "requestRecheckNow was not found, so this asserts nothing")
+        #expect(recheck.contains("secondsPerRound: ProbeSelection.liveSecondsPerRound())"))
     }
 }

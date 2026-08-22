@@ -479,7 +479,11 @@ struct BuildFreshnessStateTests {
                 "A verdict pinned in init is stale by construction: the panel owns the read now (#2065).")
 
         let sheet = SourceGuardHelper.source("Overture/UI/BuildFreshnessSheet.swift")
-        #expect(sheet.contains("refreshIfStale"),
+        // #2726: the `.task` site, which is the one "when it shows" means. A bare `refreshIfStale` was
+        // answered by the app-became-active handler AND by a comment mentioning the name, so the panel
+        // could have stopped reading on appear entirely and this stayed green (L135, L103).
+        #expect(SourceGuardHelper.containsCode(
+            ".task { state.refreshIfStale() await state.watch() }", in: sheet),
                 "The panel must read the records when it shows.")
         #expect(sheet.contains("state.watch()"),
                 "And keep watching, so a merge landing while Dan works is noticed (his call, 2026-08-04).")

@@ -52,8 +52,14 @@ struct GmailConnectReentrancyTests {
     @Test func theLoopbackCatcherRunsOffTheMainQueue() {
         let src = SourceGuardHelper.source("Overture/Integration/GmailAuthManager.swift")
         #expect(src.contains("listenerQueue = DispatchQueue(label:"))
-        #expect(src.contains("queue: Self.listenerQueue"))
-        #expect(src.contains("conn.start(queue: Self.listenerQueue)"))
+        // #2726: both of these named the LISTENER, and both were answered by the token-exchange
+        // connection in `exchange`, which starts on the same queue for its own reasons. Either would have
+        // stayed green with the whole loopback listener moved to .main (L135). Named at the listener now.
+        #expect(SourceGuardHelper.containsCode(
+            "LoopbackListener.start( queue: Self.listenerQueue,", in: src))
+        let listener = SourceGuardHelper.bodyOfFunction(named: "startListener", in: src) ?? ""
+        #expect(!listener.isEmpty, "startListener was not found, so this asserts nothing")
+        #expect(listener.contains("conn.start(queue: Self.listenerQueue)"))
         #expect(!src.contains("LoopbackListener.start(queue: .main)"))
     }
 }
