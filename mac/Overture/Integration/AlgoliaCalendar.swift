@@ -12,9 +12,29 @@ enum AlgoliaCalendar {
     static let index = "prod_Events"
     static let endpoint = URL(string: "https://Q0TMLOPF1J-dsn.algolia.net/1/indexes/*/queries")!
 
-    // How far ahead the scout looks. Past performances and anything beyond this are not worth
-    // pitching; the queue's display window ([[QueueModel.leadTimeWindowDays]]) mirrors this.
-    static let windowDays = 90
+    // How far ahead the scout looks. Past performances and anything beyond this are not worth pitching.
+    //
+    // #2521: 120, and the thirty days over the queue's display window ([[QueueModel.leadTimeWindowDays]],
+    // 90) are the POINT rather than slack. This is the SUPPLY side of the pair #1571 wrote down: supply
+    // must exceed demand so a show is already in the store by the time it rolls into Dan's triage window.
+    //
+    // It used to be 90, exactly the display window, so it "mirrored" it. That is the one arrangement the
+    // pair must not have: a Carnegie show became fetchable and became pitchable on the same day, so
+    // whether it was in the store when Dan could first act on it depended on a scout run landing in the
+    // right order rather than on any margin. Nothing absorbed a night the scout did not run, a read Dan
+    // deferred, or a feed that was briefly unreadable.
+    //
+    // Every other source has that margin without anyone choosing it, because a whole calendar month is a
+    // coarser unit than a day: [[CalendarMonthIndex.defaultHorizon]]'s four months reach 89 to 122 days
+    // against the same 90 day window. Counted in days, the margin has to be picked, and thirty puts this
+    // source in the same family as the other two.
+    //
+    // Carnegie is why it is worth the fetch: 122 of 322 shoots in Dan's history, 38% of everything he has
+    // photographed, and it is the store's only `algolia` source.
+    //
+    // `QueueWindowAndScoutHorizonTests` measures this against the display window from the constants
+    // themselves and fails if either moves, so changing one is a deliberate act rather than silent drift.
+    static let windowDays = 120
     static let hitsPerPage = 1000
     // A safety stop so a surprise in the index can never spin the pager forever.
     static let maxPages = 5
