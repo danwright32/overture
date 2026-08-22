@@ -137,6 +137,51 @@ assert_eq "intra-skill: return code 0 when consistent" "0" "${RC}"
 run_contradiction "Prefer a soft close." "Hold boundaries positively."
 assert_empty "intra-skill: absence of the phrase is not a contradiction" "${OUT}"
 
+# --- #2961: the skill's two halves compared on FACTS, not on a list of banned phrases ----------------
+#
+# #1227 asked for exactly this and what shipped was a loop over a hand-maintained list of superseded
+# PHRASES, which catches the case it was built from and nothing else (L96). This is keyed on the SUBJECT.
+
+MD_RATE='Dan charges $250/hr plus tax with a minimum of one hour.'
+REF_SAME='A reply quotes the paragraph: $250/hr plus tax, minimum of one hour.'
+REF_STALE='An older note says $195/hr plus tax, minimum of two hours.'
+
+OUT="$(intra_skill_fact_drift "${MD_RATE}" "${REF_STALE}")"; STATUS=$?
+assert_contains "intra-skill facts: two different rates is a drift" "${OUT}" "the hourly rate"
+assert_contains "intra-skill facts: it names one value" "${OUT}" "250"
+assert_contains "intra-skill facts: and the other" "${OUT}" "195"
+assert_equals "intra-skill facts: a drift does not exit 0" "1" \
+  "$([ "${STATUS}" -ne 0 ] && echo 1 || echo 0)"
+
+OUT="$(intra_skill_fact_drift "${MD_RATE}" "${REF_SAME}")"; STATUS=$?
+assert_empty "intra-skill facts: two halves that agree report nothing" "${OUT}"
+assert_equals "intra-skill facts: agreement exits 0" "0" "${STATUS}"
+
+# Silence is not a claim. The references are the DETAIL and SKILL.md is the summary; neither repeats all
+# of the other, so demanding both state everything would fire on the ordinary case (L93).
+OUT="$(intra_skill_fact_drift "${MD_RATE}" "This half says nothing about money at all.")"; STATUS=$?
+assert_empty "intra-skill facts: a fact only one half mentions is not a contradiction" "${OUT}"
+assert_equals "intra-skill facts: a one-sided fact exits 0" "0" "${STATUS}"
+
+# Found by running this against the REAL skill, which writes "within 2 weeks" in SKILL.md and "within two
+# weeks" in the references. Comparing the raw forms accused on the first run: one fact spelled two ways is
+# not two facts disagreeing (L185, group by the normalized form and never the raw one).
+OUT="$(intra_skill_fact_drift 'the full gallery within 2 weeks' 'the gallery comes back within two weeks')"
+assert_empty "intra-skill facts: two spellings of one number are one value" "${OUT}"
+
+# And a real turnaround disagreement still reports, so the normalizing narrowed the reading rather than
+# switching it off (L159).
+OUT="$(intra_skill_fact_drift 'the full gallery within 2 weeks' 'the gallery comes back within six weeks')"
+assert_contains "intra-skill facts: a real turnaround disagreement is still caught" "${OUT}" \
+  "the gallery turnaround"
+
+# Every entry names a subject and captures a value, so a malformed one cannot silently check nothing.
+for entry in "${BRAND_VOICE_SKILL_FACTS[@]}"; do
+  assert_equals "intra-skill facts: '${entry%%|*}' names a subject" "1" \
+    "$([ -n "${entry%%|*}" ] && [ "${entry%%|*}" != "${entry}" ] && echo 1 || echo 0)"
+  assert_contains "intra-skill facts: '${entry%%|*}' captures a value" "${entry#*|}" "("
+done
+
 echo
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "check-brand-voice-drift.test.sh: all assertions passed"
