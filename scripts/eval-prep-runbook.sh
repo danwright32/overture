@@ -289,10 +289,45 @@ record_completed_run() {
     echo "scripts/check-prep-eval-freshness.sh will keep reporting whatever it reported before." >&2
     return 0
   fi
+  local covered_names covered_passed
+  covered_names="$(merged_covered_names "${fingerprint}")"
+  covered_passed="$(covered_passing_count "${covered_names}")"
   prep_eval_write_last_run "${LAST_RUN_FILE}" "${fingerprint}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     "${_eval_total}" "$(list_fixtures | wc -l | tr -d ' ')" "$(( _eval_total - _eval_failures ))" \
-    "${_eval_tmp}"
+    "${_eval_tmp}" "${covered_names}" "${covered_passed}"
   echo "recorded this completed run in ${LAST_RUN_FILE}"
+}
+
+# #2581: the fixtures scored against THIS runbook text, this run's plus whatever the previous record
+# already held for the same text.
+#
+# Gated on the FINGERPRINT, and that gate is the whole of why this is safe. Carrying a verdict forward
+# across a runbook edit would present a score taken against wording the current rules never saw as a
+# score on the current rules, which is the overclaim this record exists to prevent. On any mismatch, or
+# an unreadable record, or a record written before these fields existed, the answer is just this run,
+# which is the behaviour every record had before and under-reports rather than over-reports.
+merged_covered_names() {
+  local fingerprint="$1" prior_fingerprint prior_names=""
+  prior_fingerprint="$(prep_eval_record_field "${LAST_RUN_FILE}" runbook || true)"
+  if [ -n "${fingerprint}" ] && [ "${prior_fingerprint}" = "${fingerprint}" ]; then
+    prior_names="$(prep_eval_record_field "${LAST_RUN_FILE}" coveredNames || true)"
+  fi
+  # A union over NAMES, so re-scoring a fixture already covered adds nothing. `|| true` because grep
+  # exits 1 on empty input, which under `set -e` would abort the run right before its summary.
+  { printf '%s\n%s\n' "$(printf '%s' "${prior_names}" | tr ' ' '\n')" "${_eval_ran_names}" \
+      | grep -v '^$' || true; } | sort -u | tr '\n' ' ' | sed 's/ *$//'
+}
+
+# How many of the covered fixtures are currently PASSING, read off the same converging failures file
+# `--yes --failed` reads, so the record and the recheck can never disagree about what is outstanding
+# (L16). Called AFTER update_failures_file, which is what makes that file this run's answer rather than
+# the previous one's.
+covered_passing_count() {
+  local covered_names="$1" failing=0 name
+  for name in ${covered_names}; do
+    grep -qxF -- "${name}" "${FAILURES_FILE}" 2>/dev/null && failing=$(( failing + 1 ))
+  done
+  echo $(( $(printf '%s' "${covered_names}" | tr ' ' '\n' | grep -c . || true) - failing ))
 }
 
 # $1 (optional): a single fixture name to eval instead of all of them (a cheap targeted recheck), or the

@@ -48,8 +48,26 @@ prep_eval_record_field() {
 #
 # Written to a temp file and moved into place, so a record half written by an interrupted process
 # never replaces a good one (L5).
+# #2581: `scored` and `passed` are about THIS run; `covered`, `coveredNames` and `coveredPassed` are the
+# cumulative set against this same runbook text. A `--yes --failed` recheck used to write its own one
+# fixture over the record of a 17/17 pass, so the freshness check then under-reported what had been
+# verified, which is the wrong direction for a harness whose job is saying what has been checked.
+#
+# The cumulative side is kept as NAMES, and `covered` is counted from them here rather than passed in,
+# so the two can never disagree. Counts alone cannot be merged: they cannot tell a recheck of an
+# already-scored fixture from a fresh one, and adding them would double count. The caller owns the union
+# (it is the only thing that knows which fixtures this run ran, and whether the prior record was about
+# this same runbook at all).
+#
+# An OLD record on disk carries none of the three. That is a real absence rather than a caller's
+# omission, so prep_eval_record_field answers empty for it and the reader falls back to `scored`, which
+# is exactly the behaviour those records had before. A CALLER omitting them is a different thing and is
+# not tolerated: all nine arguments are required.
 prep_eval_write_last_run() {
   local file="$1" fingerprint="$2" completed="$3" scored="$4" available="$5" passed="$6" outputs="$7"
+  local covered_names="$8" covered_passed="$9"
+  local covered
+  covered="$(printf '%s' "${covered_names}" | tr ' ' '\n' | grep -c . || true)"
   local tmp="${file}.writing.$$"
   {
     echo "runbook ${fingerprint}"
@@ -58,6 +76,9 @@ prep_eval_write_last_run() {
     echo "available ${available}"
     echo "passed ${passed}"
     echo "outputs ${outputs}"
+    echo "covered ${covered}"
+    echo "coveredPassed ${covered_passed}"
+    echo "coveredNames ${covered_names}"
   } > "${tmp}" || return 1
   mv "${tmp}" "${file}"
 }
