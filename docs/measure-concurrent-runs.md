@@ -22,7 +22,8 @@ concurrent detached runs hit a plan rate limit. The real budget is up to sixteen
 
 ## What makes it safe
 
-Three things, all enforced by the script rather than remembered:
+Four things, all enforced by the script rather than remembered. Three are checked BEFORE it spends
+anything; the fourth is checked after, because it is a fact about what the runs actually did.
 
 1. **A scratch support directory.** It refuses to run against `~/Library/Application Support/Overture`
    or the Debug folder, including through a symlink. Nothing it does can reach the live store, and a
@@ -31,6 +32,19 @@ Three things, all enforced by the script rather than remembered:
    must share no show. The script refuses if they do and names the show. This costs the measurement
    nothing: it needs the check to carry *enough* shows, never particular ones.
 3. **Nothing runs without `--yes`.** Run it once without, read the plan, then add it.
+4. **It refuses to REPORT a measurement of the wrong configuration** (#3005). After both halves finish and
+   before any number is printed, it reads what each run recorded about ITSELF: the check half must have run
+   on the lookup model and FANNED OUT, the drafting half must have run on the drafting model and stayed ONE
+   stream. Any of those wrong and it refuses, naming which half and what it actually was, and exits 3.
+
+   This exists because on 2026-08-18 the peak, both wall clocks and both cost readings all looked perfectly
+   healthy while half the session was running the wrong KIND of run entirely (#2980): it measured 15 sonnet
+   lookups rather than 10 lookups beside 1 opus drafting run. A person found it by reading `prep-run.log`.
+   An instrument that cannot tell you it measured the wrong thing produces its most reassuring output
+   exactly when the work was not what you asked for.
+
+   A refusal does not mean the usage was wasted in vain: the runs happened and the samples file is still
+   written, so it names where to find it. What it will not do is print numbers you would go on to quote.
 
 It does **not** lift the app's exclusion between the two slots. That exclusion is live safety code and
 lifting it early, to take a measurement, would mean shipping a weakened control. Driving the two runner

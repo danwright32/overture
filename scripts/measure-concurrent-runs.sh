@@ -210,6 +210,75 @@ wait "${CHECK_PID}" 2>/dev/null; CHECK_STATUS=$?
 wait "${PREP_PID}" 2>/dev/null; PREP_STATUS=$?
 elapsed="$(( $(date +%s) - started_at ))"
 
+# --- was this the measurement that was asked for? ---------------------------------------------------
+#
+# #3005: asked BEFORE any number is printed, because this instrument could not tell you it measured the
+# wrong thing. On 2026-08-18 the peak, both wall clocks and both cost readings all looked healthy while
+# half the session was running the wrong KIND of run entirely (#2980): it measured 15 sonnet lookups
+# rather than 10 lookups beside 1 opus drafting run, and nothing here said so. A person found it by
+# reading prep-run.log.
+#
+# That is the shape L98 warns about, in the place it costs most: the reassuring output arrives exactly
+# when the work was not what you asked for, and #2762 wants more than one session, so this gets used
+# again.
+#
+# The facts it checks are CHEAP and are read from what each run already wrote about itself, never from a
+# log phrase (#2981: a run log holds the runner's own source, so grepping it for a message proves
+# nothing). Each refusal names which half was wrong and what it actually was.
+config_problem() {
+  slot="$1"; want_streams="$2"; want_model="$3"
+  results="${SUPPORT}/overture-${slot}-results.json"
+  if [ ! -f "${results}" ]; then
+    echo "the ${slot} half wrote no results file at all, so nothing about it can be checked"
+    return 0
+  fi
+  got_model="$("${JQ}" -r '.model // "none"' "${results}" 2>/dev/null || echo "unreadable")"
+  got_streams="$("${JQ}" -r '.runCost.streams // "none"' "${results}" 2>/dev/null || echo "unreadable")"
+  if [ "${got_model}" != "${want_model}" ]; then
+    echo "the ${slot} half ran on ${got_model}, not ${want_model}, so it was not the kind of run this measures"
+    return 0
+  fi
+  case "${want_streams}" in
+    one)
+      [ "${got_streams}" = "1" ] || {
+        echo "the ${slot} half fanned out into ${got_streams} streams; the drafting half must stay ONE, or this is not the shape being measured"
+        return 0
+      }
+      ;;
+    many)
+      case "${got_streams}" in
+        ''|*[!0-9]*) echo "the ${slot} half recorded no usable stream count (${got_streams}), so its fan-out cannot be checked"; return 0 ;;
+      esac
+      [ "${got_streams}" -gt 1 ] || {
+        echo "the ${slot} half ran as ${got_streams} stream; the check half must FAN OUT, or this measures one lookup beside a draft rather than ten"
+        return 0
+      }
+      ;;
+  esac
+  echo ""
+}
+
+CONFIG_PROBLEMS=""
+# The check half fans out to many sonnet lookups; the drafting half stays one opus stream. Those two
+# facts are what tell the intended shape apart from the #2980 one, and both are recorded by the runs.
+for pair in "check|many|sonnet" "prep|one|opus"; do
+  slot="${pair%%|*}"; rest="${pair#*|}"; want_streams="${rest%%|*}"; want_model="${rest##*|}"
+  problem="$(config_problem "${slot}" "${want_streams}" "${want_model}")"
+  [ -z "${problem}" ] || CONFIG_PROBLEMS="${CONFIG_PROBLEMS}  ${problem}
+"
+done
+
+if [ -n "${CONFIG_PROBLEMS}" ]; then
+  echo
+  echo "measure-concurrent-runs: REFUSED to report. This did not measure the configuration you asked for:"
+  printf '%s' "${CONFIG_PROBLEMS}"
+  echo
+  echo "  The usage was spent and the runs happened; what cannot be trusted is the reading. Every number"
+  echo "  below would have looked healthy, which is how #2980 went unnoticed for a whole session."
+  echo "  The samples are still at ${SAMPLES} if you want to look at them by hand."
+  exit 3
+fi
+
 # --- what it found --------------------------------------------------------------------------------
 
 report_run() {
