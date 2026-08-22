@@ -404,6 +404,15 @@ already drifting from the Swift version it mirrored.
     tests fails with `NOTHING RAN`, naming the scope as the likely cause.
   - `pnpm test` (vitest): GATED already, by vitest itself. A filter matching nothing prints
     `No test files found, exiting with code 1` and exits 1. Nothing was added here; it was checked.
+    Its SCOPE is a different question and had the opposite defect (#3120): with no config file vitest
+    took its default include, which descends into the agent worktrees under `.claude/worktrees/`, so
+    the run collected this repo's 16 test files fifteen times over, one copy per nested checkout, and
+    reported `Test Files  240 passed (240)` (measured 2026-08-22, 14 worktrees). Not a coverage gap,
+    but a half finished branch in a worktree could fail the verdict on a change that never touched it,
+    and the count read as thorough while moving with how many agents happened to be running.
+    `vitest.config.ts` now names an include anchored inside `src/`, which a nested checkout cannot be
+    reached by whatever it is called, and `src/lib/testDiscoveryScope.test.ts` guards both that anchor
+    and the other half, that no test file of this repo's own is left outside where the include looks.
   - `scripts/run-shell-fixtures.sh`: GATED since #2541. A fixture that exits 0 having printed no passing
     assertion fails, because that is what a fixture looks like when its body did not run (an early
     return, a loop over an empty list, a guard that skipped every case). All 61 fixtures print at least
