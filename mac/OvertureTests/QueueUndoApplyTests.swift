@@ -264,8 +264,11 @@ struct QueueUndoWiringGuardTests {
         let root = source("Overture/App/RootView.swift")
         #expect(app.contains("undoRequest.request()"))
         #expect(app.contains(".environment(undoRequest)"))
-        #expect(root.contains("onChange(of: undoRequest.token)"))
-        #expect(root.contains("performQueueUndo()"))
+        // #2726: the call and its trigger as ONE piece of code. Asserted separately, `performQueueUndo()`
+        // was satisfied by the function's own declaration, so the window could have stopped calling it
+        // entirely and this stayed green (L135).
+        #expect(SourceGuardHelper.containsCode(
+            ".onChange(of: undoRequest.token) { _, _ in performQueueUndo() }", in: root))
         // #1500: the entry can cover a whole night, so the window resolves every row it names rather than
         // one model it looked up itself.
         #expect(root.contains("QueueUndo.apply(entry, resolving:"))

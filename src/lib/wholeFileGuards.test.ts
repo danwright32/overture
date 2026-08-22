@@ -1,7 +1,10 @@
 import { describe, it, expect } from "vitest";
 import {
+  builtNeedleCount,
+  codeContainsAssertions,
   countOccurrences,
   findingsFor,
+  normalizedCode,
   positiveContainsAssertions,
   report,
   sourceBindings,
@@ -94,5 +97,68 @@ describe("finding a whole-file guard a second occurrence can answer (#2726)", ()
 
   it("says plainly what a clean report does and does not prove", () => {
     expect(report([], 172)).toContain("not every way a guard can be vacuous");
+  });
+
+  // #2726: the containsCode form, which this tool could not see at all.
+  //
+  // That blindness is the part worth testing. Converting a guard to containsCode is the natural fix for
+  // the comment-satisfies-the-guard case (L103), and while the tool was blind to the result, every such
+  // conversion silently REMOVED a guard from the report. A list that shrinks when guards MOVE rather than
+  // when they are FIXED reports a clean bill of health for a shrinking population (L98), and it would
+  // have made this very change's own zero a measurement of nothing.
+  describe("the containsCode form", () => {
+    const CODE_SHAPE = `
+@Suite("Wiring")
+struct WiringTests {
+    @Test func theViewPresentsIt() {
+        let queue = SourceGuardHelper.source("Overture/UI/QueueView.swift")
+        #expect(SourceGuardHelper.containsCode(".sheet(item: $pendingNightDismiss) { pending in", in: queue))
+    }
+}
+`;
+
+    it("sees a containsCode guard, which it used to ignore entirely", () => {
+      const found = codeContainsAssertions(CODE_SHAPE);
+      expect(found).toHaveLength(1);
+      expect(found[0].variable).toBe("queue");
+      expect(found[0].needle).toBe(".sheet(item: $pendingNightDismiss) { pending in");
+    });
+
+    it("counts a containsCode needle against the code, not the raw file", () => {
+      const app = [
+        "// .sheet(item: $pendingNightDismiss) { pending in   <- a comment about it",
+        ".sheet(item: $pendingNightDismiss) { pending in",
+      ].join("\n");
+      // Raw, the needle is there twice; as CODE it is there once, which is what containsCode reads. A
+      // tool counting the raw file would call this at risk and send somebody to fix a guard that is fine.
+      expect(countOccurrences(app, ".sheet(item: $pendingNightDismiss) { pending in")).toBe(2);
+      expect(countOccurrences(normalizedCode(app), ".sheet(item: $pendingNightDismiss) { pending in"))
+        .toBe(1);
+      expect(findingsFor("T.swift", CODE_SHAPE, () => app)).toHaveLength(0);
+    });
+
+    it("flags a containsCode needle that really does occur twice in the code", () => {
+      const app = [
+        ".sheet(item: $pendingNightDismiss) { pending in",
+        ".sheet(item: $pendingNightDismiss) { pending in",
+      ].join("\n");
+      const findings = findingsFor("T.swift", CODE_SHAPE, () => app);
+      expect(findings).toHaveLength(1);
+      expect(findings[0].occurrences).toBe(2);
+    });
+
+    // A needle BUILT at runtime cannot be read statically. It is COUNTED and said out loud rather than
+    // passed over, because an exemption nobody can see is how a blind spot becomes a clean bill of health.
+    it("counts a built needle instead of quietly exempting it", () => {
+      const built = `#expect(SourceGuardHelper.containsCode("a" + suffix, in: queue))`;
+      expect(codeContainsAssertions(built)).toHaveLength(0);
+      expect(builtNeedleCount(built)).toBe(1);
+      expect(builtNeedleCount(CODE_SHAPE)).toBe(0);
+    });
+
+    it("states the unanalysable count in the report every run", () => {
+      expect(report([], 188, 3)).toContain("not analysable: 3");
+      expect(report([], 188, 0)).toContain("not analysable: 0");
+    });
   });
 });

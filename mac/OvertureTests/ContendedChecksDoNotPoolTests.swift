@@ -176,7 +176,10 @@ struct ContendedChecksDoNotPoolTests {
     // (L46). The reader asks the question the run is about to answer: is the other slot alive right now.
     @Test func theLiveEstimateAsksWhetherTheOtherSlotIsAlive() {
         let text = SourceGuardHelper.source("Overture/Domain/ProbeSelection.swift")
-        #expect(text.contains("PrepQueueService.isRunning(slot: .prep"))
-        #expect(text.contains("contended:"))
+        // #2726: one site, not a bare `contended:`, which also matches the parameter's own declaration
+        // and its use inside `secondsPerRound`, so the loose search could never have gone red for the
+        // reader this test is about (L135).
+        #expect(SourceGuardHelper.containsCode(
+            "contended: PrepQueueService.isRunning(slot: .prep, now: now))", in: text))
     }
 }

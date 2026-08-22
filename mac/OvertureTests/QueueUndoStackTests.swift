@@ -256,8 +256,11 @@ struct UndoMenuWiringGuardTests {
 
     @Test func theMenuItemReadsItsTitleFromTheStackAndCallsTheRouter() {
         let app = source("Overture/App/OvertureApp.swift")
-        #expect(app.contains("Button(undoStack.undoMenuTitle)"))   // the title comes from the model
-        #expect(app.contains("performUndo()"))
+        // #2726: the title and the call as ONE piece of code. On its own, `performUndo()` was satisfied
+        // by the function's own declaration further up the file, so the menu item could have called
+        // nothing and this stayed green (L135).
+        #expect(SourceGuardHelper.containsCode(
+            "Button(undoStack.undoMenuTitle) { performUndo() }", in: app))
         #expect(app.contains("UndoRouting.destination("))
         #expect(app.contains("UndoRouting.forwardsToResponderChain("))
     }

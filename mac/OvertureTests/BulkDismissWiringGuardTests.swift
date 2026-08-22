@@ -24,7 +24,15 @@ struct BulkDismissWiringGuardTests {
     // reachable by one right-click, so the stage check is part of the wiring, not a styling detail.
     @Test func theActionIsScoutOnly() {
         let queue = source("Overture/UI/QueueView.swift")
-        #expect(queue.contains("if focusedStage == .scout"))
+        // #2726: the RULE, not a substring. `if focusedStage == .scout` guards two unrelated things in
+        // this view, so a bare search for it was answered by the other one and could never have gone red
+        // for this feature (L135). What this is actually about is that the menu is unreachable off Scout,
+        // so it asserts every place the menu is raised carries the stage check on the same line.
+        let raisers = queue.split(separator: "\n").filter { $0.contains("nightDismissMenu(group)") }
+        #expect(!raisers.isEmpty, "nothing raises the night-dismiss menu, so this asserts nothing")
+        let unguarded = raisers.filter { !$0.contains("focusedStage == .scout") }
+        #expect(unguarded.isEmpty,
+                "the night-dismiss menu is raised without the Scout-only check: \(unguarded)")
     }
 
     // The menu offers only the half that is possible for a night of untriaged shows: the seven endings for
@@ -45,7 +53,11 @@ struct BulkDismissWiringGuardTests {
         #expect(queue.contains("pendingNightDismiss = NightDismiss("))
         #expect(queue.contains(".sheet(item: $pendingNightDismiss)"))
         // A first-party branded sheet, not a stock system dialog (#1249, and Dan's standing preference).
-        #expect(queue.contains("SelfBookingConfirmSheet("))
+        // #2726: named at THIS presentation. `SelfBookingConfirmSheet(` occurs three times in this view
+        // (the self-booking guard, the probe confirm, and this one), so a bare search for it was answered
+        // by either of the other two and would have passed with the night-dismiss sheet deleted (L135).
+        #expect(SourceGuardHelper.containsCode(
+            ".sheet(item: $pendingNightDismiss) { pending in SelfBookingConfirmSheet(", in: queue))
         // The dismissal itself happens on the sheet's own buttons, and nowhere else in this view. Which
         // shows each button takes is pinned separately, below.
         #expect(queue.contains("onProceed: { dismissNight(pending,"))

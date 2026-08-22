@@ -189,7 +189,12 @@ struct ProducerCorrectionControlTests {
         // own property declaration (`var onCorrectProducer: (...) -> Void = { _ in }`), which is present
         // whether anything calls it or not, so the guard said "wired in" and asked "does this word exist"
         // (L135).
-        #expect(row.contains("onCorrectProducer("))
+        // #2726: BOTH calls, named. The control offers two answers and a bare `onCorrectProducer(` is
+        // satisfied by either, so deleting one menu item left the guard green (L135).
+        #expect(SourceGuardHelper.containsCode(
+            "onCorrectProducer(ProducerOverrideEditing.Standing.none)", in: row))
+        #expect(SourceGuardHelper.containsCode(
+            "onCorrectProducer(item.treatedAsVenue ? .promoted : .demoted)", in: row))
         #expect(row.contains("QueueModel.producerCorrectionLabel"))
         #expect(factory.contains("ProspectMutations.correctProducer"))
     }

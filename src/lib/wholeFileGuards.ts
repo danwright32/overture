@@ -41,6 +41,55 @@ const BINDING = /(\w+)\s*=\s*(?:SourceGuardHelper\.)?source\(\s*"Overture\/([^"]
 // are working as intended (L93).
 const POSITIVE_CONTAINS = /#expect\(\s*(\w+)\.contains\(\s*"((?:[^"\\]|\\.)*)"\s*\)/g;
 
+// #2726: the OTHER whole-file guard form, `SourceGuardHelper.containsCode("X", in: src)`, which this
+// tool could not see at all. That blindness matters more than a missing feature: converting a guard to
+// containsCode is the natural fix for the comment-satisfies-the-guard case (L103), and while this could
+// not see the result, every such conversion silently REMOVED a guard from the report. A list that shrinks
+// when guards move rather than when they are fixed is the L98 shape, and it would have made this change's
+// own "0 at risk" a measurement of nothing.
+//
+// Two forms are recognised, and the second is the honest half. A needle written as ONE string literal can
+// be counted. A needle BUILT at runtime (concatenated with `+`, or interpolated) cannot be read
+// statically, so it is counted and REPORTED as unanalysable rather than passed over: an exemption nobody
+// can see is how a blind spot becomes a clean bill of health.
+const CODE_CONTAINS = /containsCode\(\s*"((?:[^"\\]|\\.)*)"\s*,\s*in:\s*(\w+)\s*\)/g;
+const CODE_CONTAINS_BUILT = /containsCode\(\s*(?![\s]*"(?:[^"\\]|\\.)*"\s*,)/g;
+
+// The same reading `SourceGuardHelper.normalizedCode` does: comments dropped, every run of whitespace
+// collapsed to one space. Counting a containsCode needle against the RAW file would answer a different
+// question from the one the guard asks, which is the mistake this whole issue is about.
+export function normalizedCode(source: string): string {
+  return source
+    .split("\n")
+    .map((line) => {
+      const trimmed = line.trimStart();
+      if (trimmed.startsWith("//")) return "";
+      const marker = line.indexOf("//");
+      return marker === -1 ? line : line.slice(0, marker);
+    })
+    .join(" ")
+    .split(/\s+/)
+    .join(" ")
+    .trim();
+}
+
+export function codeContainsAssertions(testSource: string): ContainsAssertion[] {
+  const out: ContainsAssertion[] = [];
+  for (const m of testSource.matchAll(CODE_CONTAINS)) {
+    out.push({
+      variable: m[2],
+      needle: unescapeSwift(m[1]),
+      line: testSource.slice(0, m.index ?? 0).split("\n").length,
+    });
+  }
+  return out;
+}
+
+// How many containsCode calls in this file build their needle rather than writing it as one literal.
+export function builtNeedleCount(testSource: string): number {
+  return [...testSource.matchAll(CODE_CONTAINS_BUILT)].length;
+}
+
 export function sourceBindings(testSource: string): SourceBinding[] {
   const out: SourceBinding[] = [];
   for (const m of testSource.matchAll(BINDING)) {
@@ -104,12 +153,27 @@ export function findingsFor(
       out.push({ testFile, line: assertion.line, appPath, needle: assertion.needle, occurrences });
     }
   }
+  // #2726: and the containsCode form, counted against the NORMALIZED code, which is what that helper
+  // reads. Counting it against the raw file would answer a question the guard never asks.
+  for (const assertion of codeContainsAssertions(testSource)) {
+    const appPath = bindings.get(assertion.variable);
+    if (appPath === undefined) continue;
+    const app = readAppFile(appPath);
+    if (app === null) continue;
+    const occurrences = countOccurrences(normalizedCode(app), assertion.needle);
+    if (occurrences > 1) {
+      out.push({ testFile, line: assertion.line, appPath, needle: assertion.needle, occurrences });
+    }
+  }
   return out;
 }
 
-export function report(findings: Finding[], checked: number): string {
+export function report(findings: Finding[], checked: number, built = 0): string {
   const lines: string[] = [];
   lines.push(`positive whole-file contains assertions: ${checked}`);
+  // #2726: stated every run, even when it is the boring number, because an exemption nobody can see is
+  // how a blind spot becomes a clean bill of health.
+  lines.push(`containsCode guards whose needle is built rather than written, so not analysable: ${built}`);
   lines.push(`at risk (the searched text occurs more than once in the file): ${findings.length}`);
   lines.push("");
   if (findings.length === 0) {

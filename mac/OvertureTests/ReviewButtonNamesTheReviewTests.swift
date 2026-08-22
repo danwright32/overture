@@ -74,7 +74,10 @@ struct ReviewButtonNamesTheReviewTests {
     @Test func acontrolThatReallySendsKeepsItsSendLabel() {
         let source = SourceGuardHelper.source("Overture/UI/ReplyConversationView.swift")
 
-        #expect(source.contains("Send reply"))
+        // #2726: as CODE. A comment in this file uses the same words, and prose about a rule is where a
+        // rule is most often written down, so a text search read its own documentation as the control
+        // (L103).
+        #expect(SourceGuardHelper.containsCode("Send reply", in: source))
         #expect(source.contains("SendConfirmCopy.openReview") == false,
                 "this one sends; naming a review it does not open would be the same defect reversed")
     }

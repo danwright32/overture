@@ -52,8 +52,14 @@ struct UpdatePressIsWatchedTests {
     @Test func theNoticeHandsThePressToTheWatcher() {
         let source = SourceGuardHelper.source("Overture/UI/BuildFreshnessSheet.swift")
 
-        #expect(source.contains("UpdateAttemptState"),
+        // #2726: the notice HOLDING one, not the type name occurring. The bare name is satisfied by the
+        // initialiser line alone, so the stored property could have gone and this stayed green (L135).
+        #expect(SourceGuardHelper.containsCode(
+            "@State private var attempt: UpdateAttemptState", in: source),
                 "the notice owns the watcher, or nothing is looking when the run reports back")
+        #expect(SourceGuardHelper.containsCode(
+            "_attempt = State(initialValue: UpdateAttemptState(directory: directory))", in: source),
+                "and it has to be given the directory the run reports into")
         #expect(source.contains("attempt.pressed("),
                 "the id UpdateCommandFile.open hands back has to reach the watcher, or it waits on a press it cannot recognise")
         #expect(source.contains("UpdateFailureSheet("),

@@ -83,7 +83,15 @@ struct ShowSearchFieldKeyboardGuardTests {
     }
 
     @Test func arrowsAreIgnoredWhenThereIsNoResultListToMoveThrough() {
-        #expect(src.contains("guard showDropdown, !results.isEmpty else { return .ignored }"),
-                "swallowing the arrow keys with no results on screen would break the text field's own caret movement.")
+        // #2726: BOTH arrows, each named. The line is identical in the two handlers, so a single search
+        // was answered by whichever one survived and could never go red for the other (L135). The test's
+        // own name says "arrows", plural.
+        for (key, move) in [(".downArrow", "moveDown"), (".upArrow", "moveUp")] {
+            #expect(SourceGuardHelper.containsCode(
+                ".onKeyPress(\(key)) { let results = matches "
+                    + "guard showDropdown, !results.isEmpty else { return .ignored } "
+                    + "selection.\(move)(resultCount: results.count)", in: src),
+                    "swallowing \(key) with no results on screen would break the text field's own caret movement.")
+        }
     }
 }
