@@ -47,7 +47,7 @@ struct DuplicateContactMergeTests {
     @Test func aFormOnlyRowAndAnAddressRowForOnePersonBecomeOne() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx)
-        add(p, name: "Devin Marlowe", formURL: "https://www.instagram.com/devinmarlowe/")
+        add(p, name: "Devin Marlowe", formURL: "https://www.instagram.com/example-performer-act/")
         add(p, name: "Devin Marlowe", email: "devin@devinmarlowe.example")
         try ctx.save()
 
@@ -107,7 +107,7 @@ struct DuplicateContactMergeTests {
         let sent = add(p, name: "Juno Faraday", email: "olivia@example.test")
         sent.sendState = .sent
         sent.sentAt = Date(timeIntervalSince1970: 1_780_000_000)
-        add(p, name: "Juno Faraday", formURL: "https://www.instagram.com/junofaradayofficial/")
+        add(p, name: "Juno Faraday", formURL: "https://www.instagram.com/example-performer-duo/")
         try ctx.save()
 
         #expect(DuplicateContactMerge.reconcile(p, in: ctx) == 0)
@@ -147,7 +147,7 @@ struct DuplicateContactMergeTests {
     @Test func itIsIdempotent() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx)
-        add(p, name: "Devin Marlowe", formURL: "https://www.instagram.com/devinmarlowe/")
+        add(p, name: "Devin Marlowe", formURL: "https://www.instagram.com/example-performer-act/")
         add(p, name: "Devin Marlowe", email: "devin@devinmarlowe.example")
         try ctx.save()
 
@@ -220,7 +220,7 @@ struct DuplicateContactMergeTests {
     @Test func theStoreWidePassReportsWhatItMerged() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx)
-        add(p, name: "Devin Marlowe", formURL: "https://www.instagram.com/devinmarlowe/")
+        add(p, name: "Devin Marlowe", formURL: "https://www.instagram.com/example-performer-act/")
         add(p, name: "Devin Marlowe", email: "devin@devinmarlowe.example")
         try ctx.save()
 

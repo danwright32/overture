@@ -232,7 +232,7 @@ struct AttachedConversationChannelTests {
         #expect(FormOutreachCopy.channelLine(formURL: form, hasWatchableConversation: true)
                 == FormOutreachCopy.watchedLine)
         // A DM says the same thing about the route it actually went out on.
-        let dm = "https://instagram.com/corinhale"
+        let dm = "https://instagram.com/example-performer-form"
         #expect(FormOutreachCopy.channelLine(formURL: dm, hasWatchableConversation: false)
                 == FormOutreachCopy.sentLineSocial)
         #expect(FormOutreachCopy.channelLine(formURL: dm, hasWatchableConversation: true)

@@ -19,7 +19,7 @@ struct DeadEndContactTests {
     // #2612: the reversal, at the predicate. A social profile is a route Dan works by hand.
     @Test func asocialProfileIsARouteAgain() {
         #expect(!DeadEndContact.hasNoUsableRoute(email: nil,
-                                                 formURL: "https://www.instagram.com/devinmarlowe/"))
+                                                 formURL: "https://www.instagram.com/example-performer-act/"))
         #expect(!DeadEndContact.hasNoUsableRoute(email: "", formURL: "https://www.facebook.com/someone"))
     }
 
@@ -36,7 +36,7 @@ struct DeadEndContactTests {
     // their row.
     @Test func anAddressIsAlwaysAWayIn() {
         #expect(!DeadEndContact.hasNoUsableRoute(email: "ryan@example.test",
-                                                 formURL: "https://www.instagram.com/devinmarlowe/"))
+                                                 formURL: "https://www.instagram.com/example-performer-act/"))
     }
 
     // Nothing at all is the clearest dead end of the lot.

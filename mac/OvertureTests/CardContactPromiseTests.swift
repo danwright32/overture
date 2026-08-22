@@ -243,10 +243,10 @@ struct ContactCountPromiseTests {
         let ctx = ModelContext(try container())
         let p = show(ctx)
         p.setRecipients([performer("Sarah Matsushima", email: "sarah@example.com"),
-                         performer("Tobias Lund", form: "https://instagram.com/tobiaslund")])
+                         performer("Tobias Lund", form: "https://instagram.com/example-performer-solo")])
 
         let item = QueueItem(p)
-        #expect(item.displayedContactForms.map(\.absoluteString) == ["https://instagram.com/tobiaslund"])
+        #expect(item.displayedContactForms.map(\.absoluteString) == ["https://instagram.com/example-performer-solo"])
         #expect(item.contactCountLabel == "2 contacts")
     }
 

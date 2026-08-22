@@ -5,7 +5,7 @@ import SwiftData
 // #2265: a check that reached a social profile and stopped there is NOT a check that found nothing.
 //
 // Measured on the 2026-08-07 run, on 2 of its 3 shows. For Devin Marlowe the run spent nine web
-// calls, fetched instagram.com/devinmarlowe/ successfully, and emitted a contact whose only route
+// calls, fetched instagram.com/example-performer-act/ successfully, and emitted a contact whose only route
 // was that profile. A social DM is a dead end by Dan's standing rule, so the ingest refused it and the
 // card rendered a plain "No email found", with no reason. Verified the same day: a plain fetch of
 // devinmarlowe.example/contact-8-1 publishes devin@devinmarlowe.example and tessa@devinmarlowe.example.
@@ -49,7 +49,7 @@ struct SocialProfileIsNotNothingTests {
     private func socialOnlyContact() -> PrepContact {
         PrepContact(name: "Devin Marlowe", role: "Performer", email: nil,
                     method: "form_or_dm", confidence: "low",
-                    formUrl: "https://www.instagram.com/devinmarlowe/", provenance: "performer")
+                    formUrl: "https://www.instagram.com/example-performer-act/", provenance: "performer")
     }
 
     @Test func aRunThatOnlyReachedASocialProfileSaysSo() throws {

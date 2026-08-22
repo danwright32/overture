@@ -59,8 +59,8 @@ struct OnePersonOneContactTests {
         let ctx = ModelContext(try container())
         let key = show(ctx)
 
-        ingest([contact("Devin Marlowe", formUrl: "https://www.instagram.com/devinmarlowe/"),
-                contact("Juno Faraday", formUrl: "https://www.instagram.com/junofaradayofficial/")],
+        ingest([contact("Devin Marlowe", formUrl: "https://www.instagram.com/example-performer-act/"),
+                contact("Juno Faraday", formUrl: "https://www.instagram.com/example-performer-duo/")],
                key: key, into: ctx)
         ingest([contact("Devin Marlowe", email: "devin@devinmarlowe.example"),
                 contact("Juno Faraday", email: "junofaradaymusic@example.test")],
