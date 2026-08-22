@@ -149,7 +149,8 @@ assert_lacks "never run: never claims the runbook CHANGED (nothing to change aga
 check "never run: its own return code (2)" '[[ "${RC}" -eq 2 ]]'
 
 # 2. Fresh: the record names this exact runbook text.
-prep_eval_write_last_run "${RECORD}" "${FP_A}" "2026-08-11T09:00:00Z" 13 13 13 "${TMP}/runs/20260811-090000"
+prep_eval_write_last_run "${RECORD}" "${FP_A}" "2026-08-11T09:00:00Z" 13 13 13 "${TMP}/runs/20260811-090000" \
+  "a b c d e f g h i j k l m" 13
 run_verdict "${FP_A}" "${RECORD}"
 assert_contains "fresh: reports OK" "${OUT}" "OK:"
 assert_contains "fresh: names when the eval completed" "${OUT}" "2026-08-11T09:00:00Z"
@@ -185,7 +186,7 @@ echo "a fresh verdict claims only what the run measured:"
 
 # A run that scored 1 of 13 fixtures did not evaluate the runbook, it spot-checked it. Saying "OK"
 # and stopping there would let a targeted recheck stand in for the full set.
-prep_eval_write_last_run "${RECORD}" "${FP_A}" "2026-08-11T09:00:00Z" 1 13 1 "${TMP}/runs/x"
+prep_eval_write_last_run "${RECORD}" "${FP_A}" "2026-08-11T09:00:00Z" 1 13 1 "${TMP}/runs/x" "a" 1
 run_verdict "${FP_A}" "${RECORD}"
 check "targeted: still fresh (return code 0)" '[[ "${RC}" -eq 0 ]]'
 assert_contains "targeted: says the run covered only part of the fixture set" "${OUT}" "1 of 13"
@@ -193,10 +194,54 @@ assert_contains "targeted: names the rest as unscored rather than implying a ful
 
 # A completed run that FAILED fixtures is fresh and is also bad news. Reporting only the freshness
 # would be a green line over a judgment layer that said no.
-prep_eval_write_last_run "${RECORD}" "${FP_A}" "2026-08-11T09:00:00Z" 13 13 11 "${TMP}/runs/y"
+prep_eval_write_last_run "${RECORD}" "${FP_A}" "2026-08-11T09:00:00Z" 13 13 11 "${TMP}/runs/y" \
+  "a b c d e f g h i j k l m" 11
 run_verdict "${FP_A}" "${RECORD}"
 assert_contains "failing: names the fixtures the last run left failing" "${OUT}" "2 fixture"
 assert_contains "failing: points at the cheap recheck for them" "${OUT}" "--yes --failed"
+
+# --- coverage carried across runs (#2581) -------------------------------------------------------
+echo
+echo "a recheck does not shrink what the record says has been covered:"
+
+# The measured shape: a 13/13 pass, then a one-fixture recheck. `scored` is honestly 1, because that is
+# what THIS run did, and coverage against these same rules is still 13. Reading the first number as
+# coverage is what made a recheck look like a loss of ground.
+prep_eval_write_last_run "${RECORD}" "${FP_A}" "2026-08-12T13:36:00Z" 1 13 1 "${TMP}/runs/recheck" \
+  "a b c d e f g h i j k l m" 13
+run_verdict "${FP_A}" "${RECORD}"
+check "recheck: still fresh (return code 0)" '[[ "${RC}" -eq 0 ]]'
+assert_contains "recheck: coverage is stated as the full set, not as the one fixture rechecked" \
+  "${OUT}" "13 of 13"
+assert_lacks "recheck: is not reported as a targeted spot check of the whole rules" "${OUT}" "TARGETED"
+# Needle chosen to be unambiguous: "1 fixture" is a substring of "13 fixtures scored" on the line
+# above it, so it would pass without the sentence it is about ever being printed.
+assert_contains "recheck: still says what THIS run scored, so the two are not confused" "${OUT}" "re-scored 1"
+
+# Coverage, not this run, is what decides whether the rest is unscored. A record whose cumulative set is
+# short must still say so however complete the last run looked on its own.
+prep_eval_write_last_run "${RECORD}" "${FP_A}" "2026-08-12T13:36:00Z" 4 13 4 "${TMP}/runs/partial" \
+  "a b c d" 4
+run_verdict "${FP_A}" "${RECORD}"
+assert_contains "partial coverage: names the rest as unscored" "${OUT}" "TARGETED"
+assert_contains "partial coverage: counts by the covered set" "${OUT}" "4 of 13"
+
+# Outstanding failures are counted over the COVERED set too, so a recheck that passes its own one
+# fixture cannot silence the failures the earlier run left in the other twelve.
+prep_eval_write_last_run "${RECORD}" "${FP_A}" "2026-08-12T13:36:00Z" 1 13 1 "${TMP}/runs/recheck2" \
+  "a b c d e f g h i j k l m" 10
+run_verdict "${FP_A}" "${RECORD}"
+assert_contains "recheck: still names the failures outstanding across the covered set" "${OUT}" "left 3 fixture"
+assert_contains "recheck: points at the cheap recheck for them" "${OUT}" "--yes --failed"
+
+# A record written BEFORE these fields existed has no cumulative set. That is a real absence, not a
+# caller's omission, and it must read exactly as it did before rather than as zero coverage.
+printf 'runbook %s\ncompleted 2026-08-11T09:00:00Z\nscored 13\navailable 13\npassed 13\n' "${FP_A}" \
+  > "${RECORD}"
+run_verdict "${FP_A}" "${RECORD}"
+check "an older record is still read (return code 0)" '[[ "${RC}" -eq 0 ]]'
+assert_contains "an older record still reports its own numbers" "${OUT}" "13 of 13"
+assert_lacks "and is never reported as covering nothing" "${OUT}" "0 of 13"
 
 # --- the script end to end ----------------------------------------------------------------------
 echo
@@ -226,7 +271,7 @@ check "never run: exits 0, because this warns and never blocks" '[[ "${RC}" -eq 
 
 # Fresh against the REAL runbook in this checkout.
 prep_eval_write_last_run "${E2E_RECORD}" "$(prep_eval_runbook_fingerprint "${RUNBOOK}")" \
-  "2026-08-11T09:00:00Z" 13 13 13 "${TMP}/runs/z"
+  "2026-08-11T09:00:00Z" 13 13 13 "${TMP}/runs/z" "a b c d e f g h i j k l m" 13
 run_check "${STUB_PATH}"
 assert_contains "fresh: reports OK against the runbook actually in this checkout" "${OUT}" "OK:"
 check "fresh: exit 0" '[[ "${RC}" -eq 0 ]]'

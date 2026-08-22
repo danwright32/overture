@@ -379,6 +379,75 @@ check "the record did not exist yet while the run was still working" \
 check "the run directory DID already exist then (which is why it is not the record)" \
   '[[ "$(cat "${SNAP_RUNS}")" == *"${RECORD_RUNS_DIR}"* ]]'
 
+# --- a partial run no longer erases the coverage a fuller one earned (#2581) --------------------------
+#
+# `--yes --failed` re-runs only the fixtures the previous run failed, and used to write the record as
+# though it were the whole run. Measured 2026-08-12: a 17/17 pass at .overture-eval-runs/20260812-132142
+# was recorded, then a one-fixture recheck at 20260812-133616 overwrote it, leaving the record reading
+# "scored 1 / available 17 / passed 1". `scripts/check-prep-eval-freshness.sh` reads that record to tell a
+# later session what has been verified against the current runbook, so it then UNDER-reports coverage,
+# which is the wrong direction for a harness whose whole job is saying what has been checked.
+#
+# The fix keeps `scored` and `passed` meaning THIS RUN, and adds `covered` / `coveredNames` /
+# `coveredPassed` for the cumulative set. Merging is a set union over names, not arithmetic on counts:
+# counts cannot tell a recheck of an already-scored fixture from a fresh one, and adding them would
+# double count.
+echo "the partial-run merge (#2581):"
+
+# A SECOND targeted run, against the same runbook, on the record the first one left.
+PATH="${RECORD_STUB}:${PATH}" \
+  OVERTURE_EVAL_RUNS_DIR="${RECORD_RUNS_DIR}" \
+  OVERTURE_EVAL_FAILURES_FILE="${RECORD_STUB}/failures" \
+  OVERTURE_EVAL_LAST_RUN_FILE="${RECORD_FILE}" \
+  SNAP_RECORD="${SNAP_RECORD}" SNAP_RUNS="${SNAP_RUNS}" \
+  "${SCRIPT}" --yes presenter-not-venue >/dev/null 2>&1 || true
+
+check "the second run still reports only what IT scored" \
+  '[[ "$(prep_eval_record_field "${RECORD_FILE}" scored)" == "1" ]]'
+check "but the coverage carried forward, so a recheck does not erase a fuller run" \
+  '[[ "$(prep_eval_record_field "${RECORD_FILE}" covered)" == "2" ]]'
+check "and the record names the fixtures behind that number, not just the count" \
+  '[[ "$(prep_eval_record_field "${RECORD_FILE}" coveredNames)" == *"host-venue-not-target"* \
+     && "$(prep_eval_record_field "${RECORD_FILE}" coveredNames)" == *"presenter-not-venue"* ]]'
+check "re-scoring an already covered fixture does not double count it" \
+  '[[ "$(PATH="${RECORD_STUB}:${PATH}" OVERTURE_EVAL_RUNS_DIR="${RECORD_RUNS_DIR}" \
+         OVERTURE_EVAL_FAILURES_FILE="${RECORD_STUB}/failures" \
+         OVERTURE_EVAL_LAST_RUN_FILE="${RECORD_FILE}" \
+         SNAP_RECORD="${SNAP_RECORD}" SNAP_RUNS="${SNAP_RUNS}" \
+         "${SCRIPT}" --yes presenter-not-venue >/dev/null 2>&1; \
+       prep_eval_record_field "${RECORD_FILE}" covered)" == "2" ]]'
+
+# A prior record about a DIFFERENT runbook is not coverage of THIS one. Carrying it forward would be the
+# exact overclaim this record exists to prevent: verdicts scored against wording the current rules never
+# saw, presented as verdicts on the current rules.
+STALE_RECORD="${RECORD_STUB}/last-run-stale"
+prep_eval_write_last_run "${STALE_RECORD}" "a-different-runbook-entirely" "2026-08-11T09:00:00Z" \
+  17 17 17 "${RECORD_RUNS_DIR}/old" "one two three four" 17
+PATH="${RECORD_STUB}:${PATH}" \
+  OVERTURE_EVAL_RUNS_DIR="${RECORD_RUNS_DIR}" \
+  OVERTURE_EVAL_FAILURES_FILE="${RECORD_STUB}/failures-stale" \
+  OVERTURE_EVAL_LAST_RUN_FILE="${STALE_RECORD}" \
+  SNAP_RECORD="${SNAP_RECORD}" SNAP_RUNS="${SNAP_RUNS}" \
+  "${SCRIPT}" --yes host-venue-not-target >/dev/null 2>&1 || true
+
+check "coverage of a DIFFERENT runbook is never carried forward" \
+  '[[ "$(prep_eval_record_field "${STALE_RECORD}" covered)" == "1" ]]'
+# Both halves asserted: that the other runbook's names are gone AND that this run's own name is there.
+# The first alone passes just as well when the field does not exist at all, which is the state before
+# this change and the one the case is written to fail on.
+check "and the names from that other runbook are dropped with it" \
+  '[[ "$(prep_eval_record_field "${STALE_RECORD}" coveredNames)" != *"three"* \
+     && "$(prep_eval_record_field "${STALE_RECORD}" coveredNames)" == *"host-venue-not-target"* ]]'
+
+# coveredPassed is derived from the SAME converging failures file `--failed` reads, so the two can never
+# disagree about which fixtures are outstanding (L16).
+# Non-emptiness asserted first, because an absent field and an absent field compare equal and `-le`
+# on two empty strings is not a measurement of anything.
+check "coveredPassed is recorded as a number, not left absent" \
+  '[[ "$(prep_eval_record_field "${RECORD_FILE}" coveredPassed)" =~ ^[0-9]+$ ]]'
+check "and never claims more passes than there are covered fixtures" \
+  '[[ "$(prep_eval_record_field "${RECORD_FILE}" coveredPassed)" -le "$(prep_eval_record_field "${RECORD_FILE}" covered)" ]]'
+
 # And nothing in this fixture, across every real run above, touched the repo's own record.
 check "no run in this fixture wrote the repo's own eval record" \
   '[[ "$(real_last_run_state)" == "${REAL_LAST_RUN_BEFORE}" ]]'

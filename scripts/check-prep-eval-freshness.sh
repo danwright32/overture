@@ -41,7 +41,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # L11). Pure: takes a fingerprint and a path, so the fixture drives it against throwaway records.
 prep_eval_freshness() {
   local current="$1" record="$2"
-  local recorded completed scored available passed
+  local recorded completed scored available passed covered covered_passed
 
   if [ ! -f "${record}" ]; then
     echo "NEVER RUN: no completed run of the paid eval is recorded here (${record})."
@@ -68,20 +68,42 @@ prep_eval_freshness() {
   available="$(prep_eval_record_field "${record}" available || true)"
   passed="$(prep_eval_record_field "${record}" passed || true)"
 
-  if [ -n "${scored}" ] && [ -n "${available}" ]; then
-    echo "OK: the paid eval last completed ${completed} against this exact docs/prep-runbook.md (${scored} of ${available} fixtures scored)."
+  # #2581: COVERAGE against these rules is the cumulative set, which is not the same as what the last
+  # run happened to re-score. A `--yes --failed` recheck of one fixture used to overwrite the record of a
+  # full pass, so this check then under-reported what had been verified, which is the wrong direction for
+  # a harness whose whole job is saying what has been checked.
+  #
+  # A record written before those fields existed carries none of them. That is a real absence rather than
+  # a writer's omission, so it falls back to this run's own numbers, which is exactly how such a record
+  # read before, and under-reports rather than claiming coverage nobody measured.
+  covered="$(prep_eval_record_field "${record}" covered || true)"
+  covered_passed="$(prep_eval_record_field "${record}" coveredPassed || true)"
+  if [ -z "${covered}" ]; then
+    covered="${scored}"
+    covered_passed="${passed}"
+  fi
+
+  if [ -n "${covered}" ] && [ -n "${available}" ]; then
+    echo "OK: the paid eval last completed ${completed} against this exact docs/prep-runbook.md (${covered} of ${available} fixtures scored)."
   else
     echo "OK: the paid eval last completed ${completed} against this exact docs/prep-runbook.md."
+  fi
+
+  # Where the two differ, BOTH are said. The cumulative number alone would present verdicts taken days
+  # ago as though the last run produced them, and the last run's number alone is the under-report this
+  # issue was filed about (L11).
+  if [ -n "${covered}" ] && [ -n "${scored}" ] && [ "${scored}" -lt "${covered}" ] 2>/dev/null; then
+    echo "That last run re-scored ${scored} of them; the rest are verdicts carried forward from earlier runs against this same runbook text."
   fi
 
   # A run may be fresh and still have claimed less than a reader would assume. Both of these are
   # things the record measured, so saying them costs nothing and leaving them out would let a
   # one-fixture spot check, or a run that failed, read as a whole suite passing (L11).
-  if [ -n "${scored}" ] && [ -n "${available}" ] && [ "${scored}" -lt "${available}" ] 2>/dev/null; then
-    echo "That run was TARGETED at ${scored} of ${available} fixtures; the rest have not been scored against these rules."
+  if [ -n "${covered}" ] && [ -n "${available}" ] && [ "${covered}" -lt "${available}" ] 2>/dev/null; then
+    echo "That run was TARGETED at ${covered} of ${available} fixtures; the rest have not been scored against these rules."
   fi
-  if [ -n "${scored}" ] && [ -n "${passed}" ] && [ "${passed}" -lt "${scored}" ] 2>/dev/null; then
-    echo "It also left $(( scored - passed )) fixture(s) FAILING. Recheck just those with: scripts/eval-prep-runbook.sh --yes --failed"
+  if [ -n "${covered}" ] && [ -n "${covered_passed}" ] && [ "${covered_passed}" -lt "${covered}" ] 2>/dev/null; then
+    echo "It also left $(( covered - covered_passed )) fixture(s) FAILING. Recheck just those with: scripts/eval-prep-runbook.sh --yes --failed"
   fi
   return 0
 }
