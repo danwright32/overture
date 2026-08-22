@@ -76,6 +76,44 @@ heartbeat_stop() {
   wait "$1" 2>/dev/null || true
 }
 
+# heartbeat_stop_all <space-separated pids>
+#
+# #3099: heartbeat_stop over a LIST, for the OTHER jobs the EXIT traps end.
+#
+# #2981 reaped the heartbeat and left the chunk and claude kills in those same traps alone, on the
+# reasoning that they had not been observed to leave a notice. That reasoning was wrong and was never
+# checked: measured 2026-08-21 over the real logs in ~/Library/Application Support/Overture, 67
+# termination notices, 56 of them the heartbeat and the rest other jobs, including
+# `run_claude_on_chunk "$CHUNKD...` rendered into scout-extract-run.log. Same consequence as #2981: the
+# log then holds the program as well as the events, so a grep for a phrase can match code that never ran.
+#
+# It also closes a second defect on the same line, found while fixing the first. prep's trap read
+# `kill "$CLAUDE_PID"`, quoted, while the parallel path sets CLAUDE_PID to the space-separated list of
+# every chunk pid, commented "so the EXIT trap kills every chunk, not just one". A quoted list is ONE
+# argument: `kill "111 222"` exits 1 with "arguments must be process or job IDs" and kills nothing at all,
+# so a crash or an app quit orphaned every chunk the run had launched. The word-splitting here is
+# therefore load-bearing rather than incidental, and is what the caller gets by using this helper.
+#
+# Both `kill` and `wait` are `|| true` for heartbeat_stop's reason: this runs inside an EXIT trap, where a
+# non-zero status is not somebody's problem to hear about and `set -e` would turn one into a different
+# exit code than the run really had. An empty or blank list is a no-op returning 0, because the traps name
+# a variable that is legitimately empty for a run that never launched a chunk and for one already reaped.
+heartbeat_stop_all() {
+  # Unquoted on purpose: the argument is a LIST and must word-split. See the note above.
+  # shellcheck disable=SC2086
+  set -- ${1:-}
+  [ "$#" -gt 0 ] || return 0
+  for _hb_pid in "$@"; do
+    kill "$_hb_pid" 2>/dev/null || true
+  done
+  # Reaped in a second pass, after every one has been signalled, so a slow first process cannot delay the
+  # signal reaching the rest. `wait` is what stops the shell announcing the job, which is the whole point.
+  for _hb_pid in "$@"; do
+    wait "$_hb_pid" 2>/dev/null || true
+  done
+  return 0
+}
+
 heartbeat_guard_exit() {
   trap "heartbeat_stop_recorded_run '$1'" EXIT
 }
