@@ -15,7 +15,7 @@ set -uo pipefail
 #   2. A run was piped through a command that was not on PATH and exited 0 having tested nothing, so the
 #      pipe's status was read instead of the runner's (AGENTS.md's own warning, #2502).
 #
-# Ten outcomes, kept apart on purpose, because collapsing any two of them is how this lies:
+# Eleven outcomes, kept apart on purpose, because collapsing any two of them is how this lies:
 #
 #   CAUGHT            the mutation applied where it was aimed and the suite went red. The guard is real.
 #   SURVIVED          the mutation applied and the suite stayed green. The guard protects nothing.
@@ -27,6 +27,7 @@ set -uo pipefail
 #   DID NOT BUILD     the code stopped compiling, so no test ran (#2995, #2859). Says nothing either.
 #   MISPLACED FLAG    a flag was passed where a test scope goes, so it was never read (#2993).
 #   PERL VARIABLE     the expression carries an unescaped perl variable, which is almost never meant.
+#   SCOPE MISSED THE FILE  the scope ran real tests, but none that name the mutated file (#3098).
 #
 # The last three are the three ways a MALFORMED INSTRUCTION used to be reported as a verdict. Each was
 # measured: a build failure was folded into CAUGHT ("the compiler caught it"), which is true of a
@@ -225,6 +226,10 @@ if PERL_VARIABLE="$(unescaped_perl_variable "${EXPRESSION}")"; then
 fi
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# #3098: the rule that says whether a scope reached the tests for the file it broke. In its own file
+# because the whole of it is testable without paying for a mutation run, which driving mutate.sh is not.
+# shellcheck source=lib/mutation-scope.sh
+source "${REPO_ROOT}/scripts/lib/mutation-scope.sh"
 RUNNER="${OVERTURE_MUTATE_RUNNER:-${REPO_ROOT}/mac/scripts/run-tests-locked.sh}"
 
 # The runner has to be one command this shell can actually run, and that is proved BEFORE anything is
@@ -637,16 +642,49 @@ if [[ "${RUN_STATUS}" -ne 0 ]]; then
   exit 0
 fi
 
+# #3098: the last thing between a SURVIVED and being believed. A scope naming a suite that EXISTS but
+# does not hold the guard under test runs happily, passes, and reports SURVIVED, and NOTHING RAN
+# structurally cannot catch it because something did run. mutate.sh used to print a CAUTION about that,
+# which is a rule living only in prose and reaches nobody in exactly the runs where it matters (L27).
+# Refused rather than reported, on the same rule as this tool's other refusals: a SURVIVED is quoted as
+# evidence that a guard is fake, and evidence taken from a run that never executed the guard is worse
+# than no evidence.
+SCOPE_VERDICT="$(mutation_scope_reached_file "${RUN_LOG}" "${TARGET}" "$@")"
+SCOPE_STATUS=$?
+if [[ "${SCOPE_STATUS}" -eq 1 ]]; then
+  echo "SCOPE MISSED THE FILE - the run tested real code, but none of it names ${TARGET##*/}."
+  echo "  ${EXPRESSION}"
+  echo
+  echo "  So this says nothing about any guard: the suites that ran had no reason to notice the change."
+  echo "  ${SHAPE:-The runner printed no total.}"
+  echo "  Scope: $*"
+  echo
+  echo "  The suites that DO name it, one of which is the scope you meant:"
+  printf '%s\n' "${SCOPE_VERDICT}" | tail -n +2 | mutation_scope_format_candidates 15
+  exit 2
+fi
+
 echo "SURVIVED - the suite stayed green with the code broken, so nothing is guarding this."
 echo "  A guard that cannot go red is protecting nothing, and reads exactly like one that works (L1)."
 if [[ -n "${SHAPE}" ]]; then
   echo "  ${SHAPE}"
 fi
-if [[ $# -gt 0 ]]; then
-  echo
-  echo "  Before believing it: was the scope the right one? A scope naming a suite that EXISTS but does"
-  echo "  not hold the guard you are testing runs happily and reports exactly this. NOTHING RAN cannot"
-  echo "  catch that, because something did run. Check the count above against what you expected."
-  echo "  Scope: $*"
-fi
+# Which of the three non-refusing verdicts this was, in one line, so a SURVIVED that was never actually
+# checked against its scope does not read as one that was. An unmeasured check and a passed one look
+# identical from silence (L11).
+case "${SCOPE_VERDICT%%$'\n'*}" in
+  NO_SUITE_MENTIONS_IT)
+    echo "  No suite anywhere names ${TARGET##*/}, so nothing was guarding it whatever the scope was."
+    ;;
+  CANNOT_JUDGE)
+    echo "  Whether the scope reached this file could NOT be checked:"
+    printf '%s\n' "${SCOPE_VERDICT}" | tail -n +2 | sed 's/^/  /'
+    ;;
+  REACHED)
+    if [[ $# -gt 0 ]]; then
+      echo "  The scope did reach a suite that names ${TARGET##*/}, so it is the right scope:"
+      printf '%s\n' "${SCOPE_VERDICT}" | tail -n +2 | sed 's/^/  /'
+    fi
+    ;;
+esac
 exit 1
