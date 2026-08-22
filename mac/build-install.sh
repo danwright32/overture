@@ -121,12 +121,23 @@ OVERTURE_REPO_ROOT="$(cd "$(pwd)/.." && pwd)"
 OVERTURE_DATA_DIR="${HOME}/Library/Application Support/Overture"
 INSTALLED_COMMIT="$(git -C "${OVERTURE_REPO_ROOT}" rev-parse HEAD)"
 INSTALLED_COMMIT_DATE="$(git -C "${OVERTURE_REPO_ROOT}" log -1 --format=%cI HEAD)"
+
+# #2553: and WHERE it came from, which only this script can answer, because the app cannot run git.
+# Without it the panel compared commit DATES, and a build from an unmerged branch is newer than
+# everything on main, so it reported "up to date" in the words a correct install uses. The rule lives in
+# its own file with its own fixture, since this script has none and a rule written inline here could only
+# be proved by doing a real install.
+# shellcheck source=./scripts/lib/build-provenance.sh
+. "$(dirname "$0")/scripts/lib/build-provenance.sh"
+INSTALLED_PROVENANCE="$(build_provenance "${OVERTURE_REPO_ROOT}")"
+
 mkdir -p "${OVERTURE_DATA_DIR}"
 INSTALLED_TMP="$(mktemp "${OVERTURE_DATA_DIR}/.installed-build.XXXXXX")"
-printf '{"version":1,"commit":"%s","commitDate":"%s","repoPath":"%s"}\n' \
-  "${INSTALLED_COMMIT}" "${INSTALLED_COMMIT_DATE}" "${OVERTURE_REPO_ROOT}" > "${INSTALLED_TMP}"
+printf '{"version":2,"commit":"%s","commitDate":"%s","repoPath":"%s","provenance":"%s"}\n' \
+  "${INSTALLED_COMMIT}" "${INSTALLED_COMMIT_DATE}" "${OVERTURE_REPO_ROOT}" "${INSTALLED_PROVENANCE}" \
+  > "${INSTALLED_TMP}"
 mv -f "${INSTALLED_TMP}" "${OVERTURE_DATA_DIR}/installed-build.json"
-echo "==> Recorded installed build: ${INSTALLED_COMMIT:0:7}"
+echo "==> Recorded installed build: ${INSTALLED_COMMIT:0:7} (${INSTALLED_PROVENANCE})"
 
 # #2838: and point the Release domain at THIS checkout's three runner scripts, so the six absolute
 # paths that used to be typed from a runbook are derived from the install instead. Written after the

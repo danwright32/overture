@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1464 sentences**.
+Every sentence Overture can say to Dan: **1469 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -984,10 +984,14 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OmniFocusSync.swift`
 "It fetches the page, then follows each show's own link to get the venue and date."
     `UI/AddLeadSheet.swift`
+"It is not what has shipped, and it is working on your real data."
+    `Domain/BuildFreshnessPanel.swift`
 "It leaves your queue, filed as \(reason.label)."
     `Domain/BulkDismiss.swift`
 "It reaches them"
     `UI/DraftReviewView.swift`
+"It was installed before Overture started recording which code went into a build. The next install will settle it."
+    `Domain/BuildFreshnessPanel.swift`
 "It's their address"
     `UI/DraftReviewView.swift`
 "Its listing page couldn't be read"
@@ -1421,6 +1425,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Overture cannot reach its data, so there is nowhere to add a lead"
     `UI/AddLeadPresenter.swift`
 "Overture cannot tell how old this copy is"
+    `Domain/BuildFreshnessPanel.swift`
+"Overture cannot tell where this copy came from"
     `Domain/BuildFreshnessPanel.swift`
 "Overture cannot tell whether anything is missing"
     `App/StoreShrinkCheck.swift`
@@ -2059,6 +2065,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SendConfirmSheet.swift`
 "The email that will send, edit it here"
     `UI/SendConfirmSheet.swift`
+"The installer could not reach GitHub to check whether this build's code had been merged."
+    `Domain/BuildFreshnessPanel.swift`
 "The last day is before the first day."
     `Domain/DayOff.swift`
 "The last follow-up sync failed. Tap Retry sync to try again."
@@ -2171,6 +2179,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "This copy did not come from the installer, so there is no record of what went into it."
     `Domain/BuildFreshnessPanel.swift`
 "This copy is \(behindBy(installedAt: installedAt, shippedAt: shippedAt, now: now)) behind what has shipped, so anything fixed since then is not in front of you."
+    `Domain/BuildFreshnessPanel.swift`
+"This copy was built from unmerged code"
     `Domain/BuildFreshnessPanel.swift`
 "This draft says \(named). The show is \(show)."
     `Domain/EventDateInDraft.swift`

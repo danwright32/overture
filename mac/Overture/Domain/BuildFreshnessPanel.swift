@@ -18,7 +18,9 @@ enum BuildFreshnessPanel {
         case .upToDate: return false
         // Not knowing is shown, not swallowed. It means the mechanism itself is broken, and that is the
         // one state where saying nothing is indistinguishable from saying "you are up to date" (L11).
-        case .behind, .cannotTell: return true
+        // #2553: and a branch build is shown for a stronger version of the same reason. It is the state
+        // that used to render as "up to date", and the copy saying it is running against the real store.
+        case .behind, .cannotTell, .builtFromABranch: return true
         }
     }
 
@@ -119,6 +121,13 @@ final class BuildFreshnessState {
 enum BuildFreshnessCopy {
     static let title = "Overture is out of date"
     static let cannotTellTitle = "Overture cannot tell how old this copy is"
+    // #2553: its own title, because a branch build is not merely old. Old is fixed by catching up; this
+    // copy was never what shipped.
+    static let branchBuildTitle = "This copy was built from unmerged code"
+    // And a third title, because the two new reasons are about WHERE this copy came from, not how old it
+    // is. Reusing the age title over a sentence about provenance would have the two halves of the panel
+    // answering different questions.
+    static let cannotTellProvenanceTitle = "Overture cannot tell where this copy came from"
 
     // #2187: how far behind the copy is, which is time from the SHIPPED commit to now.
     //
@@ -153,12 +162,29 @@ enum BuildFreshnessCopy {
             return "This copy did not come from the installer, so there is no record of what went into it."
         case .cannotTell(.noShippedRecord):
             return "Nothing has recorded a merge on this Mac, so there is nothing to compare this copy against."
+        // The three below each say what their TITLE does not. A body that restates its own heading is
+        // the #843 defect, and it is easiest to write here, where every one of these is a sentence about
+        // the same small fact.
+        case .cannotTell(.provenanceNotRecorded):
+            return "It was installed before Overture started recording which code went into a build. The next install will settle it."
+        case .cannotTell(.provenanceUnknown):
+            return "The installer could not reach GitHub to check whether this build's code had been merged."
+        case .builtFromABranch:
+            return "It is not what has shipped, and it is working on your real data."
         }
     }
 
     static func title(_ verdict: BuildFreshness.Verdict) -> String {
-        if case .cannotTell = verdict { return cannotTellTitle }
-        return title
+        switch verdict {
+        case .builtFromABranch: return branchBuildTitle
+        case .cannotTell(.provenanceNotRecorded), .cannotTell(.provenanceUnknown):
+            return cannotTellProvenanceTitle
+        case .cannotTell: return cannotTellTitle
+        // `upToDate` never reaches a panel, since `shouldShow` refuses it, and it is not given a
+        // cheerful title of its own for the same reason `body` gives it no sentence: it would land in
+        // `docs/copy-inventory.md` as something Overture can say while being unreachable.
+        case .behind, .upToDate: return title
+        }
     }
 
     static let update = "Update Overture"
