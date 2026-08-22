@@ -7,7 +7,7 @@ import SwiftData
 // A pitch sent through a contact form or a social DM deliberately never stamps `gmailThreadId`
 // (`FormOutreach.recordFormOutreach`), so there is nothing for the reply watcher to fetch and no way
 // to be told when the presenter writes back by email. Measured live 2026-08-14: a form pitch through
-// caseengaines.com was answered from a gmail.com address, and Overture knew nothing about it while the
+// corinhale.example was answered from a gmail.com address, and Overture knew nothing about it while the
 // row went on saying it could not see a reply to that one.
 //
 // The two things this suite exists to hold, because both are the shape of a defect this repo keeps

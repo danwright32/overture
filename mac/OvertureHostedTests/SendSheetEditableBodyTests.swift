@@ -16,18 +16,18 @@ struct SendSheetEditableBodyTests {
         let ctx = ModelContext(try ModelContainer(
             for: Schema([Prospect.self, Recipient.self]),
             configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
-        let key = Prospect.makeNaturalKey(groupName: "Ryan James Monroe",
+        let key = Prospect.makeNaturalKey(groupName: "Devin Marlowe",
                                           performanceDate: "2026-08-01", venue: "54 Below")
-        let p = Prospect(naturalKey: key, groupName: "Ryan James Monroe", discipline: "music",
+        let p = Prospect(naturalKey: key, groupName: "Devin Marlowe", discipline: "music",
                          venue: "54 Below", performanceDate: "2026-08-01", sourceListingURL: nil,
                          websiteURL: nil, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 6, tier: "mid",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
                          possibleMatchName: nil, status: .contacted, ingestedAt: Date())
-        p.draftSubject = "Photographing Ryan James Monroe's August 1 show at 54 Below"
+        p.draftSubject = "Photographing Devin Marlowe's August 1 show at 54 Below"
         p.sentAt = Date(timeIntervalSince1970: 1_780_000_000)
         ctx.insert(p)
-        let r = Recipient(id: "ryan@ryanjamesmonroe.com", email: "ryan@ryanjamesmonroe.com",
+        let r = Recipient(id: "devin@devinmarlowe.example", email: "devin@devinmarlowe.example",
                           name: "Ryan", provenance: .act)
         r.sendState = .sent
         r.sentAt = p.sentAt

@@ -7,7 +7,7 @@ import SwiftData
 //
 // The card for Battle of the Siblings (The Green Room 42, Aug 6) said three things at once that could
 // not all be true: a "2 contacts" pill, a rust "No email found" badge, and a green link to
-// jerrickcavagnaro.com. Two independent defects, one card.
+// tobiaslund.example. Two independent defects, one card.
 //
 // This suite covers the first: the badge was written by the 2026-07-29 reachability PROBE, and the two
 // performers arrived days later from an ordinary Prep run. Only the probe path ever wrote
@@ -49,8 +49,8 @@ struct PrepIngestReachabilityTests {
         [PrepContact(name: "Sarah Matsushima", role: "Performer", email: nil, method: "form_or_dm",
                      confidence: "medium", formUrl: "https://instagram.com/sarah.bernadette",
                      provenance: "performer"),
-         PrepContact(name: "Jerrick Cavagnaro", role: "Performer", email: nil, method: "form_or_dm",
-                     confidence: "medium", formUrl: "https://jerrickcavagnaro.com/appointments",
+         PrepContact(name: "Tobias Lund", role: "Performer", email: nil, method: "form_or_dm",
+                     confidence: "medium", formUrl: "https://tobiaslund.example/appointments",
                      provenance: "performer")]
     }
 
@@ -98,7 +98,7 @@ struct PrepIngestReachabilityTests {
         // asserts is unchanged in point: a run that mints no verdict still stores every contact it found
         // a route to.
         #expect(p?.recipients.count == 2)
-        #expect(Set(p?.recipients.compactMap(\.name) ?? []) == ["Sarah Matsushima", "Jerrick Cavagnaro"])
+        #expect(Set(p?.recipients.compactMap(\.name) ?? []) == ["Sarah Matsushima", "Tobias Lund"])
     }
 
     // The failure path: the run answered this show with nothing. There is no new evidence, so the
@@ -175,7 +175,7 @@ struct ContactCountPromiseTests {
         let ctx = ModelContext(try container())
         let p = show(ctx)
         p.setRecipients([performer("Sarah Matsushima", form: "https://www.thegreenroom42.com/contact"),
-                         performer("Jerrick Cavagnaro", form: "https://jerrickcavagnaro.com/appointments")])
+                         performer("Tobias Lund", form: "https://tobiaslund.example/appointments")])
 
         let item = QueueItem(p)
         #expect(item.contactCountLabel == "2 found, 1 reachable")
@@ -200,7 +200,7 @@ struct ContactCountPromiseTests {
         let ctx = ModelContext(try container())
         let p = show(ctx)
         p.setRecipients([performer("Sarah Matsushima", email: "sarah@example.com"),
-                         performer("Jerrick Cavagnaro", email: "jerrick@example.com")])
+                         performer("Tobias Lund", email: "tobias@example.com")])
 
         #expect(QueueItem(p).contactCountLabel == "2 contacts")
     }
@@ -218,10 +218,10 @@ struct ContactCountPromiseTests {
         let ctx = ModelContext(try container())
         let p = show(ctx)
         p.setRecipients([performer("Sarah Matsushima", email: "sarah@example.com"),
-                         performer("Jerrick Cavagnaro", form: "https://jerrickcavagnaro.com/appointments")])
+                         performer("Tobias Lund", form: "https://tobiaslund.example/appointments")])
 
         let item = QueueItem(p)
-        #expect(item.displayedContactForms.map(\.absoluteString) == ["https://jerrickcavagnaro.com/appointments"])
+        #expect(item.displayedContactForms.map(\.absoluteString) == ["https://tobiaslund.example/appointments"])
         #expect(item.contactCountLabel == "2 contacts", "two people, two ways in")
     }
 
@@ -243,10 +243,10 @@ struct ContactCountPromiseTests {
         let ctx = ModelContext(try container())
         let p = show(ctx)
         p.setRecipients([performer("Sarah Matsushima", email: "sarah@example.com"),
-                         performer("Jerrick Cavagnaro", form: "https://instagram.com/jerrick")])
+                         performer("Tobias Lund", form: "https://instagram.com/tobiaslund")])
 
         let item = QueueItem(p)
-        #expect(item.displayedContactForms.map(\.absoluteString) == ["https://instagram.com/jerrick"])
+        #expect(item.displayedContactForms.map(\.absoluteString) == ["https://instagram.com/tobiaslund"])
         #expect(item.contactCountLabel == "2 contacts")
     }
 

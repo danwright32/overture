@@ -39,7 +39,7 @@ struct RecipientTests {
 
     @Test func firstNameUsesTheSharedSalutationHelper() {
         var r = Recipient(id: "x", email: "x@act.example", provenance: .act)
-        r.name = "Anna Pierre"
+        r.name = "Nora Calder"
         #expect(r.firstName == "Anna")
     }
 

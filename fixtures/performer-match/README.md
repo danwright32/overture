@@ -17,7 +17,7 @@ regress by "improving" the matcher:
    token *containment* (so "New York Ballet" matches "New York Theatre Ballet"), which is right for
    orgs and wrong for people: it would match the person "Jane Doe" to the org "Jane Doe Ensemble".
    The person-name path requires full token-set equality instead. Token *order* still does not
-   matter, so a surname-first program listing ("Vega, Marisol") matches.
+   matter, so a surname-first program listing ("Vega, Larkin") matches.
 2. **A conflicting email suppresses an otherwise-good name match.** Two different people share a
    name more often than one person changes their email, so a mismatch between the performer's email
    and the address on file is treated as evidence against the match, and nothing is auto-corrected

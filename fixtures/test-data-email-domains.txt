@@ -1,0 +1,88 @@
+# Domains that test data still addresses e-mail to, which the guard would otherwise refuse (#2839).
+#
+# This is a RATCHET, not an allowlist. TestDataEmailDomainGuardTests fails on any domain in test inputs
+# that is neither reserved (an .example / .invalid / .test / .localhost TLD, or example.com / .org / .net),
+# nor Dan's own sending identity, nor a domain the APP'S OWN non-comment source names, nor listed here.
+#
+# The list may SHRINK and may never GROW. A new entry means a real domain has just been written into test
+# data, which is the thing #2831, #2833 and #2839 exist to stop; convert it to a reserved one instead.
+#
+# Why it exists at all rather than the file being empty: 69 domains and 1078 occurrences were already here
+# when the guard was written, measured 2026-08-22. Refusing all of them at once would have meant either a
+# rewrite of a thousand lines of unrelated fixtures in the same change, or a guard nobody could go green
+# on, which gets switched off within a day (L93). Recording the backlog is what lets the rule bite NOW on
+# everything new while the backlog is worked down. #3109 tracks emptying it.
+#
+# Nothing here is a real private individual: those were scrubbed in #2839. What remains is placeholder
+# shapes (x.org, e.com, b.com), Google's own infrastructure domains that appear in Gmail API fixtures
+# (mail.gmail.com, googlemail.com), and real venues and organisations, which are public entities rather
+# than private people and are the lower-risk half.
+54below.com
+a.org
+act.com
+anotherhall.org
+atrenaudience.org
+atrerow.com
+aurora.org
+aurorastrings.org
+auroratrio.com
+b.com
+b.org
+bachsociety.org
+boreal.org
+bycnyc.org
+cell.org
+choir.org
+concerthall.org
+d.com
+danwrightphotography.com.ics
+e.com
+else.com
+elsewhere.com
+evc.org
+everyvoice.org
+everyvoicechoirs.org
+examplemail.com
+f.com
+familymail.com
+fomentproductions.com
+frigid.nyc
+github.com
+googlemail.com
+greenroom42.com
+groundcontroltouring.com
+hall.org
+henrystreet.org
+icchoir.org
+jalopytheatre.org
+madisonsquarepark.org
+mail.gmail.com
+merkinhall.org
+musiccenter.org
+northsidechamber.org
+nynf.org
+org.org
+pressplayrecords.com
+redhookrecords.com
+refused.org
+rosegroupny.com
+school.com
+secondendingensemble.com
+someagency.com
+someorg.org
+somewhere.org
+somewhereelse.com
+tank.com
+theatreforanewaudience.org
+theatrerow.com
+thecuttingroomnyc.com
+thegreenroom42.com
+thetanknyc.org
+thevenue.com
+ticketing.example.com
+vivaceartscollective.org
+wavehill.org
+x.org
+y.com
+y.org
+z.org

@@ -83,7 +83,7 @@ struct ClassifierMiscTests {
     // rows out of 128 and quietly killed the discipline split Dan asked for. These are live titles.
     @Test func recognizesMusicBeyondChoirWords() {
         #expect(EventClassifier.classify(ev(title: "Berliner Philharmoniker")).discipline == .music)
-        #expect(EventClassifier.classify(ev(title: "Anna Pierre, Piano Virgile Roche, Piano")).discipline == .music)
+        #expect(EventClassifier.classify(ev(title: "Nora Calder, Piano Virgile Roche, Piano")).discipline == .music)
         #expect(EventClassifier.classify(ev(title: "Diana Jipa, Violin Ștefan Doniga, Piano")).discipline == .music)
         #expect(EventClassifier.classify(ev(title: "Camerata Nordica Octet")).discipline == .music)
         #expect(EventClassifier.classify(ev(title: "Carnegie Hall Citywide: Cerus Quartet")).discipline == .music)

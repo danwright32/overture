@@ -244,7 +244,7 @@ enum Reachability {
         // NOT a shade of `nothingPublished`, whose wording is documented above as the one case that was
         // always true: a run that found a doorway and did not open it has not established that nothing is
         // published, and on 2026-08-07 the address really was one fetch away
-        // (ryan@ryanjamesmonroe.com, published, no login). Collapsing the two made that documentation
+        // (devin@devinmarlowe.example, published, no login). Collapsing the two made that documentation
         // false and hid the state where a re-check is most likely to succeed.
         case onlySocialProfile = "only_social_profile"
         // #1817: the check could not work out WHO to write to. No producing organisation was named, and no

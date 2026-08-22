@@ -34,7 +34,7 @@ struct EngagementLinkTests {
 
     // Three community venues on a short tour must all link together, not just adjacent pairs: dismissing
     // the FIRST date's row must still know about the THIRD date, two gaps away.
-    @Test func chainsThreeVenuesTransitively() {
+    @Test func chainsThaldernuesTransitively() {
         let out = EngagementLink.group([
             row("1", "Little Red Riding Hood", "2026-07-20", venue: "Venue A"),
             row("2", "Little Red Riding Hood", "2026-07-22", venue: "Venue B"),

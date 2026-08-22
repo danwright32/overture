@@ -1,17 +1,17 @@
 {
   "clients": [
     {
-      "id": "client-marisol",
-      "displayName": "Marisol Vega",
+      "id": "client-larkin",
+      "displayName": "Larkin Sable",
       "shortName": null,
-      "email": "marisol@vegaviolin.com",
+      "email": "larkin@sableviolin.example",
       "contractEmail": "",
       "phoneNumber": null,
       "isTaxExempt": null,
       "hasLeftReview": false,
       "specialBehaviors": [],
       "notes": null,
-      "hostingSite": "marisolvega.smugmug.com"
+      "hostingSite": "larkinvega.smugmug.com"
     },
     {
       "id": "client-priya",
@@ -54,7 +54,7 @@
     }
   ],
   "history": [
-    { "groupName": "Tomas Iyer", "status": "warm", "email": "tomas@iyerviolin.com" },
+    { "groupName": "Haven Roux", "status": "warm", "email": "haven@rouxviolin.example" },
     { "groupName": "Hollis Grant", "status": "dnc" },
     { "groupName": "Lena Whitfield", "status": "contacted" },
     { "groupName": "Devon Marsh", "status": "lost_hard" },
@@ -66,46 +66,46 @@
   "cases": [
     {
       "name": "a solo-artist Downbeat client matches on the performer's full name",
-      "performerName": "Marisol Vega",
+      "performerName": "Larkin Sable",
       "performerEmail": "",
       "production": "self",
       "expect": {
         "relationship": "booked",
-        "downbeatClientId": "client-marisol",
-        "matchedClientName": "Marisol Vega",
-        "matchedPerformerName": "Marisol Vega",
+        "downbeatClientId": "client-larkin",
+        "matchedClientName": "Larkin Sable",
+        "matchedPerformerName": "Larkin Sable",
         "emailCorroborated": false
       }
     },
     {
       "name": "a matching email corroborates the name match",
-      "performerName": "Marisol Vega",
-      "performerEmail": "marisol@vegaviolin.com",
+      "performerName": "Larkin Sable",
+      "performerEmail": "larkin@sableviolin.example",
       "production": "self",
       "expect": {
         "relationship": "booked",
-        "downbeatClientId": "client-marisol",
-        "matchedClientName": "Marisol Vega",
-        "matchedPerformerName": "Marisol Vega",
+        "downbeatClientId": "client-larkin",
+        "matchedClientName": "Larkin Sable",
+        "matchedPerformerName": "Larkin Sable",
         "emailCorroborated": true
       }
     },
     {
       "name": "email corroboration is case-insensitive",
-      "performerName": "Marisol Vega",
-      "performerEmail": "MARISOL@VegaViolin.COM",
+      "performerName": "Larkin Sable",
+      "performerEmail": "LARKIN@SableViolin.EXAMPLE",
       "production": "self",
       "expect": {
         "relationship": "booked",
-        "downbeatClientId": "client-marisol",
-        "matchedClientName": "Marisol Vega",
-        "matchedPerformerName": "Marisol Vega",
+        "downbeatClientId": "client-larkin",
+        "matchedClientName": "Larkin Sable",
+        "matchedPerformerName": "Larkin Sable",
         "emailCorroborated": true
       }
     },
     {
       "name": "a conflicting email is evidence against the match, so the name match is suppressed",
-      "performerName": "Marisol Vega",
+      "performerName": "Larkin Sable",
       "performerEmail": "someone.else@example.com",
       "production": "self",
       "expect": {
@@ -131,14 +131,14 @@
     },
     {
       "name": "surname-first program listings still match (token order is not significant)",
-      "performerName": "Vega, Marisol",
+      "performerName": "Vega, Larkin",
       "performerEmail": "",
       "production": "self",
       "expect": {
         "relationship": "booked",
-        "downbeatClientId": "client-marisol",
-        "matchedClientName": "Marisol Vega",
-        "matchedPerformerName": "Vega, Marisol",
+        "downbeatClientId": "client-larkin",
+        "matchedClientName": "Larkin Sable",
+        "matchedPerformerName": "Vega, Larkin",
         "emailCorroborated": false
       }
     },
@@ -157,8 +157,8 @@
     },
     {
       "name": "an agency-produced performance never enters the matcher at all",
-      "performerName": "Marisol Vega",
-      "performerEmail": "marisol@vegaviolin.com",
+      "performerName": "Larkin Sable",
+      "performerEmail": "larkin@sableviolin.example",
       "production": "agency",
       "expect": {
         "relationship": "none",
@@ -170,8 +170,8 @@
     },
     {
       "name": "an unknown-production performance never enters the matcher at all",
-      "performerName": "Marisol Vega",
-      "performerEmail": "marisol@vegaviolin.com",
+      "performerName": "Larkin Sable",
+      "performerEmail": "larkin@sableviolin.example",
       "production": "unknown",
       "expect": {
         "relationship": "none",
@@ -183,14 +183,14 @@
     },
     {
       "name": "a warm booking-history record matches on the performer's name",
-      "performerName": "Tomas Iyer",
+      "performerName": "Haven Roux",
       "performerEmail": "",
       "production": "self",
       "expect": {
         "relationship": "warm",
         "downbeatClientId": null,
         "matchedClientName": null,
-        "matchedPerformerName": "Tomas Iyer",
+        "matchedPerformerName": "Haven Roux",
         "emailCorroborated": false
       }
     },
@@ -248,27 +248,27 @@
     },
     {
       "name": "a history record's email corroborates the match, same as a client's does",
-      "performerName": "Tomas Iyer",
-      "performerEmail": "tomas@iyerviolin.com",
+      "performerName": "Haven Roux",
+      "performerEmail": "haven@rouxviolin.example",
       "production": "self",
       "expect": {
         "relationship": "warm",
         "downbeatClientId": null,
         "matchedClientName": null,
-        "matchedPerformerName": "Tomas Iyer",
+        "matchedPerformerName": "Haven Roux",
         "emailCorroborated": true
       }
     },
     {
       "name": "a differing history email does NOT suppress: that column often holds an agent, not the performer (#779)",
-      "performerName": "Tomas Iyer",
+      "performerName": "Haven Roux",
       "performerEmail": "someone.else@example.com",
       "production": "self",
       "expect": {
         "relationship": "warm",
         "downbeatClientId": null,
         "matchedClientName": null,
-        "matchedPerformerName": "Tomas Iyer",
+        "matchedPerformerName": "Haven Roux",
         "emailCorroborated": false
       }
     },

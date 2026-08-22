@@ -64,12 +64,12 @@ enum FormOutreachCopy {
 
     // #2169: WHERE the pitch went, for the slot that names who the next email reaches on every other row.
     //
-    // Dan, reading the Alex Syiek row cold: "why does it say 'no contact' and 'sent through their form'".
+    // Dan, reading the Perri Vale row cold: "why does it say 'no contact' and 'sent through their form'".
     // The slot fell back to "no contact" because a form pitch has no address, while the record it renders
     // from was holding the form URL the whole time. A line may claim only what its check measured, and
     // what was measured is "no email address", not "no contact" (L11).
     //
-    // The host alone, without the scheme, the leading www or the path: "alexsyiek.com" reads as a place
+    // The host alone, without the scheme, the leading www or the path: "perrivale.example" reads as a place
     // Dan recognises, where the full URL reads as a link he has to parse. Nil rather than a guess when
     // there is no usable host, so the caller decides what to say instead of being handed a fragment.
     static func routeLine(formURL: String?) -> String? {

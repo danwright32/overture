@@ -30,7 +30,7 @@ struct EditAFollowUpBeforeItSendsTests {
 
     private func show(_ ctx: ModelContext, passed: Bool = false) -> (Prospect, Recipient) {
         let date = passed ? "2026-08-01" : "2026-12-01"
-        let p = Prospect(naturalKey: "k", groupName: "Ryan James Monroe", discipline: "music",
+        let p = Prospect(naturalKey: "k", groupName: "Devin Marlowe", discipline: "music",
                          venue: "54 Below", performanceDate: date, sourceListingURL: nil,
                          websiteURL: nil, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 6, tier: "mid",
@@ -38,7 +38,7 @@ struct EditAFollowUpBeforeItSendsTests {
                          possibleMatchName: nil, status: .contacted)
         p.sentAt = Date(timeIntervalSince1970: 1_780_000_000)
         ctx.insert(p)
-        let r = Recipient(id: "ryan@ryanjamesmonroe.com", email: "ryan@ryanjamesmonroe.com",
+        let r = Recipient(id: "devin@devinmarlowe.example", email: "devin@devinmarlowe.example",
                           name: "Ryan", provenance: .act)
         r.sendState = .sent
         r.sentAt = p.sentAt
@@ -85,12 +85,12 @@ struct EditAFollowUpBeforeItSendsTests {
     @Test func editingTheBodyLeavesTheThreadingSubjectAlone() async throws {
         let ctx = try context()
         let (p, r) = show(ctx)
-        p.draftSubject = "Photographing Ryan James Monroe's December 1 show at 54 Below"
+        p.draftSubject = "Photographing Devin Marlowe's December 1 show at 54 Below"
         let sender = CapturingSender()
 
         _ = await SendService.sendFollowUp(r, of: p, now: Date(), sender: sender, body: "Short note.")
 
-        #expect(sender.last?.subject == "Re: Photographing Ryan James Monroe's December 1 show at 54 Below")
+        #expect(sender.last?.subject == "Re: Photographing Devin Marlowe's December 1 show at 54 Below")
     }
 
     // Failure path: an emptied box is not a message. Nothing leaves, and the send says so rather than

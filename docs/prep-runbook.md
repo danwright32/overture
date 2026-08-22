@@ -305,10 +305,10 @@ item's `production` field first:
       used to drop all of them: measured across 54 Below's 61 listings, 17 bill a producer and 16 of
       those name an individual. Research a person the same way you would research a company, starting
       with their own site (the canonical `firstnamelastname.com` guess, which is one fetch and is how
-      caseengaines.com/contact was there to be found all along).
+      corinhale.example/contact was there to be found all along).
       **A credited producer is a `primary` contact**, whether person or company: they own the show and
       can say yes. That is the existing tier rule, restated here because this is the field that names
-      them, and because the run that missed Caseen Gaines returned 13 contacts and not one primary.
+      them, and because the run that missed Corin Hale returned 13 contacts and not one primary.
     - Otherwise read `showListing.text` yourself and look for one: a possessive credit in the title
       line, "presented by" / "produced by", or a bio naming a founder's OWN company ("is the
       Founder/Artistic Director of ICB Productions"). A company you find that way is a legitimate
@@ -491,7 +491,7 @@ in order, stop at the first that works:
    **(b) When search has not surfaced the target's own site, fetch the canonical guess directly**,
    once: `firstnamelastname.com` for a person, the organisation's name for an organisation. Search is
    not a reliable route to a small act's own site: on 2026-08-07 the literal string
-   `"ryanjamesmonroe.com"` was searched and returned Facebook, Apple Music, SoundCloud and LinkedIn,
+   `"devinmarlowe.example"` was searched and returned Facebook, Apple Music, SoundCloud and LinkedIn,
    while one direct fetch of that domain returned the site and its published address.
 
    This does NOT relax the strict verification rule. An address READ off a page a fetch returned is
@@ -1083,11 +1083,11 @@ above is written in the third person because it was designed for a third party b
 told about the act (the act's own marketing contact, a presenter), and it still serves
 that audience unchanged. A `provenance: "performer"` contact is different: the email
 goes directly to the person the draft would otherwise be describing, so writing about
-them in the third person ("I saw Virgile Roche and Anna Pierre are making their
+them in the third person ("I saw Virgile Roche and Nora Calder are making their
 debut...") reads like a mail-merge mistake to the one person reading it. For every
 `provenance: "performer"` contact, ALSO write that contact's own `overrideBody`,
 addressing them directly in second person ("you"/"your") instead: "I saw you and Anna
-Pierre are making your U.S. debut..." not "I saw Virgile Roche and Anna Pierre are
+Pierre are making your U.S. debut..." not "I saw Virgile Roche and Nora Calder are
 making their debut...". Everything else about it follows the SAME rules as the shared
 body above, INCLUDING the greeting rule (#2545): this contact receives their own email, so
 its `overrideBody` opens with its own greeting naming them, "Hi Virgile," then a blank line

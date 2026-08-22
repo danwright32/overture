@@ -24,7 +24,7 @@ struct PerformerMatchVisibilityTests {
                            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
     }
 
-    private let vega = DownbeatClient(id: "client-marisol", displayName: "Marisol Vega", shortName: nil,
+    private let vega = DownbeatClient(id: "client-larkin", displayName: "Larkin Sable", shortName: nil,
                                       email: "", contractEmail: "", phoneNumber: nil, isTaxExempt: nil,
                                       hasLeftReview: false, specialBehaviors: [], notes: nil, hostingSite: "")
     private let tanaka = DownbeatClient(id: "client-aki", displayName: "Aki Tanaka", shortName: nil,
@@ -84,7 +84,7 @@ struct PerformerMatchVisibilityTests {
         p.priorRelationship = "booked"
         p.fitScore = 27
         p.relationshipCorrectedByPerformerMatch = true
-        p.performerMatchNote = "Matched performer 'Marisol Vega' to Downbeat client Marisol Vega."
+        p.performerMatchNote = "Matched performer 'Larkin Sable' to Downbeat client Larkin Sable."
         p.performerMatchDismissed = true
 
         #expect(try rowShowsTheMatch(p) == false)   // Dan is shown nothing to confirm or reject
@@ -101,7 +101,7 @@ struct PerformerMatchVisibilityTests {
         let ctx = ModelContext(try container())
         let p = coldShow(ctx)
 
-        _ = PrepImporter.ingest(prepResults(p.naturalKey, performer: "Marisol Vega"),
+        _ = PrepImporter.ingest(prepResults(p.naturalKey, performer: "Larkin Sable"),
                                 into: ctx, clients: [vega], history: [])
 
         #expect(p.relationshipCorrectedByPerformerMatch)
@@ -112,7 +112,7 @@ struct PerformerMatchVisibilityTests {
     @Test func dismissingTurnsTheCorrectionOffRatherThanHidingIt() throws {
         let ctx = ModelContext(try container())
         let p = coldShow(ctx)
-        _ = PrepImporter.ingest(prepResults(p.naturalKey, performer: "Marisol Vega"),
+        _ = PrepImporter.ingest(prepResults(p.naturalKey, performer: "Larkin Sable"),
                                 into: ctx, clients: [vega], history: [])
 
         p.dismissPerformerMatch()
@@ -126,7 +126,7 @@ struct PerformerMatchVisibilityTests {
     @Test func confirmingKeepsItVisible() throws {
         let ctx = ModelContext(try container())
         let p = coldShow(ctx)
-        _ = PrepImporter.ingest(prepResults(p.naturalKey, performer: "Marisol Vega"),
+        _ = PrepImporter.ingest(prepResults(p.naturalKey, performer: "Larkin Sable"),
                                 into: ctx, clients: [vega], history: [])
 
         p.confirmPerformerMatch()
@@ -141,7 +141,7 @@ struct PerformerMatchVisibilityTests {
     @Test func aSupersedingOrgMatchClearsBothTogether() throws {
         let ctx = ModelContext(try container())
         let p = coldShow(ctx)
-        _ = PrepImporter.ingest(prepResults(p.naturalKey, performer: "Marisol Vega"),
+        _ = PrepImporter.ingest(prepResults(p.naturalKey, performer: "Larkin Sable"),
                                 into: ctx, clients: [vega], history: [])
 
         p.clearPerformerMatch()
@@ -160,7 +160,7 @@ struct PerformerMatchVisibilityTests {
     @Test func aSecondFindingOnAShowWhoseFirstMatchWasRejectedStillReachesDan() throws {
         let ctx = ModelContext(try container())
         let p = coldShow(ctx)
-        _ = PrepImporter.ingest(prepResults(p.naturalKey, performer: "Marisol Vega"),
+        _ = PrepImporter.ingest(prepResults(p.naturalKey, performer: "Larkin Sable"),
                                 into: ctx, clients: [vega], history: [])
         p.dismissPerformerMatch()
         try ctx.save()

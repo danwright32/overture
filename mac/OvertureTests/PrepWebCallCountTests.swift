@@ -117,7 +117,7 @@ struct PrepWebCallCountTests {
 
     // And the ordinary run, where every show was one party, says exactly what it always said. A sentence
     // that grows a clause on every run is a sentence Dan stops reading.
-    @Test func aRunWhereEveryShowWasOnePartyKeepsTheShorterSentence() {
+    @Test func aRunWhealderryShowWasOnePartyKeepsTheShorterSentence() {
         var outcome = PrepImporter.Outcome()
         outcome.webCalls = PrepResults.WebCalls(recorded: true, total: 47, items: 2, parties: 2,
                                                 capPerItem: 15, allowance: 30, overCap: true)

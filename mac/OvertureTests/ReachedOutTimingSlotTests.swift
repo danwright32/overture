@@ -27,7 +27,7 @@ struct ReachedOutTimingSlotTests {
                            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
     }
 
-    private func makeShow(_ ctx: ModelContext, day: String?, group: String = "Ryan James Monroe") -> Prospect {
+    private func makeShow(_ ctx: ModelContext, day: String?, group: String = "Devin Marlowe") -> Prospect {
         let p = Prospect(naturalKey: "\(group)|\(day ?? "none")", groupName: group, discipline: "jazz",
                          venue: "V", performanceDate: day, sourceListingURL: nil, websiteURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
@@ -40,7 +40,7 @@ struct ReachedOutTimingSlotTests {
 
     @discardableResult
     private func makeRecipient(_ ctx: ModelContext, on p: Prospect, sentAt: Date,
-                               id: String = "ryan@ryanjamesmonroe.com") -> Recipient {
+                               id: String = "devin@devinmarlowe.example") -> Recipient {
         let r = Recipient(id: id, email: id, provenance: .act)
         r.sentAt = sentAt
         r.sendState = .sent

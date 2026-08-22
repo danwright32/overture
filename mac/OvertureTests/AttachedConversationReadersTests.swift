@@ -43,21 +43,21 @@ struct AttachedConversationReadersTests {
         p.draftSubject = "Photographing 54 Sings Shuffle Along."
         p.draftBody = "Hello,"
         ctx.insert(p)
-        let form = "https://caseengaines.example/contact"
+        let form = "https://corinhale.example/contact"
         let r = Recipient(id: Recipient.makeId(email: nil, formURL: form)!, email: nil,
-                          name: "Caseen Gaines", provenance: .act,
+                          name: "Corin Hale", provenance: .act,
                           contactMethodRaw: ContactMethod.formOrDM.rawValue, contactFormURL: form)
         p.setRecipients([r])
         p.recordFormOutreach(r, now: now.addingTimeInterval(-20 * 86_400), formURL: form)
         // What #2715 writes: the conversation, and the address they wrote from.
         r.gmailThreadId = "thread-abc"
-        r.email = "caseen.gaines@gmail.example"
+        r.email = "corin.hale@gmail.example"
         if replied {
             r.replied = true
             r.repliedAt = now.addingTimeInterval(-86_400)
             r.inboundReplyMessageId = "<theirs@mail.gmail.com>"
-            r.replyFromAddress = "caseen.gaines@gmail.example"
-            r.replyAudience = ["caseen.gaines@gmail.example"]
+            r.replyFromAddress = "corin.hale@gmail.example"
+            r.replyAudience = ["corin.hale@gmail.example"]
         }
         return (p, r)
     }
@@ -75,7 +75,7 @@ struct AttachedConversationReadersTests {
         p.draftBody = "Hello,"
         ctx.insert(p)
         let r = Recipient(id: "jake@aurorastrings.example", email: "jake@aurorastrings.example",
-                          name: "Jake Berg", provenance: .act)
+                          name: "Sorrel Mane", provenance: .act)
         r.sendState = .sent
         r.sentAt = now.addingTimeInterval(-20 * 86_400)
         r.gmailThreadId = "thread-real"
@@ -222,7 +222,7 @@ struct AttachedConversationReadersTests {
         let repair = GmailThreadingRepair(fromEmail: me)
 
         let outcome = await repair.repairMessageIds(in: ctx, token: "t", fetch: responder { _ in
-            (self.threadJSON([(from: "Caseen <caseen.gaines@gmail.example>",
+            (self.threadJSON([(from: "Corin <corin.hale@gmail.example>",
                                messageId: "<theirs@mail.gmail.com>", at: 1),
                               (from: "Dan Wright <\(self.me)>",
                                messageId: "<dans-own@mail.gmail.com>", at: 2)]), 200)

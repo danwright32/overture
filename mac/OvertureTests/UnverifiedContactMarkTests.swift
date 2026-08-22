@@ -54,8 +54,8 @@ struct UnverifiedContactMarkTests {
     }
 
     @Test func aGuessedAddressIsStillIdentified() throws {
-        let i = item(ModelContext(try container()), [contact(email: "jake@jakebergmagic.example", .low)])
-        #expect(i.unverifiedContactEmails == ["jake@jakebergmagic.example"])
+        let i = item(ModelContext(try container()), [contact(email: "sorrel@sorrelmanemagic.example", .low)])
+        #expect(i.unverifiedContactEmails == ["sorrel@sorrelmanemagic.example"])
     }
 
     @Test func anAddressReadOffARealPageIsNotFlagged() throws {
@@ -88,7 +88,7 @@ struct UnverifiedContactMarkTests {
     // sibling beside it earns no warning. His words: "it wouldn't say that if we found one unverified
     // and one verified."
     @Test func theBadgeStaysPlainWhenEvenOneContactWasVerified() throws {
-        let i = item(ModelContext(try container()), [contact(email: "anna@annapierre.example", .high),
+        let i = item(ModelContext(try container()), [contact(email: "nora@noracalder.example", .high),
                                                      contact(email: "j.reed@gmail.example", .low)])
         #expect(!i.onlyUnverifiedEmailsFound)
     }

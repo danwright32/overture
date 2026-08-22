@@ -147,7 +147,7 @@ struct RankerTests {
     // 0 the classifier could never return it: no-signal rows fell back to `.music` and scored 1. Making
     // `.other` reachable therefore risked re-scoring live rows as a side effect of a bug fix. It does
     // not, and this test pins the reason: the row that sits exactly on the high-tier threshold of 5
-    // ("Anna Pierre, Piano Virgile Roche, Piano") says "Piano", so the music vocabulary Phase 0 added
+    // ("Nora Calder, Piano Virgile Roche, Piano") says "Piano", so the music vocabulary Phase 0 added
     // keeps it `.music` and keeps its point. Every live row scoring at or above 5 carries a music word.
     // Only genuinely unreadable titles reach `.other`, and they already score at or below 3, so no row
     // changes tier. If this ever goes red, a real prospect is being demoted by a classifier change and
@@ -155,7 +155,7 @@ struct RankerTests {
     @Test func onlyUnreadableTitlesPayTheOtherBaseline() {
         #expect(Ranker.disciplinePoints(.other) == 0)
         #expect(EventClassifier.classify(ExtractedEvent(
-            title: "Anna Pierre, Piano Virgile Roche, Piano", presenter: nil,
+            title: "Nora Calder, Piano Virgile Roche, Piano", presenter: nil,
             venue: "Weill Recital Hall", performanceDate: "2026-06-25", sourceUrl: nil
         )).discipline == .music)
     }

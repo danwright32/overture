@@ -54,7 +54,7 @@ struct DraftEventDateCasesTests {
     // A corpus that had drifted to all-accept would pass the test above while proving nothing, so the
     // shape of the corpus itself is asserted: it must exercise all three verdicts, and the accept side
     // has to be the larger half.
-    @Test func theCorpusExercisesAllThreeVerdictsAndLeansOnTheAcceptSide() throws {
+    @Test func theCorpusExercisesAllThalderrdictsAndLeansOnTheAcceptSide() throws {
         let cases = try corpus().cases
         let byVerdict = Dictionary(grouping: cases, by: \.expect).mapValues(\.count)
         #expect(byVerdict["ok", default: 0] >= 10)

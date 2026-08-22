@@ -21,7 +21,7 @@ struct ReplyProposalSweepTests {
 
     private let me = "dan@danwrightphotography.com"
     private let now = Date(timeIntervalSince1970: 1_786_000_000)
-    private let route = "https://www.caseengaines.com/contact"
+    private let route = "https://www.corinhale.example/contact"
 
     private func show(_ ctx: ModelContext, key: String = "k") -> Prospect {
         let p = Prospect(naturalKey: key, groupName: "54 Sings Shuffle Along", discipline: "music",
@@ -36,7 +36,7 @@ struct ReplyProposalSweepTests {
 
     @discardableResult
     private func formPitch(_ ctx: ModelContext, on p: Prospect) -> Recipient {
-        let r = Recipient(id: "form:\(route)", email: nil, name: "Caseen Gaines", provenance: .act)
+        let r = Recipient(id: "form:\(route)", email: nil, name: "Corin Hale", provenance: .act)
         r.contactFormURL = route
         r.formOutreachURL = route
         r.outreachChannel = .contactForm
@@ -61,7 +61,7 @@ struct ReplyProposalSweepTests {
         let ctx = ModelContext(try container())
         let p = show(ctx)
         let r = formPitch(ctx, on: p)
-        let found = [message("m1", from: "Caseen Gaines <caseen.gaines@example.com>", subject: "Re: the show")]
+        let found = [message("m1", from: "Corin Hale <corin.hale@example.com>", subject: "Re: the show")]
 
         let outcome = await ReplyProposalSweep(fromEmail: me)
             .run(in: ctx, now: now, search: { .searched(candidates: found, searchedThrough: now,
@@ -131,7 +131,7 @@ struct ReplyProposalSweepTests {
         let ctx = ModelContext(try container())
         let p = show(ctx)
         formPitch(ctx, on: p)
-        let found = [message("m1", from: "Caseen Gaines <caseen.gaines@example.com>", subject: "Re: the show")]
+        let found = [message("m1", from: "Corin Hale <corin.hale@example.com>", subject: "Re: the show")]
 
         let outcome = await ReplyProposalSweep(fromEmail: me)
             .run(in: ctx, now: now, save: { throw Nope() },
@@ -163,7 +163,7 @@ struct ReplyProposalSweepTests {
         let p = show(ctx)
         let r = formPitch(ctx, on: p)
         let sweep = ReplyProposalSweep(fromEmail: me)
-        let found = [message("m1", from: "Caseen Gaines <caseen.gaines@example.com>", subject: "Re: the show")]
+        let found = [message("m1", from: "Corin Hale <corin.hale@example.com>", subject: "Re: the show")]
         _ = await sweep.run(in: ctx, now: now,
                             search: { .searched(candidates: found, searchedThrough: now, saveFailed: false) })
 
@@ -183,7 +183,7 @@ struct ReplyProposalSweepTests {
         let p = show(ctx)
         let r = formPitch(ctx, on: p)
         let sweep = ReplyProposalSweep(fromEmail: me)
-        let found = [message("m1", from: "Caseen Gaines <caseen.gaines@example.com>", subject: "Re: the show")]
+        let found = [message("m1", from: "Corin Hale <corin.hale@example.com>", subject: "Re: the show")]
         _ = await sweep.run(in: ctx, now: now,
                             search: { .searched(candidates: found, searchedThrough: now, saveFailed: false) })
         ProposedConversation.decline(on: r)

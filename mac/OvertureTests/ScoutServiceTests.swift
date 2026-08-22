@@ -319,12 +319,12 @@ struct ScoutServiceTests {
                          performanceDate: "2026-06-24", sourceListingURL: nil, websiteURL: nil,
                          priorRelationship: "booked", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 27, tier: "high",
-                         fitReason: "performer match", matchedClientName: "Marisol Vega",
+                         fitReason: "performer match", matchedClientName: "Larkin Sable",
                          possibleMatchSource: nil, possibleMatchName: nil)
-        p.downbeatClientId = "client-marisol"
+        p.downbeatClientId = "client-larkin"
         p.relationshipCorrectedByPerformerMatch = true
-        p.matchedPerformerName = "Marisol Vega"
-        p.performerMatchNote = "Matched performer 'Marisol Vega' to Downbeat client Marisol Vega."
+        p.matchedPerformerName = "Larkin Sable"
+        p.performerMatchNote = "Matched performer 'Larkin Sable' to Downbeat client Larkin Sable."
         return p
     }
 
@@ -347,8 +347,8 @@ struct ScoutServiceTests {
 
         let refreshed = try choirRow(ctx)
         #expect(refreshed.priorRelationship == "booked")
-        #expect(refreshed.matchedClientName == "Marisol Vega")
-        #expect(refreshed.downbeatClientId == "client-marisol")
+        #expect(refreshed.matchedClientName == "Larkin Sable")
+        #expect(refreshed.downbeatClientId == "client-larkin")
         #expect(refreshed.fitScore == 27)
         #expect(refreshed.tier == "high")
         #expect(refreshed.relationshipCorrectedByPerformerMatch)
@@ -374,8 +374,8 @@ struct ScoutServiceTests {
         let refreshed = try choirRow(ctx)
         // The performer-match lock still protects the relationship identity.
         #expect(refreshed.priorRelationship == "booked")
-        #expect(refreshed.matchedClientName == "Marisol Vega")
-        #expect(refreshed.downbeatClientId == "client-marisol")
+        #expect(refreshed.matchedClientName == "Larkin Sable")
+        #expect(refreshed.downbeatClientId == "client-larkin")
         // Dan's discipline still survives too.
         #expect(refreshed.discipline == "dance")
         // And the score is re-derived from BOTH: dance 3 + self 2 + strong 2 + likely_uncovered 2 = 9,

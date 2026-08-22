@@ -152,7 +152,7 @@
       "name": "self-produced-duo-both-performers/0/contacts/0/overrideBody",
       "from": "fixtures/prep-eval/self-produced-duo-both-performers.json/sampleCompliantOutput/results/0/contacts/0/overrideBody",
       "asks": true,
-      "body": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to your March 10 recital with Anna Pierre at Carnegie Hall. I work in an unobtrusive documentary style, no flash, so the audience doesn't notice me and nothing on stage is disturbed. I've been photographing at Carnegie Hall for nearly ten years, and you can see my portfolio at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about your photography plans for the recital. I look forward to hearing from you."
+      "body": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to your March 10 recital with Nora Calder at Carnegie Hall. I work in an unobtrusive documentary style, no flash, so the audience doesn't notice me and nothing on stage is disturbed. I've been photographing at Carnegie Hall for nearly ten years, and you can see my portfolio at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about your photography plans for the recital. I look forward to hearing from you."
     },
     {
       "name": "self-produced-duo-both-performers/0/contacts/1/overrideBody",
@@ -188,7 +188,7 @@
       "name": "stale-site-misnamed-co-performer/0/contacts/0/overrideBody",
       "from": "fixtures/prep-eval/stale-site-misnamed-co-performer.json/sampleCompliantOutput/results/0/contacts/0/overrideBody",
       "asks": true,
-      "body": "My name is Dan Wright and I'm a professional arts photographer here in NYC. I'm writing in regard to your May 18 concert with Anna Pierre at Carnegie Hall. I shoot unobtrusive, no-flash documentary coverage, so the audience doesn't notice me and the performance isn't disturbed. I've been photographing at Carnegie Hall for close to ten years now, and you can see my portfolio at danwrightphotography.com. I'd be glad to talk about your photography plans for the performance, if you don't have someone on it already. I look forward to hearing from you!"
+      "body": "My name is Dan Wright and I'm a professional arts photographer here in NYC. I'm writing in regard to your May 18 concert with Nora Calder at Carnegie Hall. I shoot unobtrusive, no-flash documentary coverage, so the audience doesn't notice me and the performance isn't disturbed. I've been photographing at Carnegie Hall for close to ten years now, and you can see my portfolio at danwrightphotography.com. I'd be glad to talk about your photography plans for the performance, if you don't have someone on it already. I look forward to hearing from you!"
     },
     {
       "name": "stale-site-misnamed-co-performer/0/contacts/1/overrideBody",

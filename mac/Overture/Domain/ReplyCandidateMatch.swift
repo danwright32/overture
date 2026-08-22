@@ -15,8 +15,8 @@ import Foundation
 // and `venueWordsNeverScore` fails if a venue word can ever earn a point.
 //
 // The same measurement supplies the two strongest signals, neither of which the draft mentioned: four
-// of five routes are personal-name domains (caseengaines.com, reevecarney.com, jerrickcavagnaro.com,
-// alexsyiek.com) and the fifth is a handle carrying the collective's name, while `Recipient.name`
+// of five routes are personal-name domains (corinhale.example, alderbourne.example, tobiaslund.example,
+// perrivale.example) and the fifth is a handle carrying the collective's name, while `Recipient.name`
 // holds the person Dan actually pitched on four of five.
 @MainActor
 enum ReplyCandidateMatch {
@@ -126,7 +126,7 @@ enum ReplyCandidateMatch {
     // MARK: the tokens a message is compared against
 
     struct Tokens: Equatable, Sendable {
-        // The form host's own name, or a social handle: "caseengaines", "vivaceartscollective".
+        // The form host's own name, or a social handle: "corinhale", "vivaceartscollective".
         var routeSlug: String?
         // `Recipient.name`, slugged. The person Dan actually pitched.
         var contactSlug: String?

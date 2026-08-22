@@ -25,12 +25,12 @@ struct PerformerMatchDismissTests {
                          venue: "Weill Recital Hall", performanceDate: "2026-08-02",
                          sourceListingURL: nil, websiteURL: nil, priorRelationship: "booked",
                          production: "self", profile: "strong", coverage: "likely_uncovered",
-                         fitScore: 27, tier: "high", fitReason: "r", matchedClientName: "Marisol Vega",
+                         fitScore: 27, tier: "high", fitReason: "r", matchedClientName: "Larkin Sable",
                          possibleMatchSource: nil, possibleMatchName: nil, status: .queued)
-        p.downbeatClientId = "client-marisol"
+        p.downbeatClientId = "client-larkin"
         p.relationshipCorrectedByPerformerMatch = true
-        p.matchedPerformerName = "Marisol Vega"
-        p.performerMatchNote = "Matched performer 'Marisol Vega' to Downbeat client Marisol Vega."
+        p.matchedPerformerName = "Larkin Sable"
+        p.performerMatchNote = "Matched performer 'Larkin Sable' to Downbeat client Larkin Sable."
         p.performerMatchPreviousRelationship = "none"
         p.performerMatchPreviousFitScore = 7
         p.performerMatchPreviousTier = "high"
@@ -87,7 +87,7 @@ struct PerformerMatchDismissTests {
         #expect(!p.hasActivePerformerMatch)
         // The FINDING itself survives the dismissal on purpose: it is the record that stops the same
         // rejected match being re-applied on the next ingest of the same evidence (see below).
-        #expect(p.matchedPerformerName == "Marisol Vega")
+        #expect(p.matchedPerformerName == "Larkin Sable")
     }
 
     // The bug this catches is subtle and would have been live: PrepImporter's "don't run twice" check
@@ -103,12 +103,12 @@ struct PerformerMatchDismissTests {
 
         let results = PrepResults(version: 3, generatedAt: "now", results: [
             PrepResult(naturalKey: p.naturalKey,
-                       contacts: [PrepContact(name: "Marisol Vega", role: "Violinist",
-                                              email: "marisol@vegaviolin.com", method: "named_decision_maker",
+                       contacts: [PrepContact(name: "Larkin Sable", role: "Violinist",
+                                              email: "larkin@sableviolin.example", method: "named_decision_maker",
                                               confidence: "high", formUrl: nil, provenance: "performer")],
                        draft: nil)
         ])
-        let client = DownbeatClient(id: "client-marisol", displayName: "Marisol Vega", shortName: nil,
+        let client = DownbeatClient(id: "client-larkin", displayName: "Larkin Sable", shortName: nil,
                                     email: "", contractEmail: "", phoneNumber: nil, isTaxExempt: nil,
                                     hasLeftReview: false, specialBehaviors: [], notes: nil, hostingSite: "")
 

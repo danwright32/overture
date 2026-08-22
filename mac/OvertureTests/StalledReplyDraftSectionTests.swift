@@ -71,7 +71,7 @@ struct StalledReplyDraftSectionTests {
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
         context.insert(p)
-        let r = Recipient(id: "form:https://54below.example/contact", email: nil, name: "Caseen",
+        let r = Recipient(id: "form:https://54below.example/contact", email: nil, name: "Corin",
                           provenance: .act)
         r.contactFormURL = "https://54below.example/contact"
         r.formOutreachURL = "https://54below.example/contact"
@@ -82,7 +82,7 @@ struct StalledReplyDraftSectionTests {
         p.setRecipients([r])
         ProposedConversation.propose(
             ProposedConversation.Candidate(messageId: "m1", threadId: "t-m1",
-                                           fromAddress: "caseen@example.com", fromName: "Caseen",
+                                           fromAddress: "corin@example.com", fromName: "Corin",
                                            subject: "Re: the anniversary show",
                                            sentAt: now.addingTimeInterval(-3_600), score: 9),
             on: r, now: now)

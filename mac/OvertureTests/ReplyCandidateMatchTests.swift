@@ -8,11 +8,11 @@ import SwiftData
 // central risk, and the live store says they were right. Measured 2026-08-14 on the Release store,
 // the five open form and DM pitches are:
 //
-//   54 Sings Shuffle Along, Or... A 10th Anniversary Celebration | 54 Below          | Caseen Gaines      | caseengaines.com
+//   54 Sings Shuffle Along, Or... A 10th Anniversary Celebration | 54 Below          | Corin Hale      | corinhale.example
 //   Song & Word                                                  | The Green Room 42 | Vivace Arts Coll.  | instagram.com/vivaceartscollective
-//   Eva Noblezada & Reeve Carney                                 | The Green Room 42 | Reeve Carney       | reevecarney.com
-//   Battle of the Siblings                                       | The Green Room 42 | Jerrick Cavagnaro  | jerrickcavagnaro.com
-//   Alex Syiek                                                   | The Green Room 42 | (no stored name)   | alexsyiek.com
+//   Eva Noblezada & Alder Bourne                                 | The Green Room 42 | Alder Bourne       | alderbourne.example
+//   Battle of the Siblings                                       | The Green Room 42 | Tobias Lund  | tobiaslund.example
+//   Perri Vale                                                   | The Green Room 42 | (no stored name)   | perrivale.example
 //
 // FOUR OF THE FIVE ARE AT THE SAME ROOM. A token set including the venue would score that room's own
 // newsletter above the real presenter on four of Dan's five open pitches, every week, for ever. So the
@@ -171,8 +171,8 @@ struct ReplyCandidateMatchTests {
         let ctx = ModelContext(try container())
         let p = show(ctx, name: "54 Sings Shuffle Along, Or... A 10th Anniversary Celebration",
                      venue: "54 Below")
-        let r = pitch(ctx, on: p, contactName: "Caseen Gaines",
-                      route: "https://www.caseengaines.com/contact")
+        let r = pitch(ctx, on: p, contactName: "Corin Hale",
+                      route: "https://www.corinhale.example/contact")
         let m = message("m", from: "Table Bookings <bookings@someagency.com>",
                         subject: "54 Below table bookings for the season")
 
@@ -188,8 +188,8 @@ struct ReplyCandidateMatchTests {
         let ctx = ModelContext(try container())
         let p = show(ctx, name: "54 Sings Shuffle Along, Or... A 10th Anniversary Celebration",
                      venue: "54 Below")
-        let r = pitch(ctx, on: p, contactName: "Caseen Gaines",
-                      route: "https://www.caseengaines.com/contact")
+        let r = pitch(ctx, on: p, contactName: "Corin Hale",
+                      route: "https://www.corinhale.example/contact")
         let m = message("m", from: "Someone <someone@elsewhere.com>", subject: "About Shuffle Along")
 
         let scored = ReplyCandidateMatch.score(m, tokens: ReplyCandidateMatch.tokens(for: r, on: p))
@@ -202,9 +202,9 @@ struct ReplyCandidateMatchTests {
     @Test("the presenter answering from the form's own domain is the strongest signal there is")
     func theRouteDomainMatch() throws {
         let ctx = ModelContext(try container())
-        let p = show(ctx, name: "Alex Syiek", venue: "The Green Room 42")
-        let r = pitch(ctx, on: p, contactName: nil, route: "https://www.alexsyiek.com/contact")
-        let m = message("m", from: "Alex Syiek <alex@alexsyiek.com>", subject: "Re: photography")
+        let p = show(ctx, name: "Perri Vale", venue: "The Green Room 42")
+        let r = pitch(ctx, on: p, contactName: nil, route: "https://www.perrivale.example/contact")
+        let m = message("m", from: "Perri Vale <perri@perrivale.example>", subject: "Re: photography")
 
         let verdict = ReplyCandidateMatch.judge([m], for: r, on: p, selfEmail: me)
 
@@ -222,9 +222,9 @@ struct ReplyCandidateMatchTests {
         let ctx = ModelContext(try container())
         let p = show(ctx, name: "54 Sings Shuffle Along, Or... A 10th Anniversary Celebration",
                      venue: "54 Below")
-        let r = pitch(ctx, on: p, contactName: "Caseen Gaines",
-                      route: "https://www.caseengaines.com/contact")
-        let m = message("m", from: "Caseen Gaines <caseen.gaines@example.com>",
+        let r = pitch(ctx, on: p, contactName: "Corin Hale",
+                      route: "https://www.corinhale.example/contact")
+        let m = message("m", from: "Corin Hale <corin.hale@example.com>",
                         subject: "Re: Photography for the anniversary celebration")
 
         let verdict = ReplyCandidateMatch.judge([m], for: r, on: p, selfEmail: me)
@@ -238,8 +238,8 @@ struct ReplyCandidateMatchTests {
     @Test("an unrelated personal email is not proposed")
     func anUnrelatedPersonalEmailIsNotProposed() throws {
         let ctx = ModelContext(try container())
-        let p = show(ctx, name: "Alex Syiek", venue: "The Green Room 42")
-        let r = pitch(ctx, on: p, contactName: nil, route: "https://www.alexsyiek.com/contact")
+        let p = show(ctx, name: "Perri Vale", venue: "The Green Room 42")
+        let r = pitch(ctx, on: p, contactName: nil, route: "https://www.perrivale.example/contact")
         let m = message("m", from: "Mum <mum@familymail.com>", subject: "Sunday lunch")
 
         #expect(ReplyCandidateMatch.judge([m], for: r, on: p, selfEmail: me) == .nothingLooksLikeThem)
@@ -250,9 +250,9 @@ struct ReplyCandidateMatchTests {
     @Test("a different act at the same room is not proposed")
     func aDifferentActAtTheSameRoomIsNotProposed() throws {
         let ctx = ModelContext(try container())
-        let p = show(ctx, name: "Alex Syiek", venue: "The Green Room 42")
-        let r = pitch(ctx, on: p, contactName: nil, route: "https://www.alexsyiek.com/contact")
-        let m = message("m", from: "Jerrick Cavagnaro <jerrick@jerrickcavagnaro.com>",
+        let p = show(ctx, name: "Perri Vale", venue: "The Green Room 42")
+        let r = pitch(ctx, on: p, contactName: nil, route: "https://www.perrivale.example/contact")
+        let m = message("m", from: "Tobias Lund <tobias@tobiaslund.example>",
                         subject: "Re: Battle of the Siblings at The Green Room 42")
 
         #expect(ReplyCandidateMatch.judge([m], for: r, on: p, selfEmail: me) == .nothingLooksLikeThem)
@@ -266,10 +266,10 @@ struct ReplyCandidateMatchTests {
     @Test("two equally plausible candidates are ambiguous, not a proposal")
     func twoEquallyPlausibleCandidatesAreAmbiguous() throws {
         let ctx = ModelContext(try container())
-        let p = show(ctx, name: "Alex Syiek", venue: "The Green Room 42")
-        let r = pitch(ctx, on: p, contactName: "Alex Syiek", route: "https://www.alexsyiek.com/contact")
-        let a = message("a", from: "Alex Syiek <alex@alexsyiek.com>", subject: "Re: photography")
-        let b = message("b", from: "Alex Syiek <bookings@alexsyiek.com>", subject: "Re: photography")
+        let p = show(ctx, name: "Perri Vale", venue: "The Green Room 42")
+        let r = pitch(ctx, on: p, contactName: "Perri Vale", route: "https://www.perrivale.example/contact")
+        let a = message("a", from: "Perri Vale <perri@perrivale.example>", subject: "Re: photography")
+        let b = message("b", from: "Perri Vale <bookings@perrivale.example>", subject: "Re: photography")
 
         let verdict = ReplyCandidateMatch.judge([a, b], for: r, on: p, selfEmail: me)
 
@@ -282,9 +282,9 @@ struct ReplyCandidateMatchTests {
     @Test("a clear winner beside a weak also-ran is still a proposal")
     func aClearWinnerBesideAWeakAlsoRanIsAProposal() throws {
         let ctx = ModelContext(try container())
-        let p = show(ctx, name: "Alex Syiek", venue: "The Green Room 42")
-        let r = pitch(ctx, on: p, contactName: "Alex Syiek", route: "https://www.alexsyiek.com/contact")
-        let strong = message("strong", from: "Alex Syiek <alex@alexsyiek.com>", subject: "Re: photography")
+        let p = show(ctx, name: "Perri Vale", venue: "The Green Room 42")
+        let r = pitch(ctx, on: p, contactName: "Perri Vale", route: "https://www.perrivale.example/contact")
+        let strong = message("strong", from: "Perri Vale <perri@perrivale.example>", subject: "Re: photography")
         let weak = message("weak", from: "Sam <sam@elsewhere.com>", subject: "Alex asked me to write")
 
         let verdict = ReplyCandidateMatch.judge([strong, weak], for: r, on: p, selfEmail: me)
@@ -298,11 +298,11 @@ struct ReplyCandidateMatchTests {
     @Test("a refused message cannot break a tie or become the runner-up")
     func aRefusedMessageIsNotEvenInTheField() throws {
         let ctx = ModelContext(try container())
-        let p = show(ctx, name: "Alex Syiek", venue: "The Green Room 42")
-        let r = pitch(ctx, on: p, contactName: "Alex Syiek", route: "https://www.alexsyiek.com/contact")
-        let real = message("real", from: "Alex Syiek <alex@alexsyiek.com>", subject: "Re: photography")
-        let bulk = message("bulk", from: "Alex Syiek <news@alexsyiek.com>", subject: "Alex Syiek newsletter",
-                           listUnsubscribe: "<https://alexsyiek.com/u>")
+        let p = show(ctx, name: "Perri Vale", venue: "The Green Room 42")
+        let r = pitch(ctx, on: p, contactName: "Perri Vale", route: "https://www.perrivale.example/contact")
+        let real = message("real", from: "Perri Vale <perri@perrivale.example>", subject: "Re: photography")
+        let bulk = message("bulk", from: "Perri Vale <news@perrivale.example>", subject: "Perri Vale newsletter",
+                           listUnsubscribe: "<https://perrivale.example/u>")
 
         let verdict = ReplyCandidateMatch.judge([real, bulk], for: r, on: p, selfEmail: me)
 
@@ -315,8 +315,8 @@ struct ReplyCandidateMatchTests {
     @Test("no candidates at all is nothing looks like them")
     func noCandidatesIsNothingLooksLikeThem() throws {
         let ctx = ModelContext(try container())
-        let p = show(ctx, name: "Alex Syiek", venue: "The Green Room 42")
-        let r = pitch(ctx, on: p, contactName: nil, route: "https://www.alexsyiek.com/contact")
+        let p = show(ctx, name: "Perri Vale", venue: "The Green Room 42")
+        let r = pitch(ctx, on: p, contactName: nil, route: "https://www.perrivale.example/contact")
 
         #expect(ReplyCandidateMatch.judge([], for: r, on: p, selfEmail: me) == .nothingLooksLikeThem)
     }
@@ -333,14 +333,14 @@ struct ReplyCandidateMatchTests {
         let ctx = ModelContext(try container())
         let live: [(name: String, venue: String, presenter: String?, contact: String?, route: String)] = [
             ("54 Sings Shuffle Along, Or... A 10th Anniversary Celebration", "54 Below", nil,
-             "Caseen Gaines", "https://www.caseengaines.com/contact"),
+             "Corin Hale", "https://www.corinhale.example/contact"),
             ("Song & Word", "The Green Room 42", "Vivace Arts Collective", "Vivace Arts Collective",
              "https://www.instagram.com/vivaceartscollective/"),
-            ("Eva Noblezada & Reeve Carney", "The Green Room 42", nil, "Reeve Carney",
-             "https://www.reevecarney.com/booking"),
-            ("Battle of the Siblings", "The Green Room 42", nil, "Jerrick Cavagnaro",
-             "https://jerrickcavagnaro.com/appointments"),
-            ("Alex Syiek", "The Green Room 42", nil, nil, "https://www.alexsyiek.com/contact"),
+            ("Eva Noblezada & Alder Bourne", "The Green Room 42", nil, "Alder Bourne",
+             "https://www.alderbourne.example/booking"),
+            ("Battle of the Siblings", "The Green Room 42", nil, "Tobias Lund",
+             "https://tobiaslund.example/appointments"),
+            ("Perri Vale", "The Green Room 42", nil, nil, "https://www.perrivale.example/contact"),
         ]
         // Written for this test rather than captured, because a capture of Dan's real window is his
         // personal correspondence (L19). Each one is a shape that genuinely lands in his inbox.
@@ -352,7 +352,7 @@ struct ReplyCandidateMatchTests {
                     subject: "Your tickets for 54 Sings Shuffle Along"),
             message("press", from: "press@anotherhall.org", subject: "Media accreditation"),
             message("personal", from: "Mum <mum@familymail.com>", subject: "Sunday lunch"),
-            message("otheract", from: "Sam Weaver <sam@samweaver.com>",
+            message("otheract", from: "Quinn Asher <quinn@quinnasher.example>",
                     subject: "Re: my show at The Green Room 42"),
             message("bounce", from: "Mail Delivery Subsystem <mailer-daemon@googlemail.com>",
                     subject: "Delivery Status Notification"),
@@ -382,18 +382,18 @@ struct ReplyCandidateMatchTests {
         let live: [(name: String, venue: String, presenter: String?, contact: String?, route: String,
                     reply: String)] = [
             ("54 Sings Shuffle Along, Or... A 10th Anniversary Celebration", "54 Below", nil,
-             "Caseen Gaines", "https://www.caseengaines.com/contact",
-             "Caseen Gaines <caseen.gaines@example.com>"),
+             "Corin Hale", "https://www.corinhale.example/contact",
+             "Corin Hale <corin.hale@example.com>"),
             ("Song & Word", "The Green Room 42", "Vivace Arts Collective", "Vivace Arts Collective",
              "https://www.instagram.com/vivaceartscollective/",
              "Vivace Arts Collective <hello@vivaceartscollective.org>"),
-            ("Eva Noblezada & Reeve Carney", "The Green Room 42", nil, "Reeve Carney",
-             "https://www.reevecarney.com/booking", "Reeve Carney <reeve@reevecarney.com>"),
-            ("Battle of the Siblings", "The Green Room 42", nil, "Jerrick Cavagnaro",
-             "https://jerrickcavagnaro.com/appointments",
-             "Jerrick Cavagnaro <jerrick@jerrickcavagnaro.com>"),
-            ("Alex Syiek", "The Green Room 42", nil, nil, "https://www.alexsyiek.com/contact",
-             "Alex Syiek <alex@alexsyiek.com>"),
+            ("Eva Noblezada & Alder Bourne", "The Green Room 42", nil, "Alder Bourne",
+             "https://www.alderbourne.example/booking", "Alder Bourne <alder@alderbourne.example>"),
+            ("Battle of the Siblings", "The Green Room 42", nil, "Tobias Lund",
+             "https://tobiaslund.example/appointments",
+             "Tobias Lund <tobias@tobiaslund.example>"),
+            ("Perri Vale", "The Green Room 42", nil, nil, "https://www.perrivale.example/contact",
+             "Perri Vale <perri@perrivale.example>"),
         ]
 
         var missed: [String] = []

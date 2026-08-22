@@ -6,7 +6,7 @@ import SwiftData
 // Overture watches for replies by fetching the Gmail thread named on `Recipient.gmailThreadId`. A pitch
 // sent through a contact form or a social DM deliberately never stamps it, which was right at the time
 // and leaves no way to be told when the presenter writes back by email. Measured live 2026-08-14: a
-// form pitch through caseengaines.com was answered from a gmail.com address, and Overture knew nothing
+// form pitch through corinhale.example was answered from a gmail.com address, and Overture knew nothing
 // about it while the row went on saying it could not see a reply to that one.
 //
 // This half only FINDS the messages that could be an answer. It never ranks them (#2714 does, and it is

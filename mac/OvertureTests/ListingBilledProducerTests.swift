@@ -145,8 +145,8 @@ struct ListingBilledProducerTests {
     }
 
     // The honest miss #2262 recorded, now READ: #2554 added "produced and directed by" to the credits,
-    // because that phrasing is what the p0 case used ("this concert is produced and directed by Caseen
-    // Gaines") and searching for "produced by" inside it matches nothing at all.
+    // because that phrasing is what the p0 case used ("this concert is produced and directed by Corin
+    // Hale") and searching for "produced by" inside it matches nothing at all.
     //
     // The value it returns carries the role the page put in front of the name, because the credit really
     // does read "Produced and directed by Showpeople Resident Artist Colby Thompson". Asserted as it is,

@@ -28,8 +28,8 @@ struct ManualContactRouteTests {
 
     // The whole point of the issue: the two routes Dan works by hand.
     @Test func aContactFormAndAProfileAreBothRoutes() {
-        #expect(ManualContactRoute.parse("https://www.reevecarney.com/booking")
-                == .link("https://www.reevecarney.com/booking"))
+        #expect(ManualContactRoute.parse("https://www.alderbourne.example/booking")
+                == .link("https://www.alderbourne.example/booking"))
         #expect(ManualContactRoute.parse("https://www.instagram.com/heybailay/")
                 == .link("https://www.instagram.com/heybailay/"))
     }

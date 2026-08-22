@@ -16,24 +16,24 @@
     {
       "label": "Duo's own concert page",
       "url": "https://rocheduo.example/us-debut",
-      "content": "Virgile Roche and Anna Pierre make their U.S. debut at Carnegie Hall on March 10, 2026. This recital is self-produced by the two pianists."
+      "content": "Virgile Roche and Nora Calder make their U.S. debut at Carnegie Hall on March 10, 2026. This recital is self-produced by the two pianists."
     },
     {
       "label": "Virgile Roche bio and contact",
       "url": "https://virgileroche.example/contact",
-      "content": "Virgile Roche, pianist. Appearing with Anna Pierre at Carnegie Hall, March 10, 2026. Contact: virgile@virgileroche.example."
+      "content": "Virgile Roche, pianist. Appearing with Nora Calder at Carnegie Hall, March 10, 2026. Contact: virgile@virgileroche.example."
     },
     {
-      "label": "Anna Pierre bio and contact",
-      "url": "https://annapierre.example/contact",
-      "content": "Anna Pierre, pianist. Carnegie Hall recital with Virgile Roche, March 10, 2026. Contact: anna@annapierre.example."
+      "label": "Nora Calder bio and contact",
+      "url": "https://noracalder.example/contact",
+      "content": "Nora Calder, pianist. Carnegie Hall recital with Virgile Roche, March 10, 2026. Contact: nora@noracalder.example."
     }
   ],
   "expected": {
     "description": "Both named performers surfaced as performer contacts, no act contact, each with a second-person overrideBody.",
     "requiredPerformers": [
       "Virgile Roche",
-      "Anna Pierre"
+      "Nora Calder"
     ],
     "forbidActProvenance": true,
     "performerOverrideBodyRequired": true,
@@ -54,15 +54,15 @@
             "confidence": "high",
             "sourceUrl": "https://virgileroche.example/contact",
             "provenance": "performer",
-            "overrideBody": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to your March 10 recital with Anna Pierre at Carnegie Hall. I work in an unobtrusive documentary style, no flash, so the audience doesn't notice me and nothing on stage is disturbed. I've been photographing at Carnegie Hall for nearly ten years, and you can see my portfolio at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about your photography plans for the recital. I look forward to hearing from you."
+            "overrideBody": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to your March 10 recital with Nora Calder at Carnegie Hall. I work in an unobtrusive documentary style, no flash, so the audience doesn't notice me and nothing on stage is disturbed. I've been photographing at Carnegie Hall for nearly ten years, and you can see my portfolio at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about your photography plans for the recital. I look forward to hearing from you."
           },
           {
-            "name": "Anna Pierre",
+            "name": "Nora Calder",
             "role": "Pianist",
-            "email": "anna@annapierre.example",
+            "email": "nora@noracalder.example",
             "method": "named_decision_maker",
             "confidence": "high",
-            "sourceUrl": "https://annapierre.example/contact",
+            "sourceUrl": "https://noracalder.example/contact",
             "provenance": "performer",
             "overrideBody": "My name is Dan and I'm a professional arts photographer here in NYC. I'm writing in regard to your March 10 recital with Virgile Roche at Carnegie Hall. I work in an unobtrusive documentary style, no flash, so the audience doesn't notice me and nothing on stage is disturbed. I've been photographing at Carnegie Hall for nearly ten years, and you can see my portfolio at danwrightphotography.com. If you don't have someone on it already, I'd be glad to talk about your photography plans for the recital. I look forward to hearing from you."
           }

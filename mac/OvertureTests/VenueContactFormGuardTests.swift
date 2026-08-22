@@ -12,7 +12,7 @@ import SwiftData
 // reading "Contact form only" pointing Dan straight at the room.
 //
 // A hole rather than a live defect: in the 2026-07-27 run all of the upgraded rows pointed at the act's
-// own domain (jakebergmagic.com, shop.copeland.band, marcribler.com) and none matched its venue. The run
+// own domain (sorrelmanemagic.com, shop.copeland.band, marcribler.com) and none matched its venue. The run
 // that would expose it is the next one at a room with a decent website.
 //
 // The comparison is SHARED with the email guard rather than copied, so one rule decides "is this the

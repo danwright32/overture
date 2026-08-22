@@ -72,7 +72,7 @@ struct ReachabilityProbeMarkerContractTests {
         #expect(marker.keys == Set([
             "summer lovin|2026-08-11|the green room 42",
             "cabaret for the chronically dramatic|2026-08-11|54 below",
-            "ryan james monroe|2026-08-11|54 below",
+            "devin marlowe|2026-08-11|54 below",
         ]))
     }
 

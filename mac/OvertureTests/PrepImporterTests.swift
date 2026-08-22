@@ -1021,14 +1021,14 @@ struct PrepImporterTests {
         return p
     }
 
-    private func marisol(email: String = "") -> DownbeatClient {
-        DownbeatClient(id: "client-marisol", displayName: "Marisol Vega", shortName: nil,
+    private func larkin(email: String = "") -> DownbeatClient {
+        DownbeatClient(id: "client-larkin", displayName: "Larkin Sable", shortName: nil,
                        email: email, contractEmail: "", phoneNumber: nil, isTaxExempt: nil,
                        hasLeftReview: false, specialBehaviors: [], notes: nil, hostingSite: "")
     }
 
-    private func performerResults(_ key: String, name: String = "Marisol Vega",
-                                  email: String? = "marisol@vegaviolin.com",
+    private func performerResults(_ key: String, name: String = "Larkin Sable",
+                                  email: String? = "larkin@sableviolin.example",
                                   provenance: String = "performer") -> PrepResults {
         PrepResults(version: 3, generatedAt: "now", results: [
             PrepResult(naturalKey: key,
@@ -1047,15 +1047,15 @@ struct PrepImporterTests {
         #expect(p.fitScore == 7)   // cold, on the org name alone
 
         _ = PrepImporter.ingest(performerResults(p.naturalKey), into: ctx,
-                                clients: [marisol()], history: [])
+                                clients: [larkin()], history: [])
 
         #expect(p.priorRelationship == "booked")
-        #expect(p.matchedClientName == "Marisol Vega")
-        #expect(p.downbeatClientId == "client-marisol")
+        #expect(p.matchedClientName == "Larkin Sable")
+        #expect(p.downbeatClientId == "client-larkin")
         #expect(p.fitScore == 27)                 // rescored from the upgraded relationship
         #expect(p.tier == "high")
         #expect(p.relationshipCorrectedByPerformerMatch)
-        #expect(p.matchedPerformerName == "Marisol Vega")
+        #expect(p.matchedPerformerName == "Larkin Sable")
         #expect(p.performerMatchNote != nil)
         // A brand-new finding starts unreviewed and undismissed: Dan hasn't seen it yet.
         #expect(!p.performerMatchReviewed)
@@ -1071,7 +1071,7 @@ struct PrepImporterTests {
         let p = performerProspect(ctx)
 
         _ = PrepImporter.ingest(performerResults(p.naturalKey, name: "Rowan Delacroix"),
-                                into: ctx, clients: [marisol()], history: [])
+                                into: ctx, clients: [larkin()], history: [])
 
         #expect(p.priorRelationship == "none")
         #expect(p.fitScore == 7)
@@ -1088,11 +1088,11 @@ struct PrepImporterTests {
         let p = performerProspect(ctx)
         let results = performerResults(p.naturalKey)
 
-        _ = PrepImporter.ingest(results, into: ctx, clients: [marisol()], history: [])
+        _ = PrepImporter.ingest(results, into: ctx, clients: [larkin()], history: [])
         p.performerMatchReviewed = true   // Dan has now seen it
         try ctx.save()
 
-        _ = PrepImporter.ingest(results, into: ctx, clients: [marisol()], history: [])
+        _ = PrepImporter.ingest(results, into: ctx, clients: [larkin()], history: [])
 
         #expect(p.performerMatchReviewed)                       // not silently un-reviewed
         #expect(p.performerMatchPreviousFitScore == 7)          // still the SCOUT's score, not 27
@@ -1110,7 +1110,7 @@ struct PrepImporterTests {
 
         // The performer's history says merely "warm" (10), against a prospect already booked (20).
         _ = PrepImporter.ingest(performerResults(p.naturalKey), into: ctx, clients: [],
-                                history: [HistoryRecord(groupName: "Marisol Vega", status: "warm")])
+                                history: [HistoryRecord(groupName: "Larkin Sable", status: "warm")])
 
         #expect(p.priorRelationship == "booked")
         #expect(p.fitScore == 27)
@@ -1127,7 +1127,7 @@ struct PrepImporterTests {
         #expect(p.fitScore == 17)
 
         _ = PrepImporter.ingest(performerResults(p.naturalKey), into: ctx, clients: [],
-                                history: [HistoryRecord(groupName: "Marisol Vega", status: "declined")])
+                                history: [HistoryRecord(groupName: "Larkin Sable", status: "declined")])
 
         #expect(p.priorRelationship == "warm")
         #expect(p.fitScore == 17)
@@ -1139,7 +1139,7 @@ struct PrepImporterTests {
         let p = performerProspect(ctx, production: "agency")
 
         _ = PrepImporter.ingest(performerResults(p.naturalKey), into: ctx,
-                                clients: [marisol()], history: [])
+                                clients: [larkin()], history: [])
 
         #expect(p.priorRelationship == "none")
         #expect(!p.relationshipCorrectedByPerformerMatch)
@@ -1152,7 +1152,7 @@ struct PrepImporterTests {
         let p = performerProspect(ctx)
 
         _ = PrepImporter.ingest(performerResults(p.naturalKey, provenance: "act"),
-                                into: ctx, clients: [marisol()], history: [])
+                                into: ctx, clients: [larkin()], history: [])
 
         #expect(p.priorRelationship == "none")
         #expect(!p.relationshipCorrectedByPerformerMatch)

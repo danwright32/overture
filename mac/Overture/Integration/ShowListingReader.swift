@@ -2,7 +2,7 @@ import Foundation
 
 // #1824: read a show's own listing page, on the app side, and hand the text to the Prep run.
 //
-// The run cannot do this itself and the 2026-07-30 Alex Syiek run is the proof. Its instinct was already
+// The run cannot do this itself and the 2026-07-30 Perri Vale run is the proof. Its instinct was already
 // right with no prompt change at all: it fetched `sourceListingURL`, got an 11KB shell with no description
 // in it, and asked for a browser render. `PREP_ALLOWED_TOOLS` (Read, Write, WebSearch, WebFetch, Bash,
 // Skill under `--permission-mode manual`) denied it, and the draft was written without ever learning that

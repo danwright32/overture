@@ -82,13 +82,13 @@ enum ReplyIdentity {
 
     // #2169: what this row's slot says when there is no address to list.
     //
-    // Dan, reading the Alex Syiek row cold: "why does it say 'no contact' and 'sent through their form'".
+    // Dan, reading the Perri Vale row cold: "why does it say 'no contact' and 'sent through their form'".
     // A form pitch has nothing emailable, so this fell through to "no contact" while the record it renders
     // from was holding the form URL it was sent to the whole time, and the line below said so. A line may
     // claim only what its check measured, and what was measured is "no email address" (L11).
     //
     // The route comes first for a form pitch, ahead of any stored name: on the two live rows that carry a
-    // name, a bare "Reeve Carney" reads as an emailable person whose address is merely not shown, which is
+    // name, a bare "Alder Bourne" reads as an emailable person whose address is merely not shown, which is
     // the same gap in a politer font. "no contact" survives only for a record with neither, which on the
     // live store today is no row at all.
     //

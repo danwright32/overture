@@ -680,7 +680,7 @@ struct ProspectRowView: View {
 
     // #1597 follow-up (Dan's walk of the Debug build): the badge says an address exists but never which
     // one, and that is the thing he actually needs while triaging. "info@thevenue.com" and
-    // "anna@annapierre.com" wear the same badge and are completely different decisions.
+    // "nora@noracalder.example" wear the same badge and are completely different decisions.
     //
     // ALL of them, his call, including the weak ones: on a self-produced show two named performers may
     // both have been found, and showing only the first silently hides the second, which is exactly the
@@ -758,8 +758,8 @@ struct ProspectRowView: View {
             // search box.
             // Labelled with the SITE, not with the words "contact form": the pill directly above already
             // says that, and what Dan needs from this line is the same thing the address line gives him,
-            // WHO he would be writing to. "jakebergmagic.com" and "shop.copeland.band" are different
-            // decisions in the way "info@thevenue.com" and "anna@annapierre.com" are.
+            // WHO he would be writing to. "sorrelmanemagic.com" and "shop.copeland.band" are different
+            // decisions in the way "info@thevenue.com" and "nora@noracalder.example" are.
             // #1628: no caveat here either. Every contact form is unverified by definition (the runbook
             // maps form-or-DM to low confidence unconditionally), so a warning on all of them would say
             // nothing the "Contact form only" pill above does not already say.

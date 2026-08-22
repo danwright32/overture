@@ -21,7 +21,7 @@ struct ConfirmProposedConversationTests {
 
     private let me = "dan@danwrightphotography.com"
     private let now = Date(timeIntervalSince1970: 1_786_000_000)
-    private let route = "https://www.caseengaines.com/contact"
+    private let route = "https://www.corinhale.example/contact"
 
     private func show(_ ctx: ModelContext) -> Prospect {
         let p = Prospect(naturalKey: "k", groupName: "54 Sings Shuffle Along", discipline: "music",
@@ -36,7 +36,7 @@ struct ConfirmProposedConversationTests {
 
     @discardableResult
     private func pitchWithProposal(_ ctx: ModelContext, on p: Prospect) -> Recipient {
-        let r = Recipient(id: "form:\(route)", email: nil, name: "Caseen Gaines", provenance: .act)
+        let r = Recipient(id: "form:\(route)", email: nil, name: "Corin Hale", provenance: .act)
         r.contactFormURL = route
         r.formOutreachURL = route
         r.outreachChannel = .contactForm
@@ -45,15 +45,15 @@ struct ConfirmProposedConversationTests {
         r.sendState = .sent
         p.addRecipient(r)
         ProposedConversation.propose(
-            .init(messageId: "m1", threadId: "t1", fromAddress: "caseen.gaines@example.com",
-                  fromName: "Caseen Gaines", subject: "Re: the anniversary show",
+            .init(messageId: "m1", threadId: "t1", fromAddress: "corin.hale@example.com",
+                  fromName: "Corin Hale", subject: "Re: the anniversary show",
                   sentAt: now.addingTimeInterval(-3600), score: 9), on: r, now: now)
         return r
     }
 
     private func threadData() -> Data {
         confirmProposedGmail.thread([
-            .init(from: "Caseen Gaines <caseen.gaines@example.com>",
+            .init(from: "Corin Hale <corin.hale@example.com>",
                   subject: "Re: the anniversary show", messageID: "<theirs@mail.gmail.com>",
                   id: "m1", internalDateMillis: Int64(now.timeIntervalSince1970 - 3600) * 1000),
         ])
@@ -78,7 +78,7 @@ struct ConfirmProposedConversationTests {
 
         guard case .attached = outcome else { Issue.record("expected an attach, got \(outcome)"); return }
         #expect(r.gmailThreadId == "t1")
-        #expect(r.email == "caseen.gaines@example.com")
+        #expect(r.email == "corin.hale@example.com")
         #expect(r.replied)
         #expect(ProposedConversation.stored(on: r) == nil)
     }
@@ -118,7 +118,7 @@ struct ConfirmProposedConversationTests {
         let ctx = ModelContext(try container())
         let p = show(ctx)
         let r = pitchWithProposal(ctx, on: p)
-        ContactRefusal.refuse(email: "caseen.gaines@example.com", scope: .show(p.naturalKey),
+        ContactRefusal.refuse(email: "corin.hale@example.com", scope: .show(p.naturalKey),
                               in: ctx, now: now)
 
         let outcome = await ConfirmProposedConversation(fromEmail: me)
@@ -127,7 +127,7 @@ struct ConfirmProposedConversationTests {
         guard case .refused(let reason) = outcome else {
             Issue.record("a struck address must refuse, got \(outcome)"); return
         }
-        #expect(reason.contains("caseen.gaines@example.com"))
+        #expect(reason.contains("corin.hale@example.com"))
         #expect(ProposedConversation.stored(on: r) != nil)
         #expect(r.gmailThreadId == nil)
     }

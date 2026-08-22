@@ -47,16 +47,16 @@ struct DuplicateContactMergeTests {
     @Test func aFormOnlyRowAndAnAddressRowForOnePersonBecomeOne() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx)
-        add(p, name: "Ryan James Monroe", formURL: "https://www.instagram.com/ryanjamesmonroe/")
-        add(p, name: "Ryan James Monroe", email: "ryan@ryanjamesmonroe.example")
+        add(p, name: "Devin Marlowe", formURL: "https://www.instagram.com/devinmarlowe/")
+        add(p, name: "Devin Marlowe", email: "devin@devinmarlowe.example")
         try ctx.save()
 
         let merged = DuplicateContactMerge.reconcile(p, in: ctx)
 
         #expect(merged == 1)
         #expect(p.recipients.count == 1)
-        #expect(p.recipients.first?.email == "ryan@ryanjamesmonroe.example")
-        #expect(p.recipients.first?.id == "ryan@ryanjamesmonroe.example")
+        #expect(p.recipients.first?.email == "devin@devinmarlowe.example")
+        #expect(p.recipients.first?.id == "devin@devinmarlowe.example")
     }
 
     // The two pairs where the LATER find was strictly worse: her own booking page must survive, not the
@@ -104,10 +104,10 @@ struct DuplicateContactMergeTests {
     @Test func agroupHoldingASentRowIsLeftAlone() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx)
-        let sent = add(p, name: "Olivia Terpin", email: "olivia@example.test")
+        let sent = add(p, name: "Juno Faraday", email: "olivia@example.test")
         sent.sendState = .sent
         sent.sentAt = Date(timeIntervalSince1970: 1_780_000_000)
-        add(p, name: "Olivia Terpin", formURL: "https://www.instagram.com/oliviaterpinofficial/")
+        add(p, name: "Juno Faraday", formURL: "https://www.instagram.com/junofaradayofficial/")
         try ctx.save()
 
         #expect(DuplicateContactMerge.reconcile(p, in: ctx) == 0)
@@ -130,7 +130,7 @@ struct DuplicateContactMergeTests {
     @Test func differentPeopleAndNamelessRowsAreUntouched() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx)
-        add(p, name: "Olivia Terpin", email: "olivia@example.test")
+        add(p, name: "Juno Faraday", email: "olivia@example.test")
         add(p, name: "Bethany Griffin", email: "bethany@example.test")
         let a = Recipient(id: "form:https://one.example", email: nil, name: nil, provenance: .performer,
                           contactFormURL: "https://one.example")
@@ -147,8 +147,8 @@ struct DuplicateContactMergeTests {
     @Test func itIsIdempotent() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx)
-        add(p, name: "Ryan James Monroe", formURL: "https://www.instagram.com/ryanjamesmonroe/")
-        add(p, name: "Ryan James Monroe", email: "ryan@ryanjamesmonroe.example")
+        add(p, name: "Devin Marlowe", formURL: "https://www.instagram.com/devinmarlowe/")
+        add(p, name: "Devin Marlowe", email: "devin@devinmarlowe.example")
         try ctx.save()
 
         #expect(DuplicateContactMerge.reconcile(p, in: ctx) == 1)
@@ -220,8 +220,8 @@ struct DuplicateContactMergeTests {
     @Test func theStoreWidePassReportsWhatItMerged() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx)
-        add(p, name: "Ryan James Monroe", formURL: "https://www.instagram.com/ryanjamesmonroe/")
-        add(p, name: "Ryan James Monroe", email: "ryan@ryanjamesmonroe.example")
+        add(p, name: "Devin Marlowe", formURL: "https://www.instagram.com/devinmarlowe/")
+        add(p, name: "Devin Marlowe", email: "devin@devinmarlowe.example")
         try ctx.save()
 
         #expect(DuplicateContactMerge.run(in: ctx) == 1)
