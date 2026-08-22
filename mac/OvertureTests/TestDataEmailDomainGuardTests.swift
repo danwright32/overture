@@ -151,11 +151,45 @@ struct TestDataEmailDomainGuardTests {
             """)
     }
 
-    // The twelve real people scrubbed in #2839 must not come back, by name OR by domain. This is the
-    // narrow regression half, deliberately kept beside the general rule rather than instead of it: the
-    // rule above cannot see a display name or an Instagram handle, only an address.
+    // Every real person scrubbed out of this PUBLIC repository must not come back, by name OR by handle
+    // OR by domain. This is the narrow regression half, deliberately kept beside the general rule rather
+    // than instead of it: the rule above judges an ADDRESS by its domain and can see neither a display
+    // name nor an Instagram handle.
+    //
+    // Two batches now. #2839 scrubbed twelve people found by grepping for e-mail addresses, which is the
+    // shape somebody happened to look for. #2834 swept the shapes that sweep could not see and found
+    // twenty-one more: eight named people paired with real Instagram handles, and thirteen producers and
+    // music directors credited on real shows, which arrive the same way an address does, because a test
+    // written from a real listing keeps the real credits.
+    //
+    // What is deliberately NOT here: venues and organisations. A room's published phone number, address
+    // or account is public information about a public entity, so `jalopytheatre` and a box office number
+    // stay. The target is a private individual (#2834 says so, and a rule that fired on every venue would
+    // fire on the common case and be switched off, L93).
     @Test func noScrubbedRealPersonReturnsByNameOrHandle() throws {
-        let scrubbed = ["ryanjamesmonroe", "reevecarney", "jerrickcavagnaro", "alexsyiek", "vegaviolin",
+        let scrubbed = [
+                        // #2834, the handles
+                        "cydneyemcg", "maggieestephens", "sarah.bernadette", "migueamell", "markklett",
+                        "sunny.sheu", "kenjin39", "heybailay", "celloverton", "alexkim",
+                        // #2834, the names
+                        "cydney mcquillan-grace", "cydney mcquillan", "maggie stephens",
+                        "maggie wisniewski", "sarah bernadette", "miguel amell", "mark klett",
+                        "sunny sheu", "kento hong", "sarah overton", "alex kim",
+                        // #2834, three more found by extracting every `name:` literal in test data and
+                        // provenance-testing each: a name introduced by a SCRUB commit is invented and
+                        // stays, one introduced by a feature commit was written from real data. That test
+                        // is what kept "Corin Hale" and "Nora Calder" (both minted by #2839 and #2844) and
+                        // what condemned these.
+                        "tatianna cordoba", "sam ock", "zachary mcintyre", "zachmcint",
+                        // #2834, the producer and music director credits
+                        "ben cameron", "bela reynoso", "daniel rubinson", "bryce valle",
+                        "ellen grace diehl", "jenna matula", "kelsey seaman", "rachel sandler",
+                        "mackenzie bruen",
+                        // Written twice, because the accented character reaches this comparison as itself
+                        // in a JSON fixture and as the six characters of a unicode escape in Swift source.
+                        "desir\u{00E9}e dabney", "desir\\u{00e9}e dabney",
+                        // #2839
+"ryanjamesmonroe", "reevecarney", "jerrickcavagnaro", "alexsyiek", "vegaviolin",
                         "annapierre", "samweaver", "iyerviolin", "marcduval", "jakebergmagic",
                         "oliviaterpin", "caseengaines", "caseen.gaines", "ryansbrother",
                         "ryan james monroe", "reeve carney", "jerrick cavagnaro", "alex syiek",

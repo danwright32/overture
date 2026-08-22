@@ -9,7 +9,7 @@ import SwiftData
 // forward: when the dropped night left the feed, `ScoutService.matchByAnyRunURL` re-keyed the stored
 // dismissed row onto the next opening night deliberately, so the show never came back at all.
 //
-// Found live 2026-08-13 on `Rachel Sandler's Singer Showcase` at The Green Room 42, one row playing
+// Found live 2026-08-13 on `Lenka Fiore's Singer Showcase` at The Green Room 42, one row playing
 // Aug 19, Sep 30 and Oct 21, whose Aug 19 is blocked by a day off.
 enum RunNightDrop {
 

@@ -20,7 +20,7 @@ struct RunNightDropWiringTests {
 
     private let now = Date(timeIntervalSince1970: 1_786_000_000)
 
-    private func run(_ ctx: ModelContext, name: String = "Rachel Sandler's Singer Showcase",
+    private func run(_ ctx: ModelContext, name: String = "Lenka Fiore's Singer Showcase",
                      nights: [String] = ["2026-08-19", "2026-09-30", "2026-10-21"]) -> Prospect {
         let p = Prospect(naturalKey: Prospect.makeNaturalKey(groupName: name,
                                                              performanceDate: nights[0],
@@ -98,7 +98,7 @@ struct RunNightDropWiringTests {
     // MARK: the whole-night dismiss, right-clicking a date heading in Scout
 
     // The path that is easy to miss. A bulk "Pitching other shows that night" on Aug 19 would otherwise
-    // still archive the Sandler run's Sep 30 and Oct 21.
+    // still archive the Fiore run's Sep 30 and Oct 21.
     @Test("a night reason applied to a whole date drops only that night from each run it touches")
     func theNightDismissDropsOnlyThatNight() throws {
         let ctx = ModelContext(try container())

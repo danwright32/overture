@@ -227,8 +227,8 @@ enum GroupNameMatch {
     }
 
     // A trailing word that names a ROLE, not a person (#755). Dan's booking history stores a soloist
-    // as "Kento Hong, violin", so without this the strict rule below can never match the person
-    // "Kento Hong" to the record that IS him. Found by running the matcher against his real history
+    // as "Toma Reyes, violin", so without this the strict rule below can never match the person
+    // "Toma Reyes" to the record that IS him. Found by running the matcher against his real history
     // (see PerformerMatchPrecisionCheckTests): it matched 2 of 13 real past performers, because
     // almost every soloist is filed with their instrument.
     //

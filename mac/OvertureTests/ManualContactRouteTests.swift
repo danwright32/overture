@@ -30,16 +30,16 @@ struct ManualContactRouteTests {
     @Test func aContactFormAndAProfileAreBothRoutes() {
         #expect(ManualContactRoute.parse("https://www.alderbourne.example/booking")
                 == .link("https://www.alderbourne.example/booking"))
-        #expect(ManualContactRoute.parse("https://www.instagram.com/heybailay/")
-                == .link("https://www.instagram.com/heybailay/"))
+        #expect(ManualContactRoute.parse("https://www.instagram.com/heybaylor/")
+                == .link("https://www.instagram.com/heybaylor/"))
     }
 
     // A pasted link with no scheme gets one. This is not cosmetic: every surface that offers a route
     // builds a `URL` and drops anything whose scheme is nil, so storing it verbatim would create a
     // contact no card ever shows, which is this same defect one layer further in and harder to see.
     @Test func aSchemelessLinkIsGivenOneRatherThanStoredUnusable() {
-        #expect(ManualContactRoute.parse("instagram.com/heybailay")
-                == .link("https://instagram.com/heybailay"))
+        #expect(ManualContactRoute.parse("instagram.com/heybaylor")
+                == .link("https://instagram.com/heybaylor"))
         #expect(ManualContactRoute.parse("www.marcribler.com/contact")
                 == .link("https://www.marcribler.com/contact"))
     }

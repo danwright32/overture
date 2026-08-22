@@ -197,7 +197,7 @@ enum ProducerShapedName {
     // #2554 adds the combined credit. It is not a variation worth skipping: "this concert is produced and
     // directed by Corin Hale" is the exact line Dan hit, and searching for "produced by " inside it
     // matches nothing at all. Listed longest first so the fuller phrase wins, which also matters to the
-    // attachment test: matching "Produced by" inside "Directed & Produced by Desirée Dabney" would leave
+    // attachment test: matching "Produced by" inside "Directed & Produced by Océane Vireux" would leave
     // it reading "&" and refusing a credit that opens its own line.
     private static let creditConnectors = ["directed and produced by ", "directed & produced by ",
                                            "produced and directed by ", "produced & directed by ",

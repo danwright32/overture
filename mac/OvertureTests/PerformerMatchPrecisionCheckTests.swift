@@ -22,7 +22,7 @@ struct PerformerMatchPrecisionCheckTests {
     // TRAPS: names of people the org is merely NAMED AFTER, where a match would be a false positive.
     private static let realPerformerNames = [
         "Janani Sreenivasan",       // a Downbeat client in her own right
-        "Kento Hong",               // history: "Kento Hong, violin"
+        "Toma Reyes",               // history: "Toma Reyes, violin"
         "Rainer Crosett",           // history: "Rainer Crosett, Cello" (multi-line)
         "Victor Santiago Asuncion", // history: same entry, second line
         "Leonela Alejandro",        // history: "Leonela Alejandro, Guitar"

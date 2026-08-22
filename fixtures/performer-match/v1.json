@@ -59,7 +59,7 @@
     { "groupName": "Lena Whitfield", "status": "contacted" },
     { "groupName": "Devon Marsh", "status": "lost_hard" },
     { "groupName": "Aiko Tanaka", "status": "lost_soft" },
-    { "groupName": "Kento Hong, violin", "status": "lost_soft" },
+    { "groupName": "Toma Reyes, violin", "status": "lost_soft" },
     { "groupName": "Rainer Crosett, Cello\nVictor Santiago Asuncion, Piano\nThe American Recital Debut Award Concert", "status": "booked" },
     { "groupName": "Abby Whiteside Foundation", "status": "warm" }
   ],
@@ -273,15 +273,15 @@
       }
     },
     {
-      "name": "a soloist listed with their instrument still matches, the history stores 'Kento Hong, violin'",
-      "performerName": "Kento Hong",
+      "name": "a soloist listed with their instrument still matches, the history stores 'Toma Reyes, violin'",
+      "performerName": "Toma Reyes",
       "performerEmail": "",
       "production": "self",
       "expect": {
         "relationship": "lost_soft",
         "downbeatClientId": null,
         "matchedClientName": null,
-        "matchedPerformerName": "Kento Hong",
+        "matchedPerformerName": "Toma Reyes",
         "emailCorroborated": false
       }
     },

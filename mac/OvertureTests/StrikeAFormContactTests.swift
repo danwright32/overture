@@ -82,14 +82,14 @@ struct StrikeAFormContactTests {
         let ctx = ModelContext(try container())
         let p = show(ctx)
         let struck = add(p, name: "Eliah B. Johnson", formURL: "https://eliahbjohnson.example/contact")
-        add(p, name: "Zachary McIntyre", formURL: "https://zachmcintyre.example/booking")
+        add(p, name: "Emmett Thackery", formURL: "https://emmettthackyre.example/booking")
         try ctx.save()
 
         ProspectMutations.removeRecipientManually(QueueItem(p), struck.id, struck.name,
                                                   prospects: [p], context: ctx, feedback: ActionFeedback())
 
         let ledger = ContactRefusal.ledger(in: ctx)
-        #expect(!ledger.isRefused(email: nil, formURL: "https://zachmcintyre.example/booking",
+        #expect(!ledger.isRefused(email: nil, formURL: "https://emmettthackyre.example/booking",
                                   showKey: p.naturalKey, orgKey: nil))
         #expect(p.recipients.count == 1)
     }

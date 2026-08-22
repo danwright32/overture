@@ -49,8 +49,8 @@ struct LocalHistoryContractTests {
 
         // A performer filed with their instrument, which is exactly the shape #755 taught the person
         // matcher to read.
-        #expect(history[1].groupName == "Kento Hong, violin")
-        #expect(history[1].email == "kento@example.com")
+        #expect(history[1].groupName == "Toma Reyes, violin")
+        #expect(history[1].email == "toma@example.com")
 
         // One cell really can hold two addresses; the app splits them, the importer does not.
         #expect(history[2].email == "a@example.com, b@example.com")

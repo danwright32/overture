@@ -40,7 +40,7 @@ struct UnaccountedAddressGuardTests {
 
     // The measured show inbox: a local part that is the SHOW's name rather than a person's.
     @Test func anaddressInTheShowsOwnNameIsAccountedFor() {
-        #expect(!fires(email: "BwaySessions@example.com", name: "Ben Cameron",
+        #expect(!fires(email: "BwaySessions@example.com", name: "Ilan Rooke",
                        groupName: "Broadway Sessions"))
     }
 
@@ -53,10 +53,10 @@ struct UnaccountedAddressGuardTests {
     // named on the target's OWN page. Four of the six representative contacts in the store are that, and
     // every one of them must stay untouched.
     @Test func acitedPageAccountsForTheAddress() {
-        #expect(!fires(email: "jed@rosegroupny.com", name: "Tatianna Cordoba",
+        #expect(!fires(email: "jed@rosegroupny.com", name: "Marisol Quenneville",
                        sourceURL: "https://tatiannacordoba.com/contact"))
         // Whitespace is not a citation, so a blank string cannot buy an exemption.
-        #expect(fires(email: "jed@rosegroupny.com", name: "Tatianna Cordoba", sourceURL: "   "))
+        #expect(fires(email: "jed@rosegroupny.com", name: "Marisol Quenneville", sourceURL: "   "))
     }
 
     // The ordinary personal address, in every shape the store holds it: the name itself, an initial plus
