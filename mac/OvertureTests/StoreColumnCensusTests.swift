@@ -18,12 +18,15 @@ import SwiftData
 // rehearsal that quietly counts zero (L52).
 @MainActor
 @Suite("Counting how many stored rows carry a value in one column")
-struct StoreColumnCensusTests {
+// #3065: `final class`, so `sandboxes` is released after every test. This suite was leaving 10
+// directories per run, and a store sandbox holds the `-wal` and `-shm` files SQLite makes beside the
+// `.store` too, which a cleanup naming the store alone could never reach.
+final class StoreColumnCensusTests {
+    private let sandboxes = TemporarySandboxes()
+
     private func tempStoreURL() -> URL {
-        let dir = URL(fileURLWithPath: NSTemporaryDirectory())
-            .appendingPathComponent("census-\(UUID().uuidString)")
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir.appendingPathComponent("Overture.store")
+        (try? sandboxes.makeFile(named: "Overture.store", inSandboxNamed: "census"))
+            ?? URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("Overture.store")
     }
 
     private func makeProspect(_ key: String) -> Prospect {
@@ -169,10 +172,7 @@ struct StoreColumnCensusTests {
     @Test func saysItCouldNotReadAStoreWhosePagesAreDamaged() throws {
         let store = try makeStore(count: 3, withMode: 1)
         let fm = FileManager.default
-        let dir = URL(fileURLWithPath: NSTemporaryDirectory())
-            .appendingPathComponent("census-damaged-\(UUID().uuidString)")
-        try fm.createDirectory(at: dir, withIntermediateDirectories: true)
-        defer { try? fm.removeItem(at: dir) }
+        let dir = try sandboxes.make(named: "census-damaged")
         let copied = dir.appendingPathComponent("Overture.store")
 
         var bytes = try withExtendedLifetime(store.container) { try Data(contentsOf: store.url) }

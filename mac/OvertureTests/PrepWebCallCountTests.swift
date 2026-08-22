@@ -9,7 +9,12 @@ import SwiftData
 // script side now counts it; this is the half that gets the number in front of Dan.
 @MainActor
 @Suite("The app reads what the run actually spent on the web (#1721)")
-struct PrepWebCallCountTests {
+// #3065: `final class` so the sandbox goes with each test. This suite was leaving 6 result files per
+// run. They are FILES rather than directories, so each gets its own sandbox directory: that is what makes
+// them removable at all without naming every file the code under test might write beside them.
+final class PrepWebCallCountTests {
+    private let sandboxes = TemporarySandboxes()
+
 
     private func results(_ block: String) throws -> PrepResults {
         let json = """
@@ -74,14 +79,12 @@ struct PrepWebCallCountTests {
     @Test func theCountReachesTheSummaryThroughTheRealImporter() throws {
         let ctx = ModelContext(try ModelContainer(
             for: AppSchema.schema, configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
-        let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("prep-results-\(UUID().uuidString).json")
+        let url = try sandboxes.makeFile(named: "prep-results.json", inSandboxNamed: "prep-results")
         try """
         {"version": 7, "generatedAt": "2026-07-29T00:00:00Z", "results": [],
          "webCalls": {"recorded": true, "total": 47, "items": 2, "capPerItem": 15,
                       "allowance": 30, "overCap": true, "streams": 1}}
         """.write(to: url, atomically: true, encoding: .utf8)
-        defer { try? FileManager.default.removeItem(at: url) }
 
         let outcome = PrepImporter.consumeIfNew(slot: .prep, 
             at: url, into: ctx,
@@ -230,15 +233,13 @@ struct PrepWebCallCountTests {
     @Test func theRefusalCountReachesTheSummaryThroughTheRealImporter() throws {
         let ctx = ModelContext(try ModelContainer(
             for: AppSchema.schema, configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
-        let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("prep-results-\(UUID().uuidString).json")
+        let url = try sandboxes.makeFile(named: "prep-results.json", inSandboxNamed: "prep-results")
         try """
         {"version": 7, "generatedAt": "2026-07-29T00:00:00Z", "results": [],
          "webCalls": {"recorded": true, "total": 4, "denied": 2, "items": 1, "capPerItem": 15,
                       "allowance": 15, "overCap": false, "streams": 1,
                       "deniedByRoute": {"fetch": 0, "search": 0, "browser": 2, "bash": 0}}}
         """.write(to: url, atomically: true, encoding: .utf8)
-        defer { try? FileManager.default.removeItem(at: url) }
 
         let outcome = PrepImporter.consumeIfNew(slot: .prep, 
             at: url, into: ctx,
@@ -261,14 +262,12 @@ struct PrepWebCallCountTests {
     @Test func aRunThatRecordedNoRoutesKeepsTheSentenceItAlwaysHad() throws {
         let ctx = ModelContext(try ModelContainer(
             for: AppSchema.schema, configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
-        let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("prep-results-\(UUID().uuidString).json")
+        let url = try sandboxes.makeFile(named: "prep-results.json", inSandboxNamed: "prep-results")
         try """
         {"version": 7, "generatedAt": "2026-07-29T00:00:00Z", "results": [],
          "webCalls": {"recorded": true, "total": 4, "denied": 2, "items": 1, "capPerItem": 15,
                       "allowance": 15, "overCap": false, "streams": 1}}
         """.write(to: url, atomically: true, encoding: .utf8)
-        defer { try? FileManager.default.removeItem(at: url) }
 
         let outcome = PrepImporter.consumeIfNew(slot: .prep,
             at: url, into: ctx,

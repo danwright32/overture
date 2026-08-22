@@ -10,11 +10,12 @@ import SwiftData
 // instantly (assume-it-runs-twice). Driven with injected temp paths and a fake launcher, no real run.
 @MainActor
 @Suite("Cancelling the detached Prep and reply-classify runs (#1038)")
-struct PrepReplyCancelServiceTests {
+// #3065: `final class` so the sandbox goes with each test. This suite was leaving 4 per run.
+final class PrepReplyCancelServiceTests {
+    private let sandboxes = TemporarySandboxes()
+
     private func tempDir() throws -> URL {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("prep-reply-cancel-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir
+        try sandboxes.make(named: "prep-reply-cancel")
     }
 
     // --- Prep ---------------------------------------------------------------------------------------

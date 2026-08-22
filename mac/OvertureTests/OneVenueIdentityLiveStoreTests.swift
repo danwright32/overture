@@ -19,17 +19,18 @@ import SwiftData
 //
 // Reads a copy of the live store and writes nothing anywhere.
 @Suite("One venue identity, measured on the real store (#1802)")
-struct OneVenueIdentityLiveStoreTests {
+// #3065: `final class` so the sandbox goes with each test. These held a whole clone of the live store,
+// about 4 MB each, which is why 56 of them accounted for 1.62 GB when the issue was measured.
+final class OneVenueIdentityLiveStoreTests {
+    private let sandboxes = TemporarySandboxes()
+
     private static var liveStoreExists: Bool {
         FileManager.default.fileExists(atPath:
             StoreLocation.storeURL(appSupport: StoreLocation.appSupport, isDebugBuild: false).path)
     }
 
     private func liveProspects() throws -> [Prospect] {
-        let fm = FileManager.default
-        let dir = fm.temporaryDirectory.appendingPathComponent("venue-identity-\(UUID().uuidString)",
-                                                               isDirectory: true)
-        try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        let dir = try sandboxes.make(named: "venue-identity")
         guard let url = try LiveStoreClone.makeClone(in: dir) else {
             throw LiveStoreClone.Refusal.backupFailed("no live store on this machine")
         }

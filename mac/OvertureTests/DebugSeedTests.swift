@@ -7,13 +7,14 @@ import SwiftData
 // realistic data without touching live data. The helper is compiled out of release builds,
 // so these tests (always built in Debug) are the only thing that references it.
 #if DEBUG
+// #3065: a `final class` rather than a `struct`, so `sandboxes` is released at the end of every test and
+// its deinit removes the scratch. This suite alone was leaving 17 directories per run.
 @Suite("Debug seed (#281)")
-struct DebugSeedTests {
+final class DebugSeedTests {
+    private let sandboxes = TemporarySandboxes()
+
     private func makeTempDir() throws -> URL {
-        let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("debug-seed-test-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir
+        try sandboxes.make(named: "debug-seed-test")
     }
 
     @Test func planMapsEachInputToASrcAndDestUnderTheRightBase() {
@@ -194,8 +195,9 @@ struct DebugSeedTests {
 
     @Test func seedGmailCreatesTheDestinationDirectoryWhenAbsent() throws {
         let live = try makeTempDir()
-        let debug = FileManager.default.temporaryDirectory
-            .appendingPathComponent("debug-seed-gmail-missing-\(UUID().uuidString)", isDirectory: true)
+        // Reserved, not created: this test's whole subject is that seedGmail creates the destination
+        // when it is absent, so handing it an existing directory would remove the condition under test.
+        let debug = sandboxes.reserve(named: "debug-seed-gmail-missing")
         try "{}".write(to: live.appendingPathComponent("gmail-oauth.json"), atomically: true, encoding: .utf8)
 
         let result = try DebugSeed.seedGmail(liveBase: live, debugBase: debug)
@@ -206,8 +208,8 @@ struct DebugSeedTests {
 
     @Test func seedCreatesTheDestinationDirectoryWhenAbsent() throws {
         let live = try makeTempDir()
-        let debug = FileManager.default.temporaryDirectory
-            .appendingPathComponent("debug-seed-missing-\(UUID().uuidString)", isDirectory: true)
+        // Reserved, not created, for the same reason as the gmail case above.
+        let debug = sandboxes.reserve(named: "debug-seed-missing")
         let name = "overture-history.json"
         try "[]".write(to: live.appendingPathComponent(name), atomically: true, encoding: .utf8)
 

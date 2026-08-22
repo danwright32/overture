@@ -8,7 +8,13 @@ import SwiftData
 // (which always build in Debug) are the only thing that references it.
 #if DEBUG
 @Suite("Debug staging")
-struct DebugStagingTests {
+// #3065: `final class` so the sandbox goes with each test. The old `defer` here removed the `.store`
+// and left the `-wal` and `-shm` files SQLite creates beside it, which is where the measured
+// `overture-test-*.store-wal` and `-shm` entries came from. A cleanup naming ONE file cannot know about
+// the two the database engine made next to it; a cleanup of the directory around it does not have to.
+final class DebugStagingTests {
+    private let sandboxes = TemporarySandboxes()
+
     private func makeProspect() -> Prospect {
         Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: nil,
                  performanceDate: nil, sourceListingURL: nil, websiteURL: nil,
@@ -280,9 +286,7 @@ struct DebugStagingTests {
     // the queue's `@Query` re-reads through its own). An in-memory store or a same-context refetch
     // could both mask a real persistence gap that only a genuinely separate read surfaces.
     @Test func selfSendLeadKeepsItsPendingRecipientInAFileBackedStoreAcrossContexts() throws {
-        let storeURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("overture-test-\(UUID().uuidString).store")
-        defer { try? FileManager.default.removeItem(at: storeURL) }
+        let storeURL = try sandboxes.makeFile(named: "Overture.store", inSandboxNamed: "overture-test")
         let container = try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
                                            configurations: [ModelConfiguration(url: storeURL)])
 

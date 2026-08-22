@@ -9,17 +9,17 @@ import SwiftData
 // looks identical to a healthy run that genuinely found nothing.
 @MainActor
 @Suite("Performer match: failure paths and idempotency (#754)")
-struct PerformerMatchFailurePathTests {
+// #3065: `final class` so the sandbox goes with each test. This suite was leaving 4 per run.
+final class PerformerMatchFailurePathTests {
+    private let sandboxes = TemporarySandboxes()
+
     private func container() throws -> ModelContainer {
         try ModelContainer(for: Schema([Prospect.self]),
                            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
     }
 
     private func tempDir() throws -> URL {
-        let dir = URL(fileURLWithPath: NSTemporaryDirectory())
-            .appendingPathComponent("performer-failure-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir
+        try sandboxes.make(named: "performer-failure")
     }
 
     // MARK: - The matcher itself never crashes and never guesses

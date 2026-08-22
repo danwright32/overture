@@ -13,12 +13,14 @@ import Foundation
 // None of the 53 was broken, only because the files #1967 moved happened to sit at the same depth as
 // the ones that stayed. That is luck, and the next reorganisation spends it.
 @Suite("Finding the repo root by search (#1993)")
-struct RepoRootTests {
+// #3065: `final class` so the sandbox goes with each test.
+final class RepoRootTests {
+    private let sandboxes = TemporarySandboxes()
+
 
     // A throwaway tree shaped like this repo: a root holding the marker, and a file some way down.
     private func tree(depth: Int) throws -> (root: URL, leaf: URL) {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("repo-root-\(UUID().uuidString)")
+        let root = try sandboxes.make(named: "repo-root")
         try FileManager.default.createDirectory(
             at: root.appendingPathComponent("mac/Overture"), withIntermediateDirectories: true)
 
@@ -58,10 +60,10 @@ struct RepoRootTests {
     // plausible-looking path, because a wrong root does not fail: it silently scans an empty
     // directory and every guard standing on it reports that the app contains nothing (#1967).
     @Test func nothingIsFoundWhenTheMarkerIsAbsent() throws {
-        let bare = FileManager.default.temporaryDirectory
-            .appendingPathComponent("no-repo-\(UUID().uuidString)/a/b/c")
+        // The old `defer` here removed `bare`, which is the LEAF `a/b/c`, and left the `no-repo-<uuid>`
+        // root and two levels of it behind on every run. Owning the root is what actually clears it.
+        let bare = try sandboxes.make(named: "no-repo").appendingPathComponent("a/b/c")
         try FileManager.default.createDirectory(at: bare, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: bare) }
 
         #expect(RepoRoot.search(from: bare.appendingPathComponent("Stray.swift")) == nil)
     }
