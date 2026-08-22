@@ -4,7 +4,7 @@ import SwiftData
 
 // #2691: dismissing ONE night of a multi-night run must not throw away every other night.
 //
-// Found live 2026-08-13: `Rachel Sandler's Singer Showcase` at The Green Room 42 is one row whose
+// Found live 2026-08-13: `Lenka Fiore's Singer Showcase` at The Green Room 42 is one row whose
 // `runNights` are 2026-08-19, 2026-09-30 and 2026-10-21. Aug 19 is blocked, so the card carries the
 // Unavailable badge; Dan wants Sep 30 or Oct 21 and cannot say so. Dismissing archives all three, and
 // the dismissal then follows the show forward, because when Aug 19 leaves the feed
@@ -26,11 +26,11 @@ struct RunNightDropTests {
     private let now = Date(timeIntervalSince1970: 1_786_000_000)
 
     // The live row this issue was found on.
-    private func sandler(_ ctx: ModelContext) -> Prospect {
-        let p = Prospect(naturalKey: Prospect.makeNaturalKey(groupName: "Rachel Sandler's Singer Showcase",
+    private func fiore(_ ctx: ModelContext) -> Prospect {
+        let p = Prospect(naturalKey: Prospect.makeNaturalKey(groupName: "Lenka Fiore's Singer Showcase",
                                                              performanceDate: "2026-08-19",
                                                              venue: "The Green Room 42"),
-                         groupName: "Rachel Sandler's Singer Showcase", discipline: "music",
+                         groupName: "Lenka Fiore's Singer Showcase", discipline: "music",
                          venue: "The Green Room 42", performanceDate: "2026-08-19",
                          sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
                          production: "self", profile: "strong", coverage: "likely_uncovered",
@@ -82,7 +82,7 @@ struct RunNightDropTests {
     @Test("dropping the opening night moves the card to the next night")
     func droppingTheOpeningNightMovesTheCard() throws {
         let ctx = ModelContext(try container())
-        let p = sandler(ctx)
+        let p = fiore(ctx)
 
         let outcome = p.dropNight("2026-08-19", reason: .dateConflict, now: now, in: ctx)
 
@@ -98,7 +98,7 @@ struct RunNightDropTests {
     @Test("the card stays untriaged and in the queue, it does not go to Archive")
     func theCardStaysInTheQueue() throws {
         let ctx = ModelContext(try container())
-        let p = sandler(ctx)
+        let p = fiore(ctx)
 
         _ = p.dropNight("2026-08-19", reason: .dateConflict, now: now, in: ctx)
 
@@ -113,7 +113,7 @@ struct RunNightDropTests {
     @Test("a dropped night is not recorded as the show leaving the queue")
     func aDroppedNightIsNotAnExit() throws {
         let ctx = ModelContext(try container())
-        let p = sandler(ctx)
+        let p = fiore(ctx)
 
         _ = p.dropNight("2026-08-19", reason: .pitchingOtherShows, now: now, in: ctx)
 
@@ -126,13 +126,13 @@ struct RunNightDropTests {
     @Test("the row is re-keyed in place to its new opening night")
     func theRowIsRekeyedInPlace() throws {
         let ctx = ModelContext(try container())
-        let p = sandler(ctx)
+        let p = fiore(ctx)
         let before = p.naturalKey
 
         _ = p.dropNight("2026-08-19", reason: .dateConflict, now: now, in: ctx)
 
         #expect(p.naturalKey != before)
-        #expect(p.naturalKey == Prospect.makeNaturalKey(groupName: "Rachel Sandler's Singer Showcase",
+        #expect(p.naturalKey == Prospect.makeNaturalKey(groupName: "Lenka Fiore's Singer Showcase",
                                                         performanceDate: "2026-09-30",
                                                         venue: "The Green Room 42"))
         #expect((try ctx.fetch(FetchDescriptor<Prospect>())).count == 1, "one card, not two")
@@ -146,7 +146,7 @@ struct RunNightDropTests {
     @Test("a dropped night is remembered, with its reason and when")
     func aDroppedNightIsRemembered() throws {
         let ctx = ModelContext(try container())
-        let p = sandler(ctx)
+        let p = fiore(ctx)
 
         _ = p.dropNight("2026-08-19", reason: .hadPaidWork, now: now, in: ctx)
 
@@ -160,7 +160,7 @@ struct RunNightDropTests {
     @Test("re-folding the run from the feed does not put a dropped night back")
     func theScoutDoesNotPutItBack() throws {
         let ctx = ModelContext(try container())
-        let p = sandler(ctx)
+        let p = fiore(ctx)
         _ = p.dropNight("2026-08-19", reason: .dateConflict, now: now, in: ctx)
 
         // What the next scout hands back: the feed still lists all three nights.
@@ -172,7 +172,7 @@ struct RunNightDropTests {
     @Test("a night that was never dropped survives a re-fold")
     func anUndroppedNightSurvives() throws {
         let ctx = ModelContext(try container())
-        let p = sandler(ctx)
+        let p = fiore(ctx)
 
         #expect(DroppedNight.keeping(["2026-08-19", "2026-09-30"], on: p, lookup: { _ in nil }) == ["2026-08-19", "2026-09-30"])
     }
@@ -185,7 +185,7 @@ struct RunNightDropTests {
     @Test("dropping the blocked night clears the clash")
     func droppingTheBlockedNightClearsTheClash() throws {
         let ctx = ModelContext(try container())
-        let p = sandler(ctx)
+        let p = fiore(ctx)
         // The live block: Dan's own day off on Aug 19, named Empire Harmony Rehearsal.
         let calendar = BlockedCalendar.build(
             bookings: [], exportedBlockedDates: [],
@@ -210,7 +210,7 @@ struct RunNightDropTests {
     @Test("dropping the last remaining night is an ordinary dismissal")
     func droppingTheLastNightIsADismissal() throws {
         let ctx = ModelContext(try container())
-        let p = sandler(ctx)
+        let p = fiore(ctx)
         _ = p.dropNight("2026-08-19", reason: .dateConflict, now: now, in: ctx)
         _ = p.dropNight("2026-09-30", reason: .dateConflict, now: now, in: ctx)
 
@@ -223,7 +223,7 @@ struct RunNightDropTests {
     @Test("a single-night show is never a per-night drop")
     func aSingleNightShowIsAlwaysAWholeShow() throws {
         let ctx = ModelContext(try container())
-        let p = sandler(ctx)
+        let p = fiore(ctx)
         p.runNights = ["2026-08-19"]
         p.runEndDate = nil
 
@@ -237,7 +237,7 @@ struct RunNightDropTests {
     @Test("a run with no recorded nights is dismissed whole rather than guessed at")
     func aRunWithNoRecordedNightsIsNotPickedApart() throws {
         let ctx = ModelContext(try container())
-        let p = sandler(ctx)
+        let p = fiore(ctx)
         p.runNights = []
 
         #expect(p.dropNight("2026-08-19", reason: .dateConflict, now: now, in: ctx) == .wholeShow)
@@ -248,7 +248,7 @@ struct RunNightDropTests {
     @Test("undoing a drop puts the night back and restores the key")
     func undoingADropPutsTheNightBack() throws {
         let ctx = ModelContext(try container())
-        let p = sandler(ctx)
+        let p = fiore(ctx)
         let key = p.naturalKey
         _ = p.dropNight("2026-08-19", reason: .dateConflict, now: now, in: ctx)
 
@@ -263,7 +263,7 @@ struct RunNightDropTests {
     @Test("dropping the same night twice drops it once")
     func droppingTwiceDropsOnce() throws {
         let ctx = ModelContext(try container())
-        let p = sandler(ctx)
+        let p = fiore(ctx)
         _ = p.dropNight("2026-08-19", reason: .dateConflict, now: now, in: ctx)
 
         let second = p.dropNight("2026-08-19", reason: .dateConflict, now: now.addingTimeInterval(60), in: ctx)

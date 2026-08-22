@@ -148,11 +148,11 @@ struct PerformerMatchTests {
     // (crucially) must not be mistaken for an address that then fails to match.
     @Test func aHistoryCellThatIsNotAnEmailIsSimplyNoSignal() {
         let notEmails = [
-            HistoryRecord(groupName: "Kento Hong, violin", status: "warm",
-                          email: "DM on instagram\nhttps://www.instagram.com/kenjin39/?hl=en"),
+            HistoryRecord(groupName: "Toma Reyes, violin", status: "warm",
+                          email: "DM on instagram\nhttps://www.instagram.com/tomarey39/?hl=en"),
         ]
         let verdict = HistoryMatch.matchPerformer(
-            performerName: "Kento Hong", performerEmail: "kento@example.com",
+            performerName: "Toma Reyes", performerEmail: "toma@example.com",
             production: .selfProduced, clients: [], history: notEmails)
 
         #expect(verdict.relationship == .warm)
@@ -228,10 +228,10 @@ struct PerformerMatchTests {
     // #755, found by running the matcher against Dan's REAL booking history: it matched only 2 of 13
     // known past performers, because almost every soloist is filed with their instrument.
     @Test func aTrailingInstrumentOrVoicePartIsNotPartOfAPersonsName() {
-        #expect(GroupNameMatch.personNameTokens("Kento Hong, violin") == ["kento", "hong"])
+        #expect(GroupNameMatch.personNameTokens("Toma Reyes, violin") == ["toma", "reyes"])
         #expect(GroupNameMatch.personNameTokens("Rainer Crosett, Cello") == ["rainer", "crosett"])
         #expect(GroupNameMatch.personNameTokens("Jane Doe, mezzo soprano") == ["jane", "doe"])
-        #expect(GroupNameMatch.isConfidentPersonName("Kento Hong", "Kento Hong, violin"))
+        #expect(GroupNameMatch.isConfidentPersonName("Toma Reyes", "Toma Reyes, violin"))
 
         // Never strips below two tokens, so a name can't erode into a single word that would then
         // collide with half the world.

@@ -400,7 +400,7 @@ enum PrepImporter {
     //   - Never a manual recipient (#388: Dan typed it in, and it is not the importer's to rewrite), and
     //     never an already-sent one, whose address is locked.
     //
-    // Provenance is deliberately NOT required to match. The live store held Ben Cameron as `act` on one
+    // Provenance is deliberately NOT required to match. The live store held Ilan Rooke as `act` on one
     // row and `performer` on the other, disagreeing about what he even is; they are still one person, and
     // `apply` settles the classification.
     private static func matchSamePerson(in p: Prospect, name: String?,

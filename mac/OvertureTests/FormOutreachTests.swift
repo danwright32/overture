@@ -333,13 +333,13 @@ struct FormPitchStateTests {
     // this safe: only where a hand route is the ONLY way through, which the test above pins.
     @Test func asocialOnlyContactReachesTheSameControl() throws {
         let ctx = ModelContext(try container())
-        let p = show(ctx, formURL: "https://www.instagram.com/heybailay/")
+        let p = show(ctx, formURL: "https://www.instagram.com/heybaylor/")
 
         guard case let .ready(_, routeURL) = FormPitch.state(of: p) else {
             Issue.record("a social-only show offers no way to pitch it by hand")
             return
         }
-        #expect(routeURL == "https://www.instagram.com/heybailay/")
+        #expect(routeURL == "https://www.instagram.com/heybaylor/")
     }
 }
 

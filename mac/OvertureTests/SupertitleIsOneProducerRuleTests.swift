@@ -30,7 +30,7 @@ struct SupertitleIsOneProducerRuleTests {
         ("Underbelly Theatre Company's", "Underbelly Theatre Company"),
         ("Acting Up Entertainment's", "Acting Up Entertainment"),
         ("Hosted by Vivace Arts Collective", "Vivace Arts Collective"),
-        ("Ben Cameron's", "Ben Cameron")
+        ("Ilan Rooke's", "Ilan Rooke")
     ]
 
     // Real supertitles from the same feed, every one of them marketing.

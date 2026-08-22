@@ -55,7 +55,7 @@ enum UnaccountedAddressGuard {
         if sharedInboxWords.contains(where: { core.contains($0) }) { return false }
         // The show's own name and the presenting organisation's, because an address at either is the act's
         // rather than a stranger's. This is what keeps a show inbox (measured: `BwaySessions@` on Ben
-        // Cameron's "Broadway Sessions") out of a rule about people.
+        // Rooke's "Broadway Sessions") out of a rule about people.
         let accountedFor = words(name) + words(groupName) + words(presenter)
         return !accountedFor.contains { core.contains($0) }
     }

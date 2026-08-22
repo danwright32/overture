@@ -37,9 +37,9 @@ struct VenueTixProducerFromSuperTitleTests {
             ("Ted and Togo Productions", "Ted and Togo Productions"),
             ("What\u{2019}s Inside Productions", "What\u{2019}s Inside Productions"),
             // A person producing under their own name is still the producer, and is who Dan pitches.
-            ("Ben Cameron's", "Ben Cameron"),
-            ("Kelsey Seaman's", "Kelsey Seaman"),
-            ("Maggie Wisniewski's", "Maggie Wisniewski"),
+            ("Ilan Rooke's", "Ilan Rooke"),
+            ("Robyn Estal's", "Robyn Estal"),
+            ("Tamsin Reddick's", "Tamsin Reddick"),
         ]
         for (raw, expected) in cases {
             #expect(ProducerShapedName.from(raw) == expected,

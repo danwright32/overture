@@ -15,8 +15,8 @@ import SwiftData
 //     entirely alone rather than partly merged.
 //   - Only where exactly two or more rows fold to ONE person and every one of them is safe to touch.
 //   - Nothing the loser knew is lost. Every field is carried across where the winner has none, which is
-//     the case the store actually held: Ben Cameron's form-only row carried no role while his address row
-//     carried "Creator & Host, Broadway Sessions", and Cydney's Instagram row carried a role her booking
+//     the case the store actually held: Ilan Rooke's form-only row carried no role while his address row
+//     carried "Creator & Host, Broadway Sessions", and Sabine's Instagram row carried a role her booking
 //     page row did not (L5: a blank must never beat real data in a merge).
 enum DuplicateContactMerge {
 

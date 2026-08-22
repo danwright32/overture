@@ -208,9 +208,9 @@ describe("appHistoryRecords", () => {
   it("carries the email through, so a performer match can be corroborated", () => {
     const csv =
       "Name of Group,Date of shoot,Email,Venue,First Contact,Type of Contact,Status\n" +
-      "Kento Hong,,kento@example.com,,Cold Email (Me to Them),Direct Email,Booked\n";
+      "Toma Reyes,,toma@example.com,,Cold Email (Me to Them),Direct Email,Booked\n";
     expect(appHistoryRecords(parseBookingCsv(csv))).toEqual([
-      { groupName: "Kento Hong", status: "booked", email: "kento@example.com" },
+      { groupName: "Toma Reyes", status: "booked", email: "toma@example.com" },
     ]);
   });
 

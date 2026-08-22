@@ -64,8 +64,8 @@ struct DuplicateContactMergeTests {
     @Test func theUsableFormSurvivesAndTheSocialOneGoes() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx)
-        add(p, name: "Cydney McQuillan-Grace", formURL: "https://www.cydneymcg.example/booking")
-        add(p, name: "Cydney McQuillan-Grace", formURL: "https://www.instagram.com/cydneyemcg/",
+        add(p, name: "Sabine Orrell-Vance", formURL: "https://www.cydneymcg.example/booking")
+        add(p, name: "Sabine Orrell-Vance", formURL: "https://www.instagram.com/sabineeov/",
             role: "Vocalist")
         try ctx.save()
 
@@ -78,14 +78,14 @@ struct DuplicateContactMergeTests {
         #expect(kept.role == "Vocalist")
     }
 
-    // Ben Cameron, the worst pair in the store: the rows disagreed about what he is, and only the address
+    // Ilan Rooke, the worst pair in the store: the rows disagreed about what he is, and only the address
     // row carried his role.
     @Test func nothingTheLosingRowKnewIsLost() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx)
-        add(p, name: "Ben Cameron", formURL: "https://www.instagram.com/bwaysessions/",
+        add(p, name: "Ilan Rooke", formURL: "https://www.instagram.com/bwaysessions/",
             provenance: .act, sourceURL: "https://www.instagram.com/bwaysessions/")
-        add(p, name: "Ben Cameron", email: "bwaysessions@example.test",
+        add(p, name: "Ilan Rooke", email: "bwaysessions@example.test",
             role: "Creator & Host, Broadway Sessions", provenance: .performer)
         try ctx.save()
 
@@ -118,8 +118,8 @@ struct DuplicateContactMergeTests {
     @Test func aGroupHoldingAManualRowIsLeftAlone() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx)
-        add(p, name: "Miguel Amell", email: "typed@example.test", provenance: .manual)
-        add(p, name: "Miguel Amell", formURL: "https://www.instagram.com/migueamell/")
+        add(p, name: "Marek Solano", email: "typed@example.test", provenance: .manual)
+        add(p, name: "Marek Solano", formURL: "https://www.instagram.com/mareksolano/")
         try ctx.save()
 
         #expect(DuplicateContactMerge.reconcile(p, in: ctx) == 0)
@@ -160,15 +160,15 @@ struct DuplicateContactMergeTests {
     @Test func threeHandlesForOnePersonCollapseToOne() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx)
-        add(p, name: "Maggie Stephens", formURL: "https://www.instagram.com/maggieestephens/")
-        add(p, name: "Maggie Stephens", formURL: "https://www.maggiestephens.example/contact")
-        add(p, name: "Maggie Stephens", email: "maggie@example.test")
+        add(p, name: "Nessa Halloway", formURL: "https://www.instagram.com/nessaehalloway/")
+        add(p, name: "Nessa Halloway", formURL: "https://www.maggiestephens.example/contact")
+        add(p, name: "Nessa Halloway", email: "nessa@example.test")
         try ctx.save()
 
         #expect(DuplicateContactMerge.reconcile(p, in: ctx) == 2)
         let kept = try #require(p.recipients.first)
         #expect(p.recipients.count == 1)
-        #expect(kept.email == "maggie@example.test")
+        #expect(kept.email == "nessa@example.test")
         #expect(kept.contactFormURL == "https://www.maggiestephens.example/contact",
                 "of her two forms the one on her own site survived")
     }
@@ -180,8 +180,8 @@ struct DuplicateContactMergeTests {
     @Test func twoDifferentAddressesUnderOneNameAreNeverMerged() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx)
-        add(p, name: "Alex Kim", email: "b@example.test")
-        add(p, name: "Alex Kim", email: "a@example.test")
+        add(p, name: "Noa Petrov", email: "b@example.test")
+        add(p, name: "Noa Petrov", email: "a@example.test")
         try ctx.save()
 
         #expect(DuplicateContactMerge.reconcile(p, in: ctx) == 0)
@@ -193,8 +193,8 @@ struct DuplicateContactMergeTests {
     @Test func oneAddressWrittenTwoWaysIsStillMerged() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx)
-        add(p, name: "Alex Kim", email: "Alex@Example.test")
-        add(p, name: "Alex Kim", formURL: "https://www.instagram.com/alexkim/")
+        add(p, name: "Noa Petrov", email: "Alex@Example.test")
+        add(p, name: "Noa Petrov", formURL: "https://www.instagram.com/noapetrov/")
         try ctx.save()
 
         #expect(DuplicateContactMerge.reconcile(p, in: ctx) == 1)
@@ -207,8 +207,8 @@ struct DuplicateContactMergeTests {
     @Test func twoFormOnlyRowsStillMerge() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx)
-        add(p, name: "Maggie Stephens", formURL: "https://www.instagram.com/maggieestephens/")
-        add(p, name: "Maggie Stephens", formURL: "https://www.maggiestephens.example/contact")
+        add(p, name: "Nessa Halloway", formURL: "https://www.instagram.com/nessaehalloway/")
+        add(p, name: "Nessa Halloway", formURL: "https://www.maggiestephens.example/contact")
         try ctx.save()
 
         #expect(DuplicateContactMerge.reconcile(p, in: ctx) == 1)

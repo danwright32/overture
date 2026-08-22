@@ -72,12 +72,12 @@ struct ContactFormReachabilityTests {
     @Test func aninstagramIsARouteWithItsOwnVerdict() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx, group: "Gimme A Sign!")
-        p.setRecipients([formContact("https://www.instagram.com/heybailay/")])
+        p.setRecipients([formContact("https://www.instagram.com/heybaylor/")])
 
         #expect(p.reachabilityResultFromRecipients == .socialOnly)
         var item = QueueItem(p)
         item.reachabilityResult = .socialOnly
-        #expect(item.displayedContactForms.map(\.absoluteString) == ["https://www.instagram.com/heybailay/"])
+        #expect(item.displayedContactForms.map(\.absoluteString) == ["https://www.instagram.com/heybaylor/"])
     }
 
     @Test func anEmailStillBeatsAForm() throws {
@@ -138,7 +138,7 @@ struct ContactFormReachabilityTests {
         ownSite.reachabilityResult = .noEmailFound
 
         let social = show(ctx, group: "Gimme A Sign!")
-        social.setRecipients([formContact("https://www.instagram.com/heybailay/")])
+        social.setRecipients([formContact("https://www.instagram.com/heybaylor/")])
         social.reachabilityProbedAt = Date()
         social.reachabilityResult = .noEmailFound
 

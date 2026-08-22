@@ -47,7 +47,7 @@ struct PrepIngestReachabilityTests {
     // will not use) and one form on the performer's own site (one he will).
     private func theTwoPerformers() -> [PrepContact] {
         [PrepContact(name: "Sarah Matsushima", role: "Performer", email: nil, method: "form_or_dm",
-                     confidence: "medium", formUrl: "https://instagram.com/sarah.bernadette",
+                     confidence: "medium", formUrl: "https://instagram.com/delia.marchetti",
                      provenance: "performer"),
          PrepContact(name: "Tobias Lund", role: "Performer", email: nil, method: "form_or_dm",
                      confidence: "medium", formUrl: "https://tobiaslund.example/appointments",
@@ -254,7 +254,7 @@ struct ContactCountPromiseTests {
     @Test func oneContactStillEarnsNoPill() throws {
         let ctx = ModelContext(try container())
         let p = show(ctx)
-        p.setRecipients([performer("Sarah Matsushima", form: "https://instagram.com/sarah.bernadette")])
+        p.setRecipients([performer("Sarah Matsushima", form: "https://instagram.com/delia.marchetti")])
 
         #expect(QueueItem(p).contactCountLabel == nil)
     }

@@ -56,7 +56,7 @@ struct ListingOrganiserTests {
             ("Acting Up Entertainment's The Larry Ray Show", "The Larry Ray Show",
              "Acting Up Entertainment"),
             // A person producing under their own name is still who Dan pitches.
-            ("Ben Cameron's Broadway Sessions", "Broadway Sessions", "Ben Cameron"),
+            ("Ilan Rooke's Broadway Sessions", "Broadway Sessions", "Ilan Rooke"),
         ]
         for (text, title, expected) in cases {
             #expect(ListingOrganiser.producerNamed(inListingText: text, showTitle: title,

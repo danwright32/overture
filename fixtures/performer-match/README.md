@@ -46,7 +46,7 @@ Each is a concession to how his history is actually written, and each is deliber
 to leave the traps in rule 1 intact:
 
 5. **A trailing instrument or voice part is not part of a name.** His history files a soloist as
-   "Kento Hong, violin", so a strict rule could never match the person to the record that IS him. A
+   "Toma Reyes, violin", so a strict rule could never match the person to the record that IS him. A
    CLOSED vocabulary of role words, not "drop the last token": dropping blindly would turn the org
    "Jane Doe Ensemble" into the person "Jane Doe", which is precisely the false positive rule 1
    exists to stop. Never strips a name below two tokens.

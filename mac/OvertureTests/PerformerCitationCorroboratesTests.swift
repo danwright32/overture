@@ -215,7 +215,7 @@ struct PerformerCitationCorroboratesTests {
         _ = PrepImporter.ingest(PrepResults(version: 6, generatedAt: "now", results: [
             PrepResult(naturalKey: key, contacts: [
                 performer("robin@robinvale.example", corroborated: false),
-                PrepContact(name: "Sam Ock", role: nil, email: "sam@ensemble.example",
+                PrepContact(name: "Roan Petrie", role: nil, email: "sam@ensemble.example",
                             method: "named_decision_maker", confidence: "high", formUrl: nil,
                             provenance: "act", sourceUrl: nil),
             ])
@@ -234,7 +234,7 @@ struct PerformerCitationCorroboratesTests {
         let key = keptProspect(ctx, group: "Robin Vale", venue: "East Village Playhouse")
         _ = PrepImporter.ingest(PrepResults(version: 6, generatedAt: "now", results: [
             PrepResult(naturalKey: key, contacts: [
-                PrepContact(name: "Sam Ock", role: nil, email: "sam@ensemble.example",
+                PrepContact(name: "Roan Petrie", role: nil, email: "sam@ensemble.example",
                             method: "named_decision_maker", confidence: "high", formUrl: nil,
                             provenance: "act", sourceUrl: nil),
             ])

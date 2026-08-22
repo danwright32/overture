@@ -79,17 +79,17 @@ struct OnePersonOneContactTests {
         let ctx = ModelContext(try container())
         let key = show(ctx)
 
-        ingest([contact("Cydney McQuillan-Grace", formUrl: "https://www.cydneymcg.example/booking"),
-                contact("Maggie Stephens", formUrl: "https://www.maggiestephens.example/contact")],
+        ingest([contact("Sabine Orrell-Vance", formUrl: "https://www.sabinemcg.example/booking"),
+                contact("Nessa Halloway", formUrl: "https://www.maggiestephens.example/contact")],
                key: key, into: ctx)
-        ingest([contact("Cydney McQuillan-Grace", formUrl: "https://www.instagram.com/cydneyemcg/"),
-                contact("Maggie Stephens", formUrl: "https://www.instagram.com/maggieestephens/")],
+        ingest([contact("Sabine Orrell-Vance", formUrl: "https://www.instagram.com/sabineeov/"),
+                contact("Nessa Halloway", formUrl: "https://www.instagram.com/nessaehalloway/")],
                key: key, into: ctx)
 
         let p = try prospect(ctx, key)
         #expect(p.recipients.count == 2)
-        let cydney = try #require(p.recipients.first { $0.name == "Cydney McQuillan-Grace" })
-        #expect(cydney.contactFormURL == "https://www.cydneymcg.example/booking",
+        let sabine = try #require(p.recipients.first { $0.name == "Sabine Orrell-Vance" })
+        #expect(sabine.contactFormURL == "https://www.sabinemcg.example/booking",
                 "her own booking page is the route Dan can use; the Instagram is a dead end (#1626)")
     }
 
@@ -100,10 +100,10 @@ struct OnePersonOneContactTests {
         let key = show(ctx)
 
         ingest([contact("Bethany Griffin", formUrl: "https://www.bethanygriffin.example/contact"),
-                contact("Miguel Amell", formUrl: "https://www.instagram.com/migueamell/")],
+                contact("Marek Solano", formUrl: "https://www.instagram.com/mareksolano/")],
                key: key, into: ctx)
         ingest([contact("Bethany Griffin", email: "gbethany831@example.test"),
-                contact("Miguel Amell", email: "migueamell9@example.test")],
+                contact("Marek Solano", email: "mareksolano9@example.test")],
                key: key, into: ctx)
 
         let p = try prospect(ctx, key)
@@ -120,9 +120,9 @@ struct OnePersonOneContactTests {
         let ctx = ModelContext(try container())
         let key = show(ctx)
 
-        ingest([contact("Ben Cameron", formUrl: "https://www.instagram.com/bwaysessions/", provenance: "act")],
+        ingest([contact("Ilan Rooke", formUrl: "https://www.instagram.com/bwaysessions/", provenance: "act")],
                key: key, into: ctx)
-        ingest([contact("Ben Cameron", email: "bwaysessions@example.test",
+        ingest([contact("Ilan Rooke", email: "bwaysessions@example.test",
                         role: "Creator & Host, Broadway Sessions", provenance: "performer")],
                key: key, into: ctx)
 
@@ -153,9 +153,9 @@ struct OnePersonOneContactTests {
         let ctx = ModelContext(try container())
         let key = show(ctx)
 
-        ingest([contact("Alex Kim", formUrl: "https://alexkim.example/contact")], key: key, into: ctx)
-        ingest([contact("Alex Kim", email: "alex@one.example"),
-                contact("Alex Kim", email: "alex@two.example")], key: key, into: ctx)
+        ingest([contact("Noa Petrov", formUrl: "https://noapetrov.example/contact")], key: key, into: ctx)
+        ingest([contact("Noa Petrov", email: "alex@one.example"),
+                contact("Noa Petrov", email: "alex@two.example")], key: key, into: ctx)
 
         let p = try prospect(ctx, key)
         #expect(p.recipients.count == 3, "two people share a name, so nothing may be merged onto one row")
@@ -203,8 +203,8 @@ struct ContactIdentityTests {
 
     @Test func caseSpacingAndPunctuationDoNotMakeTwoPeople() {
         #expect(ContactIdentity.isSamePerson("Devin Marlowe", "devin marlowe"))
-        #expect(ContactIdentity.isSamePerson("Cydney McQuillan-Grace", "Cydney McQuillan Grace"))
-        #expect(ContactIdentity.isSamePerson("Maggie  Stephens ", "Maggie Stephens"))
+        #expect(ContactIdentity.isSamePerson("Sabine Orrell-Vance", "Sabine Orrell Vance"))
+        #expect(ContactIdentity.isSamePerson("Nessa  Halloway ", "Nessa Halloway"))
     }
 
     // #774/#755's reason, applied to a person: the strip removes everything outside a-z, so an accent

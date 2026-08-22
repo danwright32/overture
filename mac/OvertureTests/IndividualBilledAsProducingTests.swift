@@ -113,8 +113,8 @@ struct IndividualBilledAsProducingTests {
     // The supertitle path reads the SAME rule, so a credit standing above the title is found by the one
     // definition rather than a second spelling of it (#2452, L89). Both of these are refused today.
     @Test("a credit in the supertitle is read by the same rule",
-          arguments: [("Produced by Mackenzie Bruen", "Mackenzie Bruen"),
-                      ("Directed & Produced by Desirée Dabney", "Desirée Dabney")])
+          arguments: [("Produced by Sullivan Roarke", "Sullivan Roarke"),
+                      ("Directed & Produced by Océane Vireux", "Océane Vireux")])
     func aSupertitleCreditIsRead(_ pair: (String, String)) {
         #expect(ProducerShapedName.from(pair.0) == pair.1)
     }
@@ -184,12 +184,12 @@ struct SuperTitleCalibrationTests {
         // People billing a show under their own name, which the possessive arm has always accepted: the
         // self-producing headliner ListingOrganiserTests already says is kept.
         let selfProducers: Set<String> = [
-            "A SHARP", "Bela Reynoso and Daniel Rubinson", "Ben Cameron", "Bryce Valle",
-            "Ellen Grace Diehl", "Harvard", "Jack and Friends", "Jenna Matula", "Kelsey Seaman",
-            "Maggie Wisniewski", "Rachel Sandler",
+            "A SHARP", "Ilka Brannon and Peder Lasko", "Ilan Rooke", "Tobin Wray",
+            "Marit Vale Osgood", "Harvard", "Jack and Friends", "Perrin Okada", "Robyn Estal",
+            "Tamsin Reddick", "Lenka Fiore",
         ]
         // #2554's two, and the entire measured gain on this feed.
-        let newlyCredited: Set<String> = ["Desir\u{00E9}e Dabney", "Mackenzie Bruen"]
+        let newlyCredited: Set<String> = ["Oc\u{00E9}ane Vireux", "Sullivan Roarke"]
 
         #expect(accepted == companies.union(selfProducers).union(newlyCredited))
         // 29 distinct NAMES out of 30 accepted supertitles: the feed bills "Productions by Stephan" both
@@ -205,8 +205,8 @@ struct SuperTitleCalibrationTests {
     @Test func wideningTheCreditAddedOnlyTheCredits() throws {
         let sts = try corpus()
         let accepted = Set(sts.compactMap { ProducerShapedName.from($0) })
-        #expect(accepted.contains("Mackenzie Bruen"))
-        #expect(accepted.contains("Desir\u{00E9}e Dabney"))
+        #expect(accepted.contains("Sullivan Roarke"))
+        #expect(accepted.contains("Oc\u{00E9}ane Vireux"))
         // Everything else the rule accepts, it accepted before: 30 accepted supertitles less the two, and
         // 27 distinct names, which is what the 2026-08-07 calibration's boundary comes to on this feed.
         #expect(sts.filter { ProducerShapedName.from($0) != nil }.count - 2 == 28)

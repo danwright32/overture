@@ -29,8 +29,8 @@ enum ContactIdentity {
     // none of which can lose an identity.
     //
     // Deliberately NOT GroupNameMatch.normalize: that one strips a trailing subtitle after a dash or
-    // colon, which is right for "Presenter - Program" and wrong for a person ("Miguel Amell - Baritone"
-    // and "Miguel Amell" should match, but so should a hyphenated surname stay whole, and the org rule
+    // colon, which is right for "Presenter - Program" and wrong for a person ("Marek Solano - Baritone"
+    // and "Marek Solano" should match, but so should a hyphenated surname stay whole, and the org rule
     // would take "Rodriguez" off "Ana Maria Rodriguez - Soprano" only when the prefix is two words).
     static func personKey(_ name: String?) -> String? {
         guard let name else { return nil }
@@ -55,8 +55,8 @@ enum ContactIdentity {
     // at all (#1626: an Instagram is a dead end he will not use) decides which of two is better, so the
     // card and the merge cannot disagree about what a usable route is.
     //
-    // Never replaces a usable form with a social one, which is the case the store actually held: Cydney
-    // McQuillan-Grace's own booking page and Maggie Stephens' own contact page were each found first and
+    // Never replaces a usable form with a social one, which is the case the store actually held: Sabine
+    // Orrell-Vance's own booking page and Nessa Halloway's own contact page were each found first and
     // then joined by an Instagram. Where neither is better, the existing one stays, so a re-run cannot
     // churn a row between two equally good links.
     static func preferredFormURL(existing: String?, incoming: String?) -> String? {

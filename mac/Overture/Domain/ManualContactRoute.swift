@@ -41,7 +41,7 @@ enum ManualContactRoute: Equatable, Sendable {
     //
     // The scheme is not cosmetic: every surface that offers one of these builds a `URL` and drops
     // anything with a nil scheme (`Prospect.usableContactFormURLs`, `QueueModel.usableContactFormURL`).
-    // So storing `instagram.com/heybailay` verbatim would create a contact that no card ever shows, which
+    // So storing `instagram.com/heybaylor` verbatim would create a contact that no card ever shows, which
     // is the same defect this issue is about, one layer further in and harder to see.
     private static func normalizedLink(_ trimmed: String) -> String? {
         // Anything with whitespace inside it is prose, not a link. Checked before the scheme test so
