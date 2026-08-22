@@ -19,8 +19,12 @@ struct BuildFreshnessTests {
         return f.date(from: iso)!
     }
 
-    private func installed(_ commit: String, _ iso: String, repo: String = "/repo") -> InstalledBuild {
-        InstalledBuild(commit: commit, commitDate: date(iso), repoPath: repo)
+    // #2553: provenance is REQUIRED of this helper rather than defaulted, so every case below has to say
+    // which kind of build it is about. A default would have let the branch cases be written by accident
+    // as whatever the ordinary case is, which is how the rule under test would be proved against itself.
+    private func installed(_ commit: String, _ iso: String, repo: String = "/repo",
+                           from provenance: BuildFreshness.Provenance?) -> InstalledBuild {
+        InstalledBuild(commit: commit, commitDate: date(iso), repoPath: repo, provenance: provenance)
     }
 
     private func shipped(_ commit: String, _ iso: String) -> ShippedCommit {
@@ -32,25 +36,137 @@ struct BuildFreshnessTests {
     // The same commit is the exact answer, and it does not go through the clock at all: two records of
     // one commit cannot disagree about how old it is.
     @Test func theSameCommitIsUpToDate() {
-        let v = BuildFreshness.verdict(installed: installed("abc123", "2026-08-03T22:09:00Z"),
+        let v = BuildFreshness.verdict(installed: installed("abc123", "2026-08-03T22:09:00Z", from: .main),
                                        shipped: shipped("abc123", "2026-08-03T22:09:00Z"))
         #expect(v == .upToDate)
     }
 
     @Test func anOlderInstalledCommitIsBehind() {
-        let v = BuildFreshness.verdict(installed: installed("abc123", "2026-08-03T22:09:00Z"),
+        let v = BuildFreshness.verdict(installed: installed("abc123", "2026-08-03T22:09:00Z", from: .main),
                                        shipped: shipped("def456", "2026-08-03T23:06:00Z"))
         #expect(v == .behind(installedAt: date("2026-08-03T22:09:00Z"),
                              shippedAt: date("2026-08-03T23:06:00Z")))
     }
 
-    // Installed from something NEWER than the last recorded merge (a branch build, or a shipped record
-    // that has not caught up). Not behind: nothing is missing from it.
+    // Installed from something NEWER than the last recorded merge, from a checkout the installer
+    // confirmed was on main. Not behind: nothing is missing from it, the shipped record has simply not
+    // caught up.
     @Test func anInstalledCommitNewerThanTheRecordIsNotBehind() {
-        let v = BuildFreshness.verdict(installed: installed("abc123", "2026-08-03T23:30:00Z"),
+        let v = BuildFreshness.verdict(installed: installed("abc123", "2026-08-03T23:30:00Z", from: .main),
                                        shipped: shipped("def456", "2026-08-03T23:06:00Z"))
         #expect(v == .upToDate)
     }
+
+    // MARK: - Where the build came from (#2553)
+
+    // THE CASE THIS ISSUE IS ABOUT, and until now this file asserted the opposite of it. The test above
+    // used to carry no provenance, describe itself as "a branch build, or a shipped record that has not
+    // caught up", and assert `.upToDate` for both.
+    //
+    // A build from an unmerged branch is NEWER than everything on main, which is exactly why comparing
+    // dates called it current. Hit 2026-08-11: the app in /Applications had been replaced at 21:22 while
+    // several agents were running, and there was no way from the repo to tell whether it came from main
+    // or from somebody's branch. It turned out to be Dan pressing Update, confirmed by ASKING him, which
+    // is not a check.
+    //
+    // It matters because the live app holds the real store, so this is the one state nobody would
+    // notice: the panel actively says everything is current.
+    @Test func aBuildFromAnUnmergedBranchIsNotReportedAsCurrent() {
+        let v = BuildFreshness.verdict(installed: installed("abc123", "2026-08-03T23:30:00Z", from: .branch),
+                                       shipped: shipped("def456", "2026-08-03T23:06:00Z"))
+        #expect(v == .builtFromABranch)
+    }
+
+    // And it is still not current when it happens to be OLDER than the shipped commit. Both facts are
+    // true then, and the branch is the one that explains the copy in front of him: updating is the
+    // remedy for either, but "behind" invites him to read this as ordinary lag.
+    @Test func aBranchBuildOlderThanTheShippedCommitStillSaysItIsABranchBuild() {
+        let v = BuildFreshness.verdict(installed: installed("abc123", "2026-08-03T22:09:00Z", from: .branch),
+                                       shipped: shipped("def456", "2026-08-03T23:06:00Z"))
+        #expect(v == .builtFromABranch)
+    }
+
+    // The one thing that outranks provenance: the SAME commit. If what is installed is the commit that
+    // shipped, it is current whatever ref it was built from, and saying otherwise would put a warning in
+    // front of Dan for a copy that is byte for byte what has shipped.
+    @Test func aBranchStampOnTheShippedCommitItselfIsStillCurrent() {
+        let v = BuildFreshness.verdict(installed: installed("abc123", "2026-08-03T22:09:00Z", from: .branch),
+                                       shipped: shipped("abc123", "2026-08-03T22:09:00Z"))
+        #expect(v == .upToDate)
+    }
+
+    // The two ways provenance can be absent are DIFFERENT facts and are kept apart, because they need
+    // different things done about them (L11): a record written before Overture stamped provenance is
+    // fixed by the next install, and an installer that could not reach the remote is not.
+    @Test func aRecordWithNoProvenanceSaysWhyRatherThanClaimingToBeCurrent() {
+        let notRecorded = BuildFreshness.verdict(
+            installed: installed("abc123", "2026-08-03T23:30:00Z", from: nil),
+            shipped: shipped("def456", "2026-08-03T23:06:00Z"))
+        #expect(notRecorded == .cannotTell(.provenanceNotRecorded))
+
+        let couldNotTell = BuildFreshness.verdict(
+            installed: installed("abc123", "2026-08-03T23:30:00Z", from: .unknown),
+            shipped: shipped("def456", "2026-08-03T23:06:00Z"))
+        #expect(couldNotTell == .cannotTell(.provenanceUnknown))
+    }
+
+    // An unstamped record that is genuinely OLDER is still reported as behind, not as unknown. That is a
+    // fact the two dates settle on their own, so withholding it would be refusing to say something this
+    // check did measure.
+    @Test func anUnstampedRecordThatIsOlderIsStillReportedAsBehind() {
+        let v = BuildFreshness.verdict(installed: installed("abc123", "2026-08-03T22:09:00Z", from: nil),
+                                       shipped: shipped("def456", "2026-08-03T23:06:00Z"))
+        #expect(v == .behind(installedAt: date("2026-08-03T22:09:00Z"),
+                             shippedAt: date("2026-08-03T23:06:00Z")))
+    }
+
+    // The panel must SHOW a branch build. A verdict nothing renders is the same as no check at all.
+    @Test func thePanelShowsABranchBuild() {
+        #expect(BuildFreshnessPanel.shouldShow(.builtFromABranch, dismissedThisLaunch: false))
+        #expect(BuildFreshnessPanel.shouldShow(.builtFromABranch, dismissedThisLaunch: true) == false)
+    }
+
+    // And it says which state it is, in its own words rather than borrowing the out-of-date ones: the
+    // remedy is the same but the reason is not, and a copy built from a branch is not merely old.
+    @Test func aBranchBuildIsDescribedAsOneRatherThanAsOutOfDate() {
+        let body = BuildFreshnessCopy.body(.builtFromABranch)
+        #expect(body.isEmpty == false)
+        #expect(body != BuildFreshnessCopy.body(.cannotTell(.noInstalledRecord)))
+        #expect(BuildFreshnessCopy.title(.builtFromABranch) != BuildFreshnessCopy.title)
+        #expect(BuildFreshnessCopy.title(.builtFromABranch) != BuildFreshnessCopy.cannotTellTitle)
+    }
+
+    // Each new reason it cannot tell gets its own sentence, for the same reason the two record-absence
+    // reasons already do: one message for two causes sends whoever reads it to fix the wrong thing.
+    @Test func eachNewReasonItCannotTellAlsoSaysWhichOne() {
+        let notRecorded = BuildFreshnessCopy.body(.cannotTell(.provenanceNotRecorded))
+        let unknown = BuildFreshnessCopy.body(.cannotTell(.provenanceUnknown))
+        #expect(notRecorded.isEmpty == false)
+        #expect(unknown.isEmpty == false)
+        #expect(notRecorded != unknown)
+        #expect(notRecorded != BuildFreshnessCopy.body(.cannotTell(.noInstalledRecord)))
+        #expect(unknown != BuildFreshnessCopy.body(.cannotTell(.noShippedRecord)))
+    }
+
+    // The two new reasons are about WHERE this copy came from, not how old it is, so they get the title
+    // that asks that question. Reusing the age title would have the two halves of the panel answering
+    // different questions, which is the defect a cold read exists to catch and no other test can.
+    @Test func theProvenanceReasonsAreTitledAsProvenanceRatherThanAge() {
+        #expect(BuildFreshnessCopy.title(.cannotTell(.provenanceNotRecorded))
+                == BuildFreshnessCopy.cannotTellProvenanceTitle)
+        #expect(BuildFreshnessCopy.title(.cannotTell(.provenanceUnknown))
+                == BuildFreshnessCopy.cannotTellProvenanceTitle)
+        #expect(BuildFreshnessCopy.title(.cannotTell(.noInstalledRecord))
+                == BuildFreshnessCopy.cannotTellTitle)
+        #expect(BuildFreshnessCopy.cannotTellProvenanceTitle != BuildFreshnessCopy.cannotTellTitle)
+    }
+
+    // There is deliberately NO automated check that a body avoids restating its title (#843). One was
+    // written and removed: scoring shared words fires on `.cannotTell(.noInstalledRecord)`, whose title
+    // and body share "this copy" as a REFERENT rather than as a restatement, so it condemned correct
+    // copy on the ordinary case and would be switched off within a day (L93). AGENTS.md is right that the
+    // cold read is the only thing that catches this class, and it was done for all four sentences here:
+    // two of them originally repeated their own heading and were rewritten before this shipped.
 
     // The failure path, and the whole reason this rule is written down rather than inferred: a missing
     // record must say so. A silent "up to date" is indistinguishable from no check at all, which is
@@ -58,7 +174,7 @@ struct BuildFreshnessTests {
     @Test func aMissingRecordSaysItCannotTellRatherThanFresh() {
         #expect(BuildFreshness.verdict(installed: nil, shipped: shipped("d", "2026-08-03T23:06:00Z"))
                 == .cannotTell(.noInstalledRecord))
-        #expect(BuildFreshness.verdict(installed: installed("a", "2026-08-03T22:09:00Z"), shipped: nil)
+        #expect(BuildFreshness.verdict(installed: installed("a", "2026-08-03T22:09:00Z", from: .main), shipped: nil)
                 == .cannotTell(.noShippedRecord))
         #expect(BuildFreshness.verdict(installed: nil, shipped: nil) == .cannotTell(.noInstalledRecord))
     }
