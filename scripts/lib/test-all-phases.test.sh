@@ -160,6 +160,22 @@ fi
 assert_contains "and says that is why, rather than looking like an ordinary failure" \
   "${KILLED_OUT}" "never recorded how it ended"
 
+# --- the vacuous-guard advisory warns and does not block, and can be made to block -------------------
+#
+# Dan's standing rule is that he wants the override on anything, with the reason named in the message. It
+# shipped as a hard gate first; this pins the correction, and pins that the override really does the other
+# thing, so "advisory" cannot quietly become "absent".
+TA_SRC="$(cat "${SCRIPT_DIR}/../test-all.sh")"
+assert_contains "the vacuous-guard check rides along" "${TA_SRC}" "pnpm find-vacuous-guards"
+assert_contains "it names an override" "${TA_SRC}" "OVERTURE_VACUOUS_GUARDS_STRICT"
+assert_contains "and its message says it is not failing the run" "${TA_SRC}" "does NOT fail the run"
+# The gate half. Without the override it must NOT reach the failure list; with it, it must, so advisory
+# cannot quietly become absent.
+TA_BLOCK_LINE="$(printf '%s' "${TA_SRC}" | grep -n 'TEST_ALL_CHEAP_FAILURES+=("pnpm find-vacuous-guards")' | cut -d: -f1)"
+assert_equals "it can still be made blocking" "1" "$([ -n "${TA_BLOCK_LINE}" ] && echo 1 || echo 0)"
+TA_GUARD="$(printf '%s' "${TA_SRC}" | sed -n "$((TA_BLOCK_LINE - 1))p")"
+assert_contains "and that path is reachable only through the override" "${TA_GUARD}" "OVERTURE_VACUOUS_GUARDS_STRICT"
+
 echo
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "test-all-phases.test.sh: all assertions passed"
