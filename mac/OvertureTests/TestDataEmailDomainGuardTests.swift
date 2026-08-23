@@ -22,6 +22,21 @@ import Testing
 // is not squeamishness: the first version did, and this guard failed on its own source, which is the
 // rule working. A file explaining a forbidden shape must not contain the shape.
 //
+// WHAT THIS RULE STRUCTURALLY CANNOT SEE, and where that half lives now (#3110). Judging an address by
+// its DOMAIN closes the deliverability half and nothing else: a reserved TLD makes an address unusable
+// and does nothing at all about a public repository stating that a named musician is a prospect.
+// `arealpersonsname.example` passes every line below. So does a real person's name kept as the LOCAL
+// PART of the invented address that replaced theirs, which is what #2839's own scrub left behind,
+// because it replaced only the domain.
+//
+// That half is answered by `scripts/check-test-identity-provenance.sh`, and by evidence rather than by
+// a pattern: a name whose first appearance in this repository is a privacy SCRUB commit was minted by
+// that scrub and is invented, and one whose first appearance is an ordinary feature commit was written
+// by somebody with a real page open. It reports rather than refuses, because plenty of
+// feature-introduced names are perfectly invented, so it cannot be a gate and is deliberately not one.
+// The regression half below stays exactly as it is: it is the record of people already found, and it
+// can see a display name and a handle, which no address rule can.
+//
 // THE ALLOWED SET IS DERIVED, not hand written, in the one place it could otherwise go stale: a domain
 // the APP'S OWN source names in a rule is a domain a test of that rule legitimately needs.
 // `WatchedSourceBackfill` matches on "carnegiehall.org", so a test of it must say "carnegiehall.org".
@@ -195,6 +210,16 @@ struct TestDataEmailDomainGuardTests {
                         "ryan james monroe", "reeve carney", "jerrick cavagnaro", "alex syiek",
                         "marisol vega", "anna pierre", "sam weaver", "tomas iyer", "marc duval",
                         "jake berg", "olivia terpin", "caseen gaines"]
+        // Every one of those names ALSO forbidden with its spaces closed up, DERIVED rather than listed
+        // twice (#3110). A person comes back as a domain label or a handle far more often than as prose,
+        // because that is the form a website and a social account put them in, and the spaced spelling
+        // cannot see it. That was not hypothetical: `tatianna cordoba` was scrubbed by #2834, was on
+        // this list the whole time, and was still in the tree as a personal-name .com host, which this
+        // check read as clean. Deriving it means adding a name to the list above covers both forms, so
+        // the pair can never drift the way the hand-written pairs for #2839's people could.
+        let forbidden = scrubbed + scrubbed
+            .filter { $0.contains(" ") }
+            .map { $0.replacingOccurrences(of: " ", with: "") }
         var hits: [String] = []
         for root in ["mac", "fixtures", "src", "docs"] {
             let dir = RepoRoot.url.appendingPathComponent(root)
@@ -204,7 +229,7 @@ struct TestDataEmailDomainGuardTests {
                 // Its own source has to NAME what it forbids, so it is the one file it cannot police.
                 guard file.name != "TestDataEmailDomainGuardTests.swift" else { continue }
                 let text = file.text.lowercased()
-                for name in scrubbed where text.contains(name) {
+                for name in forbidden where text.contains(name) {
                     hits.append("\(name) in \(file.name)")
                 }
             }

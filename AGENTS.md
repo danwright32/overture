@@ -201,6 +201,48 @@ already drifting from the Swift version it mirrored.
   `prep-results` files from `PrepResultsConsumedOnceTests`, which nothing in the issue mentioned. That is
   the check working rather than the conversion having been careless.
 
+- **Asking whether test data names a real person: `scripts/check-test-identity-provenance.sh` (#3110,
+  #3131).** `TestDataEmailDomainGuardTests` judges an address by its DOMAIN, so anything on a reserved
+  TLD passes. That closes the deliverability half and leaves the identity half open, because
+  `arealpersonsname.example` is reserved and still names a real person in a PUBLIC repository. #2839's
+  scrub replaced only the domain, so a scrubbed person routinely survived as the LOCAL PART of the very
+  address that replaced them.
+  What it runs on is EVIDENCE, not a pattern, and the evidence was measured before it was built: a name
+  whose first appearance in this repository is a privacy SCRUB commit was minted by that scrub and is
+  invented, and one whose first appearance is an ordinary FEATURE commit was written by somebody with a
+  real page open. Measured 2026-08-22, `git log -S<name> --reverse` separated all eighteen names #2834
+  scrubbed from `Corin Hale` and `Nora Calder`, which were about to be scrubbed by mistake.
+  **#3110 named two other candidate answers and both were rejected, which is worth knowing before
+  reaching for either again.** Checking a domain label against the display names in the same test file
+  does not discriminate at all: an INVENTED personal-name domain appears as a display name in its own
+  test exactly as reliably as a real one, so the rule fires identically on the correct fix and gets
+  switched off within a day (L93). A periodic AI review over the corpus was rejected once the cheaper
+  answer above turned out to exist, and because a judgement nothing records is one the next sweep makes
+  again from scratch.
+  It REPORTS and does not refuse, deliberately. Plenty of feature-introduced names are perfectly
+  invented, so a gate on "introduced by a feature commit" would fire on the common case. What it
+  produces is the list of identities NOBODY HAS LOOKED AT YET, each carrying its introducing commit.
+  Read its answer correctly. Three exit codes, and the third is the one that matters: `2` is UNMEASURED,
+  because an extraction that found nothing and a tree with nothing to find leave the same empty result
+  and the emptiest possible failure must not read as the cleanest possible pass (L98). `1` means there
+  is something to triage, `0` that everything present is recorded.
+  Its baseline, `fixtures/test-identity-provenance.txt`, GROWS, which is the opposite of
+  `fixtures/test-data-email-domains.txt` beside it. That one is a ratchet over a defect being paid off
+  and may only shrink; this one is a triage log over identities somebody has read, and new invented
+  identities legitimately arrive with new tests. `--record` prints what it is about to add for that
+  reason: recording without reading the list is how a count driven to zero stops being a measurement
+  (L182).
+  Two things it does that look like over-engineering and are not, both caught by its own fixture. The
+  token is kept VERBATIM apart from lowercasing, punctuation included, because `git log -S` searches for
+  a literal string and a normalised `margueriteeddowes` is in no commit anywhere, so the lookup answers
+  "no commit found" in wording that reads as a shrug. And the lookup is NOT scoped to the scanned roots,
+  even though scoping is faster, because a pathspec does not follow a rename and a fixture moved under a
+  root later has its MOVE reported as its origin, which is wrong in the direction that matters.
+  It is OPT IN and deliberately not in `scripts/test-all.sh`: it runs one `git log -S` over the whole
+  history per identity. Its judging half rides along on every push through
+  `scripts/check-test-identity-provenance.test.sh`, which drives it against a throwaway git repository
+  with real commits rather than a stub of `git log` (L52).
+
 - Keeping the checkout tidy: `scripts/tidy-checkout.sh` (#2234) removes local branches and agent
   worktrees whose work has provably shipped. It is a DRY RUN by default and needs `--apply` to
   delete anything. Note WHY it exists rather than the one-line idiom: this repo squash-merges, so a
