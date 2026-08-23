@@ -133,6 +133,9 @@ enum NaturalKeyVenueMigration {
                survivor.firstSeenAt == nil || earliest < survivor.firstSeenAt! {
                 survivor.firstSeenAt = earliest
             }
+            // #3124: and his DECISIONS, before the rows holding them go. Same place and same reason as
+            // `firstSeenAt` above: whatever only a loser knew is gone the moment it is deleted (L5).
+            carryDansDecisions(onto: survivor, from: members)
             for loser in members where loser !== survivor {
                 context.delete(loser)
                 summary.duplicatesDeleted += 1
@@ -167,6 +170,55 @@ enum NaturalKeyVenueMigration {
     // the queue twice at two different ranks (2 against 10), permanently, on nine rows of which not one
     // had ever been sent anything. Everything else about this decision is unchanged, including the
     // refusal to choose between two dismissal reasons that disagree.
+    // #3124: a decision of Dan's must not die with whichever duplicate row happened to hold it.
+    //
+    // The merge does not combine rows field by field. It picks ONE survivor and deletes every other
+    // member, and none of the three tests standing between a row and that delete can see a decision that
+    // did not move the row's stage. `mustDefer` needs TWO rows carrying history. `hasOutreachHistory`
+    // counts a status off `new` and a show outcome. `hasRecordBeyondADismissal`, which actually picks the
+    // survivor, asks whether the row reached the OUTSIDE WORLD, and a decision of Dan's is not that. So a
+    // row still at `new` whose only content is his rename loses to any fresher pristine duplicate.
+    //
+    // They are deliberately NOT added to `hasRecordBeyondADismissal`, which would reintroduce #1780: that
+    // predicate's other job is deciding a DEFERRAL, and teaching it to answer yes to a rename would make
+    // two renamed duplicates defer forever with nothing on screen saying so. #1845 narrowed it again after
+    // three shows sat wedged in the queue twice, permanently, on nine rows none of which had been sent
+    // anything. Carrying changes WHAT THE SURVIVOR KNOWS and never whether a merge happens, so it cannot
+    // deadlock anything.
+    //
+    // Dan's call, 2026-08-22, on the case where two members each carry a DIFFERENT decision: keep one
+    // card and carry both decisions onto it, rather than deferring the merge or dropping one of them.
+    //
+    // Every field here is one of `ProspectFieldClassificationTests.danDecisionsTheRuleCannotSee`, and a
+    // guard there fails if that list grows a field this function does not name, so a new decision cannot
+    // arrive without a carry rule (L96).
+    static func carryDansDecisions(onto survivor: Prospect, from members: [Prospect]) {
+        let losers = members.filter { $0 !== survivor }
+
+        // Kept visible after a genre change. ANY member saying so wins, because `false` is what a row
+        // holds for never having been asked: `GenreVisibility` writes this only on the row that was
+        // showing when a genre change would have hidden it, so an absent flag is silence, not a refusal.
+        if losers.contains(where: { $0.keptVisibleAfterGenreChange }) {
+            survivor.keptVisibleAfterGenreChange = true
+        }
+
+        // The rename, and the flag and the NAME move together. Carrying the flag alone would leave the
+        // survivor claiming Dan renamed it while showing the scout's wording, which is the row asserting
+        // the opposite of what happened (L163). `scoutGroupName` is deliberately NOT carried: it mirrors
+        // the LATEST scout-emitted name, so the survivor's own is the current one.
+        //
+        // A survivor that already carries an override keeps it. That is a decision of Dan's too, and
+        // ranking his decisions against each other is not this pass's to do. Only an undecided survivor
+        // is filled in, and where two losers both carry one the freshest wins, which is this pass's own
+        // tie-break rather than a second rule invented here.
+        if !survivor.groupNameOverriddenByDan,
+           let renamed = losers.filter({ $0.groupNameOverriddenByDan })
+               .max(by: { $0.ingestedAt < $1.ingestedAt }) {
+            survivor.groupName = renamed.groupName
+            survivor.groupNameOverriddenByDan = true
+        }
+    }
+
     static func mustDefer(_ members: [Prospect]) -> Bool {
         guard members.count > 1 else { return false }
         guard members.filter(hasOutreachHistory).count >= 2 else { return false }
