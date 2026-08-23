@@ -42,7 +42,11 @@ struct LocationsTheRulesWouldRefuseTests {
                                                                    isDirectory: true)
             defer { try? fm.removeItem(at: dir) }
             try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+            // A nil clone AFTER `liveStoreExists` is a failed BACKUP, not a machine without a store, and
+            // the two must not look alike: silently returning here would let a broken copy read as a
+            // clean measurement of Dan's data (L98, L10).
             guard let clone = try LiveStoreClone.makeClone(in: dir) else {
+                Issue.record("the live store is present and LiveStoreClone could not copy it, so nothing below measured anything")
                 await RealStoreTestLock.shared.release()
                 return
             }
