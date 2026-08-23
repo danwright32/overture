@@ -1604,6 +1604,14 @@ struct QueueView: View {
         case .attachedAwaitingAnswer:
             Text(ProposedConversationCopy.attachedAwaitingAnswer)
                 .font(.system(size: 10)).foregroundStyle(OVColor.gold)
+        // #2806: the state that used to draw nothing. Inkfaint rather than gold: nothing is waiting on
+        // him, so this is an account of what happened and not a call to act, and colouring it like the
+        // line above would put a second thing demanding attention on a row that needs none.
+        case .attachedAndAnswered:
+            Text(ProposedConversationCopy.linkedAndAnswered(wroteAddress: r.attachWroteAddress,
+                                                            address: r.email))
+                .font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
+                .fixedSize(horizontal: false, vertical: true)
         case .proposed(let candidate):
             VStack(alignment: .leading, spacing: 3) {
                 Text(ProposedConversationCopy.question)

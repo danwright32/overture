@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1499 sentences**.
+Every sentence Overture can say to Dan: **1501 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -2183,6 +2183,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SourcesView.swift`
 "Their name"
     `UI/InquiryIntakeSheet.swift`
+"Their reply is here and you've already answered it."
+    `Domain/ProposedConversation.swift`
+"Their reply is here and you've already answered it. Email goes to \(address) from now on."
+    `Domain/ProposedConversation.swift`
 "Their shows sit oddly for a company. Correct one from any of its shows if it looks wrong."
     `UI/OrganisationsView.swift`
 "There's no linked conversation on this pitch to unlink."

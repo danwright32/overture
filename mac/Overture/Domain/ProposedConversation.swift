@@ -15,6 +15,31 @@ enum ProposedConversationCopy {
     // question it heads rather than in the view, so the sheet and the Reached out row cannot come to
     // two wordings of one thing.
     static let section = "Conversations to confirm"
+    // #2806: the durable account of an attach that captured a reply and left nothing waiting. Built from
+    // the STORED facts, never from the attach's transient outcome, so it is still there tomorrow and
+    // after a relaunch, which is what durable has to mean for a question Dan asked a minute later.
+    //
+    // It names the REPLY and the SAVED ADDRESS, and not the linking, because he pressed the link button
+    // himself and already knows he did. The address is the consequence with the longest reach: every
+    // email on this show from now on goes there, which `confirmDetail` promises BEFORE the click and
+    // nothing confirmed after it.
+    //
+    // The address is passed rather than read off a flag, so a row whose flag says an address was saved
+    // and carries none cannot render "and it goes to " with nothing after it (L67).
+    //
+    // The WORDS came from the cold read, against the line directly above this one on the same row
+    // ("Sent through their form. Overture is watching the email conversation you linked."). A first
+    // draft said "nothing is waiting on you", which is true and answers a question Dan did not ask. What
+    // he asked was "did the link work, what did it do", so the line says what it DID: their reply landed
+    // and his answer is already on it, which is precisely what `replyHandledAt` records and what no
+    // surface said.
+    static func linkedAndAnswered(wroteAddress: Bool, address: String?) -> String {
+        guard wroteAddress, let address, !address.isEmpty else {
+            return "Their reply is here and you've already answered it."
+        }
+        return "Their reply is here and you've already answered it. Email goes to \(address) from now on."
+    }
+
     static let question = "Is this their reply?"
 
     // Names the sender the way a person is named: who, then where from, because the address alone is
@@ -110,6 +135,11 @@ enum ProposedConversation {
         case proposed(Candidate)
         case allDeclined
         case attachedAwaitingAnswer
+        // #2806: linked, the reply captured, and nothing waiting on him. It used to fall to
+        // `.notApplicable`, which draws EmptyView, so the MORE completely the attach succeeded the less
+        // the row said: the version that shows a badge is the one where he had not already answered,
+        // which has less to report rather than more. Dan read the silence as the link not having worked.
+        case attachedAndAnswered
     }
 
     // MARK: writing
@@ -176,7 +206,9 @@ enum ProposedConversation {
 
     static func state(of r: Recipient, now: Date = Date()) -> State {
         if r.conversationAttachedAt != nil {
-            return r.hasUnhandledReply ? .attachedAwaitingAnswer : .notApplicable
+            // #2806: the second branch used to be `.notApplicable`. An attach that also stamped
+            // `replyHandledAt` is the completely successful case and was the silent one.
+            return r.hasUnhandledReply ? .attachedAwaitingAnswer : .attachedAndAnswered
         }
         guard isAskable(r) else { return .notApplicable }
         // #2711: he has already told Overture they replied on a channel it cannot watch. The row is
