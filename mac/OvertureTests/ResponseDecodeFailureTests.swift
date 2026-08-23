@@ -203,6 +203,13 @@ struct ResponseDecodeFailureTests {
                 "RootView never reads the response failure register (#2888, L46)")
         #expect(SourceGuardHelper.containsCode("failingResponses: failingResponses", in: source),
                 "RootView reads the register and does not hand it to the notice list")
+        // The ASSIGNMENT, which is the load-bearing line and the one the two assertions above cannot
+        // see: both of them stayed green with the assignment deleted, because the register is still
+        // READ on one line and the state is still PASSED on another, and only this connects them
+        // (L178: two conditions over one body of text prove neither half). Measured, mutate.sh
+        // reported SURVIVED on exactly that mutation.
+        #expect(SourceGuardHelper.containsCode("failingResponses = responses", in: source),
+                "RootView reads the register and never stores what it read, so the notice can never appear")
     }
 
     // MARK: - The class, derived rather than remembered (L96)
