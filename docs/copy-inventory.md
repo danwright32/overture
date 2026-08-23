@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1495 sentences**.
+Every sentence Overture can say to Dan: **1499 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -359,6 +359,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Persistence/PrepImporter.swift`
 "1 client set aside"
     `Domain/ClientCoverage.swift`
+"1 contact named a way in and gave none, and the run never once said it found no route"
+    `Domain/RunInstructionCompliance.swift`
 "1 later night"
     `App/ActionFeedback.swift`
 "1 named producer answers for several of them; \(s.performerHuntCount) "
@@ -2637,6 +2639,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "\(count) clients set aside"
     `Domain/ClientCoverage.swift`
+"\(count) contacts named a way in and gave none, and the run never once said it found no route"
+    `Domain/RunInstructionCompliance.swift`
 "\(count) didn't come back, they'll be retried"
     `Domain/HandoffShortfall.swift`
 "\(count) of those are shows that name their producing organisation."
@@ -3179,6 +3183,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/FollowUp.swift`
     `Domain/ReplyIdentity.swift`
     `UI/FollowUpsView.swift`
+"not one of its \(contacts) contacts carries a tier, so the fit score is guessing"
+    `Domain/RunInstructionCompliance.swift`
 "only stops OmniFocus asking; Overture still needs the ending from you."
     `Domain/OmniFocusSync.swift`
 "opened on. Paste \(one ? "that month's" : "a month's") own link and I'll "
@@ -3254,6 +3260,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OmniFocusSync.swift`
 "the list of calendars it watches"
     `Integration/ScoutService.swift`
+"the one contact it found carries no tier, so the fit score is guessing"
+    `Domain/RunInstructionCompliance.swift`
 "the ones it emailed itself."
     `Domain/AttachConversation.swift`
 "the other \(leftover)"
