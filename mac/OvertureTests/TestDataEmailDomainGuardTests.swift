@@ -210,16 +210,22 @@ struct TestDataEmailDomainGuardTests {
                         "ryan james monroe", "reeve carney", "jerrick cavagnaro", "alex syiek",
                         "marisol vega", "anna pierre", "sam weaver", "tomas iyer", "marc duval",
                         "jake berg", "olivia terpin", "caseen gaines"]
-        // Every one of those names ALSO forbidden with its spaces closed up, DERIVED rather than listed
-        // twice (#3110). A person comes back as a domain label or a handle far more often than as prose,
-        // because that is the form a website and a social account put them in, and the spaced spelling
-        // cannot see it. That was not hypothetical: `tatianna cordoba` was scrubbed by #2834, was on
-        // this list the whole time, and was still in the tree as a personal-name .com host, which this
-        // check read as clean. Deriving it means adding a name to the list above covers both forms, so
-        // the pair can never drift the way the hand-written pairs for #2839's people could.
-        let forbidden = scrubbed + scrubbed
-            .filter { $0.contains(" ") }
-            .map { $0.replacingOccurrences(of: " ", with: "") }
+        // Every one of those names ALSO forbidden in each of the separators a machine puts between its
+        // parts, DERIVED rather than listed again (#3110). A person comes back as a domain label, a
+        // handle, an e-mail local part or a URL slug far more often than as prose, because that is the
+        // form a website and a social account put them in, and the spaced spelling matches none of them.
+        // That was not hypothetical: `tatianna cordoba` and `maggie stephens` were scrubbed by #2834,
+        // were on this list the whole time, and were both still in the tree as personal-name hosts,
+        // which this check read as clean.
+        //
+        // Deriving it, rather than writing the variants beside the names, is the point: adding a name
+        // covers every form at once, so the halves cannot drift the way the hand-written pairs for
+        // #2839's people could. The empty separator is first because it is the one that was missing.
+        let forbidden = scrubbed + ["", ".", "-", "_"].flatMap { separator in
+            scrubbed
+                .filter { $0.contains(" ") }
+                .map { $0.replacingOccurrences(of: " ", with: separator) }
+        }
         var hits: [String] = []
         for root in ["mac", "fixtures", "src", "docs"] {
             let dir = RepoRoot.url.appendingPathComponent(root)

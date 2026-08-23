@@ -112,6 +112,17 @@ assert_contains "an identity added after the baseline is named" "${THIRD}" "ostr
 assert_not_contains "and the already-triaged ones stay quiet" "${THIRD}" "verrindale"
 assert_equals "a new arrival exits 1" "1" "${THIRD_STATUS}"
 
+# --- an identity no commit accounts for is its own answer, not a shrug -------------------------------
+# Asserted POSITIVELY, in the same fixture that asserts its absence above. A test that only ever says
+# this branch did NOT happen is satisfied by a fixture in which it COULD not happen (L159), and this
+# branch is the one that fires when the lookup has been asked the wrong question.
+printf '{"contact": "hallowvex.marrender@example.com"}\n' > "${REPO}/fixtures/uncommitted.json"
+UNCOMMITTED="$("${CHECK}" 2>&1)"
+assert_contains "an identity in an uncommitted file is still extracted" "${UNCOMMITTED}" "hallowvex.marrender"
+assert_contains "and says its provenance could not be resolved, in words" \
+  "${UNCOMMITTED}" "PROVENANCE NOT RESOLVED"
+rm -f "${REPO}/fixtures/uncommitted.json"
+
 # --- a baseline line for an identity that is gone is a line to delete --------------------------------
 printf 'akeleyworth\n' >> "${BASELINE}"
 STALE="$("${CHECK}" 2>&1)"
