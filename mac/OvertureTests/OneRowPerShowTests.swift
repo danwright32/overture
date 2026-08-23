@@ -104,6 +104,11 @@ struct OneRowPerShowTests {
 
     // With nobody having replied there is no such person, so the row speaks for whichever contact is due
     // soonest: that is the one the row's own action is about.
+    //
+    // #2366: this test's verdict DOES change when its show is pulled towards its own pinned clock, and
+    // it is in `fixtures/far-future-sensitive-tests.txt` for that reason. Not a defect: the show has to
+    // be genuinely ahead for the row to be active at all, and the assertion is about WHICH contact the
+    // row speaks for, not about where the show sits. Recorded so the next sweep does not re-litigate it.
     @Test func withNoReplyTherowSpeaksForTheContactDueSoonest() throws {
         let ctx = try context()
         let p = show(ctx)

@@ -171,6 +171,33 @@ already drifting from the Swift version it mirrored.
   literal-to-literal pair and moving one end breaks it for a reason unrelated to the clock. Shifting the
   whole repo including the app's own source was worse again (69), because it moves constants that are not
   fixtures at all.
+- **Asking whether a far-future fixture still asserts anything: `scripts/check-far-future-fixtures.sh`
+  (#2366).** A fixture dated `2099-09-19` was written to mean "always upcoming". Once #2359 gave the
+  queue a triage window it also came to mean "always OUTSIDE the window", so an assertion about triage on
+  that show went on passing while covering nothing. Measured 2026-08-09, 55 tests used that one date,
+  across at least twelve files, and nobody could tell which still asserted anything.
+  It is the MIRROR of `check-fixtures-do-not-age.sh` and shares its machinery through
+  `scripts/lib/fixture-date-shift.sh`: that one moves fixtures FORWARD and asks which tests read the
+  relationship between a stored date and the clock, this one pulls the far ones BACK and asks which were
+  relying on being outside every window. Both directions are findings: a test that goes RED was asserting
+  something true only of a far show, one that goes GREEN could never have fired at all, which is the
+  #2366 defect exactly.
+  **Read the limit of the instrument before reading its findings, because two of its three runs while
+  being built reported nothing but its own artefacts.** The shift is by whole YEARS, measured against the
+  clock the FILE ITSELF pins (`private let now = Date(timeIntervalSince1970: ...)`) rather than against
+  the year the run happens in, because a test judging from a pinned 2027 is asking about a show 72 years
+  ahead of THAT and pulling it back to today puts it behind its own clock. It moves dated strings and
+  epoch literals TOGETHER, for the reason `shift_dates` records: `WentByRetirementOnTheTickTests` pins
+  its opening night as a string and its clock as a number, and moving one end produced three failures
+  that were the check's own doing (L130). Even so, whole years cannot control the distance, so a show can
+  land a few days from its clock rather than a few months, and a test that breaks for THAT reason is the
+  instrument rather than a finding. `fixtures/far-future-sensitive-tests.txt` records the ones already
+  read, with a reason each, so the report is only ever what nobody has looked at.
+  **What the first full sweep found, 2026-08-23: nothing.** No test anywhere goes GREEN when its far
+  show is pulled near, which is the defect this exists for. The two that go RED are a deliberate
+  absurdly-long-range test and one whose show has to be ahead at all. It is OPT IN and not in
+  `scripts/test-all.sh`: it runs the whole Swift suite twice.
+
 - **Asking whether the suite cleans up after itself: `scripts/check-temp-dir-leaks.sh` (#3065).** The
   Mac suite created scratch directories under the per-user temp folder and never removed them, and macOS
   clears that folder only at boot. Measured on this Mac 2026-08-22, on an uptime of 8 days: 952

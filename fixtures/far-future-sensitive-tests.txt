@@ -1,0 +1,14 @@
+# Tests whose verdict depends on their show being far in the future (#2366).
+#
+# Written by scripts/check-far-future-fixtures.sh --record. A line here means somebody read the
+# test and judged the distance deliberate. The file may grow: a new deliberate one is fine.
+#
+# READ THE LIMIT OF THE INSTRUMENT BEFORE ADDING TO IT. The shift is by whole YEARS, so a show
+# lands anywhere from a few days to twelve months from the clock its test judges from, and a
+# test that breaks because its show became imminent is this check's doing rather than a
+# finding. Both entries below are exactly that shape or deliberate by design. What the check
+# genuinely rules out is the #2366 defect: a test that goes GREEN once its show is near, which
+# means its assertion could never fire while the show sat outside every window. None was found.
+
+anAbsurdlyLongRangeIsRefused  # deliberate: a decade-long block IS the subject, so the far end is the fixture
+withNoReplyTherowSpeaksForTheContactDueSoonest  # the shift lands its show four days after its own pinned clock, so this is the instrument, not a defect
