@@ -145,6 +145,14 @@ enum ReplyService {
             // #430: a reply on this show auto-pauses its still-unsent contacts pending Dan's triage,
             // so the drip/queue won't email them while he reads and responds to the reply.
             if newReply { p.pausePendingForReply() }
+            // #2915: and if the show had been closed out as "never heard back", that ending is no longer
+            // true. Only that one, and only when the reply is newer than the close-out; the rule itself
+            // lives on the model beside `Recipient.reopenOnReply`, so it holds wherever a reply is
+            // recorded rather than only here.
+            //
+            // Gated on `newReply` rather than on the loop having run: a thread re-read on every check
+            // with nothing new on it must not keep reopening a show Dan has closed since.
+            if newReply { p.reopenOnReply(at: now) }
         }
         return count
     }

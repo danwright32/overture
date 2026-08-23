@@ -822,6 +822,29 @@ final class Prospect {
         set { showOutcomeRaw = newValue?.rawValue }
     }
 
+    // #2915: WHEN a pitched show was closed out, which is the only thing that can tell a reply arriving
+    // AFTER the ending from the reply Dan already had in hand when he wrote it.
+    //
+    // Deliberately NOT written by the setter above. A stamp taken from a hidden `Date()` inside a model
+    // property is a clock no test can pin and no caller can see, and this repo passes `now` explicitly
+    // everywhere for that reason. It is written where the decision is made, and everything that does not
+    // write it is covered by the rule below refusing to act on an ending it cannot date.
+    var showOutcomeAt: Date? = nil
+
+    // #2915: a reply after a close out. The SHOW-level twin of `Recipient.reopenOnReply`, deciding
+    // through `ReplyReopen` so this and the inquiry's own copy cannot come to different answers (L16).
+    //
+    // Returns whether it actually cleared one, so the caller can report a real change rather than
+    // announcing one on every check.
+    @discardableResult
+    func reopenOnReply(at repliedAt: Date) -> Bool {
+        guard ReplyReopen.shouldClear(outcome: showOutcome, closedAt: showOutcomeAt,
+                                      repliedAt: repliedAt) else { return false }
+        showOutcome = nil
+        showOutcomeAt = nil
+        return true
+    }
+
     // #2394: whether an email actually WENT OUT for this show, which is the fact that decides which half
     // of the vocabulary Dan is offered (ShowOutcome.menu(wasPitched:)). Whether a show was pitched is
     // never encoded in the words themselves.

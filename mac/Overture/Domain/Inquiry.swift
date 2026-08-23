@@ -184,6 +184,23 @@ final class Inquiry {
         set { showOutcomeRaw = newValue?.rawValue }
     }
 
+    // #2915: WHEN it was closed out, so a reply arriving afterwards can be told from the one Dan already
+    // had in hand. Same field and same reason as the prospect's.
+    var showOutcomeAt: Date? = nil
+
+    // #2915: a reply after a close out, deciding through the SAME `ReplyReopen` the prospect uses. An
+    // inquiry closed as "never heard back" whose sender writes back is the same situation as a scouted
+    // show's, and it rides the same reply check, so a rule stated only on the prospect would leave half
+    // the funnel uncovered (L30).
+    @discardableResult
+    func reopenOnReply(at repliedAt: Date) -> Bool {
+        guard ReplyReopen.shouldClear(outcome: showOutcome, closedAt: showOutcomeAt,
+                                      repliedAt: repliedAt) else { return false }
+        showOutcome = nil
+        showOutcomeAt = nil
+        return true
+    }
+
     var outcome: Outcome {
         get { Outcome.fromStored(outcomeRaw) }
         set { outcomeRaw = newValue.rawValue }
