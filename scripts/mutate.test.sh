@@ -497,6 +497,43 @@ OUT="$(OVERTURE_MUTATE_RUNNER="${EMPTY_RUNNER}" "${MUTATE}" "${SUBJECT}" 's/"yes
 assert_contains "a run that really executed nothing is still refused" "${OUT}" "NOTHING RAN"
 assert_not_contains "and is never reported as caught" "${OUT}" "CAUGHT"
 
+# --- #3157: a SURVIVED says whether the needle is still in the file --------------------------------
+# Four source-text guards written on 2026-08-23 passed while the code they guard was deleted, all the
+# same shape: the needle also occurs somewhere harmless in the SAME file, so the assertion is answered by
+# that second occurrence rather than by the code (L135). `DetachConversationCopy.control` is a PREFIX of
+# `.controlHelp` on the next line (#2797); `DraftedDeadEndCopy.line` survived inside an `if false` branch
+# (#2674); `onConnectGmail: connectGmail` reaches ArchiveView as well as FollowUpsView (#2967). Every one
+# was found by hand, after the SURVIVED, by grepping the file. mutate.sh already holds both the file and
+# the needle, so it can say it.
+printf 'struct Subject {\n    let a = Copy.control\n    let b = Copy.controlHelp\n}\n' > "${SUBJECT}"
+OUT="$(OVERTURE_MUTATE_RUNNER="${GREEN_RUNNER}" "${MUTATE}" "${SUBJECT}" 's/Copy\.control/Copy.gone/' 2>&1)"
+assert_contains "a survived mutation is still survived" "${OUT}" "SURVIVED"
+assert_contains "and says the needle is still in the file" "${OUT}" "still in Subject.swift"
+assert_contains "and names the line it is still on" "${OUT}" "line 3"
+
+# The other half, so silence never stands for a measurement (L11): a needle that genuinely went away is
+# RULED OUT in one line, rather than being left to look like the unchecked case.
+write_subject
+OUT="$(OVERTURE_MUTATE_RUNNER="${GREEN_RUNNER}" "${MUTATE}" "${SUBJECT}" 's/"yes"/"no"/' 2>&1)"
+assert_contains "a survived mutation whose needle went away is still survived" "${OUT}" "SURVIVED"
+assert_contains "and rules the second occurrence out" "${OUT}" "no longer occurs anywhere in Subject.swift"
+assert_not_contains "and does not claim it is still there" "${OUT}" "still in Subject.swift"
+
+# And the third state gets its own words. An expression whose search half cannot be read as literal text
+# was never measured, and an unmeasured check must not read as a passed one.
+printf 'struct Subject {\n    static let answer = "yes"\n}\n' > "${SUBJECT}"
+OUT="$(OVERTURE_MUTATE_RUNNER="${GREEN_RUNNER}" "${MUTATE}" "${SUBJECT}" 's/"y.s"/"no"/' 2>&1)"
+assert_contains "a survived mutation with an unreadable needle is still survived" "${OUT}" "SURVIVED"
+assert_contains "and says the recurrence could not be checked" "${OUT}" "could NOT be checked"
+assert_not_contains "and claims nothing either way" "${OUT}" "no longer occurs anywhere"
+
+# It is a reading of a SURVIVED and nothing else: a CAUGHT is already explained by the test that went red,
+# and a note there would be noise on the ordinary outcome.
+printf 'struct Subject {\n    let a = Copy.control\n    let b = Copy.controlHelp\n}\n' > "${SUBJECT}"
+OUT="$(OVERTURE_MUTATE_RUNNER="${RED_RUNNER}" "${MUTATE}" "${SUBJECT}" 's/Copy\.control/Copy.gone/' 2>&1)"
+assert_contains "a caught mutation is still caught" "${OUT}" "CAUGHT"
+assert_not_contains "and carries no recurrence note" "${OUT}" "still in Subject.swift"
+
 if [[ "${FAILURES:-0}" -ne 0 ]]; then
   echo "${FAILURES} failure(s)"
   exit 1
