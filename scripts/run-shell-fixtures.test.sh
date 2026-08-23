@@ -389,6 +389,66 @@ chmod +x "${FIXED}"
 fixture_sources_avoid_short_circuit_pipes "${FIXED}" >/dev/null 2>&1
 assert_equals "the herestring remedy is accepted" "0" "$?"
 
+# --- #3125: a background job must not be killed in the breath it is started --------------------------
+#
+# The proven defect. `run-heartbeat.test.sh` started a stand-in and killed it on the very next line, then
+# waited for it. The kill is sent so soon after the fork that it sometimes does not take, and the wait
+# then sits for the stand-in's whole lifetime. Measured 2026-08-22 under the real runner: one round in
+# roughly ten cost 306 seconds, every assertion still passing, and marks either side of those two lines
+# showed +1s before and +301s after while every other mark in the fixture stayed at +1s.
+#
+# It is refused at the SOURCE, before anything runs, for #2850's reason: a runtime check could only ever
+# fire on the runs where the race actually opened, which is one in ten.
+RACED_KILL="${TMP_DIR}/raced-kill.test.sh"
+printf '#!/usr/bin/env bash\nsleep 300 & P=$!\nkill "${P}" 2>/dev/null; wait "${P}" 2>/dev/null\necho "ok - x"\n' > "${RACED_KILL}"
+chmod +x "${RACED_KILL}"
+KILL_OUTPUT="$(fixture_sources_avoid_kill_wait_on_a_fresh_job "${RACED_KILL}" 2>&1)"
+KILL_STATUS=$?
+assert_equals "a fixture that kills and waits for a job it just started is refused" "1" "${KILL_STATUS}"
+case "${KILL_OUTPUT}" in
+  *"raced-kill.test.sh"*) echo "ok - and the refusal names the file" ;;
+  *) echo "FAIL - the refusal did not name the offending fixture"; echo "  ${KILL_OUTPUT}"
+     FAILURES=$((FAILURES + 1)) ;;
+esac
+case "${KILL_OUTPUT}" in
+  *"line 3"*) echo "ok - and quotes the line the wait is on" ;;
+  *) echo "FAIL - the refusal did not name the line"; echo "  ${KILL_OUTPUT}"
+     FAILURES=$((FAILURES + 1)) ;;
+esac
+
+# The other direction, which is what stops this being switched off (L93). Every OTHER recorded background
+# pid in this repo is the `stuck-tool-call.test.sh` shape: a stand-in started, real work done, and the
+# WATCHDOG killed rather than the stand-in. Its race window is closed by the work in between, and a rule
+# that condemned it would fire on eight lines that have never stalled.
+WORKING="${TMP_DIR}/working.test.sh"
+printf '#!/usr/bin/env bash\nsleep 120 & P=$!\n( true ) & WD=$!\nsleep 3\nkill "${WD}" 2>/dev/null || true\necho "ok - x"\n' > "${WORKING}"
+chmod +x "${WORKING}"
+fixture_sources_avoid_kill_wait_on_a_fresh_job "${WORKING}" >/dev/null 2>&1
+assert_equals "a stand-in with real work before the kill is left alone" "0" "$?"
+
+# And the remedy this issue's fix used must be accepted, or the rule would condemn its own cure: a job
+# that EXITS ON ITS OWN needs no kill at all, so there is no race to lose.
+CURED="${TMP_DIR}/cured.test.sh"
+printf '#!/usr/bin/env bash\n( exit 0 ) & P=$!\nwait "${P}" 2>/dev/null\necho "ok - x"\n' > "${CURED}"
+chmod +x "${CURED}"
+fixture_sources_avoid_kill_wait_on_a_fresh_job "${CURED}" >/dev/null 2>&1
+assert_equals "a job left to exit on its own is accepted" "0" "$?"
+
+# The false positive this guard shipped with for one run, kept as a test because it is the failure mode
+# that gets a rule switched off. Its first version asked only whether the two lines after a recorded pid
+# CONTAINED the characters "kill" and "wait", and the line after this guard's own synthetic offender
+# calls `fixture_sources_avoid_kill_wait_on_a_fresh_job`, whose name carries both. A single-letter pid
+# variable made it worse, matching any capital letter in the neighbouring line. It condemned its own test.
+MENTIONS="${TMP_DIR}/mentions.test.sh"
+printf '#!/usr/bin/env bash\nsleep 5 & P=$!\nrun_the_kill_wait_checker "${SOME_PATH}"\necho "ok - P"\n' > "${MENTIONS}"
+chmod +x "${MENTIONS}"
+fixture_sources_avoid_kill_wait_on_a_fresh_job "${MENTIONS}" >/dev/null 2>&1
+assert_equals "an identifier merely carrying the words kill and wait is not a kill or a wait" "0" "$?"
+
+# The real fixture that carried the defect, so this cannot be marked fixed while the fixture still has it.
+fixture_sources_avoid_kill_wait_on_a_fresh_job "${REPO_ROOT}/mac/scripts/lib/run-heartbeat.test.sh" >/dev/null 2>&1
+assert_equals "run-heartbeat.test.sh no longer kills a job it just started" "0" "$?"
+
 # --- the stall guard is actually WIRED IN (#2929) -----------------------------------------------------
 #
 # `scripts/lib/fixture-stall-guard.test.sh` proves the guard decides correctly, and would keep passing if

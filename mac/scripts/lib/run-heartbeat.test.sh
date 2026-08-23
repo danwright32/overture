@@ -113,8 +113,18 @@ chmod 700 "${DEADDIR}"
 # whole tail of this fixture would be vacuous.
 assert "the temp fixtures survived to this point" test -d "${TMP}"
 STALE="${TMP}/stale-pid"
-sleep 300 & STALE_PID=$!
-kill "${STALE_PID}" 2>/dev/null; wait "${STALE_PID}" 2>/dev/null
+# #3125: a job that EXITS ON ITS OWN, never a `sleep` killed on the line after it starts. The kill used
+# to be sent so soon after the fork that it sometimes did not take, and the `wait` below then sat for the
+# sleep's whole 300 seconds. Measured 2026-08-22 under `scripts/run-shell-fixtures.sh`: one round in
+# roughly ten cost 306 seconds, with marks either side of these two lines reading +1s before and +301s
+# after while every other mark in the fixture stayed at +1s. Every assertion still passed, so it never
+# failed; it just spent five minutes of a run that is mandatory before every push, looking exactly like
+# the hang #2929 exists to make visible.
+#
+# There is no race left to lose: `wait` returns when the job exits, and this job exits at once, so the
+# pid is known dead by the next line without anything having to be signalled.
+( exit 0 ) & STALE_PID=$!
+wait "${STALE_PID}" 2>/dev/null
 echo "${STALE_PID}" > "${STALE}"
 chmod 500 "${DEADDIR}"
 refute "an already-finished run still reports the failure rather than erroring" \
