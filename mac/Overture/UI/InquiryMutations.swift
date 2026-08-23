@@ -88,6 +88,27 @@ enum InquiryMutations {
 
     // The reply sheet's Send enablement. An inquiry logged without an address cannot be replied to from
     // here at all, which is the case the sheet calls out in its header.
+    // #2797: undo an automatic attach that landed on the wrong inquiry. #2712 links these WITHOUT
+    // asking, because the match is address identity rather than a guess, and that is exactly what made
+    // the missing undo the remaining risk: a wrong attach had no way back at all (L9, L97).
+    //
+    // The refusal is SPOKEN, never a silent no-op. `DetachConversation` decides and supplies the reason,
+    // so a control that declines and the sentence beside it cannot disagree (L109). A success says what
+    // it could NOT take back, because an away alert and an OmniFocus task may already have left the app
+    // and a detach that stayed quiet would be claiming an exactness it does not have (L38).
+    static func detachConversation(_ inquiry: Inquiry, context: ModelContext,
+                                   feedback: ActionFeedback, now: Date = Date()) {
+        switch DetachConversation.detach(inquiry, now: now) {
+        case .refused(let reason):
+            feedback.acknowledge(reason, tone: .warning)
+        case .detached(let couldNotUndo):
+            guard context.saveOrWarn(org: inquiry.inquirerName, feedback: feedback) else { return }
+            // OPTIONAL, and nil means there was nothing it could not take back. Saying something anyway
+            // would name a consequence that did not happen (L11).
+            if let couldNotUndo { feedback.acknowledge(couldNotUndo) }
+        }
+    }
+
     static func canSend(email: String?, subject: String, body: String) -> Bool {
         guard let email, !email.isEmpty else { return false }
         return !subject.trimmingCharacters(in: .whitespaces).isEmpty

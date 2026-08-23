@@ -218,6 +218,9 @@ enum AttachConversation {
         if inquiry.sentAt == nil,
            let his = ReplyDetection.latestSentMessageSentAt(threadJSON: threadJSON, selfEmail: selfEmail) {
             inquiry.sentAt = his
+            // #2797: recorded, so a detach can take back the date THIS attach supplied and leave alone
+            // one that was already there.
+            inquiry.attachWroteSentAt = true
         }
 
         let detected = ReplyService.detectReplies(in: [inquiry], selfEmail: selfEmail, now: now,

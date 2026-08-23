@@ -129,6 +129,24 @@ enum ProspectMutations {
         return true
     }
 
+    // #2797: the same undo for a pitch. `DetachConversation.detach` has existed since #2719 and had NO
+    // caller anywhere in `mac/Overture`: it was reached only by its own tests, so the undo it was built
+    // to provide was unreachable (L3). Found while generalising it to inquiries, and fixed here rather
+    // than filed, because shipping a second unreachable function beside the first is not a fix.
+    static func detachConversation(_ item: QueueItem, _ recipientId: String, prospects: [Prospect],
+                                   context: ModelContext, feedback: ActionFeedback,
+                                   now: Date = Date()) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }),
+              let recipient = model.recipients.first(where: { $0.id == recipientId }) else { return }
+        switch DetachConversation.detach(recipient, on: model, now: now) {
+        case .refused(let reason):
+            feedback.acknowledge(reason, tone: .warning)
+        case .detached(let couldNotUndo):
+            guard context.saveOrWarn(org: item.groupName, feedback: feedback) else { return }
+            if let couldNotUndo { feedback.acknowledge(couldNotUndo) }
+        }
+    }
+
     // Dan manually adds a contact by hand (#399): runs the exact-duplicate/org/venue check first,
     // then creates a fresh Recipient, resumes one pursuit had stopped on, or is blocked if the
     // email already belongs to an active or settled contact. The venue/org flags never block; they

@@ -14,6 +14,12 @@ import Foundation
 enum DetachConversationCopy {
     // Each refusal is spoken by the function that decides it, so a greyed control and the reason beside
     // it cannot disagree (L109).
+    // #2797: the control itself. One label for both surfaces, because it is one act.
+    static let control = "Unlink this conversation"
+    // Phrased as IF. The control is offered on EVERY linked conversation, and most of them are the right
+    // one, so a tooltip asserting this one is wrong tells Dan something the app does not know.
+    static let controlHelp = "If Overture linked the wrong conversation, unlinking takes back what it recorded from it."
+
     static let nothingLinked =
         "There's no linked conversation on this pitch to unlink."
 
@@ -117,6 +123,57 @@ enum DetachConversation {
         r.attachPriorReplyDraftWrittenByDan = false
         r.attachPriorReplyDraftEditedByDan = false
         r.attachPausedRecipientIds = nil
+
+        return .detached(couldNotUndo: DetachConversationCopy.couldNotUndo(
+            omniFocusEnabled: omniFocusEnabled))
+    }
+
+    // #2797: the same compensating operation for a hire INQUIRY, whose conversation #2712 attaches
+    // automatically and without asking.
+    //
+    // The field list is derived from what `AttachConversation.attach(to: Inquiry)` writes, not copied
+    // from the pitch version above, and the two genuinely differ. An inquiry has no
+    // `attachedThreadSubject`, no recipients frozen by the attach, and no address of the attach's
+    // making, because it already carries the address it came from: that is why its match is identity
+    // rather than a guess and why it needs no confirming. It has one the pitch does not, `sentAt`,
+    // filled from Dan's own message on the thread when the inquiry had none.
+    //
+    // Written out field by field for the reason the pitch version is: the point is that every one of
+    // them was checked, and a compensating operation that touches N minus 1 of N is L38.
+    static func detach(_ i: Inquiry, now: Date,
+                       omniFocusEnabled: Bool = OmniFocusSyncConfig.loaded().enabled) -> Outcome {
+        guard let attachedAt = i.conversationAttachedAt, i.hasWatchableConversation else {
+            return .refused(reason: DetachConversationCopy.nothingLinked)
+        }
+        // Answered SINCE the attach, not answered at all. The attach itself stamps `replyHandledAt` when
+        // the thread's newest message was already Dan's own (#2712), and counting that would make a
+        // conversation he had already dealt with instantly and permanently un-undoable.
+        if let handled = i.replyHandledAt, handled > attachedAt {
+            return .refused(reason: DetachConversationCopy.alreadyAnswered)
+        }
+
+        i.gmailThreadId = nil
+        i.conversationAttachedAt = nil
+
+        // Only the date this attach supplied. One that was already there was never the detach's to
+        // remove, which is the same rule `attachWroteAddress` holds above.
+        if i.attachWroteSentAt {
+            i.sentAt = nil
+            i.attachWroteSentAt = false
+        }
+
+        // Everything `ReplyService.detectReplies` wrote.
+        i.replied = false
+        i.repliedAt = nil
+        i.lastReplyId = nil
+        i.lastReplyText = nil
+        i.replyAudience = nil
+        i.replyFromAddress = nil
+        i.replyFromName = nil
+        i.inboundReplySentAt = nil
+        i.inboundReplyMessageId = nil
+        i.replyHandledAt = nil
+        i.replyTextCheckedAt = nil
 
         return .detached(couldNotUndo: DetachConversationCopy.couldNotUndo(
             omniFocusEnabled: omniFocusEnabled))

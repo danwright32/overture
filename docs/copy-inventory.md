@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1503 sentences**.
+Every sentence Overture can say to Dan: **1505 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -985,6 +985,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ScoutSummaryView.swift`
 "I've run the import"
     `Domain/AppNotice.swift`
+"If Overture linked the wrong conversation, unlinking takes back what it recorded from it."
+    `Domain/DetachConversation.swift`
 "If another Overture window is open, use that one. Otherwise quit and reopen Overture."
     `App/StoreUnavailableView.swift`
 "If they asked you to stop emailing them, Overture will keep every future show from this org out of your queue. You can undo it from the row."
@@ -2359,6 +2361,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/HandMarkedReply.swift`
 "Unknown contact"
     `UI/QueueView+Model.swift`
+"Unlink this conversation"
+    `Domain/DetachConversation.swift`
 "Unverified email found"
     `Domain/Reachability.swift`
 "Update Overture"

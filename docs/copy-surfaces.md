@@ -163,6 +163,8 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
     HandMarkedReplyCopy.mark  "They got back to me"
     HandMarkedReplyCopy.undo  "Undo that"
 `UI/InquiryRowView.swift`
+    DetachConversationCopy.control  "Unlink this conversation"
+    DetachConversationCopy.controlHelp  "If Overture linked the wrong conversation, unlinking takes back what it recorded from it."
     InquiryCopy.replyTrackingLostBadge  "Replies can't be tracked"
     InquiryCopy.threadingDegradedBadge  "A nudge will arrive as a new email"
 `UI/LinkReplyPicker.swift`
