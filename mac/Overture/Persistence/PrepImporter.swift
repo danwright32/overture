@@ -44,6 +44,12 @@ enum PrepImporter {
         // as a cold lead. Surfaced rather than swallowed: an empty match result otherwise looks
         // exactly like a healthy run that genuinely found nothing.
         var matchDataWarning: String? = nil
+        // #2641/#2925: whether this run followed the two runbook instructions whose only writer is the
+        // prompt. Measured over EVERY contact the results carried, including the ones the ingest went on
+        // to discard: a contact refused for naming a route it never found is exactly the evidence being
+        // counted, so counting only survivors would count zero of the thing in question.
+        var instructionCompliance = RunInstructionCompliance.Measurement(
+            contacts: 0, withATier: 0, declaredNoRouteFound: 0, routeNamedButNotSupplied: 0)
     }
 
     // Fail loud, not silent (#754). The performer matcher is only as good as the two files it reads,
@@ -76,6 +82,10 @@ enum PrepImporter {
                        clients: [DownbeatClient] = [], history: [HistoryRecord] = [],
                        isProbe: Bool = false) -> Outcome {
         var outcome = Outcome()
+        // #2641/#2925: measured from the RESULTS, before any of them are matched to a prospect or
+        // discarded, so the count is of what the run said rather than of what survived the ingest.
+        outcome.instructionCompliance =
+            RunInstructionCompliance.measure(contacts: results.results.flatMap { $0.contacts ?? [] })
         for r in results.results {
             let key = r.naturalKey
             guard let p = try? Prospect.stored(key: key, in: context) else {

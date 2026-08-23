@@ -121,6 +121,10 @@ enum PrepRunSummary {
         if includeRetryNote, !outcome.missingKeys.isEmpty {
             notes.append(HandoffShortfall.retryNote(count: outcome.missingKeys.count))
         }
+        // #2641/#2925: the run answered shows and ignored an instruction that lives only in the runbook.
+        // Silent, these are invisible for ever: the tier stays empty on every future show while the score
+        // guesses, and the refusal built to catch a misbehaving run goes on firing on ordinary ones.
+        notes.append(contentsOf: outcome.instructionCompliance.notes)
         if outcome.saveFailed { notes.append("couldn't save, try again") }
         // #754: the performer matcher ran against missing or unreadable reference data, so a past client
         // may have read as a cold lead. Silent here means invisible forever.
