@@ -83,6 +83,12 @@ final class Inquiry {
     // true the moment Overture's own reply lands on the thread, while the fact that Overture found this
     // conversation rather than starting it is permanent.
     var conversationAttachedAt: Date?
+
+    // #2797: whether the ATTACH is what supplied `sentAt`. The attach fills it from Dan's own message on
+    // the thread when the inquiry carries none, so the detach has to know which it is: a date that was
+    // already there was never the detach's to remove. Exactly the rule `attachWroteAddress` holds on the
+    // pitch side, and the same reason for it.
+    var attachWroteSentAt: Bool = false
     // #2712: when the mailbox was last read for a message from this inquirer. The mirror of
     // `Recipient.replyCandidateSearchedAt` and read by the same `ReplySearchScope.windowStart`: the shared
     // high-water mark says how far the MAILBOX has been read, which is only an answer for an inquiry that

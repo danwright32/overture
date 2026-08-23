@@ -16,6 +16,9 @@ struct InquiryRowView: View {
     var onEdit: () -> Void
     var onMarkBooked: () -> Void
     var onMarkLost: (ShowOutcome) -> Void
+    // #2797: undo a conversation Overture attached to the wrong inquiry. Defaulted to nothing only so a
+    // test can render the row without one; both call sites pass the real mutation.
+    var onDetachConversation: () -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: OVSpacing.xs) {
@@ -65,6 +68,12 @@ struct InquiryRowView: View {
             // something Overture did rather than something Dan has to act on.
             if let found = InquiryCopy.foundInGmailBadge(attachedAt: row.conversationAttachedAt) {
                 badge(found, OVColor.inkFaint).help(InquiryCopy.foundInGmailHelp)
+                // #2797: the undo, beside the badge saying what was linked, which is the only place on
+                // screen that says it happened. #2712 attaches without asking, so this is the whole of
+                // the way back from a wrong one.
+                Button(DetachConversationCopy.control) { onDetachConversation() }
+                    .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                    .help(DetachConversationCopy.controlHelp)
             }
             Text(stateText).font(OVType.meta).foregroundStyle(OVColor.inkFaint)
         }

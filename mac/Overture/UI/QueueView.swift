@@ -653,7 +653,11 @@ struct QueueView: View {
                                 onReply: { replyingTo = inquiry },
                                 onEdit: { editingInquiry = inquiry },
                                 onMarkBooked: { markInquiry(inquiry, .booked) },
-                                onMarkLost: { markInquiry(inquiry, .lost($0)) })
+                                onMarkLost: { markInquiry(inquiry, .lost($0)) },
+                                onDetachConversation: {
+                                    InquiryMutations.detachConversation(inquiry, context: context,
+                                                                        feedback: feedback)
+                                })
                         }
                     }
                 }
@@ -1147,7 +1151,11 @@ struct QueueView: View {
                                     onReply: { replyingTo = inquiry },
                                     onEdit: { editingInquiry = inquiry },
                                     onMarkBooked: { markInquiry(inquiry, .booked) },
-                                    onMarkLost: { markInquiry(inquiry, .lost($0)) })
+                                    onMarkLost: { markInquiry(inquiry, .lost($0)) },
+                                    onDetachConversation: {
+                                        InquiryMutations.detachConversation(inquiry, context: context,
+                                                                            feedback: feedback)
+                                    })
                             }
                             Divider()
                         }
