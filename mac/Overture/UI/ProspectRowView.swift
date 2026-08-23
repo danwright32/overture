@@ -63,6 +63,8 @@ struct ProspectRowView: View {
     var onDraftReply: (_ recipientId: String) -> Void = { _ in }
     var onSendReply: (_ recipientId: String) -> Void = { _ in }
     var onCopyReply: (_ recipientId: String) -> Void = { _ in }
+    // #2869: step two of copy-then-confirm.
+    var onConfirmCopiedReplySent: (_ recipientId: String) -> Void = { _ in }
     var onEditReplyDraft: (_ recipientId: String, _ body: String) -> Void = { _, _ in }
     var onCancelReplyDraft: () -> Void = {}   // #1038: stop the detached reply-classify + drafter run
     var onCorrectClassification: (Discipline) -> Void = { _ in }
@@ -200,6 +202,7 @@ struct ProspectRowView: View {
                     onDraftReply: onDraftReply,
                     onSendReply: onSendReply,
                     onCopyReply: onCopyReply,
+                    onConfirmCopiedReplySent: onConfirmCopiedReplySent,
                     onEditReplyDraft: onEditReplyDraft,
                     onCancelReplyDraft: onCancelReplyDraft,
                     gmailConnected: gmailConnected,

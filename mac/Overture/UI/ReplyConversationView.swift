@@ -28,6 +28,9 @@ struct ReplyConversationView: View {
     var onDraftReply: (_ recipientId: String) -> Void = { _ in }
     var onSendReply: (_ recipientId: String) -> Void = { _ in }
     var onCopyReply: (_ recipientId: String) -> Void = { _ in }
+    // #2869: step two of copy-then-confirm. Its own callback rather than a flag on the one above,
+    // because they record different things and only one of them claims an answer.
+    var onConfirmCopiedReplySent: (_ recipientId: String) -> Void = { _ in }
     var onEditReplyDraft: (_ recipientId: String, _ body: String) -> Void = { _, _ in }
     var onCancelReplyDraft: () -> Void = {}
 
@@ -170,7 +173,16 @@ struct ReplyConversationView: View {
                 .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forestText)
             Button("Copy") { onCopyReply(contact.id) }
                 .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.forestText)
-                .help("Copy the draft and mark it replied (paste it into Gmail yourself)")
+                // #2869: the tooltip used to promise that copying marks it replied, which it did, and
+                // which was the defect rather than the documentation of it.
+                .help(ReplyPanelCopy.copyHelp)
+            // #2869: step two, offered only once the words have actually been taken. Gold, because this
+            // is the one thing on the row that is now waiting on him.
+            if contact.replyCopiedAt != nil {
+                Button(ReplyPanelCopy.confirmCopiedSent) { onConfirmCopiedReplySent(contact.id) }
+                    .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.gold)
+                    .help(ReplyPanelCopy.confirmCopiedSentHelp)
+            }
         }
     }
 

@@ -756,6 +756,9 @@ struct RecipientSnapshot: Identifiable, Equatable, Sendable {
     var replyDraftSubject: String? = nil
     var replyDraftBody: String? = nil
     var replyDraftRequestedAt: Date? = nil
+    // #2869: the reply draft is on the clipboard and Dan has not said he sent it. On the snapshot
+    // because the card decides from it whether to offer the confirm.
+    var replyCopiedAt: Date? = nil
     // #2966: WHEN the reply draft this contact is still waiting on was asked for, or nil when nothing is
     // awaited. The ANSWER from `ReplyDraftRequest`, carried across rather than the inputs to it, for two
     // reasons. The snapshot then holds no copy of the rule at all, which is the whole point of there being
@@ -2723,6 +2726,7 @@ extension RecipientSnapshot {
                   isHeldFromSending: r.isBlockedAwaitingReview,
                   replyDraftSubject: r.replyDraftSubject, replyDraftBody: r.replyDraftBody,
                   replyDraftRequestedAt: r.replyDraftRequestedAt,
+                  replyCopiedAt: r.replyCopiedAt,
                   // #2966: the shared rule's answer, so the card and the reply panel cannot disagree about
                   // whether a run is still going.
                   awaitedReplyDraftRequestedAt: r.awaitedReplyDraftRequestedAt,

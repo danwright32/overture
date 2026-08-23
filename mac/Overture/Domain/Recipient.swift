@@ -364,6 +364,12 @@ final class Recipient {
     // recipient can legitimately be due for a conversation nudge at the same time (two different
     // open surfaces), so sharing would cause spurious refusals rather than catching a real race.
     var replySendClaimedAt: Date?
+
+    // #2869: the reply draft is on the clipboard and Dan has not yet said he sent it. The reply card's
+    // twin of `formPitchStartedAt`, and for that control's reason: copying is not sending, and the row
+    // has to hold the in-between state durably or the confirm has nothing to appear on and the fix is a
+    // button nobody can reach.
+    var replyCopiedAt: Date?
     // #468 (SUP-005): shared by sendFollowUp and sendConversationNudge. Safe to share: a
     // recipient eligible for a follow-up (isAwaitingFollowUp, which requires outcomeSourceRaw ==
     // nil) and one eligible for a conversation nudge (which requires a conversationState, and

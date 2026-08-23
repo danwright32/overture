@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1501 sentences**.
+Every sentence Overture can say to Dan: **1503 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -693,12 +693,14 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/StoreShrinkNoticeSheet.swift`
 "Conversations to confirm"
     `Domain/ProposedConversation.swift`
+"Copied. Paste it into Gmail, then say you sent it."
+    `Domain/ReplyPanel.swift`
 "Copy pitch and open form"
     `Domain/FormOutreach.swift`
 "Copy pitch and open profile"
     `Domain/FormOutreach.swift`
-"Copy the draft and mark it replied (paste it into Gmail yourself)"
-    `UI/ReplyConversationView.swift`
+"Copy the draft to paste into Gmail yourself. Nothing is recorded until you say you sent it."
+    `Domain/ReplyPanel.swift`
 "Couldn't block \(range)"
     `UI/ProspectMutations.swift`
 "Couldn't connect Gmail"
@@ -1714,6 +1716,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReconcileSummary.swift`
 "Reconnect Gmail"
     `Domain/GmailReconnectCopy.swift`
+"Record this reply as answered. Nothing was recorded when you copied it."
+    `Domain/ReplyPanel.swift`
 "Recorded. \(org) is now in Reached out."
     `App/ActionFeedback.swift`
 "Redo it anyway?"

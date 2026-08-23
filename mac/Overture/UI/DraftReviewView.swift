@@ -51,6 +51,8 @@ struct DraftReviewView: View {
     var onDraftReply: (_ recipientId: String) -> Void = { _ in }
     var onSendReply: (_ recipientId: String) -> Void = { _ in }
     var onCopyReply: (_ recipientId: String) -> Void = { _ in }
+    // #2869: step two of copy-then-confirm, threaded through so the card's button is a live one.
+    var onConfirmCopiedReplySent: (_ recipientId: String) -> Void = { _ in }
     var onEditReplyDraft: (_ recipientId: String, _ body: String) -> Void = { _, _ in }
     // #1038: stop the detached reply-classify + drafter run that is drafting this reply. The run drafts
     // every queued reply in one detached pass, so this stops the whole run cooperatively (the runner sees
@@ -889,6 +891,7 @@ struct DraftReviewView: View {
                               onDraftReply: onDraftReply,
                               onSendReply: onSendReply,
                               onCopyReply: onCopyReply,
+                              onConfirmCopiedReplySent: onConfirmCopiedReplySent,
                               onEditReplyDraft: onEditReplyDraft,
                               onCancelReplyDraft: onCancelReplyDraft)
     }

@@ -466,9 +466,37 @@ enum ProspectMutations {
               let body = recipient.replyDraftBody, !body.isEmpty else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(body, forType: .string)
+        // #2869: step ONE of copy-then-confirm, the shape `beginFormPitch` below already uses. This used
+        // to call `AnsweredReply.record` here, which froze the body as sent, stamped `replySentAt` and
+        // `replyHandledAt`, consumed the draft, and marked every peer on the same reply answered, on the
+        // strength of nothing at all. Copy and close the window, paste into the wrong place, or change
+        // your mind, and the conversation read as answered while the person was still waiting (L12).
+        //
+        // What it records is exactly what happened: the words are on the clipboard. That is durable
+        // because the confirm has to be offered on a later render, not only in this frame.
+        model.updateRecipient(id: recipientId) { $0.replyCopiedAt = Date() }
+        context.saveOrWarn(org: item.groupName, feedback: feedback)
+        feedback.acknowledge(ReplyPanelCopy.copiedAwaitingConfirm)
+    }
+
+    // #2869: step TWO. This is the moment the answer becomes real, and it is the only place the reply
+    // card records one.
+    //
+    // Refuses when nothing was copied, so this cannot become a second route to claiming a send that
+    // skips the clipboard entirely. The control is only ever offered after a copy anyway; the refusal is
+    // what makes that a property of the mutation rather than of the one screen that calls it.
+    static func confirmCopiedReplySent(_ item: QueueItem, _ recipientId: String,
+                                       prospects: [Prospect], context: ModelContext,
+                                       feedback: ActionFeedback) {
+        guard let model = prospects.first(where: { $0.naturalKey == item.id }),
+              let recipient = model.recipients.first(where: { $0.id == recipientId }),
+              recipient.replyCopiedAt != nil else { return }
         // #2191: the same routine the in-app send runs, so answering by pasting into Gmail clears the
         // conversation exactly as answering in the app does.
         AnsweredReply.record(on: recipient, in: model, now: Date())
+        // The offer goes with it, or the row keeps asking about an answer it has already recorded, which
+        // reads as broken and gets pressed again (L44).
+        recipient.replyCopiedAt = nil
         context.saveOrWarn(org: item.groupName, feedback: feedback)
     }
 
