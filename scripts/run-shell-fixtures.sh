@@ -169,6 +169,61 @@ fixture_sources_avoid_short_circuit_pipes() {
   return 1
 }
 
+# fixture_sources_avoid_kill_wait_on_a_fresh_job FILE...
+#
+# #3125: a background job must not be killed in the same breath it is started and then waited for.
+#
+# `run-heartbeat.test.sh` wanted a pid naming a process that had already finished, and got one by
+# starting a `sleep 300`, killing it on the very next line, and waiting for it. The kill is sent so soon
+# after the fork that it sometimes does not take, and the `wait` then sits for the job's whole lifetime.
+#
+# Measured 2026-08-22 under this runner's own plumbing: one round in roughly ten cost 306 seconds. Marks
+# placed either side of those two lines read +1s before and +301s after, while every other mark in the
+# fixture stayed at +1s. Every assertion still passed, so it never failed: it just cost five minutes of a
+# run that is mandatory before every push, and while it sat there it was indistinguishable from a genuine
+# hang (#2929 named it, correctly, and could not say whether to wait or kill).
+#
+# Refused at the SOURCE rather than at runtime, for #2850's reason: a runtime check can only fire on the
+# runs where the race actually opened, which is one in ten, so it would be a witness rather than a gate.
+#
+# NARROW, so it is not switched off within a day (L93). It flags only a recorded background pid whose
+# very next line or two both KILLS and WAITS FOR that same pid. Every other recorded pid in this repo is
+# `stuck-tool-call.test.sh`'s shape, where real work happens in between and it is the WATCHDOG that gets
+# killed rather than the stand-in; those windows are closed by the work, and none has ever stalled.
+fixture_sources_avoid_kill_wait_on_a_fresh_job() {
+  local offenders="" f n i var window line
+  local -a lines
+  # The `$!` is inside single quotes so the shell cannot expand it into this runner's own last
+  # background pid, which is a live value here: `start_fixture_watch` sets one.
+  local re='&[[:space:]]+([A-Za-z_][A-Za-z0-9_]*)=\$!'
+  for f in "$@"; do
+    [[ -r "${f}" ]] || continue
+    lines=()
+    while IFS= read -r line || [[ -n "${line}" ]]; do lines+=("${line}"); done < "${f}"
+    n=${#lines[@]}
+    for (( i = 0; i < n; i++ )); do
+      [[ "${lines[i]}" =~ $re ]] || continue
+      var="${BASH_REMATCH[1]}"
+      # The next two lines only. The defect is a kill that races the fork, and a kill three lines later
+      # has had a command run in between, which is what closes the window.
+      window="${lines[i+1]:-}"$'\n'"${lines[i+2]:-}"
+      [[ "${window}" == *"${var}"* ]] || continue
+      [[ "${window}" == *kill* ]] || continue
+      [[ "${window}" == *wait* ]] || continue
+      offenders+="${f}: line $((i + 2)): ${lines[i+1]}"$'\n'
+    done
+  done
+  [[ -z "${offenders}" ]] && return 0
+  echo "FAIL - a fixture kills and waits for a background job it has only just started (#3125)"
+  printf '%s' "${offenders}" | sed 's/^/    /'
+  echo "  The kill can be sent before the job has finished starting, and the wait then sits for the job's"
+  echo "  whole lifetime. Nothing fails, so it reads as a hang rather than as an error."
+  echo "  For a pid naming a process that has already finished, let a job exit on its own instead:"
+  echo "    ( exit 0 ) & P=\$!"
+  echo "    wait \"\${P}\" 2>/dev/null"
+  return 1
+}
+
 # fixture_temp_allowed_names <uid>: the names a fixture may leave in its private temp directory without
 # being called a leak, because it did not create them. node and tsx write these caches wherever TMPDIR
 # points, on any run that shells out to either.
@@ -335,6 +390,9 @@ main() {
   # witness. The runtime half still runs per fixture below and catches shapes this pattern does not know.
   local source_status=0
   fixture_sources_avoid_short_circuit_pipes "${fixtures[@]}" || source_status=1
+  # Both run, and neither is allowed to stand for the other: each prints its own refusal naming its own
+  # defect, so a run carrying both shapes reports both rather than the first one found (L11).
+  fixture_sources_avoid_kill_wait_on_a_fresh_job "${fixtures[@]}" || source_status=1
 
   echo "Running ${#fixtures[@]} shell fixture(s)..."
   local run_status=0
