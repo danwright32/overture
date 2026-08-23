@@ -140,6 +140,7 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
     SendModeCopy.together  "One email to everyone"
     ShowOutcome.reopenLabel  "Reopen this show"
 `UI/FollowUpsView.swift`
+    GmailReconnectCopy.afterLinkAttempt  "Your Gmail access has expired or was revoked, so this conversation could not be linked. Nothing was sent and nothing changed. Click Connect Gmail to reconnect, then answer again."
     GmailReconnectCopy.connect  "Connect Gmail"
     GmailReconnectCopy.title  "Reconnect Gmail"
     ProposedConversationCopy.confirm  "Yes, link it"
@@ -236,6 +237,7 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
     ScoutSummaryCopy.subtitle  "I'll read the ones you fix."
     ScoutSummaryCopy.title  "Scout results"
 `UI/SendConfirmAndReconnectAlerts.swift`
+    GmailReconnectCopy.afterSend  "Your Gmail access has expired or was revoked, so nothing was sent. Click Connect Gmail to reconnect, then try Send again."
     GmailReconnectCopy.connect  "Connect Gmail"
     GmailReconnectCopy.title  "Reconnect Gmail"
 `UI/SendConfirmSheet.swift`
