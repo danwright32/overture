@@ -90,7 +90,9 @@ enum GoogleOAuth {
     // 401 means reconnect; any other non-success, or a 200 we can't parse, is transient
     // so a still-valid saved login is never thrown away over a blip.
     static func interpretRefreshResponse(status: Int, data: Data) -> Result<OAuthTokens, RefreshFailure> {
-        if status == 200, let tokens = try? JSONDecoder().decode(OAuthTokens.self, from: data) {
+        if status == 200,
+           let tokens = ResponseBody.decode(OAuthTokens.self, from: data,
+                                            endpoint: "google.oauth.token").value {
             return .success(tokens)
         }
         let body = String(data: data, encoding: .utf8) ?? ""

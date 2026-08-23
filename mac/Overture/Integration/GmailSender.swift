@@ -109,7 +109,7 @@ struct GmailSender: MailSender {
             let detail = String(data: data, encoding: .utf8) ?? "send failed"
             throw GmailSendError.api(detail)
         }
-        let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        let json = ResponseBody.json(data, from: "gmail.messages.send").value
         // #2647: the id of the message Gmail just created, which is what the read back asks for. Read
         // on its own rather than through the threadId fallback below, because that fallback deliberately
         // treats the message id as a stand-in for a missing threadId and this is the message id proper.
@@ -162,7 +162,7 @@ struct GmailSender: MailSender {
             logReadBackFailure("Gmail refused the read back for message \(id)")
             return nil
         }
-        let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        let json = ResponseBody.json(data, from: "gmail.messages.get").value
         let headers = (json?["payload"] as? [String: Any])?["headers"] as? [[String: Any]] ?? []
         // Case insensitively: RFC 2822 header names are, and Gmail returns "Message-Id" as often as
         // "Message-ID", so an exact match would degrade a send that was perfectly fine.

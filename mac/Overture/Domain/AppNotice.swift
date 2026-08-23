@@ -238,6 +238,50 @@ enum AppNotices {
         return AppNotice(text: text, tone: .warning, help: "\(explanation)\n\n\(detail)")
     }
 
+    // #2888: endpoints answering with bodies Overture cannot read. Distinct from `couldNotRead` above,
+    // which is about FILES: a file is still there and can be looked at, a response is gone, and the two
+    // remedies are different, so one line covering both would name neither (L11).
+    //
+    // Only the FAILING ones reach here, meaning a run of consecutive failures rather than a single bad
+    // response. The register counts the rest and stays quiet about them, because a line per malformed
+    // response is a line Dan learns to ignore (L36, L77).
+    //
+    // What is LOST is named in Dan's terms, not the endpoint's: "gmail.threads.get" tells him nothing,
+    // and a notice he cannot read is one he cannot act on. An endpoint the table below does not know
+    // still gets a line, under its raw name: falling back to silence would exempt every new call site
+    // from this surface until somebody remembered to add it (L113, L96).
+    static func responsesNotUnderstood(_ health: [ResponseDecodeFailures.Health]) -> AppNotice? {
+        // The condition is decided HERE, not by whoever built the list. A caller handing over every
+        // endpoint that has ever had one bad response would otherwise produce a false alarm, and the
+        // rule for what counts as failing would then exist in two places (L16).
+        let failing = health.filter(\.isFailing)
+        guard let first = failing.first else { return nil }
+        // One sentence, not two saying the same thing. `whatIsLost` already says the service is
+        // answering with something Overture cannot read AND what that costs him; a second clause
+        // repeating it is the #843 restatement.
+        let text = failing.count == 1
+            ? whatIsLost(first.endpoint)
+            : "\(failing.count) of the services Overture reads are answering with something it can't read, so it's working from nothing there."
+        let detail = failing
+            .map { "\($0.endpoint): \($0.failures) of \($0.attempts) unreadable, \($0.consecutiveFailures) in a row. \($0.lastReason ?? "no reason recorded")" }
+            .joined(separator: "\n")
+        let explanation = "The service replied, so this is not a connection problem: what came back was not what Overture expected. One bad answer is normal and says nothing here; this line appears only once several in a row have failed, and it clears as soon as one is readable again."
+        return AppNotice(text: text, tone: .warning, help: "\(explanation)\n\n\(detail)")
+    }
+
+    // What Dan loses when this endpoint stops making sense, in his words. Deliberately NOT exhaustive
+    // over a vocabulary, because it is keyed on a free-form endpoint name rather than an enum, so a
+    // total switch is not available; the fallback is the raw name and a line, never silence.
+    private static func whatIsLost(_ endpoint: String) -> String {
+        if endpoint.hasPrefix("gmail.") || endpoint.hasPrefix("google.") {
+            return "Gmail is answering, but not in a way Overture understands, so replies and bounces may be going unnoticed."
+        }
+        if endpoint.hasPrefix("algolia.") || endpoint.hasPrefix("squarespace.") {
+            return "A venue's own calendar is answering, but not in a way Overture understands, so its shows may be missing from a scout."
+        }
+        return "\(endpoint) is answering, but not in a way Overture understands."
+    }
+
     // `shootHistory` is OPTIONAL, and nil means nothing has looked yet rather than a clean bill of
     // health. A verdict is a measurement, and defaulting to `.ok` before the read would put the
     // reassuring answer on the one state nobody has checked (L11).
@@ -246,6 +290,9 @@ enum AppNotices {
                         bookingsVanished: DownbeatBookingFeed.Vanished? = nil,
                         shootHistory: ShootHistory.Health? = nil,
                         unreadableFiles: [HandoffReadFailures.Failure] = [],
+                        // #2888: endpoints whose bodies Overture cannot read. Only the FAILING ones,
+                        // which the register decides, so this list is never a per-response warning.
+                        failingResponses: [ResponseDecodeFailures.Health] = [],
                         status: StatusLine) -> [AppNotice] {
         var notices: [AppNotice] = []
         if let bookingsVanished { notices.append(downbeatShootsVanished(bookingsVanished)) }
@@ -253,6 +300,7 @@ enum AppNotices {
             notices.append(omniFocusFailing(omniFocusFailure.kind, reason: omniFocusFailure.reason))
         }
         if let notice = couldNotRead(unreadableFiles) { notices.append(notice) }
+        if let notice = responsesNotUnderstood(failingResponses) { notices.append(notice) }
         if let shootHistory, let notice = shootHistoryWarning(shootHistory) { notices.append(notice) }
         if let text = status.text {
             notices.append(AppNotice(text: text,

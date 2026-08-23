@@ -130,7 +130,7 @@ struct GmailReplySearch {
     // Nil on anything that is not a list response, so an error body cannot parse as an empty page and
     // read as "the mailbox holds nothing".
     static func parseList(_ data: Data) -> ListPage? {
-        guard let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+        guard let root = ResponseBody.json(data, from: "gmail.messages.list").value else {
             return nil
         }
         // A response with no `messages` key at all is a legitimate empty result; one that is not an
@@ -148,7 +148,7 @@ struct GmailReplySearch {
     // `internalDate` is a STRING holding MILLISECONDS since the epoch, which is the field most easily
     // read wrongly: taken as seconds it dates every message to 1970 and the window drops the lot.
     static func parseMetadata(_ data: Data) -> InboundMessage? {
-        guard let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+        guard let root = ResponseBody.json(data, from: "gmail.messages.get").value,
               let id = root["id"] as? String,
               let thread = root["threadId"] as? String,
               let millis = Int64((root["internalDate"] as? String) ?? ""),

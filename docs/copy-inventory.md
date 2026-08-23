@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1468 sentences**.
+Every sentence Overture can say to Dan: **1480 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -112,7 +112,7 @@ What is not, and why:
 - `UI/DraftSignaturePreview.swift`: renders the outbound email's own HTML (body + Gmail signature), not Overture's voice (#1203)
 - `UI/DraftSignaturePreview.swift`: browser-side measuring script, not a sentence Overture says to Dan (#915)
 
-## The same sentence, said in more than one place (52)
+## The same sentence, said in more than one place (53)
 
 Two copies of a sentence will drift. #843 owns fixing these.
 
@@ -254,6 +254,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
 - "\(city), \(state)"
   - `Domain/EventLocationFill.swift`
   - `Domain/EventLocationFill.swift`
+- "\(explanation)\n\n\(detail)"
+  - `Domain/AppNotice.swift`
+  - `Domain/AppNotice.swift`
 - "\(min(progress.completed, progress.total)) of \(progress.total)"
   - `Domain/ReplyClassifyProgress.swift`
   - `Domain/ScoutExtractProgress.swift`
@@ -454,6 +457,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OmniFocusFailureKind.swift`
 "A test tried to launch a real Claude run. Inject the launch seam instead."
     `Integration/ScoutExtractService.swift`
+"A venue's own calendar is answering, but not in a way Overture understands, so its shows may be missing from a scout."
+    `Domain/AppNotice.swift`
 "AI read: \(hint.replacingOccurrences(of: "_", with: " "))"
     `UI/QueueView+Model.swift`
 "Add a Lead..."
@@ -886,6 +891,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/RootView.swift`
 "Gmail couldn't refresh right now (temporary): \(m)"
     `Integration/GmailAuthManager.swift`
+"Gmail is answering, but not in a way Overture understands, so replies and bounces may be going unnoticed."
+    `Domain/AppNotice.swift`
 "Gmail is connected for sending"
     `Domain/DraftReviewNotes.swift`
 "Gmail isn't connected yet. Authorize the photography account to enable sending."
@@ -2127,6 +2134,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ScoutWarningCopy.swift`
 "The scout started reading the calendars that changed, but the run finished without producing anything. Those pages have NOT been read, and it will try them again on the next scout."
     `Domain/DetachedRunOutcome.swift`
+"The service replied, so this is not a connection problem: what came back was not what Overture expected. One bad answer is normal and says nothing here; this line appears only once several in a row have failed, and it clears as soon as one is readable again."
+    `Domain/AppNotice.swift`
 "The shoot history file couldn't be read (it may be corrupted or a newer format), so pitches can't mention rooms you've photographed before. Re-run the shoot-history import."
     `Domain/ShootHistory.swift`
 "The show on \(dateLabel) is dismissed as \(reason.label)"
@@ -2520,6 +2529,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/VenueDisplay.swift`
 "\($0.count) \($0.route)"
     `Domain/WebCallRefusals.swift`
+"\($0.endpoint): \($0.failures) of \($0.attempts) unreadable, \($0.consecutiveFailures) in a row. \($0.lastReason ?? "no reason recorded")"
+    `Domain/AppNotice.swift`
 "\($0.file): \($0.reason)"
     `Domain/AppNotice.swift`
 "\($0.orgName): \($0.state.failureMessage ?? "couldn't be checked")"
@@ -2636,6 +2647,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ScoutWarnings.swift`
 "\(empties[0].orgName) has listed shows before and came back empty this run."
     `Domain/ScoutWarnings.swift`
+"\(endpoint) is answering, but not in a way Overture understands."
+    `Domain/AppNotice.swift`
 "\(entry.distinctShowCount) different titles"
     `Domain/OrganisationListing.swift`
 "\(entry.rowCount) shows, \(titles), \(rooms)."
@@ -2650,6 +2663,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ScoutWarnings.swift`
 "\(failed.count) sources couldn't be checked.\n\n"
     `Integration/ScoutService.swift`
+"\(failing.count) of the services Overture reads are answering with something it can't read, so it's working from nothing there."
+    `Domain/AppNotice.swift`
 "\(filed) \(note)"
     `Domain/BulkDismiss.swift`
 "\(first) and \(names[1])"
@@ -2827,6 +2842,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/EventLocationFill.swift`
 "\(path(context)) is not the expected type (\(type))"
     `Domain/HandoffDecodeFailure.swift`
+"\(path) is the wrong type or empty"
+    `Domain/ResponseBody.swift`
 "\(pending) calendars have new listings to read."
     `Domain/ScoutReadBudget.swift`
 "\(piece) is not an email address"
@@ -2972,6 +2989,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ScoutWarningCopy.swift`
 "_(Removed: the auto-generated guidance contained a specific name and was quarantined; it will regenerate on the next Prep run.)_"
     `Domain/VoiceGuidanceGuard.swift`
+"a field is the wrong type"
+    `Domain/ResponseBody.swift`
+"a field the response should carry is missing: \(key.stringValue)"
+    `Domain/ResponseBody.swift`
 "a past client"
     `UI/QueueView+Model.swift`
 "a required field is empty: \(path(context))"
@@ -3190,6 +3211,12 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceReadability.swift`
 "the archive"
     `App/ActionFeedback.swift`
+"the body could not be decoded"
+    `Domain/ResponseBody.swift`
+"the body is JSON but not an object"
+    `Domain/ResponseBody.swift`
+"the body is not valid JSON"
+    `Domain/ResponseBody.swift`
 "the booking history couldn't be read"
     `Persistence/PrepImporter.swift`
 "the contact"

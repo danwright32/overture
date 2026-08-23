@@ -65,7 +65,8 @@ enum SquarespaceCalendar {
     // fallback is the existing path and a wrong "yes" would take a source off the paid read that needs
     // it. `events` and `events-stacked` are both real live values.
     static func isEventsCollection(_ data: Data) -> Bool {
-        guard let payload = try? JSONDecoder().decode(Payload.self, from: data),
+        guard let payload = ResponseBody.decode(Payload.self, from: data,
+                                                endpoint: "squarespace.collection").value,
               let typeName = payload.collection?.typeName else { return false }
         return typeName.hasPrefix("events")
     }

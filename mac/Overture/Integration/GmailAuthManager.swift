@@ -249,7 +249,8 @@ final class GmailAuthManager {
         // cancelled right before this call runs), so this genuinely had no bound before.
         let (data, resp) = try await GmailNetworking.session.data(for: req)
         guard (resp as? HTTPURLResponse)?.statusCode == 200,
-              let tokens = try? JSONDecoder().decode(OAuthTokens.self, from: data) else {
+              let tokens = ResponseBody.decode(OAuthTokens.self, from: data,
+                                               endpoint: "google.oauth.exchange").value else {
             throw AuthError.exchangeFailed(String(data: data, encoding: .utf8) ?? "unknown")
         }
         return tokens

@@ -4,6 +4,12 @@ import Foundation
 // address other than Dan's own. Pure so it's testable without the network; the live
 // thread fetch lives in the integration layer.
 enum ReplyDetection {
+
+    // #2888: every reader below is handed the body of one Gmail `threads.get`, so they share one name
+    // in the failure register. Named for the CALL rather than for the reader, because what is failing
+    // is the response, and eight lines saying the same endpoint is unreadable is one condition (L11).
+    private static let endpoint = "gmail.threads.get"
+
     static func hasReply(fromAddresses: [String], selfEmail: String) -> Bool {
         let me = email(from: selfEmail)
         return fromAddresses.contains { raw in
@@ -54,7 +60,7 @@ enum ReplyDetection {
 
     // From-header values of every message in a Gmail threads.get (metadata) response.
     static func fromAddresses(threadJSON data: Data) -> [String] {
-        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        guard let obj = ResponseBody.json(data, from: Self.endpoint).value,
               let messages = obj["messages"] as? [[String: Any]] else { return [] }
         return messages.compactMap { m in
             guard let payload = m["payload"] as? [String: Any],
@@ -76,7 +82,7 @@ enum ReplyDetection {
     // walking the messages themselves with the same three-part skip copied out. A change to what counts
     // as a real reply now reaches all of them at once instead of one and not the others (L30).
     private static func latestReplyMessage(threadJSON data: Data, selfEmail: String) -> [String: Any]? {
-        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        guard let obj = ResponseBody.json(data, from: Self.endpoint).value,
               let messages = obj["messages"] as? [[String: Any]] else { return nil }
         let me = email(from: selfEmail)
         for m in newestFirst(messages) {
@@ -152,7 +158,7 @@ enum ReplyDetection {
     // asks "is this from Dan" through the same `email(from:)` normalisation every other reader here uses,
     // so a display name or angle brackets cannot make his own message look like a stranger's.
     static func latestSentMessageID(threadJSON data: Data, selfEmail: String) -> String? {
-        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        guard let obj = ResponseBody.json(data, from: Self.endpoint).value,
               let messages = obj["messages"] as? [[String: Any]] else { return nil }
         let me = email(from: selfEmail)
         guard !me.isEmpty else { return nil }
@@ -177,7 +183,7 @@ enum ReplyDetection {
     // Nil when the thread carries nothing of his, which is a person who wrote twice before he ever
     // answered, and a state the caller must be able to tell apart from an answered one.
     static func latestSentMessageSentAt(threadJSON data: Data, selfEmail: String) -> Date? {
-        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        guard let obj = ResponseBody.json(data, from: Self.endpoint).value,
               let messages = obj["messages"] as? [[String: Any]] else { return nil }
         let me = email(from: selfEmail)
         guard !me.isEmpty else { return nil }
@@ -214,7 +220,7 @@ enum ReplyDetection {
     }
 
     static func newestMessageFromSelf(threadJSON data: Data, selfEmail: String) -> SentMessage? {
-        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        guard let obj = ResponseBody.json(data, from: Self.endpoint).value,
               let messages = obj["messages"] as? [[String: Any]],
               let newest = realMessagesNewestFirst(messages).first else { return nil }
         let me = email(from: selfEmail)
@@ -252,7 +258,7 @@ enum ReplyDetection {
     // False, never nil, when the thread cannot be read or carries no message at all: the safe reading is
     // that he has NOT answered, which leaves the row asking rather than silently marking it dealt with.
     static func newestMessageIsSelf(threadJSON data: Data, selfEmail: String) -> Bool {
-        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        guard let obj = ResponseBody.json(data, from: Self.endpoint).value,
               let messages = obj["messages"] as? [[String: Any]],
               let newest = realMessagesNewestFirst(messages).first else { return false }
         let me = email(from: selfEmail)
@@ -381,7 +387,7 @@ enum ReplyDetection {
     // stripped text/html; base64url-decoded and capped. Residual quoted history is left for the
     // classifier (#112) rather than perfectly stripped here. nil if there's no real reply with text.
     static func latestReplyBody(threadJSON data: Data, selfEmail: String, maxLength: Int = 6_000) -> String? {
-        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        guard let obj = ResponseBody.json(data, from: Self.endpoint).value,
               let messages = obj["messages"] as? [[String: Any]] else { return nil }
         let me = email(from: selfEmail)
         for m in newestFirst(messages) {

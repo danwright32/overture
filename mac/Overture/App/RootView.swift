@@ -220,11 +220,18 @@ struct RootView: View {
     // frozen at whatever was true when the masthead last drew for some other reason.
     @State private var unreadableFiles: [HandoffReadFailures.Failure] = []
 
+    // #2888: the endpoints answering with bodies Overture cannot read. Held and refreshed exactly like
+    // the file register above and on the same tick, for the same reason: reading either register inside
+    // `body` would register no dependency on it and leave the line frozen.
+    @State private var failingResponses: [ResponseDecodeFailures.Health] = []
+
     // Reads an in-memory dictionary under a lock, no filesystem and no derivation, and assigns only on a
     // real change so an app with nothing wrong redraws nothing (#1774: an idle surface must pay nothing).
     private func refreshUnreadableFiles() {
         let current = HandoffReadFailures.shared.current()
         if current != unreadableFiles { unreadableFiles = current }
+        let responses = ResponseDecodeFailures.shared.failing()
+        if responses != failingResponses { failingResponses = responses }
     }
 
     // The ONE place the file is read for this line, so the launch load and the notice's own re-read
@@ -512,7 +519,11 @@ struct RootView: View {
                                               // #2879: and any handoff file the app is reading and
                                               // cannot read, which used to be indistinguishable from a
                                               // file that was simply not there yet.
-                                              unreadableFiles: unreadableFiles, status: status),
+                                              unreadableFiles: unreadableFiles,
+                                              // #2888: and any service answering with a body it cannot
+                                              // read, which used to be indistinguishable from a service
+                                              // answering that it has nothing.
+                                              failingResponses: failingResponses, status: status),
                   // #2250: the remedy a notice names, run from here where the sync lives.
                   onNoticeAction: { action in
                       switch action {
