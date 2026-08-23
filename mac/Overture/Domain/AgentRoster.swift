@@ -44,6 +44,10 @@ struct AgentInputs: Sendable {
     var gmailConnected: Bool
     var sendErrors: Int      // approved sends that failed
     var followUpsDue: Int
+    // #2674: how many of the rows at `drafted` have nobody to send to. Its own input rather than a fold
+    // into `toReview`, because Dan's call was that the stage KEEPS them: the number stays honest about
+    // how many rows are there, and this says how many of them the stage's action cannot touch.
+    var reviewDeadEnds: Int = 0
     var stalledReplyDrafts: Int = 0   // #431: reply-draft runs that died without producing a draft
     var stuckSends: Int = 0   // #475/#476: claimed .sending, never resolved (outcome unknown)
     var degradedReplyTracking: Int = 0   // #483: sent, but no usable threadId so replies can't be auto-detected
@@ -113,6 +117,9 @@ extension AgentInputs {
             // that was drawing them.
             followUpsDue: DueWork.counts(prospects: allProspects, now: context.now,
                                          replyRunAlive: replyRunAlive).total,
+            // #2674: counted over the same list the stage's own number comes from, so the two halves of
+            // one sentence cannot be about different sets of rows.
+            reviewDeadEnds: DraftedDeadEnd.count(in: prospects),
             // #2878/#2828: the SAME function FollowUpsView builds its "Stalled reply drafts" section
             // from, so the number on this pill and the rows behind it cannot answer differently. It used
             // to sweep the recipients here for itself, and the sheet swept nothing at all, so the pill
@@ -312,7 +319,10 @@ enum AgentRoster {
             // has not read, and calling every one of them a draft would be false of the approved ones.
             // The unqualified count also reads like its neighbours ("464 to triage", "5 ready to prep").
             return AgentStatus(name: "Review", state: .needsAttention,
-                               detail: "\(i.toReview) to review",
+                               // #2674: and how many of them cannot be sent to anybody, which a bare
+                               // count could not say and which no single card could reveal.
+                               detail: DraftedDeadEndCopy.pillDetail(toReview: i.toReview,
+                                                                     deadEnds: i.reviewDeadEnds),
                                focus: .review, count: i.toReview)
         }
         return AgentStatus(name: "Review", state: .idle, detail: "Nothing to review", focus: .review, count: 0)
