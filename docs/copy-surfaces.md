@@ -52,7 +52,7 @@ macOS may relocate this into the overflow menu or drop it entirely at a narrow w
 
 A sentence written as a constant is read here at the file that RENDERS it, not only at the file that declares it. That is the case the rest of this document and `copy-inventory.md` cannot show: moving an existing sentence onto a new screen changes no literal anywhere, so it produces no diff and gets no cold read, which is exactly when placement most needs reading.
 
-49 files render a sentence declared as a constant.
+50 files render a sentence declared as a constant.
 
 `App/OvertureApp.swift`
     StoreLaunchOutcome.defaultUnavailableReason  "Overture's data is unavailable."
@@ -139,6 +139,9 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
     SendModeCopy.separately  "A separate email each"
     SendModeCopy.together  "One email to everyone"
     ShowOutcome.reopenLabel  "Reopen this show"
+`UI/EmptyAnswerSection.swift`
+    EmptyAnswerCopy.nothingEmpty  "No check has come home without a contact. When one does, what it claimed appears here."
+    EmptyAnswerCopy.title  "Checks that came home empty"
 `UI/FollowUpsView.swift`
     GmailReconnectCopy.afterLinkAttempt  "Your Gmail access has expired or was revoked, so this conversation could not be linked. Nothing was sent and nothing changed. Click Connect Gmail to reconnect, then answer again."
     GmailReconnectCopy.connect  "Connect Gmail"

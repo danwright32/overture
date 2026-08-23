@@ -38,19 +38,24 @@ struct OutcomePatternsView: View {
             .padding(.bottom, OVSpacing.sm)
             Divider()
 
-            if rows.isEmpty {
-                Text("No outcomes yet. Once you've sent and recorded results, booking and response rates show up here.")
-                    .font(OVType.body).foregroundStyle(OVColor.inkSoft)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .padding(OVSpacing.xl)
-            } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: OVSpacing.xs) {
+            // #2989: the empty branch is INSIDE the scroll now rather than replacing it. It used to
+            // stand alone, which meant the two report sections below existed only for a store that
+            // already had outcomes: a fresh store showed one sentence and nothing else, and neither
+            // report could be found at all. That is #1547's defect, a section rendered in one branch of
+            // a conditional and absent from the state Dan is actually in.
+            ScrollView {
+                VStack(alignment: .leading, spacing: OVSpacing.xs) {
+                    if rows.isEmpty {
+                        Text("No outcomes yet. Once you've sent and recorded results, booking and response rates show up here.")
+                            .font(OVType.body).foregroundStyle(OVColor.inkSoft)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.bottom, OVSpacing.lg)
+                    } else {
                         ForEach(rows, id: \.name) { row in
                             patternRow(name: row.name, tally: row.tally)
                             Divider()
                         }
+                    }
                         // #2688: what Dan's genre corrections are teaching, HERE rather than behind a
                         // toolbar button of its own.
                         //
@@ -60,10 +65,12 @@ struct OutcomePatternsView: View {
                         // adds one has to decide what it displaces. The answer here is nothing, because it
                         // does not belong there: this is a report Dan reads when he chooses, and it is a
                         // sibling of the one on this very sheet. Both say what his own decisions add up to.
-                        GenreCorrectionsSection()
-                    }
-                    .padding(OVSpacing.lg)
+                    GenreCorrectionsSection()
+                    // #2989: what the empty contact answers are claiming, and the one contradiction
+                    // visible without opening a card.
+                    EmptyAnswerSection()
                 }
+                .padding(OVSpacing.lg)
             }
         }
         .frame(width: 480, height: 540)
