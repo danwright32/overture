@@ -134,6 +134,24 @@ FIXED="$(newly_passing "${AFTER}" "${BEFORE}")"
 assert_contains "a test that went green only under the shift is named too" \
   "${FIXED}" "wentRedFromTheShift"
 
+# --- the baseline, which is what keeps the report worth reading ---------------------------------------
+# The check does NOT demand that no test is far-future sensitive: some legitimately are, and a gate
+# nobody can go green on gets switched off (L93). It asserts the SET has not changed.
+BASE="${WORK}/baseline.txt"
+cat > "${BASE}" <<'TXT'
+# a comment
+anAbsurdlyLongRangeIsRefused   # deliberate: the range IS the subject
+withNoReplyTherowSpeaksForTheContactDueSoonest
+
+TXT
+DECLARED="$(declared_far_future_sensitive "${BASE}")"
+assert_contains "the baseline reads a plain name" "${DECLARED}" "anAbsurdlyLongRangeIsRefused"
+assert_contains "and one carrying a trailing reason" "${DECLARED}" "withNoReplyTherowSpeaksForTheContactDueSoonest"
+assert_not_contains "and drops the reason, so the name still compares" "${DECLARED}" "deliberate"
+assert_not_contains "and drops comment lines" "${DECLARED}" "a comment"
+MISSING="$(declared_far_future_sensitive "${WORK}/not-there.txt")"
+assert_empty "a missing baseline reads as empty rather than killing the script under pipefail" "${MISSING}"
+
 # --- nothing measured is its own answer ---------------------------------------------------------------
 # A run that shifted no file and one where every fixture is already near leave the same empty result,
 # and the emptiest possible failure must not read as the cleanest possible pass (L98).

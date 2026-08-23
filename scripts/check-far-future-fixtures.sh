@@ -48,6 +48,17 @@ source "${SCRIPT_DIR}/lib/fixture-date-shift.sh"
 # caught. Derived against the year the run happens in and never written down as a literal cutoff: a
 # hard-coded year is a date fixture of its own and would age exactly like the ones this exists to find.
 FAR_YEARS_AHEAD="${OVERTURE_FAR_FUTURE_YEARS:-2}"
+BASELINE_REL="fixtures/far-future-sensitive-tests.txt"
+
+# The tests already read and judged deliberate, one name per line. Same shape and same reason as
+# `fixtures/year-sensitive-tests.txt`: this check does NOT demand that no test is far-future sensitive,
+# because some legitimately are (a range refused for being absurdly long needs an absurdly long range),
+# and a gate nobody can go green on gets switched off (L93). What it asserts is that the SET has not
+# changed, so a NEW entrant is a test to look at.
+declared_far_future_sensitive() {
+  local file="${1:-${REPO_ROOT}/${BASELINE_REL}}"
+  { grep -vE '^[[:space:]]*(#|$)' "${file}" 2>/dev/null || true; } | sed -E 's/[[:space:]]*#.*$//' | sort -u
+}
 
 is_far_future() {
   local year="$1" today_year="$2"
@@ -300,6 +311,9 @@ candidate_files() {
 main() {
   cd "${REPO_ROOT}"
 
+  RECORD=0
+  [[ "${1:-}" == "--record" ]] && RECORD=1
+
   if [[ -n "$(git status --porcelain -- mac/)" ]]; then
     echo "check-far-future-fixtures: REFUSED, mac/ has uncommitted changes."
     echo "  This rewrites dated fixtures and restores the tree with 'git checkout --', which would take"
@@ -376,12 +390,53 @@ main() {
   went_red="$(newly_failing "${before}" "${after}")"
   went_green="$(newly_passing "${before}" "${after}")"
 
-  echo
-  if [[ -z "${went_red}" && -z "${went_green}" ]]; then
-    echo "check-far-future-fixtures: no test changed verdict. Every far-future date in those ${count}"
-    echo "  files is decoration: nothing asserts anything about where the show sits."
+  local declared changed fresh
+  declared="$(declared_far_future_sensitive)"
+  changed="$(printf '%s\n%s\n' "${went_red}" "${went_green}" | sed '/^$/d' | sort -u)"
+  fresh="$(comm -23 <(printf '%s\n' "${changed}" | sed '/^$/d') <(printf '%s\n' "${declared}"))"
+  local gone
+  gone="$(comm -13 <(printf '%s\n' "${changed}" | sed '/^$/d') <(printf '%s\n' "${declared}"))"
+
+  if [[ "${RECORD}" -eq 1 ]]; then
+    {
+      echo "# Tests whose verdict depends on their show being far in the future (#2366)."
+      echo "#"
+      echo "# Written by scripts/check-far-future-fixtures.sh --record. A line here means somebody read the"
+      echo "# test and judged the distance deliberate. The file may grow: a new deliberate one is fine."
+      echo "#"
+      echo "# READ THE LIMIT OF THE INSTRUMENT BEFORE ADDING TO IT. The shift is by whole YEARS, so a show"
+      echo "# lands anywhere from a few days to twelve months from the clock its test judges from, and a"
+      echo "# test that breaks because its show became imminent is this check's doing rather than a"
+      echo "# finding. Both entries below are exactly that shape or deliberate by design. What the check"
+      echo "# genuinely rules out is the #2366 defect: a test that goes GREEN once its show is near, which"
+      echo "# means its assertion could never fire while the show sat outside every window. None was found."
+      echo
+      printf '%s\n' "${changed}"
+    } > "${REPO_ROOT}/${BASELINE_REL}"
+    echo "check-far-future-fixtures: recorded $(printf '%s\n' "${changed}" | sed '/^$/d' | wc -l | tr -d ' ') test(s) in ${BASELINE_REL}."
     exit 0
   fi
+
+  echo
+  if [[ -z "${fresh}" && -z "${gone}" ]]; then
+    if [[ -z "${changed}" ]]; then
+      echo "check-far-future-fixtures: no test changed verdict at all. Every far-future date in those"
+      echo "  ${count} files is decoration: nothing asserts anything about where the show sits."
+    else
+      echo "check-far-future-fixtures: the same tests are far-future sensitive as last time, and every one"
+      echo "  of them has been read. Nothing new."
+    fi
+    exit 0
+  fi
+  if [[ -n "${gone}" ]]; then
+    echo "${BASELINE_REL} lists test(s) that are no longer far-future sensitive:"
+    printf '  %s\n' ${gone}
+    echo "  Delete those lines with --record."
+    echo
+  fi
+  went_red="$(comm -12 <(printf '%s\n' "${went_red}" | sed '/^$/d') <(printf '%s\n' "${fresh}"))"
+  went_green="$(comm -12 <(printf '%s\n' "${went_green}" | sed '/^$/d') <(printf '%s\n' "${fresh}"))"
+  if [[ -z "${went_red}" && -z "${went_green}" ]]; then exit 1; fi
   if [[ -n "${went_red}" ]]; then
     echo "These tests PASS with the show far in the future and FAIL once it is near:"
     printf '  %s\n' ${went_red}
