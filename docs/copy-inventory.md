@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1505 sentences**.
+Every sentence Overture can say to Dan: **1507 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -795,6 +795,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReplyPanel.swift`
 "Drafted by \(name)"
     `Domain/DraftTrace.swift`
+"Drafted, and there's nobody to send it to. Add a contact and this draft is ready to go."
+    `Domain/DraftedDeadEnd.swift`
 "Drafting a reply"
     `Domain/ReplyPanel.swift`
 "Drafting replies"
@@ -2731,8 +2733,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AgentRoster.swift`
 "\(i.sendErrors) failed to send"
     `Domain/AgentRoster.swift`
-"\(i.toReview) to review"
-    `Domain/AgentRoster.swift`
 "\(i.toTriage) to triage"
     `Domain/AgentRoster.swift`
 "\(kept) to prep"
@@ -2992,6 +2992,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceReadability.swift`
 "\(to) · nudge \(attempt(after: followUpCount)) of \(config.maxFollowUps)"
     `Domain/FollowUp.swift`
+"\(toReview) to review"
+    `Domain/DraftedDeadEnd.swift`
+"\(toReview) to review, \(deadEnds) with nobody to send to"
+    `Domain/DraftedDeadEnd.swift`
 "\(total) web calls for \(shows)\(people), more than expected"
     `Domain/PrepRunSummary.swift`
 "\(town) is already on your skip list"

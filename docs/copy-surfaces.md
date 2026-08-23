@@ -198,6 +198,7 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
     ReplyPanelCopy.copiedAwaitingConfirm  "Copied. Paste it into Gmail, then say you sent it."
     SendIdentity.danWright  "Dan Wright"
 `UI/ProspectRowView.swift`
+    DraftedDeadEndCopy.line  "Drafted, and there's nobody to send it to. Add a contact and this draft is ready to go."
     GenreControlCopy.help  "Set this show's genre"
     ReachabilityCopy.checkAgain  "Check again"
     ReachabilityCopy.checkAgainRetry  "Try again"
