@@ -79,7 +79,8 @@ enum AlgoliaCalendar {
     // pipeline already classifies. `licenseename` is the presenter/renter (drives self vs
     // agency), `facility` is the venue, and the date comes from the /calendar/yyyy/mm/dd url.
     static func parse(_ data: Data) -> (events: [ExtractedEvent], nbPages: Int) {
-        guard let resp = try? JSONDecoder().decode(Response.self, from: data),
+        guard let resp = ResponseBody.decode(Response.self, from: data,
+                                             endpoint: "algolia.search").value,
               let page = resp.results.first else { return ([], 0) }
         let events = page.hits
             .filter { !isCancelled($0.title) }

@@ -8,7 +8,7 @@ enum GmailSignatureService {
     // The primary sendAs's HTML signature from a sendAs.list response, or the first non-empty one. Pure,
     // so the JSON shape is pinned by a test without the network.
     static func primarySignature(fromListJSON data: Data) -> String? {
-        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        guard let root = ResponseBody.json(data, from: "gmail.settings.sendAs.list").value,
               let list = root["sendAs"] as? [[String: Any]] else { return nil }
         let candidates = [list.first { ($0["isPrimary"] as? Bool) == true }].compactMap { $0 } + list
         for entry in candidates {

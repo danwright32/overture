@@ -8,6 +8,12 @@ import Foundation
 // message body, so a still-reachable contact is never silenced by a soft bounce, an
 // unrelated automated sender, or a real person's email that happens to mention "failure".
 enum BounceDetection {
+
+    // #2888: the body of a Gmail `threads.get`, read through the shared reader so a 200 whose body does
+    // not decode is counted rather than reading as NO BOUNCE, which would report a pitch that bounced as
+    // delivered.
+    private static let endpoint = "gmail.threads.get"
+
     private static let bounceSenderLocalParts = ["mailer-daemon", "postmaster"]
 
     static func isBounceSender(_ email: String) -> Bool {
@@ -40,7 +46,7 @@ enum BounceDetection {
     // come first in the array.
     private static func newestBounceSenderMessageId(threadJSON data: Data,
                                                     matching predicate: (String) -> Bool) -> String? {
-        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        guard let obj = ResponseBody.json(data, from: Self.endpoint).value,
               let messages = obj["messages"] as? [[String: Any]] else { return nil }
         for m in ReplyDetection.newestFirst(messages) {
             guard let payload = m["payload"] as? [String: Any],
