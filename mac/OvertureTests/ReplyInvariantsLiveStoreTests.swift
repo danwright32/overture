@@ -234,6 +234,59 @@ struct ReplyInvariantsLiveStoreTests {
         }
     }
 
+
+    // #2960: did an automatic reply from Dan's own mailbox ever silence a conversation genuinely waiting
+    // on him?
+    //
+    // #2865's refusal, the one that stops an out-of-office counting as Dan's answer, could NOT FIRE until
+    // #2941 (2026-08-18): `isAutomatedSend` reads `Auto-Submitted`, `X-Autoreply`, `X-Autorespond` and
+    // `Precedence`, and the thread fetch never requested any of them, so it could only ever answer false.
+    // For that window an automatic reply would have stamped `replyHandledAt` and taken the row off every
+    // surface that could ask about it, and `markReplyAnswered` never moves the stamp backwards, so
+    // nothing in the product would ever raise that conversation again.
+    //
+    // THE SIGNATURE, since the headers are gone and cannot be re-read: an answer recorded from Dan's own
+    // address within a couple of minutes of theirs. A person does not read and reply to a pitch response
+    // in ninety seconds; an autoresponder does nothing else. It is a signature and not a proof, which is
+    // why this reports the number rather than naming rows.
+    //
+    // Measured 2026-08-23 on the live store: 4 rows carry a recorded answer, and ZERO of them are inside
+    // the window. Two of the four have the answer recorded BEFORE their message, which is the ordinary
+    // "they wrote again after he answered" shape and not this defect.
+    //
+    // It NAMES NOTHING. A count is the whole finding, and a test that printed the show or the address
+    // would put a real person's details into every transcript and every terminal scrollback that ever
+    // runs the suite (L222).
+    @Test
+    func noConversationWasSilencedByWhatLooksLikeAnAutomaticReply() async throws {
+        try await withLiveShows { shows in
+            let answered = shows.flatMap { p in
+                p.recipients.compactMap { r -> TimeInterval? in
+                    guard let handled = r.replyHandledAt, let theirs = r.repliedAt else { return nil }
+                    return handled.timeIntervalSince(theirs)
+                }
+            }
+            // The population, printed every run for the reason the corpus line above exists: a rule that
+            // examined zero rows and a rule that examined every row must not look alike (L98).
+            let suspicious = answered.filter { $0 >= 0 && $0 <= Self.automaticReplyWindow }
+            print("LIVE STORE AUTO-REPLY CHECK: \(answered.count) conversations carry a recorded answer, "
+                  + "\(suspicious.count) of them recorded within \(Int(Self.automaticReplyWindow))s of the "
+                  + "message they answer. A zero population means this measured nothing.")
+            #expect(suspicious.isEmpty, """
+                \(suspicious.count) conversation(s) had their answer recorded within \
+                \(Int(Self.automaticReplyWindow)) seconds of the message it answers, which is the shape of an \
+                automatic reply from Dan's own mailbox rather than one he wrote (#2960). Those rows are \
+                silenced permanently, because markReplyAnswered never moves the stamp backwards. The repair \
+                is the same shape as #2926's. No row is named here on purpose: this is a public repository \
+                and a count is the whole finding.
+                """)
+        }
+    }
+
+    // Ninety seconds. Above the few seconds an autoresponder takes and far below anything a person does,
+    // and stated as a constant so the mutation proving this guard has something to move.
+    private static let automaticReplyWindow: TimeInterval = 90
+
     // #2985/#2986: how much this suite actually measured, reported every run.
     //
     // Both invariants above are now allowed to find NOTHING, because both of their corpora legitimately
