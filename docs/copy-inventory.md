@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1480 sentences**.
+Every sentence Overture can say to Dan: **1495 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -371,8 +371,12 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "1 of them went through an earlier check and never got an answer."
     `Domain/ProbeSelection.swift`
+"1 of those is a show that names its producing organisation."
+    `UI/EmptyAnswerSection.swift`
 "1 run was left alone: Overture could not check whether its next night is free"
     `App/ActionFeedback.swift`
+"1 show has been checked and left with nobody to write to. What the check claimed:"
+    `UI/EmptyAnswerSection.swift`
 "1 show on \(dateLabel) has no genre read. Set it before dismissing the night."
     `Domain/GenreGate.swift`
 "1 source needs"
@@ -638,6 +642,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/RunProgressView.swift`
 "Checking what it found against your bookings"
     `Domain/ScoutSweepStep.swift`
+"Checks that came home empty"
+    `UI/EmptyAnswerSection.swift`
 "City not known"
     `Domain/VenueDisplay.swift`
 "Clear the search"
@@ -723,6 +729,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/LeadIntakeModel.swift`
 "Couldn't start the reader: \(error.localizedDescription)"
     `UI/LeadIntakeModel.swift`
+"Couldn't work out who to write to"
+    `Domain/EmptyAnswerReport.swift`
 "Coverage cannot be checked right now: the Downbeat client export is missing or could not be read. Refresh it from Downbeat."
     `Domain/ClientCoverage.swift`
 "Dan Wright"
@@ -868,6 +876,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ManualPrepPrefill.swift`
 "Found in Gmail"
     `Domain/InquiryCopy.swift`
+"Found the people, no way to reach any of them"
+    `Domain/EmptyAnswerReport.swift`
 "Freshly found events waiting for you to keep or dismiss."
     `Domain/AgentRoster.swift`
 "From Downbeat"
@@ -1162,6 +1172,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReplyPanel.swift`
 "No address yet, so its shows are not placed in your area."
     `UI/SourcesView.swift`
+"No check has come home without a contact. When one does, what it claimed appears here."
+    `UI/EmptyAnswerSection.swift`
 "No contact found"
     `UI/DraftReviewView.swift`
 "No contacts yet."
@@ -1232,6 +1244,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ShowOutcome.swift`
 "Nobody found to write to"
     `Domain/Reachability.swift`
+"Nobody on this show publishes an address"
+    `Domain/EmptyAnswerReport.swift`
 "Nobody who can hire you"
     `Domain/Reachability.swift`
 "None due"
@@ -1401,12 +1415,20 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DraftCheck.swift`
 "Only a press address"
     `Domain/Reachability.swift`
+"Only a press or PR desk"
+    `Domain/EmptyAnswerReport.swift`
+"Only a profile with the right name on it"
+    `Domain/EmptyAnswerReport.swift`
 "Only a social profile"
     `Domain/Reachability.swift`
+"Only a social profile, not opened"
+    `Domain/EmptyAnswerReport.swift`
 "Only counts corrections made since this started recording them. Earlier ones were never kept, "
     `Domain/GenreCorrection.swift`
 "Only names, no way to reach them"
     `Domain/Reachability.swift`
+"Only the room's own inbox"
+    `Domain/EmptyAnswerReport.swift`
 "Only the venue's address"
     `Domain/Reachability.swift`
 "Open OmniFocus, then sync again."
@@ -1477,6 +1499,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReplyPanel.swift`
 "Overture didn't email \(groupName), so it can't add a message to the conversation you linked. Write to them in Gmail instead."
     `Domain/AttachedConversation.swift`
+"Overture doesn't record whether a check was told the organisation's name, so this counts every show carrying one, not only the ones where the name went unsearched."
+    `Domain/EmptyAnswerReport.swift`
 "Overture found this conversation in your Gmail, from the address you logged, and is watching it for replies."
     `Domain/InquiryCopy.swift`
 "Overture gave up waiting for Gmail while looking for replies to the pitches you sent through a form or a DM."
@@ -2054,6 +2078,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SourcesView.swift`
 "The check couldn't name anyone to research for this show, so it never got as far as looking for an address. If you know who puts this on, add a contact by hand and it's back in play."
     `Domain/Reachability.swift`
+"The check named a way in and gave none"
+    `Domain/EmptyAnswerReport.swift`
 "The check named the page it read this address off, but that page doesn't tie this person to this performance, so Overture isn't treating it as verified. If you know it's them, say so on the review panel and it stops being called unverified."
     `Domain/Reachability.swift`
 "The check said it had verified the address here but never named the page it read it off, so Overture isn't treating it as verified. It may well be right: if you recognise it, say so on the review panel and it stops being called unverified."
@@ -2613,6 +2639,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ClientCoverage.swift`
 "\(count) didn't come back, they'll be retried"
     `Domain/HandoffShortfall.swift`
+"\(count) of those are shows that name their producing organisation."
+    `UI/EmptyAnswerSection.swift`
+"\(count) shows have been checked and left with nobody to write to. What the checks claimed:"
+    `UI/EmptyAnswerSection.swift`
 "\(count) shows on \(dateLabel) have no genre read. Set them before dismissing the night."
     `Domain/GenreGate.swift`
 "\(count) shows were left out of this run. The local store stopped answering, so Overture "
