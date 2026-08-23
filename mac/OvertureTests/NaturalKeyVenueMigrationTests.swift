@@ -171,6 +171,116 @@ struct NaturalKeyVenueMigrationTests {
 
     // Running twice is a no-op the second time: after the first pass every row already holds its folded
     // key, so nothing is re-keyed or deleted again.
+    // MARK: - #3124: a decision of Dan's is carried onto the survivor, never deleted with its row
+    //
+    // The merge picks one survivor and deletes the rest, and none of the three tests standing between a
+    // row and that delete can see a decision that did not move the row's stage. A row still at `new`
+    // holding only his rename loses to any fresher pristine duplicate, and the scout never reproduces
+    // his name.
+
+    @Test func aRenameOnTheLosingRowIsCarriedOntoTheSurvivor() throws {
+        let ctx = try context()
+        let group = "GATA Jazz Trio", date = "2026-07-18"
+        let folded = foldedKey(group, date, "The Cutting Room")
+
+        // The renamed row is the OLDER one, so the freshest-wins tie-break would delete it.
+        insert(ctx, key: "legacy-address-key", group: "Dan's own name for them", date: date,
+               venue: "The Cutting Room, 44 East 32nd Street, New York, NY",
+               ingestedAt: Date(timeIntervalSince1970: 1_000)) { p in
+            p.groupNameOverriddenByDan = true
+            p.scoutGroupName = group
+        }
+        insert(ctx, key: folded, group: group, date: date, venue: "The Cutting Room",
+               ingestedAt: Date(timeIntervalSince1970: 2_000))
+
+        _ = NaturalKeyVenueMigration.run(in: ctx)
+        try? ctx.save()
+
+        let rows = allProspects(ctx)
+        #expect(rows.count == 1, "the duplicates should still collapse: carrying is not deferring")
+        let survivor = try #require(rows.first)
+        #expect(survivor.groupNameOverriddenByDan,
+                "the survivor must know Dan renamed this show, or the next scout overwrites his name")
+        #expect(survivor.groupName == "Dan's own name for them",
+                "the flag and the NAME move together: a survivor claiming a rename while showing the scout's wording asserts the opposite of what happened")
+    }
+
+    @Test func keptVisibleAfterAGenreChangeSurvivesTheMerge() throws {
+        let ctx = try context()
+        let group = "GATA Jazz Trio", date = "2026-07-18"
+        let folded = foldedKey(group, date, "The Cutting Room")
+
+        insert(ctx, key: "legacy-address-key", group: group, date: date,
+               venue: "The Cutting Room, 44 East 32nd Street, New York, NY",
+               ingestedAt: Date(timeIntervalSince1970: 1_000)) { $0.keptVisibleAfterGenreChange = true }
+        insert(ctx, key: folded, group: group, date: date, venue: "The Cutting Room",
+               ingestedAt: Date(timeIntervalSince1970: 2_000))
+
+        _ = NaturalKeyVenueMigration.run(in: ctx)
+        try? ctx.save()
+
+        let survivor = try #require(allProspects(ctx).first)
+        #expect(allProspects(ctx).count == 1)
+        #expect(survivor.keptVisibleAfterGenreChange,
+                "a false flag is what a row holds for never having been asked, so any member saying yes is the decision")
+    }
+
+    // Dan's call, 2026-08-22, on the case the issue said to decide rather than assume: keep ONE card and
+    // carry BOTH decisions onto it, rather than deferring the merge or dropping one of them.
+    @Test func twoMembersEachCarryingADifferentDecisionKeepBothOnOneCard() throws {
+        let ctx = try context()
+        let group = "GATA Jazz Trio", date = "2026-07-18"
+        let folded = foldedKey(group, date, "The Cutting Room")
+
+        insert(ctx, key: "legacy-address-key", group: "Dan's own name for them", date: date,
+               venue: "The Cutting Room, 44 East 32nd Street, New York, NY",
+               ingestedAt: Date(timeIntervalSince1970: 1_000)) { p in
+            p.groupNameOverriddenByDan = true
+            p.scoutGroupName = group
+        }
+        insert(ctx, key: folded, group: group, date: date, venue: "The Cutting Room",
+               ingestedAt: Date(timeIntervalSince1970: 2_000)) { $0.keptVisibleAfterGenreChange = true }
+
+        _ = NaturalKeyVenueMigration.run(in: ctx)
+        try? ctx.save()
+
+        let rows = allProspects(ctx)
+        #expect(rows.count == 1, "one card, not a deferral")
+        let survivor = try #require(rows.first)
+        #expect(survivor.groupNameOverriddenByDan && survivor.groupName == "Dan's own name for them",
+                "the rename came from the row that held it")
+        #expect(survivor.keptVisibleAfterGenreChange,
+                "and the keep-visible decision came from the other one")
+    }
+
+    // The other direction, so the carry cannot quietly overwrite a decision it was meant to protect: a
+    // survivor that already carries Dan's own rename keeps ITS name, not a loser's.
+    @Test func aSurvivorsOwnRenameIsNotOverwrittenByALosers() throws {
+        let ctx = try context()
+        let group = "GATA Jazz Trio", date = "2026-07-18"
+        let folded = foldedKey(group, date, "The Cutting Room")
+
+        insert(ctx, key: "legacy-address-key", group: "the older name he gave it", date: date,
+               venue: "The Cutting Room, 44 East 32nd Street, New York, NY",
+               ingestedAt: Date(timeIntervalSince1970: 1_000)) { p in
+            p.groupNameOverriddenByDan = true
+            p.scoutGroupName = group
+        }
+        insert(ctx, key: folded, group: "the name on the surviving row", date: date,
+               venue: "The Cutting Room",
+               ingestedAt: Date(timeIntervalSince1970: 2_000)) { p in
+            p.groupNameOverriddenByDan = true
+            p.scoutGroupName = group
+        }
+
+        _ = NaturalKeyVenueMigration.run(in: ctx)
+        try? ctx.save()
+
+        let survivor = try #require(allProspects(ctx).first)
+        #expect(survivor.groupName == "the name on the surviving row",
+                "ranking Dan's decisions against each other is not this pass's to do: only an UNDECIDED survivor is filled in")
+    }
+
     @Test func runningTwiceIsIdempotent() throws {
         let ctx = try context()
         let group = "STEVEN MAGLIO & HIS BIG BAND ORCHESTRA", date = "2026-07-19"

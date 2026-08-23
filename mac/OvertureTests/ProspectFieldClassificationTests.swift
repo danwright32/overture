@@ -240,6 +240,27 @@ struct ProspectFieldClassificationTests {
             """)
     }
 
+    // #3124: every field on that list must have a CARRY RULE, so a decision of Dan's is moved onto the
+    // survivor instead of being deleted with the row that held it.
+    //
+    // Derived from the list rather than written out again beside it: a hand-written second copy only ever
+    // checks what somebody remembered, and this is exactly the pairing that rots (L96, L41). Adding a
+    // field to `danDecisionsTheRuleCannotSee` and nothing else now fails here, naming the field.
+    @Test func everyDecisionOfDansIsCarriedOntoTheSurvivor() throws {
+        let carry = try #require(
+            SourceGuardHelper.bodyOfFunction(named: "carryDansDecisions", in: migrationSource),
+            "carryDansDecisions could not be found: it is what moves a decision onto the survivor (#3124)")
+
+        let uncarried = Self.danDecisionsTheRuleCannotSee.keys.filter { !carry.contains($0) }
+
+        #expect(uncarried.isEmpty, """
+            \(uncarried.sorted().joined(separator: ", ")): listed as a decision of Dan's that the \
+            survivor rule cannot see, but `NaturalKeyVenueMigration.carryDansDecisions` does not name \
+            it, so the launch merge still deletes it with whichever duplicate row happened to hold it. \
+            Give it a carry rule, and say what carrying it MEANS when more than one member has one.
+            """)
+    }
+
     // The list must not rot the other way either: an entry for a field that has gone is a note about code
     // that no longer exists, and a real one could hide behind it.
     @Test func nothingIsListedThatIsNoLongerAField() throws {
