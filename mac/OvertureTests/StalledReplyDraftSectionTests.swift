@@ -94,7 +94,7 @@ struct StalledReplyDraftSectionTests {
     }
 
     private func followUpsPill(_ all: [Prospect], replyRunAlive: Bool = false) -> AgentStatus {
-        let inputs = AgentInputs.from(prospects: all, context: .at(today, now: now),
+        let inputs = AgentInputs.from(prospects: all, allProspects: all, context: .at(today, now: now),
                                       gmailConnected: true, runInFlight: nil, replyRunAlive: replyRunAlive)
         return AgentRoster.statuses(inputs).first { $0.name == "Follow-ups" }!
     }
@@ -205,33 +205,17 @@ struct StalledReplyDraftSectionTests {
 
     // MARK: - The class, not the instance
 
-    // Every member of the number the sheet's header states must have a section in that sheet, or be a
-    // named, filed exception. `conversationsToConfirm` (#2718) is the one exception: those rows are
-    // answered on the Reached out row instead, which is #2967, so the header can still exceed the rows
-    // behind it by exactly that and by nothing else.
+    // `everyMemberOfTheHeaderCountHasASectionExceptTheOneFiledElsewhere` stood here and is DELETED
+    // rather than moved (#2967, #3076). Its content was the exception it asserted: it allowed the
+    // header to exceed the rows by exactly `conversationsToConfirm`, because those rows were answered
+    // on the Reached out row and nowhere in this sheet. They have a section now, so the exception is
+    // gone and an assertion that the header exceeds the rows by anything at all would be asserting the
+    // defect (#2967 named this test as what a fix should remove).
     //
-    // This is the guard that makes the fix a rule rather than one repaired instance: a FIFTH member
-    // added to `Counts` with no section in the sheet fails here, which is precisely how
-    // `stalledReplyDrafts` got in unnoticed.
-    //
-    // The fixture PUTS a proposed conversation in the store, so the exception is a real number rather
-    // than a zero the assertion would be satisfied by whatever the code did (L159). With no proposal
-    // both sides read 0 and the test would pass in a fixture where the case cannot arise.
-    @Test func everyMemberOfTheHeaderCountHasASectionExceptTheOneFiledElsewhere() throws {
-        let context = try makeContext()
-        showWithAStalledReplyDraft(context)
-        showWithAConversationToConfirm(context)
-        let all = try prospects(context)
-        let counts = DueWork.counts(prospects: all, now: now, replyRunAlive: false)
-        let listed = DueWork.rows(prospects: all, now: now, replyRunAlive: false)
-
-        // The exception exists in this store, so the difference below is asserting about something.
-        #expect(counts.conversationsToConfirm == 1)
-        #expect(listed.stalledReplyDrafts.count == 1)
-
-        #expect(counts.total - listed.rendered == counts.conversationsToConfirm,
-                "the header states \(counts.total) over \(listed.rendered) rendered rows, and only \(counts.conversationsToConfirm) of that difference is the conversations answered on the Reached out row (#2967): something else is counted with no section to land on")
-    }
+    // What replaces it is stronger and lives in `OneDueNumberTests`: every surface stating the number
+    // agrees with it AND with the rows behind it, over a store holding one of every kind of due work at
+    // once. A FIFTH member added to `Counts` with no section still fails, there, where the whole rule
+    // is asserted rather than this one exception to it.
 
     // MARK: - Built is not wired (L3)
 

@@ -63,7 +63,7 @@ struct ReachedOutDuePillCountsWhatIsOwedTests {
     }
 
     private func inputs(_ all: [Prospect]) -> AgentInputs {
-        AgentInputs.from(prospects: all, context: .at(today, now: now),
+        AgentInputs.from(prospects: all, allProspects: all, context: .at(today, now: now),
                          gmailConnected: true, runInFlight: nil, replyRunAlive: false)
     }
 
@@ -142,7 +142,7 @@ struct ReachedOutDuePillCountsWhatIsOwedTests {
         inquiry.replied = true                                   // and they wrote back, so somebody is waiting
         #expect(StageNavigation.stage(for: inquiry) == .reachedOut)
 
-        let built = AgentInputs.from(prospects: [], inquiries: [inquiry], context: .at(today, now: now),
+        let built = AgentInputs.from(prospects: [], allProspects: [], inquiries: [inquiry], context: .at(today, now: now),
                                      gmailConnected: true, runInFlight: nil, replyRunAlive: false)
         #expect(built.reachedOutDue == 1)
     }

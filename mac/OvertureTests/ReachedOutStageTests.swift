@@ -77,7 +77,7 @@ struct ReachedOutStageTests {
         reachedOutContact(ctx, on: b, id: "c@org.example")   // two contacts on show "two"
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
 
-        let inputs = AgentInputs.from(prospects: all, context: .at(today, now: now),
+        let inputs = AgentInputs.from(prospects: all, allProspects: all, context: .at(today, now: now),
                                       gmailConnected: true, runInFlight: nil, replyRunAlive: false)
 
         #expect(ReachedOutQueue.activeWithDates(from: all, now: now).count == 2)   // two rows, one per show

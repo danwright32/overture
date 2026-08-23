@@ -11,6 +11,10 @@ import Foundation
 // call and a question Dan cannot answer without opening Gmail is the thing this milestone exists to
 // remove.
 enum ProposedConversationCopy {
+    // #2967: the heading of the section in the Follow-ups sheet these rows now have. Beside the
+    // question it heads rather than in the view, so the sheet and the Reached out row cannot come to
+    // two wordings of one thing.
+    static let section = "Conversations to confirm"
     static let question = "Is this their reply?"
 
     // Names the sender the way a person is named: who, then where from, because the address alone is

@@ -127,7 +127,7 @@ struct AwaitedReplyDraftIsOnePredicateTests {
         let context = try makeContext()
         answeredAfterAskingForADraft(context)
         let all = try context.fetch(FetchDescriptor<Prospect>())
-        let inputs = AgentInputs.from(prospects: all, context: .at(today, now: now),
+        let inputs = AgentInputs.from(prospects: all, allProspects: all, context: .at(today, now: now),
                                      gmailConnected: true, runInFlight: nil, replyRunAlive: false)
         let counts = DueWork.counts(prospects: all, now: now, replyRunAlive: false)
         let listed = DueWork.rows(prospects: all, now: now, replyRunAlive: false)
@@ -144,7 +144,7 @@ struct AwaitedReplyDraftIsOnePredicateTests {
         let context = try makeContext()
         stillAwaitingADraft(context)
         let all = try context.fetch(FetchDescriptor<Prospect>())
-        let inputs = AgentInputs.from(prospects: all, context: .at(today, now: now),
+        let inputs = AgentInputs.from(prospects: all, allProspects: all, context: .at(today, now: now),
                                      gmailConnected: true, runInFlight: nil, replyRunAlive: false)
         let counts = DueWork.counts(prospects: all, now: now, replyRunAlive: false)
         let listed = DueWork.rows(prospects: all, now: now, replyRunAlive: false)

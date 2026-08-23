@@ -86,10 +86,15 @@ enum QueueRenderPass {
         // #1962: every show's place worked out once for this pass and shared by the three sweeps below.
         let context = i.context.resolvingPlaces(of: i.prospects.all)
         let geo = context.geo
+        // #2968: the whole store, INCLUDING the dismissed shows `i.prospects` drops, taken once and read
+        // twice. `QueueModel.items` already needed it as its corpus; the Follow-ups count is a second
+        // READER of that same list rather than a second reason to walk the store, and taking it again
+        // would spend one of the eight sweeps `QueueRenderPassCostTests` pins (#1913).
+        let everyProspect = i.allProspects.all
         // #1121/#1774: the whole-store derivation, paid ONCE here and threaded down, rather than by each
         // computed property that wants a row.
         let items = QueueModel.items(from: i.prospects.all, answers: i.orgAnswers,
-                                     corpus: i.allProspects.all, overrides: i.overrides,
+                                     corpus: everyProspect, overrides: i.overrides,
                                      sources: i.sources, refusals: i.refusals,
                                      // #2524: the same window the stage rule applies, so the card's
                                      // sentence and the stage's decision come from one answer.
@@ -111,7 +116,13 @@ enum QueueRenderPass {
         let focusedRows = items.filter { wanted.contains($0.id) }
         return QueueView.RenderData(
             items: items, visible: visible,
-            agentInputs: AgentInputs.from(prospects: i.prospects.all, inquiries: i.inquiries,
+            agentInputs: AgentInputs.from(prospects: i.prospects.all,
+                                          // #2968: the Follow-ups number alone is taken over
+                                          // everything, because the sheet and the toolbar badge
+                                          // behind that pill query everything, and this list
+                                          // drops dismissed shows.
+                                          allProspects: everyProspect,
+                                          inquiries: i.inquiries,
                                           context: context, gmailConnected: i.gmailConnected,
                                           runInFlight: i.runInFlight, replyRunAlive: i.replyRunAlive),
             gmailConnected: i.gmailConnected,

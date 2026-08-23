@@ -1070,7 +1070,7 @@ struct RootView: View {
                 FollowUpsView(onOpenInArchive: { key, recipientId in
                     showFollowUps = false
                     openArchive(key: key, recipientId: recipientId)
-                })
+                }, onConnectGmail: connectGmail)
             }
             .sheet(isPresented: $showVoiceGuidance) { VoiceGuidanceView() }
             // #953: pick which kept shows this Prep run covers. Defaults by performance date; the run

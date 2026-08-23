@@ -112,7 +112,7 @@ struct StageNavigationCountsTests {
         oneOfEverything(ctx)
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
 
-        let inputs = AgentInputs.from(prospects: all, context: .at(today, now: now),
+        let inputs = AgentInputs.from(prospects: all, allProspects: all, context: .at(today, now: now),
                                       gmailConnected: true, runInFlight: nil, replyRunAlive: false)
         func nav(_ f: StageFocus) -> Int { StageNavigation.naturalKeys(for: f, in: all, context: .at(today, now: now)).count }
 
