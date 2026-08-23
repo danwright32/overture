@@ -97,6 +97,14 @@ enum EventLocationFill {
     // A refusal here stores NOTHING and falls through to the rules below. It can never hide a show: an
     // unplaced show is kept and flagged (#970), which is the safe direction, and the wrong place it
     // withdraws was hiding one.
+    // #2790: the same predicate, named for what a CALLER is asking. The repair pass needs exactly this
+    // question about a string already in the store, and a second implementation of it there would let
+    // the repair and the ingest disagree about what is acceptable (L16). Internal rather than private
+    // for that reason and no other; the ingest still asks it through the rule below.
+    static func acceptsAsPublishedLocation(_ published: String) -> Bool {
+        namesAPlaceRatherThanARoom(published)
+    }
+
     private static func namesAPlaceRatherThanARoom(_ published: String) -> Bool {
         let clauses = published.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
         guard clauses.contains(where: { StreetClause.isAddress($0) }) else { return true }

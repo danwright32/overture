@@ -186,6 +186,14 @@ enum LaunchMigrations {
         // offered on rows that were withholding it. Deliberately BEFORE the town retirement below, so a
         // show this pass places in a town Dan has already refused is cut in the same launch rather than
         // sitting in the queue until the next one. Idempotent and additive: it fills blanks only.
+        // LIVE-STORE-CLAIM verified=2026-08-23 measure="stored locations run through the shipping published-location predicate"
+        // #2790: BEFORE the backfill, and that order is the whole of how the two work together. This
+        // withdraws a location the current rules would refuse and, where it can, re-derives one; where it
+        // cannot, it clears to blank, and the backfill on the next line then owns that row exactly as it
+        // owns every other blank. Reversed, a row this cleared would wait a whole launch to be refilled.
+        // Measured on the live store 2026-08-23: 958 shows, 946 with a location, 4 holding one the rules
+        // would no longer write, two of them hidden right now for a reason that is not true.
+        LocationRepair.run(in: context)
         LocationBackfill.run(in: context)
         // LIVE-STORE-CLAIM verified=2026-08-06 measure="recipients that are replied, unresolved, unbounced and carry no answered stamp, where an answer was demonstrably sent on the same conversation after the reply arrived"
         // #2190: stamp the replies Dan answered BEFORE #2170 added the field that means "Dan answered".
