@@ -158,6 +158,9 @@ struct ProspectRowView: View {
                     }
                     tags
                     possibleMatchQuestion
+                    // #2674: this show is at the stage whose whole job is sending and has nobody to
+                    // send to.
+                    draftedDeadEndLine
                     relatedRunNote
                     heldBackNote
                     linkedEngagementNote
@@ -562,6 +565,25 @@ struct ProspectRowView: View {
     // show's name, so it is as long as that name is, and a pill cannot wrap inside itself. Gold,
     // because it is still the "you may know these people" signal the pills carry, and it is a question
     // Dan can answer.
+    // #2674: a show at `drafted` with no contacts left. Dan's call was that it STAYS in that stage, so
+    // the row is what has to say the stage's action cannot be taken on it: without this the card can
+    // announce there is no way in (since #2664) while sitting in the stage that exists to send one.
+    //
+    // Gold, unlike the faint lines around it, because this is something he can act on and the sentence
+    // says what: adding a contact makes the draft that is already there ready to go.
+    //
+    // Asked of the ITEM's own contacts, which is the same list the card renders below, so a row cannot
+    // say it has nobody while showing somebody.
+    @ViewBuilder private var draftedDeadEndLine: some View {
+        if item.status == .drafted, item.contacts.isEmpty {
+            Text(DraftedDeadEndCopy.line)
+                .font(OVType.tag)
+                .foregroundStyle(OVColor.gold)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 2)
+        }
+    }
+
     @ViewBuilder private var possibleMatchQuestion: some View {
         if let question = QueueModel.possibleMatchQuestion(item) {
             Text(question)
