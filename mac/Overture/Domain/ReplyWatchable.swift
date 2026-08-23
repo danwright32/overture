@@ -119,6 +119,10 @@ extension ReplyWatchableRecipient {
 
 // A contacted entity (a show's lead, or an inquiry) that owns one or more watched threads.
 protocol ReplyWatchable: AnyObject {
+    // #2915: a reply after a close out clears an ending that says nobody ever answered. On the protocol
+    // rather than on the prospect alone, because an inquiry rides this same check and is closed out from
+    // the same vocabulary, so the half nobody wrote would be the half nobody noticed (L30).
+    @discardableResult func reopenOnReply(at repliedAt: Date) -> Bool
     var replyWatchManualOutcome: Bool { get }   // lead hand-resolved; stop watching ALL its threads.
     var replyWatchIsBooked: Bool { get }         // lead booked; the whole thing is closed.
     var replyWatchRecipients: [any ReplyWatchableRecipient] { get }

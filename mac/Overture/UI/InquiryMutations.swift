@@ -80,6 +80,9 @@ enum InquiryMutations {
         // Always assigned, so marking a previously-lost inquiry booked replaces the stale ending rather than
         // leaving one behind for #16 to count in two groups.
         inquiry.showOutcome = action.ending
+        // #2915: WHEN, so a reply arriving afterwards can be compared against it. Without this every
+        // inquiry ending is undateable and the reopen rule can never fire for one.
+        inquiry.showOutcomeAt = Date()
         return context.saveOrWarn(org: inquiry.inquirerName, feedback: feedback)
     }
 

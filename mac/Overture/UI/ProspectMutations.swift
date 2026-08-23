@@ -86,6 +86,10 @@ enum ProspectMutations {
             // what takes it off the reached-out stage; marking it dismissed would file a real pitch among
             // the shows Dan never sent to.
             model.showOutcome = outcome
+            // #2915: WHEN, so a reply arriving afterwards can be told from the reply Dan already had in
+            // hand when he closed this. Written here rather than by the setter, because a stamp taken
+            // from a hidden clock inside a model property is one no test can pin.
+            model.showOutcomeAt = Date()
             // A booking Dan recorded is HIS call, and the show has to say so or the next Downbeat
             // reconcile claims it and silently moves it from the manual half of the booking split to the
             // automatic one (#2226).
@@ -114,6 +118,9 @@ enum ProspectMutations {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return false }
         guard let had = model.showOutcome else { return false }
         model.showOutcome = nil
+        // #2915: and its stamp, or the next close-out inherits this one's moment and a reply is compared
+        // against an ending that no longer exists.
+        model.showOutcomeAt = nil
         for r in model.recipients where r.resolution != nil {
             r.markOutcomeManually(resolution: nil, bounced: r.bounced)
         }
