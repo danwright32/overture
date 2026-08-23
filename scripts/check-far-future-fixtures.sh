@@ -54,19 +54,62 @@ is_far_future() {
   [[ "${year}" -gt $(( today_year + FAR_YEARS_AHEAD )) ]]
 }
 
-# Move every far-future date on stdin back so the EARLIEST of them lands about a month ahead of the given
-# year, in whole years so the month and day survive. Whole years rather than a day count because a shift
-# of a few days is not enough to leave the window, and because month-and-day survival keeps a fixture
-# that means "the 19th" still meaning it.
+# How many years this file has to move so its far-future fixtures land inside the coming year. Computed
+# for the WHOLE FILE and from BOTH forms, then handed to the two passes below, so a fixture written as a
+# `"yyyy-mm-dd"` string and one written as `Date(timeIntervalSince1970:)` in the same test land on the
+# same day.
 #
-# All of them move by the SAME number of years, so the gaps between them survive: a fixture whose two
-# nights are twelve days apart still has two nights twelve days apart.
-pull_far_future_dates_near() {
-  local today_year="$1"
+# That is not symmetry for its own sake. `WentByRetirementOnTheTickTests` pins its opening night as a
+# string and the clock it is judged against as an epoch literal, both in 2096, so it is CORRECT and is
+# not this issue's defect at all. Moving only the string broke that pair and the suite reported three
+# failures which were entirely this check's own doing, which is the mistake `shift_dates`' own header
+# records making once already (L130).
+#
+# The EARLIEST far-future year decides, so the whole span moves together and the gaps survive.
+far_future_shift_years() {
+  local file="$1" today_year="$2"
   awk -v today="${today_year}" -v far="${FAR_YEARS_AHEAD}" '
-    # First pass is not available on a stream, so the shift is computed from the FIRST far-future date
-    # seen and then held. A file whose dates span decades keeps that span, which is what preserving the
-    # gaps means.
+    function civil_year(z,   era, doe, yoe, y, doy, mp, m) {
+      z += 719468
+      era = int((z >= 0 ? z : z - 146096) / 146097)
+      doe = z - era * 146097
+      yoe = int((doe - int(doe / 1460) + int(doe / 36524) - int(doe / 146096)) / 365)
+      y = yoe + era * 400
+      doy = doe - (365 * yoe + int(yoe / 4) - int(yoe / 100))
+      mp = int((5 * doy + 2) / 153)
+      m = mp + (mp < 10 ? 3 : -9)
+      return (m <= 2) ? y + 1 : y
+    }
+    function consider(y) { if (y > today + far && (earliest == 0 || y < earliest)) earliest = y }
+    {
+      line = $0
+      while (match(line, /"[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/)) {
+        consider(substr(line, RSTART + 1, 4) + 0)
+        line = substr(line, RSTART + RLENGTH)
+      }
+      line = $0
+      while (match(line, /timeIntervalSince1970:[ ]*[0-9_]+/)) {
+        tok = substr(line, RSTART, RLENGTH)
+        sub(/^timeIntervalSince1970:[ ]*/, "", tok)
+        gsub(/_/, "", tok)
+        v = tok + 0
+        days = int(v / 86400)
+        if (v - days * 86400 < 0) days -= 1
+        y = civil_year(days)
+        if (y >= 1980 && y <= 2200) consider(y)
+        line = substr(line, RSTART + RLENGTH)
+      }
+    }
+    END { print (earliest == 0) ? 0 : earliest - today }
+  ' "${file}"
+}
+
+# Move every far-future date literal on stdin back by the given number of years. Whole years, so the
+# month and day survive and a fixture that means "the 19th" still means it, and the same number for all
+# of them, so the gaps between a run's nights survive.
+pull_far_future_dates_near() {
+  local shift="$1" today_year="$2"
+  awk -v shift="${shift}" -v today="${today_year}" -v far="${FAR_YEARS_AHEAD}" '
     {
       out = ""
       line = $0
@@ -74,15 +117,81 @@ pull_far_future_dates_near() {
         pre = substr(line, 1, RSTART - 1)
         tok = substr(line, RSTART, RLENGTH)
         year = substr(tok, 2, 4) + 0
-        if (year > today + far) {
-          if (shift == 0) shift = year - today
-          tok = "\"" (year - shift) "-" substr(tok, 7)
+        if (year > today + far) tok = "\"" (year - shift) "-" substr(tok, 7)
+        out = out pre tok
+        line = substr(line, RSTART + RLENGTH)
+      }
+      print out line
+    }
+  '
+}
+
+# The same move for a date written as a NUMBER, which is the other way a fixture pins a moment and the
+# one the string pass cannot see. Reuses the shared shifter with a negative shift, and applies it only to
+# values that are themselves far in the future, so an arbitrary instant (`0`, `1`, `9_999`) is untouched.
+pull_far_future_epochs_near() {
+  local shift="$1" today_year="$2"
+  local floor
+  floor="$(epoch_at_year_start $(( today_year + FAR_YEARS_AHEAD + 1 )))"
+  awk -v shift="${shift}" -v floor="${floor}" '
+    function days_from_civil(y, m, d,   era, yoe, doy, doe) {
+      y = (m <= 2) ? y - 1 : y
+      era = int((y >= 0 ? y : y - 399) / 400)
+      yoe = y - era * 400
+      doy = int((153 * (m + (m > 2 ? -3 : 9)) + 2) / 5) + d - 1
+      doe = yoe * 365 + int(yoe / 4) - int(yoe / 100) + doy
+      return era * 146097 + doe - 719468
+    }
+    function civil_from_days(z,   era, doe, yoe, y, doy, mp, d, m) {
+      z += 719468
+      era = int((z >= 0 ? z : z - 146096) / 146097)
+      doe = z - era * 146097
+      yoe = int((doe - int(doe / 1460) + int(doe / 36524) - int(doe / 146096)) / 365)
+      y = yoe + era * 400
+      doy = doe - (365 * yoe + int(yoe / 4) - int(yoe / 100))
+      mp = int((5 * doy + 2) / 153)
+      d = doy - int((153 * mp + 2) / 5) + 1
+      m = mp + (mp < 10 ? 3 : -9)
+      CY = (m <= 2) ? y + 1 : y; CM = m; CD = d
+      return 0
+    }
+    {
+      out = ""
+      line = $0
+      while (match(line, /timeIntervalSince1970:[ ]*[0-9_]+/)) {
+        pre = substr(line, 1, RSTART - 1)
+        tok = substr(line, RSTART, RLENGTH)
+        digits = tok
+        sub(/^timeIntervalSince1970:[ ]*/, "", digits)
+        gsub(/_/, "", digits)
+        v = digits + 0
+        if (v >= floor) {
+          days = int(v / 86400); secs = v - days * 86400
+          if (secs < 0) { days -= 1; secs += 86400 }
+          civil_from_days(days)
+          tok = "timeIntervalSince1970: " sprintf("%d", days_from_civil(CY - shift, CM, CD) * 86400 + secs)
         }
         out = out pre tok
         line = substr(line, RSTART + RLENGTH)
       }
       print out line
     }
+  '
+}
+
+# The first instant of a given year, so the epoch pass has a numeric floor to compare against rather than
+# decoding every literal twice.
+epoch_at_year_start() {
+  awk -v y="$1" '
+    function days_from_civil(yy, m, d,   era, yoe, doy, doe) {
+      yy = (m <= 2) ? yy - 1 : yy
+      era = int((yy >= 0 ? yy : yy - 399) / 400)
+      yoe = yy - era * 400
+      doy = int((153 * (m + (m > 2 ? -3 : 9)) + 2) / 5) + d - 1
+      doe = yoe * 365 + int(yoe / 4) - int(yoe / 100) + doy
+      return era * 146097 + doe - 719468
+    }
+    BEGIN { print days_from_civil(y, 1, 1) * 86400 }
   '
 }
 
@@ -192,8 +301,13 @@ main() {
   fi
 
   local today_year; today_year="$(date +%Y)"
+  local shift
   while IFS= read -r file; do
-    pull_far_future_dates_near "${today_year}" < "${file}" > "${file}.shifted"
+    # Per FILE, from both forms, so a string and an epoch literal in the same test land on the same day.
+    shift="$(far_future_shift_years "${file}" "${today_year}")"
+    [[ "${shift}" -gt 0 ]] || continue
+    pull_far_future_dates_near "${shift}" "${today_year}" < "${file}" \
+      | pull_far_future_epochs_near "${shift}" "${today_year}" > "${file}.shifted"
     mv "${file}.shifted" "${file}"
   done <<< "${files}"
 
@@ -220,8 +334,8 @@ main() {
   if [[ -n "${went_red}" ]]; then
     echo "These tests PASS with the show far in the future and FAIL once it is near:"
     printf '  %s\n' ${went_red}
-    echo "  Each was asserting something true only of a show outside every window. Either say so in its"
-    echo "  name, or pin a `today` beside the date so the pair cannot drift."
+    echo '  Each was asserting something true only of a show outside every window. Either say so in its'
+    echo '  name, or pin a today beside the date so the pair cannot drift.'
     echo
   fi
   if [[ -n "${went_green}" ]]; then

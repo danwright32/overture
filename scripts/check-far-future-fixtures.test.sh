@@ -43,7 +43,9 @@ let show = "2099-09-19"
 let booking = "2026-08-14"
 let stamp = "2099-10-01T19:30:00Z"
 SWIFT
-OUT="$(pull_far_future_dates_near 2026 < "${IN}")"
+SHIFT="$(far_future_shift_years "${IN}" 2026)"
+assert_equals "the shift is computed from the EARLIEST far-future year in the file" "73" "${SHIFT}"
+OUT="$(pull_far_future_dates_near "${SHIFT}" 2026 < "${IN}")"
 assert_contains "the far-future show lands inside the coming year" "${OUT}" '"2026-09-19"'
 assert_contains "a second far-future date moves by the SAME amount, so their gap survives" \
   "${OUT}" '"2026-10-01T19:30:00Z"'
@@ -52,6 +54,32 @@ assert_contains "a date that was already near is untouched" "${OUT}" '"2026-08-1
 # The gap between the two far-future dates is preserved, which is the whole reason they move together.
 assert_equals "the two moved dates keep their twelve day gap" "1" \
   "$(printf '%s' "${OUT}" | grep -c '2026-09-19')"
+
+# --- a date written as a NUMBER moves by the SAME amount as one written as a string -------------------
+# This is the trap that made the first real run report three failures of its own making.
+# `WentByRetirementOnTheTickTests` pins its opening night as a string and the clock it is judged against
+# as an epoch literal, both in 2096, so the test is CORRECT and is not this issue's defect at all. Moving
+# only the string broke the pair (L130).
+PAIRED="${WORK}/paired.swift"
+cat > "${PAIRED}" <<'SWIFT'
+let openingNight = "2096-10-01"
+let after = Date(timeIntervalSince1970: 4_000_000_000)
+SWIFT
+PSHIFT="$(far_future_shift_years "${PAIRED}" 2026)"
+assert_equals "an epoch literal counts towards the shift, not only a dated string" "70" "${PSHIFT}"
+POUT="$(pull_far_future_dates_near "${PSHIFT}" 2026 < "${PAIRED}" | pull_far_future_epochs_near "${PSHIFT}" 2026)"
+assert_contains "the dated string moves" "${POUT}" '"2026-10-01"'
+assert_not_contains "and the epoch literal moves with it rather than staying in 2096" \
+  "${POUT}" "4_000_000_000"
+assert_not_contains "and it is not left as the raw 2096 value either" "${POUT}" "4000000000"
+
+# An arbitrary instant is not a fixture date and must not move: `Date(timeIntervalSince1970: 0)` is
+# chosen because a test needed two moments in an order.
+ARBITRARY="${WORK}/arbitrary.swift"
+printf 'let a = Date(timeIntervalSince1970: 0)\nlet b = "2099-01-01"\n' > "${ARBITRARY}"
+ASHIFT="$(far_future_shift_years "${ARBITRARY}" 2026)"
+AOUT="$(pull_far_future_epochs_near "${ASHIFT}" 2026 < "${ARBITRARY}")"
+assert_contains "an arbitrary early instant is left exactly as it was" "${AOUT}" "timeIntervalSince1970: 0"
 
 # --- a file that MIXES the two is reported rather than silently half shifted --------------------------
 # This is the one case the shift genuinely changes a relationship rather than a distance, so it is named
@@ -96,6 +124,14 @@ GOOD_LOG="${WORK}/good.log"
 printf 'Test run with 8363 tests in 1146 suites passed after 500 seconds.\n' > "${GOOD_LOG}"
 assert_equals "a log that reports a run is not refused" "0" \
   "$(run_reported_nothing "${GOOD_LOG}" && echo 1 || echo 0)"
+
+# --- the report's own sentences are printed, not executed --------------------------------------------
+# A backtick inside a double-quoted echo is a command substitution, so the report ran `today` as a
+# command and printed "today: command not found" in the middle of its own advice. Caught on the first
+# real run, which is the only place it could have been: every assertion above drives a function, and
+# this line lives in main().
+assert_not_contains "no line of the report is inside backticks in a double-quoted string" \
+  "$(grep -n 'echo "' "${CHECK}" | grep '`' || true)" '`'
 
 if [[ "${FAILURES}" -gt 0 ]]; then
   echo "FAILED: ${FAILURES} check-far-future-fixtures.sh assertion(s) failed"
