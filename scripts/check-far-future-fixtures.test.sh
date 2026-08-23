@@ -81,6 +81,30 @@ ASHIFT="$(far_future_shift_years "${ARBITRARY}" 2026)"
 AOUT="$(pull_far_future_epochs_near "${ASHIFT}" 2026 < "${ARBITRARY}")"
 assert_contains "an arbitrary early instant is left exactly as it was" "${AOUT}" "timeIntervalSince1970: 0"
 
+# --- the file's own pinned clock is the reference, not the year this runs in -------------------------
+# The five findings the first corrected run produced were all this: NativePathGuardTests pins 2027 and
+# dates its shows 2099, so a shift computed against today put every show BEHIND the clock the test
+# judges from, and the suite reported failures the check had caused.
+PINNED="${WORK}/pinned.swift"
+cat > "${PINNED}" <<'SWIFT'
+private let now = Date(timeIntervalSince1970: 1_800_000_000)
+let show = "2099-09-19"
+SWIFT
+assert_equals "a pinned near-future clock is the reference year" "2027" \
+  "$(reference_year "${PINNED}" 2026)"
+assert_equals "and the shift is measured from it, not from today" "72" \
+  "$(far_future_shift_years "${PINNED}" "$(reference_year "${PINNED}" 2026)")"
+NO_CLOCK="${WORK}/noclock.swift"
+printf 'let show = "2099-09-19"\n' > "${NO_CLOCK}"
+assert_equals "a file pinning no clock measures itself against the real one" "2026" \
+  "$(reference_year "${NO_CLOCK}" 2026)"
+# A 2099 epoch literal is a fixture DATE, not the moment the test judges from, so it must not become
+# the reference: that would make the shift zero and the file would never move.
+FAR_CLOCK="${WORK}/farclock.swift"
+printf 'let t = Date(timeIntervalSince1970: 4_000_000_000)\nlet show = "2099-09-19"\n' > "${FAR_CLOCK}"
+assert_equals "a far-future epoch literal is a fixture date, not a clock" "2026" \
+  "$(reference_year "${FAR_CLOCK}" 2026)"
+
 # --- a file that MIXES the two is reported rather than silently half shifted --------------------------
 # This is the one case the shift genuinely changes a relationship rather than a distance, so it is named
 # for a person to read rather than folded in (L11).

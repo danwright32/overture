@@ -54,6 +54,53 @@ is_far_future() {
   [[ "${year}" -gt $(( today_year + FAR_YEARS_AHEAD )) ]]
 }
 
+# The year this file measures ITSELF against, which is not always the year the run happens in.
+#
+# A test that pins its own clock (`private let now = Date(timeIntervalSince1970: 1_800_000_000)`, which
+# is 2027) and dates its show to 2099 is asking a question about a show 72 years ahead OF THAT CLOCK.
+# Pulling the show back to the year this script runs in puts it BEHIND the test's own clock, which is a
+# different case entirely, and the suite then reports failures that are the check's own doing.
+#
+# Measured: the first corrected run reported six tests, and five of them were exactly this. They are all
+# in `NativePathGuardTests`, which pins 2027 and dates its shows 2099, and every one of them went green
+# again once the shift was computed against the pinned clock instead.
+#
+# The LATEST such clock decides, since a suite usually pins one moment and derives the rest from it. A
+# file with no pinned clock measures itself against the real one, so today's year is the answer.
+reference_year() {
+  local file="$1" today_year="$2"
+  awk -v today="${today_year}" -v far="${FAR_YEARS_AHEAD}" '
+    function civil_year(z,   era, doe, yoe, y, doy, mp, m) {
+      z += 719468
+      era = int((z >= 0 ? z : z - 146096) / 146097)
+      doe = z - era * 146097
+      yoe = int((doe - int(doe / 1460) + int(doe / 36524) - int(doe / 146096)) / 365)
+      y = yoe + era * 400
+      doy = doe - (365 * yoe + int(yoe / 4) - int(yoe / 100))
+      mp = int((5 * doy + 2) / 153)
+      m = mp + (mp < 10 ? 3 : -9)
+      return (m <= 2) ? y + 1 : y
+    }
+    {
+      line = $0
+      while (match(line, /timeIntervalSince1970:[ ]*[0-9_]{9,}/)) {
+        tok = substr(line, RSTART, RLENGTH)
+        sub(/^timeIntervalSince1970:[ ]*/, "", tok)
+        gsub(/_/, "", tok)
+        v = tok + 0
+        days = int(v / 86400)
+        if (v - days * 86400 < 0) days -= 1
+        y = civil_year(days)
+        # Only a clock that is NOT itself far in the future: a 2099 epoch literal is a fixture date, not
+        # the moment the test judges from.
+        if (y >= 1980 && y <= today + far && y > latest) latest = y
+        line = substr(line, RSTART + RLENGTH)
+      }
+    }
+    END { print (latest == 0) ? today : latest }
+  ' "${file}"
+}
+
 # How many years this file has to move so its far-future fixtures land inside the coming year. Computed
 # for the WHOLE FILE and from BOTH forms, then handed to the two passes below, so a fixture written as a
 # `"yyyy-mm-dd"` string and one written as `Date(timeIntervalSince1970:)` in the same test land on the
@@ -301,13 +348,17 @@ main() {
   fi
 
   local today_year; today_year="$(date +%Y)"
-  local shift
+  local shift reference
   while IFS= read -r file; do
+    # Against the file's OWN clock where it pins one, not against the year this runs in: a test judging
+    # from a pinned 2027 is asking about a show 72 years ahead of THAT, and pulling the show back to
+    # today puts it behind the clock the test uses.
+    reference="$(reference_year "${file}" "${today_year}")"
     # Per FILE, from both forms, so a string and an epoch literal in the same test land on the same day.
-    shift="$(far_future_shift_years "${file}" "${today_year}")"
+    shift="$(far_future_shift_years "${file}" "${reference}")"
     [[ "${shift}" -gt 0 ]] || continue
-    pull_far_future_dates_near "${shift}" "${today_year}" < "${file}" \
-      | pull_far_future_epochs_near "${shift}" "${today_year}" > "${file}.shifted"
+    pull_far_future_dates_near "${shift}" "${reference}" < "${file}" \
+      | pull_far_future_epochs_near "${shift}" "${reference}" > "${file}.shifted"
     mv "${file}.shifted" "${file}"
   done <<< "${files}"
 
