@@ -434,6 +434,17 @@ chmod +x "${CURED}"
 fixture_sources_avoid_kill_wait_on_a_fresh_job "${CURED}" >/dev/null 2>&1
 assert_equals "a job left to exit on its own is accepted" "0" "$?"
 
+# The false positive this guard shipped with for one run, kept as a test because it is the failure mode
+# that gets a rule switched off. Its first version asked only whether the two lines after a recorded pid
+# CONTAINED the characters "kill" and "wait", and the line after this guard's own synthetic offender
+# calls `fixture_sources_avoid_kill_wait_on_a_fresh_job`, whose name carries both. A single-letter pid
+# variable made it worse, matching any capital letter in the neighbouring line. It condemned its own test.
+MENTIONS="${TMP_DIR}/mentions.test.sh"
+printf '#!/usr/bin/env bash\nsleep 5 & P=$!\nrun_the_kill_wait_checker "${SOME_PATH}"\necho "ok - P"\n' > "${MENTIONS}"
+chmod +x "${MENTIONS}"
+fixture_sources_avoid_kill_wait_on_a_fresh_job "${MENTIONS}" >/dev/null 2>&1
+assert_equals "an identifier merely carrying the words kill and wait is not a kill or a wait" "0" "$?"
+
 # The real fixture that carried the defect, so this cannot be marked fixed while the fixture still has it.
 fixture_sources_avoid_kill_wait_on_a_fresh_job "${REPO_ROOT}/mac/scripts/lib/run-heartbeat.test.sh" >/dev/null 2>&1
 assert_equals "run-heartbeat.test.sh no longer kills a job it just started" "0" "$?"

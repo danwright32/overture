@@ -196,6 +196,9 @@ fixture_sources_avoid_kill_wait_on_a_fresh_job() {
   # The `$!` is inside single quotes so the shell cannot expand it into this runner's own last
   # background pid, which is a live value here: `start_fixture_watch` sets one.
   local re='&[[:space:]]+([A-Za-z_][A-Za-z0-9_]*)=\$!'
+  # PHYSICAL lines, which is deliberate and worth knowing: a synthetic offender written by a `printf`
+  # with `\n` escapes lives on ONE line, so this cannot see it, and the fixtures that build such files to
+  # test this very guard are therefore not condemned by it.
   for f in "$@"; do
     [[ -r "${f}" ]] || continue
     lines=()
@@ -207,9 +210,17 @@ fixture_sources_avoid_kill_wait_on_a_fresh_job() {
       # The next two lines only. The defect is a kill that races the fork, and a kill three lines later
       # has had a command run in between, which is what closes the window.
       window="${lines[i+1]:-}"$'\n'"${lines[i+2]:-}"
-      [[ "${window}" == *"${var}"* ]] || continue
-      [[ "${window}" == *kill* ]] || continue
-      [[ "${window}" == *wait* ]] || continue
+      # Both words must be REAL WORDS acting on THIS pid, never bare substrings. The first version asked
+      # only whether the window contained the characters, and it condemned this guard's own test, whose
+      # next line calls `fixture_sources_avoid_kill_wait_on_a_fresh_job`: that identifier carries both
+      # words, and a single-letter pid variable like `P` matched any capital P in the line beside it. A
+      # guard that fires on the text describing it is the trap #2193 established the build-the-needle
+      # trick for, and here the honest fix is to ask the sharper question rather than to hide the words.
+      #
+      # `[^[:alnum:]_]` before the word is what excludes an identifier: in `avoid_kill_wait_on`, `kill`
+      # is preceded by an underscore, so it is part of a name rather than a command.
+      [[ "${window}" =~ (^|[^[:alnum:]_])kill([[:space:]]|$).*\$\{?${var}\}? ]] || continue
+      [[ "${window}" =~ (^|[^[:alnum:]_])wait([[:space:]]|$).*\$\{?${var}\}? ]] || continue
       offenders+="${f}: line $((i + 2)): ${lines[i+1]}"$'\n'
     done
   done
