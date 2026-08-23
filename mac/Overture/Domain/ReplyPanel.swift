@@ -430,6 +430,17 @@ enum ReplyPanel {
 // and so every one of them appears in the copy inventory for a cold read.
 enum ReplyPanelCopy {
     static let answer = "Answer"
+    // #2869: the reply card's copy-then-confirm pair. Copying is not sending, so the first says what it
+    // actually did and the second is the only thing that records an answer.
+    static let copiedAwaitingConfirm = "Copied. Paste it into Gmail, then say you sent it."
+    // The SAME words the form pitch's confirm uses, from its constant rather than a second copy of the
+    // string. Both are step two of one shape (Dan did outside the app the thing Overture put on his
+    // clipboard), and two spellings of one control drifting apart is what that section of
+    // docs/copy-inventory.md exists to catch (#843). It flagged this pair on the first regeneration.
+    static var confirmCopiedSent: String { FormOutreachCopy.sentIt }
+    static let confirmCopiedSentHelp = "Record this reply as answered. Nothing was recorded when you copied it."
+    static let copyHelp = "Copy the draft to paste into Gmail yourself. Nothing is recorded until you say you sent it."
+
     static let noCapturedWords = "Overture didn't capture what they wrote. Their message is in Gmail."
     // #2149: a message Overture DID read and could not decode, which is a different thing and gets
     // different words. It names the likely cause, because that is what tells Dan the answer is in Gmail

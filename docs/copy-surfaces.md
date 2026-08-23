@@ -83,6 +83,7 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
     InquiryCopy.replySubjectDefault  "Re: your inquiry"
 `Domain/ReplyPanel.swift`
     AttachConversationWriteCopy.linkedByHand  "You linked this conversation. Overture didn't email them."
+    FormOutreachCopy.sentIt  "I sent it"
     GmailCopy.notConnected  "Connect Gmail first"
     ReplyPanelCopy.aiWroteThisDraft  "Written by AI"
     ReplyPanelCopy.noCapturedWords  "Overture didn't capture what they wrote. Their message is in Gmail."
@@ -192,6 +193,7 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
     ActionAck.contactBlankAddress  "One of the addresses is blank. No contact was added"
     ActionAck.contactNeedsRoute  "Add an email address, or a link to a contact form or profile. No contact was added"
     ActionAck.contactOneAtATime  "Add one address at a time. No contact was added"
+    ReplyPanelCopy.copiedAwaitingConfirm  "Copied. Paste it into Gmail, then say you sent it."
     SendIdentity.danWright  "Dan Wright"
 `UI/ProspectRowView.swift`
     GenreControlCopy.help  "Set this show's genre"
@@ -222,6 +224,8 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
     SelfBookingCopy.prepConfirmProceed  "Prep anyway"
     SelfBookingCopy.prepConfirmTitle  "Prep a show on a date you're already pitching?"
 `UI/ReplyConversationView.swift`
+    ReplyPanelCopy.confirmCopiedSentHelp  "Record this reply as answered. Nothing was recorded when you copied it."
+    ReplyPanelCopy.copyHelp  "Copy the draft to paste into Gmail yourself. Nothing is recorded until you say you sent it."
     ReplyPanelCopy.drafting  "Drafting a reply"
 `UI/ReplySheet.swift`
     ReplyPanelCopy.audienceHeading  "Your reply goes to"

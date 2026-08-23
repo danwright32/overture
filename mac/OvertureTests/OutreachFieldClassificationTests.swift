@@ -104,6 +104,11 @@ struct OutreachFieldClassificationTests {
         "replyAudience": "who a reply went to, captured with the reply that is counted",
         "intentHint": "what a classify run read a REPLY as meaning, and replied is counted",
         "replyDraftEditedByDan": "whether he edited the reply draft, and replyDraftBody is counted",
+        // #2869: the draft is on the clipboard and Dan has NOT said he sent it. Deliberately not
+        // outreach, which is the whole of that change: copying is not sending, and the field exists
+        // precisely to hold the in-between state that used to be recorded as an answer. `replySentAt`
+        // and `replyHandledAt` are what say something happened, and both are written by the confirm.
+        "replyCopiedAt": "the reply draft was put on the clipboard and nothing has been sent yet (#2869)",
         "replyDraftWrittenByDan": "whether he wrote the reply draft himself, and replyDraftBody is counted",
         "replyMarkClearedStandDown": "set with replyMarkedByHandAt by HandMarkedReply.mark, and that is counted",
         // #2715: the attach can only ever run on a contact that already carries formOutreachRecordedAt

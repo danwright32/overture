@@ -137,6 +137,9 @@ enum ProspectRowFactory {
             onDraftReply: { rid in ProspectMutations.draftReply(item.id, rid, prospects: prospects, context: context, feedback: feedback) },
             onSendReply: onSendReply,
             onCopyReply: { rid in ProspectMutations.copyReply(item, rid, prospects: prospects, context: context, feedback: feedback) },
+            // #2869: the only place the reply card records an answer. A defaulted no-op here would draw a
+            // live-looking button that does nothing, which is worse than no button (L109).
+            onConfirmCopiedReplySent: { rid in ProspectMutations.confirmCopiedReplySent(item, rid, prospects: prospects, context: context, feedback: feedback) },
             onEditReplyDraft: { rid, body in ProspectMutations.editReplyDraft(item, rid, body, prospects: prospects, context: context, feedback: feedback) },
             // #1038: a run-level cancel (the reply-classify run drafts every queued reply in one pass), so
             // it takes no recipient id: it writes the sentinel the runner checks on its heartbeat.
