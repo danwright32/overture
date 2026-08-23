@@ -16,7 +16,9 @@ enum DetachConversationCopy {
     // it cannot disagree (L109).
     // #2797: the control itself. One label for both surfaces, because it is one act.
     static let control = "Unlink this conversation"
-    static let controlHelp = "Overture linked the wrong conversation to this. Unlinking takes back what it recorded."
+    // Phrased as IF. The control is offered on EVERY linked conversation, and most of them are the right
+    // one, so a tooltip asserting this one is wrong tells Dan something the app does not know.
+    static let controlHelp = "If Overture linked the wrong conversation, unlinking takes back what it recorded from it."
 
     static let nothingLinked =
         "There's no linked conversation on this pitch to unlink."
