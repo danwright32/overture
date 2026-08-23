@@ -92,6 +92,12 @@ struct ProspectFieldClassificationTests {
         "dismissReasonRaw": "the legacy dismissal reason, read only by ShowOutcomeBackfill now",
         "dismissedAt": "when the row left the queue, the dismissal's own date",
         "showOutcomeRaw": "how the show ended; counted by `hasOutreachHistory`, which is the predicate that asks whether anything happened at all",
+        // #2915: WHEN that ending was recorded. Beside the ending itself rather than in `notARecord`,
+        // because the two are one fact: a row carrying the ending already survives this rule through
+        // `showOutcomeRaw`, and a merge that kept the ending and dropped its date would leave a survivor
+        // whose ending can never be compared against a later reply, so the reopen rule would refuse it
+        // for ever. Carried for the same reason `dismissedAt` is.
+        "showOutcomeAt": "when the show was closed out; the ending's own date, and what a later reply is compared against (#2915)",
 
         // MARK: a paid check's answer. Re-derivable only by paying again, and that is the whole of why
         // #1845 took found addresses OUT of the deferral half of this rule: an address a check merely
