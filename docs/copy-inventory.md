@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1466 sentences**.
+Every sentence Overture can say to Dan: **1468 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -147,8 +147,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
   - `UI/ProspectRowView.swift`
 - "Connect Gmail"
   - `App/RootView.swift`
+  - `Domain/GmailReconnectCopy.swift`
   - `UI/OnboardingView.swift`
-  - `UI/SendConfirmAndReconnectAlerts.swift`
 - "Contact form"
   - `Domain/Inquiry.swift`
   - `UI/DraftReviewView.swift`
@@ -661,8 +661,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ProspectRowView.swift`
 "Connect Gmail"
     `App/RootView.swift`
+    `Domain/GmailReconnectCopy.swift`
     `UI/OnboardingView.swift`
-    `UI/SendConfirmAndReconnectAlerts.swift`
 "Connect Gmail first"
     `Domain/DraftReviewNotes.swift`
 "Consider closing"
@@ -678,6 +678,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DraftCheck.swift`
 "Continue anyway"
     `UI/StoreShrinkNoticeSheet.swift`
+"Conversations to confirm"
+    `Domain/ProposedConversation.swift`
 "Copy pitch and open form"
     `Domain/FormOutreach.swift`
 "Copy pitch and open profile"
@@ -1318,7 +1320,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DraftReviewNotes.swift`
 "Nothing scouted yet"
     `Domain/EmptyState.swift`
-"Nothing to act on. Shows you've emailed appear here for a gentle follow-up, and again once the date has passed so you can close them out; they drop off the moment you record how one ended."
+"Nothing to act on. Shows you've pitched appear here for a gentle follow-up, again once the date has passed so you can close them out, and whenever a conversation turns up that might be their reply; they drop off the moment you act on one."
     `Domain/EmptyState.swift`
 "Nothing to prep yet"
     `Domain/StageEmptyState.swift`
@@ -1340,8 +1342,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ShowOutcome.swift`
 "Notifications allowed."
     `Domain/OnboardingState.swift`
-"Nudges due on shows you've already reached out to."
-    `Domain/AgentRoster.swift`
 "Offers a discount or free/complimentary work"
     `Domain/DraftCheck.swift`
 "OmniFocus is syncing due follow-ups. It only fires while Overture is open, so it looks ahead by:"
@@ -1680,7 +1680,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Reconcile ran but couldn't save its results. Try again; if this keeps happening, something's wrong with the local store."
     `Domain/ReconcileSummary.swift`
 "Reconnect Gmail"
-    `UI/SendConfirmAndReconnectAlerts.swift`
+    `Domain/GmailReconnectCopy.swift`
 "Recorded. \(org) is now in Reached out."
     `App/ActionFeedback.swift`
 "Redo it anyway?"
@@ -1908,6 +1908,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Shows you kept that a date clash is holding back."
     `Domain/AgentRoster.swift`
 "Shows you've pitched and are waiting to hear back on."
+    `Domain/AgentRoster.swift`
+"Shows you've pitched that need something from you: a nudge, a possible reply to check, or how it ended."
     `Domain/AgentRoster.swift`
 "Silent follow-ups"
     `UI/FollowUpsView.swift`
@@ -2491,7 +2493,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Your Downbeat client export is \(days) days old. Recently booked clients may be missing, so some warm leads could look cold. Open Downbeat to refresh it."
     `Domain/DownbeatExport.swift`
 "Your Gmail access has expired or was revoked, so nothing was sent. Click Connect Gmail to reconnect, then try Send again."
-    `UI/SendConfirmAndReconnectAlerts.swift`
+    `Domain/GmailReconnectCopy.swift`
+"Your Gmail access has expired or was revoked, so this conversation could not be linked. Nothing was sent and nothing changed. Click Connect Gmail to reconnect, then answer again."
+    `Domain/GmailReconnectCopy.swift`
 "Your Prep run is still going. Wait for it to finish before starting another."
     `Integration/PrepQueueService.swift`
 "Your \(kind.runNoun) is still going"

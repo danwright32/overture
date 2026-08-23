@@ -33,7 +33,7 @@ enum EmptyState {
     // inventory lists each string literal as its own entry and a sentence chopped mid-clause cannot be
     // cold read (#843's whole point).
     static let followUpsSheet = [
-        "Nothing to act on. Shows you've emailed appear here for a gentle follow-up, and again once the date has passed so you can close them out; they drop off the moment you record how one ended.",
+        "Nothing to act on. Shows you've pitched appear here for a gentle follow-up, again once the date has passed so you can close them out, and whenever a conversation turns up that might be their reply; they drop off the moment you act on one.",
         StalledReplyDraftCopy.nothingStalled,
     ].joined(separator: " ")
 

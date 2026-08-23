@@ -235,7 +235,7 @@ struct TriageWindowTests {
                               eventName: "Gala")
         inquiry.performanceDate = day(700)
 
-        let inputs = AgentInputs.from(prospects: [], inquiries: [inquiry], context: .at(today, now: now),
+        let inputs = AgentInputs.from(prospects: [], allProspects: [], inquiries: [inquiry], context: .at(today, now: now),
                                       gmailConnected: true, runInFlight: nil, replyRunAlive: false)
         #expect(inputs.toReview == 1)
     }

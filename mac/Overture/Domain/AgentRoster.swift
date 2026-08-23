@@ -77,7 +77,15 @@ extension AgentInputs {
     // to be defaulted here with a comment saying a test not about geography was unchanged by it, which is
     // exactly how a SHIPPING caller forgets a gate invisibly: a pill built without it counts shows its own
     // stage list will not render, which is #1570 over again.
-    static func from(prospects: [Prospect], inquiries: [Inquiry] = [], context: StageContext,
+    // #2968: `allProspects` is REQUIRED and carries no default (L168). The Follow-ups number is the one
+    // count here that must be taken over the whole store rather than over the queue's own list, because
+    // the queue's list drops dismissed shows and the sheet and the toolbar badge behind this pill query
+    // everything. A show Dan dismissed AFTER emailing it was therefore work on two surfaces and
+    // invisible on the third. A default would let a caller forget the distinction silently, which is how
+    // the two sets came to disagree in the first place; a required argument makes every call site say
+    // which it means.
+    static func from(prospects: [Prospect], allProspects: [Prospect], inquiries: [Inquiry] = [],
+                     context: StageContext,
                      gmailConnected: Bool, runInFlight: RunKind?, replyRunAlive: Bool) -> AgentInputs {
         // Counted THROUGH StageNavigation, never alongside it, so a pill's number and the rows its tap
         // lands on come from one predicate and cannot answer the same question differently.
@@ -98,7 +106,13 @@ extension AgentInputs {
             readyToSend: count(.sendApproved),
             gmailConnected: gmailConnected,
             sendErrors: count(.sendErrors),
-            followUpsDue: FollowUp.dueRecipients(from: prospects, now: context.now).count,
+            // #2968/#3076: the SAME derivation the sheet's header, the toolbar badge, the Dock tile and
+            // the menu bar all state, so this pill's number and the rows behind it cannot be two
+            // opinions (L16). It counted `FollowUp.dueRecipients` alone, which is silent nudges and
+            // nothing else, so with only after the show rows pending it read "None due" over a sheet
+            // that was drawing them.
+            followUpsDue: DueWork.counts(prospects: allProspects, now: context.now,
+                                         replyRunAlive: replyRunAlive).total,
             // #2878/#2828: the SAME function FollowUpsView builds its "Stalled reply drafts" section
             // from, so the number on this pill and the rows behind it cannot answer differently. It used
             // to sweep the recipients here for itself, and the sheet swept nothing at all, so the pill
@@ -217,7 +231,12 @@ enum AgentRoster {
         case .sendApproved, .sendBlocked, .sendErrors, .sendStuck, .sendDegraded, .sendThreadingDegraded:
             return "Sent emails that hit a problem, or approved ones you can't send yet."
         case .reachedOut: return "Shows you've pitched and are waiting to hear back on."
-        case .followUps: return "Nudges due on shows you've already reached out to."
+        // #2968: it said "Nudges due on shows you've already reached out to.", which was true of the
+        // number it used to state and of nothing else this pill opens. A post-event prompt is not a
+        // nudge (#2710 removed the email it used to send), and a conversation to confirm is a question
+        // rather than a chase, so the sentence named one of the four things behind it.
+        case .followUps:
+            return "Shows you've pitched that need something from you: a nudge, a possible reply to check, or how it ended."
         // A show held by a date clash DOES reach a pill: `statuses` returns a "Prep" status carrying this
         // focus whenever `prepBlocked > 0`, and it outranks the ordinary ready-to-prep state, so it is
         // what Dan hovers on exactly the day something is stuck.
@@ -397,9 +416,12 @@ enum AgentRoster {
         // A dead reply-drafter run takes priority: it's an abnormal stall Dan should clear (#431).
         if i.stalledReplyDrafts > 0 {
             let n = i.stalledReplyDrafts
+            // #2968/#3076: the DETAIL names the abnormal thing, and the COUNT is still the whole number
+            // the sheet behind it draws. It used to be the stalled count alone, so a store holding one
+            // stalled draft beside two after the show rows put "1" on a pill opening a sheet of three.
             return AgentStatus(name: "Follow-ups", state: .needsAttention,
                                detail: "\(n) reply draft\(n == 1 ? "" : "s") stalled",
-                               focus: .followUps, count: n)
+                               focus: .followUps, count: i.followUpsDue)
         }
         if i.followUpsDue > 0 {
             // #843: the tooltip shows this after the concept ("Nudges due on shows you've already reached

@@ -144,7 +144,7 @@ struct ProspectStageReachabilityGuardTests {
             .map(\.prospect.naturalKey))
         let stage = StageNavigation.stage(containing: "show-1", in: all, reachedOutKeys: reachedOutKeys,
                                           context: .at(today, now: now))
-        let inputs = AgentInputs.from(prospects: all, context: .at(today, now: now), gmailConnected: true,
+        let inputs = AgentInputs.from(prospects: all, allProspects: all, context: .at(today, now: now), gmailConnected: true,
                                       runInFlight: nil, replyRunAlive: false)
         return (stage, AgentRoster.statuses(inputs))
     }

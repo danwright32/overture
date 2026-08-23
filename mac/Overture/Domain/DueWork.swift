@@ -38,15 +38,16 @@ enum DueWork {
         var afterTheShow: [PostEventPrompt.DueRecipient] = []
         var silent: [FollowUp.DueRecipient] = []
         var stalledReplyDrafts: [StalledReplyDraft.DueRecipient] = []
-        // Counted, and rendered NOWHERE in the sheet the count heads: those rows are answered on the
-        // Reached out row instead (#2718). Carried here rather than fetched separately by `counts` so
-        // the gap is visible in the one type that says what the sheet holds, and so the guard in
-        // `StalledReplyDraftSectionTests` can name it. Filed as #2967.
+        // #2967: these are DRAWN now, in their own section of the sheet the count heads. They used to
+        // be counted here and rendered only on the Reached out row, so the header could stand over
+        // fewer rows than it promised, which is #863 in the one place that exists to prevent it.
         var conversationsToConfirm: [ProposedConversation.DueRecipient] = []
 
         // What FollowUpsView actually DRAWS. Named apart from the count below on purpose: the whole
         // defect was a number and a list that were not the same thing.
-        var rendered: Int { afterTheShow.count + silent.count + stalledReplyDrafts.count }
+        var rendered: Int {
+            afterTheShow.count + silent.count + stalledReplyDrafts.count + conversationsToConfirm.count
+        }
         var isEmpty: Bool { rendered == 0 }
 
         // Derived from the lists rather than measured beside them, so the number the sheet's header
@@ -63,7 +64,16 @@ enum DueWork {
     // than a compile error.
     static func rows(prospects: [Prospect], now: Date, replyRunAlive: Bool,
                      followUp: FollowUpConfig = .init()) -> Rows {
-        Rows(afterTheShow: PostEventPrompt.dueRecipients(from: prospects, now: now),
+        // #2967 state 2: one form pitch on a show that has been and gone is owed BOTH questions at
+        // once, and counting it twice put "Due 2" over one contact. The confirm question wins and the
+        // post-event prompt yields, because how a show ended cannot be answered honestly while it is
+        // still unsettled whether the act ever replied; answering the confirm re-decides what the other
+        // prompt should even say. Suppressed here, in the one place that decides what the sheet holds,
+        // rather than in the view, so the number and the rows cannot disagree about it (L16).
+        let toConfirm = ProposedConversation.dueRecipients(from: prospects)
+        let confirmKeys = Set(toConfirm.map(\.recipient.id))
+        return Rows(afterTheShow: PostEventPrompt.dueRecipients(from: prospects, now: now)
+                .filter { !confirmKeys.contains($0.recipient.id) },
              // Oldest pitch first, which is the order the sheet showed before this ordering moved here
              // from its body: one place decides what the list holds AND what order it is in.
              silent: FollowUp.dueRecipients(from: prospects, now: now, config: followUp)
@@ -72,7 +82,7 @@ enum DueWork {
                                                                  runAlive: replyRunAlive),
              // The SAME function the Reached out row is built from, never a second predicate that
              // happens to agree today (L16).
-             conversationsToConfirm: ProposedConversation.dueRecipients(from: prospects))
+             conversationsToConfirm: toConfirm)
     }
 
     static func counts(prospects: [Prospect], now: Date, replyRunAlive: Bool,

@@ -40,7 +40,7 @@ struct InquiryStageTests {
     // The stage pills must count inquiries too, or a logged inquiry would hide behind a pill that
     // reads "0" and Dan would never tap in. The count and the rows the tap lands on must agree.
     private func inputs(inquiries: [Inquiry]) -> AgentInputs {
-        AgentInputs.from(prospects: [], inquiries: inquiries, context: .at("2026-07-01", now: Date()),
+        AgentInputs.from(prospects: [], allProspects: [], inquiries: inquiries, context: .at("2026-07-01", now: Date()),
                          gmailConnected: true, runInFlight: nil, replyRunAlive: false)
     }
 

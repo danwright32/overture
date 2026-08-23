@@ -20,12 +20,13 @@ A message here can be correct, tested, and still fail to do its job: taken away 
 before Dan sees it, or delivered somewhere he cannot act on it. These are the ones to look at
 when new copy lands in them.
 
-### OS alert (3 files)
+### OS alert (4 files)
 
 This appears over whatever is already on screen, including a sheet Dan is in the middle of, so it can interrupt an answer it has nothing to do with.
 
 - `App/RootView.swift`
 - `UI/DraftReviewView.swift`
+- `UI/FollowUpsView.swift`
 - `UI/SendConfirmAndReconnectAlerts.swift`
 
 ### Info block (1 file)
@@ -51,7 +52,7 @@ macOS may relocate this into the overflow menu or drop it entirely at a narrow w
 
 A sentence written as a constant is read here at the file that RENDERS it, not only at the file that declares it. That is the case the rest of this document and `copy-inventory.md` cannot show: moving an existing sentence onto a new screen changes no literal anywhere, so it produces no diff and gets no cold read, which is exactly when placement most needs reading.
 
-48 files render a sentence declared as a constant.
+49 files render a sentence declared as a constant.
 
 `App/OvertureApp.swift`
     StoreLaunchOutcome.defaultUnavailableReason  "Overture's data is unavailable."
@@ -139,6 +140,14 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
     SendModeCopy.together  "One email to everyone"
     ShowOutcome.reopenLabel  "Reopen this show"
 `UI/FollowUpsView.swift`
+    GmailReconnectCopy.afterLinkAttempt  "Your Gmail access has expired or was revoked, so this conversation could not be linked. Nothing was sent and nothing changed. Click Connect Gmail to reconnect, then answer again."
+    GmailReconnectCopy.connect  "Connect Gmail"
+    GmailReconnectCopy.title  "Reconnect Gmail"
+    ProposedConversationCopy.confirm  "Yes, link it"
+    ProposedConversationCopy.decline  "Not them"
+    ProposedConversationCopy.linked  "Linked. Overture is watching that conversation now."
+    ProposedConversationCopy.question  "Is this their reply?"
+    ProposedConversationCopy.section  "Conversations to confirm"
     SendConfirmCopy.openReview  "Review and send"
     StalledReplyDraftCopy.section  "Stalled reply drafts"
     StalledReplyDraftCopy.tryAgain  "Draft it again"
@@ -227,6 +236,10 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
 `UI/ScoutSummaryView.swift`
     ScoutSummaryCopy.subtitle  "I'll read the ones you fix."
     ScoutSummaryCopy.title  "Scout results"
+`UI/SendConfirmAndReconnectAlerts.swift`
+    GmailReconnectCopy.afterSend  "Your Gmail access has expired or was revoked, so nothing was sent. Click Connect Gmail to reconnect, then try Send again."
+    GmailReconnectCopy.connect  "Connect Gmail"
+    GmailReconnectCopy.title  "Reconnect Gmail"
 `UI/SendConfirmSheet.swift`
     SendConfirmCopy.chooseLabel  "Who this goes to"
     SendConfirmCopy.editLabel  "The email that will send, edit it here"
@@ -289,7 +302,7 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
 `UI/DraftReviewView.swift`
     OS alert, Confirmation dialog, Menu, Popover
 `UI/FollowUpsView.swift`
-    Menu, Sheet
+    OS alert, Menu, Sheet
 `UI/OutcomePatternsView.swift`
     Popover, Sheet
 `UI/PrepSelectionSheet.swift`

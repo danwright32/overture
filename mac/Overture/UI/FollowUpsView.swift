@@ -22,6 +22,10 @@ struct FollowUpsView: View {
     // same RootView. #685: also carries the specific contact, so a multi-recipient show
     // highlights that one instead of just the whole card.
     var onOpenInArchive: (_ key: String, _ recipientId: String?) -> Void = { _, _ in }
+    // #2967: confirming a conversation reaches Gmail, so this sheet needs the same way back from a dead
+    // connection that every other consequential screen has. Defaulted to nothing only so a test can
+    // render the sheet without one; RootView passes its own `connectGmail`.
+    var onConnectGmail: () -> Void = {}
     // #682: the recipient Dan clicked "Send a follow-up" from on the Reached Out row, so this
     // sheet scrolls to and highlights that same entry instead of leaving him to find it again.
     // Clears RootView's own copy of the target once captured, so a later plain "Follow-ups" pill
@@ -30,6 +34,11 @@ struct FollowUpsView: View {
     // QueueView/ArchiveView's outboundSending/replySending, so this sheet's Send buttons get the
     // same live "Sending…" feedback instead of staying clickable during the send.
     @State private var sending: [String: Date] = [:]
+    // #2967: which contact's conversation is being linked right now. The same shape QueueView's Reached
+    // out row uses, and for the same reason: confirming reaches Gmail, so the control has to show three
+    // visibly different states (at rest, working, failed) rather than one indefinite spinner.
+    @State private var linkingConversationFor: String?
+    @State private var showReconnect = false
     // #976: the section at the top of the scroll, bound so the list holds its place while its rows
     // rebuild. `prospects` is a @Query, so a reply-classify or Prep run re-emits it and rebuilds this
     // sheet, and a plain ScrollView drops its offset to the top on each one (the #974 shape). Pinned to
@@ -37,7 +46,9 @@ struct FollowUpsView: View {
     // within. The recipient reveal below scrolls by a different identity (the contact's id), so this is
     // cleared when a reveal starts, letting proxy.scrollTo own that jump. Its own identity, not the
     // section's display title, so the scroll wiring never becomes a second copy of that copy (#843).
-    private enum ScrollSection: Hashable { case afterTheShow, silent, stalledReplyDrafts }
+    private enum ScrollSection: Hashable {
+        case afterTheShow, silent, stalledReplyDrafts, conversationsToConfirm
+    }
     @State private var topSection: ScrollSection?
 
     // #948: each pending send now carries the branded SendConfirmation the shared SendConfirmSheet
@@ -117,6 +128,19 @@ struct FollowUpsView: View {
                                 }
                                 .id(ScrollSection.stalledReplyDrafts)   // #976
                             }
+                            // #2967: above "After the show" on purpose. This asks whether somebody
+                            // replied at all, and the answer changes what a post-event prompt on the
+                            // same show should even say, so it is the question to settle first.
+                            if !listed.conversationsToConfirm.isEmpty {
+                                section(ProposedConversationCopy.section) {
+                                    ForEach(listed.conversationsToConfirm, id: \.recipient.id) { d in
+                                        conversationToConfirmRow(d, sourceCalendars: sourceCalendars,
+                                                                 now: now)
+                                        Divider()
+                                    }
+                                }
+                                .id(ScrollSection.conversationsToConfirm)   // #976
+                            }
                             if !listed.afterTheShow.isEmpty {
                                 section("After the show") {
                                     ForEach(listed.afterTheShow, id: \.recipient.id) { d in
@@ -157,7 +181,87 @@ struct FollowUpsView: View {
                              // #2575: the words in the box are the words that send.
                              onSendEdited: { performNudge(p.id, p.recipientId, body: $0) })
         }
+        // #2967: confirming reaches Gmail, so this sheet can meet a dead connection the same way the
+        // Reached out row can. The SHARED alert (#631), never a second wording, and it carries the
+        // Connect Gmail action rather than only the news, because a message naming what is wrong on a
+        // surface with no way to act on it leaves Dan where he started (L80).
+        .alert(GmailReconnectCopy.title, isPresented: $showReconnect) {
+            Button(GmailReconnectCopy.connect) { onConnectGmail() }
+            Button(GmailReconnectCopy.cancel, role: .cancel) {}
+        } message: {
+            Text(GmailReconnectCopy.afterLinkAttempt)
+        }
         .actionFeedbackBanner()
+    }
+
+    // #2967: the conversation Overture thinks might be their reply, with the two answers Dan can give
+    // it. The same question, the same words and the same two actions the Reached out row carries, from
+    // the same copy constants: the row moved here because the number counting it lands him here, and a
+    // second wording of one question is how two surfaces come to disagree about what is being asked.
+    @ViewBuilder
+    func conversationToConfirmRow(_ d: ProposedConversation.DueRecipient,
+                                  sourceCalendars: [String: String], now: Date) -> some View {
+        let candidate = d.candidate
+        VStack(alignment: .leading, spacing: 3) {
+            Text(d.prospect.groupName).font(OVType.groupName).foregroundStyle(OVColor.ink)
+            RowSourceLink(listingURL: d.prospect.sourceListingURL, sourceIds: d.prospect.sourceIds,
+                          calendars: sourceCalendars)
+            Text(ProposedConversationCopy.question).font(OVType.meta).foregroundStyle(OVColor.ink)
+            Text(ProposedConversationCopy.sender(name: candidate.fromName,
+                                                 address: candidate.fromAddress))
+                .font(.system(size: 10)).foregroundStyle(OVColor.ink)
+            Text(ProposedConversationCopy.detail(subject: candidate.subject,
+                                                 sentAt: candidate.sentAt, now: now))
+                .font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
+            // What confirming DOES, beside the control that does it, so what Dan approves is exactly
+            // what happens including who it reaches (L64).
+            Text(ProposedConversationCopy.confirmDetail(address: candidate.fromAddress))
+                .font(.system(size: 10)).foregroundStyle(OVColor.inkSoft)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: OVSpacing.sm) {
+                if linkingConversationFor == d.recipient.id {
+                    ProgressView().controlSize(.small)
+                    Text(ProposedConversationCopy.linking).font(OVType.meta)
+                        .foregroundStyle(OVColor.inkSoft)
+                } else {
+                    Button(ProposedConversationCopy.confirm) {
+                        linkProposedConversation(d.recipient, of: d.prospect)
+                    }
+                    .font(OVType.meta)
+                    Button(ProposedConversationCopy.decline) {
+                        declineProposedConversation(d.recipient)
+                    }
+                    .buttonStyle(.plain).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                }
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func linkProposedConversation(_ r: Recipient, of p: Prospect) {
+        linkingConversationFor = r.id
+        Task { @MainActor in
+            let outcome = await ConfirmProposedConversation().confirm(on: r, of: p, in: context)
+            linkingConversationFor = nil
+            switch outcome {
+            case .notConnected: showReconnect = true
+            case .failed(let reason), .refused(let reason):
+                feedback.acknowledge(reason, tone: .warning)
+            case .attached(_, let saveFailed):
+                feedback.acknowledge(saveFailed ? ProposedConversationCopy.couldNotSaveLink
+                                                : ProposedConversationCopy.linked,
+                                     tone: saveFailed ? .warning : .info)
+            }
+        }
+    }
+
+    private func declineProposedConversation(_ r: Recipient) {
+        ProposedConversation.decline(on: r)
+        do {
+            try context.save()
+        } catch {
+            feedback.acknowledge(ProposedConversationCopy.couldNotSaveLink, tone: .warning)
+        }
     }
 
     @ViewBuilder private func section<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {

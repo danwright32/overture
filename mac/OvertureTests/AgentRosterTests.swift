@@ -157,7 +157,14 @@ struct AgentRosterTests {
         #expect(AgentRoster.conceptSummary(for: .review).contains("read"))
         #expect(AgentRoster.conceptSummary(for: .review).contains("send"))
         #expect(AgentRoster.conceptSummary(for: .sendErrors).contains("sent") || AgentRoster.conceptSummary(for: .sendErrors).contains("send"))
-        #expect(AgentRoster.conceptSummary(for: .followUps).contains("reached out"))
+        // #2968: this pinned the words "reached out", which the sentence no longer uses. The property
+        // it was holding is that the sentence says these shows have already been PITCHED, which is what
+        // separates this pill from Scout and Prep; the exact phrase for that is copy, and pinning copy
+        // fails the first legitimate rewording of it (L103). The sentence must also no longer promise
+        // only nudges, which is #2968 itself, so that half is asserted too.
+        #expect(AgentRoster.conceptSummary(for: .followUps).contains("pitched"))
+        #expect(!AgentRoster.conceptSummary(for: .followUps).hasPrefix("Nudges"),
+                "the Follow-ups sentence names nudges as the whole of what this pill holds (#2968)")
     }
 
     // #2654: there is no longer an "unknown name" to be empty for. The lookup is keyed on `StageFocus`,

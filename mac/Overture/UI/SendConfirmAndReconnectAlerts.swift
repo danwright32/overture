@@ -26,11 +26,13 @@ private struct SendConfirmAndReconnectAlerts: ViewModifier {
                     onSendSelection: pending.onSendSelection
                 )
             }
-            .alert("Reconnect Gmail", isPresented: $showReconnect) {
-                Button("Connect Gmail") { onConnectGmail() }
-                Button("Cancel", role: .cancel) {}
+            // #2967: the words moved to GmailReconnectCopy once a second screen needed them. What
+            // differs between the two is only what was LOST, which is why that half is not shared.
+            .alert(GmailReconnectCopy.title, isPresented: $showReconnect) {
+                Button(GmailReconnectCopy.connect) { onConnectGmail() }
+                Button(GmailReconnectCopy.cancel, role: .cancel) {}
             } message: {
-                Text("Your Gmail access has expired or was revoked, so nothing was sent. Click Connect Gmail to reconnect, then try Send again.")
+                Text(GmailReconnectCopy.afterSend)
             }
     }
 }

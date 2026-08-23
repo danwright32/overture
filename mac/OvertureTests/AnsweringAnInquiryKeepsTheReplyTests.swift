@@ -183,7 +183,7 @@ struct AnsweringAnInquiryKeepsTheReplyTests {
         let inq = repliedTo(ctx)
 
         func due() -> Int {
-            AgentInputs.from(prospects: [], inquiries: [inq],
+            AgentInputs.from(prospects: [], allProspects: [], inquiries: [inq],
                              context: .at("2026-08-18", now: day("2026-08-18")),
                              gmailConnected: true, runInFlight: nil, replyRunAlive: false).reachedOutDue
         }
