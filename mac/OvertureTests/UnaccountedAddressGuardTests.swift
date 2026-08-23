@@ -54,7 +54,7 @@ struct UnaccountedAddressGuardTests {
     // every one of them must stay untouched.
     @Test func acitedPageAccountsForTheAddress() {
         #expect(!fires(email: "jed@rosegroupny.com", name: "Marisol Quenneville",
-                       sourceURL: "https://tatiannacordoba.com/contact"))
+                       sourceURL: "https://marisolquenneville.example/contact"))
         // Whitespace is not a citation, so a blank string cannot buy an exemption.
         #expect(fires(email: "jed@rosegroupny.com", name: "Marisol Quenneville", sourceURL: "   "))
     }

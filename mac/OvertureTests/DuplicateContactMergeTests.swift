@@ -161,7 +161,7 @@ struct DuplicateContactMergeTests {
         let ctx = ModelContext(try container())
         let p = show(ctx)
         add(p, name: "Nessa Halloway", formURL: "https://www.instagram.com/nessaehalloway/")
-        add(p, name: "Nessa Halloway", formURL: "https://www.maggiestephens.example/contact")
+        add(p, name: "Nessa Halloway", formURL: "https://www.nessahalloway.example/contact")
         add(p, name: "Nessa Halloway", email: "nessa@example.test")
         try ctx.save()
 
@@ -169,7 +169,7 @@ struct DuplicateContactMergeTests {
         let kept = try #require(p.recipients.first)
         #expect(p.recipients.count == 1)
         #expect(kept.email == "nessa@example.test")
-        #expect(kept.contactFormURL == "https://www.maggiestephens.example/contact",
+        #expect(kept.contactFormURL == "https://www.nessahalloway.example/contact",
                 "of her two forms the one on her own site survived")
     }
 
@@ -208,11 +208,11 @@ struct DuplicateContactMergeTests {
         let ctx = ModelContext(try container())
         let p = show(ctx)
         add(p, name: "Nessa Halloway", formURL: "https://www.instagram.com/nessaehalloway/")
-        add(p, name: "Nessa Halloway", formURL: "https://www.maggiestephens.example/contact")
+        add(p, name: "Nessa Halloway", formURL: "https://www.nessahalloway.example/contact")
         try ctx.save()
 
         #expect(DuplicateContactMerge.reconcile(p, in: ctx) == 1)
-        #expect(p.recipients.first?.contactFormURL == "https://www.maggiestephens.example/contact")
+        #expect(p.recipients.first?.contactFormURL == "https://www.nessahalloway.example/contact")
     }
 
     // The whole-store entry point reports what it did, so a launch that reconciled something can say so
