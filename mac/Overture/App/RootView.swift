@@ -1310,6 +1310,19 @@ struct RootView: View {
         }
     }
 
+    // DEBUG ONLY (#2968): a show pitched and then cut, whose nudge falls due afterwards. It is the one
+    // state that decides whether a dismissal stops Overture asking for work, and it is only readable on
+    // screen, so there has to be a way to put it there.
+    private func debugStageDismissedAfterEmailed() {
+        let p = DebugStaging.stageDismissedAfterEmailed(in: context, now: Date())
+        do {
+            try context.save()
+            status.set("DEBUG: staged '\(p.groupName)', pitched then dismissed. Open Follow-ups to see whether it is still counted")
+        } catch {
+            status.set("DEBUG stage failed: \(error.localizedDescription)")
+        }
+    }
+
     private func debugStageReprepQueuedDraft() {
         let p = DebugStaging.stageReprepQueuedDraft(in: context, now: Date())
         do {
@@ -2386,6 +2399,7 @@ struct RootView: View {
         Button("Stage re-prep-queued draft") { debugStageReprepQueuedDraft() }
         Button("Stage reachability competition (best-contact highlight)") { debugStageReachabilityCompetition() }
         Button("Stage form-pitch shows (copy-and-confirm, and one already recorded)") { debugStageFormPitchScenario() }
+        Button("Stage show dismissed after it was emailed (#2968)") { debugStageDismissedAfterEmailed() }
         Button("Clear debug leads") { debugClearDebugLeads() }
     }
     #endif

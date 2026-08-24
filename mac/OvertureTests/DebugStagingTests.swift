@@ -465,5 +465,54 @@ final class DebugStagingTests {
 
         #expect((try ctx.fetchCount(FetchDescriptor<Prospect>())) == 0)
     }
+
+    // MARK: - #2968: the show dismissed after it was emailed
+
+    // The one state #2968 turns on, which a near-empty Debug store cannot otherwise reach: a show Dan
+    // pitched, then cut, whose nudge falls due afterwards. It decides whether a dismissal stops Overture
+    // asking for work, and the answer is only readable on screen, so there has to be a way to put it
+    // there (#1245 is the same affordance for two other invisible states).
+    @Test @MainActor func stagesAShowDismissedAfterItWasEmailed() throws {
+        let ctx = try makeInMemoryContext()
+        let now = Date(timeIntervalSince1970: 1_780_000_000)
+
+        let p = DebugStaging.stageDismissedAfterEmailed(in: ctx, now: now)
+        try ctx.save()
+
+        #expect(p.status == .dismissed, "the show is not dismissed, so this is not the state at all")
+        #expect(p.showOutcome != nil, "a dismissal records the ending it was cut for")
+        #expect(p.sentAt != nil, "a show nobody emailed cannot owe a follow-up")
+        #expect(p.recipients.count == 1)
+        #expect(p.recipients[0].gmailMessageId != nil,
+                "outreach with no message id is not provably sent, so nothing downstream reads it")
+    }
+
+    // The POSITIVE control, in the same fixture, because a scenario that stages the right rows and
+    // produces no due work would be indistinguishable from one that works while asserting nothing
+    // (L159). This is what the two states differ about: today it is 1, and under Dan's 2026-08-21 call
+    // it would be 0.
+    @Test @MainActor func theDismissedShowReallyDoesOweAFollowUpToday() throws {
+        let ctx = try makeInMemoryContext()
+        let now = Date(timeIntervalSince1970: 1_780_000_000)
+
+        _ = DebugStaging.stageDismissedAfterEmailed(in: ctx, now: now)
+        try ctx.save()
+        let all = try ctx.fetch(FetchDescriptor<Prospect>())
+
+        #expect(FollowUp.dueRecipients(from: all, now: now).count == 1,
+                "the staged show owes no nudge, so the screen it exists to show would be empty")
+        #expect(DueWork.rows(prospects: all, now: now, replyRunAlive: false).rendered == 1,
+                "the Follow-ups sheet draws no row for it, which is the surface the question is about")
+    }
+
+    @Test @MainActor func clearDebugLeadsRemovesTheDismissedShow() throws {
+        let ctx = try makeInMemoryContext()
+        _ = DebugStaging.stageDismissedAfterEmailed(in: ctx, now: Date())
+        try ctx.save()
+
+        DebugStaging.clearDebugLeads(in: ctx)
+
+        #expect((try ctx.fetchCount(FetchDescriptor<Prospect>())) == 0)
+    }
 }
 #endif
