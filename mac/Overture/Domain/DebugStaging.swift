@@ -382,6 +382,53 @@ enum DebugStaging {
         return [a, b]
     }
 
+    // #2968: the show Dan pitched and then CUT, whose nudge falls due afterwards.
+    //
+    // The question it exists to make visible is a product one and only readable on screen: does a
+    // dismissal stop Overture asking for work on that show, or does the conversation with a real person
+    // outlive the decision against the event? Today every surface counts it (the pill, the sheet header,
+    // the toolbar badge, the Dock tile and the menu bar are one number since #3142); Dan's 2026-08-21
+    // call on #2968 was that it should count nowhere.
+    //
+    // A near-empty Debug store cannot reach this state by any ordinary route: it needs a real send, a
+    // wait past the follow-up gap, and a dismissal in that order. Same reason #1245 staged its two.
+    //
+    // The show sits AHEAD of the date deliberately. A show that has already been and gone is a
+    // `PostEventPrompt`, and that path refuses a dismissed show outright (#238), so it cannot show the
+    // disagreement this is about. The silent nudge is the only half where it arises.
+    @discardableResult
+    static func stageDismissedAfterEmailed(in context: ModelContext, now: Date) -> Prospect {
+        let stamp = Int(now.timeIntervalSince1970)
+        let key = "debug-of-dismissed-\(stamp)"
+        let sentAt = now.addingTimeInterval(-30 * 86_400)
+
+        let p = Prospect(naturalKey: key, groupName: "Ninefold Consort (debug)", discipline: "music",
+                         venue: "Jalopy Theatre",
+                         performanceDate: EasternDate.dayString(from: now.addingTimeInterval(30 * 86_400)),
+                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                         production: "self", profile: "strong", coverage: "likely_uncovered",
+                         fitScore: 7, tier: "high", fitReason: "debug dismissed after emailing",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                         status: .contacted)
+        p.sentAt = sentAt
+        // The same synthetic id every other staged send uses: proof of a real send for everything
+        // downstream, and unmistakable for a Gmail one.
+        p.gmailMessageId = "debug-\(key)-\(stamp)"
+        context.insert(p)
+
+        let r = Recipient(id: "dismissed@debug.example", email: "dismissed@debug.example",
+                          name: "Wren Adler (debug)", provenance: .act)
+        r.sendState = .sent
+        r.sentAt = sentAt
+        r.gmailMessageId = "debug-\(r.id)-\(stamp)"
+        p.setRecipients([r])
+
+        // Cut AFTER the pitch went out, which is the whole shape. A recorded ending rather than a bare
+        // status, because that is what every path through `markDismissed` produces.
+        p.markDismissed(reason: .notAFit, at: now.addingTimeInterval(-14 * 86_400))
+        return p
+    }
+
     // A plain-ASCII HTML signature in Dan's brand colors, clean enough to pass GmailSignatureHealth so it
     // is actually cached and the #1203 styled preview has something to render.
     static let demoSignatureHTML =

@@ -181,26 +181,90 @@ struct OneDueNumberTests {
         #expect(pill.detail != "None due", "the pill says nothing is due over a sheet with rows in it")
     }
 
-    // A show Dan dismissed AFTER emailing it. The pill was built from the queue's prospects, which
-    // exclude dismissed shows, while the sheet and the badge query everything, so this show was work on
-    // one surface and invisible on another. The conversation is with a real person either way, and
-    // closing it out is the thing still owed, so the pill counts it too.
-    @Test func aDismissedShowThatWasEmailedIsCountedByThePillAsWellAsTheSheet() throws {
+    // A show Dan dismissed AFTER emailing it owes NOTHING.
+    //
+    // Dan's call, 2026-08-23: "if I dismiss it after emailing, no nudges". His reasoning, recorded on
+    // #2968 on 2026-08-21: the dismissal was a decision against the show, so it stops asking for work.
+    // That does not silence the person, because a reply from them still arrives on its own path and
+    // still reaches him (#2910), which is what makes the exclusion safe rather than a way of losing
+    // them.
+    //
+    // This REPLACES `aDismissedShowThatWasEmailedIsCountedByThePillAsWellAsTheSheet`, which asserted
+    // the opposite. That test was not adjusted, because its whole content was the behaviour this
+    // decision removes, and a guard kept over a reversed decision defends the defect (the same reason
+    // #2967 deleted `everyMemberOfTheHeaderCountHasASectionExceptTheOneFiledElsewhere` rather than
+    // editing it).
+    //
+    // A SILENT follow-up rather than a post-event prompt, because `PostEventPrompt.nextPromptDate`
+    // refuses a dismissed show outright (#238) already. The silent nudge was the one half with no such
+    // guard, which is why it is the half this fixture builds.
+    @Test func aDismissedShowThatWasEmailedOwesNothingOnAnySurface() throws {
         let context = try makeContext()
-        // A SILENT follow-up rather than a post-event prompt, because `PostEventPrompt.nextPromptDate`
-        // refuses a dismissed show outright (#238) and that half of #2968's premise therefore cannot
-        // arise. `FollowUp.dueRecipients` has no such guard, so this half can and does.
         let p = silentFollowUp(context, key: "dismissed")
-        p.status = .dismissed
+        p.markDismissed(reason: .notAFit, at: now)
         let all = try allProspects(context)
         let queue = all.filter { $0.status != .dismissed }
 
         #expect(queue.isEmpty, "the queue's own list drops this show, which is the premise of #2968")
-        #expect(rows(all).rendered == 1)
+        #expect(FollowUp.dueRecipients(from: all, now: now).isEmpty,
+                "a show Dan cut is still asking to be nudged")
+        #expect(rows(all).rendered == 0,
+                "the Follow-ups sheet draws \(rows(all).rendered) row(s) for a show Dan already cut")
 
         let pill = followUpsPill(queue, all: all)
-        #expect(pill.count == 1,
-                "the pill counts \(pill.count) while the sheet and the toolbar behind it draw 1 row")
+        #expect(pill.count == 0, "the pill counts \(pill.count) on a show Dan already cut")
+        #expect(pill.detail == "None due")
+    }
+
+    // The POSITIVE control, in the same fixture and on the same row: undismissed, it really is due. A
+    // test that asserts nothing is owed is satisfied by a fixture in which nothing could ever be owed
+    // (L159), and that would pass just as well if `dueRecipients` had simply stopped working.
+    @Test func theSameShowUndismissedIsStillDue() throws {
+        let context = try makeContext()
+        _ = silentFollowUp(context, key: "dismissed")
+        let all = try allProspects(context)
+
+        #expect(FollowUp.dueRecipients(from: all, now: now).count == 1,
+                "the fixture owes no nudge even undismissed, so the test above asserts nothing")
+        #expect(rows(all).rendered == 1)
+        #expect(followUpsPill(all, all: all).count == 1)
+    }
+
+    // The OTHER half of the same decision, and the reason the guard is not simply applied everywhere.
+    //
+    // Dan's words on #2968: a dismissal "does not silence the person. A reply from them still arrives on
+    // its own path and still reaches him (#2910)". So the rule is about DIRECTION, not about the show:
+    // a dismissal stops OVERTURE reaching out (a nudge, and a post-event prompt, which #238 already
+    // refuses), and leaves untouched anything that exists because SOMEBODY REACHED IN.
+    //
+    // Both remaining members of the Due count are on the reaching-in side: a conversation to confirm is
+    // a candidate reply awaiting his yes or no, and a stalled reply draft only exists because a reply
+    // arrived and he asked for help answering it. Neither takes the dismissed guard, and that is a
+    // decision with a reason rather than an omission (L129). Asserted here so the next person to notice
+    // the asymmetry finds the rule instead of "fixing" it.
+    @Test func aDismissalSilencesTheNudgeAndNotTheReply() throws {
+        let context = try makeContext()
+        let confirm = conversationToConfirm(context, key: "confirmdismissed")
+        confirm.markDismissed(reason: .notAFit, at: now)
+        let stalled = stalledReplyDraft(context, key: "stalleddismissed")
+        stalled.markDismissed(reason: .notAFit, at: now)
+        // A dismissed SILENT lead in the same store, so the nudge assertion below discriminates. Without
+        // it that line is vacuous: a form pitch is not on the email channel and a replied contact is not
+        // silent, so neither of the two rows above could owe a nudge whether the guard exists or not,
+        // and the test would pass just as well with the guard deleted (L159). Measured: it did.
+        let silent = silentFollowUp(context, key: "silentdismissed")
+        silent.markDismissed(reason: .notAFit, at: now)
+        let all = try allProspects(context)
+        let listed = rows(all)
+
+        #expect(listed.conversationsToConfirm.count == 1,
+                "a possible reply stopped being asked about because the show was cut, which loses the person")
+        #expect(listed.stalledReplyDrafts.count == 1,
+                "a reply Dan asked for help answering vanished because the show was cut")
+        // The nudge half really is silenced IN THE SAME STORE, so this asserts a difference rather than
+        // passing because the guard does nothing at all.
+        #expect(FollowUp.dueRecipients(from: all, now: now).isEmpty,
+                "the dismissed silent lead is still asking to be nudged")
     }
 
     // #2967 state 2: one form pitch on a show that has been and gone is in `afterTheShow` and in

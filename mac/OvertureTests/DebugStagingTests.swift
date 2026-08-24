@@ -465,5 +465,66 @@ final class DebugStagingTests {
 
         #expect((try ctx.fetchCount(FetchDescriptor<Prospect>())) == 0)
     }
+
+    // MARK: - #2968: the show dismissed after it was emailed
+
+    // The one state #2968 turns on, which a near-empty Debug store cannot otherwise reach: a show Dan
+    // pitched, then cut, whose nudge falls due afterwards. It decides whether a dismissal stops Overture
+    // asking for work, and the answer is only readable on screen, so there has to be a way to put it
+    // there (#1245 is the same affordance for two other invisible states).
+    @Test @MainActor func stagesAShowDismissedAfterItWasEmailed() throws {
+        let ctx = try makeInMemoryContext()
+        let now = Date(timeIntervalSince1970: 1_780_000_000)
+
+        let p = DebugStaging.stageDismissedAfterEmailed(in: ctx, now: now)
+        try ctx.save()
+
+        #expect(p.status == .dismissed, "the show is not dismissed, so this is not the state at all")
+        #expect(p.showOutcome != nil, "a dismissal records the ending it was cut for")
+        #expect(p.sentAt != nil, "a show nobody emailed cannot owe a follow-up")
+        #expect(p.recipients.count == 1)
+        #expect(p.recipients[0].gmailMessageId != nil,
+                "outreach with no message id is not provably sent, so nothing downstream reads it")
+    }
+
+    // What the scenario is FOR, now that Dan has decided it (2026-08-23: "if I dismiss it after
+    // emailing, no nudges"). The staged show owes nothing, and the fixture is only worth anything if it
+    // WOULD have owed a nudge but for the dismissal: a scenario that stages a row too young, or on the
+    // wrong channel, would produce the same zero while proving nothing at all (L159).
+    //
+    // This replaces `theDismissedShowReallyDoesOweAFollowUpToday`, which asserted the count was 1. That
+    // was written earlier the same day, before the decision, and its content was the behaviour the
+    // decision reverses.
+    @Test @MainActor func theStagedShowOwesNothingAndWouldHaveButForTheDismissal() throws {
+        let ctx = try makeInMemoryContext()
+        let now = Date(timeIntervalSince1970: 1_780_000_000)
+
+        let p = DebugStaging.stageDismissedAfterEmailed(in: ctx, now: now)
+        try ctx.save()
+        let all = try ctx.fetch(FetchDescriptor<Prospect>())
+
+        #expect(FollowUp.dueRecipients(from: all, now: now).isEmpty,
+                "a show Dan cut is still asking to be nudged")
+        #expect(DueWork.rows(prospects: all, now: now, replyRunAlive: false).rendered == 0,
+                "the Follow-ups sheet still draws a row for a show Dan already cut")
+
+        // Undismissed, the same row is genuinely due, so the zero above is the guard doing its job
+        // rather than a fixture that could never owe anything.
+        p.clearDismissal(to: .contacted)
+        try ctx.save()
+        let restored = try ctx.fetch(FetchDescriptor<Prospect>())
+        #expect(FollowUp.dueRecipients(from: restored, now: now).count == 1,
+                "the staged show owes no nudge even undismissed, so it proves nothing about the guard")
+    }
+
+    @Test @MainActor func clearDebugLeadsRemovesTheDismissedShow() throws {
+        let ctx = try makeInMemoryContext()
+        _ = DebugStaging.stageDismissedAfterEmailed(in: ctx, now: Date())
+        try ctx.save()
+
+        DebugStaging.clearDebugLeads(in: ctx)
+
+        #expect((try ctx.fetchCount(FetchDescriptor<Prospect>())) == 0)
+    }
 }
 #endif
