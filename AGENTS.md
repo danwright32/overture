@@ -599,6 +599,31 @@ already drifting from the Swift version it mirrored.
   must never give, since the reading it exists to support is "was this run short?", so it prints
   `Suite shape: NOT REPORTED` and names the restart instead of summing across a crash, and such a
   run can no longer record its own count as the baseline the short-run gate measures against.
+  **Since #2991 a second line beside it says whether the LIVE STORE invariants measured anything.**
+  `ReplyInvariantsLiveStoreTests` prints a corpus line every run giving how many rows each of its
+  invariants could examine, and measured 2026-08-19 it read `0 with a reply still open, 0 reached-out
+  rows in play`: both passed having asserted nothing about anything, and the only thing separating that
+  from a clean bill of health was a printed line thousands of lines up a log nobody reads. That is L182
+  exactly, and this one goes to zero precisely when Dan finishes his outreach work, so it can sit there
+  for months. What is dormant is not the RULE (the synthetic suite still has teeth, confirmed by
+  mutation) but the ability to notice an unforeseen SHAPE in his real data, which is the whole reason
+  the live suite exists (#2150). Four states, kept apart because an unmeasured check and a passed one
+  look identical from silence (L11): `measuring` with both counts, `PARTLY DORMANT` naming WHICH half
+  had no rows and giving the other's real count, `DORMANT` when neither did, and `NOT REPORTED` when
+  the run carried no corpus line at all. That last one is the one to read carefully: it is what a
+  SCOPED run produces, and treating its absence as nothing to report would make the emptiest possible
+  failure look like the cleanest possible pass (L98).
+  **It also says HOW LONG**, which is the half worth acting on: "both measured nothing today" is much
+  weaker than "neither has measured anything since May (114 days)", because only the second says
+  whether to care. That needs a record, `.overture-live-corpus-seen` beside the repo, gitignored and
+  per machine on the exact precedent of `.overture-eval-last-run` (#1867). Two things about it are
+  load bearing. The DATE lives INSIDE the file rather than being its mtime, because a clone rewrites
+  every mtime and would reset the dormancy to zero, which is the one number this must never get wrong.
+  And a run only WRITES the invariant it actually measured: a dormant run leaves the record alone, and
+  a run with no corpus line leaves it alone too, or the last real measurement would be stamped over
+  every run and the duration would always read zero, which is the defect wearing a date. Both refusals
+  are pure (`live_corpus_seen_update` returns the new contents, the caller only writes them) and both
+  were seen to fail.
   Since #2600 a FAILING run then reprints xcodebuild's own `Failing tests:` block, with a count, as
   the last thing on screen. Read that rather than searching the log: a failure raised by
   `Issue.record` prints only `recorded an issue` while an `#expect` prints `Expectation failed:`, so

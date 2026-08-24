@@ -268,6 +268,124 @@ assert_eq "an ordinary run is unaffected by the new argument being absent" \
   "$(format_suite_report "6177 878 106.868" "1.66" "1204" "5980")" \
   "Suite shape: 6177 tests in 878 suites, 106.868s. Test Swift to app Swift 1.66 to 1. Source-text guards are 1204 of 5980 test declarations."
 
+# ---------------------------------------------------------------------------
+# live_corpus_report: whether the live store invariants measured anything (#2991)
+# ---------------------------------------------------------------------------
+# `ReplyInvariantsLiveStoreTests` prints a corpus line every run saying how many rows each of its
+# invariants could examine. Measured 2026-08-19 it read `0 with a reply still open, 0 reached-out rows
+# in play`, so both invariants passed having asserted nothing about anything, and the only thing
+# separating that from a clean bill of health was a printed line in a test log nobody is scheduled to
+# read. That is L182 exactly: a count driven to zero stops being read as a measurement and starts
+# being read as proof the thing cannot occur.
+#
+# So the state is stated in the readout AGENTS.md names as THE reference line for a finished run, in
+# three states kept apart, because an unmeasured check and a passed one look identical from silence
+# (L11).
+
+CORPUS_LIVE="LIVE STORE CORPUS: 936 shows, 4 replied rows, 3 with a reply still open, 5 reached-out rows in play. A zero here means the invariants in this suite ran over nothing."
+CORPUS_DORMANT="LIVE STORE CORPUS: 936 shows, 4 replied rows, 0 with a reply still open, 0 reached-out rows in play. A zero here means the invariants in this suite ran over nothing."
+CORPUS_HALF="LIVE STORE CORPUS: 936 shows, 4 replied rows, 0 with a reply still open, 5 reached-out rows in play. A zero here means the invariants in this suite ran over nothing."
+
+# The clock and the record are PASSED IN, never read inside, so a test can pin both. This repo passes
+# `now` explicitly everywhere for that reason, and a duration read off a hidden clock is one no test
+# can hold still (L130).
+TODAY="2026-08-23"
+SEEN_BOTH="open=2026-06-14
+reached=2026-08-19"
+SEEN_NEITHER=""
+
+assert_eq "a corpus with rows in it says what each invariant measured" \
+  "$(live_corpus_report "${CORPUS_LIVE}" "${TODAY}" "${SEEN_BOTH}")" \
+  "Live store invariants: measuring, over 3 open replies and 5 reached-out rows in play."
+
+# #2991 asked for the DURATION, not only the state. "Both measured nothing today" is much weaker than
+# "neither has measured anything since June": only the second says whether to care, and the whole
+# defect is a zero that stops being read as a measurement (L182).
+assert_eq "a dormant pair says how long each has been asleep" \
+  "$(live_corpus_report "${CORPUS_DORMANT}" "${TODAY}" "${SEEN_BOTH}")" \
+  "Live store invariants: DORMANT. The open-reply invariant has measured nothing since 2026-06-14 (70 days), the reached-out one since 2026-08-19 (4 days), so both passed having asserted nothing about Dan's real data (#2991, L182)."
+
+# A clone with no record yet must say THAT, not guess a date and not fall silent. An unrecorded
+# duration and a short one are different facts (L11).
+assert_eq "a dormant pair with nothing recorded says so rather than inventing a date" \
+  "$(live_corpus_report "${CORPUS_DORMANT}" "${TODAY}" "${SEEN_NEITHER}")" \
+  "Live store invariants: DORMANT. The open-reply invariant has measured nothing for as long as this clone has recorded, the reached-out one for as long as this clone has recorded, so both passed having asserted nothing about Dan's real data (#2991, L182)."
+
+# Half dormant is its own state and names WHICH half, because one invariant still having teeth is not
+# the same fact as neither having any, and a message covering both would be true of neither.
+assert_eq "one dormant invariant is named, with its own duration" \
+  "$(live_corpus_report "${CORPUS_HALF}" "${TODAY}" "${SEEN_BOTH}")" \
+  "Live store invariants: PARTLY DORMANT. The open-reply invariant has measured nothing since 2026-06-14 (70 days); the reached-out one measured 5 this run (#2991, L182)."
+
+# The state that must never read as clean: no corpus line at all. That is what a scoped run produces,
+# and what a rename of the test would produce, and the emptiest possible failure must not look like
+# the cleanest possible pass (L98).
+assert_eq "no corpus line at all is unmeasured, never clean" \
+  "$(live_corpus_report "" "${TODAY}" "${SEEN_BOTH}")" \
+  "Live store invariants: NOT REPORTED. This run printed no corpus line, so whether they measured anything is unknown; a scoped run does not include them."
+
+assert_eq "a run whose output simply never mentions the corpus is unmeasured too" \
+  "$(live_corpus_report "$(printf '%s\n' 'Test run with 10 tests in 1 suite passed after 0.029 seconds.')" "${TODAY}" "${SEEN_BOTH}")" \
+  "Live store invariants: NOT REPORTED. This run printed no corpus line, so whether they measured anything is unknown; a scoped run does not include them."
+
+# It reads the line out of a whole run's output, not just a line handed to it on its own, which is how
+# it is really called.
+assert_eq "the corpus line is found inside a full run's output" \
+  "$(live_corpus_report "$(printf '%s\n%s\n%s\n' 'some noise' "${CORPUS_DORMANT}" 'more noise')" "${TODAY}" "${SEEN_BOTH}")" \
+  "Live store invariants: DORMANT. The open-reply invariant has measured nothing since 2026-06-14 (70 days), the reached-out one since 2026-08-19 (4 days), so both passed having asserted nothing about Dan's real data (#2991, L182)."
+
+# ---------------------------------------------------------------------------
+# live_corpus_seen_update: what gets REMEMBERED, kept pure so the rules are testable
+# ---------------------------------------------------------------------------
+# The merge is a pure function returning the file's new contents; the call site only writes what it
+# returns. That is what lets every rule below be checked without touching a file.
+
+# A run that MEASURED something stamps that invariant with today's date. Only that one: the other's
+# last-measured date is the whole thing being preserved.
+assert_eq "an invariant that measured something is stamped with today" \
+  "$(live_corpus_seen_update "${CORPUS_HALF}" "${TODAY}" "${SEEN_BOTH}")" \
+  "open=2026-06-14
+reached=2026-08-23"
+
+assert_eq "both are stamped when both measured" \
+  "$(live_corpus_seen_update "${CORPUS_LIVE}" "${TODAY}" "${SEEN_BOTH}")" \
+  "open=2026-08-23
+reached=2026-08-23"
+
+# The case the whole feature rests on: a run where neither measured anything must CHANGE NOTHING, or
+# the record would be overwritten with today every single run and the duration would always read zero,
+# which is the defect wearing a date.
+assert_eq "a dormant run stamps nothing at all" \
+  "$(live_corpus_seen_update "${CORPUS_DORMANT}" "${TODAY}" "${SEEN_BOTH}")" \
+  "${SEEN_BOTH}"
+
+# And a run that took no reading is not evidence about anything, so it must not write either. A scoped
+# run produces exactly this, and it happens constantly.
+assert_eq "a run with no corpus line leaves the record untouched" \
+  "$(live_corpus_seen_update "" "${TODAY}" "${SEEN_BOTH}")" \
+  "${SEEN_BOTH}"
+
+# A first record on a fresh clone is written, rather than needing a file to already exist.
+assert_eq "a first measurement records itself on a clone with no file" \
+  "$(live_corpus_seen_update "${CORPUS_LIVE}" "${TODAY}" "${SEEN_NEITHER}")" \
+  "open=2026-08-23
+reached=2026-08-23"
+
+# ---------------------------------------------------------------------------
+# days_since: the duration, and its refusal
+# ---------------------------------------------------------------------------
+
+assert_eq "a duration is whole days between the two dates" \
+  "$(days_since "2026-06-14" "2026-08-23")" "70"
+
+assert_eq "the same day is zero days, not blank" \
+  "$(days_since "2026-08-23" "2026-08-23")" "0"
+
+# A date it cannot read produces NOTHING rather than a zero, because zero days is a measurement and an
+# unreadable date is not one (L11).
+assert_eq "an unreadable date yields no duration rather than a zero" \
+  "$(days_since "not-a-date" "2026-08-23")" ""
+
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All suite-stats.sh fixtures passed."
   exit 0
