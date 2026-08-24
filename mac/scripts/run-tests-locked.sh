@@ -641,6 +641,38 @@ main() {
   echo >&2
   echo "run-tests-locked.sh: $(suite_report_for_run "${last_output}" "${MAC_DIR}")" >&2
 
+  # #2991: and whether the LIVE store invariants measured anything, AND FOR HOW LONG THEY HAVE NOT,
+  # beside the shape rather than buried thousands of lines up in the log. The corpus line has been
+  # printed since #2986; nobody was scheduled to read it, and it sat at zero on both invariants
+  # (measured 2026-08-19) while they passed. A zero nobody reads stops being a measurement and becomes
+  # proof the thing cannot occur (L182), which is the one reading this must never allow.
+  #
+  # The duration is the half worth acting on, and it needs a record. That record lives beside the
+  # repo, is per machine by nature (it records what ran HERE), and is gitignored, on the exact
+  # precedent of `.overture-eval-last-run` (#1867). The DATE lives INSIDE the file rather than being
+  # its modification time, for that file's own reason: a clone rewrites every mtime, so an mtime would
+  # reset the dormancy to zero the first time anyone cloned, which is the one number this must never
+  # get wrong.
+  #
+  # The clock is computed HERE and passed in, so the reporting itself stays pure and its fixture can
+  # pin both ends (L130).
+  # OVERRIDABLE, and that is not a convenience. This fixture drives the REAL wrapper, so without a seam
+  # its "measuring" case wrote a record into the actual repository root, claiming both invariants had
+  # measured rows on a day the live store held none. A test must be structurally unable to write into
+  # the live tree (L2), and a default that only the fixture can move is what makes that structural
+  # rather than remembered. Caught by reading the file after a run, not by any check.
+  LIVE_CORPUS_RECORD="${OVERTURE_LIVE_CORPUS_RECORD:-${MAC_DIR}/../.overture-live-corpus-seen}"
+  LIVE_CORPUS_TODAY="$(date +%Y-%m-%d)"
+  LIVE_CORPUS_SEEN="$(cat "${LIVE_CORPUS_RECORD}" 2>/dev/null || true)"
+  echo "run-tests-locked.sh: $(live_corpus_report "${last_output}" "${LIVE_CORPUS_TODAY}" "${LIVE_CORPUS_SEEN}")" >&2
+  # Written only when this run actually measured something. `live_corpus_seen_update` decides that and
+  # returns the whole new contents, so a dormant run and a scoped run both come back unchanged and the
+  # last real measurement is preserved rather than stamped over.
+  LIVE_CORPUS_NEXT="$(live_corpus_seen_update "${last_output}" "${LIVE_CORPUS_TODAY}" "${LIVE_CORPUS_SEEN}")"
+  if [[ -n "${LIVE_CORPUS_NEXT}" && "${LIVE_CORPUS_NEXT}" != "${LIVE_CORPUS_SEEN}" ]]; then
+    printf '%s\n' "${LIVE_CORPUS_NEXT}" > "${LIVE_CORPUS_RECORD}" 2>/dev/null || true
+  fi
+
   # #2322: no test started at all, and the evidence says the machine rather than the change. Said
   # before the crash branch below, and INSTEAD of it, because a crashed host and a machine that
   # cannot start any test want different actions and must never share one message.

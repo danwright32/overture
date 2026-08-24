@@ -166,6 +166,147 @@ format_suite_report() {
   echo "${out}"
 }
 
+# #2991: whether the live store invariants measured anything, and for HOW LONG they have not.
+#
+# `ReplyInvariantsLiveStoreTests` prints a corpus line every run giving how many rows each of its
+# invariants could examine. Measured 2026-08-19 it read `0 with a reply still open, 0 reached-out rows
+# in play`: both passed having asserted nothing about anything, and the only thing separating that
+# from a clean bill of health was a printed line thousands of lines up a log nobody reads.
+#
+# That is L182 exactly. A count driven to zero stops being read as a measurement and starts being read
+# as proof the thing cannot occur, and this one goes to zero precisely when Dan finishes his outreach
+# work, so it can sit there for months. What is dormant is not the RULE (the synthetic suite still has
+# teeth) but the ability to notice an unforeseen SHAPE in his real data, which is the whole reason the
+# live suite exists (#2150).
+#
+# The DURATION is the half worth acting on. "Both measured nothing today" is much weaker than "neither
+# has measured anything since June": only the second says whether to care.
+#
+# Four states, kept apart, because an unmeasured check and a passed one look identical from silence
+# (L11), and because one invariant still having teeth is a different fact from neither having any:
+#
+#   measuring        both invariants had rows to examine
+#   PARTLY DORMANT   one had none; it is NAMED, with its own duration, and the other's real count given
+#   DORMANT          neither had any, each with its own duration
+#   NOT REPORTED     no corpus line in this run at all
+#
+# NOT REPORTED is the one that matters, and it is not hypothetical: a scoped run does not include this
+# suite, and so produces no line. Reading that absence as "nothing to report" would make the emptiest
+# possible failure look like the cleanest possible pass (L98).
+#
+# The clock and the record are PASSED IN, never read inside. This repo passes `now` explicitly
+# everywhere for that reason, and a duration read off a hidden clock is one no test can hold still
+# (L130). The merge below is likewise a pure function returning the record's new CONTENTS, so the call
+# site only writes what it returns and every rule about what may be remembered is testable.
+
+# The two counts the corpus line states, as "open reached", or nothing when there is no readable line.
+#
+# Each is read off the PHRASE that names it rather than by position, so a reworded or reordered corpus
+# line cannot silently hand this the wrong number.
+live_corpus_counts() {
+  local output="$1" line open reached
+  line="$(grep -a "LIVE STORE CORPUS:" <<< "${output}" 2>/dev/null | tail -n 1)"
+  [[ -n "${line}" ]] || return 1
+  open="$(grep -oE '[0-9]+ with a reply still open' <<< "${line}" | grep -oE '^[0-9]+')"
+  reached="$(grep -oE '[0-9]+ reached-out rows in play' <<< "${line}" | grep -oE '^[0-9]+')"
+  # A line this cannot parse is unmeasured, never clean: the same answer as no line at all, because a
+  # number nobody could read is not a number this may report.
+  [[ "${open}" =~ ^[0-9]+$ && "${reached}" =~ ^[0-9]+$ ]] || return 1
+  echo "${open} ${reached}"
+}
+
+# Whole days between two yyyy-mm-dd dates, or NOTHING when either cannot be read. Never a zero standing
+# in for an unreadable date: zero days is a measurement and an unreadable date is not one (L11).
+days_since() {
+  local from="$1" to="$2" a b
+  a="$(date -j -f "%Y-%m-%d" "${from}" +%s 2>/dev/null)" || return 0
+  b="$(date -j -f "%Y-%m-%d" "${to}" +%s 2>/dev/null)" || return 0
+  [[ "${a}" =~ ^[0-9]+$ && "${b}" =~ ^[0-9]+$ ]] || return 0
+  echo $(( (b - a) / 86400 ))
+}
+
+# The date recorded against one invariant, from the record's text, or nothing.
+live_corpus_seen_date() {
+  local field="$1" seen="$2"
+  grep -aE "^${field}=" <<< "${seen}" 2>/dev/null | tail -n 1 | cut -d= -f2-
+}
+
+# How long one invariant has been asleep, in words. Says plainly when nothing was ever recorded here,
+# rather than guessing a date or falling silent: an unrecorded duration and a short one are different
+# facts, and only one of them means "look at this".
+live_corpus_dormancy_phrase() {
+  local field="$1" today="$2" seen="$3" date days
+  date="$(live_corpus_seen_date "${field}" "${seen}")"
+  if [[ -n "${date}" ]]; then
+    days="$(days_since "${date}" "${today}")"
+    if [[ -n "${days}" ]]; then
+      echo "since ${date} (${days} day$([[ "${days}" == 1 ]] || echo s))"
+      return 0
+    fi
+    echo "since ${date}"
+    return 0
+  fi
+  echo "for as long as this clone has recorded"
+}
+
+live_corpus_report() {
+  local output="$1" today="${2:-}" seen="${3:-}" counts open reached
+  if ! counts="$(live_corpus_counts "${output}")"; then
+    echo "Live store invariants: NOT REPORTED. This run printed no corpus line, so whether they measured anything is unknown; a scoped run does not include them."
+    return 0
+  fi
+  read -r open reached <<< "${counts}"
+
+  if [[ "${open}" -eq 0 && "${reached}" -eq 0 ]]; then
+    echo "Live store invariants: DORMANT. The open-reply invariant has measured nothing $(live_corpus_dormancy_phrase open "${today}" "${seen}"), the reached-out one $(live_corpus_dormancy_phrase reached "${today}" "${seen}"), so both passed having asserted nothing about Dan's real data (#2991, L182)."
+    return 0
+  fi
+  if [[ "${open}" -eq 0 ]]; then
+    echo "Live store invariants: PARTLY DORMANT. The open-reply invariant has measured nothing $(live_corpus_dormancy_phrase open "${today}" "${seen}"); the reached-out one measured ${reached} this run (#2991, L182)."
+    return 0
+  fi
+  if [[ "${reached}" -eq 0 ]]; then
+    echo "Live store invariants: PARTLY DORMANT. The reached-out invariant has measured nothing $(live_corpus_dormancy_phrase reached "${today}" "${seen}"); the open-reply one measured ${open} this run (#2991, L182)."
+    return 0
+  fi
+  echo "Live store invariants: measuring, over ${open} open replies and ${reached} reached-out rows in play."
+}
+
+# The record's NEW contents after this run, given its old contents. Pure: the caller writes what this
+# returns, so every rule here is testable without a file.
+#
+# Two refusals carry the whole feature, and both are refusals to WRITE:
+#
+#   * A run in which an invariant measured NOTHING leaves that invariant's date alone. Stamping today
+#     regardless would overwrite the last real measurement every single run, so the duration would
+#     always read zero and the dormancy would be invisible in a message that mentions a date, which is
+#     the defect wearing a disguise.
+#   * A run with no corpus line writes nothing at all. It took no reading, so it is evidence about
+#     nothing, and a scoped run produces exactly this constantly.
+live_corpus_seen_update() {
+  local output="$1" today="$2" seen="$3" counts open reached
+  if ! counts="$(live_corpus_counts "${output}")"; then
+    printf '%s' "${seen}"
+    return 0
+  fi
+  read -r open reached <<< "${counts}"
+
+  local open_date reached_date
+  open_date="$(live_corpus_seen_date open "${seen}")"
+  reached_date="$(live_corpus_seen_date reached "${seen}")"
+  [[ "${open}" -gt 0 ]] && open_date="${today}"
+  [[ "${reached}" -gt 0 ]] && reached_date="${today}"
+
+  local out=""
+  [[ -n "${open_date}" ]] && out="open=${open_date}"
+  if [[ -n "${reached_date}" ]]; then
+    [[ -n "${out}" ]] && out="${out}
+"
+    out="${out}reached=${reached_date}"
+  fi
+  printf '%s' "${out}"
+}
+
 # ---------------------------------------------------------------------------
 # Below this line the functions read the repository. Everything above is pure.
 # ---------------------------------------------------------------------------

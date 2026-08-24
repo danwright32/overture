@@ -710,6 +710,72 @@ assert_contains "and the wall clock the run reported" \
 assert_contains "a failing run states its shape too" \
   "Suite shape:" "$(run_wrapper_with_stub_xcodebuild "${REAL_FAILURE_OUTPUT}" 65 "${REAL_LOG_OUTPUT}")"
 
+# --- the wiring: every run says whether the LIVE store invariants measured anything (#2991) ------
+#
+# suite-stats.test.sh proves the four readings are right. These prove the wrapper PRINTS one, which
+# is a separate claim (L3). The corpus line has been printed by the suite itself since #2986, and
+# nobody was scheduled to read it: measured 2026-08-19 both invariants sat at zero rows and passed.
+
+assert_contains "a passing run says where the live store invariants stand" \
+  "Live store invariants:" "${SHAPE_ON_PASS}"
+
+# The stub's run carries no corpus line at all, which is the state that must never read as clean: it
+# is what a scoped run produces, and an absent measurement is not a good one (L98).
+assert_contains "a run with no corpus line says it is unmeasured rather than saying nothing" \
+  "NOT REPORTED" "${SHAPE_ON_PASS}"
+
+# EVERY run below writes its record into a throwaway path, never the repository. Without this the
+# "measuring" case wrote into the real repo root, recording that both invariants had measured rows on
+# a day the live store held none. A test must be structurally unable to touch the live tree (L2).
+CORPUS_RECORD_DIR="$(mktemp -d)"
+export OVERTURE_LIVE_CORPUS_RECORD="${CORPUS_RECORD_DIR}/seen"
+
+# And a run that DOES carry one, with both counts at zero, is called dormant on screen. Without this
+# the wiring would be proved only against the absent case, which is the easy half.
+DORMANT_RUN="$(run_wrapper_with_stub_xcodebuild "LIVE STORE CORPUS: 936 shows, 4 replied rows, 0 with a reply still open, 0 reached-out rows in play.
+${PASSING_OUTPUT}" 0)"
+
+# The refusal that carries the whole duration: a run in which nothing measured writes NOTHING. If it
+# stamped today regardless, the recorded date would move every run, the duration would always read
+# zero, and the dormancy would be invisible behind a date that looks like a measurement.
+assert_equals "a dormant run writes no record at all" \
+  "absent" "$([[ -e "${OVERTURE_LIVE_CORPUS_RECORD}" ]] && echo present || echo absent)"
+assert_contains "a run whose invariants measured nothing says DORMANT" \
+  "Live store invariants: DORMANT" "${DORMANT_RUN}"
+assert_not_contains "and that run is not also called unmeasured" \
+  "Live store invariants: NOT REPORTED" "${DORMANT_RUN}"
+
+# #2991's second half: the DURATION reaches the screen, not just the state. The stub run writes its
+# record into a throwaway HOME-adjacent path via the wrapper's own repo root, so this asserts the
+# shape of the sentence rather than a specific date, which moves with the clock (L130).
+assert_contains "a dormant run says how long, not only that it is dormant" \
+  "has measured nothing" "${DORMANT_RUN}"
+
+# The positive control, in the same fixture: rows present reads as measuring, so the two states are
+# genuinely told apart rather than every run reporting the same thing (L159).
+MEASURING_RUN="$(run_wrapper_with_stub_xcodebuild "LIVE STORE CORPUS: 936 shows, 4 replied rows, 3 with a reply still open, 5 reached-out rows in play.
+${PASSING_OUTPUT}" 0)"
+assert_contains "a run whose invariants had rows says so, with the counts" \
+  "measuring, over 3 open replies and 5 reached-out rows in play" "${MEASURING_RUN}"
+assert_not_contains "and is not called dormant" \
+  "DORMANT" "${MEASURING_RUN}"
+
+# The positive half of the same rule: a run that DID measure writes the record, so the refusal above is
+# a refusal rather than a writer that never works at all (L159).
+assert_equals "a measuring run does write the record" \
+  "present" "$([[ -e "${OVERTURE_LIVE_CORPUS_RECORD}" ]] && echo present || echo absent)"
+assert_contains "and the record names both invariants it measured" \
+  "open=" "$(cat "${OVERTURE_LIVE_CORPUS_RECORD}" 2>/dev/null)"
+assert_contains "and the reached-out one too" \
+  "reached=" "$(cat "${OVERTURE_LIVE_CORPUS_RECORD}" 2>/dev/null)"
+
+# Nothing was written into the repository itself, which is what went wrong the first time.
+assert_equals "no run wrote a record into the repository" \
+  "absent" "$([[ -e "${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}/.overture-live-corpus-seen" ]] && echo present || echo absent)"
+
+rm -rf "${CORPUS_RECORD_DIR}"
+unset OVERTURE_LIVE_CORPUS_RECORD
+
 # A build failure ran no test at all. It must SAY it could not read the totals rather than print a
 # zero, because "0 tests" is a measurement and this run made none (L11).
 BUILD_FAILURE_SHAPE="$(run_wrapper_with_stub_xcodebuild "${BUILD_FAILURE_OUTPUT}" 65)"
