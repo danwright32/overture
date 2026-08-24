@@ -465,6 +465,20 @@ already drifting from the Swift version it mirrored.
   (SURVIVED is then a real finding about the code), and a log with no suite lines at all, which is what
   `OVERTURE_MUTATE_RUNNER` pointed at the shell fixtures or vitest produces.
 
+  **A SURVIVED also says whether the needle is still in the file (#3157).** Four source-text guards
+  written on 2026-08-23 passed while the code they guard was deleted, all the same shape: the needle
+  also occurs somewhere harmless in the SAME file, so the assertion is answered by that second
+  occurrence rather than by the code (L135). `DetachConversationCopy.control` is a PREFIX of
+  `.controlHelp` on the next line (#2797); `DraftedDeadEndCopy.line` survived inside an `if false`
+  branch (#2674); `onConnectGmail: connectGmail` reaches ArchiveView as well as FollowUpsView (#2967).
+  Every one was found the same way, by hand, after the SURVIVED, by grepping the file. So the SURVIVED
+  now carries that reading, in three states kept apart because an unmeasured check and a passed one
+  look identical from silence (L11): the text is STILL in the file, at named line numbers; it is not,
+  which rules that explanation out; or it could not be read as literal text that was in the file, in
+  which case nothing was measured and it says so. It is a REPORT on a SURVIVED and deliberately not a
+  rule over every guard: a needle that legitimately recurs is common, so a gate on it would fire on
+  the ordinary case and be switched off within a day (L93).
+
 - **Which test entry points refuse to call an empty run a pass, and which cannot (#2541).** Zero subjects
   examined is its own outcome and must never read as "everything passed", because the empty result
   arrives exactly when the work has not started (L98). Where each entry point stands, measured

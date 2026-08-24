@@ -307,6 +307,42 @@ search_half_of() {
   printf '%s' "${BASH_REMATCH[1]}" | perl -pe 's/\\(.)/$1/g'
 }
 
+# #3157: after a SURVIVED, whether the text this mutation replaced is STILL somewhere in the same file.
+#
+# Four source-text guards written on 2026-08-23 passed while the code they guard was deleted, all the same
+# shape: the needle also occurs somewhere harmless in the SAME file, so the assertion is answered by that
+# second occurrence rather than by the code (L135). `DetachConversationCopy.control` is a PREFIX of
+# `.controlHelp` on the next line (#2797); `DraftedDeadEndCopy.line` survived inside an `if false` branch
+# (#2674); `onConnectGmail: connectGmail` reaches ArchiveView as well as FollowUpsView (#2967). Every one
+# was found the same way, by hand, after the SURVIVED, by grepping the file. This script already holds
+# both the file and the needle, so it can say it in one line instead.
+#
+# A REPORT on a SURVIVED and never a rule over every guard: a needle that legitimately recurs is common,
+# so a gate on it would fire on the ordinary case and be switched off within a day (L93).
+#
+# Three answers, kept apart, because an unmeasured check and a passed one look identical from silence
+# (L11). The needle read LITERALLY has to have been in the original file for any of this to mean
+# anything: when it was not, the mutation matched through the regex engine and the literal reading
+# answers about text nobody wrote, so it says it could not judge rather than guessing (the same evidence
+# rule the NOT APPLIED refusal already follows).
+#
+#   STILL PRESENT\n<lines>  the needle is still in the mutated file, at those line numbers
+#   GONE                    it is not, so a second occurrence is not why this survived
+#   CANNOT_JUDGE            the needle could not be read as literal text, so nothing was measured
+mutation_needle_recurrence() {
+  local before="$1" after="$2" needle="$3" lines
+  if [[ -z "${needle}" ]] || ! grep -qF -- "${needle}" "${before}" 2>/dev/null; then
+    echo "CANNOT_JUDGE"
+    return 0
+  fi
+  lines="$(grep -nF -- "${needle}" "${after}" 2>/dev/null | cut -d: -f1 | paste -sd, - | sed 's/,/, /g')"
+  if [[ -z "${lines}" ]]; then
+    echo "GONE"
+    return 0
+  fi
+  printf 'STILL PRESENT\n%s\n' "${lines}"
+}
+
 # The extended-regex metacharacters left unescaped in that half, deduplicated and in the order met. A
 # character preceded by a backslash is the author already saying "literally this", so it is not reported.
 unescaped_metacharacters() {
@@ -687,6 +723,31 @@ echo "  A guard that cannot go red is protecting nothing, and reads exactly like
 if [[ -n "${SHAPE}" ]]; then
   echo "  ${SHAPE}"
 fi
+
+# #3157: the commonest reason a source-text guard survives having its subject deleted, asked here rather
+# than by hand afterwards. Read while the file is still mutated: the restore runs from the EXIT trap.
+RECURRENCE="$(mutation_needle_recurrence "${BACKUP}" "${TARGET}" "${SEARCH_HALF}")"
+case "${RECURRENCE%%$'\n'*}" in
+  "STILL PRESENT")
+    RECURRENCE_LINES="$(printf '%s' "${RECURRENCE}" | tail -n +2)"
+    if [[ "${RECURRENCE_LINES}" == *","* ]]; then
+      echo "  The text it replaced is still in ${TARGET##*/}, at lines ${RECURRENCE_LINES}."
+    else
+      echo "  The text it replaced is still in ${TARGET##*/}, at line ${RECURRENCE_LINES}."
+    fi
+    echo "  That is the commonest reason a source-text guard stays green with its subject gone: the"
+    echo "  assertion is answered by the other occurrence rather than by the code you broke (L135)."
+    ;;
+  GONE)
+    echo "  The text it replaced no longer occurs anywhere in ${TARGET##*/}, so a second occurrence"
+    echo "  answering the assertion is not why this survived (L135)."
+    ;;
+  CANNOT_JUDGE)
+    echo "  Whether the text it replaced still occurs in ${TARGET##*/} could NOT be checked: the search"
+    echo "  half of the expression is not literal text that was in the file, so looking for it would"
+    echo "  answer about text nobody wrote. Check by hand for a second occurrence (L135)."
+    ;;
+esac
 # Which of the three non-refusing verdicts this was, in one line, so a SURVIVED that was never actually
 # checked against its scope does not read as one that was. An unmeasured check and a passed one look
 # identical from silence (L11).
