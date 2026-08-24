@@ -129,7 +129,27 @@ enum FollowUp {
     //
     // `now` is required, not defaulted, for the same reason `in p:` is: a caller that forgot it would
     // compile and quietly nudge a show that has been and gone.
+    // #2968: a show Dan DISMISSED stops asking for work, whatever its contacts still say.
+    //
+    // Dan's call, 2026-08-23: "if I dismiss it after emailing, no nudges". His reasoning, recorded on
+    // #2968 on 2026-08-21: the dismissal was a decision against the show. That does not silence the
+    // person, because a reply from them still arrives on its own path and still reaches him (#2910),
+    // which is what makes the exclusion safe rather than a way of losing them.
+    //
+    // HERE rather than in `dueRecipients`, which is where his note named it, and the difference is not
+    // cosmetic. Four readers ask this one question: `dueRecipients` (the Follow-ups sheet, its pill,
+    // the toolbar badge, the Dock tile and the menu bar all descend from it), `ReachedOutQueue.nextDue`,
+    // `ReachedOutAction`, and `SendService.deliverFollowUp`. Guarding only `dueRecipients` would take
+    // the show off every COUNT while leaving the send path willing to actually email it, so the surfaces
+    // would agree that nothing is owed while a nudge went out anyway. One predicate, read by all of
+    // them (L16).
+    //
+    // Keyed on `status` rather than on `showOutcome`, because they are not the same fact: `setStatus`
+    // takes an optional reason, so a dismissal can leave no recorded ending, and such a row passes
+    // `ReachedOutQueue.isInPlay`'s `showOutcome == nil` guard. The dismissal is the decision; the
+    // outcome is only what it was labelled.
     static func isAwaitingNudge(_ r: Recipient, in p: Prospect, now: Date) -> Bool {
+        guard p.status != .dismissed else { return false }
         guard r.isAwaitingFollowUp, !r.isOutreachStoodDown else { return false }
         guard !hasPerformed(p, now: now) else { return false }
         return !p.isOutreachStoodDown(asOf: r.repliedAt)
