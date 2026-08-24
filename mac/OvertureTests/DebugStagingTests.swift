@@ -487,22 +487,34 @@ final class DebugStagingTests {
                 "outreach with no message id is not provably sent, so nothing downstream reads it")
     }
 
-    // The POSITIVE control, in the same fixture, because a scenario that stages the right rows and
-    // produces no due work would be indistinguishable from one that works while asserting nothing
-    // (L159). This is what the two states differ about: today it is 1, and under Dan's 2026-08-21 call
-    // it would be 0.
-    @Test @MainActor func theDismissedShowReallyDoesOweAFollowUpToday() throws {
+    // What the scenario is FOR, now that Dan has decided it (2026-08-23: "if I dismiss it after
+    // emailing, no nudges"). The staged show owes nothing, and the fixture is only worth anything if it
+    // WOULD have owed a nudge but for the dismissal: a scenario that stages a row too young, or on the
+    // wrong channel, would produce the same zero while proving nothing at all (L159).
+    //
+    // This replaces `theDismissedShowReallyDoesOweAFollowUpToday`, which asserted the count was 1. That
+    // was written earlier the same day, before the decision, and its content was the behaviour the
+    // decision reverses.
+    @Test @MainActor func theStagedShowOwesNothingAndWouldHaveButForTheDismissal() throws {
         let ctx = try makeInMemoryContext()
         let now = Date(timeIntervalSince1970: 1_780_000_000)
 
-        _ = DebugStaging.stageDismissedAfterEmailed(in: ctx, now: now)
+        let p = DebugStaging.stageDismissedAfterEmailed(in: ctx, now: now)
         try ctx.save()
         let all = try ctx.fetch(FetchDescriptor<Prospect>())
 
-        #expect(FollowUp.dueRecipients(from: all, now: now).count == 1,
-                "the staged show owes no nudge, so the screen it exists to show would be empty")
-        #expect(DueWork.rows(prospects: all, now: now, replyRunAlive: false).rendered == 1,
-                "the Follow-ups sheet draws no row for it, which is the surface the question is about")
+        #expect(FollowUp.dueRecipients(from: all, now: now).isEmpty,
+                "a show Dan cut is still asking to be nudged")
+        #expect(DueWork.rows(prospects: all, now: now, replyRunAlive: false).rendered == 0,
+                "the Follow-ups sheet still draws a row for a show Dan already cut")
+
+        // Undismissed, the same row is genuinely due, so the zero above is the guard doing its job
+        // rather than a fixture that could never owe anything.
+        p.clearDismissal(to: .contacted)
+        try ctx.save()
+        let restored = try ctx.fetch(FetchDescriptor<Prospect>())
+        #expect(FollowUp.dueRecipients(from: restored, now: now).count == 1,
+                "the staged show owes no nudge even undismissed, so it proves nothing about the guard")
     }
 
     @Test @MainActor func clearDebugLeadsRemovesTheDismissedShow() throws {
