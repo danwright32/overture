@@ -187,6 +187,114 @@ OUTPUT="$("${CHECK}" compare "${REPO}" "${SNAPSHOT}" 2>&1)"
 assert_contains "a path with spaces is named whole" "a file with spaces.txt" "${OUTPUT}"
 rm -rf "${REPO}"
 
+# --- #3161: an ignored path the run wrote is SEEN, where before it was invisible ---
+#
+# `git status --porcelain -uall` lists tracked and untracked paths and NOT ignored ones, so a run
+# that wrote a gitignored file into the repository was invisible to the guard whose whole job is
+# noticing that a run changed the tree. Measured 2026-08-23 while building #2991: a fixture drove the
+# real run-tests-locked.sh and its measuring case wrote `.overture-live-corpus-seen` into the
+# repository root recording that both live-store invariants had examined rows on a day the live store
+# held none of either. The guard passed clean; a person found it by reading the file afterwards.
+#
+# It REPORTS rather than fails, and each case below pins that, because the very file the incident was
+# measured on is also written by an ordinary run whenever the invariants really do measure something.
+# A check that fires on the ordinary case is a check somebody switches off (L93).
+
+ignore_repo() {
+  local dir
+  dir="$(make_repo)"
+  printf 'state-file\nbuild-dir/\n' > "${dir}/.gitignore"
+  git -C "${dir}" add .gitignore
+  git -C "${dir}" commit -q -m "ignore the state file and the build directory"
+  echo "${dir}"
+}
+
+REPO="$(ignore_repo)"
+SNAPSHOT="${REPO}/.snapshot"
+"${CHECK}" record "${REPO}" "${SNAPSHOT}" >/dev/null 2>&1
+echo "written by the run" > "${REPO}/state-file"
+OUTPUT="$("${CHECK}" compare "${REPO}" "${SNAPSHOT}" 2>&1)"
+EXIT=$?
+assert_equals "an ignored file the run wrote does not fail the run" "0" "${EXIT}"
+assert_contains "but the ignored file the run wrote is named" "state-file" "${OUTPUT}"
+assert_contains "under a heading that says it is a report" \
+  "IGNORED PATHS THIS RUN CHANGED" "${OUTPUT}"
+assert_contains "and says which way it changed" "appeared:" "${OUTPUT}"
+assert_not_contains "it is never reported as the suite writing a tracked file" \
+  "WENT FROM CLEAN TO CHANGED" "${OUTPUT}"
+assert_not_contains "and it never offers the opt-in remedy, which changes nothing here" \
+  "opt-in" "${OUTPUT}"
+rm -rf "${REPO}"
+
+# An ignored path that was there before and is untouched says NOTHING. A report that speaks on every
+# run is a report nobody reads (L36), and every real checkout here carries ignored paths already.
+REPO="$(ignore_repo)"
+SNAPSHOT="${REPO}/.snapshot"
+echo "was here before the run" > "${REPO}/state-file"
+"${CHECK}" record "${REPO}" "${SNAPSHOT}" >/dev/null 2>&1
+OUTPUT="$("${CHECK}" compare "${REPO}" "${SNAPSHOT}" 2>&1)"
+EXIT=$?
+assert_equals "an unchanged ignored file passes" "0" "${EXIT}"
+assert_equals "and the run says nothing at all about it" "" "${OUTPUT}"
+rm -rf "${REPO}"
+
+# CONTENT, not presence: the #2991 file already exists on a machine that has run the suite before, so
+# a rule that only noticed a path APPEARING would have missed the incident on every later run.
+REPO="$(ignore_repo)"
+SNAPSHOT="${REPO}/.snapshot"
+echo "was here before the run" > "${REPO}/state-file"
+"${CHECK}" record "${REPO}" "${SNAPSHOT}" >/dev/null 2>&1
+echo "the run rewrote it" > "${REPO}/state-file"
+OUTPUT="$("${CHECK}" compare "${REPO}" "${SNAPSHOT}" 2>&1)"
+EXIT=$?
+assert_equals "rewriting an ignored file is still not a failure" "0" "${EXIT}"
+assert_contains "but the rewritten ignored file is named" "state-file" "${OUTPUT}"
+assert_contains "and says it was rewritten rather than newly written" "rewritten:" "${OUTPUT}"
+rm -rf "${REPO}"
+
+# An ignored path that went away is its own third thing, for the same reason the tracked side keeps
+# clean -> changed apart from changed -> clean: they have different causes.
+REPO="$(ignore_repo)"
+SNAPSHOT="${REPO}/.snapshot"
+echo "was here before the run" > "${REPO}/state-file"
+"${CHECK}" record "${REPO}" "${SNAPSHOT}" >/dev/null 2>&1
+rm -f "${REPO}/state-file"
+OUTPUT="$("${CHECK}" compare "${REPO}" "${SNAPSHOT}" 2>&1)"
+assert_contains "an ignored file the run deleted is named" "state-file" "${OUTPUT}"
+assert_contains "and says it is gone rather than written" "gone:" "${OUTPUT}"
+rm -rf "${REPO}"
+
+# The verdict still comes from the TRACKED side alone. A run that touched both is a failure, and both
+# lists are printed, so the report can never soften a real failure or invent one.
+REPO="$(ignore_repo)"
+SNAPSHOT="${REPO}/.snapshot"
+"${CHECK}" record "${REPO}" "${SNAPSHOT}" >/dev/null 2>&1
+echo "rewritten by the run" > "${REPO}/tracked.txt"
+echo "written by the run" > "${REPO}/state-file"
+OUTPUT="$("${CHECK}" compare "${REPO}" "${SNAPSHOT}" 2>&1)"
+EXIT=$?
+assert_equals "a tracked change alongside an ignored one still fails" "1" "${EXIT}"
+assert_contains "the tracked file is still named" "tracked.txt" "${OUTPUT}"
+assert_contains "and the ignored one is named beside it" "state-file" "${OUTPUT}"
+rm -rf "${REPO}"
+
+# Churn INSIDE an ignored directory is deliberately invisible: git collapses an ignored directory to
+# a single entry, which is what keeps this cheap. Without that, `mac/build/` alone would put the whole
+# of Xcode's output through a hash on every run, and the report would name thousands of paths that
+# every run is supposed to write. Measured on this repository 2026-08-24: 12 entries this way against
+# 9,690 with directories expanded.
+REPO="$(ignore_repo)"
+SNAPSHOT="${REPO}/.snapshot"
+mkdir -p "${REPO}/build-dir"
+echo "before" > "${REPO}/build-dir/one.txt"
+"${CHECK}" record "${REPO}" "${SNAPSHOT}" >/dev/null 2>&1
+echo "written during the run" > "${REPO}/build-dir/two.txt"
+OUTPUT="$("${CHECK}" compare "${REPO}" "${SNAPSHOT}" 2>&1)"
+EXIT=$?
+assert_equals "churn inside an ignored directory passes" "0" "${EXIT}"
+assert_equals "and is not reported, because the directory is one entry" "" "${OUTPUT}"
+rm -rf "${REPO}"
+
 # --- a missing snapshot is an error, never a pass ---
 # The compare step runs at the end of a long suite, which is exactly where a silently skipped check
 # would never be noticed. A snapshot that was never recorded means this measured nothing.

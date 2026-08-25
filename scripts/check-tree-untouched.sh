@@ -18,6 +18,22 @@ set -uo pipefail
 # and it would fail for the ordinary reason (uncommitted work) rather than the real one. Comparing
 # before against after blames the run for exactly what the run did, and nothing else.
 #
+# It watches TWO halves, and they have different verdicts (#3161).
+#
+# The tracked and untracked half FAILS, as it always has. The IGNORED half only REPORTS. Until #3161
+# there was no ignored half at all: `git status --porcelain -uall` lists tracked and untracked paths
+# and not ignored ones, so a run that wrote a gitignored file into the repository was invisible to the
+# guard whose whole job is noticing that a run changed the tree, and ignored paths are the likeliest
+# place for a scratch or state file to land. Measured 2026-08-23 while building #2991: a fixture drove
+# the real run-tests-locked.sh and its measuring case wrote `.overture-live-corpus-seen` into the
+# repository root, recording that both live-store invariants had examined rows on a day the live store
+# held none of either. This check passed clean; a person found it by reading the file by hand.
+#
+# That same file is why the ignored half cannot refuse. An ordinary run writes it legitimately every
+# time the invariants really do measure something, so a rule that failed on it would fire on the
+# ordinary case and be switched off within a day (L93). Putting the list in front of a person is the
+# whole of what was missing.
+#
 # Usage: check-tree-untouched.sh record <repo-dir> <snapshot-file>
 #        check-tree-untouched.sh compare <repo-dir> <snapshot-file>
 
@@ -38,16 +54,28 @@ usage() {
 #
 # The snapshot file itself is excluded when it happens to sit inside the tree, or this check reports
 # its own working note as something the run left behind, and fails every clean run.
-tree_state() {
-  local dir="$1" snapshot="${2:-}"
-  local own=""
-  case "${snapshot}" in "${dir}/"*) own="${snapshot#"${dir}"/}" ;; esac
-  git -C "${dir}" status --porcelain -uall -z | while IFS= read -r -d '' entry; do
+# Reads ONE `git status --porcelain -z` listing and emits a snapshot line per entry it keeps: that
+# path's status, the path, and a hash of its contents.
+#
+# Both halves of the snapshot go through here so the line format, the rename handling and the
+# exclusion of the snapshot file itself cannot drift apart between them.
+#
+# `keep` is "ignored" or "tracked", and the two are exclusive: every entry belongs to exactly one
+# half, so nothing can be counted twice or fall between them.
+porcelain_state() {
+  local dir="$1" own="$2" keep="$3"
+  shift 3
+  git -C "${dir}" status --porcelain -z "$@" | while IFS= read -r -d '' entry; do
     local status="${entry:0:2}"
     local path="${entry:3}"
     # A rename's porcelain entry is followed by its own NUL-separated source path, which is not a
     # path in its own right and must not be read as the next entry.
     if [[ "${status}" == R* || "${status}" == C* ]]; then IFS= read -r -d '' _source; fi
+    if [[ "${keep}" == "ignored" ]]; then
+      [[ "${status}" == "!!" ]] || continue
+    else
+      [[ "${status}" == "!!" ]] && continue
+    fi
     if [[ -n "${own}" && "${path}" == "${own}" ]]; then continue; fi
     # TAB separated, so the PATH is one field however many spaces are in it. #2843 reads the path
     # back out of these lines to say which of three things happened to it, and splitting on spaces
@@ -58,7 +86,37 @@ tree_state() {
     else
       printf '%s\t%s\t%s\n' "${status}" "${path}" "(not a regular file)"
     fi
-  done | sort
+  done
+}
+
+# What the tree looks like right now: one line per path, carrying that path's status AND a hash of
+# its contents.
+#
+# Both halves are needed, and so is the per-path SHAPE. Status alone cannot see a run rewriting a
+# file that was already modified before it started, because the status line reads the same either
+# way, and that is precisely the tree most people run the suite on. A bulk content diff can see it
+# but reports it as changed hunks, so the failure shows the words that moved and never names the
+# file they moved in, which is the one thing the reader needs (L80). A line per path gives both: any
+# difference at all names its own file.
+#
+# The snapshot file itself is excluded when it happens to sit inside the tree, or this check reports
+# its own working note as something the run left behind, and fails every clean run.
+#
+# The ignored half is read with `-unormal` and NOT `-uall`, which is what keeps this cheap. With
+# `-uall` git expands every ignored DIRECTORY into its every file: measured on this repository
+# 2026-08-24, 9,690 entries that way against 12 collapsed, nearly all of it Xcode build output and
+# node_modules that every run is supposed to write. Collapsed, an ignored directory is a single entry
+# whose contents read "(not a regular file)", so churn inside one is invisible here. What that gives
+# up is a stray file written into a directory that is ALREADY ignored; what it keeps is the case that
+# matters, a stray ignored file in a directory that is not, which is still listed on its own.
+tree_state() {
+  local dir="$1" snapshot="${2:-}"
+  local own=""
+  case "${snapshot}" in "${dir}/"*) own="${snapshot#"${dir}"/}" ;; esac
+  {
+    porcelain_state "${dir}" "${own}" tracked -uall
+    porcelain_state "${dir}" "${own}" ignored -unormal --ignored
+  } | sort
 }
 
 record() {
@@ -110,27 +168,16 @@ paths_changed_in_both() {
   done <<< "${shared}"
 }
 
-compare() {
-  local dir="$1" snapshot="$2"
-  if [[ ! -f "${snapshot}" ]]; then
-    echo "check-tree-untouched: no snapshot at ${snapshot}, so nothing was measured." >&2
-    echo "The run's effect on the working tree is UNKNOWN, which is not the same as none." >&2
-    return 1
-  fi
-
-  local after
-  after="$(tree_state "${dir}" "${snapshot}")"
-  if [[ "${after}" == "$(cat "${snapshot}")" ]]; then
-    return 0
-  fi
-
+# The tracked and untracked half of a difference: still three buckets, still a failure (#2843).
+report_tracked() {
+  local before="$1" after="$2"
   echo "" >&2
   echo "check-tree-untouched: the working tree is not as this run found it." >&2
 
   local written cleaned ambiguous
-  written="$(paths_only_in "${after}" "$(cat "${snapshot}")")"
-  cleaned="$(paths_only_in "$(cat "${snapshot}")" "${after}")"
-  ambiguous="$(paths_changed_in_both "$(cat "${snapshot}")" "${after}")"
+  written="$(paths_only_in "${after}" "${before}")"
+  cleaned="$(paths_only_in "${before}" "${after}")"
+  ambiguous="$(paths_changed_in_both "${before}" "${after}")"
 
   # Each bucket says what it MEASURED and no more, and only the first of the three is evidence the
   # suite wrote anything, so only the first carries the opt-in advice (#2843, L11).
@@ -166,8 +213,70 @@ compare() {
   fi
 
   echo "" >&2
-  diff <(cat "${snapshot}") <(echo "${after}") | head -60 >&2
-  return 1
+  diff <(echo "${before}") <(echo "${after}") | head -60 >&2
+}
+
+# The IGNORED half of a difference (#3161): named, and never a verdict.
+#
+# Three kinds, kept apart for the same reason the tracked side keeps its three apart: they have
+# different causes, and a reader who cannot tell a file the run CREATED from one it deleted has to go
+# and find out by hand, which is exactly the step this exists to remove.
+report_ignored() {
+  local before="$1" after="$2"
+  local appeared gone rewritten
+  appeared="$(paths_only_in "${after}" "${before}")"
+  gone="$(paths_only_in "${before}" "${after}")"
+  rewritten="$(paths_changed_in_both "${before}" "${after}")"
+
+  echo "" >&2
+  echo "IGNORED PATHS THIS RUN CHANGED. A report, and NOT a failure: the verdict is the tracked half" >&2
+  echo "alone." >&2
+  [[ -n "${appeared}" ]] && sed 's|^|  appeared:  |' <<< "${appeared}" >&2
+  [[ -n "${rewritten}" ]] && sed 's|^|  rewritten: |' <<< "${rewritten}" >&2
+  [[ -n "${gone}" ]] && sed 's|^|  gone:      |' <<< "${gone}" >&2
+  echo "" >&2
+  echo "git status does not list ignored paths, so before #3161 a run could write one of these into" >&2
+  echo "the repository and this check saw nothing, which is the likeliest place for a scratch or state" >&2
+  echo "file to land. Some of them a run writes legitimately, which is why this reports rather than" >&2
+  echo "refuses. Read the list and ask of each whether THIS run was meant to write it." >&2
+  return 0
+}
+
+compare() {
+  local dir="$1" snapshot="$2"
+  if [[ ! -f "${snapshot}" ]]; then
+    echo "check-tree-untouched: no snapshot at ${snapshot}, so nothing was measured." >&2
+    echo "The run's effect on the working tree is UNKNOWN, which is not the same as none." >&2
+    return 1
+  fi
+
+  local after before
+  after="$(tree_state "${dir}" "${snapshot}")"
+  before="$(cat "${snapshot}")"
+  if [[ "${after}" == "${before}" ]]; then
+    return 0
+  fi
+
+  # Split by half before anything is judged. A difference in the ignored half must not reach the
+  # tracked half's wording, which asserts things that are only true there ("a git add -A would commit
+  # them" is false of a gitignored path), and must not move the verdict.
+  local tracked_before tracked_after ignored_before ignored_after
+  tracked_before="$(grep -v '^!!' <<< "${before}" || true)"
+  tracked_after="$(grep -v '^!!' <<< "${after}" || true)"
+  ignored_before="$(grep '^!!' <<< "${before}" || true)"
+  ignored_after="$(grep '^!!' <<< "${after}" || true)"
+
+  local verdict=0
+  if [[ "${tracked_after}" != "${tracked_before}" ]]; then
+    report_tracked "${tracked_before}" "${tracked_after}"
+    verdict=1
+  fi
+
+  if [[ "${ignored_after}" != "${ignored_before}" ]]; then
+    report_ignored "${ignored_before}" "${ignored_after}"
+  fi
+
+  return "${verdict}"
 }
 
 main() {
