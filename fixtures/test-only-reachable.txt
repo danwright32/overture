@@ -1,0 +1,49 @@
+# Declarations in mac/Overture/Domain that the tests name and nothing else in the app does (#3154).
+#
+# A RATCHET, strict in both directions. A finding not listed here fails the suite, which is the point.
+# A line here that is no longer a finding also fails, so an entry cannot outlive the code it describes
+# and quietly exempt a future declaration that takes the same name.
+#
+# A line with NO reason is UNTRIAGED DEBT and may only be removed, by wiring the code up or by deleting
+# it and its tests with it. A line carrying a `# reason` has been looked at and is exempt on purpose,
+# because it is reached by a route the scan cannot see. The two are told apart by the reason and by
+# nothing else, so write one whenever an entry is meant to stay (L233).
+#
+# Seeded 2026-08-27 by the guard's own predicate rather than by a query written beside it (L107).
+ContactIdentity.swift:isSamePerson
+DownbeatExport.swift:hasLeftReview
+DownbeatExport.swift:hostingSite
+DownbeatExport.swift:isTaxExempt
+DownbeatExport.swift:phoneNumber
+DownbeatExport.swift:venueId
+GeoRefusals.swift:resolvedPlaceCount
+InquiryReporting.swift:lostAfter
+InquiryReporting.swift:openPredicate
+OmniFocusSync.swift:completionIsCarriedBack
+OutcomeStats.swift:autoBookingRate
+OutcomeStats.swift:manualBookingRate
+PrepQueueButton.swift:canStart
+PrepResults.swift:allowance
+PrepResults.swift:capPerItem
+Prospect.swift:classificationConfidence
+Prospect.swift:draftNeedsSalutationReview
+Prospect.swift:draftSalutationReviewOverriddenBody
+Prospect.swift:jointOpeningOverride
+Recipient.swift:openingOverride
+Recipient.swift:resumeClosingNote
+Recipient.swift:standDownClosingNote
+ReconcileSummary.swift:deepLinkKey
+ReplyPanel.swift:linkedByHandLine
+ReplyPanel.swift:openingBody
+ReprepRequest.swift:gerund
+RunNightDrop.swift:classified
+RunProgress.swift:stoppedRunIsOver
+RunSlot.swift:allDefaultsKeys
+RunSlot.swift:allPaths
+ScrollOverflow.swift:erasedHeight
+SearchScope.swift:isHolding
+SendGroup.swift:isRepresentative
+ShowOutcome.swift:asDismissReason
+SourceGrade.swift:isStopped
+SourceSchedule.swift:maySpendTokens
+StageOverlap.swift:violations
