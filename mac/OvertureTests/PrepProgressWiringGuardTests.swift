@@ -26,14 +26,17 @@ struct PrepProgressWiringGuardTests {
         // reads "Checking reachability" instead of "Prepping".
         // #2760: the progress file is the SLOT's, so a live check counts its own N of M instead of
         // whatever the prep run last wrote.
-        guard let detailRange = rootView.range(
-            of: "PrepProgressDecoder.progressURL(for: slot)") else {
-            Issue.record("Prep LiveRunLabel progressDetail not found")
+        // #3137: the REGION, not a fixed number of characters back from an anchor. This read 1400
+        // characters and broke the moment a four line comment was added between the label and the call,
+        // failing on the comment rather than on the wiring (L518). It is the same property the test below
+        // already scopes to, so both halves of this file now ask about one region instead of one asking
+        // about a window that happens to reach it.
+        guard let nearby = SourceGuardHelper.propertyBody("private var prepToolbarLabel: some View {",
+                                                          in: rootView) else {
+            Issue.record("RootView no longer builds the toolbar's Prep label in `prepToolbarLabel`")
             return
         }
-        let windowStart = rootView.index(detailRange.lowerBound, offsetBy: -1400,
-                                         limitedBy: rootView.startIndex) ?? rootView.startIndex
-        let nearby = rootView[windowStart..<detailRange.lowerBound]
+        #expect(nearby.contains("PrepProgressDecoder.progressURL(for: slot)"))
         #expect(nearby.contains("LiveRunLabel("))
         #expect(nearby.contains("RunProgressCopy.title(isProbe ? .probing : .prepping)"))
         // #2760: which run is in flight comes from `runInFlight`, which asks BOTH slots, so a check is
@@ -56,8 +59,11 @@ struct PrepProgressWiringGuardTests {
         }
         #expect(body.contains("heartbeat: { PrepQueueService.heartbeat(slot: slot, now: Date()) }"),
                 "the toolbar label judges liveness with no heartbeat, so a healthy run reads as stuck")
-        #expect(body.contains("RunTimeouts.reachabilityProbe"),
-                "a probe is judged against Prep's window instead of its own")
+        // #3137: the WINDOW call, not the bare constant. `RunTimeouts.reachabilityProbe` is a prefix of
+        // `RunTimeouts.reachabilityProbeWindow`, so the looser needle passes whichever of the two the
+        // label uses and could no longer tell them apart (#3157).
+        #expect(body.contains("RunTimeouts.reachabilityProbeWindow(lookups: liveCheckLookups())"),
+                "a probe is judged against Prep's window, or against a flat one that ignores its depth")
         #expect(body.contains("RunTimeouts.prep"))
     }
 }
