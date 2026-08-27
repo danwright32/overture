@@ -289,6 +289,26 @@ already drifting from the Swift version it mirrored.
   `scripts/check-test-identity-provenance.test.sh`, which drives it against a throwaway git repository
   with real commits rather than a stub of `git log` (L52).
 
+- **Before implementing a decision Dan has REVERSED, list the tests that assert the old one:
+  `scripts/find-tests-naming.sh <symbol> [<symbol> ...]` (#3163).** It prints every test in either Swift
+  test target that names any of the symbols, attributed to the `@Test func` that encloses the mention, or
+  to the SUITE when the mention sits in a helper or a comment outside any test, which it labels rather
+  than folds in.
+  Why the test rather than the file, which is all `grep -rl` gives: 14 files name `isAwaitingNudge` here,
+  and the unit somebody has to decide about is each test inside them. A test asserting a decision that has
+  since been reversed is not stale coverage, it is the guard DEFENDING the rejected behaviour, so it is
+  deleted rather than adjusted (L252).
+  It exists because that went wrong on 2026-08-23 with #2968. Dan reversed the rule so a show dismissed
+  after being emailed owes no nudge; two tests asserted the opposite, in two files, both written the same
+  day. One was found by reading and replaced, the other was MISSED and surfaced only by a full suite run
+  twenty minutes later.
+  A TOOL, never a gate, and #3163 says why: most tests naming a symbol are legitimately untouched by a
+  reversal, so anything that refused would fire on the common case. Three exit codes, and the third is the
+  one to read: `1` means NO test names any of the symbols, which is usually a symbol spelled differently
+  in the tests than in the app, and a reversal implemented against an empty list is one nothing was
+  checked for (L98). A COMMENT naming the rule is reported exactly like an assertion, because a comment
+  asserting the old rule misleads the next reader just as much.
+
 - Keeping the checkout tidy: `scripts/tidy-checkout.sh` (#2234) removes local branches and agent
   worktrees whose work has provably shipped. It is a DRY RUN by default and needs `--apply` to
   delete anything. Note WHY it exists rather than the one-line idiom: this repo squash-merges, so a
