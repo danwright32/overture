@@ -754,7 +754,7 @@ REPO_CORPUS_RECORD_BEFORE="$(repo_corpus_record_state)"
 
 # And a run that DOES carry one, with both counts at zero, is called dormant on screen. Without this
 # the wiring would be proved only against the absent case, which is the easy half.
-DORMANT_RUN="$(run_wrapper_with_stub_xcodebuild "LIVE STORE CORPUS: 936 shows, 4 replied rows, 0 with a reply still open, 0 reached-out rows in play.
+DORMANT_RUN="$(run_wrapper_with_stub_xcodebuild "LIVE STORE CORPUS: 936 shows, 4 replied rows, 0 with a reply still open, 0 whose writer a contact holds, 0 reached-out rows in play.
 ${PASSING_OUTPUT}" 0)"
 
 # The refusal that carries the whole duration: a run in which nothing measured writes NOTHING. If it
@@ -775,10 +775,10 @@ assert_contains "a dormant run says how long, not only that it is dormant" \
 
 # The positive control, in the same fixture: rows present reads as measuring, so the two states are
 # genuinely told apart rather than every run reporting the same thing (L159).
-MEASURING_RUN="$(run_wrapper_with_stub_xcodebuild "LIVE STORE CORPUS: 936 shows, 4 replied rows, 3 with a reply still open, 5 reached-out rows in play.
+MEASURING_RUN="$(run_wrapper_with_stub_xcodebuild "LIVE STORE CORPUS: 936 shows, 4 replied rows, 3 with a reply still open, 3 whose writer a contact holds, 5 reached-out rows in play.
 ${PASSING_OUTPUT}" 0)"
 assert_contains "a run whose invariants had rows says so, with the counts" \
-  "measuring, over 3 open replies and 5 reached-out rows in play" "${MEASURING_RUN}"
+  "measuring, over 3 rows the writer-resolution rule can judge and 5 reached-out rows in play" "${MEASURING_RUN}"
 assert_not_contains "and is not called dormant" \
   "DORMANT" "${MEASURING_RUN}"
 
@@ -786,8 +786,11 @@ assert_not_contains "and is not called dormant" \
 # a refusal rather than a writer that never works at all (L159).
 assert_equals "a measuring run does write the record" \
   "present" "$([[ -e "${OVERTURE_LIVE_CORPUS_RECORD}" ]] && echo present || echo absent)"
+# #3165: the key is `writer=`, not `open=`. The readout is measured by the rows the
+# writer-resolution rule can judge, because the still-open count empties whenever Dan is up to date, and
+# a key named `open` counting something else is how one word comes to name two units (L118).
 assert_contains "and the record names both invariants it measured" \
-  "open=" "$(cat "${OVERTURE_LIVE_CORPUS_RECORD}" 2>/dev/null)"
+  "writer=" "$(cat "${OVERTURE_LIVE_CORPUS_RECORD}" 2>/dev/null)"
 assert_contains "and the reached-out one too" \
   "reached=" "$(cat "${OVERTURE_LIVE_CORPUS_RECORD}" 2>/dev/null)"
 

@@ -692,7 +692,7 @@ already drifting from the Swift version it mirrored.
 
   **Since #2991 a second line beside it says whether the LIVE STORE invariants measured anything.**
   `ReplyInvariantsLiveStoreTests` prints a corpus line every run giving how many rows each of its
-  invariants could examine, and measured 2026-08-19 it read `0 with a reply still open, 0 reached-out
+  invariants could examine, and measured 2026-08-19 it read `0 whose writer a contact holds, 0 reached-out
   rows in play`: both passed having asserted nothing about anything, and the only thing separating that
   from a clean bill of health was a printed line thousands of lines up a log nobody reads. That is L182
   exactly, and this one goes to zero precisely when Dan finishes his outreach work, so it can sit there

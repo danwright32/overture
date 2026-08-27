@@ -392,6 +392,44 @@ assert_eq "the same day is zero days, not blank" \
 assert_eq "an unreadable date yields no duration rather than a zero" \
   "$(days_since "not-a-date" "2026-08-23")" ""
 
+# --- every corpus line written ANYWHERE in this repo is one the parser can read (#3165) --------------
+#
+# The line is spelled in five places: the Swift test that prints it, the parser that reads it, this
+# fixture, `mac/scripts/run-tests-locked.test.sh`, and AGENTS.md. #3165 changed which clause the parser
+# reads and updated four of them; the fifth went red only in a full `scripts/test-all.sh` run minutes
+# later, and it reported the readout as UNMEASURED rather than as a wording mismatch, which is the least
+# informative possible way to learn about it.
+#
+# So the rule is asked of the TREE rather than of a list somebody maintains: every `LIVE STORE CORPUS:`
+# string in the repository must be one `live_corpus_counts` can parse. A sixth spelling is then caught by
+# the fixture that owns the parser, in seconds, instead of by a suite run.
+REPO_FOR_CORPUS="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+CORPUS_LINES="$(grep -rhoa 'LIVE STORE CORPUS: [^"]*' \
+  "${REPO_FOR_CORPUS}/mac/scripts" "${REPO_FOR_CORPUS}/mac/OvertureTests" "${REPO_FOR_CORPUS}/AGENTS.md" \
+  2>/dev/null | grep -a 'reached-out rows in play' || true)"
+assert_eq "there really are corpus lines to check, so this is not passing over an empty list" \
+  "$([ -n "${CORPUS_LINES}" ] && echo 1 || echo 0)" "1"
+
+UNPARSEABLE=""
+while IFS= read -r corpus_line; do
+  [ -n "${corpus_line}" ] || continue
+  # The Swift source writes the line with interpolations rather than numbers, so a line still carrying
+  # one is the TEMPLATE and cannot be parsed as it stands. Its clause wording is checked below instead.
+  case "${corpus_line}" in *'\('*) continue ;; esac
+  live_corpus_counts "${corpus_line}" >/dev/null 2>&1 || UNPARSEABLE="${UNPARSEABLE} ${corpus_line}"
+done <<< "${CORPUS_LINES}"
+assert_eq "every corpus line spelled anywhere in the repo is one the parser can read" "${UNPARSEABLE}" ""
+
+# And the TEMPLATE the Swift test prints carries the clause the parser looks for, which is the half the
+# check above cannot ask, because a template holds interpolations rather than numbers.
+# Counted as "at least one" rather than as an exact number: the clause legitimately appears both in the
+# printed line and in the comment above it explaining why that clause is the one the readout is measured
+# by, and pinning the count would fail on an edit that only reworded the comment.
+assert_eq "the test that PRINTS the line writes the clause the parser reads" \
+  "$([ "$(grep -ac 'whose writer a contact holds' \
+            "${REPO_FOR_CORPUS}/mac/OvertureTests/ReplyInvariantsLiveStoreTests.swift" || echo 0)" -ge 1 ] \
+     && echo yes || echo no)" "yes"
+
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All suite-stats.sh fixtures passed."
   exit 0
