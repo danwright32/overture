@@ -272,6 +272,12 @@ assert_eq "an ordinary run is unaffected by the new argument being absent" \
 # live_corpus_report: whether the live store invariants measured anything (#2991)
 # ---------------------------------------------------------------------------
 # `ReplyInvariantsLiveStoreTests` prints a corpus line every run saying how many rows each of its
+# #3165: the number the readout is measured by is the WRITER-HELD count, not the still-open one. The open
+# count empties whenever Dan is up to date, and it read zero for as long as this clone had recorded, so the
+# readout reported a rule as dormant when the truth was that the rule had been asked a question its corpus
+# could not hold. The record's key was renamed with it, because a key named `open` counting something else
+# is how one word comes to name two units (L118); no history is lost, since the old count was zero on every
+# machine that ever wrote the file, so no `open=` line exists anywhere to inherit.
 # invariants could examine. Measured 2026-08-19 it read `0 with a reply still open, 0 reached-out rows
 # in play`, so both invariants passed having asserted nothing about anything, and the only thing
 # separating that from a clean bill of health was a printed line in a test log nobody is scheduled to
@@ -282,40 +288,40 @@ assert_eq "an ordinary run is unaffected by the new argument being absent" \
 # three states kept apart, because an unmeasured check and a passed one look identical from silence
 # (L11).
 
-CORPUS_LIVE="LIVE STORE CORPUS: 936 shows, 4 replied rows, 3 with a reply still open, 5 reached-out rows in play. A zero here means the invariants in this suite ran over nothing."
-CORPUS_DORMANT="LIVE STORE CORPUS: 936 shows, 4 replied rows, 0 with a reply still open, 0 reached-out rows in play. A zero here means the invariants in this suite ran over nothing."
-CORPUS_HALF="LIVE STORE CORPUS: 936 shows, 4 replied rows, 0 with a reply still open, 5 reached-out rows in play. A zero here means the invariants in this suite ran over nothing."
+CORPUS_LIVE="LIVE STORE CORPUS: 936 shows, 4 replied rows, 3 with a reply still open, 3 whose writer a contact holds, 5 reached-out rows in play. A zero here means the invariants in this suite ran over nothing."
+CORPUS_DORMANT="LIVE STORE CORPUS: 936 shows, 4 replied rows, 0 with a reply still open, 0 whose writer a contact holds, 0 reached-out rows in play. A zero here means the invariants in this suite ran over nothing."
+CORPUS_HALF="LIVE STORE CORPUS: 936 shows, 4 replied rows, 0 with a reply still open, 0 whose writer a contact holds, 5 reached-out rows in play. A zero here means the invariants in this suite ran over nothing."
 
 # The clock and the record are PASSED IN, never read inside, so a test can pin both. This repo passes
 # `now` explicitly everywhere for that reason, and a duration read off a hidden clock is one no test
 # can hold still (L130).
 TODAY="2026-08-23"
-SEEN_BOTH="open=2026-06-14
+SEEN_BOTH="writer=2026-06-14
 reached=2026-08-19"
 SEEN_NEITHER=""
 
 assert_eq "a corpus with rows in it says what each invariant measured" \
   "$(live_corpus_report "${CORPUS_LIVE}" "${TODAY}" "${SEEN_BOTH}")" \
-  "Live store invariants: measuring, over 3 open replies and 5 reached-out rows in play."
+  "Live store invariants: measuring, over 3 rows the writer-resolution rule can judge and 5 reached-out rows in play."
 
 # #2991 asked for the DURATION, not only the state. "Both measured nothing today" is much weaker than
 # "neither has measured anything since June": only the second says whether to care, and the whole
 # defect is a zero that stops being read as a measurement (L182).
 assert_eq "a dormant pair says how long each has been asleep" \
   "$(live_corpus_report "${CORPUS_DORMANT}" "${TODAY}" "${SEEN_BOTH}")" \
-  "Live store invariants: DORMANT. The open-reply invariant has measured nothing since 2026-06-14 (70 days), the reached-out one since 2026-08-19 (4 days), so both passed having asserted nothing about Dan's real data (#2991, L182)."
+  "Live store invariants: DORMANT. The writer-resolution invariant has measured nothing since 2026-06-14 (70 days), the reached-out one since 2026-08-19 (4 days), so both passed having asserted nothing about Dan's real data (#2991, L182)."
 
 # A clone with no record yet must say THAT, not guess a date and not fall silent. An unrecorded
 # duration and a short one are different facts (L11).
 assert_eq "a dormant pair with nothing recorded says so rather than inventing a date" \
   "$(live_corpus_report "${CORPUS_DORMANT}" "${TODAY}" "${SEEN_NEITHER}")" \
-  "Live store invariants: DORMANT. The open-reply invariant has measured nothing for as long as this clone has recorded, the reached-out one for as long as this clone has recorded, so both passed having asserted nothing about Dan's real data (#2991, L182)."
+  "Live store invariants: DORMANT. The writer-resolution invariant has measured nothing for as long as this clone has recorded, the reached-out one for as long as this clone has recorded, so both passed having asserted nothing about Dan's real data (#2991, L182)."
 
 # Half dormant is its own state and names WHICH half, because one invariant still having teeth is not
 # the same fact as neither having any, and a message covering both would be true of neither.
 assert_eq "one dormant invariant is named, with its own duration" \
   "$(live_corpus_report "${CORPUS_HALF}" "${TODAY}" "${SEEN_BOTH}")" \
-  "Live store invariants: PARTLY DORMANT. The open-reply invariant has measured nothing since 2026-06-14 (70 days); the reached-out one measured 5 this run (#2991, L182)."
+  "Live store invariants: PARTLY DORMANT. The writer-resolution invariant has measured nothing since 2026-06-14 (70 days); the reached-out one measured 5 this run (#2991, L182)."
 
 # The state that must never read as clean: no corpus line at all. That is what a scoped run produces,
 # and what a rename of the test would produce, and the emptiest possible failure must not look like
@@ -332,7 +338,7 @@ assert_eq "a run whose output simply never mentions the corpus is unmeasured too
 # it is really called.
 assert_eq "the corpus line is found inside a full run's output" \
   "$(live_corpus_report "$(printf '%s\n%s\n%s\n' 'some noise' "${CORPUS_DORMANT}" 'more noise')" "${TODAY}" "${SEEN_BOTH}")" \
-  "Live store invariants: DORMANT. The open-reply invariant has measured nothing since 2026-06-14 (70 days), the reached-out one since 2026-08-19 (4 days), so both passed having asserted nothing about Dan's real data (#2991, L182)."
+  "Live store invariants: DORMANT. The writer-resolution invariant has measured nothing since 2026-06-14 (70 days), the reached-out one since 2026-08-19 (4 days), so both passed having asserted nothing about Dan's real data (#2991, L182)."
 
 # ---------------------------------------------------------------------------
 # live_corpus_seen_update: what gets REMEMBERED, kept pure so the rules are testable
@@ -344,12 +350,12 @@ assert_eq "the corpus line is found inside a full run's output" \
 # last-measured date is the whole thing being preserved.
 assert_eq "an invariant that measured something is stamped with today" \
   "$(live_corpus_seen_update "${CORPUS_HALF}" "${TODAY}" "${SEEN_BOTH}")" \
-  "open=2026-06-14
+  "writer=2026-06-14
 reached=2026-08-23"
 
 assert_eq "both are stamped when both measured" \
   "$(live_corpus_seen_update "${CORPUS_LIVE}" "${TODAY}" "${SEEN_BOTH}")" \
-  "open=2026-08-23
+  "writer=2026-08-23
 reached=2026-08-23"
 
 # The case the whole feature rests on: a run where neither measured anything must CHANGE NOTHING, or
@@ -368,7 +374,7 @@ assert_eq "a run with no corpus line leaves the record untouched" \
 # A first record on a fresh clone is written, rather than needing a file to already exist.
 assert_eq "a first measurement records itself on a clone with no file" \
   "$(live_corpus_seen_update "${CORPUS_LIVE}" "${TODAY}" "${SEEN_NEITHER}")" \
-  "open=2026-08-23
+  "writer=2026-08-23
 reached=2026-08-23"
 
 # ---------------------------------------------------------------------------
@@ -385,6 +391,44 @@ assert_eq "the same day is zero days, not blank" \
 # unreadable date is not one (L11).
 assert_eq "an unreadable date yields no duration rather than a zero" \
   "$(days_since "not-a-date" "2026-08-23")" ""
+
+# --- every corpus line written ANYWHERE in this repo is one the parser can read (#3165) --------------
+#
+# The line is spelled in five places: the Swift test that prints it, the parser that reads it, this
+# fixture, `mac/scripts/run-tests-locked.test.sh`, and AGENTS.md. #3165 changed which clause the parser
+# reads and updated four of them; the fifth went red only in a full `scripts/test-all.sh` run minutes
+# later, and it reported the readout as UNMEASURED rather than as a wording mismatch, which is the least
+# informative possible way to learn about it.
+#
+# So the rule is asked of the TREE rather than of a list somebody maintains: every `LIVE STORE CORPUS:`
+# string in the repository must be one `live_corpus_counts` can parse. A sixth spelling is then caught by
+# the fixture that owns the parser, in seconds, instead of by a suite run.
+REPO_FOR_CORPUS="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+CORPUS_LINES="$(grep -rhoa 'LIVE STORE CORPUS: [^"]*' \
+  "${REPO_FOR_CORPUS}/mac/scripts" "${REPO_FOR_CORPUS}/mac/OvertureTests" "${REPO_FOR_CORPUS}/AGENTS.md" \
+  2>/dev/null | grep -a 'reached-out rows in play' || true)"
+assert_eq "there really are corpus lines to check, so this is not passing over an empty list" \
+  "$([ -n "${CORPUS_LINES}" ] && echo 1 || echo 0)" "1"
+
+UNPARSEABLE=""
+while IFS= read -r corpus_line; do
+  [ -n "${corpus_line}" ] || continue
+  # The Swift source writes the line with interpolations rather than numbers, so a line still carrying
+  # one is the TEMPLATE and cannot be parsed as it stands. Its clause wording is checked below instead.
+  case "${corpus_line}" in *'\('*) continue ;; esac
+  live_corpus_counts "${corpus_line}" >/dev/null 2>&1 || UNPARSEABLE="${UNPARSEABLE} ${corpus_line}"
+done <<< "${CORPUS_LINES}"
+assert_eq "every corpus line spelled anywhere in the repo is one the parser can read" "${UNPARSEABLE}" ""
+
+# And the TEMPLATE the Swift test prints carries the clause the parser looks for, which is the half the
+# check above cannot ask, because a template holds interpolations rather than numbers.
+# Counted as "at least one" rather than as an exact number: the clause legitimately appears both in the
+# printed line and in the comment above it explaining why that clause is the one the readout is measured
+# by, and pinning the count would fail on an edit that only reworded the comment.
+assert_eq "the test that PRINTS the line writes the clause the parser reads" \
+  "$([ "$(grep -ac 'whose writer a contact holds' \
+            "${REPO_FOR_CORPUS}/mac/OvertureTests/ReplyInvariantsLiveStoreTests.swift" || echo 0)" -ge 1 ] \
+     && echo yes || echo no)" "yes"
 
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All suite-stats.sh fixtures passed."
