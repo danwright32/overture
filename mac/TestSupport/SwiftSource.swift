@@ -16,6 +16,16 @@ enum SwiftSource {
         var text: String        // the literal's contents, interpolations left intact
         var isRaw: Bool         // #"..."#, which in this codebase is always a regex, never a sentence
         var line: Int = 0
+        // #3155: the only thing between this literal and the one before it was `+` and whitespace, so
+        // the two are one sentence in the running app. A reader of the literals alone cannot tell that,
+        // and the copy inventory recorded the halves separately, which put a fragment in front of the
+        // cold read and left the sentence Dan actually sees written nowhere.
+        //
+        // Decided HERE rather than by a caller re-reading the source, because the character positions
+        // that make it decidable exist only during the scan: `codeLines` has the literals removed with
+        // nothing marking where they were, so a caller holding two literals on one line cannot tell
+        // which side of the `+` each sat on.
+        var joinedToPrevious: Bool = false
     }
 
     // Copy that isn't a sentence Overture says to Dan is marked where it lives, not allowlisted in a
@@ -223,9 +233,24 @@ enum SwiftSource {
             let index = i + offset
             return index < chars.count ? chars[index] : nil
         }
+        // #3155: whether the last thing emitted was a literal, and whether a `+` has been seen since.
+        // Both are needed together: `+` alone is arithmetic, and a literal alone is the ordinary case.
+        // Whitespace is transparent, so a concatenation broken across lines reads the same as one on a
+        // single line (a newline never reaches here, and a comment never does either, so both are
+        // transparent for free).
+        var lastEmissionWasLiteral = false
+        var plusSinceThatLiteral = false
+
         func code(_ character: Character) {
             scan.codeLines[line, default: ""].append(character)
             scan.sourceLines[line, default: ""].append(character)
+            if character.isWhitespace { return }
+            if character == "+", lastEmissionWasLiteral {
+                plusSinceThatLiteral = true
+                return
+            }
+            lastEmissionWasLiteral = false
+            plusSinceThatLiteral = false
         }
         // A literal is put back into its line's source, quotes and all, so a caller matching on `Text(`
         // sees the sentence sitting inside it. A `"""` block collapses onto its opening line, which is
@@ -233,7 +258,10 @@ enum SwiftSource {
         func literal(_ text: String, raw: Bool, at start: Int) {
             let quoted = raw ? "#\"\(text)\"#" : "\"\(text)\""
             scan.sourceLines[start, default: ""].append(quoted)
-            scan.literals.append(Literal(text: text, isRaw: raw, line: start))
+            scan.literals.append(Literal(text: text, isRaw: raw, line: start,
+                                         joinedToPrevious: lastEmissionWasLiteral && plusSinceThatLiteral))
+            lastEmissionWasLiteral = true
+            plusSinceThatLiteral = false
         }
 
         while i < chars.count {

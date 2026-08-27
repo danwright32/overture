@@ -144,6 +144,15 @@ enum CopyInventory {
             Array(Set(occurrences[sentence] ?? [])).sorted()
         }
 
+        // #3155: the entries that are still only PART of what Dan reads, because a value is interpolated
+        // into them and no static reading can supply it. Named rather than left in the list looking whole:
+        // the cold read is asked whether a sentence tells Dan anything the line beside it did not, and
+        // that question cannot be answered about a line with a hole in it. `+` concatenation is joined
+        // before this (see `composed`), so what remains here is only the genuinely unresolvable half.
+        var carryingAValue: [String] {
+            occurrences.keys.filter { $0.contains("\\(") }.sorted()
+        }
+
         // The same sentence written in more than one place. #843's raw material, and the reason the list
         // leads with this rather than burying it: a duplicate is the one thing here that is always worth
         // a second look, because the two copies WILL drift.
@@ -179,11 +188,43 @@ enum CopyInventory {
             for reason in SwiftSource.ignoredReasons(in: source) {
                 inventory.exclusions.append(Exclusion(file: name, reason: reason))
             }
-            for literal in SwiftSource.literals(in: source) where isCopy(literal) {
+            for literal in composed(SwiftSource.literals(in: source)) where isCopy(literal) {
                 inventory.occurrences[literal.text, default: []].append(name)
             }
         }
         return inventory
+    }
+
+    // #3155: a sentence written as `"first half " + "second half"` is ONE sentence in the running app,
+    // and until this it reached the inventory as two.
+    //
+    // That matters because the cold read is the only thing catching the #840/#843 class, and it cannot
+    // catch what it cannot see. Hit twice in one session, 2026-08-23: `GmailReconnectCopy` (#2967)
+    // composed both reconnect sentences from a shared fragment and `AppNotices.responsesNotUnderstood`
+    // (#2888) did the same, and both landed here as pieces while the sentence Dan reads appeared nowhere.
+    //
+    // Joined BEFORE `isCopy` is asked, deliberately and not as an ordering accident. `isCopy` refuses a
+    // one-word literal, because at this altitude one word cannot be told from an SF Symbol or a defaults
+    // key; two one-word halves of a real sentence are exactly that shape, so asking first would drop the
+    // sentence and then have nothing left to join.
+    //
+    // What it still cannot do is resolve a value: `"\(cause), so nothing was sent"` has no second
+    // literal to join, and no static reading can supply the words. Those are NAMED instead, in the
+    // rendered document's own section, rather than sitting in the list looking like whole sentences.
+    static func composed(_ literals: [SwiftSource.Literal]) -> [SwiftSource.Literal] {
+        var out: [SwiftSource.Literal] = []
+        for literal in literals {
+            if literal.joinedToPrevious, var previous = out.last {
+                previous.text += literal.text
+                // Raw is carried by the GROUP: a raw literal anywhere in it means the whole thing is a
+                // regex rather than a sentence, and `isCopy` refuses it for that reason.
+                previous.isRaw = previous.isRaw || literal.isRaw
+                out[out.count - 1] = previous
+            } else {
+                out.append(literal)
+            }
+        }
+        return out
     }
 
     enum Failure: Error, CustomStringConvertible {
@@ -394,9 +435,12 @@ extension CopyInventory.Inventory {
         - **One-word labels** (`Text("Sources")`). At this altitude a single word cannot be told apart
           from an SF Symbol, a defaults key or an identifier, and letting those in would bury the
           sentences under tokens nobody reads.
-        - **Sentences assembled from parts.** This lists the templates in the source, so a line built at
-          runtime from `Plural.count(n, "show")` plus a suffix appears as its pieces, not as the finished
-          sentence.
+        - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
+          one sentence the running app says (#3155). What is still only part of what Dan reads is a
+          sentence carrying a VALUE: \(carryingAValue.count) of the \(occurrences.count) below hold a
+          `\\(...)` where a number or a name goes, so what is printed is the template. They are counted
+          here rather than listed again, because the hole is visible in the line itself; what was missing
+          was any statement of how much of this document is templates.
         - **DEBUG-only copy**, which is compiled out of the app Dan runs.
         - **Marked regions**, listed below with the reason, at the source.
 
