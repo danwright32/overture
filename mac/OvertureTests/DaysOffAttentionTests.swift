@@ -72,28 +72,48 @@ struct DaysOffAttentionTests {
         #expect(!title.contains("("), "no parenthetical: the explanation lives in the hover and the sheet")
     }
 
-    // And the item must not RESERVE space for a title it no longer has: showsTitle drives an always-on
-    // static label, so leaving it wired to the no-shoots state would print a bare duplicate "Days off"
-    // beside the icon while the pipe is dry, which is the one thing this pass exists to remove.
-    @Test func theToolbarItemStopsPrintingAStaticTitle() throws {
-        let rootView = SourceGuardHelper.source("Overture/App/RootView.swift")
-        let range = try #require(rootView.range(of: "DaysOffAttention.badgeTitle"))
-        let item = rootView[range.lowerBound...].prefix(400)
-        #expect(!item.contains("showsTitle: daysOffReason"),
-                "the label is carried by colour now, not by printed text")
+    // #1745: the words are PRINTED beside the icon while Overture is blind to his schedule, and hidden
+    // again the moment it is not. The two assertions #1430 left here were the exact reverse of this pair
+    // (that the item must never print a static title, and that it must be drawn in `OVColor.inkSoft`) and
+    // they are DELETED rather than adjusted: they were the guard defending the behaviour this reverses
+    // (L252). What #1430 actually asked for, the plain two words and no gold, is asserted below and in
+    // `theToolbarNeverDescribesHisScheduleBackToHim`, and neither is being reversed.
+    @Test func theWordsComeUpOnlyWhileSomethingNeedsHim() {
+        #expect(DaysOffAttention.showsTitle(.noUpcomingShoots))
+        #expect(DaysOffAttention.showsTitle(.feedStalled))
+        #expect(DaysOffAttention.showsTitle(.none) == false,
+                "a mark that is always up is not a mark; the resting state leaves its name to the hover")
     }
 
-    // And it must not wear the app's attention colour. Gold is reserved for something that is WRONG (a
-    // failing source, three items along the same toolbar); this is a limit on what Overture can promise,
-    // which is worth saying quietly and exactly once.
-    @Test func theBadgeIsNotDrawnInTheAttentionColour() throws {
-        // The path has to be right or SourceGuardHelper returns "" and a !contains guard passes on an empty
-        // string, which is the shape of a test that can never fail. The #require below is what catches that.
+    // Scoped to the FUNCTION's balanced-brace body, not to a fixed number of characters after an anchor.
+    // Both of these were first written as `.prefix(600)` from `DaysOffAttention.badgeTitle` and both went
+    // red on their own explaining comment rather than on the code: a window measured in characters stops
+    // containing the thing it checks the moment anything is written above it (L518). `bodyOfFunction` has
+    // no such number in it.
+    @Test func theToolbarItemAsksForTheWordsThroughThatRule() throws {
         let rootView = SourceGuardHelper.source("Overture/App/RootView.swift")
-        let range = try #require(rootView.range(of: "DaysOffAttention.badgeTitle"))
-        let item = rootView[range.lowerBound...].prefix(400)
-        #expect(!item.contains("OVColor.gold"), "gold is for what is wrong, and nothing here is wrong")
-        #expect(item.contains("OVColor.inkSoft"), "quiet secondary ink, not an alarm")
+        let item = try #require(SourceGuardHelper.bodyOfFunction(named: "daysOffButton", in: rootView))
+        #expect(item.contains("showsTitle: DaysOffAttention.showsTitle(reason)"),
+                "the view must ask the rule, so the rule above is what actually ships")
+    }
+
+    // The half that makes the defect structurally unable to return: there is no longer an ink to get
+    // wrong, because the ink does not change at all. #1745's whole cause was that the attention state's
+    // ink (`OVColor.inkSoft`, dark mode (0.702, 0.722, 0.667)) is DIMMER than the resting `Color.primary`,
+    // so the state meaning "Overture cannot keep clear of your bookings" rendered less visibly than the
+    // state meaning everything is fine.
+    @Test func theInkIsTheSameWhetherOrNotSomethingNeedsHim() throws {
+        // The path has to be right or SourceGuardHelper returns "" and a !contains guard passes on an empty
+        // string, which is the shape of a test that can never fail. The #require below is what catches that:
+        // `bodyOfFunction` answers nil rather than "" when it cannot find the function at all.
+        let rootView = SourceGuardHelper.source("Overture/App/RootView.swift")
+        let item = try #require(SourceGuardHelper.bodyOfFunction(named: "daysOffButton", in: rootView))
+        #expect(item.contains(".foregroundStyle(Color.primary)"),
+                "one ink, stated unconditionally, for both states")
+        #expect(!item.contains("OVColor.inkSoft"),
+                "the dimmer-than-resting ink is what #1745 was, and it must not come back")
+        #expect(!item.contains("OVColor.gold"),
+                "gold is for what is wrong, and nothing here is wrong (#1430 stands)")
     }
 
     // It names the CONSEQUENCE, not just the fact, because the consequence is the part he can act on: he
