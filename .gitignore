@@ -65,3 +65,8 @@ DerivedData/
 # LONG they have been dormant rather than only that they are. Per machine for the same reason as the
 # line above, and the date lives inside the file rather than being its mtime, which a clone rewrites.
 .overture-live-corpus-seen
+
+# #1995: when the app-hosted tests (the only ones that render a real SwiftUI view) last passed HERE.
+# Per machine for the same reason as the line above, and the date lives inside the file rather than
+# being its mtime, which a clone rewrites.
+.overture-hosted-suite-seen

@@ -658,6 +658,24 @@ already drifting from the Swift version it mirrored.
   must never give, since the reading it exists to support is "was this run short?", so it prints
   `Suite shape: NOT REPORTED` and names the restart instead of summing across a crash, and such a
   run can no longer record its own count as the baseline the short-run gate measures against.
+  **Since #1995 a third line says whether THIS run verified the SCREENS.** The app-hosted tests are the
+  only ones that render a real SwiftUI view, and since #1967 a launch fault costs them alone: the pure
+  suite passes, the runner says so, and work carries on correctly. What nothing recorded is when they last
+  actually ran, so a host broken across a stretch of UI work leaves the screens unverified for as long as
+  that lasts, silently, and the work most likely to be happening in that window is exactly the work they
+  cover. It is judged by the hosted suites' OWN `@Suite` display names, derived from
+  `mac/OvertureHostedTests/` rather than listed anywhere, and by a run reporting one of them as PASSED
+  rather than merely naming it: a run that started that bundle and died in it names those suites exactly
+  as a passing run does. The count of test BUNDLES was considered and is a proxy rather than evidence, so
+  it is not used: it says two bundles ran, never which two.
+  Four states, and only one of them is good: `verified by this run`, `NOT VERIFIED ... last passed on
+  <date> (<n> days ago)`, `NOT VERIFIED ... no run on this clone has ever verified them`, and `UNMEASURED`
+  when no suite name could be read at all, which must never be folded into the second (L11). The record is
+  `.overture-hosted-suite-seen` beside the repo, gitignored, with the date INSIDE the file, all three on
+  `.overture-live-corpus-seen`'s precedent and for its reasons. A run that did not verify them LEAVES IT
+  ALONE, which is the whole mechanism: stamping every run would move the date forward while the host
+  stayed broken and the age would always read zero.
+
   **Since #2991 a second line beside it says whether the LIVE STORE invariants measured anything.**
   `ReplyInvariantsLiveStoreTests` prints a corpus line every run giving how many rows each of its
   invariants could examine, and measured 2026-08-19 it read `0 with a reply still open, 0 reached-out
