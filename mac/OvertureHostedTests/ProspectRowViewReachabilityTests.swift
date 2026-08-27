@@ -22,7 +22,11 @@ struct ProspectRowViewReachabilityTests {
         i.presenter = presenter
         i.sentAt = sentAt
         if probed {
-            i.reachabilityProbedAt = Date(timeIntervalSince1970: 1_780_000_000)
+            // #3169: against the LIVE clock, because ProspectRowView asks for the badge with no
+            // `now` and reads the wall clock at render time. A pinned instant here means "probed on
+            // that day", which stopped meaning "probed recently" the moment real time walked past
+            // the freshness window, and eight tests in this file went red on an untouched main.
+            i.reachabilityProbedAt = LiveClockProbe.fresh
             // #1596 Phase 3: the badge reads the stored result, which the writers set once where the venue
             // and press guards have run. A row with a probe date and no result reads as never checked.
             i.reachabilityResult = hasEmail ? .emailFound : .noEmailFound
@@ -78,6 +82,19 @@ struct ProspectRowViewReachabilityTests {
         let t = try texts(item(presenter: "Aurora Strings", sourceListingURL: "https://carnegiehall.org/x",
                                probed: true, hasEmail: false))
         #expect(t.contains { $0.contains(ReachabilityCopy.noEmailFoundBadge) })
+    }
+
+    // #3169: what a released answer actually renders, which nothing hosted asserted until the day every
+    // fixture in this file aged into it at once. `Reachability.badge` covers the rule already; what was
+    // missing is that THIS row is what a rotted fixture silently becomes, so a future rot shows up as a
+    // second badge appearing rather than only as the first one vanishing.
+    @Test func aProbeTheClockHasReleasedShowsTheStaleBadge() throws {
+        var released = item(presenter: "Aurora Strings", sourceListingURL: "https://carnegiehall.org/x",
+                            probed: true, hasEmail: true)
+        released.reachabilityProbedAt = LiveClockProbe.stale
+        let t = try texts(released)
+        #expect(t.contains { $0.contains(ReachabilityCopy.staleProbeBadge) })
+        #expect(!t.contains { $0.contains(ReachabilityCopy.emailFoundBadge) })
     }
 
     // Once the pitch has gone out, the show was clearly reachable; the badge must not linger on it.
