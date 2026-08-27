@@ -730,6 +730,28 @@ assert_contains "a run with no corpus line says it is unmeasured rather than say
 CORPUS_RECORD_DIR="$(mktemp -d)"
 export OVERTURE_LIVE_CORPUS_RECORD="${CORPUS_RECORD_DIR}/seen"
 
+# #3172: the repo-root default, and what is there BEFORE any stub below runs.
+#
+# The claim this fixture makes about it is that the stub runs leave it alone. That was written as
+# "the file is absent", which is a different claim and one that stops being true the first time this
+# machine runs a real suite whose live store invariants measure anything: that run writes this exact
+# path, by design, and the assertion then fails forever. Both halves happened here in one session on
+# 2026-08-27, one `scripts/test-all.sh` run writing `reached=2026-08-27` and the next reporting
+# `FAILED - scripts/run-shell-fixtures.sh` with the Swift suite fully green.
+#
+# So it compares BEFORE against AFTER, which is the claim, and is true on a pristine checkout and on a
+# machine that has been running the suite for months alike (L68). Same shape as
+# scripts/check-tree-untouched.sh, for the same reason: nobody runs a suite on a clean tree.
+REPO_CORPUS_RECORD="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}/.overture-live-corpus-seen"
+repo_corpus_record_state() {
+  if [[ -e "${REPO_CORPUS_RECORD}" ]]; then
+    shasum -a 256 "${REPO_CORPUS_RECORD}" | cut -d' ' -f1
+  else
+    echo absent
+  fi
+}
+REPO_CORPUS_RECORD_BEFORE="$(repo_corpus_record_state)"
+
 # And a run that DOES carry one, with both counts at zero, is called dormant on screen. Without this
 # the wiring would be proved only against the absent case, which is the easy half.
 DORMANT_RUN="$(run_wrapper_with_stub_xcodebuild "LIVE STORE CORPUS: 936 shows, 4 replied rows, 0 with a reply still open, 0 reached-out rows in play.
@@ -769,9 +791,11 @@ assert_contains "and the record names both invariants it measured" \
 assert_contains "and the reached-out one too" \
   "reached=" "$(cat "${OVERTURE_LIVE_CORPUS_RECORD}" 2>/dev/null)"
 
-# Nothing was written into the repository itself, which is what went wrong the first time.
-assert_equals "no run wrote a record into the repository" \
-  "absent" "$([[ -e "${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}/.overture-live-corpus-seen" ]] && echo present || echo absent)"
+# Nothing the stub runs did reached the repository itself, which is what went wrong the first time.
+# Judged by CONTENT against what was there before them, so a real record this machine already carries
+# is not mistaken for something these runs wrote (#3172).
+assert_equals "no run above changed the record in the repository" \
+  "${REPO_CORPUS_RECORD_BEFORE}" "$(repo_corpus_record_state)"
 
 rm -rf "${CORPUS_RECORD_DIR}"
 unset OVERTURE_LIVE_CORPUS_RECORD
