@@ -15,7 +15,10 @@ import ViewInspector
 @Suite("The re-check control on a card (#2267)")
 struct RecheckControlOnTheRowTests {
 
-    private let probedAt = Date(timeIntervalSince1970: 1_780_000_000)
+    // #3169: against the LIVE clock. `Reachability.recheckState` refuses a stale answer, and
+    // ProspectRowView asks it with no `now`, so a pinned instant here is an answer that goes stale on
+    // a date nobody chose: this one did, and five tests in this file went red on an untouched main.
+    private let probedAt = LiveClockProbe.fresh
 
     private func item(probed: Bool = true, requestedAt: Date? = nil) -> QueueItem {
         var i = QueueItem(id: "k", groupName: "Aurora Strings", discipline: "music",

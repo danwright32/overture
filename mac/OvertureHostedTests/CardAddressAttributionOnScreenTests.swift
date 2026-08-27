@@ -19,7 +19,10 @@ struct CardAddressAttributionOnScreenTests {
                           matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                           status: .new)
         i.presenter = "Rosalind Verrier"
-        i.reachabilityProbedAt = Date(timeIntervalSince1970: 1_780_000_000)
+        // #3169: against the LIVE clock, the same as its two siblings. This file was green through
+        // the crossing only because it asserts on the address list, which renders whatever the badge
+        // says, so it was the same rot with a later fuse rather than a different case.
+        i.reachabilityProbedAt = LiveClockProbe.fresh
         i.reachabilityResult = .emailFound
         i.hasPendingRecipient = true
         i.contacts = [RecipientSnapshot(id: "marionalcottmusic@example.com", name: name,
