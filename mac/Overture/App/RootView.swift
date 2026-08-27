@@ -2267,20 +2267,6 @@ struct RootView: View {
     // #1322: a probe reuses this same run slot, so the compact label names it "Checking reachability"
     // rather than "Prepping".
     //
-    // #3137: how many shows the check now in flight is working through, or nil if nothing says.
-    //
-    // From the check's OWN marker, which is where the size is written when the run starts
-    // (`PrepQueueService` records `lookups: queue.items.count`) and is already what the settle path reads
-    // to record the run's pace. One source for the size, rather than a second count derived from the
-    // queue, which would answer differently the moment a show left it mid-run (L16).
-    //
-    // Nil on any failure, and that is the safe direction rather than an oversight: an unknown size keeps
-    // the flat window, which is the behaviour that shipped for months, where a window scaled from a guess
-    // could hide a real hang for an hour.
-    private func liveCheckLookups() -> Int? {
-        ((try? ReachabilityProbeMarker.read(from: PrepQueueService.defaultProbeRunURL)) ?? nil)?.lookups
-    }
-
     // #1822: lifted out of the toolbar's `label:` builder, which the added arguments pushed past the Swift
     // type-checker's limit for one expression. Nothing about the label changed in the move.
     private var prepToolbarLabel: some View {
@@ -2299,7 +2285,7 @@ struct RootView: View {
             // #3137: a check's window follows its DEPTH. Past the runner's fan-out cap a bigger check
             // runs deeper rather than wider, and the flat ten minutes did not move with either, so a
             // healthy 30 show run would say it looks stuck moments before finishing.
-            timeout: isProbe ? RunTimeouts.reachabilityProbeWindow(lookups: liveCheckLookups())
+            timeout: isProbe ? RunTimeouts.reachabilityProbeWindow(lookups: PrepQueueService.liveCheckLookups())
                              : RunTimeouts.prep,
             // #1822: the heartbeat this label never had. Without it RunProgress.liveness saw no evidence
             // of life at all and called every run past its timeout stuck, inside a branch that renders
@@ -2483,7 +2469,7 @@ struct RootView: View {
                     // sitting on a spinner identical to a working run until the marker goes stale.
                     cancelRequested: { PrepQueueService.cancelRequested(slot: slot) },
                     // #3137: read each tick, so the window is right from the moment the marker lands.
-                    probeLookups: { liveCheckLookups() })
+                    probeLookups: { PrepQueueService.liveCheckLookups() })
         }
     }
 

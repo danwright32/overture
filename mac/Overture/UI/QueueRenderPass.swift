@@ -75,6 +75,9 @@ enum QueueRenderPass {
         // the pair had a corner the app can never be in, and the roster was handed only the first of them.
         // #2267's per-card re-check state is derived from it below, so the card and the pill read one fact.
         var runInFlight: RunKind? = nil
+        // #3186: the check's start and size, for the row's own re-check label.
+        var checkRunSince: Date? = nil
+        var checkLookups: Int? = nil
         var replyRunAlive: Bool = false
         // #1930's fingerprint of what this view derives FROM, gathered by the caller because it describes
         // the caller's own state. DEBUG only in effect: the pass records it and nothing else reads it.
@@ -127,6 +130,8 @@ enum QueueRenderPass {
                                           runInFlight: i.runInFlight, replyRunAlive: i.replyRunAlive),
             gmailConnected: i.gmailConnected,
             probeRunning: i.runInFlight == .reachabilityCheck,
+            checkRunSince: i.checkRunSince,
+            checkLookups: i.checkLookups,
             reachedOut: reachedOut,
             reachedOutKeys: reachedOutKeys,
             pendingBookings: QueueModel.pendingBookingCount(items),

@@ -62,7 +62,8 @@ struct PrepProgressWiringGuardTests {
         // #3137: the WINDOW call, not the bare constant. `RunTimeouts.reachabilityProbe` is a prefix of
         // `RunTimeouts.reachabilityProbeWindow`, so the looser needle passes whichever of the two the
         // label uses and could no longer tell them apart (#3157).
-        #expect(body.contains("RunTimeouts.reachabilityProbeWindow(lookups: liveCheckLookups())"),
+        #expect(body.contains(
+                    "RunTimeouts.reachabilityProbeWindow(lookups: PrepQueueService.liveCheckLookups())"),
                 "a probe is judged against Prep's window, or against a flat one that ignores its depth")
         #expect(body.contains("RunTimeouts.prep"))
     }
