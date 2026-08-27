@@ -46,6 +46,9 @@ source "${SCRIPT_DIR}/lib/suite-stats.sh"
 # shellcheck source=./lib/test-progress-watch.sh
 source "${SCRIPT_DIR}/lib/test-progress-watch.sh"
 
+# shellcheck source=./lib/hosted-suite-stamp.sh
+source "${SCRIPT_DIR}/lib/hosted-suite-stamp.sh"
+
 # Given `ps -eo pid=,command=`-style output (one process per line: PID then its full command),
 # returns the PIDs of any resident Debug-configuration Overture.app test host (#632): the one
 # xcodebuild test boots at .../DerivedData/*/Build/Products/Debug/Overture.app/Contents/MacOS/Overture.
@@ -671,6 +674,35 @@ main() {
   LIVE_CORPUS_NEXT="$(live_corpus_seen_update "${last_output}" "${LIVE_CORPUS_TODAY}" "${LIVE_CORPUS_SEEN}")"
   if [[ -n "${LIVE_CORPUS_NEXT}" && "${LIVE_CORPUS_NEXT}" != "${LIVE_CORPUS_SEEN}" ]]; then
     printf '%s\n' "${LIVE_CORPUS_NEXT}" > "${LIVE_CORPUS_RECORD}" 2>/dev/null || true
+  fi
+
+  # #1995: and whether THIS run verified the screens, beside the two readouts above.
+  #
+  # The hosted tests are the only ones that render a real SwiftUI view, and since #1967 a launch fault
+  # costs them alone: the pure suite passes, this script says so, and work carries on correctly. What
+  # nothing recorded is when they last actually ran, so a host broken across a stretch of UI work leaves
+  # the screens unverified for as long as that lasts, silently, while the work most likely to be happening
+  # in that window is exactly the work they cover.
+  #
+  # Judged by the hosted suites' OWN names, derived from the directory rather than listed anywhere, so a
+  # run that names one of them as passed really did render a view. A scoped pure run, a crashed host and a
+  # build failure all correctly report NOT VERIFIED, and each leaves the record alone rather than stamping
+  # today over the last real pass.
+  #
+  # Overridable for the same structural reason as the record above: the fixture drives the real wrapper,
+  # so a default only it can move is what keeps a test out of the live tree (L2).
+  HOSTED_STAMP_RECORD="${OVERTURE_HOSTED_SUITE_RECORD:-${MAC_DIR}/../.overture-hosted-suite-seen}"
+  HOSTED_STAMP_TODAY="$(date +%Y-%m-%d)"
+  HOSTED_STAMP_SEEN="$(cat "${HOSTED_STAMP_RECORD}" 2>/dev/null || true)"
+  HOSTED_SUITE_NAMES="$(hosted_suite_names "${MAC_DIR}/OvertureHostedTests")"
+  HOSTED_VERIFIED="$(hosted_suites_ran "${last_output}" "${HOSTED_SUITE_NAMES}")"
+  while IFS= read -r hosted_line; do
+    [[ -n "${hosted_line}" ]] && echo "run-tests-locked.sh: ${hosted_line}" >&2
+  done <<< "$(hosted_freshness_line "${HOSTED_VERIFIED}" "$(hosted_stamp_date "${HOSTED_STAMP_SEEN}")" \
+                                    "${HOSTED_STAMP_TODAY}" "${HOSTED_SUITE_NAMES}")"
+  HOSTED_STAMP_NEXT="$(hosted_stamp_update "${HOSTED_VERIFIED}" "${HOSTED_STAMP_TODAY}" "${HOSTED_STAMP_SEEN}")"
+  if [[ -n "${HOSTED_STAMP_NEXT}" && "${HOSTED_STAMP_NEXT}" != "${HOSTED_STAMP_SEEN}" ]]; then
+    printf '%s' "${HOSTED_STAMP_NEXT}" > "${HOSTED_STAMP_RECORD}" 2>/dev/null || true
   fi
 
   # #2322: no test started at all, and the evidence says the machine rather than the change. Said
