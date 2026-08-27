@@ -83,6 +83,12 @@ struct RunProgressView: View {
     // Read each tick like the others; defaults to "no", so every caller with nothing to ask is unaffected.
     var waitingOnAnswer: (() -> Bool)? = nil
 
+    // #3137: how many shows this check is working through, read each tick rather than captured. A closure
+    // for the same reason the heartbeat and the count are (#1003): the marker carrying the size is written
+    // when the run starts, which can be after this view was constructed, and the panel re-renders every
+    // second. Nil where the caller has nothing to say, which every non-probing phase does.
+    var probeLookups: (() -> Int?)? = nil
+
     // Each phase's own stall window: an in-process sweep is quick, a detached read that follows detail
     // pages legitimately runs long, so reusing the sweep's 3-minute ceiling for the read would declare a
     // healthy run stuck (the #803 lesson).
@@ -94,7 +100,10 @@ struct RunProgressView: View {
         case .prepping: return RunTimeouts.prep
         // #1597: a check is not a Prep run with a different title. It shared Prep's 3-minute ceiling and
         // so reported the first real one (7m51s, working fine) as stuck at 3:38 on screen.
-        case .probing:  return RunTimeouts.reachabilityProbe
+        // #3137: and ten minutes is a per-ROUND figure. Past the runner's fan-out cap a bigger check runs
+        // deeper rather than wider, so the window follows its depth or a healthy 30 show run says it looks
+        // stuck moments before it finishes.
+        case .probing:  return RunTimeouts.reachabilityProbeWindow(lookups: probeLookups?())
         }
     }
 

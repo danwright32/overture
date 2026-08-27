@@ -31,6 +31,37 @@ enum RunTimeouts {
     // so a long batch never goes stale, and lengthening that would only make a DEAD run look alive longer.
     static let reachabilityProbe: TimeInterval = 10 * 60
 
+    // #3137: the same window, SIZED TO THE RUN, because ten minutes is a per-round figure and was being
+    // applied to runs of any depth.
+    //
+    // `prep-run.sh` splits the work-list into `min(items, OVERTURE_PREP_MAX_PARALLEL)` chunks and each
+    // chunk works through its slice in order, so past the cap a bigger check does NOT fan out wider: it
+    // puts more shows in each chunk, and the run's wall clock tracks shows-per-chunk rather than shows.
+    // The constant above never moved with either. Measured 2026-08-22, Dan at the machine: a 12 show check
+    // took 386.6s, 64% of the fixed 600s budget, at 2 shows per chunk for two of the chunks. A 30 show
+    // check is 3 per chunk and would plausibly land past 600s while running perfectly normally.
+    //
+    // Crossing it does not kill anything: this is the visible stall WARNING only, and
+    // `PrepQueueService.markerStaleAfter` deliberately stays at `prep`. So the cost is a healthy run
+    // telling Dan it looks stuck moments before it finishes, which is #1530's defect exactly, and the
+    // damage is not the one wrong message: a warning that fires on healthy runs is a warning that gets
+    // ignored, and this one exists to surface real hangs (#2577, #2929).
+    //
+    // ROUNDS, through `ProbeDurationHistory.rounds`, which is the same arithmetic the selection bar
+    // already quotes a wait from: one definition of what a round is, rather than two that can drift (L16).
+    // A check of ten or fewer is one round and its window is unchanged, which is the common case.
+    //
+    // A nil or nonsense count keeps the flat window rather than inventing one. That is the safe direction
+    // here and it is worth saying why: an unknown size means the marker is from a build before the count
+    // was written, and warning EARLY on that is the behaviour that shipped for months, while a window
+    // scaled from a guess could hide a real hang for an hour.
+    static func reachabilityProbeWindow(lookups: Int?) -> TimeInterval {
+        guard let lookups, lookups > 0 else { return reachabilityProbe }
+        let streams = min(lookups, ProbeSelection.maxConcurrentLookups)
+        let rounds = ProbeDurationHistory.rounds(lookups: lookups, streams: streams)
+        return reachabilityProbe * Double(max(rounds, 1))
+    }
+
     // #2872: how long "Finishing up" may stand before it becomes an actionable state.
     //
     // Not a run window at all, which is why it is the shortest here: it covers the HANDOVER between the
