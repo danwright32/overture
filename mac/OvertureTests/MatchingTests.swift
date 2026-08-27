@@ -340,8 +340,18 @@ struct DownbeatExportTests {
         #expect(export.clients.count == 1)
         #expect(export.clients[0].displayName == "DCINY")
 
-        let bad = Data(#"{"version":9,"clients":[],"venues":[]}"#.utf8)
-        #expect(throws: DownbeatExportError.unsupportedVersion(9)) {
+        // #3193 reversed the upper half of this gate. A version ABOVE the highest one this reader
+        // knows used to be refused, which would have taken the bridge down on Downbeat's next bump
+        // (empty clients, empty bookings, empty blockedDates, and a scout no longer suppressing
+        // nights already booked). The assertion that a version 9 file is refused is DELETED rather
+        // than adjusted: it was the guard defending the behaviour that was reversed (L252).
+        let future = Data(#"{"version":9,"clients":[],"venues":[]}"#.utf8)
+        #expect(throws: Never.self) {
+            try DownbeatBridge.decode(future)
+        }
+
+        let bad = Data(#"{"version":0,"clients":[],"venues":[]}"#.utf8)
+        #expect(throws: DownbeatExportError.unsupportedVersion(0)) {
             try DownbeatBridge.decode(bad)
         }
     }

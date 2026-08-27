@@ -24,7 +24,7 @@ the workflow's runbook is its spec.
 
 | File (in app-support dir) | Writer | Reader | Version | Fixture | Tests |
 | --- | --- | --- | --- | --- | --- |
-| `downbeat-export.json` | Downbeat app (separate repo) | App (`DownbeatBridge.decode`) | 1, 2 | `fixtures/downbeat-export/` | `DownbeatExportContractTests.swift` |
+| `downbeat-export.json` | Downbeat app (separate repo) | App (`DownbeatBridge.decode`) | 1 or above: a MINIMUM with no ceiling, not a set (#3193). See the note in the section below | `fixtures/downbeat-export/` | `DownbeatExportContractTests.swift` |
 | `overture-history.json` | Importer (`scripts/import-history.ts`) | App (`[HistoryRecord]`) | none (plain array; `email` added additively in #762) | `fixtures/local-history/` | `LocalHistoryContractTests.swift` |
 | `overture-shoot-history.json` | Importer (`scripts/import-shoot-history.ts`) | App (`ShootHistory`) | 1 | `fixtures/shoot-history/` | `ShootHistoryContractTests.swift` |
 | `overture-prep-queue.json` | App (`PrepQueueBuilder.encode`) | Prep run (workflow) | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 | `fixtures/prep-queue/` | `PrepQueueContractTests.swift` |
@@ -252,6 +252,20 @@ canonical spec lives in the Downbeat repo at
 it, that file wins. Match on `clientId` (the stable org identity), never `clientDisplayName`.
 `bookings` and `blockedDates` start empty and only fill from bookings made through the app going
 forward.
+
+The version gate is the only one in this catalogue with no upper bound, and that is deliberate
+(#3193). It used to be the exact set `[1, 2]`, so Downbeat's next bump would have thrown
+`unsupportedVersion` in a reader that answers a throw with empty clients, empty bookings and empty
+blockedDates: the roster would have emptied AND the scout would have stopped suppressing nights Dan
+is already shooting, which is a pitch for a night that is taken. Downbeat is a separate app on its
+own release schedule, so it bumping the format is the ordinary case rather than an error, and the
+format is additive by contract (Codable ignores keys the struct does not declare). A version at or
+above `DownbeatBridge.minimumVersion` is therefore read for the keys this reader declares.
+`PrepResultsDecoder` and `ReplyClassifyResultsDecoder` keep their CLOSED `minimumVersion...supportedVersion`
+ranges for the opposite reason: their producers are in this repository, so a version they do not
+know means a run wrote a shape this build cannot act on, and reading it half-way stamps every show
+in the run with a floor nothing upgrades (#1594). The rule is the writer, not the reader: refuse a
+future version when the producer ships with you, accept one when it does not.
 
 An empty `bookings` array is no longer read as a fact about Dan's diary on its own (#2478). When this
 file lists clients and carries no upcoming bookings, while Overture last saw the same feed carrying

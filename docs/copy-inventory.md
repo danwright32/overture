@@ -2040,7 +2040,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceReadability.swift`
 "That's longer than a year. Block a shorter stretch."
     `Domain/DayOff.swift`
-"The Downbeat client export couldn't be read (it may be corrupted or a newer format), so the scout treated every prospect as cold. Re-export it from Downbeat."
+"The Downbeat client export couldn't be read (it may be corrupted, or not the shape Overture expects), so the scout treated every prospect as cold. Re-export it from Downbeat."
     `Domain/DownbeatExport.swift`
 "The Prep run finished but didn't produce any results. It may have hit an error or found no contacts."
     `Domain/DetachedRunOutcome.swift`
