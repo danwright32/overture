@@ -1,7 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# #3110 / #3131: which names in this repository's test data belong to a real person?
+# #3110 / #3131 / #3140: which names in this repository's test data belong to a real person?
+#
+# TWO ROUTES IN, and #3140 is the second. An identity reaches test data as an ADDRESS (whose local part
+# and domain label are both read below) or as a URL HOST, and until #3140 nothing looked at a URL at all.
+# Measured 2026-08-22 over the scanned roots: 201 distinct hosts appear in `http(s)://` URLs and 102 of
+# them are on registrable domains rather than a reserved TLD. Most are platforms, ticketing hosts and
+# public venues; at least eight are shaped like one private individual's own name plus a real TLD, and
+# one of those belonged to a person this repository had already decided to remove.
 #
 # WHAT #2839 LEFT OPEN. `TestDataEmailDomainGuardTests` judges an address by its DOMAIN: anything on a
 # reserved TLD (.example, .invalid, .test) or example.com passes, because such a domain can never be
@@ -106,9 +113,14 @@ extract_identities() {
   for root in ${ROOTS}; do
     if [[ -d "${REPO}/${root}" ]]; then paths+=("${REPO}/${root}"); fi
   done
+  # Both extractions below feed ONE sort at the end of the function, not one each. They are compared
+  # against the baseline with `comm`, which requires sorted input and answers nonsense rather than
+  # failing when it does not get it: two locally sorted lists concatenated are not a sorted list.
+  #
   # `|| true` because grep answers "no matches" with exit 1, which is not a failure here: it is the
   # UNMEASURED case, and it has to reach the caller as an empty result rather than as an abort that
   # never gets to say so.
+  {
   { grep -rhoaE '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}' "${paths[@]}" 2>/dev/null || true; } \
     | awk '
         BEGIN {
@@ -130,6 +142,52 @@ extract_identities() {
         }' \
     | sort -u \
     | sed '/^$/d'
+
+  # #3140: the OTHER way a real person reaches test data, and the one neither guard could see.
+  #
+  # `TestDataEmailDomainGuardTests` judges an ADDRESS by its domain and the extraction above reads the
+  # identities inside a RESERVED-domain address. Neither looks at a URL, and a URL is how a real person
+  # most often reaches this data, because a contact route in the live store is a form on somebody's own
+  # site far more often than it is an address. `PressContactFormGuardTests` says so in its own comment:
+  # its list is "every other form in the live store, which must all stay usable", so the test data is a
+  # verbatim extract of Dan's real prospect contact routes, in a PUBLIC repository.
+  #
+  # The exposure #2831 and #2839 exist to close is the PERSON, not the deliverability of an address. A
+  # repository stating that a named musician is a prospect of Dan's exposes the same thing whether it
+  # states it with an address or with a link to their contact page.
+  #
+  # THE REGISTRABLE LABEL, and only it. A reserved TLD is invented by construction and is already the
+  # safe case, so it is skipped here exactly as it is KEPT above: the two halves want opposite sets,
+  # because a reserved-domain ADDRESS can still carry a real name in its local part while a
+  # reserved-domain HOST cannot be anybody's real site. `www` is stripped so one site is one identity.
+  #
+  # Deliberately NO judgement here about whether a label looks like a person's name. #3110 measured that
+  # question and it does not discriminate: an invented personal-name host appears exactly as a real one
+  # does. What discriminates is the same evidence the addresses use, the commit that introduced it, so a
+  # platform, a public venue and a private individual all go through one lookup and the answer is read
+  # per identity rather than guessed from the spelling.
+  { grep -rhoaE 'https?://[A-Za-z0-9.-]+' "${paths[@]}" 2>/dev/null || true; } \
+    | awk '
+        BEGIN {
+          split("example invalid test localhost local", t, " ")
+          for (i in t) reservedTLD[t[i]] = 1
+        }
+        {
+          host = tolower($0)
+          sub(/^https?:\/\//, "", host)
+          sub(/^www\./, "", host)
+          n = split(host, labels, ".")
+          if (n < 2) next
+          if (labels[n] in reservedTLD) next
+          # EVERY label but the TLD, rather than a guess at which one is registrable. There is no way to
+          # know that without a public suffix list: `wraymoorhall.co.uk` puts the name two labels from
+          # the end and `pellingborne.org` puts it one, and picking the wrong one hides the person. So it
+          # over-reports, in the same direction and for the same reason the extraction above keeps no
+          # stoplist of boring words: `tickets` and `co` are not identities and are absorbed by the
+          # baseline once, while under-reporting hides somebody and nothing ever says so (L96).
+          for (i = 1; i < n; i++) if (labels[i] != "www") print labels[i]
+        }'
+  } | sort -u | sed '/^$/d'
 }
 
 # The commit in which this identity FIRST appears anywhere under the scanned roots. `--reverse` after
@@ -234,7 +292,7 @@ STATUS=0
 
 if [[ -n "${FRESH}" ]]; then
   STATUS=1
-  echo "$(printf '%s\n' "${FRESH}" | wc -l | tr -d ' ') identity(ies) in reserved-domain test data that nobody has triaged yet."
+  echo "$(printf '%s\n' "${FRESH}" | wc -l | tr -d ' ') identity(ies) in test data (reserved-domain addresses and URL hosts) that nobody has triaged yet."
   echo
   echo "A name whose first appearance is a privacy SCRUB commit was minted by that scrub and is invented."
   echo "A name whose first appearance is an ordinary FEATURE commit was written from real data: read it."

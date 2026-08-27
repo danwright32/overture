@@ -40,6 +40,14 @@ let room = "boxoffice@grandtheatre.example"
 // the mechanism, because `git log -S` searches for a literal string and finds a normalised token in no
 // commit anywhere, then reports that as "no commit found".
 let dotted = "aldermoy.fenwrack@example.com"
+// #3140: the other way in. A contact route in the live store is a form on somebody's own site far more
+// often than it is an address, and neither guard looked at a URL at all. The registrable label is the
+// identity; `www` is stripped so one site is one identity, and a reserved TLD is skipped here because a
+// host on one cannot be anybody's real site (which is the OPPOSITE of the address rule above, where a
+// reserved domain is exactly where a scrubbed person's name survives as the local part).
+let form = "https://www.pellingborne.org/contact"
+let listing = "https://tickets.wraymoorhall.co.uk/events/12"
+let invented = "https://cindermarch.example/contact"
 SWIFT
 # A fixture written somewhere else and moved under a scanned root later. A pathspec does not follow a
 # rename, so the scoped lookup has no commit at the current path and the ORIGINAL commit is the answer.
@@ -92,6 +100,29 @@ MOVED_LINE="$(printf '%s\n' "${OUT}" | grep -A1 '^  brammelcourt$' | tail -1)"
 assert_contains "a moved fixture's identity reports the commit that WROTE it" \
   "${MOVED_LINE}" "Pursue every performer a bill names"
 assert_not_contains "not the commit that moved it" "${MOVED_LINE}" "Move the corpus"
+
+# --- #3140: a URL host is an identity too, and it is the route neither guard could see ----------------
+#
+# `TestDataEmailDomainGuardTests` judges an ADDRESS by its domain, and the extraction above reads the
+# identities inside a reserved-domain address. A URL was invisible to both, which matters because
+# `PressContactFormGuardTests` says in its own comment that its list is "every other form in the live
+# store, which must all stay usable": the test data is a verbatim extract of Dan's real contact routes,
+# in a public repository. Measured 2026-08-22 over the real roots: 201 distinct hosts, 102 of them on
+# registrable domains.
+assert_contains "a form URL's registrable label is an identity" "${OUT}" "pellingborne"
+assert_contains "and a ticketing subdomain reports the registrable label, not the subdomain" \
+  "${OUT}" "wraymoorhall"
+assert_not_contains "the www of a host is not an identity of its own" "${OUT}" "
+  www
+"
+# The half that must stay quiet, and it is the mirror of the address rule rather than a copy of it: a
+# host on a reserved TLD cannot be anybody's real site, while a reserved-domain ADDRESS is exactly where
+# a half-finished scrub leaves a real person's name.
+assert_not_contains "a host on a reserved TLD is not reported" "${OUT}" "cindermarch"
+# And the provenance question is asked of a host exactly as it is of an address, so a platform, a public
+# venue and a private individual all go through one lookup instead of being guessed at from the spelling.
+assert_contains "a URL identity carries the commit that introduced it" \
+  "$(printf '%s' "${OUT}" | grep -A 1 '^  pellingborne$')" "Pursue every performer a bill names"
 
 # --- the baseline is what stops the same judgement being repeated from scratch ------------------------
 "${CHECK}" --record >/dev/null 2>&1
