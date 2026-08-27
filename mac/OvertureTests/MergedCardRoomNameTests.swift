@@ -47,7 +47,7 @@ struct MergedCardRoomNameTests {
                         sourceIds: [String] = [], ingestedAt: TimeInterval = 1_000) -> Prospect {
         let p = Prospect(naturalKey: "\(group)|\(date ?? "")|\(venue)", groupName: group,
                          discipline: "music", venue: venue, performanceDate: date,
-                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                         sourceListingURL: nil, priorRelationship: "none",
                          production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 5, tier: "mid", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .new,

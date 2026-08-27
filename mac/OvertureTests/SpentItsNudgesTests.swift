@@ -26,7 +26,7 @@ struct SpentItsNudgesTests {
     // A show still AHEAD, so the post-event prompt is not what is being measured.
     private func show(_ ctx: ModelContext, date: String = "2026-09-01") -> Prospect {
         let p = Prospect(naturalKey: "k", groupName: "Aurora Strings", discipline: "music", venue: "V",
-                         performanceDate: date, sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: date, sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

@@ -14,7 +14,7 @@ import Foundation
 struct ManualPrepPrefillTests {
     private func prospect(_ group: String, presenter: String? = nil, date: String = "2026-11-14") -> Prospect {
         Prospect(naturalKey: "\(group)|\(date)|Boathouse", groupName: group, discipline: "classical",
-                 venue: "Boathouse", performanceDate: date, sourceListingURL: nil, websiteURL: nil,
+                 venue: "Boathouse", performanceDate: date, sourceListingURL: nil,
                  priorRelationship: "booked", production: "self", profile: "strong",
                  coverage: "likely_uncovered", fitScore: 9, tier: "high", fitReason: "r",
                  matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil, status: .queued)

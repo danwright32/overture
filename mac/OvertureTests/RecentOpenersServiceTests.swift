@@ -15,7 +15,7 @@ struct RecentOpenersServiceTests {
 
     private func drafted(key: String, original: String, sentAt: Date) -> Prospect {
         let p = Prospect(naturalKey: key, groupName: "G", discipline: "music", venue: "V",
-                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-07-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -46,7 +46,7 @@ struct RecentOpenersServiceTests {
         let ctx = ModelContext(try container())
         // One kept-undrafted prospect so the queue is non-empty (otherwise startPrep throws).
         let toPrep = Prospect(naturalKey: "to-prep", groupName: "G2", discipline: "music", venue: "V",
-                              performanceDate: "2026-08-01", sourceListingURL: nil, websiteURL: nil,
+                              performanceDate: "2026-08-01", sourceListingURL: nil,
                               priorRelationship: "none", production: "self", profile: "strong",
                               coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                               matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -78,7 +78,7 @@ struct RecentOpenersServiceTests {
         // FILE, so createDirectory throws, and prove the queue is still written and the launch happens.
         let ctx = ModelContext(try container())
         let toPrep = Prospect(naturalKey: "to-prep", groupName: "G2", discipline: "music", venue: "V",
-                              performanceDate: "2026-08-01", sourceListingURL: nil, websiteURL: nil,
+                              performanceDate: "2026-08-01", sourceListingURL: nil,
                               priorRelationship: "none", production: "self", profile: "strong",
                               coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                               matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

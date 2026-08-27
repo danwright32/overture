@@ -157,7 +157,7 @@ struct ReferencesChainTests {
     @MainActor
     private func pitchable(_ ctx: ModelContext) -> Prospect {
         let p = Prospect(naturalKey: "k", groupName: "Aurora Strings", discipline: "music", venue: "V",
-                         performanceDate: "2027-03-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2027-03-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

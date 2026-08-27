@@ -31,8 +31,7 @@ struct NoClosingNoteAfterTheShowTests {
     @discardableResult
     private func pitched(_ ctx: ModelContext, followUps: Int, replied: Bool = false) -> (Prospect, Recipient) {
         let p = Prospect(naturalKey: "k", groupName: "Aurora Strings", discipline: "music",
-                         venue: "Merkin Hall", performanceDate: "2026-08-10", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "self",
+                         venue: "Merkin Hall", performanceDate: "2026-08-10", sourceListingURL: nil, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 7, tier: "high",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
                          possibleMatchName: nil, status: .contacted)

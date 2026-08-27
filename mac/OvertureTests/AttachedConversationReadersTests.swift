@@ -35,7 +35,7 @@ struct AttachedConversationReadersTests {
     private func attachedFormPitch(_ ctx: ModelContext, replied: Bool = true) -> (Prospect, Recipient) {
         let p = Prospect(naturalKey: "54 Sings|2026-08-17", groupName: "54 Sings Shuffle Along",
                          discipline: "theater", venue: "The Green Room 42",
-                         performanceDate: "2026-08-17", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-08-17", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -66,8 +66,7 @@ struct AttachedConversationReadersTests {
     private func emailedContact(_ ctx: ModelContext, storedMessageId: String? = "<ours@mail.gmail.com>")
     -> (Prospect, Recipient) {
         let p = Prospect(naturalKey: "Aurora|2026-08-17", groupName: "Aurora Strings", discipline: "music",
-                         venue: "Jalopy", performanceDate: "2026-08-17", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "self", profile: "strong",
+                         venue: "Jalopy", performanceDate: "2026-08-17", sourceListingURL: nil, priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                          status: .contacted)

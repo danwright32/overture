@@ -57,7 +57,6 @@ final class Prospect {
     var venue: String?
     var performanceDate: String?
     var sourceListingURL: String?
-    var websiteURL: String?
 
     var priorRelationship: String
     var production: String
@@ -926,7 +925,6 @@ final class Prospect {
         venue: String?,
         performanceDate: String?,
         sourceListingURL: String?,
-        websiteURL: String?,
         priorRelationship: String,
         production: String,
         profile: String,
@@ -951,7 +949,6 @@ final class Prospect {
         self.venue = venue
         self.performanceDate = performanceDate
         self.sourceListingURL = sourceListingURL
-        self.websiteURL = websiteURL
         self.priorRelationship = priorRelationship
         self.production = production
         self.profile = profile

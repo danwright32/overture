@@ -14,7 +14,7 @@ struct ManualPrepOnScreenTests {
     private func item(status: ReviewStatus = .queued, draftBody: String? = nil,
                       conflicted: Bool = false) -> QueueItem {
         var i = QueueItem(id: "k", groupName: "Bargemusic", discipline: "classical", venue: "Boathouse",
-                          performanceDate: "2026-11-14", sourceListingURL: nil, websiteURL: nil,
+                          performanceDate: "2026-11-14", sourceListingURL: nil,
                           priorRelationship: "booked", production: "self", profile: "strong",
                           coverage: "likely_uncovered", fitScore: 9, tier: "high", fitReason: "r",
                           matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

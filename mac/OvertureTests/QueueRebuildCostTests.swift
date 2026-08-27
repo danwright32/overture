@@ -85,7 +85,7 @@ struct QueueRebuildCostTests {
             let p = Prospect(naturalKey: "key-\(i)", groupName: group, discipline: "music",
                              venue: venue,
                              performanceDate: String(format: "2026-%02d-%02d", month, day),
-                             sourceListingURL: nil, websiteURL: nil,
+                             sourceListingURL: nil,
                              priorRelationship: "none", production: "self", profile: "strong",
                              coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
                              matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

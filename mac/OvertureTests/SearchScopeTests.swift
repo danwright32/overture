@@ -13,7 +13,7 @@ import Foundation
 struct SearchScopeTests {
     private func item(_ id: String) -> QueueItem {
         QueueItem(id: id, groupName: "Aurora Strings", discipline: "music", venue: "Weill Recital Hall",
-                  performanceDate: "2026-08-01", sourceListingURL: nil, websiteURL: nil,
+                  performanceDate: "2026-08-01", sourceListingURL: nil,
                   priorRelationship: "none", production: "self", profile: "strong",
                   coverage: "likely_uncovered", fitScore: 4, tier: "mid", fitReason: "r",
                   matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil, status: .new)

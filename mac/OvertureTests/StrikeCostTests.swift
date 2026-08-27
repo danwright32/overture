@@ -34,8 +34,7 @@ struct StrikeCostTests {
 
     private func show(_ ctx: ModelContext, key: String = "k") -> Prospect {
         let p = Prospect(naturalKey: key, groupName: "54 Sings Shuffle Along", discipline: "theater",
-                         venue: "54 Below", performanceDate: "2026-08-17", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "unknown",
+                         venue: "54 Below", performanceDate: "2026-08-17", sourceListingURL: nil, priorRelationship: "none", production: "unknown",
                          profile: "neutral", coverage: "unknown", fitScore: 5, tier: "mid",
                          fitReason: "", matchedClientName: nil, possibleMatchSource: nil,
                          possibleMatchName: nil, status: .new)

@@ -4,7 +4,7 @@ import Foundation
 private func item(_ id: String) -> QueueItem {
     QueueItem(
         id: id, groupName: id, discipline: "music", venue: "Weill Recital Hall",
-        performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+        performanceDate: "2026-07-01", sourceListingURL: nil,
         priorRelationship: "none", production: "self", profile: "neutral",
         coverage: "unknown", fitScore: 5, tier: "mid", fitReason: "reason",
         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil, status: .new

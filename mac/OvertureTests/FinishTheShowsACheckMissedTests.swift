@@ -21,7 +21,7 @@ struct FinishTheShowsACheckMissedTests {
     private func item(_ key: String, missed: Bool = false, answered: Bool = false,
                       status: ReviewStatus = .new, booked: Bool = false) -> QueueItem {
         var i = QueueItem(id: key, groupName: key, discipline: "music", venue: "Weill Recital Hall",
-                          performanceDate: "2026-09-12", sourceListingURL: nil, websiteURL: nil,
+                          performanceDate: "2026-09-12", sourceListingURL: nil,
                           priorRelationship: "none", production: "self", profile: "strong",
                           coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
                           matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

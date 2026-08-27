@@ -25,7 +25,7 @@ struct ConflictSweepTests {
                       runEnd: String? = nil) -> Prospect {
         let p = Prospect(naturalKey: "key-\(date)", groupName: "Vienna Philharmonic", discipline: "music",
                          venue: "Stern Auditorium / Perelman Stage", performanceDate: date,
-                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                         sourceListingURL: nil, priorRelationship: "none",
                          production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 9, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: status)

@@ -58,7 +58,7 @@ struct QueueRenderPassCostTests {
             let venue = venues[n % venues.count]
             let key = "row-\(n)"
             let p = Prospect(naturalKey: key, groupName: "Ensemble \(n % 90)", discipline: "music",
-                             venue: venue, performanceDate: date, sourceListingURL: nil, websiteURL: nil,
+                             venue: venue, performanceDate: date, sourceListingURL: nil,
                              priorRelationship: "none", production: n % 3 == 0 ? "self" : "presenter",
                              profile: "strong", coverage: "likely_uncovered", fitScore: 4 + (n % 5),
                              tier: "mid", fitReason: "r", matchedClientName: nil,

@@ -63,7 +63,7 @@ struct ExcludeTownActionTests {
 
     private func item(location: String?) -> QueueItem {
         QueueItem(id: "k", groupName: "A Show", discipline: "theater", venue: "Hall",
-                  performanceDate: "2026-08-01", sourceListingURL: nil, websiteURL: nil, location: location,
+                  performanceDate: "2026-08-01", sourceListingURL: nil, location: location,
                   priorRelationship: "none", production: "self", profile: "strong", coverage: "unknown",
                   fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
                   possibleMatchSource: nil, possibleMatchName: nil, status: .new)

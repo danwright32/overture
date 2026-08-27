@@ -38,7 +38,7 @@ struct AwaitedReplyDraftIsOnePredicateTests {
         let p = Prospect(naturalKey: "aurora", groupName: "Aurora Strings", discipline: "music",
                          venue: "Weill Recital Hall",
                          performanceDate: EasternDate.today(now.addingTimeInterval(30 * 86_400)),
-                         sourceListingURL: nil, websiteURL: nil,
+                         sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

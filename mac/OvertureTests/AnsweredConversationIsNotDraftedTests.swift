@@ -35,7 +35,7 @@ struct AnsweredConversationIsNotDraftedTests {
                          bounced: Bool = false) -> Recipient {
         let p = Prospect(naturalKey: key, groupName: "Riverbend Sinfonia", discipline: "music",
                          venue: "Harborlight Hall", performanceDate: "2099-09-01",
-                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "warm",
+                         sourceListingURL: nil, priorRelationship: "warm",
                          production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 8, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil)

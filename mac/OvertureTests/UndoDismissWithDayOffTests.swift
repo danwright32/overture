@@ -24,8 +24,7 @@ struct UndoDismissWithDayOffTests {
     private func show(_ ctx: ModelContext, key: String, group: String = "Vienna Philharmonic",
                       on date: String, status: ReviewStatus = .queued) -> Prospect {
         let p = Prospect(naturalKey: key, groupName: group, discipline: "music",
-                         venue: "Stern Auditorium", performanceDate: date, sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "self", profile: "strong",
+                         venue: "Stern Auditorium", performanceDate: date, sourceListingURL: nil, priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 9, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                          status: status)

@@ -10,8 +10,7 @@ import ViewInspector
 struct ProspectRowViewOrgDoNotContactTests {
     private func item(orgDoNotContact: Bool) -> QueueItem {
         QueueItem(id: "k", groupName: "Refused Chorale", discipline: "music",
-                  venue: "Weill Recital Hall", performanceDate: "2026-09-12", sourceListingURL: nil,
-                  websiteURL: nil, priorRelationship: "none", production: "self", profile: "strong",
+                  venue: "Weill Recital Hall", performanceDate: "2026-09-12", sourceListingURL: nil, priorRelationship: "none", production: "self", profile: "strong",
                   coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                   matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                   status: .new, orgDoNotContact: orgDoNotContact)

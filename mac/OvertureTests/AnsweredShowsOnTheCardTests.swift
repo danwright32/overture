@@ -21,7 +21,7 @@ struct AnsweredShowsOnTheCardTests {
     private func contact(answered: Bool, in ctx: ModelContext, now: Date = Date()) throws -> RecipientSnapshot {
         let p = Prospect(naturalKey: "aurora|2026-11-14|carnegie", groupName: "Aurora Strings",
                          discipline: "music", venue: "Carnegie Hall", performanceDate: "2026-11-14",
-                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                         sourceListingURL: nil, priorRelationship: "none",
                          production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 9, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil)
@@ -59,7 +59,7 @@ struct AnsweredShowsOnTheCardTests {
     @Test func arecordedEndingStillWins() throws {
         let ctx = ModelContext(try container())
         let p = Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: "V",
-                         performanceDate: "2026-11-14", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-11-14", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 9, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
@@ -83,7 +83,7 @@ struct AnsweredShowsOnTheCardTests {
         let ctx2 = ModelContext(try container())
         _ = ctx2
         let p = Prospect(naturalKey: "k2", groupName: "G", discipline: "music", venue: "V",
-                         performanceDate: "2026-11-14", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-11-14", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 9, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)

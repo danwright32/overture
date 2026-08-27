@@ -38,8 +38,7 @@ struct ApproveAndSendIsOneActionTests {
     private func draftedShow(_ ctx: ModelContext, contacts: Int = 1,
                              together: Bool = false, subject: String? = "Photographing your concert") -> Prospect {
         let p = Prospect(naturalKey: "k", groupName: "Aurora Strings", discipline: "music",
-                         venue: "Weill Recital Hall", performanceDate: "2026-09-19", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "self", profile: "strong",
+                         venue: "Weill Recital Hall", performanceDate: "2026-09-19", sourceListingURL: nil, priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                          status: .drafted)

@@ -43,7 +43,7 @@ struct ASchedulingMissIsNeutralTests {
         for outcome in [ShowOutcome.dateConflict, .hadPaidWork, .pitchingOtherShows] {
             let p = Prospect(naturalKey: "k-\(outcome.rawValue)", groupName: "Aurora Strings",
                              discipline: "music", venue: "V", performanceDate: "2026-09-01",
-                             sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                             sourceListingURL: nil, priorRelationship: "none",
                              production: "self", profile: "neutral", coverage: "unknown",
                              fitScore: 3, tier: "longshot", fitReason: "r", matchedClientName: nil,
                              possibleMatchSource: nil, possibleMatchName: nil, status: .dismissed)

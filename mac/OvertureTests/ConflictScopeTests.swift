@@ -135,7 +135,7 @@ struct ConflictScopeTests {
     private func item(performance: String, blocked: String?) -> QueueItem {
         var i = QueueItem(id: "k-\(performance)-\(blocked ?? "free")", groupName: "Show",
                           discipline: "theater", venue: "Theatre",
-                          performanceDate: performance, sourceListingURL: nil, websiteURL: nil,
+                          performanceDate: performance, sourceListingURL: nil,
                           priorRelationship: "none", production: "self", profile: "neutral",
                           coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                           matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

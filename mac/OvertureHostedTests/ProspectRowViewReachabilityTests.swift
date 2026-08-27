@@ -11,11 +11,11 @@ import ViewInspector
 @MainActor
 @Suite("ProspectRowView reachability badge (#1145)")
 struct ProspectRowViewReachabilityTests {
-    private func item(presenter: String?, sourceListingURL: String?, websiteURL: String? = nil,
+    private func item(presenter: String?, sourceListingURL: String? = nil,
                       status: ReviewStatus = .new, sentAt: Date? = nil,
                       probed: Bool = false, hasEmail: Bool = false) -> QueueItem {
         var i = QueueItem(id: "k", groupName: "Aurora Strings", discipline: "music", venue: "Weill Recital Hall",
-                          performanceDate: "2026-09-12", sourceListingURL: sourceListingURL, websiteURL: websiteURL,
+                          performanceDate: "2026-09-12", sourceListingURL: sourceListingURL,
                           priorRelationship: "none", production: "self", profile: "strong",
                           coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
                           matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil, status: status)
@@ -58,15 +58,13 @@ struct ProspectRowViewReachabilityTests {
     }
 
     @Test func aRealWebsiteWithAPresenterShowsNoBadge() throws {
-        let t = try texts(item(presenter: "Aurora Strings", sourceListingURL: "https://carnegiehall.org/calendar/x",
-                               websiteURL: "https://aurorastrings.org"))
+        let t = try texts(item(presenter: "Aurora Strings", sourceListingURL: "https://carnegiehall.org/calendar/x"))
         #expect(!t.contains { $0.contains(ReachabilityCopy.hardToReachBadge) })
     }
 
     // #1335: a website with no presenter (venue-ish) or on a social listing must not swallow the warning.
     @Test func aWebsiteWithNoPresenterStillWarns() throws {
-        let t = try texts(item(presenter: nil, sourceListingURL: "https://instagram.com/x",
-                               websiteURL: "https://aurorastrings.org"))
+        let t = try texts(item(presenter: nil, sourceListingURL: "https://instagram.com/x"))
         #expect(t.contains { $0.contains(ReachabilityCopy.hardToReachBadge) })
     }
 

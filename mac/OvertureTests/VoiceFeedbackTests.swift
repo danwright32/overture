@@ -19,7 +19,7 @@ struct VoiceFeedbackTests {
                           originalSubject: String? = "AI subject",
                           sentSubject: String? = "Sent subject") -> Prospect {
         let p = Prospect(naturalKey: key, groupName: "G", discipline: discipline, venue: "V",
-                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-07-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -164,7 +164,7 @@ struct VoiceFeedbackTests {
         let ctx = ModelContext(try container())
         // One kept-undrafted prospect so the queue is non-empty (otherwise startPrep throws).
         let toPrep = Prospect(naturalKey: "to-prep", groupName: "G2", discipline: "music", venue: "V",
-                              performanceDate: "2026-08-01", sourceListingURL: nil, websiteURL: nil,
+                              performanceDate: "2026-08-01", sourceListingURL: nil,
                               priorRelationship: "none", production: "self", profile: "strong",
                               coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                               matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

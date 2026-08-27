@@ -21,7 +21,7 @@ struct OutreachFunnelTests {
                       emails: [String?] = []) -> Prospect {
         let p = Prospect(naturalKey: "k-\(date)-\(UUID().uuidString)", groupName: "A Show",
                          discipline: "other", venue: "A Hall", performanceDate: date,
-                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                         sourceListingURL: nil, priorRelationship: "none",
                          production: "unknown", profile: "neutral", coverage: "unknown",
                          fitScore: 0, tier: "longshot", fitReason: "", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: status)

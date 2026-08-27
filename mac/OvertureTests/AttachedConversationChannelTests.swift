@@ -42,7 +42,7 @@ struct AttachedConversationChannelTests {
                              formURL: String = "https://corinhale.example/contact") -> (Prospect, Recipient) {
         let p = Prospect(naturalKey: "54 Sings|\(day ?? "none")", groupName: "54 Sings Shuffle Along",
                          discipline: "theater", venue: "The Green Room 42", performanceDate: day,
-                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                         sourceListingURL: nil, priorRelationship: "none",
                          production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .drafted)

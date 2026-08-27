@@ -22,7 +22,7 @@ struct StrikeAFormContactTests {
         let key = Prospect.makeNaturalKey(groupName: "A Cabaret", performanceDate: "2026-09-12",
                                           venue: "54 Below")
         let p = Prospect(naturalKey: key, groupName: "A Cabaret", discipline: "music", venue: "54 Below",
-                         performanceDate: "2026-09-12", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-09-12", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

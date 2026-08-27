@@ -30,7 +30,7 @@ struct EveryAddressOnScreenTests {
     private func item(_ contacts: [RecipientSnapshot], next: String? = nil) -> QueueItem {
         var item = QueueItem(
             id: "k", groupName: "Aurora Strings", discipline: "music", venue: "Weill Recital Hall",
-            performanceDate: "2026-09-12", sourceListingURL: nil, websiteURL: nil,
+            performanceDate: "2026-09-12", sourceListingURL: nil,
             priorRelationship: "none", production: "self", profile: "strong",
             coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
             matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil, status: .approved)

@@ -24,7 +24,7 @@ struct ReleasedNightIsRecheckedTests {
         let p = Prospect(naturalKey: "fresh out the box|2026-11-14|the players theatre",
                          groupName: "Fresh Out The Box", discipline: "comedy",
                          venue: "The Players Theatre", performanceDate: nights.first,
-                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                         sourceListingURL: nil, priorRelationship: "none",
                          production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 8, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil)

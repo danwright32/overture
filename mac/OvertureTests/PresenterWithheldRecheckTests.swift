@@ -22,7 +22,7 @@ struct PresenterWithheldRecheckTests {
                                           venue: "The Green Room 42")
         let p = Prospect(naturalKey: key, groupName: name, discipline: "theater",
                          venue: "The Green Room 42", performanceDate: "2026-09-12",
-                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                         sourceListingURL: nil, priorRelationship: "none",
                          production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 6, tier: "mid", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .new)

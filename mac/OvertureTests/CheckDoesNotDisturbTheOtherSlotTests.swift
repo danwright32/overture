@@ -30,7 +30,7 @@ struct CheckDoesNotDisturbTheOtherSlotTests {
     @discardableResult
     private func drafted(_ ctx: ModelContext, key: String) -> Prospect {
         let p = Prospect(naturalKey: key, groupName: key, discipline: "theatre", venue: "Under St Marks",
-                         performanceDate: "2099-08-14", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2099-08-14", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -43,8 +43,7 @@ struct CheckDoesNotDisturbTheOtherSlotTests {
 
     private func writeQueue(_ keys: [String], to url: URL) throws {
         let items = keys.map { PrepQueueItem(naturalKey: $0, groupName: $0, venue: "Under St Marks",
-                                             performanceDate: "2099-08-14", discipline: "theatre",
-                                             websiteURL: nil, sourceListingURL: nil,
+                                             performanceDate: "2099-08-14", discipline: "theatre", sourceListingURL: nil,
                                              possibleMatchName: nil, priorRelationship: "none",
                                              production: "self") }
         let queue = PrepQueueBuilder.build(from: items, generatedAt: "2099-01-01T00:00:00Z", houses: [])

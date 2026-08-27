@@ -41,7 +41,7 @@ final class PrepResultsConsumedOnceTests {
     @discardableResult
     private func keptProspect(_ ctx: ModelContext, key: String) -> Prospect {
         let p = Prospect(naturalKey: key, groupName: "Choir", discipline: "choral", venue: "Stern",
-                         performanceDate: "2026-06-24", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-06-24", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

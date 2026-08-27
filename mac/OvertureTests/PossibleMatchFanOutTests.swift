@@ -26,8 +26,7 @@ struct PossibleMatchFanOutTests {
     @discardableResult
     private func flagged(_ ctx: ModelContext, key: String, group: String? = nil, name: String?) -> Prospect {
         let p = Prospect(naturalKey: key, groupName: group ?? "Show \(key)", discipline: "music",
-                         venue: "A Hall", performanceDate: "2026-10-08", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "self",
+                         venue: "A Hall", performanceDate: "2026-10-08", sourceListingURL: nil, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 5, tier: "mid",
                          fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: name == nil ? nil : "history",

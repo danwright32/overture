@@ -145,7 +145,6 @@ struct NativePathCannotCancelTests {
         let p = Prospect(naturalKey: "a-show-from-last-time", groupName: "Aurora Strings",
                          discipline: "music", venue: "Weill Recital Hall", performanceDate: "2099-09-19",
                          sourceListingURL: "https://www.carnegiehall.org/Calendar/2099/09/19/Aurora",
-                         websiteURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

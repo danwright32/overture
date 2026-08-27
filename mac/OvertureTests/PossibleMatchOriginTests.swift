@@ -81,8 +81,7 @@ struct PossibleMatchOriginTests {
             for: Schema([Prospect.self, Recipient.self, DayOff.self]),
             configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
         let p = Prospect(naturalKey: "k", groupName: "Aurora Strings", discipline: "music",
-                         venue: "A Hall", performanceDate: "2026-10-08", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "self",
+                         venue: "A Hall", performanceDate: "2026-10-08", sourceListingURL: nil, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 5, tier: "mid",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
                          possibleMatchName: nil, status: .dismissed)
@@ -114,7 +113,7 @@ struct PossibleMatchOriginTests {
 
     private func item(source: String?, name: String?) -> QueueItem {
         QueueItem(id: "a", groupName: "Aurora Strings", discipline: "music", venue: "A Hall",
-                  performanceDate: "2026-08-01", sourceListingURL: nil, websiteURL: nil,
+                  performanceDate: "2026-08-01", sourceListingURL: nil,
                   priorRelationship: "none", production: "self", profile: "strong",
                   coverage: "likely_uncovered", fitScore: 4, tier: "mid", fitReason: "r",
                   matchedClientName: nil, possibleMatchSource: source, possibleMatchName: name,

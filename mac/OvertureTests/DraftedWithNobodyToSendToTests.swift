@@ -25,8 +25,7 @@ struct DraftedWithNobodyToSendToTests {
 
     private func show(contacts: Int, status: ReviewStatus = .drafted, hasDraft: Bool = true) -> Prospect {
         let p = Prospect(naturalKey: "shuffle", groupName: "54 Sings Shuffle Along", discipline: "music",
-                         venue: "54 Below", performanceDate: "2026-12-01", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "self",
+                         venue: "54 Below", performanceDate: "2026-12-01", sourceListingURL: nil, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 7, tier: "high",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
                          possibleMatchName: nil, status: status)

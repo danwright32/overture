@@ -23,7 +23,7 @@ struct ProspectRowViewLayoutTests {
 
     private func item(groupName: String = "Aurora Strings", fitReason: String = "Strong fit") -> QueueItem {
         QueueItem(id: "k", groupName: groupName, discipline: "music", venue: "Weill Recital Hall",
-                 performanceDate: "2026-08-01", sourceListingURL: nil, websiteURL: nil,
+                 performanceDate: "2026-08-01", sourceListingURL: nil,
                  priorRelationship: "none", production: "self", profile: "strong",
                  coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: fitReason,
                  matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil, status: .new)

@@ -69,7 +69,7 @@ struct ReconcileNoSpendGuardTests {
         let key = "no-spend-\(UUID().uuidString)"
         let p = Prospect(naturalKey: key, groupName: "No Spend Chorus \(UUID().uuidString)",
                          discipline: "choral", venue: "V", performanceDate: "2099-01-01",
-                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                         sourceListingURL: nil, priorRelationship: "none",
                          production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 5, tier: "mid", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .queued)

@@ -12,62 +12,50 @@ struct ReachabilityTests {
     // wall, and lead intake already refuses these. So it reads as hard to reach even with a presenter.
     @Test func aSocialOnlySourceIsHardToReach() {
         #expect(Reachability.assess(presenter: "Aurora Strings",
-                                    sourceListingURL: "https://www.instagram.com/aurorastrings/",
-                                    websiteURL: nil) == .hardToReach)
+                                    sourceListingURL: "https://www.instagram.com/aurorastrings/") == .hardToReach)
         #expect(Reachability.assess(presenter: "Aurora Strings",
-                                    sourceListingURL: "https://facebook.com/events/123",
-                                    websiteURL: nil) == .hardToReach)
+                                    sourceListingURL: "https://facebook.com/events/123") == .hardToReach)
     }
 
     // No presenting org identified, just a venue and a show title: there is no target to email.
     @Test func aShowWithNoPresenterIsHardToReach() {
         #expect(Reachability.assess(presenter: nil,
-                                    sourceListingURL: "https://carnegiehall.org/calendar/x",
-                                    websiteURL: nil) == .hardToReach)
+                                    sourceListingURL: "https://carnegiehall.org/calendar/x") == .hardToReach)
         #expect(Reachability.assess(presenter: "   ",
-                                    sourceListingURL: "https://carnegiehall.org/calendar/x",
-                                    websiteURL: nil) == .hardToReach)
+                                    sourceListingURL: "https://carnegiehall.org/calendar/x") == .hardToReach)
     }
 
-    // A confirmed real (non-social) website, which Prep may have set, is positive evidence, but only
-    // ALONGSIDE a presenter on a non-social listing (#1335): here a named presenter on a normal listing.
-    @Test func aRealWebsiteWithAPresenterIsLikelyReachable() {
+    // #1640: three tests stood here about the act's own website as positive evidence, and about the
+    // ordering that stopped it swallowing the dead ends (#1335). They are DELETED rather than adjusted.
+    //
+    // Their subject was `websiteURL`, whose only writer anywhere was the literal `nil` in
+    // `ProspectAssembler`, so the branch they exercised could not fire on any real row and the
+    // `likelyReachable` verdict they asserted was unreachable. A test whose whole content is a case that
+    // cannot occur is not coverage: it is the thing that made the branch read as live (L252 is the same
+    // move for a reversed decision, and L29 for the code itself).
+    //
+    // What survives them is the pair of dead-end rules they were guarding the ORDER of, both of which are
+    // still asserted below on their own terms: a social-only listing and a missing presenter are hard to
+    // reach, whatever else is known.
+    @Test func aDeadEndIsADeadEndWhateverElseIsKnown() {
+        #expect(Reachability.assess(presenter: nil, sourceListingURL: nil) == .hardToReach)
         #expect(Reachability.assess(presenter: "Aurora Strings",
-                                    sourceListingURL: "https://carnegiehall.org/calendar/x",
-                                    websiteURL: "https://aurorastrings.org") == .likelyReachable)
-        #expect(Reachability.assess(presenter: "Aurora Strings",
-                                    sourceListingURL: nil,
-                                    websiteURL: "https://aurorastrings.org/contact") == .likelyReachable)
-    }
-
-    // #1335: a website is positive evidence only alongside a presenter and must never SWALLOW the
-    // social-only / no-presenter dead ends. A venue-ish (no presenter) or social listing that happens to
-    // carry a real website still warns, rather than being silently marked reachable off the site alone.
-    @Test func aWebsiteNeverSwallowsTheDeadEnds() {
-        // No presenting org (venue-ish), even with a real website: nothing to email, still hard to reach.
-        #expect(Reachability.assess(presenter: nil,
-                                    sourceListingURL: nil,
-                                    websiteURL: "https://aurorastrings.org/contact") == .hardToReach)
-        // Social-only listing, even with a real website: still a verified dead end.
-        #expect(Reachability.assess(presenter: "Aurora Strings",
-                                    sourceListingURL: "https://www.instagram.com/aurorastrings/",
-                                    websiteURL: "https://aurorastrings.org") == .hardToReach)
+                                    sourceListingURL: "https://www.instagram.com/aurorastrings/") == .hardToReach)
     }
 
     // The common Review case: a named presenter reached via a normal listing, but no confirmed website yet.
     // Overture cannot cheaply prove reachability here, so it stays silent rather than over-promising.
     @Test func aNamedPresenterOnANormalListingIsUnclear() {
         #expect(Reachability.assess(presenter: "Aurora Strings",
-                                    sourceListingURL: "https://carnegiehall.org/calendar/x",
-                                    websiteURL: nil) == .unclear)
+                                    sourceListingURL: "https://carnegiehall.org/calendar/x") == .unclear)
     }
 
-    // A website URL that is itself social does not count as positive evidence; it falls through to the
-    // social-only dead-end rule.
-    @Test func aSocialWebsiteDoesNotCountAsReachable() {
+    // #1640: this asked whether a SOCIAL website counted as positive evidence. With the website out of
+    // the rule entirely there is nothing left of the question but the social-listing dead end, which the
+    // test above already asserts, so what remains here is the listing case on its own.
+    @Test func aSocialListingIsADeadEnd() {
         #expect(Reachability.assess(presenter: "Aurora Strings",
-                                    sourceListingURL: "https://www.instagram.com/aurorastrings/",
-                                    websiteURL: "https://www.facebook.com/aurorastrings") == .hardToReach)
+                                    sourceListingURL: "https://www.instagram.com/aurorastrings/") == .hardToReach)
     }
 
     // #1596 Phase 3 rewrites what used to be three tests here (aProbedShowShowsTheFirmResult,
@@ -88,11 +76,9 @@ struct ReachabilityTests {
 
     @Test func anUnprobedShowFallsBackToTheHeuristic() {
         #expect(Reachability.badge(result: nil,
-                                   presenter: "Aurora Strings", sourceListingURL: "https://instagram.com/x",
-                                   websiteURL: nil) == .hardToReach)
+                                   presenter: "Aurora Strings", sourceListingURL: "https://instagram.com/x") == .hardToReach)
         #expect(Reachability.badge(result: nil,
-                                   presenter: "Aurora Strings", sourceListingURL: "https://carnegiehall.org/x",
-                                   websiteURL: nil) == Reachability.Badge.none)   // named presenter, no proof: silent
+                                   presenter: "Aurora Strings", sourceListingURL: "https://carnegiehall.org/x") == Reachability.Badge.none)   // named presenter, no proof: silent
     }
 
     // #1596 (milestone 32 Phase 3): the badge reads the STORED result of a check, not a live derivation
@@ -102,11 +88,11 @@ struct ReachabilityTests {
     @Test("a stored result decides the badge")
     func storedResultDecidesTheBadge() {
         #expect(Reachability.badge(result: .emailFound, presenter: "Some Org",
-                                   sourceListingURL: nil, websiteURL: nil) == .emailFound)
+                                   sourceListingURL: nil) == .emailFound)
         #expect(Reachability.badge(result: .weakContactOnly, presenter: "Some Org",
-                                   sourceListingURL: nil, websiteURL: nil) == .weakContactOnly)
+                                   sourceListingURL: nil) == .weakContactOnly)
         #expect(Reachability.badge(result: .noEmailFound, presenter: "Some Org",
-                                   sourceListingURL: nil, websiteURL: nil) == .noEmailFound)
+                                   sourceListingURL: nil) == .noEmailFound)
     }
 
     // No stored result means no check has ever run, so the row falls back to the free heuristic. This is
@@ -115,18 +101,18 @@ struct ReachabilityTests {
     @Test("no stored result falls back to the free heuristic")
     func noStoredResultFallsBackToTheHeuristic() {
         #expect(Reachability.badge(result: nil, presenter: "Some Org",
-                                   sourceListingURL: nil, websiteURL: nil) == .none)
+                                   sourceListingURL: nil) == .none)
         // #1859: no organiser named is no longer a verdict, only an unlooked-at show, so it stays silent
         // like every other state the heuristic cannot speak to.
         #expect(Reachability.badge(result: nil, presenter: nil,
-                                   sourceListingURL: nil, websiteURL: nil) == .none)
+                                   sourceListingURL: nil) == .none)
     }
 
     @Test("a stale result overrides every stored answer")
     func staleOverridesTheStoredAnswer() {
         for stored in [Reachability.ProbeResult.emailFound, .weakContactOnly, .noEmailFound] {
             #expect(Reachability.badge(result: stored, probeIsStale: true, presenter: "Some Org",
-                                       sourceListingURL: nil, websiteURL: nil) == .staleProbe)
+                                       sourceListingURL: nil) == .staleProbe)
         }
     }
 }

@@ -116,8 +116,7 @@ struct GenreChangeHidingRuleTests {
 
     private func row(_ discipline: String, location: String?) -> Prospect {
         let p = Prospect(naturalKey: "k", groupName: "Symphony No. 9", discipline: discipline,
-                 venue: "Tarrytown Music Hall", performanceDate: "2026-11-14", sourceListingURL: nil,
-                 websiteURL: nil, priorRelationship: "none", production: "self", profile: "neutral",
+                 venue: "Tarrytown Music Hall", performanceDate: "2026-11-14", sourceListingURL: nil, priorRelationship: "none", production: "self", profile: "neutral",
                  coverage: "unknown", fitScore: 5, tier: "longshot", fitReason: "",
                  matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
         p.location = location

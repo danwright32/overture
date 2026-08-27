@@ -131,8 +131,7 @@ struct DerivationRowChangeTests {
     @discardableResult
     private func show(_ ctx: ModelContext, key: String, fit: Int) -> Prospect {
         let p = Prospect(naturalKey: key, groupName: "Vienna Philharmonic", discipline: "music",
-                         venue: "Stern Auditorium", performanceDate: "2026-11-14", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "self", profile: "strong",
+                         venue: "Stern Auditorium", performanceDate: "2026-11-14", sourceListingURL: nil, priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: fit, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                          status: .new)
@@ -208,7 +207,7 @@ struct DerivationRowChangeTests {
 
     private func item(id: String, fit: Int) -> QueueItem {
         QueueItem(id: id, groupName: "Vienna Philharmonic", discipline: "music", venue: "Stern Auditorium",
-                  performanceDate: "2026-11-14", sourceListingURL: nil, websiteURL: nil,
+                  performanceDate: "2026-11-14", sourceListingURL: nil,
                   priorRelationship: "none", production: "self", profile: "strong",
                   coverage: "likely_uncovered", fitScore: fit, tier: "high", fitReason: "r",
                   matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil, status: .new)

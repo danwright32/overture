@@ -45,7 +45,7 @@ struct DraftModelTraceDisplayTests {
     private func item(draftModel: String?, contacts: [RecipientSnapshot] = []) -> QueueItem {
         var i = QueueItem(id: "k", groupName: "Aurora Strings", discipline: "music",
                           venue: "Weill Recital Hall", performanceDate: "2026-08-01",
-                          sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                          sourceListingURL: nil, priorRelationship: "none",
                           production: "self", profile: "strong", coverage: "likely_uncovered",
                           fitScore: 6, tier: "mid", fitReason: "r", matchedClientName: nil,
                           possibleMatchSource: nil, possibleMatchName: nil, status: .drafted,
@@ -125,7 +125,7 @@ struct DraftModelTraceDisplayTests {
     private func prospectWithReplier(_ ctx: ModelContext) -> (Prospect, Recipient) {
         let p = Prospect(naturalKey: "show", groupName: "Aurora Strings", discipline: "music",
                          venue: "Weill Recital Hall", performanceDate: "2099-09-19",
-                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                         sourceListingURL: nil, priorRelationship: "none",
                          production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 5, tier: "mid", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .contacted)

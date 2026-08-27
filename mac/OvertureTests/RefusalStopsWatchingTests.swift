@@ -17,7 +17,7 @@ struct RefusalStopsWatchingTests {
     private func prospect(_ groupName: String, sourceIds: [String] = []) -> Prospect {
         let p = Prospect(naturalKey: groupName, groupName: groupName, discipline: "music",
                          venue: "Zankel Hall", performanceDate: "2099-09-19",
-                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                         sourceListingURL: nil, priorRelationship: "none",
                          production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 5, tier: "mid", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil)

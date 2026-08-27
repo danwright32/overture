@@ -111,7 +111,7 @@ final class DebugSeedTests {
                                            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
         let ctx = ModelContext(container)
         ctx.insert(Prospect(naturalKey: "a", groupName: "A", discipline: "music", venue: nil,
-                            performanceDate: nil, sourceListingURL: nil, websiteURL: nil,
+                            performanceDate: nil, sourceListingURL: nil,
                             priorRelationship: "none", production: "self", profile: "neutral",
                             coverage: "unknown", fitScore: 1, tier: "longshot", fitReason: "r",
                             matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil))

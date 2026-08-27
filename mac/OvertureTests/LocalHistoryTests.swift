@@ -20,7 +20,7 @@ struct LocalHistoryTests {
                       showOutcome: ShowOutcome? = nil,
                       dismissReason: ShowOutcome? = nil) -> Prospect {
         let p = Prospect(naturalKey: group, groupName: group, discipline: "choral", venue: venue,
-                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-07-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

@@ -30,7 +30,7 @@ struct SuppressionReportTests {
     // is what LocalHistory turns into the suppression record the scout reads.
     private func refusedOrg(_ name: String, in ctx: ModelContext) {
         let p = Prospect(naturalKey: name, groupName: name, discipline: "music", venue: "Zankel Hall",
-                         performanceDate: "2026-01-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-01-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)

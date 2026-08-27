@@ -23,8 +23,7 @@ struct BlockedContactVisibilityTests {
 
     private func prospect(_ ctx: ModelContext) -> Prospect {
         let p = Prospect(naturalKey: "show", groupName: "Brooklyn Youth Chorus", discipline: "music",
-                         venue: "Merkin Hall", performanceDate: "2099-09-19", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "self",
+                         venue: "Merkin Hall", performanceDate: "2099-09-19", sourceListingURL: nil, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 5, tier: "mid",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
                          possibleMatchName: nil)
@@ -194,7 +193,7 @@ struct BlockedContactNavigationTests {
 
     private func show(_ ctx: ModelContext, key: String, status: ReviewStatus) -> Prospect {
         let p = Prospect(naturalKey: key, groupName: key, discipline: "music", venue: "Merkin Hall",
-                         performanceDate: "2099-09-19", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2099-09-19", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

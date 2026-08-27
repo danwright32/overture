@@ -31,8 +31,7 @@ struct SocialDMIsARouteTests {
         let key = Prospect.makeNaturalKey(groupName: "A Spanglish Affair Open Mic",
                                           performanceDate: "2026-08-17", venue: venue)
         let p = Prospect(naturalKey: key, groupName: "A Spanglish Affair Open Mic", discipline: "theater",
-                         venue: venue, performanceDate: "2026-08-17", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "self",
+                         venue: venue, performanceDate: "2026-08-17", sourceListingURL: nil, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 2, tier: "longshot",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
                          possibleMatchName: nil, status: .queued)
@@ -84,9 +83,9 @@ struct SocialDMIsARouteTests {
     // it has to be distinguishable from a form on the act's own site because what he does differs.
     @Test func thebadgeSaysWhichKindOfRouteItIs() {
         let social = Reachability.badge(result: .socialOnly, presenter: "Vivace Arts Collective",
-                                        sourceListingURL: nil, websiteURL: nil)
+                                        sourceListingURL: nil)
         let form = Reachability.badge(result: .contactFormOnly, presenter: "Vivace Arts Collective",
-                                      sourceListingURL: nil, websiteURL: nil)
+                                      sourceListingURL: nil)
 
         #expect(social == .socialOnly)
         #expect(social != form)

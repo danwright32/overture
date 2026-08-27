@@ -43,7 +43,7 @@ struct ReachabilityProbeReuseTests {
         let ctx = ModelContext(try container())
         let key = Prospect.makeNaturalKey(groupName: "Aurora Strings", performanceDate: "2026-09-12", venue: "Weill Recital Hall")
         let p = Prospect(naturalKey: key, groupName: "Aurora Strings", discipline: "music", venue: "Weill Recital Hall",
-                         performanceDate: "2026-09-12", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-09-12", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .queued)

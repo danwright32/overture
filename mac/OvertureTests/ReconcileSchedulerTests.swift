@@ -32,7 +32,7 @@ struct ReconcileSchedulerTests {
         // rollup. A replied contact counts even with the lead outcome still noResponse.
         let ctx = ModelContext(try container())
         let p = Prospect(naturalKey: "k", groupName: "G", discipline: "choral", venue: "V",
-                         performanceDate: nil, sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: nil, sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -53,7 +53,7 @@ struct ReconcileSchedulerTests {
         // A confirmed active conversation state set 30 days ago is due for a reminder now.
         let now = Date(timeIntervalSince1970: 40 * 86_400)
         let p = Prospect(naturalKey: "warm-lead", groupName: "Warm Lead", discipline: "choral", venue: "V",
-                         performanceDate: nil, sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: nil, sourceListingURL: nil,
                          priorRelationship: "warm", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 8, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -135,7 +135,7 @@ struct ReconcileSchedulerTests {
             schema: Schema([Prospect.self, Recipient.self]),
             seed: { ctx in
                 let p = Prospect(naturalKey: "k", groupName: "Acme Festival Chorus", discipline: "choral",
-                                 venue: "V", performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                                 venue: "V", performanceDate: "2026-07-01", sourceListingURL: nil,
                                  priorRelationship: "none", production: "self", profile: "strong",
                                  coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                                  matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -175,8 +175,7 @@ struct ReconcileSchedulerTests {
             for: Schema([Prospect.self, Recipient.self, DayOff.self]),
             configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
         let p = Prospect(naturalKey: "k", groupName: "Vienna Philharmonic", discipline: "music",
-                         venue: "Stern Auditorium", performanceDate: "2026-11-18", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "self", profile: "strong",
+                         venue: "Stern Auditorium", performanceDate: "2026-11-18", sourceListingURL: nil, priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 9, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                          status: .queued)
@@ -204,8 +203,7 @@ struct ReconcileSchedulerTests {
             for: Schema([Prospect.self, Recipient.self, DayOff.self]),
             configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
         let p = Prospect(naturalKey: "k", groupName: "Vienna Philharmonic", discipline: "music",
-                         venue: "Stern Auditorium", performanceDate: "2026-11-18", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "self", profile: "strong",
+                         venue: "Stern Auditorium", performanceDate: "2026-11-18", sourceListingURL: nil, priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 9, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                          status: .queued)

@@ -18,7 +18,7 @@ struct SourceYieldTests {
     private func show(_ key: String, sources: [String], status: ReviewStatus = .new,
                       sent: Bool = false, outcome: Outcome = .noResponse) -> Prospect {
         let p = Prospect(naturalKey: key, groupName: key, discipline: "music", venue: "V",
-                         performanceDate: "2026-09-19", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-09-19", sourceListingURL: nil,
                          priorRelationship: "none", production: "concert", profile: "unknown",
                          coverage: "unknown", fitScore: 50, tier: "medium", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

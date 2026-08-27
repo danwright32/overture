@@ -15,7 +15,7 @@ struct DismissReasonMigrationTests {
 
     private func dismissed(_ ctx: ModelContext, key: String, reasonRaw: String) -> Prospect {
         let p = Prospect(naturalKey: key, groupName: "G", discipline: "music", venue: "V",
-                         performanceDate: "2026-11-18", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-11-18", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

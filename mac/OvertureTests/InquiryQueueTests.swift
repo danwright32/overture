@@ -39,7 +39,7 @@ struct InquiryQueueTests {
 
     private func prospect(_ key: String, date: String?) -> Prospect {
         Prospect(naturalKey: key, groupName: key, discipline: "music", venue: "V",
-                 performanceDate: date, sourceListingURL: nil, websiteURL: nil,
+                 performanceDate: date, sourceListingURL: nil,
                  priorRelationship: "none", production: "unknown", profile: "neutral",
                  coverage: "unknown", fitScore: 3, tier: "longshot", fitReason: "r",
                  matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

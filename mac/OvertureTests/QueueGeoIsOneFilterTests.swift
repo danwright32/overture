@@ -32,7 +32,7 @@ struct QueueGeoIsOneFilterTests {
     private func show(_ ctx: ModelContext, _ key: String, location: String?,
                       discipline: String = "other", status: ReviewStatus = .new) -> Prospect {
         let p = Prospect(naturalKey: key, groupName: key, discipline: discipline, venue: "A Hall",
-                         performanceDate: "2026-08-19", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-08-19", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

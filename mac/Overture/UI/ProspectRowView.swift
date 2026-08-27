@@ -980,20 +980,16 @@ struct ProspectRowView: View {
     // lines that used to sit in here beside the links are retired, so the 145 untriaged rows carrying
     // neither link would otherwise draw an empty padded row.
     @ViewBuilder private var links: some View {
-        let refs = QueueModel.rowReferenceLinks(item)
+        let listingLink = QueueModel.rowListingLink(item)
         if QueueModel.rowHasReferenceLinks(item) {
             HStack(spacing: OVSpacing.md) {
                 // #358: .tint(OVColor.forestText) below does not recolor a Link's own text on macOS (tint
                 // affects control accents, not text color), so the default bright system blue clashed
                 // with the forest/gold palette and made these secondary reference links read as more
                 // important than they are. Each link needs its own explicit override.
-                if let listing = refs.listing {
+                if let listing = listingLink {
                     // #1680: the label says whether this goes to the show or only to the venue's calendar.
                     Link(QueueModel.listingLinkLabel(item), destination: listing)
-                        .foregroundStyle(OVColor.forestText)
-                }
-                if let website = refs.website {
-                    Link("Group website", destination: website)
                         .foregroundStyle(OVColor.forestText)
                 }
             }

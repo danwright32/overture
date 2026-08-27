@@ -40,7 +40,7 @@ struct AcknowledgeOnlyWhenSavedTests {
     // in-region state and a non-borough town).
     private func row(inTown location: String) -> QueueItem {
         var q = QueueItem(id: "k", groupName: "Aurora Strings", discipline: "music", venue: "V",
-                          performanceDate: "2026-08-01", sourceListingURL: nil, websiteURL: nil,
+                          performanceDate: "2026-08-01", sourceListingURL: nil,
                           priorRelationship: "none", production: "unknown", profile: "neutral",
                           coverage: "unknown", fitScore: 3, tier: "longshot", fitReason: "r",
                           matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

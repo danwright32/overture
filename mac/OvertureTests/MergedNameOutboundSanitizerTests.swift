@@ -49,7 +49,7 @@ struct MergedNameOutboundSanitizerTests {
         func confirmBody(groupName: String, seriesId: String?) throws -> String {
             let key = Prospect.makeNaturalKey(groupName: groupName, performanceDate: "2026-11-16", venue: "Stern")
             let p = Prospect(naturalKey: key, groupName: groupName, discipline: "choral", venue: "Stern",
-                             performanceDate: "2026-11-16", sourceListingURL: nil, websiteURL: nil,
+                             performanceDate: "2026-11-16", sourceListingURL: nil,
                              priorRelationship: "none", production: "self", profile: "strong",
                              coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                              matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

@@ -16,7 +16,7 @@ struct ReachedOutQueueTests {
 
     private func makeShow(_ ctx: ModelContext, group: String) -> Prospect {
         let p = Prospect(naturalKey: group, groupName: group, discipline: "choral", venue: "V",
-                         performanceDate: nil, sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: nil, sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

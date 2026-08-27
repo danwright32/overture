@@ -26,7 +26,7 @@ struct ReachabilityRecheckTests {
                       inherited: OrgAnswerLedger.Inherited? = nil,
                       recheckRequestedAt: Date? = nil) -> QueueItem {
         var i = QueueItem(id: key, groupName: key, discipline: "music", venue: "Weill Recital Hall",
-                          performanceDate: "2026-09-12", sourceListingURL: nil, websiteURL: nil,
+                          performanceDate: "2026-09-12", sourceListingURL: nil,
                           priorRelationship: "none", production: "self", profile: "strong",
                           coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
                           matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -246,7 +246,7 @@ struct ReachabilityRecheckSettleTests {
                                           venue: "Weill Recital Hall")
         let p = Prospect(naturalKey: key, groupName: group, discipline: "music",
                          venue: "Weill Recital Hall", performanceDate: "2026-09-12",
-                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                         sourceListingURL: nil, priorRelationship: "none",
                          production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 6, tier: "mid", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .new)
@@ -343,7 +343,7 @@ struct RecheckAWholeDateTests {
     private func item(_ key: String, status: ReviewStatus = .new, booked: Bool = false,
                       sent: Bool = false, probed: Bool = true, date: String = "2026-09-12") -> QueueItem {
         var i = QueueItem(id: key, groupName: key, discipline: "music", venue: "Weill Recital Hall",
-                          performanceDate: date, sourceListingURL: nil, websiteURL: nil,
+                          performanceDate: date, sourceListingURL: nil,
                           priorRelationship: "none", production: "self", profile: "strong",
                           coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
                           matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -402,7 +402,7 @@ struct RecheckAMissedShowTests {
     private func item(_ key: String, status: ReviewStatus = .new, probedAt: Date? = nil,
                       unansweredAt: Date? = nil) -> QueueItem {
         var i = QueueItem(id: key, groupName: key, discipline: "music", venue: "Weill Recital Hall",
-                          performanceDate: "2026-09-12", sourceListingURL: nil, websiteURL: nil,
+                          performanceDate: "2026-09-12", sourceListingURL: nil,
                           priorRelationship: "none", production: "self", profile: "strong",
                           coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
                           matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

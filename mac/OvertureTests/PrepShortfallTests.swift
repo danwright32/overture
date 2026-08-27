@@ -86,7 +86,7 @@ struct PrepShortfallTests {
     private func prospect(_ ctx: ModelContext, key: String) -> Prospect {
         let p = Prospect(naturalKey: key, groupName: "Aurora Strings", discipline: "music",
                          venue: "Weill Recital Hall", performanceDate: "2099-09-19",
-                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                         sourceListingURL: nil, priorRelationship: "none",
                          production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 5, tier: "mid", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .queued)
@@ -107,7 +107,7 @@ struct PrepShortfallTests {
     private func writeQueue(_ keys: [String], to dir: URL, generatedAt: String) throws -> URL {
         let items = keys.map {
             PrepQueueItem(naturalKey: $0, groupName: "Aurora Strings", venue: "Weill Recital Hall",
-                          performanceDate: "2099-09-19", discipline: "music", websiteURL: nil,
+                          performanceDate: "2099-09-19", discipline: "music",
                           sourceListingURL: nil, possibleMatchName: nil, priorRelationship: "none",
                           production: "self")
         }

@@ -9,7 +9,7 @@ struct QueueDepartingFoldTests {
     private func item(_ key: String) -> QueueItem {
         QueueItem(
             id: key, groupName: "G", discipline: "choral", venue: "V",
-            performanceDate: "2026-07-20", sourceListingURL: nil, websiteURL: nil,
+            performanceDate: "2026-07-20", sourceListingURL: nil,
             priorRelationship: "none", production: "self", profile: "neutral",
             coverage: "likely_uncovered", fitScore: 5, tier: "medium", fitReason: "r",
             matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil, status: .approved)

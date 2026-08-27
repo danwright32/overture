@@ -68,7 +68,7 @@ struct ReachedOutMergeTests {
     func bothKindsInterleaveByDate() throws {
         let ctx = ModelContext(try container())
         let p = Prospect(naturalKey: "k", groupName: "Test Choir", discipline: "music", venue: "V",
-                         performanceDate: "2026-03-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-03-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
@@ -99,7 +99,7 @@ struct ReachedOutMergeTests {
     func noteCountsInquiries() throws {
         let ctx = ModelContext(try container())
         let p = Prospect(naturalKey: "k", groupName: "Test Choir", discipline: "music", venue: "V",
-                         performanceDate: "2026-03-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-03-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
@@ -126,7 +126,7 @@ struct ReachedOutMergeTests {
     func everyProspectRowSurvivesWithoutInquiries() throws {
         let ctx = ModelContext(try container())
         let p = Prospect(naturalKey: "k", groupName: "Test Choir", discipline: "music", venue: "V",
-                         performanceDate: "2026-03-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-03-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)

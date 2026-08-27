@@ -30,8 +30,7 @@ struct OneWaitingOnDanRuleTests {
 
     private func show(_ ctx: ModelContext) -> (Prospect, Recipient) {
         let p = Prospect(naturalKey: "k", groupName: "Every Voice Choirs", discipline: "choral",
-                         venue: "Merkin Hall", performanceDate: "2026-10-31", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "self",
+                         venue: "Merkin Hall", performanceDate: "2026-10-31", sourceListingURL: nil, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 8, tier: "high",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
                          possibleMatchName: nil)

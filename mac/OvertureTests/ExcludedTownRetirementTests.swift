@@ -25,7 +25,7 @@ struct ExcludedTownRetirementTests {
     private func show(_ ctx: ModelContext, _ key: String, location: String?,
                       status: ReviewStatus = .new) -> Prospect {
         let p = Prospect(naturalKey: key, groupName: key, discipline: "opera", venue: "A venue",
-                         performanceDate: "2026-08-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-08-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 8, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

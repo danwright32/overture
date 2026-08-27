@@ -19,7 +19,7 @@ struct DownbeatBookingTests {
                       sentAt: Date? = nil, performanceDate: String? = "2026-07-01",
                       clientId: String? = nil) -> Prospect {
         let p = Prospect(naturalKey: group, groupName: group, discipline: "choral", venue: "V",
-                         performanceDate: performanceDate, sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: performanceDate, sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -146,7 +146,7 @@ struct DownbeatBookingTests {
         let sendDay = Date(timeIntervalSince1970: 1_751_328_000 - 30 * 86_400)
         let p = Prospect(naturalKey: "Acme Festival Chorus", groupName: "Acme Festival Chorus",
                          discipline: "choral", venue: "V", performanceDate: "2026-07-01",
-                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                         sourceListingURL: nil, priorRelationship: "none",
                          production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 5, tier: "mid", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .approved)
@@ -262,7 +262,7 @@ struct DownbeatBookingTests {
         let sendDay = Date(timeIntervalSince1970: 1_751_328_000 - 30 * 86_400)
         let b = booking(id: "B-shared", clientId: "C1", start: "2026-07-01", end: "2026-07-01")
         let p1 = Prospect(naturalKey: "p1-key", groupName: "Acme Festival Chorus", discipline: "choral",
-                          venue: "V", performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                          venue: "V", performanceDate: "2026-07-01", sourceListingURL: nil,
                           priorRelationship: "none", production: "self", profile: "strong",
                           coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                           matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -271,7 +271,7 @@ struct DownbeatBookingTests {
         p1.gmailMessageId = "msg-p1"
         p1.downbeatClientId = "C1"
         let p2 = Prospect(naturalKey: "p2-key", groupName: "Acme Festival Chorus", discipline: "choral",
-                          venue: "V", performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                          venue: "V", performanceDate: "2026-07-01", sourceListingURL: nil,
                           priorRelationship: "none", production: "self", profile: "strong",
                           coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                           matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

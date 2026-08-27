@@ -24,7 +24,7 @@ struct OrgAnswerRecordingTests {
                           venue: String = "Church of the Ascension") -> Prospect {
         let key = Prospect.makeNaturalKey(groupName: group, performanceDate: "2026-09-12", venue: venue)
         let p = Prospect(naturalKey: key, groupName: group, discipline: "music", venue: venue,
-                         performanceDate: "2026-09-12", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-09-12", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

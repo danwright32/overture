@@ -22,7 +22,7 @@ struct FeedReconcileTests {
                           status: ReviewStatus = .new, missed: Int = 0,
                           runEnd: String? = nil) -> Prospect {
         let p = Prospect(naturalKey: key, groupName: key, discipline: "music", venue: "Weill Recital Hall",
-                         performanceDate: date, sourceListingURL: source, websiteURL: nil,
+                         performanceDate: date, sourceListingURL: source,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

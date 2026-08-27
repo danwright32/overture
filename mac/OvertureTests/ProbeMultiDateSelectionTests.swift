@@ -13,7 +13,7 @@ struct ProbeMultiDateSelectionTests {
     private func item(_ key: String, date: String, presenter: String?, venue: String,
                       status: ReviewStatus = .new, probed: Bool = false) -> QueueItem {
         var i = QueueItem(id: key, groupName: key, discipline: "theater", venue: venue,
-                          performanceDate: date, sourceListingURL: nil, websiteURL: nil,
+                          performanceDate: date, sourceListingURL: nil,
                           priorRelationship: "none", production: "self", profile: "strong",
                           coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
                           matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

@@ -17,8 +17,7 @@ struct DismissDayOffMutationTests {
     @discardableResult
     private func show(_ ctx: ModelContext, on date: String, runEnd: String? = nil) -> Prospect {
         let p = Prospect(naturalKey: "k-\(date)", groupName: "Vienna Philharmonic", discipline: "music",
-                         venue: "Stern Auditorium", performanceDate: date, sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "self", profile: "strong",
+                         venue: "Stern Auditorium", performanceDate: date, sourceListingURL: nil, priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 9, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                          status: .queued)
@@ -106,14 +105,12 @@ struct DismissDayOffMutationTests {
     @Test func dismissingOneVenueOfATouringShowStillProposesOnlyThatVenuesNight() throws {
         let ctx = try context()
         let p1 = Prospect(naturalKey: "moca-25", groupName: "MOCA PERFORMS", discipline: "theater",
-                          venue: "Museum of Chinese in America", performanceDate: "2026-07-25", sourceListingURL: nil,
-                          websiteURL: nil, priorRelationship: "none", production: "self", profile: "strong",
+                          venue: "Museum of Chinese in America", performanceDate: "2026-07-25", sourceListingURL: nil, priorRelationship: "none", production: "self", profile: "strong",
                           coverage: "likely_uncovered", fitScore: 9, tier: "high", fitReason: "r",
                           matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                           status: .queued)
         let p2 = Prospect(naturalKey: "moca-24", groupName: "MOCA PERFORMS", discipline: "theater",
-                          venue: "Open Door Senior Center", performanceDate: "2026-07-24", sourceListingURL: nil,
-                          websiteURL: nil, priorRelationship: "none", production: "self", profile: "strong",
+                          venue: "Open Door Senior Center", performanceDate: "2026-07-24", sourceListingURL: nil, priorRelationship: "none", production: "self", profile: "strong",
                           coverage: "likely_uncovered", fitScore: 9, tier: "high", fitReason: "r",
                           matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                           status: .queued)

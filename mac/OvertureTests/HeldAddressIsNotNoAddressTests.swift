@@ -33,8 +33,7 @@ struct HeldAddressIsNotNoAddressTests {
         let key = Prospect.makeNaturalKey(groupName: "Raging of the Shrews", performanceDate: "2026-08-14",
                                           venue: "Under St Marks")
         let p = Prospect(naturalKey: key, groupName: "Raging of the Shrews", discipline: "theatre",
-                         venue: "Under St Marks", performanceDate: "2026-08-14", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "unknown",
+                         venue: "Under St Marks", performanceDate: "2026-08-14", sourceListingURL: nil, priorRelationship: "none", production: "unknown",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 6, tier: "mid",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
                          possibleMatchName: nil, status: .new)

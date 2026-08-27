@@ -202,7 +202,7 @@ struct PresenterProvenanceTests {
         let ctx = try context()
         let row = Prospect(naturalKey: "k|2026-09-01|Chain Theatre", groupName: "Fall One Acts",
                            discipline: "theater", venue: "Chain Theatre", performanceDate: "2026-09-01",
-                           sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                           sourceListingURL: nil, priorRelationship: "none",
                            production: "self", profile: "strong", coverage: "likely_uncovered",
                            fitScore: 10, tier: "mid", fitReason: "r", matchedClientName: nil,
                            possibleMatchSource: nil, possibleMatchName: nil, status: .new)

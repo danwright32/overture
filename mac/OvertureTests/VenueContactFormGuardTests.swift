@@ -27,8 +27,7 @@ struct VenueContactFormGuardTests {
 
     private func show(_ ctx: ModelContext, venue: String) -> Prospect {
         let p = Prospect(naturalKey: "k", groupName: "A Recital", discipline: "music",
-                         venue: venue, performanceDate: "2026-09-18", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "unknown",
+                         venue: venue, performanceDate: "2026-09-18", sourceListingURL: nil, priorRelationship: "none", production: "unknown",
                          profile: "neutral", coverage: "unknown", fitScore: 5, tier: "mid",
                          fitReason: "", matchedClientName: nil, possibleMatchSource: nil,
                          possibleMatchName: nil, status: .new)

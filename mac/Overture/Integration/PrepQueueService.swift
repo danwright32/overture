@@ -70,7 +70,6 @@ enum PrepQueueService {
                     // #1122: the run's closing night, so a draft can pitch the whole run.
                     runEndDate: p.runEndDate,
                     discipline: p.discipline,
-                    websiteURL: p.websiteURL,
                     sourceListingURL: p.sourceListingURL,
                     possibleMatchName: p.possibleMatchName,
                     // #752: NOT p.priorRelationship. An unconfirmed performer match must not reach the
@@ -153,7 +152,6 @@ enum PrepQueueService {
                     performanceDate: p.performanceDate,
                     runEndDate: p.runEndDate,
                     discipline: p.discipline,
-                    websiteURL: p.websiteURL,
                     sourceListingURL: p.sourceListingURL,
                     possibleMatchName: p.possibleMatchName,
                     priorRelationship: p.priorRelationshipForDrafting,

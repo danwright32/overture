@@ -16,7 +16,7 @@ struct DisciplineMigrationTests {
     @discardableResult
     private func prospect(_ ctx: ModelContext, key: String, discipline: String) -> Prospect {
         let p = Prospect(naturalKey: key, groupName: key, discipline: discipline, venue: nil,
-                         performanceDate: nil, sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: nil, sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "neutral",
                          coverage: "unknown", fitScore: 3, tier: "longshot", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)

@@ -38,7 +38,7 @@ struct RunNightDropCoveredNightTests {
         let p = Prospect(naturalKey: Prospect.makeNaturalKey(groupName: group, performanceDate: night,
                                                              venue: venue),
                          groupName: group, discipline: "comedy", venue: venue, performanceDate: night,
-                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                         sourceListingURL: nil, priorRelationship: "none",
                          production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 3, tier: "long_shot", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil)

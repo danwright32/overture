@@ -12,7 +12,7 @@ import ViewInspector
 struct ProspectRowViewAlreadyCoveredFlagTests {
     private func item(alreadyCoveredNote: String?, alreadyCoveredDismissed: Bool = false) -> QueueItem {
         QueueItem(id: "k", groupName: "French-American Piano Society", discipline: "music", venue: "Weill Recital Hall",
-                 performanceDate: "2026-09-12", sourceListingURL: nil, websiteURL: nil,
+                 performanceDate: "2026-09-12", sourceListingURL: nil,
                  priorRelationship: "none", production: "self", profile: "strong",
                  coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
                  matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil, status: .new,

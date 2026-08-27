@@ -171,7 +171,7 @@ struct ShowListingReaderTests {
 
     private func item(key: String, url: String?) -> PrepQueueItem {
         PrepQueueItem(naturalKey: key, groupName: "G", venue: "V", performanceDate: "2026-08-03",
-                      discipline: "other", websiteURL: nil, sourceListingURL: url,
+                      discipline: "other", sourceListingURL: url,
                       possibleMatchName: nil, priorRelationship: "none")
     }
 }

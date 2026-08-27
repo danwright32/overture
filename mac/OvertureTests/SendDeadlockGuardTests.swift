@@ -48,7 +48,7 @@ struct SendDeadlockGuardTests {
             configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
         let ctx = ModelContext(container)
         let p = Prospect(naturalKey: "guard", groupName: "Guard", discipline: "choral", venue: "V",
-                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-07-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

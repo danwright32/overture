@@ -536,7 +536,7 @@ struct FollowUpsView: View {
 
 private func previewProspect(_ group: String, event: String?) -> Prospect {
     Prospect(naturalKey: group, groupName: group, discipline: "music", venue: "Carnegie Hall",
-             performanceDate: event, sourceListingURL: nil, websiteURL: nil,
+             performanceDate: event, sourceListingURL: nil,
              priorRelationship: "warm", production: "self", profile: "strong", coverage: "likely_uncovered",
              fitScore: 8, tier: "high", fitReason: "r", matchedClientName: nil,
              possibleMatchSource: nil, possibleMatchName: nil)

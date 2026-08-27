@@ -15,7 +15,7 @@ import ViewInspector
 struct ArchiveViewSendStateTests {
     private func approvedItemWithDraft() -> QueueItem {
         QueueItem(id: "k", groupName: "Aurora Strings", discipline: "music", venue: "Weill Recital Hall",
-                 performanceDate: "2026-08-01", sourceListingURL: nil, websiteURL: nil,
+                 performanceDate: "2026-08-01", sourceListingURL: nil,
                  priorRelationship: "none", production: "self", profile: "strong",
                  coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
                  matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

@@ -99,7 +99,7 @@ struct CancelledCheckSpendTests {
                                           venue: "Weill Recital Hall")
         ctx.insert(Prospect(naturalKey: key, groupName: "Aurora Strings", discipline: "music",
                             venue: "Weill Recital Hall", performanceDate: "2026-09-12",
-                            sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                            sourceListingURL: nil, priorRelationship: "none",
                             production: "self", profile: "strong", coverage: "likely_uncovered",
                             fitScore: 5, tier: "mid", fitReason: "r", matchedClientName: nil,
                             possibleMatchSource: nil, possibleMatchName: nil))
@@ -146,7 +146,7 @@ struct CancelledCheckSpendTests {
                                           venue: "Weill Recital Hall")
         ctx.insert(Prospect(naturalKey: key, groupName: "Aurora Strings", discipline: "music",
                             venue: "Weill Recital Hall", performanceDate: "2026-09-12",
-                            sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                            sourceListingURL: nil, priorRelationship: "none",
                             production: "self", profile: "strong", coverage: "likely_uncovered",
                             fitScore: 5, tier: "mid", fitReason: "r", matchedClientName: nil,
                             possibleMatchSource: nil, possibleMatchName: nil))

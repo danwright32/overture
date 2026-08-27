@@ -31,7 +31,7 @@ struct ReplyReopensAClosedShowTests {
     private func show(closedAs outcome: ShowOutcome?, at stamp: Date?) -> Prospect {
         let p = Prospect(naturalKey: "aurora", groupName: "Aurora Strings", discipline: "music",
                          venue: "Weill Recital Hall", performanceDate: "2026-12-01",
-                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                         sourceListingURL: nil, priorRelationship: "none",
                          production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .contacted)

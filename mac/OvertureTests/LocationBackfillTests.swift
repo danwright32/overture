@@ -19,7 +19,7 @@ struct LocationBackfillTests {
                           scoutGroupName: String? = nil,
                           discipline: String = "music") -> Prospect {
         let p = Prospect(naturalKey: key, groupName: groupName, discipline: discipline, venue: venue,
-                         performanceDate: nil, sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: nil, sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "neutral",
                          coverage: "unknown", fitScore: 3, tier: "longshot", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)

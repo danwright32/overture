@@ -13,7 +13,7 @@ struct PrepImporterTests {
     private func keptProspect(_ ctx: ModelContext, group: String, date: String, venue: String) -> String {
         let key = Prospect.makeNaturalKey(groupName: group, performanceDate: date, venue: venue)
         let p = Prospect(naturalKey: key, groupName: group, discipline: "choral", venue: venue,
-                         performanceDate: date, sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: date, sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .queued)
@@ -58,7 +58,7 @@ struct PrepImporterTests {
                                 reprepDraftRequested: Bool = false, reprepContactsRequested: Bool = false,
                                 sentAt: Date? = nil) -> Prospect {
         let p = Prospect(naturalKey: key, groupName: "G", discipline: "choral", venue: "V",
-                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-07-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -1011,7 +1011,7 @@ struct PrepImporterTests {
             passedOnThisShow: false, contactRoute: .unchecked))
         let p = Prospect(naturalKey: key, groupName: "Emerging Artists Series", discipline: "music",
                          venue: "Weill Recital Hall", performanceDate: "2026-08-02",
-                         sourceListingURL: nil, websiteURL: nil, priorRelationship: prior,
+                         sourceListingURL: nil, priorRelationship: prior,
                          production: production, profile: "strong", coverage: "likely_uncovered",
                          fitScore: base.score, tier: base.tier.rawValue, fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

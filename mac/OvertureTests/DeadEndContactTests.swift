@@ -59,8 +59,7 @@ struct DeadEndContactIngestTests {
         let key = Prospect.makeNaturalKey(groupName: "Devin Marlowe", performanceDate: "2026-08-11",
                                           venue: "54 Below")
         let p = Prospect(naturalKey: key, groupName: "Devin Marlowe", discipline: "music",
-                         venue: "54 Below", performanceDate: "2026-08-11", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "self", profile: "strong",
+                         venue: "54 Below", performanceDate: "2026-08-11", sourceListingURL: nil, priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                          status: .queued)

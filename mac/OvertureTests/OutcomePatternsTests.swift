@@ -16,7 +16,7 @@ struct OutcomePatternsTests {
     private func make(_ ctx: ModelContext, group: String, production: String, discipline: String,
                       tier: String, status: ReviewStatus, outcome: Outcome) -> Prospect {
         let p = Prospect(naturalKey: group, groupName: group, discipline: discipline, venue: "V",
-                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-07-01", sourceListingURL: nil,
                          priorRelationship: "none", production: production, profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: tier, fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -80,7 +80,7 @@ struct OutcomePatternsTests {
     @Test func aSentTimestampWithoutAGmailMessageIdDoesNotCountAsContacted() throws {
         let ctx = ModelContext(try container())
         let p = Prospect(naturalKey: "k", groupName: "k", discipline: "music", venue: "V",
-                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-07-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -96,7 +96,7 @@ struct OutcomePatternsTests {
     // see the full set of factors that predict bookings before adjusting weights by hand.
     private func sent(_ ctx: ModelContext, key: String, profile: String, coverage: String, venue: String?) {
         let p = Prospect(naturalKey: key, groupName: key, discipline: "music", venue: venue,
-                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-07-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: profile,
                          coverage: coverage, fitScore: 5, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

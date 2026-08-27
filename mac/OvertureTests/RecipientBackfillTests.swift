@@ -15,7 +15,7 @@ struct RecipientBackfillTests {
     // A contacted-via-the-old-path show: lead carries sentAt/thread, its act recipient row does not.
     private func legacyContacted(_ ctx: ModelContext, key: String) -> Prospect {
         let p = Prospect(naturalKey: key, groupName: key, discipline: "music", venue: nil,
-                         performanceDate: nil, sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: nil, sourceListingURL: nil,
                          priorRelationship: "warm", production: "self", profile: "neutral",
                          coverage: "unknown", fitScore: 3, tier: "longshot", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
@@ -72,7 +72,7 @@ struct RecipientBackfillTests {
     @Test func repairLeavesNeverContactedShowsAlone() throws {
         let ctx = try makeInMemoryContext()
         let p = Prospect(naturalKey: "Unsent", groupName: "Unsent", discipline: "music", venue: nil,
-                         performanceDate: nil, sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: nil, sourceListingURL: nil,
                          priorRelationship: "warm", production: "self", profile: "neutral",
                          coverage: "unknown", fitScore: 3, tier: "longshot", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)

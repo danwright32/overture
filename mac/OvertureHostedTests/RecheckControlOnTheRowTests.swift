@@ -23,7 +23,7 @@ struct RecheckControlOnTheRowTests {
     private func item(probed: Bool = true, requestedAt: Date? = nil) -> QueueItem {
         var i = QueueItem(id: "k", groupName: "Aurora Strings", discipline: "music",
                           venue: "Weill Recital Hall", performanceDate: "2026-09-12",
-                          sourceListingURL: "https://example.org/calendar", websiteURL: nil,
+                          sourceListingURL: "https://example.org/calendar",
                           priorRelationship: "none", production: "self", profile: "strong",
                           coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
                           matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

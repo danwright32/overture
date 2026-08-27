@@ -16,8 +16,7 @@ struct ModelContextSaveOrWarnTests {
 
     private func make(_ ctx: ModelContext, naturalKey: String) {
         let p = Prospect(naturalKey: naturalKey, groupName: "Aurora Strings", discipline: "music",
-                         venue: "V", performanceDate: "2026-07-01", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "self",
+                         venue: "V", performanceDate: "2026-07-01", sourceListingURL: nil, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 5, tier: "mid",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
                          possibleMatchName: nil)

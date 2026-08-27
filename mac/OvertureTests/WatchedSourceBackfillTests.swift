@@ -24,7 +24,7 @@ struct WatchedSourceBackfillTests {
 
     private func prospect(_ name: String, url: String?) -> Prospect {
         Prospect(naturalKey: name, groupName: name, discipline: "music", venue: "Somewhere",
-                 performanceDate: "2026-09-19", sourceListingURL: url, websiteURL: nil,
+                 performanceDate: "2026-09-19", sourceListingURL: url,
                  priorRelationship: "none", production: "concert", profile: "unknown",
                  coverage: "unknown", fitScore: 50, tier: "medium", fitReason: "test",
                  matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)

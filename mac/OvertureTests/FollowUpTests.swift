@@ -79,7 +79,7 @@ struct FollowUpTests {
         let ctx = ModelContext(try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
                                                   configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
         let p = Prospect(naturalKey: "k", groupName: "G", discipline: "choral", venue: "V",
-                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-07-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .contacted)
@@ -102,7 +102,7 @@ struct FollowUpTests {
         let ctx = ModelContext(try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
                                                   configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
         let p = Prospect(naturalKey: "k", groupName: "G", discipline: "choral", venue: "V",
-                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-07-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .contacted)

@@ -31,7 +31,7 @@ struct NudgesStopWhenTheShowDoesTests {
         -> (Prospect, Recipient) {
         let p = Prospect(naturalKey: "k-\(showDate ?? "none")-\(runEndDate ?? "-")",
                          groupName: "Smoke Ring Quartet", discipline: "music", venue: "V",
-                         performanceDate: showDate, sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: showDate, sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

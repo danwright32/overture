@@ -73,7 +73,7 @@ struct ReplyClassifyShortfallTests {
     private func prospect(_ ctx: ModelContext, key: String, recipientIds: [String]) {
         let p = Prospect(naturalKey: key, groupName: "Aurora Strings", discipline: "music",
                          venue: "Weill Recital Hall", performanceDate: "2099-09-19",
-                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "warm",
+                         sourceListingURL: nil, priorRelationship: "warm",
                          production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 8, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil)

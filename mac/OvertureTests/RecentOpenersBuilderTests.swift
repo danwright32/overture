@@ -15,7 +15,7 @@ struct RecentOpenersBuilderTests {
                           original: String? = nil, draft: String? = nil,
                           sentAt: Date? = nil, ingestedAt: Date = Date(timeIntervalSince1970: 0)) -> Prospect {
         let p = Prospect(naturalKey: key, groupName: "G", discipline: discipline, venue: "V",
-                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-07-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

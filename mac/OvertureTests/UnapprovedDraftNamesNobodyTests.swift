@@ -29,8 +29,7 @@ struct UnapprovedDraftNamesNobodyTests {
         let key = Prospect.makeNaturalKey(groupName: "Every Voice Choirs", performanceDate: "2026-09-01",
                                           venue: "Merkin Hall")
         let p = Prospect(naturalKey: key, groupName: "Every Voice Choirs", discipline: "choral",
-                         venue: "Merkin Hall", performanceDate: "2026-09-01", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "self", profile: "strong",
+                         venue: "Merkin Hall", performanceDate: "2026-09-01", sourceListingURL: nil, priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                          status: status, ingestedAt: Date())

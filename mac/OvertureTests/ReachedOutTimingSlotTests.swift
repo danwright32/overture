@@ -29,7 +29,7 @@ struct ReachedOutTimingSlotTests {
 
     private func makeShow(_ ctx: ModelContext, day: String?, group: String = "Devin Marlowe") -> Prospect {
         let p = Prospect(naturalKey: "\(group)|\(day ?? "none")", groupName: group, discipline: "jazz",
-                         venue: "V", performanceDate: day, sourceListingURL: nil, websiteURL: nil,
+                         venue: "V", performanceDate: day, sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

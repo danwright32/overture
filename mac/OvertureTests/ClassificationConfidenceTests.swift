@@ -7,7 +7,7 @@ import Foundation
 struct QueueItemOverrideFlagTests {
     private func makeProspect(overridden: Bool = false) -> Prospect {
         let p = Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: nil,
-                         performanceDate: nil, sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: nil, sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "neutral",
                          coverage: "unknown", fitScore: 3, tier: "longshot", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
@@ -32,7 +32,7 @@ struct QueueItemBookingSuggestionTests {
                               outcome: Outcome = .noResponse,
                               outcomeSource: OutcomeSource? = nil) -> Prospect {
         let p = Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: nil,
-                         performanceDate: nil, sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: nil, sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "neutral",
                          coverage: "unknown", fitScore: 3, tier: "longshot", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
@@ -68,7 +68,7 @@ struct QueueItemBookingSuggestionTests {
 struct PendingBookingCountTests {
     private func item(bookingSuggested: Bool) -> QueueItem {
         var i = QueueItem(id: "k", groupName: "G", discipline: "music", venue: nil,
-                          performanceDate: nil, sourceListingURL: nil, websiteURL: nil,
+                          performanceDate: nil, sourceListingURL: nil,
                           priorRelationship: "none", production: "self", profile: "neutral",
                           coverage: "unknown", fitScore: 3, tier: "longshot", fitReason: "r",
                           matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

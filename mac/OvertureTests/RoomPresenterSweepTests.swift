@@ -38,7 +38,7 @@ struct RoomPresenterSweepTests {
                         configure: (Prospect) -> Void = { _ in }) -> Prospect {
         let p = Prospect(naturalKey: "\(title)|2026-09-01|\(venue ?? "")", groupName: title,
                          discipline: discipline, venue: venue, performanceDate: "2026-09-01",
-                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                         sourceListingURL: nil, priorRelationship: "none",
                          production: production, profile: profile, coverage: coverage,
                          fitScore: fitScore, tier: "mid", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .new)

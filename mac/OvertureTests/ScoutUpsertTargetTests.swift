@@ -28,7 +28,7 @@ struct ScoutUpsertTargetTests {
     private func prospect(_ key: String, in ctx: ModelContext) -> Prospect {
         let p = Prospect(naturalKey: key, groupName: "Aurora Strings", discipline: "music",
                          venue: "Carnegie Hall", performanceDate: "2026-11-14",
-                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                         sourceListingURL: nil, priorRelationship: "none",
                          production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 9, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil)

@@ -14,7 +14,7 @@ struct BookingMatchTests {
     private func prospect(clientId: String? = "C1", date: String? = "2026-03-11",
                           sentDaysAgo: Int? = 30, group: String = "Every Voice Choirs") -> Prospect {
         let p = Prospect(naturalKey: UUID().uuidString, groupName: group, discipline: "choral",
-                         venue: "Hall", performanceDate: date, sourceListingURL: nil, websiteURL: nil,
+                         venue: "Hall", performanceDate: date, sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)

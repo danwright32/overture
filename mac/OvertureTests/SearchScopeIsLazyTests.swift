@@ -6,7 +6,7 @@ private func item(id: String = "k", groupName: String = "Aurora Strings",
                   performanceDate: String? = "2026-07-01") -> QueueItem {
     QueueItem(
         id: id, groupName: groupName, discipline: "music", venue: venue,
-        performanceDate: performanceDate, sourceListingURL: nil, websiteURL: nil,
+        performanceDate: performanceDate, sourceListingURL: nil,
         priorRelationship: "none", production: "self", profile: "neutral",
         coverage: "unknown", fitScore: 5, tier: "mid", fitReason: "reason",
         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil, status: .new

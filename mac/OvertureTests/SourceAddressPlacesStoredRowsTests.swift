@@ -43,8 +43,7 @@ struct SourceAddressPlacesStoredRowsTests {
     private func show(_ ctx: ModelContext, key: String, venue: String?, sourceIds: [String],
                       location: String? = nil) -> Prospect {
         let p = Prospect(naturalKey: key, groupName: "An evening of songs", discipline: "music",
-                         venue: venue, performanceDate: "2099-05-05", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "self",
+                         venue: venue, performanceDate: "2099-05-05", sourceListingURL: nil, priorRelationship: "none", production: "self",
                          profile: "neutral", coverage: "unknown", fitScore: 3, tier: "longshot",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
                          possibleMatchName: nil)

@@ -35,8 +35,7 @@ struct ProbeResultVocabulariesTests {
     private static func freshBadge(for result: Reachability.ProbeResult) -> Reachability.Badge {
         Reachability.badge(result: result, probeIsStale: false, inherited: nil, missedByACheck: false,
                            presenter: "A Presenting Organisation",
-                           sourceListingURL: "https://example.org/listing",
-                           websiteURL: "https://example.org")
+                           sourceListingURL: "https://example.org/listing")
     }
 
     private static var allProbeResults: [Reachability.ProbeResult] { Reachability.ProbeResult.allCases }
@@ -107,20 +106,16 @@ struct ProbeResultVocabulariesTests {
 
         produced.insert(Reachability.badge(result: .emailFound, probeIsStale: true,
                                            presenter: "A Presenting Organisation",
-                                           sourceListingURL: "https://example.org/listing",
-                                           websiteURL: "https://example.org"))
+                                           sourceListingURL: "https://example.org/listing"))
         produced.insert(Reachability.badge(result: nil, missedByACheck: true,
                                            presenter: "A Presenting Organisation",
-                                           sourceListingURL: "https://example.org/listing",
-                                           websiteURL: "https://example.org"))
+                                           sourceListingURL: "https://example.org/listing"))
         produced.insert(Reachability.badge(result: nil,
                                            presenter: "A Presenting Organisation",
-                                           sourceListingURL: "https://instagram.com/anact",
-                                           websiteURL: nil))
+                                           sourceListingURL: "https://instagram.com/anact"))
         produced.insert(Reachability.badge(result: nil,
                                            presenter: "A Presenting Organisation",
-                                           sourceListingURL: "https://example.org/listing",
-                                           websiteURL: nil))
+                                           sourceListingURL: "https://example.org/listing"))
 
         #expect(produced == Set(Reachability.Badge.allCases),
                 "a Badge exists that no call into Reachability.badge can produce")
@@ -131,20 +126,16 @@ struct ProbeResultVocabulariesTests {
     @Test func eachNonProbeBadgeComesFromItsOwnPath() {
         #expect(Reachability.badge(result: .emailFound, probeIsStale: true,
                                    presenter: "A Presenting Organisation",
-                                   sourceListingURL: "https://example.org/listing",
-                                   websiteURL: "https://example.org") == .staleProbe)
+                                   sourceListingURL: "https://example.org/listing") == .staleProbe)
         #expect(Reachability.badge(result: nil, missedByACheck: true,
                                    presenter: "A Presenting Organisation",
-                                   sourceListingURL: "https://example.org/listing",
-                                   websiteURL: "https://example.org") == .checkMissedIt)
+                                   sourceListingURL: "https://example.org/listing") == .checkMissedIt)
         #expect(Reachability.badge(result: nil,
                                    presenter: "A Presenting Organisation",
-                                   sourceListingURL: "https://instagram.com/anact",
-                                   websiteURL: nil) == .hardToReach)
+                                   sourceListingURL: "https://instagram.com/anact") == .hardToReach)
         #expect(Reachability.badge(result: nil,
                                    presenter: "A Presenting Organisation",
-                                   sourceListingURL: "https://example.org/listing",
-                                   websiteURL: nil) == Reachability.Badge.none)
+                                   sourceListingURL: "https://example.org/listing") == Reachability.Badge.none)
     }
 
     // MARK: the two mappings agreeing with each other

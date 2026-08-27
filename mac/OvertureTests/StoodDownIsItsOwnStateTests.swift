@@ -87,8 +87,7 @@ struct StoodDownClosesTheContactTests {
         let key = Prospect.makeNaturalKey(groupName: "Aurora Strings", performanceDate: "2026-05-01",
                                           venue: "The Room")
         let p = Prospect(naturalKey: key, groupName: "Aurora Strings", discipline: "music",
-                         venue: "The Room", performanceDate: "2026-05-01", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "self",
+                         venue: "The Room", performanceDate: "2026-05-01", sourceListingURL: nil, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 6, tier: "mid",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
                          possibleMatchName: nil, status: .contacted)

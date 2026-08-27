@@ -26,7 +26,7 @@ struct DueWorkTests {
     // A lead emailed, never answered, and past its gap: the silent nudge is due.
     private func silentLead(_ context: ModelContext) -> Prospect {
         let p = Prospect(naturalKey: "k", groupName: "G", discipline: "choral", venue: "V",
-                         performanceDate: "2027-07-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2027-07-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

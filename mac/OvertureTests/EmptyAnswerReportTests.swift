@@ -23,7 +23,7 @@ struct EmptyAnswerReportTests {
     private func show(_ key: String, reason: Reachability.EmptyReason?, presenter: String? = nil,
                       probedAt: Date? = Date(timeIntervalSince1970: 1_780_000_000)) -> Prospect {
         let p = Prospect(naturalKey: key, groupName: key, discipline: "music", venue: "The Example Room",
-                         performanceDate: "2026-12-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-12-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)

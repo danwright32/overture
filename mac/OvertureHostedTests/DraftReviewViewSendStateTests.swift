@@ -12,7 +12,7 @@ import ViewInspector
 struct DraftReviewViewSendStateTests {
     private func approvedItem() -> QueueItem {
         QueueItem(id: "k", groupName: "Aurora Strings", discipline: "music", venue: "Weill Recital Hall",
-                 performanceDate: "2026-08-01", sourceListingURL: nil, websiteURL: nil,
+                 performanceDate: "2026-08-01", sourceListingURL: nil,
                  priorRelationship: "none", production: "self", profile: "strong",
                  coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
                  matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -22,7 +22,7 @@ struct DraftReviewViewSendStateTests {
     // #2050: the drafted card, which is now where Dan presses the one button that sends.
     private func draftedItem() -> QueueItem {
         QueueItem(id: "k", groupName: "Aurora Strings", discipline: "music", venue: "Weill Recital Hall",
-                 performanceDate: "2026-08-01", sourceListingURL: nil, websiteURL: nil,
+                 performanceDate: "2026-08-01", sourceListingURL: nil,
                  priorRelationship: "none", production: "self", profile: "strong",
                  coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
                  matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -73,7 +73,7 @@ struct DraftReviewViewSendStateTests {
     // address). The greyed Send button never said why; this note explains the stall on the Send surface.
     private func approvedItemWithNoEmail() -> QueueItem {
         QueueItem(id: "k", groupName: "Aurora Strings", discipline: "music", venue: "Weill Recital Hall",
-                 performanceDate: "2026-08-01", sourceListingURL: nil, websiteURL: nil,
+                 performanceDate: "2026-08-01", sourceListingURL: nil,
                  priorRelationship: "none", production: "self", profile: "strong",
                  coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
                  matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -107,7 +107,7 @@ struct DraftReviewViewSendStateTests {
 struct DraftReviewViewDraftLintTests {
     private func item(blockers: [DraftIssue], blocked: Bool, editedByDan: Bool = false) -> QueueItem {
         QueueItem(id: "k", groupName: "Aurora Strings", discipline: "music", venue: "Weill Recital Hall",
-                 performanceDate: "2026-08-01", sourceListingURL: nil, websiteURL: nil,
+                 performanceDate: "2026-08-01", sourceListingURL: nil,
                  priorRelationship: "none", production: "self", profile: "strong",
                  coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
                  matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -166,7 +166,7 @@ struct DraftReviewViewReprepCooldownTests {
     private func item(status: ReviewStatus = .drafted, reprepDraftRequested: Bool = false,
                       reprepContactsRequested: Bool = false, reprepLastServedAt: Date? = nil) -> QueueItem {
         QueueItem(id: "k", groupName: "Aurora Strings", discipline: "music", venue: "Weill Recital Hall",
-                 performanceDate: "2026-08-01", sourceListingURL: nil, websiteURL: nil,
+                 performanceDate: "2026-08-01", sourceListingURL: nil,
                  priorRelationship: "none", production: "self", profile: "strong",
                  coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
                  matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -231,7 +231,7 @@ struct DraftReviewViewReprepCooldownTests {
 struct DraftReviewViewApprovedEditTests {
     private func approvedItem(subject: String? = "S") -> QueueItem {
         QueueItem(id: "k", groupName: "Aurora Strings", discipline: "music", venue: "Weill Recital Hall",
-                 performanceDate: "2026-08-01", sourceListingURL: nil, websiteURL: nil,
+                 performanceDate: "2026-08-01", sourceListingURL: nil,
                  priorRelationship: "none", production: "self", profile: "strong",
                  coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
                  matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -280,7 +280,7 @@ struct DraftReviewViewVenueMatchTests {
 
     private func item(contacts: [RecipientSnapshot]) -> QueueItem {
         QueueItem(id: "k", groupName: "Aurora Strings", discipline: "music", venue: "Weill Recital Hall",
-                 performanceDate: "2026-08-01", sourceListingURL: nil, websiteURL: nil,
+                 performanceDate: "2026-08-01", sourceListingURL: nil,
                  priorRelationship: "none", production: "self", profile: "strong",
                  coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
                  matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -345,7 +345,7 @@ struct DraftReviewViewPressContactTests {
 
     private func item(contacts: [RecipientSnapshot]) -> QueueItem {
         QueueItem(id: "k", groupName: "Aurora Strings", discipline: "music", venue: "Weill Recital Hall",
-                 performanceDate: "2026-08-01", sourceListingURL: nil, websiteURL: nil,
+                 performanceDate: "2026-08-01", sourceListingURL: nil,
                  priorRelationship: "none", production: "self", profile: "strong",
                  coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
                  matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

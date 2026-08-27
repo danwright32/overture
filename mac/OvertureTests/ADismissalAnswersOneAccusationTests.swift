@@ -26,7 +26,7 @@ struct ADismissalAnswersOneAccusationTests {
                                           venue: "East Village Playhouse")
         let p = Prospect(naturalKey: key, groupName: "Robin Vale", discipline: "theatre",
                          venue: "East Village Playhouse", performanceDate: "2026-11-14",
-                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                         sourceListingURL: nil, priorRelationship: "none",
                          production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .queued)

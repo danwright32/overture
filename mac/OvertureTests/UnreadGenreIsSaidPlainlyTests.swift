@@ -104,7 +104,7 @@ struct FitReasonRealignmentTests {
     private func prospect(_ key: String, discipline: String, reason: String,
                           production: String = "self", profile: String = "strong") -> Prospect {
         Prospect(naturalKey: key, groupName: key, discipline: discipline, venue: "The Example Room",
-                 performanceDate: "2026-09-01", sourceListingURL: nil, websiteURL: nil,
+                 performanceDate: "2026-09-01", sourceListingURL: nil,
                  priorRelationship: "none", production: production, profile: profile,
                  coverage: "likely_uncovered", fitScore: 10, tier: "high", fitReason: reason,
                  matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
@@ -259,8 +259,7 @@ struct FitReasonDropsTheCoverageGuessTests {
                                            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
         let ctx = ModelContext(container)
         let row = Prospect(naturalKey: "sakura", groupName: "Every Voice Choirs", discipline: "music",
-                           venue: "Sakura Park", performanceDate: "2026-10-25", sourceListingURL: nil,
-                           websiteURL: nil, priorRelationship: "booked", production: "self",
+                           venue: "Sakura Park", performanceDate: "2026-10-25", sourceListingURL: nil, priorRelationship: "booked", production: "self",
                            profile: "strong", coverage: "likely_uncovered", fitScore: 8, tier: "high",
                            fitReason: "Self-produced music group, a strong-fit target, likely without its own photographer.",
                            matchedClientName: "Every Voice Choirs", possibleMatchSource: nil,

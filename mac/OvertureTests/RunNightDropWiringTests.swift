@@ -26,7 +26,7 @@ struct RunNightDropWiringTests {
                                                              performanceDate: nights[0],
                                                              venue: "The Green Room 42"),
                          groupName: name, discipline: "music", venue: "The Green Room 42",
-                         performanceDate: nights[0], sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: nights[0], sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)

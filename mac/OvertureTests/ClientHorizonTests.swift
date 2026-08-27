@@ -97,7 +97,7 @@ struct ClientHorizonTests {
     private func prospect(_ key: String, date: String, sourceIds: [String] = [],
                           relationship: String = "none", matched: String? = nil) -> Prospect {
         let p = Prospect(naturalKey: key, groupName: key, discipline: "music", venue: "V",
-                         performanceDate: date, sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: date, sourceListingURL: nil,
                          priorRelationship: relationship, production: "concert", profile: "unknown",
                          coverage: "unknown", fitScore: 50, tier: "medium", fitReason: "t",
                          matchedClientName: matched, possibleMatchSource: nil, possibleMatchName: nil)

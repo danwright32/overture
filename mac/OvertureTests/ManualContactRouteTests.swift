@@ -93,8 +93,7 @@ struct ManualContactRouteTests {
 
     private func show(_ ctx: ModelContext) -> Prospect {
         let p = Prospect(naturalKey: "k", groupName: "Song & Word", discipline: "music",
-                         venue: "The Green Room 42", performanceDate: "2026-08-16", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "unknown",
+                         venue: "The Green Room 42", performanceDate: "2026-08-16", sourceListingURL: nil, priorRelationship: "none", production: "unknown",
                          profile: "neutral", coverage: "unknown", fitScore: 5, tier: "mid",
                          fitReason: "", matchedClientName: nil, possibleMatchSource: nil,
                          possibleMatchName: nil, status: .drafted)

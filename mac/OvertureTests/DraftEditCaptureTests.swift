@@ -24,7 +24,7 @@ struct DraftEditCaptureTests {
     private func drafted(subject: String = "Photographing the spring run",
                          body: String = "Hello,\n\nI'd be glad to cover this.") -> Prospect {
         let p = Prospect(naturalKey: "k", groupName: "G", discipline: "choral", venue: "V",
-                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-07-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

@@ -20,7 +20,7 @@ private func item(
 ) -> QueueItem {
     var q = QueueItem(
         id: key, groupName: groupName, discipline: discipline, venue: venue,
-        performanceDate: performanceDate, sourceListingURL: nil, websiteURL: nil,
+        performanceDate: performanceDate, sourceListingURL: nil,
         priorRelationship: priorRelationship, production: production, profile: "neutral",
         coverage: coverage, fitScore: fitScore, tier: tier, fitReason: "reason",
         matchedClientName: matchedClientName, possibleMatchSource: possibleMatchSource,
@@ -109,7 +109,7 @@ struct QueueItemLifecycleTests {
     @MainActor
     @Test func isAutoRepliedOnlyForAutoDetectedReplies() {
         let p = Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: "V",
-                         performanceDate: nil, sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: nil, sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "neutral",
                          coverage: "unknown", fitScore: 3, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
@@ -291,7 +291,7 @@ struct LostOutcomeTests {
         // Phase F: every contact declined but the lead outcome was never hand-marked; the row should
         // still read as lost, derived from the contacts.
         let p = Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: "V",
-                         performanceDate: nil, sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: nil, sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "neutral",
                          coverage: "unknown", fitScore: 3, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
@@ -307,7 +307,7 @@ struct LostOutcomeTests {
         // Phase F: a contact marked booked is the single performance-level booking; the row reads as
         // Booked even before the lead outcome is set.
         let p = Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: "V",
-                         performanceDate: nil, sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: nil, sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "neutral",
                          coverage: "unknown", fitScore: 3, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
@@ -497,7 +497,7 @@ struct MultiDateRunQueueTests {
     // above uses; here the same dates are put on a Prospect, because membership is decided per prospect.
     private func prospect(_ open: String?, _ close: String?, key: String = "run") -> Prospect {
         let p = Prospect(naturalKey: key, groupName: key, discipline: "music", venue: "Merkin Hall",
-                         performanceDate: open, sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: open, sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

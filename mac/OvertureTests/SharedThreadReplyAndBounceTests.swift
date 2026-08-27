@@ -23,7 +23,7 @@ struct SharedThreadReplyAndBounceTests {
     @MainActor
     private static func show(threadId: String = "thread-1", secondThreadId: String? = nil) -> Prospect {
         let p = Prospect(naturalKey: "k", groupName: "Aurora", discipline: "music", venue: "V",
-                         performanceDate: "2026-08-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-08-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
