@@ -269,8 +269,17 @@ struct RootView: View {
             showDaysOff = true
         } label: {
             ToolbarHoverLabel(title: DaysOffAttention.badgeTitle(reason),
-                              systemImage: "calendar.badge.clock")
-                .foregroundStyle(reason != .none ? OVColor.inkSoft : Color.primary)
+                              systemImage: "calendar.badge.clock",
+                              // #1745: the words come up when Overture is blind to his schedule, and the
+                              // ink below is now the SAME in both states. Both halves are the fix: the
+                              // whole message used to be carried by an ink DIMMER than resting. The rule
+                              // lives in DaysOffAttention, not here, so it can be asserted directly
+                              // rather than only by reading this file's text.
+                              showsTitle: DaysOffAttention.showsTitle(reason))
+                // Deliberately unconditional. The resting appearance is unchanged (this was already
+                // Color.primary when nothing needed him), and holding it constant is what stops a later
+                // edit reaching for a softer ink to mean "attention" again.
+                .foregroundStyle(Color.primary)
         }
         .help(DaysOffAttention.help(reason))
     }
