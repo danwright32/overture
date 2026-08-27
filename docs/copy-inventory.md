@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1507 sentences**.
+Every sentence Overture can say to Dan: **1434 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -12,9 +12,12 @@ What is not, and why:
 - **One-word labels** (`Text("Sources")`). At this altitude a single word cannot be told apart
   from an SF Symbol, a defaults key or an identifier, and letting those in would bury the
   sentences under tokens nobody reads.
-- **Sentences assembled from parts.** This lists the templates in the source, so a line built at
-  runtime from `Plural.count(n, "show")` plus a suffix appears as its pieces, not as the finished
-  sentence.
+- **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
+  one sentence the running app says (#3155). What is still only part of what Dan reads is a
+  sentence carrying a VALUE: 510 of the 1434 below hold a
+  `\(...)` where a number or a name goes, so what is printed is the template. They are counted
+  here rather than listed again, because the hole is visible in the line itself; what was missing
+  was any statement of how much of this document is templates.
 - **DEBUG-only copy**, which is compiled out of the app Dan runs.
 - **Marked regions**, listed below with the reason, at the source.
 
@@ -112,16 +115,13 @@ What is not, and why:
 - `UI/DraftSignaturePreview.swift`: renders the outbound email's own HTML (body + Gmail signature), not Overture's voice (#1203)
 - `UI/DraftSignaturePreview.swift`: browser-side measuring script, not a sentence Overture says to Dan (#915)
 
-## The same sentence, said in more than one place (53)
+## The same sentence, said in more than one place (51)
 
 Two copies of a sentence will drift. #843 owns fixing these.
 
 - " Confirm you've checked it and it's fine to send as-is."
   - `Domain/DraftReviewNotes.swift`
   - `Domain/DraftReviewNotes.swift`
-- " The stored setting \(runner.defaultsKey) is not set,"
-  - `Domain/RunnerScripts.swift`
-  - `Domain/RunnerScripts.swift`
 - " a one-off hunt."
   - `Domain/ProbeSelection.swift`
   - `Domain/ProbeSelection.swift`
@@ -152,10 +152,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
 - "Contact form"
   - `Domain/Inquiry.swift`
   - `UI/DraftReviewView.swift`
-- "Couldn't find the \(name) runner."
-  - `Domain/RunnerScripts.swift`
-  - `Domain/RunnerScripts.swift`
-  - `Domain/RunnerScripts.swift`
 - "Date to be confirmed"
   - `UI/QueueView+Model.swift`
   - `UI/QueueView+Model.swift`
@@ -298,46 +294,24 @@ Two copies of a sentence will drift. #843 owns fixing these.
 
 " (\(skippedCount) skipped: already pending or re-prepped recently)"
     `App/ActionFeedback.swift`
-" (cd mac && ./build-install.sh) and that setting is rewritten for you."
-    `Domain/RunnerScripts.swift`
 " Confirm you've checked it and it's fine to send as-is."
     `Domain/DraftReviewNotes.swift`
-" If the checkout moved, reinstall Overture from where it is now"
-    `Domain/RunnerScripts.swift`
-" Install Overture from the checkout (cd mac && ./build-install.sh)."
-    `Domain/RunnerScripts.swift`
-" It has about \(PrepStatus.duration(seconds: remaining)) left. "
+" It has about \(PrepStatus.duration(seconds: remaining)) left. Press Run scout again once it finishes."
     `Domain/ScoutStartGate.swift`
 " One other match is flagged the same way."
     `Domain/PossibleMatchFanOut.swift`
 " Press Run scout again once the reading finishes."
     `Domain/ScoutStartGate.swift`
-" Reinstall Overture from the checkout (cd mac && ./build-install.sh)."
-    `Domain/RunnerScripts.swift`
-" The stored setting \(runner.defaultsKey) is not set,"
-    `Domain/RunnerScripts.swift`
-" The stored setting \(runner.defaultsKey) points at \(configuredPath),"
-    `Domain/RunnerScripts.swift`
 " Their email matches the address on file."
     `Domain/HistoryMatch.swift`
-" Try again, and if it keeps happening the page may be one it can't make sense of."
-    `UI/LeadIntakeModel.swift`
 " \(others) other matches are flagged the same way."
     `Domain/PossibleMatchFanOut.swift`
 " a one-off hunt."
     `Domain/ProbeSelection.swift`
 " and find new contacts"
     `App/ActionFeedback.swift`
-" and the checkout this build came from has no runnable script at \(derivedPath)."
-    `Domain/RunnerScripts.swift`
-" and there is no runnable script there."
-    `Domain/RunnerScripts.swift`
-" and this copy of Overture has no record of which checkout it was built from,"
-    `Domain/RunnerScripts.swift`
 " checked recently and are not looked up again."
     `Domain/ProbeSelection.swift`
-" so there is nowhere else to look."
-    `Domain/RunnerScripts.swift`
 " you picked."
     `Domain/ProbeSelection.swift`
 " · \(tally.booked) booked"
@@ -517,7 +491,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/OnboardingView.swift`
 "Allow OmniFocus control"
     `UI/OnboardingView.swift`
-"Allow Overture to control OmniFocus in System Settings, Privacy and Security, "
+"Allow Overture to control OmniFocus in System Settings, Privacy and Security, Automation. Then sync again."
     `Domain/OmniFocusFailureKind.swift`
 "Allow contact again"
     `UI/ProspectRowView.swift`
@@ -583,8 +557,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ClientTagCopy.swift`
 "Automatic sync pushes due follow-ups into the OmniFocus Outreach project. \"Sync now\" force-runs it immediately; the first time, macOS will ask permission to control OmniFocus."
     `App/RootView.swift`
-"Automation. Then sync again."
-    `Domain/OmniFocusFailureKind.swift`
 "Awaiting reply"
     `UI/QueueView+Model.swift`
 "Awaiting your first reply"
@@ -636,8 +608,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/Reachability.swift`
 "Check the rest"
     `Domain/AppNotice.swift`
-"Check who it is addressed to."
-    `Domain/DraftReviewNotes.swift`
 "Checked \(ago)"
     `Domain/SourceReadState.swift`
 "Checking reachability"
@@ -654,9 +624,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SourceFixConfirmActions.swift`
 "Clearing out shows in towns you blocked"
     `Domain/ScoutSweepStep.swift`
-"Clears when: you answer them in Overture, or stand this contact down. "
+"Clears when: you answer them in Overture, or stand this contact down. Ticking this off here counts too: Overture reads it back and marks their reply answered."
     `Domain/OmniFocusSync.swift`
-"Clears when: you record how the show ended in Overture. Ticking this off here "
+"Clears when: you record how the show ended in Overture. Ticking this off here only stops OmniFocus asking; Overture still needs the ending from you."
     `Domain/OmniFocusSync.swift`
 "Close this out"
     `Domain/ReachedOutClose.swift`
@@ -707,7 +677,11 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/RootView.swift`
 "Couldn't connect Gmail: \(reason)"
     `Domain/OnboardingState.swift`
-"Couldn't find the \(name) runner."
+"Couldn't find the \(name) runner. The stored setting \(runner.defaultsKey) is not set, and the checkout this build came from has no runnable script at \(derivedPath). Reinstall Overture from the checkout (cd mac && ./build-install.sh)."
+    `Domain/RunnerScripts.swift`
+"Couldn't find the \(name) runner. The stored setting \(runner.defaultsKey) is not set, and this copy of Overture has no record of which checkout it was built from, so there is nowhere else to look. Install Overture from the checkout (cd mac && ./build-install.sh)."
+    `Domain/RunnerScripts.swift`
+"Couldn't find the \(name) runner. The stored setting \(runner.defaultsKey) points at \(configuredPath), and there is no runnable script there. If the checkout moved, reinstall Overture from where it is now (cd mac && ./build-install.sh) and that setting is rewritten for you."
     `Domain/RunnerScripts.swift`
 "Couldn't open Overture's data: \(error.localizedDescription)"
     `App/OvertureApp.swift`
@@ -785,7 +759,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ShowOutcome.swift`
 "Downbeat clients no watched source treats as a returning client, so their next season would not surface a year ahead. Add a source for them, or tag an existing one below."
     `Domain/ClientCoverage.swift`
-"Downbeat's export carries no shoots at all, though \(vanished.bookingCount) have "
+"Downbeat's export carries no shoots at all, though \(vanished.bookingCount) have come through it before, "
     `Domain/AppNotice.swift`
 "Draft a reply"
     `UI/ReplyConversationView.swift`
@@ -829,7 +803,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/PostEventPrompt.swift`
 "Every one is a one-off hunt, so none of them share an answer."
     `Domain/ProbeSelection.swift`
-"Every one of the \(Plural.count(vanished.bookingCount, "shoot")) Downbeat was "
+"Every one of the \(Plural.count(vanished.bookingCount, "shoot")) Downbeat was exporting has gone at once, "
     `Domain/AppNotice.swift`
 "Every returning client is covered by a watched source, or set aside below."
     `Domain/ClientCoverage.swift`
@@ -967,7 +941,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/LeadIntake.swift`
 "I can't read that: it's behind a login, so I only get the sign-in page. Paste the org's own site or the venue's event page instead."
     `Domain/LeadIntake.swift`
-"I couldn't read \(list(unread.map(name))), so anything on in "
+"I couldn't read \(list(unread.map(name))), so anything on in \(unread.count == 1 ? "that month" : "those months") isn't here."
     `UI/LeadIntakeModel.swift`
 "I couldn't read that page, so I followed its ticket link and read \(host) instead."
     `UI/LeadIntakeModel.swift`
@@ -1025,7 +999,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ShowSummary.swift`
 "Its listing publishes no description"
     `Domain/ShowSummary.swift`
-"Its most recent backup (\(folder)) could not be read. Nothing has been changed. Check that "
+"Its most recent backup (\(folder)) could not be read. Nothing has been changed. Check that backup before working."
     `App/StoreShrinkCheck.swift`
 "Its shows are sold through a ticketing feed that names no room, so they stay out of the queue."
     `UI/SourcesView.swift`
@@ -1087,7 +1061,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ProposedConversation.swift`
 "Linked. Overture is watching that conversation now."
     `Domain/ProposedConversation.swift`
-"Linking this saves \(address) on the contact. Overture will watch the conversation, and any "
+"Linking this saves \(address) on the contact. Overture will watch the conversation, and any email it sends on this show from now on goes to that address."
     `Domain/ProposedConversation.swift`
 "Links a site that is not danwrightphotography.com"
     `Domain/DraftCheck.swift`
@@ -1307,8 +1281,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/DaysOffView.swift`
 "Nothing changed on \(org): Overture could not check whether that night is free. Try again."
     `App/ActionFeedback.swift`
-"Nothing changed."
-    `Domain/ShowOutcome.swift`
 "Nothing due before the show"
     `Domain/ReachedOutQueue.swift`
 "Nothing found here was verified as belonging to this act. Only an address read off a page naming them counts; a generic inbox or an inferred address doesn't. It may still be right, so it's worth a look before you write."
@@ -1365,9 +1337,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/LeadIntake.swift`
 "Nothing waiting"
     `Domain/AgentRoster.swift`
-"Nothing was added and nothing will go out to them."
-    `Domain/SuppressionReport.swift`
-"Nothing was ever sent for \(org), so \"\(outcome.label)\" doesn't apply to it. "
+"Nothing was ever sent for \(org), so \"\(outcome.label)\" doesn't apply to it. Nothing changed."
     `Domain/ShowOutcome.swift`
 "Notifications allowed."
     `Domain/OnboardingState.swift`
@@ -1379,7 +1349,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OmniFocusSyncStatus.swift`
 "OmniFocus permission granted."
     `Domain/OnboardingState.swift`
-"OmniFocus refused those shows, and it will refuse them the same way next time. The "
+"OmniFocus refused those shows, and it will refuse them the same way next time. The stored reason is: \(reason)"
     `Domain/OmniFocusFailureKind.swift`
 "OmniFocus sync"
     `UI/OmniFocusSettingsView.swift`
@@ -1389,9 +1359,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OmniFocusFailureSection.swift`
 "OmniFocus sync failed: \(reason)"
     `Domain/OmniFocusSync.swift`
-"OmniFocus sync is failing because OmniFocus is not open, so follow-up tasks are not "
+"OmniFocus sync is failing because OmniFocus is not open, so follow-up tasks are not being created."
     `Domain/OmniFocusFailureKind.swift`
-"OmniFocus sync is failing because Overture is not allowed to control OmniFocus, so "
+"OmniFocus sync is failing because Overture is not allowed to control OmniFocus, so follow-up tasks are not being created."
     `Domain/OmniFocusFailureKind.swift`
 "OmniFocus sync is failing, so follow-up tasks may not be getting created."
     `Domain/OmniFocusFailureKind.swift`
@@ -1411,7 +1381,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "One of the addresses is blank. Nothing was saved"
     `App/ActionFeedback.swift`
-"One show was left out of this run. The local store stopped answering, so Overture could not "
+"One show was left out of this run. The local store stopped answering, so Overture could not tell whether it was a new show or a card you have already decided on, and it would rather skip it than write over one. Run the scout again to pick it up."
     `Domain/ScoutWarningCopy.swift`
 "One source couldn't be checked."
     `UI/ScoutSummaryView.swift`
@@ -1431,7 +1401,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/Reachability.swift`
 "Only a social profile, not opened"
     `Domain/EmptyAnswerReport.swift`
-"Only counts corrections made since this started recording them. Earlier ones were never kept, "
+"Only counts corrections made since this started recording them. Earlier ones were never kept, and re-reading those rows now would answer with today's rules rather than the ones that got them wrong."
     `Domain/GenreCorrection.swift`
 "Only names, no way to reach them"
     `Domain/Reachability.swift`
@@ -1471,9 +1441,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/PrepQueueService.swift`
 "Overture contact: "
     `Domain/OmniFocusSync.swift`
-"Overture could not open its backup folder, so there is nothing to compare against. Nothing has "
+"Overture could not open its backup folder, so there is nothing to compare against. Nothing has been changed. Check that folder before working."
     `App/StoreShrinkCheck.swift`
-"Overture could not open its data file to check it at \(path). Nothing has been "
+"Overture could not open its data file to check it at \(path). Nothing has been opened or changed. The file may be in use by another program, or its permissions may have changed. Check that file before reopening Overture."
     `App/StoreSchemaGuard.swift`
 "Overture could not update"
     `Domain/UpdateAttempt.swift`
@@ -1481,11 +1451,11 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/LaunchMigrations.swift`
 "Overture couldn't get this reply ready to send."
     `Domain/ReplyPanel.swift`
-"Overture couldn't move its data to \(newStoreURL.path): "
+"Overture couldn't move its data to \(newStoreURL.path): \(error.localizedDescription). Your data is safe and unchanged at \(legacyStoreURL.path)."
     `App/StoreRelocation.swift`
 "Overture couldn't reach Gmail while looking for replies to the pitches you sent through a form or a DM."
     `Integration/GmailReplySearch.swift`
-"Overture couldn't read Gmail while looking for replies to the pitches you sent through a form "
+"Overture couldn't read Gmail while looking for replies to the pitches you sent through a form or a DM. Gmail refused the request (HTTP \(status))."
     `Integration/GmailReplySearch.swift`
 "Overture couldn't read \(failures.count) of the files it works from, so whatever they held has not been used."
     `Domain/AppNotice.swift`
@@ -1493,7 +1463,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AppNotice.swift`
 "Overture couldn't read this message, which usually means it's an image or an attachment. Open it in Gmail."
     `Domain/ReplyPanel.swift`
-"Overture couldn't save the link. Try again; if this keeps happening, something's wrong with the "
+"Overture couldn't save the link. Try again; if this keeps happening, something's wrong with the local store."
     `Domain/ProposedConversation.swift`
 "Overture couldn't start the Gmail sign-in on this Mac, so it didn't open your browser."
     `Integration/GmailAuthManager.swift`
@@ -1525,7 +1495,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ProposedConversation.swift`
 "Overture is still reading a previous page. Give it a moment and try again."
     `UI/LeadIntakeModel.swift`
-"Overture is still reading the pages the last scout found, so a new scout could fetch "
+"Overture is still reading the pages the last scout found, so a new scout could fetch but not read anything."
     `Domain/ScoutStartGate.swift`
 "Overture isn't connected to Gmail, so it can't read your inbox. Connect it in Settings and try again."
     `Domain/ProposedConversation.swift`
@@ -1537,21 +1507,21 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OmniFocusSync.swift`
 "Overture needs OmniFocus permission"
     `Integration/OmniFocusUserNotifier.swift`
-"Overture only links a conversation to a pitch you sent through a form or a DM. It already watches "
+"Overture only links a conversation to a pitch you sent through a form or a DM. It already watches the ones it emailed itself."
     `Domain/AttachConversation.swift`
-"Overture opened with \(live) \(live == 1 ? "show" : "shows"). Its most recent backup holds "
+"Overture opened with \(live) \(live == 1 ? "show" : "shows"). Its most recent backup holds \(previous). Nothing has been changed. If that drop is a surprise, quit Overture and restore a backup before working: every launch takes another backup, and only the last ten are kept."
     `App/StoreShrinkCheck.swift`
 "Overture put this show back the way it was, but it can't reach outside the app: "
     `Domain/DetachConversation.swift`
 "Overture read your inbox and found nothing from around this pitch that could be their reply."
     `Domain/ProposedConversation.swift`
-"Overture recorded those before it kept their dates, so it can't say which have "
+"Overture recorded those before it kept their dates, so it can't say which have already happened. What it can say is that a new shoot came through as recently as \(arrived), and the export now holds none at all. Re-export it from Downbeat, then re-read it here."
     `Domain/AppNotice.swift`
-"Overture was not checking for replies or bookings for \(PrepStatus.duration(seconds: seconds)), "
+"Overture was not checking for replies or bookings for \(PrepStatus.duration(seconds: seconds)), and resumed \(PrepStatus.relative(from: endedAt, to: now))"
     `Domain/WatchGap.swift`
-"Overture was not running for \(PrepStatus.duration(seconds: seconds)), "
+"Overture was not running for \(PrepStatus.duration(seconds: seconds)), and started again \(PrepStatus.relative(from: endedAt, to: now))"
     `Domain/WatchGap.swift`
-"Overture's data file doesn't look like Overture's own database. Another app may "
+"Overture's data file doesn't look like Overture's own database. Another app may have written to \(path). Nothing has been opened or changed. Check that file before reopening Overture."
     `App/StoreSchemaGuard.swift`
 "Overture's data is unavailable"
     `App/StoreUnavailableView.swift`
@@ -1625,15 +1595,13 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "Prepping \(org) to redraft and find new contacts"
     `App/ActionFeedback.swift`
-"Press Run scout again once it finishes."
-    `Domain/ScoutStartGate.swift`
 "Presumes the booking instead of handing back the decision"
     `Domain/DraftCheck.swift`
 "Put back"
     `Domain/ClientCoverage.swift`
 "Put this prospect back in the queue as undecided"
     `UI/ProspectRowView.swift`
-"Queued \(draftGrantedCount) of \(total) \(prospectWord) to \(base); "
+"Queued \(draftGrantedCount) of \(total) \(prospectWord) to \(base); \(narrowedCount) already sent, so \(narrowedCount == 1 ? "it" : "they") only got new contacts"
     `App/ActionFeedback.swift`
 "Queued \(total) \(prospectWord) to find new contacts"
     `App/ActionFeedback.swift`
@@ -1710,11 +1678,11 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReconcileSummary.swift`
 "Reconcile complete: nothing was due."
     `Domain/ReconcileSummary.swift`
-"Reconcile ran but Gmail refused every hire inquiry conversation it tried to read, so "
+"Reconcile ran but Gmail refused every hire inquiry conversation it tried to read, so it can't tell whether anyone answered them. Try again shortly."
     `Domain/ReconcileSummary.swift`
-"Reconcile ran but couldn't reach Gmail for the hire inquiries it watches, so it "
+"Reconcile ran but couldn't reach Gmail for the hire inquiries it watches, so it can't tell whether anyone answered them. Check the Gmail connection."
     `Domain/ReconcileSummary.swift`
-"Reconcile ran but couldn't read Gmail for any of the conversations it watches, so it "
+"Reconcile ran but couldn't read Gmail for any of the conversations it watches, so it can't tell whether anyone replied. Check the Gmail connection."
     `Domain/ReconcileSummary.swift`
 "Reconcile ran but couldn't save its results. Try again; if this keeps happening, something's wrong with the local store."
     `Domain/ReconcileSummary.swift`
@@ -1924,7 +1892,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/OnboardingView.swift`
 "Set up Overture…"
     `App/MenuBarContent.swift`
-"Shoots leave the export one at a time, as their dates pass, and the furthest of "
+"Shoots leave the export one at a time, as their dates pass, and the furthest of these was not until \(furthest), so all of them going together reads as a broken export rather than an empty diary. Re-export it from Downbeat, then re-read it here."
     `Domain/AppNotice.swift`
 "Show date to be confirmed"
     `UI/ReachedOutRowChrome.swift`
@@ -2034,7 +2002,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/VenueParser.swift`
 "That address is missing the part Overture needs to read this venue's calendar."
     `Integration/SourceFetcher.swift`
-"That calendar has more months on it (\(list(unreachable.map(name)))), but it "
+"That calendar has more months on it (\(list(unreachable.map(name)))), but it moves between them in a way I can't follow yet, so I only read the month it opened on. Paste \(one ? "that month's" : "a month's") own link and I'll read it."
     `UI/LeadIntakeModel.swift`
 "That calendar is drawn by JavaScript, so there is nothing to read in the page we fetch."
     `Domain/WatchedSource.swift`
@@ -2136,7 +2104,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/LeadIntakeModel.swift`
 "The reader didn't finish in time. It may still be running; try again in a minute."
     `UI/LeadIntakeModel.swift`
-"The reader finished without producing anything for that page, so nothing was read."
+"The reader finished without producing anything for that page, so nothing was read. Try again, and if it keeps happening the page may be one it can't make sense of."
     `UI/LeadIntakeModel.swift`
 "The reader that pulls listings off a page isn't set up yet, so the pages that changed couldn't be read. See docs/scout-extract-runbook.md. Nothing was lost: they'll be read on the next scout once it's configured."
     `Integration/ScoutService.swift`
@@ -2158,9 +2126,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ScoutResultAudit.swift`
 "The scheduled scout couldn't run. It'll try again later."
     `Domain/ScoutFailure.swift`
-"The scout couldn't read \(labels.count) parts of its own store (\(list)), so this run "
+"The scout couldn't read \(labels.count) parts of its own store (\(list)), so this run judged against less than Overture actually holds. Nothing was lost. Run it again to get the full picture."
     `Domain/ScoutWarningCopy.swift`
-"The scout couldn't read \(list), so this run judged against less than Overture actually "
+"The scout couldn't read \(list), so this run judged against less than Overture actually holds. Nothing was lost. Run it again to get the full picture."
     `Domain/ScoutWarningCopy.swift`
 "The scout couldn't run. This stopped the whole run, so no source was checked. Try again; if it keeps failing, something is wrong with the local store rather than with any one calendar.\n\nDetails: \(message)"
     `Domain/ScoutFailure.swift`
@@ -2239,9 +2207,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DraftCheck.swift`
 "This draft won't send: it doesn't open with a greeting. Edit it to add one."
     `Domain/DraftReviewNotes.swift`
-"This draft won't send: it opens \"Hi \(greeted)\" but this contact is \(contact). "
+"This draft won't send: it opens \"Hi \(greeted)\" but this contact is \(contact). Check who it is addressed to."
     `Domain/DraftReviewNotes.swift`
-"This draft won't send: the greeting names one person but this email goes to "
+"This draft won't send: the greeting names one person but this email goes to \(audience). Open it \"Hello,\" instead."
     `Domain/DraftReviewNotes.swift`
 "This group also performs at this venue on other dates"
     `UI/QueueView+Model.swift`
@@ -2311,8 +2279,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "Those were \(named[0]) and \(named[1])."
     `Domain/SourceReadability.swift`
-"Ticking this off here counts too: Overture reads it back and marks their reply "
-    `Domain/OmniFocusSync.swift`
 "Timed out waiting for Google. Close any old browser tabs and try Connect Gmail again."
     `Integration/GmailAuthManager.swift`
 "Times vary"
@@ -2515,9 +2481,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "You stopped working this show \(ago(stoodDownAt, now: now))"
     `Domain/FollowUp.swift`
-"You struck \(address) off this show, so Overture won't link a conversation that would write it "
+"You struck \(address) off this show, so Overture won't link a conversation that would write it back onto the contact. Add the address back on the card first if you want to use it."
     `Domain/AttachConversation.swift`
-"You struck this contact off the show, so Overture won't link a conversation to it. Add the "
+"You struck this contact off the show, so Overture won't link a conversation to it. Add the contact back on the card first if you want to use it."
     `Domain/AttachConversation.swift`
 "You told Overture they replied. Their message isn't here, because it didn't come by email."
     `Domain/ReplyPanel.swift`
@@ -2533,13 +2499,13 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/BlockedCalendar.swift`
 "You've already added that link. Its shows are in your queue, and once the watchlist is on, that organization gets re-checked on its own."
     `UI/LeadIntakeModel.swift`
-"You've already answered on this conversation, so Overture can't unlink it. Your message is on "
+"You've already answered on this conversation, so Overture can't unlink it. Your message is on their thread and unlinking wouldn't take it back."
     `Domain/DetachConversation.swift`
 "You've already answered this one, so Overture can't take the reply back."
     `Domain/HandMarkedReply.swift`
 "You've already logged an inquiry for this event. You can still add this one."
     `Domain/InquiryCopy.swift`
-"You've said none of the messages Overture found are them. It'll keep looking while this pitch "
+"You've said none of the messages Overture found are them. It'll keep looking while this pitch is open."
     `Domain/ProposedConversation.swift`
 "Your Downbeat client export is \(days) days old. Recently booked clients may be missing, so some warm leads could look cold. Open Downbeat to refresh it."
     `Domain/DownbeatExport.swift`
@@ -2565,7 +2531,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ShootHistory.swift`
 "Zankel Hall"
     `Domain/VenueParser.swift`
-"\"\(outcome.label)\" isn't yours to set: Overture writes that one itself. "
+"\"\(outcome.label)\" isn't yours to set: Overture writes that one itself. \(org) is unchanged."
     `Domain/ShowOutcome.swift`
 "\($0) (\(hall))"
     `Domain/VenueDisplay.swift`
@@ -2615,10 +2581,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ExperimentReport.swift`
 "\(arm.tally.replied + arm.tally.booked) replied of \(arm.tally.contacted)"
     `Domain/ExperimentReport.swift`
-"\(arrived), and the export now holds none at all. Re-export it from Downbeat, "
-    `Domain/AppNotice.swift`
-"\(audience). Open it \"Hello,\" instead."
-    `Domain/DraftReviewNotes.swift`
 "\(base) \($0)"
     `Domain/RunProgress.swift`
 "\(base) looks stuck (\(elapsed))"
@@ -2641,9 +2603,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "\(contacts.count) found, none reachable"
     `UI/QueueView+Model.swift`
-"\(correctionsSeen) correction\(correctionsSeen == 1 ? "" : "s")."
-    `Domain/GenreCorrection.swift`
-"\(correctionsSeen) genre correction\(correctionsSeen == 1 ? "" : "s") recorded, and no word "
+"\(correctionsSeen) genre correction\(correctionsSeen == 1 ? "" : "s") recorded, and no word appears often enough yet to be worth adding to the classifier."
     `Domain/GenreCorrection.swift`
 "\(count) \(count == 1 ? "contact" : "contacts") held for a check"
     `Domain/DraftReviewNotes.swift`
@@ -2663,7 +2623,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/EmptyAnswerSection.swift`
 "\(count) shows on \(dateLabel) have no genre read. Set them before dismissing the night."
     `Domain/GenreGate.swift`
-"\(count) shows were left out of this run. The local store stopped answering, so Overture "
+"\(count) shows were left out of this run. The local store stopped answering, so Overture could not tell whether they were new shows or cards you have already decided on, and it would rather skip them than write over one. Run the scout again to pick them up."
     `Domain/ScoutWarningCopy.swift`
 "\(count) shows were left out this run because the local store stopped answering. Run the scout again."
     `Domain/ScoutWarnings.swift`
@@ -2673,9 +2633,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceAttention.swift`
 "\(count) sources went quiet."
     `UI/ScoutSummaryView.swift`
-"\(date) is dismissed as \(reason.label). Every other night of \(org) already has its "
+"\(date) is dismissed as \(reason.label). Every other night of \(org) already has its own card, so this run card is closed as a duplicate."
     `App/ActionFeedback.swift`
-"\(date) is dismissed as \(reason.label). \(nights) of \(org) already \(has), so this "
+"\(date) is dismissed as \(reason.label). \(nights) of \(org) already \(has), so this run \(gave) and now opens on \(next)."
     `App/ActionFeedback.swift`
 "\(dates), \(shows)"
     `Domain/ProbeSelection.swift`
@@ -2701,8 +2661,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OrganisationListing.swift`
 "\(entry.rowCount) shows, \(titles), \(rooms)."
     `Domain/OrganisationListing.swift`
-"\(error.localizedDescription). Your data is safe and unchanged at "
-    `App/StoreRelocation.swift`
 "\(event.title) \(presenter)"
     `Domain/EventClassifier.swift`
 "\(explanation)\n\n\(detail)"
@@ -2798,8 +2756,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OutreachEventPhrasing.swift`
 "\(names.count) new repl\(names.count == 1 ? "y" : "ies") (\(names.joined(separator: ", ")))"
     `Domain/OutreachEventPhrasing.swift`
-"\(narrowedCount) already sent, so \(narrowedCount == 1 ? "it" : "they") only got new contacts"
-    `App/ActionFeedback.swift`
 "\(night) \($0)"
     `Integration/ScoutService.swift`
 "\(nightDismissed(count: count, reason: reason, dateLabel: dateLabel)). \(tail)"
@@ -2854,8 +2810,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "\(org) is open again. \"\(outcome.label)\" is no longer recorded against it."
     `Domain/ShowOutcome.swift`
-"\(org) is unchanged."
-    `Domain/ShowOutcome.swift`
 "\(org) recorded as booked."
     `Domain/ShowOutcome.swift`
 "\(org) was already pitched, so \"\(outcome.label)\" doesn't apply to it. Nothing changed."
@@ -2900,8 +2854,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "\(placed) shows"
     `UI/SourcesView.swift`
-"\(previous). Nothing has been changed. If that drop is a surprise, quit Overture and "
-    `App/StoreShrinkCheck.swift`
 "\(progress.completed) of \(progress.total)"
     `Domain/PrepProgress.swift`
 "\(range) is no longer blocked"
@@ -2910,7 +2862,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "\(readNothing.count) sources have listed shows before and came back with nothing this run: \(list). Their page formats may have changed."
     `Domain/ScoutWarningCopy.swift`
-"\(readable) shows listed, down from the usual \(baseline), "
+"\(readable) shows listed, down from the usual \(baseline), so Overture won't mark anything from this source as gone until the smaller calendar holds."
     `Domain/SourceReadability.swift`
 "\(reason) Those reminders are not there, and running the sync again will not change it."
     `Domain/OmniFocusFailureKind.swift`
@@ -2922,7 +2874,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ProbeSelection.swift`
 "\(s.dateCount) dates"
     `Domain/ProbeSelection.swift`
-"\(s.organisationCount) named producers answer for several shows each; "
+"\(s.organisationCount) named producers answer for several shows each; \(s.performerHuntCount) "
     `Domain/ProbeSelection.swift`
 "\(s.previouslyMissedCount) of them went through an earlier check and never got an answer."
     `Domain/ProbeSelection.swift`
@@ -2970,11 +2922,11 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SourceReadability.swift`
 "\(subject) a look: failing, never read at all, empty run after run, or can't mark shows as gone until it reads its calendar properly again"
     `Domain/SourceAttention.swift`
-"\(subject) you to stop still \(verb) on calendars you watch: \(who). "
+"\(subject) you to stop still \(verb) on calendars you watch: \(who). Nothing was added and nothing will go out to them."
     `Domain/SuppressionReport.swift`
 "\(subject), \(f.localizedString(for: sentAt, relativeTo: now))"
     `Domain/ProposedConversation.swift`
-"\(suggestions) word\(suggestions == 1 ? "" : "s") worth adding to the classifier, from "
+"\(suggestions) word\(suggestions == 1 ? "" : "s") worth adding to the classifier, from \(correctionsSeen) correction\(correctionsSeen == 1 ? "" : "s")."
     `Domain/GenreCorrection.swift`
 "\(tally.booked) booked of \(tally.contacted)"
     `Domain/OutcomePatterns.swift`
@@ -3008,8 +2960,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "\(undoRestoredNight(count: restored, priorStatuses: priorStatuses)). \(others) already moved on."
     `App/ActionFeedback.swift`
-"\(unread.count == 1 ? "that month" : "those months") isn't here."
-    `UI/LeadIntakeModel.swift`
 "\(venueRejected) of \(total) shows had no venue on their own detail page and \(titleRejected) had no title, so Overture won't mark anything from this source as gone until it can read its pages again."
     `Domain/SourceReadability.swift`
 "\(venueRejected) of \(total) shows had no venue on their own detail page and \(titleRejected) had no title."
@@ -3028,9 +2978,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/HandoffDecodeFailure.swift`
 "\(who) is already a recipient on \(org)."
     `App/ActionFeedback.swift`
-"\(worst.name) is flagged as a possible match on \(worst.count) shows, "
+"\(worst.name) is flagged as a possible match on \(worst.count) shows, which usually means the match is wrong."
     `Domain/PossibleMatchFanOut.swift`
-"\(writer) wrote, and this reply would go to \(Plural.list(audience)) instead, "
+"\(writer) wrote, and this reply would go to \(Plural.list(audience)) instead, so Overture won't send it. Answer this one in Gmail."
     `Domain/ReplyPanel.swift`
 "\n\nLast lines of the run log:\n\(tail)"
     `Domain/DetachedRunOutcome.swift`
@@ -3069,48 +3019,16 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OrganisationListing.swift`
 "all the same title"
     `Domain/OrganisationListing.swift`
-"already happened. What it can say is that a new shoot came through as recently as "
-    `Domain/AppNotice.swift`
-"and re-reading those rows now would answer with today's rules rather than the ones that "
-    `Domain/GenreCorrection.swift`
-"and resumed \(PrepStatus.relative(from: endedAt, to: now))"
-    `Domain/WatchGap.swift`
-"and started again \(PrepStatus.relative(from: endedAt, to: now))"
-    `Domain/WatchGap.swift`
 "another show"
     `Domain/SelfBookingConflict.swift`
-"appears often enough yet to be worth adding to the classifier."
-    `Domain/GenreCorrection.swift`
 "at \(v)"
     `Domain/InquiryCopy.swift`
 "at \(venue) on \(dateLabel)"
     `UI/QueueView+Model.swift`
-"back onto the contact. Add the address back on the card first if you want to use it."
-    `Domain/AttachConversation.swift`
-"backup before working."
-    `App/StoreShrinkCheck.swift`
-"been changed. Check that folder before working."
-    `App/StoreShrinkCheck.swift`
-"being created."
-    `Domain/OmniFocusFailureKind.swift`
 "book now"
     `Domain/TicketLink.swift`
 "both of these people"
     `UI/SendConfirmSheet.swift`
-"but not read anything."
-    `Domain/ScoutStartGate.swift`
-"can't tell whether anyone answered them. Check the Gmail connection."
-    `Domain/ReconcileSummary.swift`
-"can't tell whether anyone replied. Check the Gmail connection."
-    `Domain/ReconcileSummary.swift`
-"changed. Check that file before reopening Overture."
-    `App/StoreSchemaGuard.swift`
-"come through it before, "
-    `Domain/AppNotice.swift`
-"contact back on the card first if you want to use it."
-    `Domain/AttachConversation.swift`
-"could not tell whether they were new shows or cards you have already decided on, and it "
-    `Domain/ScoutWarningCopy.swift`
 "couldn't read \(read.label). (\(underlying))"
     `Integration/ScoutService.swift`
 "couldn't save the producer answers, so other shows by them won't reuse this one"
@@ -3127,36 +3045,18 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ExperimentReport.swift`
 "elsewhere on \(dateLabel)"
     `UI/QueueView+Model.swift`
-"email it sends on this show from now on goes to that address."
-    `Domain/ProposedConversation.swift`
-"export rather than an empty diary. Re-export it from Downbeat, then re-read it "
-    `Domain/AppNotice.swift`
-"exporting has gone at once, "
-    `Domain/AppNotice.swift`
-"file before reopening Overture."
-    `App/StoreSchemaGuard.swift`
-"follow-up tasks are not being created."
-    `Domain/OmniFocusFailureKind.swift`
 "gave it up"
     `App/ActionFeedback.swift`
 "gave them up"
     `App/ActionFeedback.swift`
 "get seats"
     `Domain/TicketLink.swift`
-"get the full picture."
-    `Domain/ScoutWarningCopy.swift`
-"got them wrong."
-    `Domain/GenreCorrection.swift`
 "has its own card"
     `App/ActionFeedback.swift`
 "have their own cards"
     `App/ActionFeedback.swift`
-"have written to \(path). Nothing has been opened or changed. Check that "
-    `App/StoreSchemaGuard.swift`
 "high confidence"
     `Domain/ReviewStatus.swift`
-"holds. Nothing was lost. Run it again to get the full picture."
-    `Domain/ScoutWarningCopy.swift`
 "if an alert or an OmniFocus task went out for this reply, clear those yourself."
     `Domain/DetachConversation.swift`
 "if an alert went out for this reply, clear it yourself."
@@ -3167,28 +3067,18 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReachedOutQueue.swift`
 "in the queue"
     `UI/QueueView.swift`
-"is open."
-    `Domain/ProposedConversation.swift`
-"it can't tell whether anyone answered them. Try again shortly."
-    `Domain/ReconcileSummary.swift`
 "it is not valid JSON"
     `Domain/HandoffDecodeFailure.swift`
 "it is version \(v), which this build of Overture does not read"
     `Domain/ReplyClassify.swift`
-"judged against less than Overture actually holds. Nothing was lost. Run it again to "
-    `Domain/ScoutWarningCopy.swift`
 "just now"
     `Domain/PrepStatus.swift`
 "last prep \(Self.relative(from: last, to: now))"
     `Domain/PrepStatus.swift`
-"local store."
-    `Domain/ProposedConversation.swift`
 "low confidence"
     `Domain/ReviewStatus.swift`
 "medium confidence"
     `Domain/ReviewStatus.swift`
-"moves between them in a way I can't follow yet, so I only read the month it "
-    `UI/LeadIntakeModel.swift`
 "never heard back"
     `Domain/ShowOutcome.swift`
 "no Downbeat client export was found"
@@ -3201,34 +3091,16 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/FollowUpsView.swift`
 "not one of its \(contacts) contacts carries a tier, so the fit score is guessing"
     `Domain/RunInstructionCompliance.swift`
-"only stops OmniFocus asking; Overture still needs the ending from you."
-    `Domain/OmniFocusSync.swift`
-"opened on. Paste \(one ? "that month's" : "a month's") own link and I'll "
-    `UI/LeadIntakeModel.swift`
-"opened or changed. The file may be in use by another program, or its permissions may have "
-    `App/StoreSchemaGuard.swift`
-"or a DM. Gmail refused the request (HTTP \(status))."
-    `Integration/GmailReplySearch.swift`
-"own card, so this run card is closed as a duplicate."
-    `App/ActionFeedback.swift`
 "page fetch"
     `Domain/WebCallRefusals.swift`
 "prep run"
     `Domain/RunKind.swift`
-"rather skip it than write over one. Run the scout again to pick it up."
-    `Domain/ScoutWarningCopy.swift`
 "reachability check"
     `Domain/RunKind.swift`
-"read it."
-    `UI/LeadIntakeModel.swift`
 "redraft and find new contacts"
     `App/ActionFeedback.swift`
-"restore a backup before working: every launch takes another backup, and only the last "
-    `App/StoreShrinkCheck.swift`
 "restored your guidance notes"
     `Domain/PrepRunSummary.swift`
-"run \(gave) and now opens on \(next)."
-    `App/ActionFeedback.swift`
 "send failed"
     `Integration/GmailSender.swift`
 "show is"
@@ -3241,20 +3113,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ProbeSelection.swift`
 "so Overture can't keep clear of your booked nights or spot a booking."
     `Domain/AppNotice.swift`
-"so Overture won't mark anything from this source as gone until the smaller calendar holds."
-    `Domain/SourceReadability.swift`
-"so Overture won't send it. Answer this one in Gmail."
-    `Domain/ReplyPanel.swift`
 "something Overture has seen before"
     `UI/QueueView+Model.swift`
 "still couldn't save what this check found, so it has stopped trying and those shows will be checked again"
     `Domain/ReachabilityRunSummary.swift`
-"stored reason is: \(reason)"
-    `Domain/OmniFocusFailureKind.swift`
-"tell whether it was a new show or a card you have already decided on, and it would "
-    `Domain/ScoutWarningCopy.swift`
-"ten are kept."
-    `App/StoreShrinkCheck.swift`
 "the Downbeat client export couldn't be read"
     `Persistence/PrepImporter.swift`
 "the Downbeat client export is \(days) days old"
@@ -3278,8 +3140,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/ScoutService.swift`
 "the one contact it found carries no tier, so the fit score is guessing"
     `Domain/RunInstructionCompliance.swift`
-"the ones it emailed itself."
-    `Domain/AttachConversation.swift`
 "the other \(leftover)"
     `Domain/ScoutReadBudget.swift`
 "the other one"
@@ -3298,12 +3158,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "the venue names it matches against"
     `Integration/ScoutService.swift`
-"their thread and unlinking wouldn't take it back."
-    `Domain/DetachConversation.swift`
-"then re-read it here."
-    `Domain/AppNotice.swift`
-"these was not until \(furthest), so all of them going together reads as a broken "
-    `Domain/AppNotice.swift`
 "they said no"
     `Domain/ShowOutcome.swift`
 "they said not now"
@@ -3324,12 +3178,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/PrepRunSummary.swift`
 "web search"
     `Domain/WebCallRefusals.swift`
-"which usually means the match is wrong."
-    `Domain/PossibleMatchFanOut.swift`
 "would have read \(count) show\(count == 1 ? "" : "s") as \(discipline.label)"
     `Domain/GenreCorrection.swift`
-"would rather skip them than write over one. Run the scout again to pick them up."
-    `Domain/ScoutWarningCopy.swift`
 "wrote this"
     `Domain/ReplyPanel.swift`
 "you stopped this check after 1 of \(requested) shows got an answer, and the lookups that were already under way still counted as spent"
