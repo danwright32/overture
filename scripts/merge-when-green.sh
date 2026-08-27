@@ -20,6 +20,8 @@ source "${SCRIPT_DIR}/lib/mac-project-paths.sh"
 # The same completeness enumeration verify-and-merge-branch.sh enforces, from the one shared file,
 # so a PR cannot be waved through by choosing the other merge script.
 source "${SCRIPT_DIR}/lib/pr-completeness-guard.sh"
+# shellcheck source=./lib/pr-body-claims.sh
+source "${SCRIPT_DIR}/lib/pr-body-claims.sh"
 # merge_pr: the one implementation of the merge and everything that must follow one, shared with
 # verify-and-merge-branch.sh so a fix to it cannot be missing from one of the two paths.
 source "${SCRIPT_DIR}/lib/pr-merge.sh"
@@ -146,10 +148,17 @@ main() {
   # #2822: the author and the changed files come with the body, because the ONE exemption (a known bot
   # bumping only dependency manifests) needs both halves. A `gh` call that fails yields an empty string
   # for either, and empty is never exempt.
+  # Read ONCE into a variable rather than fetched again below: the same body answers both guards, and a
+  # second fetch could return a different one if somebody edits it in between, which would leave the two
+  # refusals talking about different text.
+  local pr_body
+  pr_body="$(gh_as_danwright32 pr view "${PR_NUMBER}" -R "${REPO}" --json body --jq .body 2>/dev/null || echo "")"
   require_pr_completeness "${PR_NUMBER}" \
-    "$(gh_as_danwright32 pr view "${PR_NUMBER}" -R "${REPO}" --json body --jq .body 2>/dev/null || echo "")" \
+    "${pr_body}" \
     "$(gh_as_danwright32 pr view "${PR_NUMBER}" -R "${REPO}" --json author --jq .author.login 2>/dev/null || echo "")" \
     "$(gh_as_danwright32 pr view "${PR_NUMBER}" -R "${REPO}" --json files --jq '.files[].path' 2>/dev/null || echo "")"
+  # #3159, before the polling loop for the same reason: the cheapest fix must not wait out CI.
+  PR_BODY_CLAIMS_GH=gh_as_danwright32 check_pr_body_claims "${PR_NUMBER}" "${pr_body}" || exit 1
 
   START="$(date -u +%s)"
 

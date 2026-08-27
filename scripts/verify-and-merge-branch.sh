@@ -26,6 +26,8 @@ source "${SCRIPT_DIR}/lib/checkout-tidy.sh"
 # The completeness enumeration AGENTS.md demands. Shared with merge-when-green.sh so the two merge
 # paths cannot disagree about what a mergeable PR looks like.
 source "${SCRIPT_DIR}/lib/pr-completeness-guard.sh"
+# shellcheck source=./lib/pr-body-claims.sh
+source "${SCRIPT_DIR}/lib/pr-body-claims.sh"
 # merge_pr, the one implementation of the merge and everything that must follow one, shared with
 # merge-when-green.sh for the same reason (#2602 found the two copies needing the same fix).
 source "${SCRIPT_DIR}/lib/pr-merge.sh"
@@ -276,6 +278,9 @@ verify_and_merge() {
   # BEFORE the suite, deliberately: a body missing the enumeration is refused in seconds rather
   # than after two minutes of exclusive test lock, and the fix does not need a re-run of anything.
   require_pr_completeness "${PR_NUMBER}" "${PR_BODY}" "${PR_AUTHOR:-}" "${PR_FILES:-}"
+  # #3159, and here for the same reason as the line above: a Closes line GitHub will not honour is
+  # refused in seconds rather than after the exclusive test lock, and the fix is an edit to the body.
+  PR_BODY_CLAIMS_GH=gh_as_danwright32 check_pr_body_claims "${PR_NUMBER}" "${PR_BODY}" || return 1
 
   echo "Verifying PR #${PR_NUMBER} (${PR_BRANCH}) in the verify worktree..."
   # Checked, not left to errexit: every caller of verify_and_merge invokes it somewhere errexit is

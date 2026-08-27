@@ -162,6 +162,12 @@ verify_and_merge_batch() {
       return 1
     }
     require_pr_completeness "${PR_NUMBER}" "${PR_BODY}" "${PR_AUTHOR:-}" "${PR_FILES:-}"
+    # #3159, in the same up-front pass as everything else that can refuse a PR before the one
+    # expensive suite run starts, so a batch never pays for a combine it is going to reject.
+    PR_BODY_CLAIMS_GH=gh_as_danwright32 check_pr_body_claims "${PR_NUMBER}" "${PR_BODY}" || {
+      echo "Nothing was verified and nothing was merged." >&2
+      return 1
+    }
 
     numbers+=("${PR_NUMBER}")
     branches+=("${PR_BRANCH}")
