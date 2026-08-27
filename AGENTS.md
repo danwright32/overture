@@ -70,6 +70,25 @@ already drifting from the Swift version it mirrored.
   never saying "writer". Kept strict on purpose rather than accepting stems, because a looser match
   would let an incidental mention anywhere in the body count as an answer.
 
+  **Two claims in a PR body are checked against the world rather than for presence (#3159), and they have
+  DIFFERENT verdicts.** `scripts/lib/pr-body-claims.sh` runs in all three merge paths, and which half
+  refuses was measured over the last 200 merged PRs before either was written.
+  A `Closes` keyword fronting a comma separated LIST **refuses**. GitHub links an issue only where the
+  keyword immediately precedes its number, so `Closes #a, #b, #c` closes exactly one and silently
+  references the rest. The shape appears 4 times in 200 (#3146, #3142, #2851, #2848) and every one is the
+  defect: two left an issue open that is still open (#2925, #3076), the other six were closed by hand days
+  later. Write the keyword before each number. `ALLOW_UNLINKED_CLOSES=1` overrides one command and
+  announces itself.
+  A quoted decision date matching no comment on any issue the body names only **reports**, and the reason
+  is worth knowing before anyone tries to make it a gate. 39 of those 200 bodies quote a decision with a
+  date and 12 quote one no comment day carries, but nearly all of those are correct, because most of Dan's
+  calls are made in the working session rather than in a comment: PR #3160 says so in its own body, #3114's
+  decision lives on an issue it does not close, and #3164 quotes a session call that confirms an earlier
+  comment. A gate there would refuse about one PR in five and be right about one of them (L93). What it
+  prints instead is the quoted date beside the days the evidence really carries, which for PR #3142, the
+  incident, is `quoted 2026-08-22` against `2026-08-18 2026-08-21`. It says nothing at all when there is no
+  evidence, because a failed fetch and an issue with no comments must not read as a mismatch (L98).
+
 
 - Before pushing anything that touches a cross-language contract (`fixtures/`,
   `docs/contracts.md`), or really before pushing anything at all, run `scripts/test-all.sh`
