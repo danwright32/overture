@@ -261,17 +261,38 @@ struct ReplyInvariantsLiveStoreTests {
     func noConversationWasSilencedByWhatLooksLikeAnAutomaticReply() async throws {
         try await withLiveShows { shows in
             let answered = shows.flatMap { p in
-                p.recipients.compactMap { r -> TimeInterval? in
+                p.recipients.compactMap { r -> Answer? in
                     guard let handled = r.replyHandledAt, let theirs = r.repliedAt else { return nil }
-                    return handled.timeIntervalSince(theirs)
+                    // #3171: the attach path writes `conversationAttachedAt`, `repliedAt` and
+                    // `replyHandledAt` from ONE `now`, so its delta is zero by construction.
+                    return Answer(gap: handled.timeIntervalSince(theirs),
+                                  recordedInOneWriteWithTheAttach: r.conversationAttachedAt == handled)
                 }
             }
+            // #3171: a row recorded in a single attach write is set aside BEFORE the signature is applied,
+            // because there is nothing there to measure. `AttachConversation.attach` runs detection with
+            // its own `now` (which stamps `repliedAt`) and then stamps `replyHandledAt` from the same
+            // `now` when the thread's newest message is already Dan's, so the two instants are equal for
+            // an arithmetic reason rather than because anything answered anything in zero seconds. The
+            // live store held exactly one such row and it read as the defect this test exists to catch.
+            //
+            // Set aside by EVIDENCE rather than by the delta being suspiciously round: a zero gap is also
+            // what an instant autoresponder would produce, so excluding zero itself would blind the rule
+            // to its own worst case. What the exclusion asks is whether the attach instant IS the answer
+            // instant, which only that one write can produce.
+            let fromOneAttachWrite = answered.filter(\.recordedInOneWriteWithTheAttach)
+            let suspicious = answered.filter {
+                !$0.recordedInOneWriteWithTheAttach && $0.gap >= 0 && $0.gap <= Self.automaticReplyWindow
+            }
             // The population, printed every run for the reason the corpus line above exists: a rule that
-            // examined zero rows and a rule that examined every row must not look alike (L98).
-            let suspicious = answered.filter { $0 >= 0 && $0 <= Self.automaticReplyWindow }
+            // examined zero rows and a rule that examined every row must not look alike (L98). The set
+            // aside count is printed for the same reason: an exclusion nobody can see the size of is one
+            // that can grow to cover the whole corpus without anybody noticing (L182).
             print("LIVE STORE AUTO-REPLY CHECK: \(answered.count) conversations carry a recorded answer, "
-                  + "\(suspicious.count) of them recorded within \(Int(Self.automaticReplyWindow))s of the "
-                  + "message they answer. A zero population means this measured nothing.")
+                  + "\(fromOneAttachWrite.count) of them recorded in one write with a conversation attach "
+                  + "and therefore not measurable here, "
+                  + "\(suspicious.count) of the rest recorded within \(Int(Self.automaticReplyWindow))s of "
+                  + "the message they answer. A zero population means this measured nothing.")
             #expect(suspicious.isEmpty, """
                 \(suspicious.count) conversation(s) had their answer recorded within \
                 \(Int(Self.automaticReplyWindow)) seconds of the message it answers, which is the shape of an \
@@ -281,6 +302,14 @@ struct ReplyInvariantsLiveStoreTests {
                 and a count is the whole finding.
                 """)
         }
+    }
+
+    // One conversation's recorded answer, as the two facts the signature above is decided from. A struct
+    // rather than a bare interval because the second fact is what tells an autoresponder's zero gap from
+    // an attach write's, and a pair of parallel arrays would let the two drift apart (#3171).
+    private struct Answer {
+        let gap: TimeInterval
+        let recordedInOneWriteWithTheAttach: Bool
     }
 
     // Ninety seconds. Above the few seconds an autoresponder takes and far below anything a person does,
