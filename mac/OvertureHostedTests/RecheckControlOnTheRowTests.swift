@@ -38,10 +38,67 @@ struct RecheckControlOnTheRowTests {
     }
 
     private func texts(_ item: QueueItem, checkRunning: Bool = false,
-                       probeRunning: Bool = false) throws -> [String] {
+                       probeRunning: Bool = false,
+                       checkRunSince: Date? = nil, checkLookups: Int? = nil) throws -> [String] {
         let view = ProspectRowView(item: item, today: "2026-08-07", onKeep: {}, onDismiss: { _ in },
-                                   checkRunning: checkRunning, probeRunning: probeRunning)
+                                   checkRunning: checkRunning, probeRunning: probeRunning,
+                                   checkRunSince: checkRunSince, checkLookups: checkLookups)
         return try view.inspect().findAll(ViewType.Text.self).map { try $0.string() }
+    }
+
+    // #3186: the label counts from the RUN and is judged by the run's DEPTH, and both halves are rendered
+    // rather than asserted of a rule, because the row is where they were wrong.
+    //
+    // The control does not start a run: `requestReachabilityRecheck` sets a flag and the answer arrives
+    // from whatever batch picks it up. So the label counted from the PRESS, which includes however long
+    // the request waited, and judged that against a flat ten minutes, which #3137 established is a
+    // per-round figure. A card could sit there saying a healthy deep run looked stuck, which is #1530's
+    // defect and the one this family of warnings cannot afford (#2577, #2929).
+    //
+    // Against the LIVE clock, because `ProspectRowView` has no clock seam and reads the wall clock at
+    // render time; the fixture is expressed relative to it for #3169's reason.
+    private func runningRow(startedMinutesAgo: Double, pressedMinutesAgo: Double) -> QueueItem {
+        var row = item(requestedAt: Date().addingTimeInterval(-pressedMinutesAgo * 60))
+        row.reachabilityProbedAt = LiveClockProbe.fresh
+        return row
+    }
+
+    @Test func aDeepRunPastTheOneRoundWindowIsNotCalledStuck() throws {
+        let row = runningRow(startedMinutesAgo: 11, pressedMinutesAgo: 40)
+        let t = try texts(row, probeRunning: true,
+                          checkRunSince: Date().addingTimeInterval(-11 * 60), checkLookups: 30)
+        #expect(t.contains { $0.contains(ReachabilityCopy.recheckRunning) })
+        #expect(!t.contains { $0.contains("looks stuck") },
+                "a 30 show check eleven minutes in is three rounds deep and running normally")
+    }
+
+    // The control, in the same fixture, so the negative above is not satisfied by a row that could never
+    // have said it (L159). Same run, same elapsed time, with the size unknown: the flat one-round window
+    // is all there is to judge by, and eleven minutes really is past it.
+    @Test func theSameRunWithNoKnownSizeStillFallsBackToTheFlatWindow() throws {
+        let row = runningRow(startedMinutesAgo: 11, pressedMinutesAgo: 40)
+        let t = try texts(row, probeRunning: true,
+                          checkRunSince: Date().addingTimeInterval(-11 * 60), checkLookups: nil)
+        #expect(t.contains { $0.contains("looks stuck") })
+    }
+
+    // And the half that is about the CLOCK rather than the window: a request that waited half an hour for
+    // a run to pick it up is judged from the run, not from the press. With the old reading this row was
+    // forty minutes elapsed and stuck; with the run's own start it is one minute in.
+    @Test func aLongWaitBeforeTheRunStartedIsNotCountedAgainstTheRun() throws {
+        let row = runningRow(startedMinutesAgo: 1, pressedMinutesAgo: 40)
+        let t = try texts(row, probeRunning: true,
+                          checkRunSince: Date().addingTimeInterval(-60), checkLookups: nil)
+        #expect(t.contains { $0.contains(ReachabilityCopy.recheckRunning) })
+        #expect(!t.contains { $0.contains("looks stuck") })
+    }
+
+    // Nothing said when the run start is unknown, so the row is exactly as it was rather than silently
+    // unmeasured: it falls back to the press, which is the reading that shipped.
+    @Test func anUnknownRunStartFallsBackToThePress() throws {
+        let row = runningRow(startedMinutesAgo: 0, pressedMinutesAgo: 40)
+        let t = try texts(row, probeRunning: true, checkRunSince: nil, checkLookups: nil)
+        #expect(t.contains { $0.contains("looks stuck") })
     }
 
     @Test func aFrozenAnswerOffersTheControl() throws {
