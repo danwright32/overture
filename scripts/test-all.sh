@@ -30,6 +30,29 @@ cd "${REPO_ROOT}"
 # shellcheck source=./lib/test-all-phases.sh
 source "${REPO_ROOT}/scripts/lib/test-all-phases.sh"
 
+# #3168: install the TypeScript dependencies HERE, before the snapshot below, because this is a step
+# the run is defined to perform rather than something it leaves behind.
+#
+# pnpm installs missing dependencies by itself the first time a script is run, so until this existed the
+# install happened inside `pnpm typecheck` in the cheap lane, minutes after the snapshot was taken. On any
+# checkout without `node_modules` the ignored half of the tree check then reported `appeared: node_modules/`,
+# every time. That is guaranteed rather than incidental on the path that matters most:
+# verify-and-merge-branch.sh scrubs its verify slot with `git clean -ffdx`, which removes `node_modules`,
+# so every verify-and-merge and verify-and-merge-batch run reported it, starting with the very first one.
+# A report that speaks on every merge is one people learn to scroll past, and then the stray state file it
+# exists to surface goes unread too (L36, L93).
+#
+# Ordering rather than an exception list naming `node_modules`, which would be a hand-written registry and
+# would go stale the way any registry-driven guard does (L96). What it gives up is the window before the
+# install: a stray written in it is now inside the snapshot rather than after it. That window holds nothing
+# but this line.
+#
+# It does NOT take the run down on its own. Neither lane has started yet, so a failure here under `set -e`
+# would end the run before anything reported; `pnpm typecheck` and `pnpm test` in the cheap lane report a
+# broken install exactly as they did before this step existed.
+echo "==> pnpm install"
+pnpm install || echo "FAILED - pnpm install (the pnpm checks in the cheap lane below report what is broken)"
+
 # #2318: record the working tree before anything runs, and compare it at the end. A test that writes
 # into the checkout leaves changes indistinguishable from a person's own edits, so review cannot
 # catch them and nobody has a reason to look. Observed from out here because a suite cannot watch
