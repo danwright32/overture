@@ -176,6 +176,38 @@ assert_equals "it can still be made blocking" "1" "$([ -n "${TA_BLOCK_LINE}" ] &
 TA_GUARD="$(printf '%s' "${TA_SRC}" | sed -n "$((TA_BLOCK_LINE - 1))p")"
 assert_contains "and that path is reachable only through the override" "${TA_GUARD}" "OVERTURE_VACUOUS_GUARDS_STRICT"
 
+# --- the dependency install happens BEFORE the working-tree snapshot (#3168) -------------------------
+#
+# check-tree-untouched.sh reports the IGNORED paths a run changed, and that report is only worth
+# anything while it is silent on the ordinary run. It was not. `pnpm` installs missing dependencies by
+# itself when a script is run, so the first `pnpm typecheck` in the cheap lane created `node_modules/`,
+# and the snapshot recorded before it had no such path: every verify-and-merge run reported
+# `appeared: node_modules/`, forever, starting with the very first one (merging #3167). The verify slot
+# is scrubbed with `git clean -ffdx`, so it is the path where this is guaranteed rather than incidental.
+#
+# The remedy is ordering, not an exception list: a step the run is DEFINED to perform belongs before the
+# measurement, so the snapshot is taken of a tree that already has the dependencies in it. An exception
+# list naming `node_modules` would have to be maintained by hand and would go stale the way any
+# registry-driven guard does (L96).
+#
+# Asserted as a LINE ORDER rather than as two presences, because both lines being present is exactly
+# what the defect looked like.
+TA_INSTALL_LINE="$(printf '%s' "${TA_SRC}" | grep -n '^pnpm install' | head -1 | cut -d: -f1)"
+TA_RECORD_LINE="$(printf '%s' "${TA_SRC}" | grep -n 'check-tree-untouched.sh" record' | head -1 | cut -d: -f1)"
+assert_equals "test-all.sh installs the node dependencies itself" \
+  "1" "$([ -n "${TA_INSTALL_LINE}" ] && echo 1 || echo 0)"
+assert_equals "test-all.sh records the working-tree snapshot" \
+  "1" "$([ -n "${TA_RECORD_LINE}" ] && echo 1 || echo 0)"
+assert_equals "the install runs BEFORE the snapshot, so node_modules is never reported as something the run left behind" \
+  "1" "$([ -n "${TA_INSTALL_LINE}" ] && [ -n "${TA_RECORD_LINE}" ] && [ "${TA_INSTALL_LINE}" -lt "${TA_RECORD_LINE}" ] && echo 1 || echo 0)"
+# It must not take the run down on its own. The cheap lane exists so one failure does not hide the
+# others, and the Swift lane has not started yet at this point, so an install that dies under `set -e`
+# would end the run before either lane reported anything. The pnpm checks in the cheap lane are what
+# report a broken install, exactly as they did before this step existed.
+TA_INSTALL_STMT="$(printf '%s' "${TA_SRC}" | sed -n "${TA_INSTALL_LINE:-0}p")"
+assert_contains "and a failed install does not end the run before either lane has reported" \
+  "${TA_INSTALL_STMT}" "||"
+
 # --- the background lane is REAPED, so it leaves no notice in the output (#3105) ---------------------
 #
 # A killed background job is announced by the shell at the next command boundary, and the notice renders
