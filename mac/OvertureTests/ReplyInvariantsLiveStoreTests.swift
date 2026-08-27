@@ -89,6 +89,17 @@ struct ReplyInvariantsLiveStoreTests {
         repliedRows(in: shows).filter { $0.1.hasUnhandledReply }
     }
 
+    // #3165: the replied rows the writer-resolution rule can say anything about at all, which is a
+    // recorded writer address that somebody on the show actually holds. Wider than `openReplyRows` by
+    // exactly the handled rows, which is the point: that set is the one that empties when Dan answers.
+    private func writerHeldRows(in shows: [Prospect]) -> [(Prospect, Recipient, Recipient)] {
+        repliedRows(in: shows).compactMap { (p, r) in
+            guard let writer = r.replyFromAddress, !writer.isEmpty else { return nil }
+            guard let holder = ReplyPanel.contact(holding: writer, of: p) else { return nil }
+            return (p, r, holder)
+        }
+    }
+
     // #2122/#2125, as an invariant. The panel resolves a reply to the peer whose address matches the
     // recorded writer; the row the LIST stands on is picked by sorted id and is routinely somebody else.
     // The defect was that resolution silently landing on the wrong person. It cannot be caught by asking
@@ -114,6 +125,40 @@ struct ReplyInvariantsLiveStoreTests {
             }
             #expect(wrong.isEmpty, Comment(rawValue: "a reply resolved to somebody other than the person who wrote it:\n"
                     + wrong.prefix(5).joined(separator: "\n")))
+        }
+    }
+
+    // #3165: the SAME claim, asked of every replied row through the inputs rather than through
+    // `ReplyIdentity.answering`, which short-circuits.
+    //
+    // WHY THIS EXISTS, and it is a measurement rather than a hunch. #2985 narrowed the rule above to rows
+    // whose reply is still OPEN, correctly: `answering` returns the row itself once `hasUnhandledReply`
+    // is false, so it makes no claim about a handled row and asserting one fired when Dan answered a
+    // reply, which is the workflow succeeding. What that left is a rule whose corpus empties whenever he
+    // is up to date, which is most of the time. Measured on the live store 2026-08-27: 1018 shows, 5
+    // replied rows, ZERO still open, so the rule ran over nothing and had done for as long as this clone
+    // had recorded (#3165, L182).
+    //
+    // The claim that still holds for a handled row is the one `answering` is BUILT from: it looks for the
+    // writer among `SendGroup.peers`, while `ReplyPanel.contact(holding:)` looks among every recipient on
+    // the show. When those two disagree, resolution lands on whoever sorts first, which is #2122/#2125
+    // exactly. Asked of the peers directly, that survives the reply being answered, because it is a fact
+    // about how the contacts are grouped rather than about the reply's state.
+    //
+    // It NAMES NOBODY, deliberately, unlike its neighbour above. A count and the show are the whole
+    // finding, and this is a public repository (L222).
+    @Test(.enabled(if: liveStoreExists, "no live store on this machine"))
+    func theContactHoldingTheWritersAddressIsAPeerOfTheRowThatRecordedIt() async throws {
+        try await withLiveShows { shows in
+            var stranded: [String] = []
+            for (p, r, holder) in writerHeldRows(in: shows) {
+                if !SendGroup.peers(of: r, in: p).contains(where: { $0.id == holder.id }) {
+                    stranded.append("\(p.groupName): the contact holding the writer's address is on the "
+                                    + "show but is not a peer of the row that recorded the reply, so "
+                                    + "resolution would land on whoever sorts first")
+                }
+            }
+            #expect(stranded.isEmpty, Comment(rawValue: stranded.prefix(5).joined(separator: "\n")))
         }
     }
 
@@ -339,12 +384,23 @@ struct ReplyInvariantsLiveStoreTests {
         try await withLiveShows { shows in
             let replied = repliedRows(in: shows)
             let open = openReplyRows(in: shows)
+            // #3165: the number the writer-resolution rule is measured by, which is no longer the open
+            // count. That one empties whenever Dan is up to date, and it read zero for as long as this
+            // clone had recorded, so the readout was reporting a rule as dormant that had simply been
+            // asked a question its corpus could not hold.
+            let writerHeld = writerHeldRows(in: shows)
             let inPlay = ReachedOutQueue.activeWithDates(from: shows, now: Date())
             print("LIVE STORE CORPUS: \(shows.count) shows, \(replied.count) replied rows, "
-                  + "\(open.count) with a reply still open, \(inPlay.count) reached-out rows in play. "
+                  + "\(open.count) with a reply still open, "
+                  + "\(writerHeld.count) whose writer a contact holds, "
+                  + "\(inPlay.count) reached-out rows in play. "
                   + "A zero here means the invariants in this suite ran over nothing.")
             // An open reply is a replied row, by construction, so the narrower set can never be the larger.
             #expect(open.count <= replied.count)
+            // And so is a row whose writer a contact holds, by the same construction. The containment is
+            // asserted rather than assumed for the same reason as the line above: it is what stops a
+            // filter that started selecting something else entirely from passing on the sizes alone.
+            #expect(writerHeld.count <= replied.count)
             // A row in play was sent to: `ReachedOutQueue.isInPlay` refuses a recipient with no `sentAt`,
             // so a row here without one means that gate stopped holding.
             #expect(inPlay.allSatisfy { $0.recipient.sentAt != nil })

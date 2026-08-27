@@ -207,7 +207,11 @@ live_corpus_counts() {
   local output="$1" line open reached
   line="$(grep -a "LIVE STORE CORPUS:" <<< "${output}" 2>/dev/null | tail -n 1)"
   [[ -n "${line}" ]] || return 1
-  open="$(grep -oE '[0-9]+ with a reply still open' <<< "${line}" | grep -oE '^[0-9]+')"
+  # #3165: the WRITER-HELD count, not the still-open one. The open count empties whenever Dan is up to
+  # date, which is most of the time, so it reported the writer-resolution rule as dormant when the truth
+  # was that the rule had been asked a question its corpus could not hold. The rule now runs over every
+  # replied row whose recorded writer somebody on the show holds, and this is that number.
+  open="$(grep -oE '[0-9]+ whose writer a contact holds' <<< "${line}" | grep -oE '^[0-9]+')"
   reached="$(grep -oE '[0-9]+ reached-out rows in play' <<< "${line}" | grep -oE '^[0-9]+')"
   # A line this cannot parse is unmeasured, never clean: the same answer as no line at all, because a
   # number nobody could read is not a number this may report.
@@ -258,18 +262,18 @@ live_corpus_report() {
   read -r open reached <<< "${counts}"
 
   if [[ "${open}" -eq 0 && "${reached}" -eq 0 ]]; then
-    echo "Live store invariants: DORMANT. The open-reply invariant has measured nothing $(live_corpus_dormancy_phrase open "${today}" "${seen}"), the reached-out one $(live_corpus_dormancy_phrase reached "${today}" "${seen}"), so both passed having asserted nothing about Dan's real data (#2991, L182)."
+    echo "Live store invariants: DORMANT. The writer-resolution invariant has measured nothing $(live_corpus_dormancy_phrase writer "${today}" "${seen}"), the reached-out one $(live_corpus_dormancy_phrase reached "${today}" "${seen}"), so both passed having asserted nothing about Dan's real data (#2991, L182)."
     return 0
   fi
   if [[ "${open}" -eq 0 ]]; then
-    echo "Live store invariants: PARTLY DORMANT. The open-reply invariant has measured nothing $(live_corpus_dormancy_phrase open "${today}" "${seen}"); the reached-out one measured ${reached} this run (#2991, L182)."
+    echo "Live store invariants: PARTLY DORMANT. The writer-resolution invariant has measured nothing $(live_corpus_dormancy_phrase writer "${today}" "${seen}"); the reached-out one measured ${reached} this run (#2991, L182)."
     return 0
   fi
   if [[ "${reached}" -eq 0 ]]; then
-    echo "Live store invariants: PARTLY DORMANT. The reached-out invariant has measured nothing $(live_corpus_dormancy_phrase reached "${today}" "${seen}"); the open-reply one measured ${open} this run (#2991, L182)."
+    echo "Live store invariants: PARTLY DORMANT. The reached-out invariant has measured nothing $(live_corpus_dormancy_phrase reached "${today}" "${seen}"); the writer-resolution one measured ${open} this run (#2991, L182)."
     return 0
   fi
-  echo "Live store invariants: measuring, over ${open} open replies and ${reached} reached-out rows in play."
+  echo "Live store invariants: measuring, over ${open} rows the writer-resolution rule can judge and ${reached} reached-out rows in play."
 }
 
 # The record's NEW contents after this run, given its old contents. Pure: the caller writes what this
@@ -292,13 +296,13 @@ live_corpus_seen_update() {
   read -r open reached <<< "${counts}"
 
   local open_date reached_date
-  open_date="$(live_corpus_seen_date open "${seen}")"
+  open_date="$(live_corpus_seen_date writer "${seen}")"
   reached_date="$(live_corpus_seen_date reached "${seen}")"
   [[ "${open}" -gt 0 ]] && open_date="${today}"
   [[ "${reached}" -gt 0 ]] && reached_date="${today}"
 
   local out=""
-  [[ -n "${open_date}" ]] && out="open=${open_date}"
+  [[ -n "${open_date}" ]] && out="writer=${open_date}"
   if [[ -n "${reached_date}" ]]; then
     [[ -n "${out}" ]] && out="${out}
 "

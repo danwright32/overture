@@ -658,6 +658,20 @@ already drifting from the Swift version it mirrored.
   must never give, since the reading it exists to support is "was this run short?", so it prints
   `Suite shape: NOT REPORTED` and names the restart instead of summing across a crash, and such a
   run can no longer record its own count as the baseline the short-run gate measures against.
+  **Since #3165 the first of those two invariants is measured by a different number.** It used to be the
+  rows whose reply is still OPEN, which #2985 narrowed it to for a correct reason (`ReplyIdentity.answering`
+  short-circuits once a reply is handled, and asserting through it fired when Dan answered one, which is the
+  workflow succeeding). What that left was a rule whose corpus empties whenever he is up to date, which is
+  most of the time: measured 2026-08-27, 1018 shows, 5 replied rows, ZERO still open, so it had asserted
+  nothing about his data for as long as this clone had recorded. The claim that still holds for a handled
+  row is the one `answering` is BUILT from, that the contact holding the writer's address is a PEER of the
+  row that recorded the reply, and asking the peers directly survives the reply being answered because it is
+  a fact about how contacts are grouped rather than about the reply's state. It runs over 4 rows today where
+  it ran over 0, and a mutation removing the peer requirement goes red on Dan's real data. The readout and
+  the record's key were renamed with it (`writer=`, not `open=`), because a key named `open` counting
+  something else is how one word comes to name two units (L118); no history was lost, since the old count
+  was zero on every machine that ever wrote that file.
+
   **Since #1995 a third line says whether THIS run verified the SCREENS.** The app-hosted tests are the
   only ones that render a real SwiftUI view, and since #1967 a launch fault costs them alone: the pure
   suite passes, the runner says so, and work carries on correctly. What nothing recorded is when they last
