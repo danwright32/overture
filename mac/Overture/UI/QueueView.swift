@@ -254,6 +254,10 @@ struct QueueView: View {
         // same reason as the line above. Both read a marker file, and a per-card read would be a disk
         // read per row per scroll frame, which is the #1770 defect exactly.
         let probeRunning: Bool
+        // #3186: the check's start and size, for the row's own re-check label. Read only when a check is
+        // actually in flight, so an idle queue pays nothing for a control it is merely offering.
+        let checkRunSince: Date?
+        let checkLookups: Int?
         // Contacted RECIPIENTS Dan is still working, soonest-first. #652: one entry per recipient, so a
         // multi-contact show can appear more than once, each with its own contact and timing.
         let reachedOut: [(prospect: Prospect, recipient: Recipient, next: Date)]
@@ -280,6 +284,8 @@ struct QueueView: View {
     // file-backed answers, and handing them over.
     private func makeRenderData() -> RenderData {
         let now = Date()
+        // Asked ONCE: three of the inputs below are decided from it, and it reads marker files.
+        let inFlight = PrepQueueService.runInFlight(now: now)
         return QueueRenderPass.make(QueueRenderPass.Inputs(
             prospects: QueueRenderPass.Corpus(prospects),
             allProspects: QueueRenderPass.Corpus(allProspects),
@@ -293,7 +299,12 @@ struct QueueView: View {
             focusedKeys: focusedKeys,
             // #1770: read once for the whole pass, from the cache rather than from the token file.
             gmailConnected: GmailConnection.shared.isConnected,
-            runInFlight: PrepQueueService.runInFlight(now: now),
+            runInFlight: inFlight,
+            // #3186: asked ONLY while a check is really running. Both read a marker from disk, and this
+            // runs once per render pass, so an idle queue must not pay for them (#1770).
+            checkRunSince: inFlight == .reachabilityCheck
+                ? PrepQueueService.lastRunStartedAt(slot: .check) : nil,
+            checkLookups: inFlight == .reachabilityCheck ? PrepQueueService.liveCheckLookups() : nil,
             replyRunAlive: ReplyClassifyService.isRunning(now: now),
             trace: renderTrace))
     }
@@ -1441,6 +1452,8 @@ struct QueueView: View {
                                           onRecheckNow: { requestRecheckNow($0) },
                                           checkRunning: checkRunning,
                                           probeRunning: data.probeRunning,
+                                          checkRunSince: data.checkRunSince,
+                                          checkLookups: data.checkLookups,
                                           undoStack: undoStack,
                                           highlightedKey: highlightedKey, outboundSendSince: sendingSince,
                                           replySendSince: replySince,

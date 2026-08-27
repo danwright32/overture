@@ -118,10 +118,51 @@ struct CheckStallWindowFollowsItsDepthTests {
 
     @Test func theToolbarLabelAsksForTheSameWindow() {
         let source = SourceGuardHelper.source("Overture/App/RootView.swift")
-        #expect(source.contains("RunTimeouts.reachabilityProbeWindow(lookups: liveCheckLookups())"))
-        // And the size comes from the check's own marker rather than a second count derived from the
-        // queue, which would answer differently the moment a show left it mid-run (L16).
-        #expect(source.contains("ReachabilityProbeMarker.read(from: PrepQueueService.defaultProbeRunURL)"))
+        #expect(source.contains(
+            "RunTimeouts.reachabilityProbeWindow(lookups: PrepQueueService.liveCheckLookups())"))
+    }
+
+    // #3186: and the size has ONE definition, on the service that owns the marker. Two surfaces now size
+    // a window from it, and a second count derived from the queue would answer differently the moment a
+    // show left it mid-run (L16).
+    @Test func theSizeComesFromTheCheckSOwnMarkerInOnePlace() {
+        let service = SourceGuardHelper.source("Overture/Integration/PrepQueueService.swift")
+        #expect(service.contains("static func liveCheckLookups() -> Int?"))
+        #expect(service.contains("ReachabilityProbeMarker.read(from: defaultProbeRunURL)"))
+        // Nobody reads that marker for a lookup count anywhere else, which is what makes it one place.
+        for file in AppSourceWalk.appFiles() where file.name != "PrepQueueService.swift" {
+            let lines = SwiftSource.scannableLines(in: file.text, skipping: [])
+            #expect(!lines.contains { $0.code.contains("ReachabilityProbeMarker.read") && $0.code.contains("lookups") },
+                    "\(file.name) reads the check marker's lookup count itself instead of asking PrepQueueService")
+        }
+    }
+
+    // MARK: - The row's own re-check label (#3186)
+
+    // The defect #3137 scoped out on reasoning that did not hold. The row's control does not start a run:
+    // `requestReachabilityRecheck` sets a flag, and the answer arrives from whatever batch picks it up. So
+    // the row was counting from the PRESS against a window sized for one lookup, and a card could say a
+    // healthy deep run looked stuck.
+    @Test func theRowCountsFromTheRunRatherThanFromThePress() {
+        let source = SourceGuardHelper.source("Overture/UI/ProspectRowView.swift")
+        #expect(source.contains("since: checkRunSince ?? item.reachabilityRecheckRequestedAt"),
+                "the row still counts the wait before a run picked the request up against the run")
+        #expect(source.contains("timeout: RunTimeouts.reachabilityProbeWindow(lookups: checkLookups)"),
+                "the row still judges a run of any depth against the one-round window")
+    }
+
+    // Read ONCE per render pass and threaded down, never per card: both facts come from marker files, and
+    // a per-card read is a disk read per row per scroll frame, which is the #1770 defect exactly. And only
+    // while a check is really in flight, so an idle queue pays nothing for a control it is offering.
+    @Test func theRowIsHandedThoseFactsRatherThanReadingThemPerCard() {
+        let queue = SourceGuardHelper.source("Overture/UI/QueueView.swift")
+        #expect(queue.contains("checkRunSince: inFlight == .reachabilityCheck"))
+        #expect(queue.contains("checkLookups: inFlight == .reachabilityCheck ? PrepQueueService.liveCheckLookups() : nil"))
+        let row = SourceGuardHelper.source("Overture/UI/ProspectRowView.swift")
+        #expect(!row.contains("PrepQueueService.liveCheckLookups()"),
+                "the row reads the marker itself, which is a disk read per card per scroll frame (#1770)")
+        #expect(!row.contains("PrepQueueService.lastRunStartedAt"),
+                "the row reads the run marker itself, which is a disk read per card per scroll frame")
     }
 
     // The cap this arithmetic rests on is the runner's, not a second copy of it. `ProbeSelection` already

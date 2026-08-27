@@ -82,6 +82,19 @@ struct ProspectRowView: View {
     // a Prep run occupying the slot must grey the control WITHOUT making the card claim its own check is
     // under way, which would be a running label over work that is not happening.
     var probeRunning: Bool = false
+    // #3186: WHEN the check now in flight started, and HOW BIG it is. Handed in for the same reason as
+    // the two lines above (#1770): both come from marker files, and reading them per card would be a disk
+    // read per row per scroll frame.
+    //
+    // The row needs both because it had neither, and the label it draws was wrong in two ways at once.
+    // It counted from `reachabilityRecheckRequestedAt`, the moment Dan PRESSED, which includes however
+    // long the request sat waiting for a run to pick it up; and it judged that against a flat ten
+    // minutes, which #3137 established is a per-ROUND figure. The row's control does not start a run
+    // (`ProspectMutations.requestReachabilityRecheck` sets a flag and nothing else), so a card could sit
+    // there saying a healthy run looked stuck, which is #1530's defect and the one this family of
+    // warnings cannot afford (#2577, #2929).
+    var checkRunSince: Date? = nil
+    var checkLookups: Int? = nil
     var onConfirmBooking: () -> Void = {}
     var onDismissBookingSuggestion: () -> Void = {}
     var onRejectBooking: () -> Void = {}
@@ -1081,9 +1094,14 @@ struct ProspectRowView: View {
             // #2267: counting from when the check actually began, not from this redraw, and carrying its
             // own timeout so a stalled run becomes an actionable state instead of a spinner that never
             // resolves (L74, and the global working/still-alive/failed rule).
+            // #3186: from when the RUN started, not from the press. This branch only renders while a
+            // check really is in flight, so the wait before one picked the request up belongs to the
+            // `.requested` case below and must not be counted against the run. Falls back to the press
+            // when nothing says, which is the state that shipped, so an unknown run start is no worse
+            // than before rather than silently unmeasured.
             LiveRunLabel(base: ReachabilityCopy.recheckRunning,
-                         since: item.reachabilityRecheckRequestedAt,
-                         timeout: RunTimeouts.reachabilityProbe,
+                         since: checkRunSince ?? item.reachabilityRecheckRequestedAt,
+                         timeout: RunTimeouts.reachabilityProbeWindow(lookups: checkLookups),
                          font: OVType.meta, color: OVColor.inkSoft,
                          onRetry: { onRequestRecheck() })
                 .padding(.top, 2)

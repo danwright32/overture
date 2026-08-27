@@ -195,6 +195,21 @@ enum PrepQueueService {
 
     static var defaultProbeRunURL: URL { probeRunURL(in: StoreLocation.handoffDirectory) }
 
+    // #3137/#3186: how many shows the check now in flight is working through, or nil if nothing says.
+    //
+    // From the check's OWN marker, which is where the size is written when the run starts (`lookups:
+    // queue.items.count` below) and what the settle path already reads to record the run's pace. One
+    // definition, because two surfaces now size a stall window from it and a second count derived from
+    // the queue would answer differently the moment a show left it mid-run (L16).
+    //
+    // Nil on any failure, which keeps the flat window. That is the safe direction rather than an
+    // oversight: an unknown size means a marker from a build before the count was written, and warning
+    // early on that is the behaviour that shipped for months, where a window scaled from a guess could
+    // hide a real hang for an hour.
+    static func liveCheckLookups() -> Int? {
+        ((try? ReachabilityProbeMarker.read(from: defaultProbeRunURL)) ?? nil)?.lookups
+    }
+
     // Launch a reachability probe over Dan's hand-picked keys. Mirrors startPrep's lock dance exactly
     // (atomic marker acquire, so a probe and a prep can never both hold the single runner slot), but builds
     // a contacts-only probe queue and records the probed keys in the probe-run marker for the completion

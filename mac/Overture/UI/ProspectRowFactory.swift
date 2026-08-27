@@ -25,6 +25,9 @@ enum ProspectRowFactory {
                     onRecheckNow: ((QueueItem) -> Void)? = nil,
                     checkRunning: Bool = false,
                     probeRunning: Bool = false,
+                    // #3186: the run's start and its size, read once per render pass like the two above.
+                    checkRunSince: Date? = nil,
+                    checkLookups: Int? = nil,
                     // #1414: optional so a surface that does not offer undo (and any future caller)
                     // simply passes nothing rather than every call site growing a parameter it ignores.
                     undoStack: QueueUndoStack? = nil,
@@ -159,6 +162,8 @@ enum ProspectRowFactory {
             },
             checkRunning: checkRunning,
             probeRunning: probeRunning,
+            checkRunSince: checkRunSince,
+            checkLookups: checkLookups,
             onConfirmBooking: { ProspectMutations.confirmBooking(item, prospects: prospects, context: context, feedback: feedback) },
             onDismissBookingSuggestion: { ProspectMutations.dismissBookingSuggestion(item, prospects: prospects, context: context, feedback: feedback) },
             onRejectBooking: { ProspectMutations.rejectBooking(item, prospects: prospects, context: context, feedback: feedback) },
