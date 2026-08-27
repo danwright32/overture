@@ -248,7 +248,7 @@ already drifting from the Swift version it mirrored.
   the check working rather than the conversion having been careless.
 
 - **Asking whether test data names a real person: `scripts/check-test-identity-provenance.sh` (#3110,
-  #3131).** `TestDataEmailDomainGuardTests` judges an address by its DOMAIN, so anything on a reserved
+  #3131, #3140).** `TestDataEmailDomainGuardTests` judges an address by its DOMAIN, so anything on a reserved
   TLD passes. That closes the deliverability half and leaves the identity half open, because
   `arealpersonsname.example` is reserved and still names a real person in a PUBLIC repository. #2839's
   scrub replaced only the domain, so a scrubbed person routinely survived as the LOCAL PART of the very
@@ -278,6 +278,26 @@ already drifting from the Swift version it mirrored.
   identities legitimately arrive with new tests. `--record` prints what it is about to add for that
   reason: recording without reading the list is how a count driven to zero stops being a measurement
   (L182).
+  **Since #3140 it reads a URL as well as an address**, which is the route neither privacy guard could
+  see. `TestDataEmailDomainGuardTests` judges an ADDRESS by its domain and this script reads the
+  identities inside a reserved-domain one; a URL was invisible to both, and a contact route in the live
+  store is a form on somebody's own site far more often than it is an address.
+  `PressContactFormGuardTests` says so in its own comment (its list is "every other form in the live
+  store, which must all stay usable"), so the data is a verbatim extract of Dan's real prospect contact
+  routes in a PUBLIC repository. Measured 2026-08-22: 201 distinct hosts, 102 on registrable domains,
+  and at least eight shaped like one private individual's own name.
+  Two details are the mirror of the address half rather than a copy of it, and both matter. A reserved
+  TLD is SKIPPED here and KEPT there, because a host on one cannot be anybody's real site while a
+  reserved-domain address is exactly where a half-finished scrub leaves a person's name as the local
+  part. And it emits EVERY label but the TLD rather than guessing the registrable one, because
+  `wraymoorhall.co.uk` puts the name two labels from the end and `pellingborne.org` puts it one: it
+  over-reports `tickets` and `co`, which the baseline absorbs once, rather than picking wrong and hiding
+  somebody. What it does NOT do is judge whether a label looks like a person's name, which #3110 measured
+  and rejected: the provenance lookup discriminates and the spelling does not.
+  Both extractions feed ONE `sort` at the end of the function, because the caller compares with `comm`,
+  and two locally sorted lists concatenated are not a sorted list: `comm` answers nonsense rather than
+  failing on that.
+
   Two things it does that look like over-engineering and are not, both caught by its own fixture. The
   token is kept VERBATIM apart from lowercasing, punctuation included, because `git log -S` searches for
   a literal string and a normalised `margueriteeddowes` is in no commit anywhere, so the lookup answers
