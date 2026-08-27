@@ -171,18 +171,24 @@ struct ProspectRowRestoreGuardTests {
     }
 }
 
-// #358: the "Source listing" and "Group website" reference links rendered in the default system
-// accent blue, clashing with the forest/gold palette and reading as more important than the
-// secondary reference links they are. The links row's own .tint(OVColor.forest) does not actually
-// recolor a Link's own text on macOS (tint affects control accents, not Link's text color), so
-// each link needs its own explicit override. Scoped to the `links` property body (propertyBody,
-// #569) rather than a whole-file contains check, since .foregroundStyle(OVColor.forest) already
-// appears 4 times elsewhere in this 470-line file for unrelated views.
+// #358: the reference link rendered in the default system accent blue, clashing with the forest/gold
+// palette and reading as more important than the secondary link it is. The links row's own
+// .tint(OVColor.forest) does not actually recolor a Link's own text on macOS (tint affects control
+// accents, not Link's text color), so the link needs its own explicit override. Scoped to the `links`
+// property body (propertyBody, #569) rather than a whole-file contains check, since
+// .foregroundStyle(OVColor.forest) already appears several times elsewhere in this file for unrelated
+// views.
+//
+// #1640: there were TWO links here, and the second was "Group website". It was drawn from
+// `Prospect.websiteURL`, whose only writer anywhere was a literal `nil`, so it had never rendered on any
+// card in this app's life. Both it and the field are gone, and the count below moved from two to one with
+// them. Kept as a count rather than loosened to "at least one", because the number is the assertion: it
+// is what would notice a third link arriving with no override of its own.
 @Suite("Reference links use the brand palette, not default blue")
 struct ReferenceLinkColorGuardTests {
     private var prospectRow: String { SourceGuardHelper.source("Overture/UI/ProspectRowView.swift") }
 
-    @Test func sourceListingAndGroupWebsiteLinksHaveTheirOwnBrandColorOverride() {
+    @Test func theSourceListingLinkHasItsOwnBrandColorOverride() {
         #expect(!prospectRow.isEmpty)
         let linksBody = SourceGuardHelper.propertyBody("private var links: some View {", in: prospectRow)
         #expect(linksBody != nil)
@@ -190,11 +196,10 @@ struct ReferenceLinkColorGuardTests {
         // only to the venue's calendar), so this pins the link itself rather than the literal text. The
         // wording is pinned where wording belongs, in QueueModel.listingLinkLabel's own tests.
         #expect(linksBody?.contains("Link(QueueModel.listingLinkLabel(item)") == true)
-        #expect(linksBody?.contains("Link(\"Group website\"") == true)
-        // Two links, each with its own override: a shared .tint() further down the modifier
-        // chain doesn't reach either Link's own text color.
+        #expect(linksBody?.contains("Group website") == false,
+                "the Group website link is back, and the field it drew from was deleted in #1640")
         // #2264: the text-safe green, which is what a Link's own label needs.
         let overrideCount = (linksBody?.components(separatedBy: ".foregroundStyle(OVColor.forestText)").count ?? 1) - 1
-        #expect(overrideCount == 2)
+        #expect(overrideCount == 1)
     }
 }

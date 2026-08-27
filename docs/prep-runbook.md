@@ -22,7 +22,7 @@ destroy the drafts it has already paid for.
 - **Read:** the WORK-LIST the prompt names
   (`PrepQueue` version `13`: a run-level `houses[]` (see "The queue names the houses" in §1),
   plus `items[]` each with `naturalKey`, `groupName`, `venue`,
-  `performanceDate`, `runEndDate`, `discipline`, `websiteURL`, `sourceListingURL`,
+  `performanceDate`, `runEndDate`, `discipline`, `sourceListingURL`,
   `possibleMatchName`, `priorRelationship`, `production`, `reprepMode`,
   `openingNightPassed`, `experimentArmInstruction`, `alsoAnswersFor`, `showListing`, `onlyTheActIsNamed`,
   `venueHistory`, `organisationNamedOnListing`, `refusedEmails`, `presenterOnRecord`). `production` is `self` / `agency` / `unknown`; a v1 item omits it
@@ -432,9 +432,12 @@ are what a run has to ask itself, in this order:
    shared inbox for a performer on the strength of an Instagram tag plus a search snippet whose top
    result was a different person with a similar name.
 
-**`websiteURL` may point to the venue, not the act.** If it resolves to the host venue's
+**A site you find may belong to the venue, not the act.** If a page resolves to the host venue's
 site, do NOT harvest a contact from it; find the act's (or the named performer's) OWN
-site. Landing on the venue's staff page is exactly the bug this rule prevents.
+site. Landing on the venue's staff page is exactly the bug this rule prevents. (This used to be
+written about a `websiteURL` field on the show. That field was deleted in #1640: nothing ever
+populated it, so the rule was phrased around a value the run never received. The rule itself stands
+and applies to any page the run opens.)
 
 **Search the target's BARE NAME first (#2259).** Whatever the target is, the FIRST query is its name
 and nothing else. Only if that comes back with nothing useful do you narrow, and then in this order:
