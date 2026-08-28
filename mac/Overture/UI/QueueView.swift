@@ -567,7 +567,9 @@ struct QueueView: View {
                 if let request { navigateToLead(request.key, proxy: proxy) }
             }
             .onChange(of: deepLinkedKeys) { _, request in
-                if let request, !request.keys.isEmpty { focusOnLeads(request.keys, proxy: proxy) }
+                if let request, !request.keys.isEmpty {
+                    focusOnLeads(request.keys, heading: request.heading, proxy: proxy)
+                }
             }
         }
     }
@@ -847,9 +849,11 @@ struct QueueView: View {
     // between the notification firing and Dan tapping it is no longer in `items` at all, so this
     // scrolls to the first key that's actually there instead of blindly the first key named in the
     // (possibly stale) notification.
-    private func focusOnLeads(_ keys: [String], proxy: ScrollViewProxy) {
+    private func focusOnLeads(_ keys: [String], heading: String?, proxy: ScrollViewProxy) {
         focusedKeys = keys
         focusedStage = nil   // #1140: a named leads set, not a stage; keep it frozen, don't re-derive.
+        // #1794: nil restores the generic new-leads heading, which is the away-alert path's answer.
+        focusedHeading = heading
         let target = QueueModel.firstVisibleKey(keys, among: items)
         // #1573: drive the scroll position to the group holding the lead instead of clearing it and
         // asking for the row. The old comment here claimed this view was "a flat list without scroll
@@ -1787,10 +1791,16 @@ struct LeadDeepLink: Equatable {
 
 struct LeadsDeepLink: Equatable {
     let keys: [String]
+    // #1794: what to call the focused list, when the surface that opened it knows better than the queue
+    // does. The away-alert path (#308) leaves it nil and keeps the generic new-leads heading; the
+    // Presenters shortlist names the organisation, because a filtered list whose heading does not say
+    // what it was filtered BY is a screen Dan has to remember his own way out of.
+    let heading: String?
     private let token: UUID
 
-    init(keys: [String]) {
+    init(keys: [String], heading: String? = nil) {
         self.keys = keys
+        self.heading = heading
         self.token = UUID()
     }
 }

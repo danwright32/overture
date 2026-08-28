@@ -1112,7 +1112,23 @@ struct RootView: View {
             .sheet(isPresented: $showDaysOff) { DaysOffView() }
             .sheet(isPresented: $showOmniFocusSettings) { OmniFocusSettingsView() }
             .sheet(isPresented: $showExcludedTowns) { ExcludedTownsView() }
-            .sheet(isPresented: $showOrganisations) { OrganisationsView() }
+            // #1794: tapping an entry closes the sheet and filters the queue to that organisation's
+            // shows. Through the SAME channel the away-alert leads path uses (`deepLinkedKeys`), never a
+            // second filter mechanism, which is what Dan's note asked for. The request carries its own
+            // identity (#1927), so tapping one organisation, coming back and tapping it again works: a
+            // channel carrying the destination would read the second tap as no change at all.
+            .sheet(isPresented: $showOrganisations) {
+                OrganisationsView(onShowShows: { entry in
+                    let keys = OrganisationListing.naturalKeys(forOrganisation: entry.key,
+                                                               in: nonDismissedProspects)
+                    // An entry covering nothing would close the sheet onto an empty focused list, which
+                    // reads as the tap having broken something. The shortlist's own floor is three rows,
+                    // so this cannot normally fire; it refuses rather than trusting that.
+                    guard !keys.isEmpty else { return }
+                    deepLinkedKeys = LeadsDeepLink(keys: keys, heading: entry.name)
+                    showOrganisations = false
+                })
+            }
             // #924: the date picker a multi-night dismissal opens, pre-filled with the run's dates.
             .sheet(item: Bindable(dayOffOffer).pending) { pending in
                 BlockDaysSheet(pending: pending, undo: undoStack)
