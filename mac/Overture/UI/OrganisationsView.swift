@@ -15,6 +15,12 @@ import SwiftData
 // The organisations most likely to be judged WRONG lead (#1729), because the rest of the list is
 // Overture working correctly and a person reads the top of a list.
 struct OrganisationsView: View {
+    // #1794: where an entry leads. Handed in rather than decided here, because the destination is the
+    // QUEUE, which this sheet cannot reach: RootView owns the deep-link channel the queue watches, and
+    // routing through it is what keeps this one navigation path rather than a second filter (Dan's note,
+    // 2026-08-11). Defaulted to nothing so the sheet still builds in a preview or a test with no queue
+    // behind it; the row below is drawn as a control only when there is somewhere to go.
+    var onShowShows: ((OrganisationListing.Entry) -> Void)?
     @Environment(\.dismiss) private var dismiss
     // Bound, so a correction made on a row while this is open redraws it rather than showing a stale
     // verdict: the gate reads these two sets, so the listing must be rebuilt when either changes.
@@ -118,17 +124,47 @@ struct OrganisationsView: View {
         }
     }
 
+    @ViewBuilder
     private func row(for entry: OrganisationListing.Entry, detail: String) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(entry.name)
-                .font(.system(size: 12, weight: .medium)).foregroundStyle(OVColor.ink)
-            if !detail.isEmpty {
-                Text(detail)
-                    .font(.system(size: 11)).foregroundStyle(OVColor.inkSoft)
-                    .fixedSize(horizontal: false, vertical: true)
+        if let onShowShows {
+            Button { onShowShows(entry) } label: { rowBody(entry, detail: detail, leadsSomewhere: true) }
+                .buttonStyle(.plain)
+                .help(OrganisationsCopy.showShowsHelp(entry.name))
+                // No explicit label: a Button speaks its own Texts, which are already the name and the
+                // evidence line, so one written here would be the same words a second time and would
+                // have to be kept in step with them. What the default cannot say is what pressing it
+                // DOES, which is the hint. The chevron is hidden from it because it is decoration: it
+                // tells a sighted reader the row leads somewhere, and the hint tells everyone else.
+                .accessibilityHint(OrganisationsCopy.showShowsHelp(entry.name))
+        } else {
+            rowBody(entry, detail: detail, leadsSomewhere: false)
+        }
+    }
+
+    private func rowBody(_ entry: OrganisationListing.Entry, detail: String,
+                         leadsSomewhere: Bool) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: OVSpacing.xs) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(entry.name)
+                    .font(.system(size: 12, weight: .medium)).foregroundStyle(OVColor.ink)
+                if !detail.isEmpty {
+                    Text(detail)
+                        .font(.system(size: 11)).foregroundStyle(OVColor.inkSoft)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            // #1794: the row has to LOOK like it leads somewhere at rest, not only under the pointer and
+            // not only in a tooltip (L49). A chevron rather than a colour, because the whole sheet is
+            // evidence and nothing on it is an alarm: this says "there is more this way", which is what
+            // it does.
+            if leadsSomewhere {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .semibold)).foregroundStyle(OVColor.inkFaint)
+                    .accessibilityHidden(true)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
         .padding(.vertical, 3)
     }
 

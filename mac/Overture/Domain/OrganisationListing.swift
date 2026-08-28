@@ -67,6 +67,23 @@ enum OrganisationListing {
     // read first. Built ONCE per render beside VenueBrands, never per row: deciding this walks every
     // presenter against every venue spelling in the store (roughly 156 by 140 on Dan's), which is a cost
     // a card must not pay while it is being drawn (#1687, #1121).
+    // #1794: the shows one shortlist entry covers, as the natural keys the queue navigates by.
+    //
+    // The sheet is EVIDENCE ONLY and always has been (Dan, 2026-07-29): the correction lives on the row.
+    // So naming an organisation and leaving him to find its cards by hand was the whole remaining
+    // distance, and it is not a small one: FRIGID New York carries 27 rows and the seven shortlisted
+    // covered 68 between them when this was measured. His call, 2026-08-11: tapping an entry dismisses
+    // the sheet and filters the queue to that organisation's shows, rather than opening the first of
+    // them, because the correction is made per row and landing on one card hides that scale.
+    //
+    // Folded through `ProducerGate.key`, which is the same fold the entry's own `key` was built with, so
+    // the rows this returns are exactly the rows the entry counted. Asking any other way (a name
+    // comparison, a second fold) would let the count on screen and the list he lands on be two answers
+    // (L16, and #863: a count is a promise about rows).
+    static func naturalKeys(forOrganisation key: String, in prospects: [Prospect]) -> [String] {
+        prospects.filter { ProducerGate.key($0.presenter) == key }.map(\.naturalKey)
+    }
+
     static func build(shows: [Show], overrides: ProducerOverrides = .none) -> [Entry] {
         let gateShows = shows.map { ProducerGate.Show(presenter: $0.presenter, venue: $0.venue) }
         let venueKeys = ProducerGate.venueKeys(of: gateShows)
