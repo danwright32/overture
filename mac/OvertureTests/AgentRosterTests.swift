@@ -107,9 +107,15 @@ struct AgentRosterTests {
         #expect(status("Send issues", failed).detail == "1 failed to send")
     }
 
-    @Test func followUpsNeedAttentionWhenDue() {
+    // #1837 DELETED `followUpsNeedAttentionWhenDue`, which asserted that any due work at all took the
+    // attention tone, rather than adjusting it. That was the guard defending the behaviour Dan reversed
+    // (L252): "0 and 10 due can look exactly the same if the 10 are all pitches that nobody answered."
+    // What replaced it is `FollowUpsPillToneTests`, which asserts both halves of the narrowed rule over
+    // one fixture. The line below is what the old test's case now does.
+    @Test func followUpsDueWithNobodyWaitingRestsAndStillStatesItsNumber() {
         var i = calm; i.followUpsDue = 4
-        #expect(status("Follow-ups", i).state == .needsAttention)
+        #expect(status("Follow-ups", i).state == .idle)
+        #expect(status("Follow-ups", i).detail == "4 due")
     }
 
     @Test func followUpsFlagAStalledReplyDraft() {
@@ -301,8 +307,21 @@ struct AgentRosterTests {
         var i = calm; i.reachedOut = 4; i.reachedOutDue = 1
         #expect(AgentRoster.statuses(i).contains { $0.state == .needsAttention })
 
+        // #1837: the Follow-ups half is asserted on what the pill SAYS rather than on its colour. The
+        // invariant this test states is "at least one pill says so", and gold was standing in for it.
+        // That proxy stopped being true when the tone narrowed: a nudge owed on a silent pitch is work,
+        // not an alarm, which is exactly what Dan asked for. What must still never happen, and is what
+        // this now guards directly, is the NUMBER going missing.
         var f = calm; f.followUpsDue = 1
-        #expect(AgentRoster.statuses(f).contains { $0.state == .needsAttention })
+        let followUps = AgentRoster.statuses(f).first { $0.focus == .followUps }
+        #expect(followUps?.detail == "1 due")
+        #expect(followUps?.count == 1)
+        #expect(AgentRoster.showsDetailWhileResting(focus: .followUps),
+                "and it is drawn: a resting pill hides its detail unless this rule says otherwise")
+
+        // Somebody waiting is still gold, so the escalated half of the invariant is untouched.
+        var waiting = calm; waiting.followUpsDue = 1; waiting.conversationsToConfirm = 1
+        #expect(AgentRoster.statuses(waiting).contains { $0.state == .needsAttention })
 
         // And with nothing due anywhere, no pill claims attention, so gold keeps meaning something.
         var quiet = calm; quiet.reachedOut = 9

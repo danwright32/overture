@@ -44,6 +44,11 @@ struct AgentInputs: Sendable {
     var gmailConnected: Bool
     var sendErrors: Int      // approved sends that failed
     var followUpsDue: Int
+    // #1837: how many of `followUpsDue` are a form or DM conversation Overture thinks might be their
+    // reply, waiting on Dan to say whether it is theirs (#2718). Its own input rather than a fold into
+    // the total, because it decides the pill's TONE while the total decides its NUMBER, and those are
+    // now two different questions. Both are read off one `DueWork.Counts`, so they cannot disagree.
+    var conversationsToConfirm: Int = 0
     // #2674: how many of the rows at `drafted` have nobody to send to. Its own input rather than a fold
     // into `toReview`, because Dan's call was that the stage KEEPS them: the number stays honest about
     // how many rows are there, and this says how many of them the stage's action cannot touch.
@@ -96,6 +101,11 @@ extension AgentInputs {
         // #1121: one traversal for every focus (StageNavigation.counts), not one traversal per focus, so
         // the send-related counts fault each prospect's `recipients` at most once instead of once each.
         let focusCounts = StageNavigation.counts(in: prospects, context: context)
+        // #1837: ONE derivation, read twice. The pill states `total` and its attention tone is now decided
+        // by `conversationsToConfirm`, and those must be two readings of the same Counts rather than two
+        // calls that could drift or disagree about the same store (L16). Hoisted rather than called twice
+        // for that reason, not for speed.
+        let dueWork = DueWork.counts(prospects: allProspects, now: context.now, replyRunAlive: replyRunAlive)
         func count(_ focus: StageFocus) -> Int { focusCounts[focus] ?? 0 }
         // #1436: inquiries share two of these stages, so a logged inquiry is counted where it renders.
         func inquiryCount(_ focus: StageFocus) -> Int {
@@ -115,8 +125,10 @@ extension AgentInputs {
             // opinions (L16). It counted `FollowUp.dueRecipients` alone, which is silent nudges and
             // nothing else, so with only after the show rows pending it read "None due" over a sheet
             // that was drawing them.
-            followUpsDue: DueWork.counts(prospects: allProspects, now: context.now,
-                                         replyRunAlive: replyRunAlive).total,
+            followUpsDue: dueWork.total,
+            // #1837: the one member of that total with a person on the other end waiting on Dan. It is
+            // what decides the pill's attention TONE now; the number it states is still the whole total.
+            conversationsToConfirm: dueWork.conversationsToConfirm,
             // #2674: counted over the same list the stage's own number comes from, so the two halves of
             // one sentence cannot be about different sets of rows.
             reviewDeadEnds: DraftedDeadEnd.count(in: prospects),
@@ -422,6 +434,20 @@ enum AgentRoster {
     // below did not: nothing anywhere listed a stalled reply draft, so the pill named a number over an
     // empty screen. `StalledReplyDraftSectionTests` is the Follow-ups half of the guard
     // `StagePillCountMatchesNavigationTests` holds for every other pill.
+    // #1134/#1837: which pills state their detail even while RESTING.
+    //
+    // An idle pill normally hides its detail, because "Nothing new" is furniture. Two pills are different:
+    // they are navigation stops whose number is the point, and whose resting tone is a deliberate
+    // statement that the number is not an alarm. Reached out has always been one (#1134). Follow-ups
+    // became one at #1837, when its due state stopped being `.needsAttention`: without this its number
+    // would have vanished the moment the tone was narrowed, which is the opposite of "keep ONE number".
+    //
+    // Stated here rather than as a `||` in the view body so it is one tested rule rather than a list
+    // maintained where nothing can assert it (#863: logic in a view body is untestable).
+    static func showsDetailWhileResting(focus: StageFocus) -> Bool {
+        focus == .reachedOut || focus == .followUps
+    }
+
     private static func followUps(_ i: AgentInputs) -> AgentStatus {
         // A dead reply-drafter run takes priority: it's an abnormal stall Dan should clear (#431).
         if i.stalledReplyDrafts > 0 {
@@ -433,11 +459,46 @@ enum AgentRoster {
                                detail: "\(n) reply draft\(n == 1 ? "" : "s") stalled",
                                focus: .followUps, count: i.followUpsDue)
         }
-        if i.followUpsDue > 0 {
-            // #843: the tooltip shows this after the concept ("Nudges due on shows you've already reached
-            // out to."), so "N nudges due" repeated "nudges due" verbatim. The count is the only new
-            // thing; the concept supplies the rest.
+        // #1837: the attention tone is now a RESTRICTION, not an addition. It used to fire on any due work
+        // at all, so ten unanswered pitches looked exactly as urgent as one person waiting. Dan's words,
+        // 2026-08-18: "one number, change pill color if any of that count is someone waiting on a reply.
+        // make it look more urgent in that case. 0 and 10 due can look exactly the same if the 10 are all
+        // pitches that nobody answered."
+        //
+        // `conversationsToConfirm` and no other member, because it is the only one in this sheet with a
+        // person on the other end waiting on Dan: a nudge on a silent pitch is optional work he can decline
+        // outright (#1740), and a post-show closing note is his own housekeeping. Replies proper are
+        // deliberately NOT folded in: they already drive the Reached out pill to attention, and two pills
+        // lighting up for one fact is what #1741 is open about.
+        //
+        // The number stays the WHOLE total in both branches. The tone and the number answer two different
+        // questions now, and only the tone narrowed.
+        if i.conversationsToConfirm > 0 {
+            // Distinguishable WITHOUT colour, which matters more now rather than less: the tone carries a
+            // specific meaning ("somebody is waiting") instead of a generic "there is something here", and
+            // a meaning carried only by hue is unavailable to anyone who cannot separate the two (L20).
+            // The chip's spoken label is its texts concatenated, so this sentence is also what says which
+            // state it is in to a screen reader.
+            //
+            // The wording went through two drafts and the cold read of the inventory changed it both times.
+            // "somebody's waiting" was the first and overstates: a conversation to confirm is Overture
+            // GUESSING that a conversation might be their reply, so if it is not theirs then nobody is
+            // waiting, and that states an inference as a fact (L192). "a possible reply to check" was the
+            // second, and it is the concept sentence's own phrase verbatim ("a nudge, a possible reply to
+            // check, or how it ended"), which the hover shows directly above this line: that is #843
+            // exactly, and it is the defect the comment ten lines below already warns about.
+            //
+            // So: the same fact, hedged the same way, in words the concept does not use.
             return AgentStatus(name: "Follow-ups", state: .needsAttention,
+                               detail: "\(i.followUpsDue) due, somebody may have answered",
+                               focus: .followUps, count: i.followUpsDue)
+        }
+        if i.followUpsDue > 0 {
+            // #843: the tooltip shows this after the concept, so "N nudges due" repeated "nudges due"
+            // verbatim. The count is the only new thing; the concept supplies the rest.
+            // #1837: `.idle`, and the number still shows. "N due" beside a resting tone is exactly what
+            // Dan asked for; anything sharper would put the alarm back on ten unanswered pitches.
+            return AgentStatus(name: "Follow-ups", state: .idle,
                                detail: "\(i.followUpsDue) due",
                                focus: .followUps, count: i.followUpsDue)
         }
