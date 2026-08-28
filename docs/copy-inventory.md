@@ -2004,7 +2004,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/SourceFetcher.swift`
 "That calendar has more months on it (\(list(unreachable.map(name)))), but it moves between them in a way I can't follow yet, so I only read the month it opened on. Paste \(one ? "that month's" : "a month's") own link and I'll read it."
     `UI/LeadIntakeModel.swift`
-"That calendar is drawn by JavaScript, so there is nothing to read in the page we fetch."
+"That calendar was drawn by JavaScript, so there was nothing to read in the page the last scout fetched."
     `Domain/WatchedSource.swift`
 "That calendar's feed answered but nothing could be read from it, so its format has probably changed."
     `Integration/SourceFetcher.swift`
@@ -2018,23 +2018,23 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/WatchlistEditing.swift`
 "That isn't a date Overture can read."
     `Domain/DayOff.swift`
-"That link isn't a web page (it served \(type ?? "an unknown type"))."
+"That link redirected to a different site (\(h)). Check the address."
     `Integration/SourceFetcher.swift`
-"That link redirects to a different site (\(h)). Check the address."
+"That link wasn't a web page (it served \(type ?? "an unknown type"))."
     `Integration/SourceFetcher.swift`
 "That page couldn't be read."
     `Domain/WatchedSource.swift`
 "That page doesn't list any dated events. It may not be their events page: try the link that shows their season or calendar."
     `Domain/LeadIntake.swift`
+"That page had no dated listings on it when the last scout read it. It may be the wrong page for this org."
+    `Domain/WatchedSource.swift`
 "That page has more on it than I could read in one pass, and I didn't find a show in the part I did read. Try again, or paste a narrower link (a specific month or season) if it keeps happening."
     `Domain/LeadIntake.swift`
-"That page has no dated listings on it. It may be the wrong page for this org."
-    `Domain/WatchedSource.swift`
 "That page has not been read. The next scout will try it again."
     `Domain/WatchedSource.swift`
 "That show had already moved on, so there was nothing to undo"
     `App/ActionFeedback.swift`
-"That site is up, but its secure connection is broken, so the page can't be read. A re-check won't clear this."
+"That site answered, but its secure connection was broken, so the page couldn't be read. A re-check won't clear this."
     `Integration/SourceFetcher.swift`
 "That was \(named[0])."
     `Domain/SourceReadability.swift`

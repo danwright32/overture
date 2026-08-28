@@ -261,15 +261,15 @@ struct SourceAddressEditorEverywhereTests {
     // but readable source might have) and never offers Confirm (there is no empty-page failure to confirm).
     @Test func aHealthySourceOffersFixButNotConfirm() {
         #expect(SourceFixConfirmActions.offersFix(nil, kind: .html))
-        #expect(!SourceFixConfirmActions.offersConfirm(nil, kind: .html))
+        #expect(!SourceFixConfirmActions.offersConfirm(nil, kind: .html, hasBytesToConfirm: true))
     }
 
     // A real failure keeps deciding exactly as before: the two predicates on the failure itself win.
     @Test func aFailingSourceDefersToTheFailuresOwnPredicates() {
-        #expect(SourceFixConfirmActions.offersConfirm(.verdict(.noDatedContent), kind: .html))
+        #expect(SourceFixConfirmActions.offersConfirm(.verdict(.noDatedContent), kind: .html, hasBytesToConfirm: true))
         #expect(SourceFixConfirmActions.offersFix(.verdict(.noDatedContent), kind: .html))
         #expect(!SourceFixConfirmActions.offersFix(.verdict(.notRead), kind: .html))          // self-heals; no address fix
-        #expect(!SourceFixConfirmActions.offersConfirm(.fetch(.http(404)), kind: .html))
+        #expect(!SourceFixConfirmActions.offersConfirm(.fetch(.http(404)), kind: .html, hasBytesToConfirm: true))
     }
 
     // The wiring claim: the sheet renders the editor on every active row regardless of failure, passing

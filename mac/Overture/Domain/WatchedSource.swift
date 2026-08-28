@@ -463,6 +463,14 @@ final class WatchedSource {
                                                  lastSeenHash: lastObservedContentHash)
     }
 
+    // #1521: is there anything for a confirm to anchor TO? Read from the same pair as the staleness
+    // question above, and asked BEFORE it: a confirm with no bytes at all is not a stale confirm, it is a
+    // judgement recorded about a page nobody has fetched. A corrected address is what puts a row here
+    // (`editURL` nils both hashes), and the card it appears on deliberately survives the correction.
+    var hasBytesToConfirm: Bool {
+        SourceConfirmation.hasBytesToConfirm(anchorHash: pendingContentHash ?? lastContentHash)
+    }
+
     // #1546: which of its two jobs is `hasUnreadChanges` doing on THIS row?
     //
     // The flag is set by two unrelated events and cannot tell them apart. A check that saw new bytes sets
@@ -835,14 +843,22 @@ enum SourceFailure: Equatable, Sendable {
     }
 
     // What Dan reads in the Sources sheet.
+    // #1521: said in the PAST tense throughout, as what the LAST RUN found rather than as a live claim.
+    //
+    // Both surfaces that render this are reporting a finished attempt. The Sources sheet reads it from the
+    // row's stored `lastFailure`, which is by definition the last run's verdict. The scout results card
+    // reads it from a snapshot taken when that run ended, and that is where a present-tense claim did real
+    // damage: the address on the card comes off the LIVE row (#1125), so the moment Dan corrected an
+    // address the card paired a present-tense complaint about one page with the address of a different
+    // one. Dan's call, 2026-08-11: keep the message, and say it as what the last run found.
     var message: String {
         switch self {
         case .fetch(let e):
             return e.errorDescription ?? "That page couldn't be read."
         case .verdict(.noDatedContent):
-            return "That page has no dated listings on it. It may be the wrong page for this org."
+            return "That page had no dated listings on it when the last scout read it. It may be the wrong page for this org."
         case .verdict(.unreadable):
-            return "That calendar is drawn by JavaScript, so there is nothing to read in the page we fetch."
+            return "That calendar was drawn by JavaScript, so there was nothing to read in the page the last scout fetched."
         case .verdict(.notRead):
             // #856: says what actually happened, and nothing more. The page is very probably fine; the
             // RUN did not come back with it. Claiming the calendar is broken would send Dan to fix a page

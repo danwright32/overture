@@ -89,28 +89,28 @@ struct SilentlyEmptySourceIsActionableTests {
     // Confirm is what this case needs and is what it never had: "yes, this page is right, it is just
     // quiet". There is no failure recorded, because nothing failed, so it cannot come from one.
     @Test func aquietPageOffersTheConfirmThatSettlesIt() {
-        #expect(SourceFixConfirmActions.offersConfirm(nil, kind: .html) == false,
+        #expect(SourceFixConfirmActions.offersConfirm(nil, kind: .html, hasBytesToConfirm: true) == false,
                 "the premise: with no failure there is nothing for the ordinary rule to offer")
-        #expect(SourceFixConfirmActions.offersConfirm(nil, kind: .html, readFineAndCameBackEmpty: true))
+        #expect(SourceFixConfirmActions.offersConfirm(nil, kind: .html, readFineAndCameBackEmpty: true, hasBytesToConfirm: true))
     }
 
     // And Fix, because a page whose format changed is exactly as likely to have moved.
     @Test func aquietPageOffersTheAddressFixToo() {
         #expect(SourceFixConfirmActions.offersFix(nil, kind: .html))
         #expect(SourceFixConfirmActions.offersAnything(failure: nil, kind: .html, stopWatching: true,
-                                                       readFineAndCameBackEmpty: true))
+                                                       readFineAndCameBackEmpty: true, hasBytesToConfirm: true))
     }
 
     // A source with no editable page still offers neither, whatever it came back with. Carnegie is watched
     // at a display-only placeholder over a POST search API: "Change the page link" would edit a field nothing
     // reads and "This page is right" would confirm a page that does not exist (#1450).
     @Test func asourceWithNoEditablePageStillOffersNeither() {
-        #expect(SourceFixConfirmActions.offersConfirm(nil, kind: .algolia, readFineAndCameBackEmpty: true)
+        #expect(SourceFixConfirmActions.offersConfirm(nil, kind: .algolia, readFineAndCameBackEmpty: true, hasBytesToConfirm: true)
                 == false)
         #expect(SourceFixConfirmActions.offersFix(nil, kind: .algolia) == false)
         // It can still be stopped, which is the exit #1450 restored.
         #expect(SourceFixConfirmActions.offersAnything(failure: nil, kind: .algolia, stopWatching: true,
-                                                       readFineAndCameBackEmpty: true))
+                                                       readFineAndCameBackEmpty: true, hasBytesToConfirm: true))
     }
 
     // The heading says what happened rather than that something failed, because nothing did.
