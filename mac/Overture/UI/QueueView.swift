@@ -113,7 +113,7 @@ struct QueueView: View {
 
     // #236: a lead opened from an OmniFocus deep link. When it changes, the queue switches to the
     // pipeline holding it, clears filters that would hide it, scrolls to it, and briefly highlights it.
-    @Binding var deepLinkedKey: String?
+    @Binding var deepLinkedKey: LeadDeepLink?
     // #976: the date group at the top of the scroll, bound so the queue holds its place while the rows
     // underneath rebuild. `prospects` is a @Query and this is the window Dan reviews in (~119 shows),
     // rebuilt by every scout and Prep run; a plain ScrollView drops its offset to the top on each one
@@ -137,7 +137,7 @@ struct QueueView: View {
     // #308: the new leads from a tapped multi-lead away alert. When it changes, the queue enters a
     // focused mode showing exactly those leads (a flat list, ignoring the pipeline split and filters so
     // even a booked lead that falls out of both pipelines still appears), with a "Show all" exit.
-    @Binding var deepLinkedKeys: [String]?
+    @Binding var deepLinkedKeys: LeadsDeepLink?
     @State private var focusedKeys: [String]?
     // #1140: which STAGE the focused view is showing, when it was entered by tapping a stage pill (nil
     // for the #308 away-alert leads path). Set, the focused list re-derives its membership and heading
@@ -328,8 +328,8 @@ struct QueueView: View {
             "gmail": "\(GmailConnection.shared.isConnected)",
             "stage": String(describing: focusedStage),
             "focusedKeys": "\(focusedKeys?.count ?? -1)",
-            "deepLinkedKey": deepLinkedKey ?? "none",
-            "deepLinkedKeys": "\(deepLinkedKeys?.count ?? -1)",
+            "deepLinkedKey": deepLinkedKey?.key ?? "none",
+            "deepLinkedKeys": "\(deepLinkedKeys?.keys.count ?? -1)",
             "today": today,
         ]
     }
@@ -563,11 +563,11 @@ struct QueueView: View {
                 .frame(maxWidth: 760, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .center)
             }
-            .onChange(of: deepLinkedKey) { _, key in
-                if let key { navigateToLead(key, proxy: proxy) }
+            .onChange(of: deepLinkedKey) { _, request in
+                if let request { navigateToLead(request.key, proxy: proxy) }
             }
-            .onChange(of: deepLinkedKeys) { _, keys in
-                if let keys, !keys.isEmpty { focusOnLeads(keys, proxy: proxy) }
+            .onChange(of: deepLinkedKeys) { _, request in
+                if let request, !request.keys.isEmpty { focusOnLeads(request.keys, proxy: proxy) }
             }
         }
     }
@@ -840,14 +840,16 @@ struct QueueView: View {
     }
 
     // #308: enter the focused new-leads view and scroll its first (still-visible) lead into view.
-    // Clears the request once handled, mirroring navigateToLead (#236). #674: a lead dismissed
+    // #1927: it no longer clears the request afterwards, and must not start again. The request carries its
+    // own identity (LeadsDeepLink), so a second tap naming the same leads is a second event on its own
+    // merits; clearing was how the old bare-destination channel got a repeat to fire at all. #674: a lead
+    // dismissed
     // between the notification firing and Dan tapping it is no longer in `items` at all, so this
     // scrolls to the first key that's actually there instead of blindly the first key named in the
     // (possibly stale) notification.
     private func focusOnLeads(_ keys: [String], proxy: ScrollViewProxy) {
         focusedKeys = keys
         focusedStage = nil   // #1140: a named leads set, not a stage; keep it frozen, don't re-derive.
-        deepLinkedKeys = nil
         let target = QueueModel.firstVisibleKey(keys, among: items)
         // #1573: drive the scroll position to the group holding the lead instead of clearing it and
         // asking for the row. The old comment here claimed this view was "a flat list without scroll
@@ -877,8 +879,8 @@ struct QueueView: View {
     }
 
     // #236/#1134: land on a deep-linked lead by focusing the STAGE that holds it (the pipeline picker is
-    // gone), so the row is actually on screen, then scroll to it and briefly highlight it. Clears the
-    // request once handled.
+    // gone), so the row is actually on screen, then scroll to it and briefly highlight it.
+    // #1927: it no longer clears the request afterwards, and must not start again. See LeadDeepLink.
     private func navigateToLead(_ key: String, proxy: ScrollViewProxy) {
         // #1121: computed inline (this is a rare deep-link tap, not the render path) now that the queue's
         // reached-out keys live in the per-render RenderData snapshot rather than a standing computed prop.
@@ -891,7 +893,6 @@ struct QueueView: View {
         focusedKeys = nil   // #1140: stage mode re-derives its own membership; no frozen key set
         focusedHeading = nil
         sendState.highlight(key)
-        deepLinkedKey = nil
         // #1573: land the jump in two stages, because the row alone cannot carry it. Stage one drives
         // the scrollPosition binding, which owns this ScrollView and is the only thing that can resolve
         // a target the lazy layout has not realized yet, to the group holding the row. Clearing it and
@@ -1756,6 +1757,39 @@ struct QueueJumpRequest: Equatable {
 
     init(group: String) {
         self.group = group
+        self.token = UUID()
+    }
+}
+
+// #1927: the queue's other two one-shot channels, given the same shape for the same reason.
+//
+// `deepLinkedKey` and `deepLinkedKeys` carried a bare destination and worked ONLY because their handlers
+// set the binding back to nil once they were done with it. That is correct today, and it is a rule
+// somebody has to keep: delete the reset and the dropped second request comes straight back, with every
+// test still green, which is exactly how #1774 happened. Carrying an identity instead makes the property
+// structural rather than remembered, so the three channels now share one pattern instead of two, and the
+// resets are gone (a handler that no longer has to clear up cannot forget to).
+//
+// They are three distinct TYPES rather than one generic or a typealias, deliberately. A jump group id and
+// a show's naturalKey are both `String`, so a shared type would let one be assigned to the other's channel
+// and compile, which is a worse bug than the duplication of four lines saves. What is shared is the
+// pattern, and `OneShotChannelGuardTests` is what holds all three to it rather than anybody remembering.
+struct LeadDeepLink: Equatable {
+    let key: String
+    private let token: UUID
+
+    init(key: String) {
+        self.key = key
+        self.token = UUID()
+    }
+}
+
+struct LeadsDeepLink: Equatable {
+    let keys: [String]
+    private let token: UUID
+
+    init(keys: [String]) {
+        self.keys = keys
         self.token = UUID()
     }
 }

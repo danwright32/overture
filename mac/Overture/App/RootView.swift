@@ -84,10 +84,10 @@ struct RootView: View {
     @AppStorage(OmniFocusSyncConfig.Keys.enabled) private var omniFocusEnabled = OmniFocusSyncConfig().enabled
     // #236: the natural key of a lead opened from an OmniFocus deep link, handed to the queue to
     // select and scroll to. Cleared by the queue once it has acted on it.
-    @State private var deepLinkedKey: String?
+    @State private var deepLinkedKey: LeadDeepLink?
     // #308: the natural keys of the new leads from a tapped multi-lead away alert, handed to the queue
     // to filter down to exactly them. Cleared by the queue once it has acted on it.
-    @State private var deepLinkedKeys: [String]?
+    @State private var deepLinkedKeys: LeadsDeepLink?
 
     // Kept prospects with no draft yet: what a Prep run would work on.
     // #367: shares PrepQueueBuilder.needsPrepPredicate rather than an inline #Predicate literal,
@@ -322,7 +322,7 @@ struct RootView: View {
         if StageNavigation.opensInQueue(key: key, in: nonDismissedProspects,
                                         reachedOutKeys: reachedOutKeys,
                                         context: StageContext(geo: geo, clients: clientWindow)) {
-            deepLinkedKey = key
+            deepLinkedKey = LeadDeepLink(key: key)
         } else {
             openArchive(key: key)
         }
@@ -433,8 +433,8 @@ struct RootView: View {
             "daysOffSnoozedUntil": "\(daysOffSnoozedUntil)",
             "feedLastNewAt": "\(feedLastNewAt)",
             "errorMessage": "\(errorMessage != nil)",
-            "deepLinkedKey": deepLinkedKey ?? "none",
-            "deepLinkedKeys": "\(deepLinkedKeys?.count ?? -1)",
+            "deepLinkedKey": deepLinkedKey?.key ?? "none",
+            "deepLinkedKeys": "\(deepLinkedKeys?.keys.count ?? -1)",
             "archiveJumpKey": archiveJumpKey ?? "none",
             "archiveJumpRecipientId": archiveJumpRecipientId ?? "none",
             "archiveOpeningQuery": "\(archiveOpeningQuery.count)",
@@ -577,7 +577,7 @@ struct RootView: View {
                 if OvertureDeepLink.isShowCommand(url) { openWindow(id: "main"); return }
                 // #308: a tapped multi-lead away alert opens overture://leads?key=…&key=…; hand the set
                 // to the queue to filter down to exactly those new leads.
-                if let keys = OvertureDeepLink.leadKeys(from: url) { deepLinkedKeys = keys; return }
+                if let keys = OvertureDeepLink.leadKeys(from: url) { deepLinkedKeys = LeadsDeepLink(keys: keys); return }
                 // #236: a tapped OmniFocus follow-up opens overture://lead?key=<naturalKey>; route it
                 // the same way as a search pick (#628) since a closed show can still generate a due
                 // follow-up (a late reply on a different contact) after it's left the Queue entirely.
