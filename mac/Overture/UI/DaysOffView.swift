@@ -196,18 +196,98 @@ struct DaysOffView: View {
                     }
                 }
                 ForEach(calendar.days.filter { $0.kind == .bookedShoot }, id: \.key) { day in
-                    HStack(spacing: OVSpacing.sm) {
-                        Text(EasternDate.dayLabel(day.date) ?? day.date)
-                            .font(.system(size: 12, weight: .medium)).foregroundStyle(OVColor.ink)
-                        Text(day.name ?? "A shoot")
-                            .font(.system(size: 12)).foregroundStyle(OVColor.inkSoft)
-                        Spacer()
-                        Text("From Downbeat").font(.system(size: 11)).foregroundStyle(OVColor.inkFaint)
-                    }
-                    .padding(.vertical, 3)
+                    bookedShootRow(day)
+                }
+                // #2692: the shoots Dan has waved through. Listed BELOW the live ones and not folded in
+                // among them, because they are a different fact: these are nights Overture is no longer
+                // protecting, and the point of showing them at all is that the decision is visible and
+                // reversible instead of the row silently vanishing (his acceptance line).
+                ForEach(cancelledRows, id: \.bookingId) { row in
+                    cancelledShootRow(row)
                 }
             }
         }
+    }
+
+    // Which cancellations to draw, and the reason this reads the STORE rather than the calendar: the
+    // calendar's whole job is to say what blocks, so a cancelled shoot is correctly absent from it. The
+    // rows are what says it was a decision rather than a disappearance.
+    private var cancelledRows: [CancelledShoot] {
+        CancelledShootEditing.rows(in: context).sorted { $0.startDate < $1.startDate }
+    }
+
+    @ViewBuilder
+    private func bookedShootRow(_ day: BlockedCalendar.Day) -> some View {
+        let ids = CancelledShootEditing.bookingIds(for: day, in: DownbeatBridge.loadedExport().bookings)
+        HStack(spacing: OVSpacing.sm) {
+            Text(EasternDate.dayLabel(day.date) ?? day.date)
+                .font(.system(size: 12, weight: .medium)).foregroundStyle(OVColor.ink)
+            Text(day.name ?? "A shoot")
+                .font(.system(size: 12)).foregroundStyle(OVColor.inkSoft)
+            Spacer()
+            Text("From Downbeat").font(.system(size: 11)).foregroundStyle(OVColor.inkFaint)
+            // Offered only where there is a booking to cancel. A flat `blockedDates` entry has no booking
+            // behind it (`day.name` is nil), so there is nothing this control could act on, and a control
+            // beside a rule that cannot act on it is a false affordance (L109).
+            // `bookingIds` only answers for a named day, so binding the name here rather than defaulting
+            // it removes a fallback that could never render. The first draft wrote `day.name ?? "That
+            // shoot"`, and the copy inventory is what caught it: a sentence in the list of everything
+            // Overture can say to Dan, which it cannot say (L29's shape, in copy).
+            if let name = day.name, !ids.isEmpty {
+                Button(CancelledShootCopy.unblockTitle) {
+                    cancel(ids: ids, named: name, on: day.date)
+                }
+                .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(OVColor.forestText)
+                .help(CancelledShootCopy.unblockHelp)
+            }
+        }
+        .padding(.vertical, 3)
+    }
+
+    private func cancelledShootRow(_ row: CancelledShoot) -> some View {
+        // What is STILL holding that night, worked out against the live export. Dan's call was that the
+        // override cancels one shoot and never the night, so without this line a cancellation that leaves
+        // the night blocked by a second booking reads as the button not having worked.
+        let others = CancelledShootEditing.stillBlocking(
+            date: row.startDate, bookings: DownbeatBridge.loadedExport().bookings,
+            cancelledIds: CancelledShootEditing.cancelledIds(in: context))
+        return VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: OVSpacing.sm) {
+                Text(EasternDate.dayLabel(row.startDate) ?? row.startDate)
+                    .font(.system(size: 12, weight: .medium)).foregroundStyle(OVColor.inkFaint)
+                Text(row.shootName)
+                    .font(.system(size: 12)).foregroundStyle(OVColor.inkFaint)
+                Spacer()
+                Text(CancelledShootCopy.unblockedLabel)
+                    .font(.system(size: 11)).foregroundStyle(OVColor.inkFaint)
+                Button(CancelledShootCopy.restoreTitle) {
+                    restore(row)
+                }
+                .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(OVColor.forestText)
+                .help(CancelledShootCopy.restoreHelp)
+            }
+            if !others.isEmpty {
+                Text(CancelledShootCopy.stillBlocked(by: others))
+                    .font(.system(size: 11)).foregroundStyle(OVColor.inkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.vertical, 3)
+    }
+
+    private func cancel(ids: [String], named name: String, on date: String) {
+        guard CancelledShootEditing.cancel(bookingIds: ids, named: name, on: date,
+                                           in: context) > 0 else { return }
+        feedback.acknowledge(CancelledShootCopy.cancelled(name),
+                             action: .init(label: "Undo") {
+                                 CancelledShootEditing.restore(bookingIds: ids, in: context)
+                             })
+    }
+
+    private func restore(_ row: CancelledShoot) {
+        let name = row.shootName
+        guard CancelledShootEditing.restore(bookingIds: [row.bookingId], in: context) > 0 else { return }
+        feedback.acknowledge(CancelledShootCopy.restored(name))
     }
 
     // MARK: - Dan's half: his to add and remove

@@ -127,7 +127,8 @@ struct LiveStoreCopyGuardTests {
     @Test func thesuitesThatRehearseAMigrationUseTheHelper() throws {
         for name in ["OrgAnswerMigrationDryRunTests", "InquiryMigrationDryRunTests",
                      "JointSendMigrationDryRunTests", "ReplyAudienceMigrationDryRunTests",
-                     "CatchAllFitReasonRetirementTests", "ContactFormReachabilityTests"] {
+                     "CatchAllFitReasonRetirementTests", "ContactFormReachabilityTests",
+                     "CancelledShootMigrationDryRunTests"] {
             let url = Self.testsRoot.appendingPathComponent("\(name).swift")
             let text = try String(contentsOf: url, encoding: .utf8)
             #expect(text.contains("LiveStoreClone.makeClone(in:")
