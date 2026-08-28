@@ -61,9 +61,25 @@ struct SourceFixConfirmActions: View {
         return failure?.offersFix ?? true
     }
 
+    // #1521: `hasBytesToConfirm` has NO default, deliberately, and this is #2654's argument in this same
+    // file applied to a second parameter. A default here could only be `true` (there are bytes), which is
+    // the permissive answer on a control Dan can press, and a permissive default is indistinguishable
+    // from a deliberate choice (L113) while failing open on an affordance (L42). Required, every caller
+    // states which row it is asking about.
     static func offersConfirm(_ failure: SourceFailure?, kind: SourceKind,
-                              readFineAndCameBackEmpty: Bool = false) -> Bool {
+                              readFineAndCameBackEmpty: Bool = false,
+                              hasBytesToConfirm: Bool) -> Bool {
         guard kind.hasEditablePage else { return false }
+        // #1521: FIRST, before the #2207 short circuit below, and that order is the fix rather than an
+        // implementation detail. A confirm with no bytes to anchor to records a judgement about a page
+        // nobody has fetched, and `confirmEmpty` answers it with `.noHash`: it clears the failing display,
+        // writes no anchor, and the card vanishes. A corrected address is what puts a row in that state.
+        //
+        // Putting it first is what covers the SILENTLY EMPTY path as well as the failure path #1521 was
+        // reported on. Both cards deliberately survive a correction (#1125, #1499, #2207), so both offered
+        // Confirm on bytes that no longer exist; had this sat after the short circuit, the readFine path
+        // would have kept the defect while looking fixed.
+        guard hasBytesToConfirm else { return false }
         // #2207: a page that read fine and returned nothing is the same thing Confirm exists for, whether
         // or not a failure was recorded against it. `confirmEmpty` anchors to the bytes last read either
         // way, so the confirmation means the same and can only ever fail to suppress, never suppress the
@@ -76,18 +92,22 @@ struct SourceFixConfirmActions: View {
     // kind, so it is asked to render for Carnegie's row, where it must produce nothing rather than an
     // empty strip of controls.
     static func offersAnything(failure: SourceFailure?, kind: SourceKind, stopWatching: Bool,
-                               readFineAndCameBackEmpty: Bool = false) -> Bool {
+                               readFineAndCameBackEmpty: Bool = false,
+                               hasBytesToConfirm: Bool) -> Bool {
         stopWatching || offersFix(failure, kind: kind)
-            || offersConfirm(failure, kind: kind, readFineAndCameBackEmpty: readFineAndCameBackEmpty)
+            || offersConfirm(failure, kind: kind, readFineAndCameBackEmpty: readFineAndCameBackEmpty,
+                             hasBytesToConfirm: hasBytesToConfirm)
     }
 
     private var offersFix: Bool { Self.offersFix(failure, kind: source.kind) }
     private var offersConfirm: Bool {
-        Self.offersConfirm(failure, kind: source.kind, readFineAndCameBackEmpty: readFineAndCameBackEmpty)
+        Self.offersConfirm(failure, kind: source.kind, readFineAndCameBackEmpty: readFineAndCameBackEmpty,
+                           hasBytesToConfirm: source.hasBytesToConfirm)
     }
     private var offersAnything: Bool {
         Self.offersAnything(failure: failure, kind: source.kind, stopWatching: offersStopWatching,
-                            readFineAndCameBackEmpty: readFineAndCameBackEmpty)
+                            readFineAndCameBackEmpty: readFineAndCameBackEmpty,
+                            hasBytesToConfirm: source.hasBytesToConfirm)
     }
 
     @Environment(\.modelContext) private var context

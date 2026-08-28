@@ -31,7 +31,7 @@ struct NativeFeedEscapeHatchTests {
     // Same for Confirm: "this page is right" anchors to the bytes last read from a page, and there is no
     // page here.
     @Test func aFeedWithNoPageIsNeverAskedToConfirmOne() {
-        #expect(!SourceFixConfirmActions.offersConfirm(.verdict(.noDatedContent), kind: .algolia))
+        #expect(!SourceFixConfirmActions.offersConfirm(.verdict(.noDatedContent), kind: .algolia, hasBytesToConfirm: true))
     }
 
     // The rule must stay narrow. The other native feeds are host-routed: they ingest for free like
@@ -43,7 +43,7 @@ struct NativeFeedEscapeHatchTests {
             #expect(SourceFixConfirmActions.offersFix(.fetch(.unreachable), kind: kind),
                     "\(kind) is watched at a real URL, which can be the wrong one")
         }
-        #expect(SourceFixConfirmActions.offersConfirm(.verdict(.noDatedContent), kind: .html))
+        #expect(SourceFixConfirmActions.offersConfirm(.verdict(.noDatedContent), kind: .html, hasBytesToConfirm: true))
     }
 
     // With the kind rule moved onto the component, the Sources sheet stops gating the component at its
@@ -51,10 +51,10 @@ struct NativeFeedEscapeHatchTests {
     // than an empty row of controls under Carnegie.
     @Test func aSourceWithNothingOnOfferDrawsNoControls() {
         #expect(!SourceFixConfirmActions.offersAnything(failure: .fetch(.unreachable), kind: .algolia,
-                                                        stopWatching: false))
+                                                        stopWatching: false, hasBytesToConfirm: true))
         #expect(SourceFixConfirmActions.offersAnything(failure: .fetch(.unreachable), kind: .algolia,
-                                                       stopWatching: true))
-        #expect(SourceFixConfirmActions.offersAnything(failure: nil, kind: .html, stopWatching: false))
+                                                       stopWatching: true, hasBytesToConfirm: true))
+        #expect(SourceFixConfirmActions.offersAnything(failure: nil, kind: .html, stopWatching: false, hasBytesToConfirm: true))
     }
 
     // MARK: - The exit itself
