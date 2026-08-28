@@ -168,6 +168,7 @@
 		173CD4938337D3F02011D487 /* ManualRecipientCheckTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CA4977B06343E3FFBA36FA9 /* ManualRecipientCheckTests.swift */; };
 		1753A6B08FB04DDDD79F5CE6 /* RefreshResponseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF936B56EA75558296D03EFE /* RefreshResponseTests.swift */; };
 		17553614ACB35C87904DA9CA /* StageOverlapLiveStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 464E95007BB1A46AE5C51E8A /* StageOverlapLiveStoreTests.swift */; };
+		1758494365CB8E981ED8676F /* DaysOffSheetCostAndCountsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97A316F8C9A3C17CF3DE3FDC /* DaysOffSheetCostAndCountsTests.swift */; };
 		1781CF03CF2CA52AA146CE84 /* AddressCorrectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B7E7E469E926AD98CEAD41D /* AddressCorrectionTests.swift */; };
 		17D75C0932626868FF558532 /* SourceNote.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7C0F936EA18B5C7307A439E /* SourceNote.swift */; };
 		17F5309131C6DC51EE96049C /* OperaAmericaExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BEEB1E507A6CE7469359DCF /* OperaAmericaExtractor.swift */; };
@@ -2777,6 +2778,7 @@
 		9762A5CFBB99DBC1CC75B811 /* QueueItemVoiceLearningTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueItemVoiceLearningTests.swift; sourceTree = "<group>"; };
 		976998798673F1D7648B4B8A /* OmniFocusSyncRunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmniFocusSyncRunnerTests.swift; sourceTree = "<group>"; };
 		9770AD5500CD3C34029F42ED /* ManualIsProvenanceNotOwnershipTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualIsProvenanceNotOwnershipTests.swift; sourceTree = "<group>"; };
+		97A316F8C9A3C17CF3DE3FDC /* DaysOffSheetCostAndCountsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DaysOffSheetCostAndCountsTests.swift; sourceTree = "<group>"; };
 		97C14E30FA728DA8363D150D /* CheckMissedAShowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckMissedAShowTests.swift; sourceTree = "<group>"; };
 		97C939D5903058B137BED0F3 /* OrganisationListing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganisationListing.swift; sourceTree = "<group>"; };
 		97CA69E0512534106A24679F /* ContactConfidenceGuard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactConfidenceGuard.swift; sourceTree = "<group>"; };
@@ -3644,6 +3646,7 @@
 				CAA76D5BD734163C5B26CE73 /* DayOffOfferTests.swift */,
 				B55A7FA5E14A57662D03A005 /* DayOffRangeStaysForwardsTests.swift */,
 				C8487C82FCF4EE9A617F9C39 /* DaysOffAttentionTests.swift */,
+				97A316F8C9A3C17CF3DE3FDC /* DaysOffSheetCostAndCountsTests.swift */,
 				59DE693FC4DE46904203D785 /* DaysOffSnoozeTests.swift */,
 				88D203F617F583B346982DF8 /* DeadEndContactTests.swift */,
 				0A7D246F45F50D150C90CBAC /* DeadPrepRunTests.swift */,
@@ -5795,6 +5798,7 @@
 				3174B4CC4A6A28014D25E294 /* DayOffRangeStaysForwardsTests.swift in Sources */,
 				DCC94ECE23FC491A288351AD /* DaysOffAttention.swift in Sources */,
 				B79CB5E690E50881984758AA /* DaysOffAttentionTests.swift in Sources */,
+				1758494365CB8E981ED8676F /* DaysOffSheetCostAndCountsTests.swift in Sources */,
 				7A47A5E3F56CD84B56FD36F9 /* DaysOffSnoozeTests.swift in Sources */,
 				38148DC7E822EF7798EFE135 /* DaysOffView.swift in Sources */,
 				631302E1D9CA4A29E6FD5F98 /* DeadEndContact.swift in Sources */,

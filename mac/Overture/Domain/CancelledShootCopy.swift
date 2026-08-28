@@ -3,6 +3,11 @@ import Foundation
 // #2692: what the days off sheet says about a shoot Dan has waved through. In the domain rather than the
 // view so the words are testable and land in `docs/copy-inventory.md` (#885).
 enum CancelledShootCopy {
+    // Their own heading, so the count above the live shoots is a promise about the rows under IT and this
+    // one is a promise about the rows under this (#863). One heading over both lists said twelve and drew
+    // thirteen rows the moment Dan cancelled anything.
+    static let sectionTitle = "Not happening"
+
     static let unblockTitle = "Not happening"
     static let restoreTitle = "Put it back"
 
