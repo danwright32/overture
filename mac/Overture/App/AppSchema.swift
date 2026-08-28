@@ -35,6 +35,10 @@ enum AppSchema {
         VenuePlaceAnswer.self,        // #1752: where Dan says a room is, when no table knows. Independent
                                       // for the same reason, and keyed on the ROOM so one answer reaches
                                       // every spelling of it and every show played there.
+        CancelledShoot.self,          // #2692: a Downbeat booking Dan says is not happening. Independent
+                                      // for the same reason as the rest, and keyed on the BOOKING id, so
+                                      // a row left behind can never suppress a future booking landing on
+                                      // the same date.
     ]
 
     static var schema: Schema { Schema(models) }

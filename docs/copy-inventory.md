@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1436 sentences**.
+Every sentence Overture can say to Dan: **1445 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 512 of the 1436 below hold a
+  sentence carrying a VALUE: 516 of the 1445 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -1019,6 +1019,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/StageEmptyState.swift`
 "Keep editing"
     `UI/DaysOffView.swift`
+"Keep this night clear for this shoot again."
+    `Domain/CancelledShootCopy.swift`
 "Keep this page but stop flagging it, until its contents change"
     `UI/SourceFixConfirmActions.swift`
 "Keep this show to pitch it"
@@ -1252,6 +1254,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OnboardingState.swift`
 "Not checked yet"
     `Domain/SourceGrade.swift`
+"Not happening"
+    `Domain/CancelledShootCopy.swift`
 "Not installed yet. Run your Overture build once to install it."
     `UI/OnboardingView.swift`
 "Not now"
@@ -1601,6 +1605,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DraftCheck.swift`
 "Put back"
     `Domain/ClientCoverage.swift`
+"Put it back"
+    `Domain/CancelledShootCopy.swift`
 "Put this prospect back in the queue as undecided"
     `UI/ProspectRowView.swift`
 "Queued \(draftGrantedCount) of \(total) \(prospectWord) to \(base); \(narrowedCount) already sent, so \(narrowedCount == 1 ? "it" : "they") only got new contacts"
@@ -1961,10 +1967,16 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DraftCheck.swift`
 "Stern Auditorium / Perelman Stage"
     `Domain/VenueParser.swift`
+"Still blocked by \(names.dropLast().joined(separator: ", ")) and \(names[names.count - 1])."
+    `Domain/CancelledShootCopy.swift`
+"Still blocked by \(names[0])."
+    `Domain/CancelledShootCopy.swift`
 "Still not granted. Allow Overture in the prompt, or in System Settings ▸ Privacy & Security ▸ Automation."
     `Domain/OnboardingState.swift`
 "Still watched and still checked. Overture will keep reporting these every run rather than quietly giving up on them."
     `Domain/SourceGrade.swift`
+"Stop keeping this night clear for this shoot. It stays in Downbeat; Overture just stops protecting it."
+    `Domain/CancelledShootCopy.swift`
 "Stop sending to this contact"
     `Domain/FollowUp.swift`
 "Stop the reply drafting run"
@@ -2475,6 +2487,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/FormOutreach.swift`
 "You opened their profile \(when). Did you send it?"
     `Domain/FormOutreach.swift`
+"You said it isn't happening"
+    `Domain/CancelledShootCopy.swift`
 "You set this: \(what)"
     `UI/QueueView+Model.swift`
 "You stopped sending to this contact \(ago(stoodDownAt, now: now))"
@@ -2746,6 +2760,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ProposedConversation.swift`
 "\(name) is a room's name, so Overture reads it as the building, not the presenter."
     `Domain/OrganisationListing.swift`
+"\(name) is holding that night again"
+    `Domain/CancelledShootCopy.swift`
 "\(name) may already be pitched for a nearby show; blocked from sending."
     `Domain/DraftReviewNotes.swift`
 "\(name) may be a press/media contact, not the act; blocked from sending."
@@ -2756,6 +2772,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OrganisationListing.swift`
 "\(name) will instead receive:"
     `Domain/DraftReviewNotes.swift`
+"\(name) won't hold that night any more"
+    `Domain/CancelledShootCopy.swift`
 "\(names.count) new booking\(names.count == 1 ? "" : "s") (\(names.joined(separator: ", ")))"
     `Domain/OutreachEventPhrasing.swift`
 "\(names.count) new repl\(names.count == 1 ? "y" : "ies") (\(names.joined(separator: ", ")))"

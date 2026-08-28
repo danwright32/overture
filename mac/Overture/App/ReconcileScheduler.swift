@@ -268,6 +268,17 @@ final class ReconcileScheduler {
     // clearance Dan already made (setScoutConflict compares against the key he cleared).
     func reapplyConflicts(now: Date, from url: URL = DownbeatBridge.defaultURL) {
         let loaded = DownbeatBridge.loadWithHealth(from: url, now: now)
+        // #2692: clear the cancellations whose booking Downbeat no longer exports, BEFORE the sweep below
+        // reads the calendar, so a night freed by a row that no longer stands for anything is re-blocked
+        // on the same tick rather than on the next one.
+        //
+        // Hygiene rather than a correctness guard, and the difference is worth keeping straight: a booking
+        // id is Downbeat's own, so a row left behind cannot suppress a FUTURE booking landing on the same
+        // date, because that booking carries a different id. What it would otherwise do is sit in the
+        // store forever as a rule nobody can see. `sweep` refuses an empty booking list outright, so an
+        // export that failed to load cannot be read as "Downbeat dropped everything" and take every one of
+        // Dan's cancellations with it (L214).
+        CancelledShootEditing.sweep(against: loaded.bookings, in: context)
         ConflictSweep.reapplyAll(export: (loaded.bookings, loaded.blockedDates), in: context)
     }
 
