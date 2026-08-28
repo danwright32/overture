@@ -1062,10 +1062,11 @@ struct QueueView: View {
                 Circle().fill(agentColor(s.state)).frame(width: 6, height: 6)
                 Text(s.name).font(OVType.tag)
                     .foregroundStyle(s.state == .idle ? OVColor.inkFaint : OVColor.ink)
-                // #1134: Reached out is idle by design (never "needs you") but is a navigation stop that
-                // should still show its count, so its detail shows even while idle. Other idle pills keep
-                // hiding their "Nothing new" detail as before.
-                if !s.detail.isEmpty, s.state != .idle || s.focus == .reachedOut {
+                // #1134/#1837: a resting pill normally hides its detail, because "Nothing new" is
+                // furniture. Which pills are the exception is AgentRoster's rule, not this view's: it is
+                // the same question as which pills are navigation stops whose number is the point, and it
+                // gained a second member the moment Follow-ups stopped going to attention on any due work.
+                if !s.detail.isEmpty, s.state != .idle || AgentRoster.showsDetailWhileResting(focus: s.focus) {
                     Text(s.detail).font(OVType.tag).foregroundStyle(OVColor.inkSoft)
                 }
             }
