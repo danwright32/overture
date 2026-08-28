@@ -132,6 +132,7 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
 `UI/DaysOffView.swift`
     CancelledShootCopy.restoreHelp  "Keep this night clear for this shoot again."
     CancelledShootCopy.restoreTitle  "Put it back"
+    CancelledShootCopy.sectionTitle  "Not happening"
     CancelledShootCopy.unblockTitle  "Not happening"
     CancelledShootCopy.unblockedLabel  "You said it isn't happening"
 `UI/DraftReviewView.swift`

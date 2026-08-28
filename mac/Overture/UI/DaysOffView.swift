@@ -160,9 +160,26 @@ struct DaysOffView: View {
     // MARK: - Downbeat's half: read-only, and honest about being empty
 
     private var bookedShoots: some View {
-        VStack(alignment: .leading, spacing: OVSpacing.xs) {
-            sectionHeading("Booked shoots", systemImage: "camera",
-                           count: calendar.days.filter { $0.kind == .bookedShoot }.count)
+        // #2692 follow-up: the export, the calendar and the cancellations are each worked out ONCE here
+        // and handed down, rather than being read again by every row.
+        //
+        // `calendar` and `cancelledRows` are computed properties, which SwiftUI re-reads on every access,
+        // and building the calendar decodes the whole Downbeat export from disk and fetches the days off
+        // and the cancellations. The unblock control made that far worse by adding a per-ROW lookup of
+        // which booking a row stands for, so a sheet with fifteen bookings opened and decoded the export
+        // fifteen times to draw itself. That is #1960's defect on this same sheet and #1731's on the
+        // Presenters one, which is why it is fixed here rather than filed.
+        let cal = calendar
+        let bookings = DownbeatBridge.loadedExport().bookings
+        let cancelled = cancelledRows
+        let cancelledIds = Set(cancelled.map(\.bookingId))
+        let live = cal.days.filter { $0.kind == .bookedShoot }
+        return VStack(alignment: .leading, spacing: OVSpacing.xs) {
+            // #2692 follow-up: counts the LIVE rows, and the waved-through ones are counted under their
+            // own heading below rather than being drawn under this number. A count is a promise about the
+            // rows beneath it (#863), and one heading over two lists broke that promise the moment Dan
+            // cancelled anything: the number said twelve and thirteen rows followed it.
+            sectionHeading("Booked shoots", systemImage: "camera", count: live.count)
 
             // #925: the explanation is gated on the FACT (no upcoming shoots), never on the snooze. The
             // snooze silences the toolbar mark, and only that. Hiding this sentence too would put the
@@ -195,15 +212,20 @@ struct DaysOffView: View {
                             .padding(.top, 2)
                     }
                 }
-                ForEach(calendar.days.filter { $0.kind == .bookedShoot }, id: \.key) { day in
-                    bookedShootRow(day)
+                ForEach(live, id: \.key) { day in
+                    bookedShootRow(day, bookings: bookings)
                 }
-                // #2692: the shoots Dan has waved through. Listed BELOW the live ones and not folded in
-                // among them, because they are a different fact: these are nights Overture is no longer
-                // protecting, and the point of showing them at all is that the decision is visible and
-                // reversible instead of the row silently vanishing (his acceptance line).
-                ForEach(cancelledRows, id: \.bookingId) { row in
-                    cancelledShootRow(row)
+                // #2692: the shoots Dan has waved through. Their OWN heading, not folded in among the live
+                // ones and no longer sitting under their count: they are a different fact (these are
+                // nights Overture is no longer protecting), and the point of showing them at all is that
+                // the decision is visible and reversible instead of the row silently vanishing.
+                if !cancelled.isEmpty {
+                    sectionHeading(CancelledShootCopy.sectionTitle, systemImage: "camera.badge.ellipsis",
+                                   count: cancelled.count)
+                        .padding(.top, OVSpacing.xs)
+                    ForEach(cancelled, id: \.bookingId) { row in
+                        cancelledShootRow(row, bookings: bookings, cancelledIds: cancelledIds)
+                    }
                 }
             }
         }
@@ -217,8 +239,8 @@ struct DaysOffView: View {
     }
 
     @ViewBuilder
-    private func bookedShootRow(_ day: BlockedCalendar.Day) -> some View {
-        let ids = CancelledShootEditing.bookingIds(for: day, in: DownbeatBridge.loadedExport().bookings)
+    private func bookedShootRow(_ day: BlockedCalendar.Day, bookings: [OvertureBooking]) -> some View {
+        let ids = CancelledShootEditing.bookingIds(for: day, in: bookings)
         HStack(spacing: OVSpacing.sm) {
             Text(EasternDate.dayLabel(day.date) ?? day.date)
                 .font(.system(size: 12, weight: .medium)).foregroundStyle(OVColor.ink)
@@ -244,13 +266,13 @@ struct DaysOffView: View {
         .padding(.vertical, 3)
     }
 
-    private func cancelledShootRow(_ row: CancelledShoot) -> some View {
+    private func cancelledShootRow(_ row: CancelledShoot, bookings: [OvertureBooking],
+                                   cancelledIds: Set<String>) -> some View {
         // What is STILL holding that night, worked out against the live export. Dan's call was that the
         // override cancels one shoot and never the night, so without this line a cancellation that leaves
         // the night blocked by a second booking reads as the button not having worked.
         let others = CancelledShootEditing.stillBlocking(
-            date: row.startDate, bookings: DownbeatBridge.loadedExport().bookings,
-            cancelledIds: CancelledShootEditing.cancelledIds(in: context))
+            date: row.startDate, bookings: bookings, cancelledIds: cancelledIds)
         return VStack(alignment: .leading, spacing: 1) {
             HStack(spacing: OVSpacing.sm) {
                 Text(EasternDate.dayLabel(row.startDate) ?? row.startDate)

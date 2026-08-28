@@ -115,7 +115,7 @@ What is not, and why:
 - `UI/DraftSignaturePreview.swift`: renders the outbound email's own HTML (body + Gmail signature), not Overture's voice (#1203)
 - `UI/DraftSignaturePreview.swift`: browser-side measuring script, not a sentence Overture says to Dan (#915)
 
-## The same sentence, said in more than one place (51)
+## The same sentence, said in more than one place (52)
 
 Two copies of a sentence will drift. #843 owns fixing these.
 
@@ -179,6 +179,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
 - "Not a real reply"
   - `UI/DraftReviewView.swift`
   - `UI/DraftReviewView.swift`
+- "Not happening"
+  - `Domain/CancelledShootCopy.swift`
+  - `Domain/CancelledShootCopy.swift`
 - "Not now"
   - `Domain/BuildFreshnessPanel.swift`
   - `UI/BlockDaysSheet.swift`
