@@ -463,22 +463,41 @@ enum ActionAck {
     // sent, so they only got the contacts half) rather than silently applying less than asked.
     // #733: skippedCount folds in anything already pending or in the re-prep cooldown, so a
     // partial batch never reads as if everything asked for was queued.
-    static func bulkReprepQueued(mode: ReprepMode, total: Int, draftGrantedCount: Int, skippedCount: Int = 0) -> String {
+    // #2014: `handWrittenSpared` is its own count and its own clause, never folded into `skippedCount`.
+    // Those rows were not skipped: they were queued, and the DESTRUCTIVE half of the request was
+    // withheld. A shared count would say a thing that did not happen, and the two have different causes
+    // and different remedies (wait, versus use the single-show control that asks) (L11).
+    static func bulkReprepQueued(mode: ReprepMode, total: Int, draftGrantedCount: Int, skippedCount: Int = 0,
+                                 handWrittenSpared: Int = 0) -> String {
         let prospectWord = total == 1 ? "prospect" : "prospects"
         let skippedSuffix = skippedCount > 0
             ? " (\(skippedCount) skipped: already pending or re-prepped recently)" : ""
+        // Named rather than counted away, because this is the sentence that has to stop him assuming the
+        // batch did what the menu said. The single-show control still redrafts one, after asking.
+        // One literal per sentence rather than one built from pieces, which is what the copy inventory
+        // lists and therefore what the cold read can judge. The first draft of this said "re-prep it one
+        // at a time", which reads as nonsense about a single email; the cold read caught it.
+        let spared: String
+        switch handWrittenSpared {
+        case 0:
+            spared = ""
+        case 1:
+            spared = " Left the email you wrote yourself alone; re-prep that show on its own card if you want it replaced."
+        default:
+            spared = " Left \(handWrittenSpared) emails you wrote yourself alone; re-prep those shows on their own cards if you want them replaced."
+        }
         guard mode != .contactsOnly else {
-            return "Queued \(total) \(prospectWord) to find new contacts" + skippedSuffix
+            return "Queued \(total) \(prospectWord) to find new contacts" + skippedSuffix + spared
         }
         let narrowedCount = total - draftGrantedCount
         guard narrowedCount > 0 else {
             return "Queued \(total) \(prospectWord) to redraft"
-                 + (mode == .both ? " and find new contacts" : "") + skippedSuffix
+                 + (mode == .both ? " and find new contacts" : "") + skippedSuffix + spared
         }
         let base = mode == .both ? "redraft and find new contacts" : "redraft"
         return "Queued \(draftGrantedCount) of \(total) \(prospectWord) to \(base); "
              + "\(narrowedCount) already sent, so \(narrowedCount == 1 ? "it" : "they") only got new contacts"
-             + skippedSuffix
+             + skippedSuffix + spared
     }
 
     // #499: a non-send mutation (keep/dismiss, draft edit, manual outcome, booking confirm, ...)

@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1450 sentences**.
+Every sentence Overture can say to Dan: **1452 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 519 of the 1450 below hold a
+  sentence carrying a VALUE: 520 of the 1452 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -302,6 +302,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DraftReviewNotes.swift`
 " It has about \(PrepStatus.duration(seconds: remaining)) left. Press Run scout again once it finishes."
     `Domain/ScoutStartGate.swift`
+" Left \(handWrittenSpared) emails you wrote yourself alone; re-prep those shows on their own cards if you want them replaced."
+    `App/ActionFeedback.swift`
+" Left the email you wrote yourself alone; re-prep that show on its own card if you want it replaced."
+    `App/ActionFeedback.swift`
 " One other match is flagged the same way."
     `Domain/PossibleMatchFanOut.swift`
 " Press Run scout again once the reading finishes."
