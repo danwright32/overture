@@ -52,6 +52,18 @@ struct ReconcileSummary: Equatable, Sendable {
     // two. Named separately from the line above because the remedy differs (reconnect Gmail, versus
     // Gmail refused these particular reads), and a message may claim only what its check measured (L11).
     var inquiryGmailNotConnected: Bool = false
+    // #1912: the reply WATCHER's own two auth states, which had no reader at all. #2741 gave the outcome a
+    // `notConnected` field and the tick never looked at it, so a revoked or expired refresh token stopped
+    // the watching outright with no alert, no status line and no record: the first symptom was that
+    // replies stopped arriving. A background job must report a failure AND the absence of an expected run
+    // (L13), and #50 already proved the app knows how to say this, on the SEND path, where somebody is
+    // watching.
+    //
+    // Two fields for the reason the inquiry pair above are two: the remedy differs. Connecting Gmail for
+    // the first time is a thing Dan has not done; a credential that died is a thing that happened to him
+    // while he was doing nothing, and it is the one that used to be completely silent.
+    var replyWatchNotConnected: Bool = false
+    var replyWatchTokenExpired: Bool = false
 
     // #308: every new lead's key this tick (replies then bookings, aligned with the name arrays), so a
     // coalesced multi-lead away alert can carry the whole set and a tap can filter the queue to exactly
@@ -92,6 +104,24 @@ struct ReconcileSummary: Equatable, Sendable {
         if inquiryThreadsUnreadable {
             return "Reconcile ran but Gmail refused every hire inquiry conversation it tried to read, so "
                 + "it can't tell whether anyone answered them. Try again shortly."
+        }
+        // #1912: the watcher's own auth, below the read failures and above the ordinary report, for the
+        // same reason as every line above it. A tick that could not authenticate has established nothing
+        // about who replied, and letting it fall through to "nothing was due" is the product claiming a
+        // measurement it never took (L98).
+        if replyWatchTokenExpired {
+            // Says REFRESH FAILED, not "expired", and the cold read of the generated inventory is what
+            // caught the difference. What the guard measures is `validAccessToken()` coming back nil,
+            // which a revoked credential produces and so does a network failure reaching the refresh
+            // endpoint, so naming expiry would claim more than the check established (L11). Reconnecting
+            // is still the right act to name: it fixes the durable cause, and a transient one clears on
+            // the next tick without Dan doing anything.
+            return "Overture couldn't refresh your Gmail sign-in, so it stopped checking for replies and "
+                + "can't tell whether anyone replied. Reconnect Gmail."
+        }
+        if replyWatchNotConnected {
+            return "Gmail isn't connected, so Overture isn't checking for replies and can't tell whether "
+                + "anyone replied. Connect Gmail."
         }
         var parts: [String] = []
         // #287 / #297: a reply or booking found this pass is the headline event, so lead with it and name

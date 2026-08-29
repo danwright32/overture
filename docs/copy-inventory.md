@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1444 sentences**.
+Every sentence Overture can say to Dan: **1446 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 516 of the 1444 below hold a
+  sentence carrying a VALUE: 516 of the 1446 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -892,6 +892,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DraftReviewNotes.swift`
 "Gmail isn't connected yet. Authorize the photography account to enable sending."
     `Integration/MailSender.swift`
+"Gmail isn't connected, so Overture isn't checking for replies and can't tell whether anyone replied. Connect Gmail."
+    `Domain/ReconcileSummary.swift`
 "Gmail isn't connected. Use Connect Gmail first."
     `Integration/GmailAuthManager.swift`
 "Go back to deciding \(organisation) automatically"
@@ -1470,6 +1472,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AppNotice.swift`
 "Overture couldn't read this message, which usually means it's an image or an attachment. Open it in Gmail."
     `Domain/ReplyPanel.swift`
+"Overture couldn't refresh your Gmail sign-in, so it stopped checking for replies and can't tell whether anyone replied. Reconnect Gmail."
+    `Domain/ReconcileSummary.swift`
 "Overture couldn't save the link. Try again; if this keeps happening, something's wrong with the local store."
     `Domain/ProposedConversation.swift`
 "Overture couldn't start the Gmail sign-in on this Mac, so it didn't open your browser."
