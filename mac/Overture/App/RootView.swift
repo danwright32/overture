@@ -532,7 +532,14 @@ struct RootView: View {
                                               // #2888: and any service answering with a body it cannot
                                               // read, which used to be indistinguishable from a service
                                               // answering that it has nothing.
-                                              failingResponses: failingResponses, status: status),
+                                              failingResponses: failingResponses,
+                                              // #2036: and any pitch that hard-bounced and nobody has
+                                              // dealt with. The flag correctly takes the contact out of
+                                              // follow-ups and the reached-out queue, which is precisely
+                                              // why nothing else on this screen would ever mention it
+                                              // again.
+                                              bouncedPitches: BounceDetection.unresolvedBounces(in: allProspects),
+                                              status: status),
                   // #2250: the remedy a notice names, run from here where the sync lives.
                   onNoticeAction: { action in
                       switch action {

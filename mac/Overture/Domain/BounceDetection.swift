@@ -72,4 +72,32 @@ enum BounceDetection {
     static func delayMessageId(threadJSON data: Data, selfEmail: String) -> String? {
         newestBounceSenderMessageId(threadJSON: data, matching: isDelaySubject)
     }
+
+    // #2036: the bounced pitches nobody has dealt with, as the masthead's notice needs them.
+    //
+    // Pure and here rather than in the view, so the masthead holds no logic of its own and every case can
+    // be produced by a fixture (a view body cannot be tested at all).
+    //
+    // Three states, and only the first is a notice. A bounce nobody has dealt with is the silent loss this
+    // exists for. A bounce on a show Dan has CLOSED OUT or STOOD DOWN is a show he has moved on from, and
+    // going on naming it is an alert he learns to ignore, which would cost the ones that matter (L36). A
+    // contact that never bounced is not a subject at all.
+    //
+    // Note what is NOT a filter here: how OLD the bounce is. There is no window, because a bounced pitch
+    // does not stop being unread as time passes, and a line that aged out would be the silence this
+    // replaces arriving a week later.
+    static func unresolvedBounces(in prospects: [Prospect]) -> [AppNotices.BouncedPitch] {
+        prospects.flatMap { prospect -> [AppNotices.BouncedPitch] in
+            guard prospect.showOutcome == nil else { return [] }
+            guard !prospect.isOutreachStoodDown(asOf: nil) else { return [] }
+            return prospect.recipients
+                .filter(\.bounced)
+                // The address is optional on the model; a contact with none cannot have bounced, and
+                // falling back to a placeholder would put a line on screen naming nothing Dan can act on.
+                .compactMap { r in
+                    r.email.map { AppNotices.BouncedPitch(email: $0, show: prospect.groupName) }
+                }
+        }
+    }
+
 }

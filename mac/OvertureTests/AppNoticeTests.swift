@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import SwiftData
 
 // #2204. Everything the app had to say about itself lived in one `ToolbarItem(placement: .status)`. Dan
 // runs Overture at about half screen width, and at that width macOS moves that slot into the toolbar's
@@ -87,6 +88,131 @@ struct AppNoticeTests {
     @Test func arunsOwnLineSaysEverythingInTheLineItself() {
         let notices = AppNotices.current(status: status("Prep finished"))
         #expect(notices.first?.help == nil)
+    }
+
+
+    // Which rows qualify is a pure decision beside the sentence, so the masthead holds no logic of its own
+    // and every case can be produced by a fixture.
+    //
+    // Three states must be told apart, and only the first is a notice: a bounce nobody has dealt with, a
+    // bounce on a show Dan has already closed out or stood down (he has moved on, and nagging about it is
+    // an alert he learns to ignore, L36), and a contact that never bounced at all.
+    @Test func onlyABounceNobodyHasDealtWithIsReported() {
+        let live = bouncedProspect(show: "Live Show", email: "live@one.example")
+        #expect(BounceDetection.unresolvedBounces(in: [live]).map(\.email) == ["live@one.example"])
+
+        let stoodDown = bouncedProspect(show: "Stood Down", email: "down@two.example")
+        stoodDown.standDownOutreach(now: Date())
+        #expect(BounceDetection.unresolvedBounces(in: [stoodDown]).isEmpty)
+
+        let closed = bouncedProspect(show: "Closed", email: "closed@three.example")
+        closed.showOutcome = .booked
+        #expect(BounceDetection.unresolvedBounces(in: [closed]).isEmpty)
+    }
+
+    @Test func aContactThatNeverBouncedIsNotReported() {
+        let fine = bouncedProspect(show: "Fine", email: "fine@four.example")
+        fine.recipients.forEach { $0.bounced = false }
+        #expect(BounceDetection.unresolvedBounces(in: [fine]).isEmpty)
+    }
+
+    // The show is named from the row Dan reads, not from the natural key, because the line puts it in
+    // front of him and he works by name.
+    @Test func theShowIsNamedTheWayDanReadsIt() {
+        let p = bouncedProspect(show: "Every Voice Choirs", email: "a@one.example")
+        #expect(BounceDetection.unresolvedBounces(in: [p]).first?.show == "Every Voice Choirs")
+    }
+
+
+    // A prospect carrying one bounced contact. Built rather than stubbed, so the filter is asked about the
+    // real model shape it will meet.
+    private func bouncedProspect(show: String, email: String) -> Prospect {
+        let p = Prospect(naturalKey: show, groupName: show, discipline: "music", venue: "Merkin Hall",
+                         performanceDate: "2026-11-02", sourceListingURL: nil,
+                         priorRelationship: "none", production: "self", profile: "strong",
+                         coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                         status: .approved)
+        let r = Recipient(id: email, email: email, provenance: .act)
+        r.sendState = .sent
+        r.sentAt = Date()
+        r.bounced = true
+        p.addRecipient(r)
+        return p
+    }
+
+
+
+    // --- #2036: a pitch that bounced is said out loud ---------------------------------------------------
+    //
+    // `BounceService.detectBounces` sets `bounced` on a contact whose thread carries a hard bounce, and
+    // that flag correctly takes the contact out of follow-ups and the reached-out queue. Nothing ever told
+    // Dan. The show quietly stops being chased, which is indistinguishable from one that was pitched and
+    // simply got no answer, so at any real volume he stops pitching organisations whose address was merely
+    // typed wrong and never finds out (L10, L13).
+
+    @Test func oneBouncedPitchIsNamedWithItsAddressAndItsShow() {
+        let notice = AppNotices.pitchesBounced([
+            .init(email: "boxoffice@merkin.example", show: "Every Voice Choirs")
+        ])
+        #expect(notice?.tone == .warning)
+        #expect(notice?.text.contains("boxoffice@merkin.example") == true)
+        #expect(notice?.text.contains("Every Voice Choirs") == true)
+    }
+
+    // Several become a count, not a list of addresses in one line, exactly as `couldNotRead` does: the
+    // addresses go in the help, where there is room for them.
+    @Test func severalBouncedPitchesBecomeACountWithTheDetailBehindIt() {
+        let notice = AppNotices.pitchesBounced([
+            .init(email: "a@one.example", show: "Show One"),
+            .init(email: "b@two.example", show: "Show Two")
+        ])
+        #expect(notice?.text.contains("2") == true)
+        #expect(notice?.text.contains("a@one.example") == false)
+        #expect(notice?.help?.contains("a@one.example") == true)
+        #expect(notice?.help?.contains("b@two.example") == true)
+    }
+
+    // The help has to name the act that CLEARS the line, or Dan is left with a permanent alarm and no way
+    // to learn what makes it go (L109, L148). That control exists and is on the show's own card.
+    @Test func theHelpNamesWhatClearsIt() {
+        let notice = AppNotices.pitchesBounced([.init(email: "a@one.example", show: "Show One")])
+        #expect(notice?.help?.contains("Not really bounced") == true)
+    }
+
+    // Nothing bounced is not a notice. An empty list must produce silence rather than a reassuring line,
+    // which is the same rule every other notice on this surface follows.
+    @Test func nothingBouncedSaysNothing() {
+        #expect(AppNotices.pitchesBounced([]) == nil)
+    }
+
+    // And it reaches the stack the masthead draws, which is the half a pure sentence cannot prove (L3).
+    @Test func theBouncedLineReachesTheNoticeStack() {
+        let notices = AppNotices.current(
+            bouncedPitches: [.init(email: "a@one.example", show: "Show One")],
+            status: StatusLine())
+        #expect(notices.contains { $0.text.contains("a@one.example") })
+    }
+    // Each sentence is ONE literal, never a concatenation, which is the rule this file states about itself
+    // and the thing the cold read depends on: the copy inventory lists literals, so a sentence built from
+    // two pieces reaches that review as two fragments and cannot be read as what Dan actually sees (#843).
+    // Guarded at the source because a correct sentence assembled from halves still passes every assertion
+    // about its text.
+    @Test func eachBounceSentenceIsASingleLiteral() {
+        let source = SourceGuardHelper.source("Overture/Domain/AppNotice.swift")
+        #expect(source.contains("bounced, so nobody ever read it.\""))
+        #expect(source.contains("pitches bounced, so nobody ever read them.\""))
+    }
+
+    // The wiring the sentence and the filter cannot see between them (L3). Both halves can be perfectly
+    // right while the masthead hands the notice an empty list for ever, and that is not a hypothetical
+    // shape here: #1912 was exactly it, a field computed by #2741 that nothing ever read.
+    //
+    // At the source, because the site is a SwiftUI view body, which cannot be tested at all.
+    @Test func themastheadHandsTheNoticeTheRowsItJudges() {
+        let root = SourceGuardHelper.source("Overture/App/RootView.swift")
+        #expect(root.contains("bouncedPitches: BounceDetection.unresolvedBounces("),
+                "the masthead must pass the bounced rows, or the line can never be drawn")
     }
 }
 
