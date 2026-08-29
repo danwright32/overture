@@ -232,6 +232,18 @@ assert_equals "a collision this repo resolves still costs no suite run" "" "${SU
 assert_equals "and is still never merged, because GitHub will not take it either" "" "${MERGE_CALLED}"
 assert_contains "the reader is told it is the cheap kind" "${OUTPUT}" "This is the cheap kind"
 assert_contains "and handed the command that changes GitHub's mind" "${OUTPUT}" "git merge origin/main"
+# The remedy has to be one somebody can FOLLOW to the end. Two things about this repo make the obvious
+# three steps wrong, and both were checked against the code rather than assumed: bringing main in fires
+# scripts/hooks/post-merge, which regenerates a stale project file and leaves it STAGED for a commit that
+# is not in the sequence, and scripts/test-all.sh does not regenerate the copy documents at all, it names
+# what moved and stops (#1994). A remedy naming a step that does not change the state the reader is stuck
+# in leaves them pressing the same control with no way to learn why (L111).
+assert_contains "the staged regeneration is part of the sequence, not a surprise after it" \
+  "${OUTPUT}" "git commit"
+assert_contains "and the suite is described as judging the generated files rather than fixing them" \
+  "${OUTPUT}" "does not regenerate"
+assert_contains "with the command that does regenerate the copy inventory" \
+  "${OUTPUT}" "TEST_RUNNER_REGENERATE_COPY_INVENTORY"
 assert_not_contains "and it is not described as a conflict somebody has to resolve" \
   "${OUTPUT}" "This is the real kind"
 assert_equals "the trial merge asked about current main against the branch" \

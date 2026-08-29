@@ -34,8 +34,17 @@ set -euo pipefail
 # The paths this driver owns. `.gitattributes` sends exactly these here, and
 # `scripts/lib/merge-generated.test.sh` reads this list rather than repeating it, so the two cannot
 # drift apart (L41).
+# #3221: all THREE generated copy documents, not just the inventory. `docs/outbound-copy.md` and
+# `docs/copy-surfaces.md` arrived with #2946 and were never registered here, so two branches that both
+# changed the app's wording still met a conflict in text neither of them wrote, which is the exact cost
+# this driver exists to remove. The safety argument is unchanged and already covered all three: this only
+# removes a conflict carrying no decision, and the freshness gates settle the content afterwards on the
+# complete tree (`CopyInventoryTests`, `OutboundCopyTests` and the copy-surfaces guard each fail on a
+# stale document, and both merge paths rebuild all three through `COPY_DOC_PATHS`).
 GENERATED_PATHS=(
   "docs/copy-inventory.md"
+  "docs/outbound-copy.md"
+  "docs/copy-surfaces.md"
   "mac/Overture.xcodeproj/project.pbxproj"
 )
 
