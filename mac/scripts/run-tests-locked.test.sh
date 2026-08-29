@@ -329,8 +329,8 @@ assert_not_contains() {
 # happened to be doing (L2), including the healthy two-day-old daemon measured here on 2026-08-16.
 run_wrapper_with_stub_xcodebuild() {
   local xcodebuild_output="$1" xcodebuild_exit="$2" log_output="${3:-}" diagnostics_dir="${4:-}"
-  local daemon_pid="${5:-}" daemon_etime="${6:-}"
-  local bin_dir output code log_calls baseline
+  local daemon_pid="${5:-}" daemon_etime="${6:-}" starting_baseline="${7:-}"
+  local bin_dir output code log_calls baseline hosted_record
 
   bin_dir="$(mktemp -d)"
   [[ -n "${diagnostics_dir}" ]] || diagnostics_dir="${bin_dir}/diagnostics"
@@ -400,8 +400,20 @@ STUB
   # wrapper run here would read as a catastrophically short run, and a fixture must never write to the
   # file the real gate is measured against either (L2).
   local baseline_file="${bin_dir}/baseline"
+  # #3233: the screens record, into the throwaway bin dir rather than the repository's own file.
+  # Defaulted HERE rather than exported around one block, so every call in this fixture is
+  # structurally unable to write it (L2). It matters now in a way it did not before: until this
+  # change no stub output named a hosted suite as passed, and the log below names two, so without
+  # this the fixture would stamp the live record with a day on which nothing rendered a view.
+  HOSTED_RECORD_AFTER_PARALLEL="${bin_dir}/hosted-seen"
+  hosted_record=""
+  # #3233: the count this Mac would already be holding, when the assertion is about the SHORT RUN
+  # gate itself. Absent by default, which is a Mac that has never had a green full run and so makes
+  # no claim about any of these, leaving every call above this one unchanged.
+  [[ -z "${starting_baseline}" ]] || echo "${starting_baseline}" > "${baseline_file}"
   output="$(PATH="${bin_dir}:${PATH}" OVERTURE_TEST_BASELINE_FILE="${baseline_file}" \
     OVERTURE_TEST_DIAGNOSTICS_DIR="${diagnostics_dir}" \
+    OVERTURE_HOSTED_SUITE_RECORD="${HOSTED_RECORD_AFTER_PARALLEL}" \
     "${SCRIPT_DIR}/run-tests-locked.sh" 2>&1)"
   code=$?
   log_calls="$(grep -c . "${bin_dir}/log-calls" 2>/dev/null || echo 0)"
@@ -409,9 +421,31 @@ STUB
   # because the file is thrown away with the bin dir, and because "did this run move the baseline?"
   # is not answerable from anything the script prints.
   baseline="$(cat "${baseline_file}" 2>/dev/null || true)"
+  # Read out here, because "did this run stamp the screens?" is not answerable from anything the
+  # script prints and the file goes with the directory below.
+  hosted_record="$(cat "${HOSTED_RECORD_AFTER_PARALLEL}" 2>/dev/null || true)"
   rm -rf "${bin_dir}"
-  printf '%s\nbaseline=%s\nlogcalls=%s\nexit=%s\n' "${output}" "${baseline}" "${log_calls}" "${code}"
+  printf '%s\nbaseline=%s\nscreensrecord=%s\nlogcalls=%s\nexit=%s\n' \
+    "${output}" "${baseline}" "${hosted_record}" "${log_calls}" "${code}"
 }
+
+# #3233: the repository's OWN screens record, and what is in it BEFORE any stub run below.
+#
+# It matters from this change onward in a way it did not before: until now no stub output named a
+# hosted suite as PASSED, so no fixture run could stamp it. The parallel fixture log names two, and a
+# run of this file must never be able to record that Dan's screens were verified on a day when nothing
+# rendered a view (L2). The override in the helper is what makes that structural; this is the check
+# that the override is really in force, in the same before-against-after shape the live store record
+# uses, so it holds on a pristine checkout and on a machine that has been running the suite for months.
+REPO_HOSTED_RECORD="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}/.overture-hosted-suite-seen"
+repo_hosted_record_state() {
+  if [[ -e "${REPO_HOSTED_RECORD}" ]]; then
+    shasum -a 256 "${REPO_HOSTED_RECORD}" | cut -d' ' -f1
+  else
+    echo absent
+  fi
+}
+REPO_HOSTED_RECORD_BEFORE="$(repo_hosted_record_state)"
 
 # THE case. Two deliberately-red guards on #1451 came out of this wrapper labelled a crashed run.
 REAL_FAILURE_RUN="$(run_wrapper_with_stub_xcodebuild "${REAL_FAILURE_OUTPUT}" 65)"
@@ -1201,6 +1235,119 @@ assert_not_contains "an ordinary run on a fresh daemon says nothing about it" \
 
 assert_not_contains "and neither does a run on a Mac with no test service running at all" \
   "testmanagerd" "${PASSING_RUN}"
+
+echo
+# --- a parallel run is counted, and a short one is refused (#3233) --------------------------
+#
+# THE incident, 2026-08-29. The suite was run once with `-parallel-testing-enabled YES` for the speed
+# audit behind milestone 60. xcodebuild stopped printing its "Test run with N tests" summary and
+# reported every test on its own line instead, nothing here could read that format, and so:
+#
+#   * the run ended with "Suite shape: could not read the test totals from this run";
+#   * the executed count was EMPTY, so the SHORT RUN gate had nothing to compare and could not fire;
+#   * 4,875 of 8,595 tests had actually run, one of the two workers printing 58 lines before its
+#     entire share vanished with no crash line anywhere;
+#   * and the only thing on screen was a list of 12 failing tests, offered as the whole story.
+#
+# A run missing 3,720 tests presented as an ordinary red is exactly the reading #2195 built this gate
+# to prevent, and the gate was intact the whole time. It was blind, not broken (L98, L11).
+#
+# Driven through the REAL script against that run's own output, trimmed, because the unit tests over
+# the parser cannot show that the gate downstream of it now fires.
+PARALLEL_RUN_LOG="$(cat "${SCRIPT_DIR}/lib/fixtures/parallel-run-20260829.log")"
+PARALLEL_RUN="$(run_wrapper_with_stub_xcodebuild "${PARALLEL_RUN_LOG}" 65 "" "" "" "" 8595)"
+
+assert_contains "a parallel run short of the baseline is refused as a SHORT RUN" \
+  "SHORT RUN" "${PARALLEL_RUN}"
+
+# Both numbers, because the point of the message is that the reader can see the size of what is
+# missing without going and finding the baseline themselves.
+assert_contains "and the refusal names what ran" \
+  "this run executed 26 tests" "${PARALLEL_RUN}"
+
+assert_contains "and what was expected of it" \
+  "the 8595 the last green run on this Mac ran" "${PARALLEL_RUN}"
+
+# This one was already red, so it keeps xcodebuild's own code rather than being flattened to 1.
+assert_equals "a short red run keeps xcodebuild's own exit code" \
+  "exit=65" "$(tail -n 1 <<< "${PARALLEL_RUN}")"
+
+# THE consequence, and the case worth building by hand rather than capturing. A short run that ends
+# RED is caught by its own failures whatever this gate does; a short run that prints the SUCCESS
+# banner is the one #1006 saw ("Test run with 1574 tests ... passed" over a ~2400 test suite), and
+# under this format it is entirely possible: the missing worker printed no failure and no crash line,
+# so had the twelve failures been in ITS share the same run would have come back green and short.
+# A result that cannot be believed must never exit 0, or test-all.sh goes on to say the suite passed.
+PARALLEL_SHORT_GREEN="$(awk '/^Failing tests:/{exit} {print}' <<< "${PARALLEL_RUN_LOG}")
+** TEST SUCCEEDED **"
+PARALLEL_GREEN_RUN="$(run_wrapper_with_stub_xcodebuild "${PARALLEL_SHORT_GREEN}" 0 "" "" "" "" 8595)"
+
+assert_contains "a short parallel run that reports SUCCESS is still refused" \
+  "SHORT RUN" "${PARALLEL_GREEN_RUN}"
+
+assert_equals "and cannot exit 0 on the strength of its own banner" \
+  "exit=1" "$(tail -n 1 <<< "${PARALLEL_GREEN_RUN}")"
+
+assert_equals "nor record its own short count as the baseline" \
+  "baseline=8595" "$(grep '^baseline=' <<< "${PARALLEL_GREEN_RUN}")"
+
+# And it is refused for the RIGHT reason. Before the parser could read this format the count came
+# back empty, which made a green run of 26 tests indistinguishable from a scope that matched nothing:
+# the run was still stopped, by NOTHING RAN, and the remedy it hands over is "check the -only-testing:
+# path you passed", which changes nothing about the state this reader is actually in (L111, L11).
+assert_not_contains "and never as a scope that matched nothing, which it was not" \
+  "NOTHING RAN" "${PARALLEL_GREEN_RUN}"
+
+# And it must not be read as one of the other two things that also arrive with no usable count. A
+# scope that matched nothing and a run that started and died partway want different responses, and
+# this run started plenty.
+assert_not_contains "a short parallel run is not reported as NOTHING RAN" \
+  "NOTHING RAN" "${PARALLEL_RUN}"
+
+# The readout, which is what AGENTS.md names as the reference for "did this run execute the whole
+# suite?". Before this it said it could not tell.
+assert_contains "the shape readout states a parallel run's counts" \
+  "Suite shape: 26 tests in 12 suites" "${PARALLEL_RUN}"
+
+# The duration is the run's own elapsed reading, never the sum of the per-test seconds, which in this
+# trimmed log come to 338.423s for a run that took 95.447. Scoped to what this SCRIPT prints: the raw
+# log carries those per-test numbers by construction (L135).
+assert_contains "and its wall clock, not the sum of its per-test seconds" \
+  "95.447s" "$(grep 'run-tests-locked.sh: Suite shape' <<< "${PARALLEL_RUN}")"
+
+# The baseline is untouched. A truncated run recording its own count would lower the bar every later
+# run is measured against, which is the failure mode that disables the gate permanently.
+assert_equals "a short parallel run never becomes the new baseline" \
+  "baseline=8595" "$(grep '^baseline=' <<< "${PARALLEL_RUN}")"
+
+# The other side of the same rule, so this is not passing because the gate refuses everything: the
+# identical log against a baseline that run is NOT short of is an ordinary red, named by its failures.
+PARALLEL_RUN_IN_FULL="$(run_wrapper_with_stub_xcodebuild "${PARALLEL_RUN_LOG}" 65 "" "" "" "" 26)"
+
+assert_not_contains "a parallel run that is NOT short is not accused of being one" \
+  "SHORT RUN" "${PARALLEL_RUN_IN_FULL}"
+
+assert_contains "and is reported by its failing tests, as any red run is" \
+  "FAILING TESTS (12)" "${PARALLEL_RUN_IN_FULL}"
+
+# The SCREENS readout, which is the same defect as the count one wearing different clothes. A parallel
+# run prints no `Suite "..." passed` line anywhere, so the #1995 reader found nothing and every such run
+# said the screens went unverified, including the runs that had just rendered all 49 hosted suites. This
+# log names two of them as passed on the app host's own destination.
+assert_contains "a parallel run that rendered a hosted suite says the screens were verified" \
+  "verified by this run" "$(grep 'Screen tests' <<< "${PARALLEL_RUN}")"
+
+# And it RECORDS it, into the throwaway path this fixture is given rather than the repository's own.
+# Without that record the reader above is a claim nothing acts on (L3), and without the throwaway path
+# these very runs would stamp the live tree with a day on which no view was rendered at all (L2).
+assert_equals "and records that against the run's own throwaway file, never the repository's" \
+  "screensrecord=screens=$(date +%Y-%m-%d)" "$(grep '^screensrecord=' <<< "${PARALLEL_RUN}")"
+
+# Nothing above reached the repository's own copy. Judged by CONTENT against what was there before,
+# so a real record this machine already carries is not mistaken for something these runs wrote
+# (#3172's reason, and its shape).
+assert_equals "and no run in this fixture changed the repository's screens record" \
+  "${REPO_HOSTED_RECORD_BEFORE}" "$(repo_hosted_record_state)"
 
 # ---------------------------------------------------------------------------
 # #2577: the stall-versus-queue scenarios live in run-tests-locked-stall.test.sh

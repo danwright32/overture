@@ -102,6 +102,93 @@ assert_eq "and one test in the singular too" \
   "Suite shape: 1 test in 1 suite, 0.004s. Test Swift to app Swift 1.70 to 1. Source-text guards are 1176 of 6219 test declarations."
 
 # ---------------------------------------------------------------------------
+# test_run_totals: the PARALLEL format (#3233)
+# ---------------------------------------------------------------------------
+# A run under `-parallel-testing-enabled YES` prints NO "Test run with ..." summary at all. Every
+# test is reported on its own line instead:
+#
+#   Test case 'Suite/test()' passed on 'My Mac - xctest (63822)' (0.013 seconds)
+#
+# Measured 2026-08-29, the audit experiment behind milestone 60. Nothing here could read that, so
+# the run ended with "Suite shape: could not read the test totals from this run", and because the
+# executed count is what the short-run gate compares against a baseline, THE GATE COULD NOT FIRE.
+# That run executed 4,875 of 8,595 tests, one of its two workers printed 58 lines and its whole
+# share never appeared, no crash line was printed anywhere, and the only thing on screen was a list
+# of 12 failing tests offered as though it were the whole story (L98, L11).
+#
+# The fixture beside this file is that run's own output, trimmed. Trimmed in VOLUME only: every line
+# in it is a real line from the real log, and the shapes that made the incident hard to read are all
+# kept, because they are what a parser has to survive:
+#
+#   * BOTH workers, named by different pids, plus the app host's own destination;
+#   * a `skipped` verb as well as `passed` and `failed`;
+#   * a parameterised test printing one line PER CASE under one name;
+#   * a retried test printing its line more than once;
+#   * one line CORRUPTED by two workers writing at the same moment, which is where the run's own
+#     elapsed reading ended up glued onto the end of a half-written test case line. That is not a
+#     curiosity: it is why the readable count in the full log is 4,874 against the xcresult's 4,875.
+#
+# The full 839KB log is kept at ~/.overture-mac-test-diagnostics/parallel-experiment-20260829.log.
+PARALLEL_LOG="$(cat "${SCRIPT_DIR}/fixtures/parallel-run-20260829.log")"
+
+# The count is what the gate needs, so it is the first thing asserted. 26 distinct tests across 12
+# suites is what this trimmed log holds; the full one held 4,874 against a baseline of 8,595.
+assert_eq "a parallel run's totals are read rather than reported as unreadable" \
+  "$(test_run_totals "${PARALLEL_LOG}")" \
+  "26 12 95.447"
+
+# Counted by NAME, not by line. 34 lines carry a verb in this fixture and 26 distinct tests produced
+# them: a parameterised test prints one line per case and a retried one prints its line again, so a
+# line count would report more tests than ran and, being the larger number, would report a truncated
+# run as a longer one than it was. That is the direction this gate must never be wrong in.
+assert_eq "a repeated line is one test, not two" \
+  "$(test_run_totals "${PARALLEL_LOG}" | awk '{print $1}')" \
+  "26"
+
+# The DURATION is the one number in this format that cannot be taken from the test lines. Each of
+# them ends in "(N seconds)" and N is elapsed since that WORKER began, not what the test cost: a
+# one-line boolean in the real log reported 64.4 seconds. Summing them here would say 338.423s for a
+# run that took 95.447, and every one of those numbers looks perfectly plausible.
+assert_eq "the duration comes from the run's own elapsed line, never the sum of the test lines" \
+  "$(test_run_totals "${PARALLEL_LOG}" | awk '{print $3}')" \
+  "95.447"
+
+# The elapsed reading and the counts are separate measurements, so one being unreadable must not
+# destroy the other. Losing that line is not hypothetical: in the real log it survived only because
+# it was glued onto a test case line, and the next collision could as easily have taken it. The
+# counts still gate the run; the duration says it was not measured rather than inventing a zero.
+PARALLEL_NO_ELAPSED="$(grep -av 'elapsed -- Testing started completed' <<< "${PARALLEL_LOG}")"
+assert_eq "a lost elapsed line leaves the counts intact and the duration unclaimed" \
+  "$(test_run_totals "${PARALLEL_NO_ELAPSED}")" \
+  "26 12 unknown"
+
+assert_eq "and the readout names the missing duration instead of printing a number" \
+  "$(format_suite_report "26 12 unknown" "1.90" "1176" "6219")" \
+  "Suite shape: 26 tests in 12 suites, duration not reported by this run. Test Swift to app Swift 1.90 to 1. Source-text guards are 1176 of 6219 test declarations."
+
+# A parallel run that started nothing is still a run that executed nothing, and must not come back
+# as a zero. Same rule as the serial format above: no reading is not a reading of none.
+assert_eq "a parallel run with no test lines yields nothing, not a zero" \
+  "$(test_run_totals "Testing started
+95.447 elapsed -- Testing started completed.
+** TEST SUCCEEDED **")" \
+  ""
+
+# The serial summary still wins wherever it exists. It is xcodebuild's own total rather than one
+# derived by counting lines, so a log carrying both must never be re-counted from the weaker source.
+assert_eq "a serial summary is preferred over counting lines" \
+  "$(test_run_totals "Test case 'A/one()' passed on 'My Mac - xctest (1)' (0.1 seconds)
+${PASS_MARK} Test run with 5923 tests in 835 suites passed after 102.546 seconds.")" \
+  "5923 835 102.546"
+
+# The failing list is read from xcodebuild's own block either way, so a parallel run's failures are
+# named exactly as a serial run's are. Worth asserting rather than assuming: this block is what the
+# incident's verdict was built from, and its being right is what made the missing count invisible.
+assert_eq "a parallel run's failing tests are still named" \
+  "$(failing_test_names "${PARALLEL_LOG}" | grep -c .)" \
+  "12"
+
+# ---------------------------------------------------------------------------
 # line_ratio: test Swift against app Swift
 # ---------------------------------------------------------------------------
 

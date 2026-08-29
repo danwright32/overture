@@ -679,6 +679,28 @@ already drifting from the Swift version it mirrored.
   must never give, since the reading it exists to support is "was this run short?", so it prints
   `Suite shape: NOT REPORTED` and names the restart instead of summing across a crash, and such a
   run can no longer record its own count as the baseline the short-run gate measures against.
+  **Since #3233 the readout also understands a PARALLEL run, which prints no totals line at all.**
+  Under `-parallel-testing-enabled YES` xcodebuild stops printing `Test run with N tests in M suites`
+  and reports each test on its own line instead (`Test case 'Suite/test()' passed on 'My Mac - xctest
+  (63822)' (N seconds)`). Nothing read that, so the whole chain downstream of the count went blind at
+  once: the readout said it could not tell, the short-run gate had nothing to compare against a
+  baseline and therefore could not fire, and the screens readout (#1995), which looks for
+  `Suite "..." passed`, reported the screens as unverified. Measured 2026-08-29 on the audit
+  experiment behind milestone 60: barely more than half the suite executed, one of its two workers
+  printed 58 lines before its entire share vanished with no crash line anywhere, and the only thing on
+  screen was a list of 12 failing tests offered as the whole story. The gate was intact throughout. It
+  was blind, not broken (L98, L11). The counts are deliberately not written here, for this document's
+  own standing reason: a hand-written suite size drifts and then weakens the very warning it is quoted
+  in support of (L32). They are in #3233 and in the fixture's own header. Three things to know about the parallel reading. The count is by
+  test NAME rather than by line, because a parameterised test prints one line per case and a retried
+  one prints its line again, and an over-count makes a truncated run look longer than it was. The
+  DURATION never comes from those per-test seconds, which are elapsed since that WORKER began rather
+  than what the test cost (in the real log a one-line boolean reported 64.4s, and the trimmed fixture's
+  lines sum to 338.423s for a run that took 95.447): it comes from the run's own elapsed line, or the
+  readout says the duration was not reported. And a serial summary still wins wherever one exists,
+  since it is xcodebuild's own total rather than one derived by counting. The fixture is that run's own
+  output, trimmed, at `mac/scripts/lib/fixtures/parallel-run-20260829.log`; the full 839KB log is kept
+  at `~/.overture-mac-test-diagnostics/parallel-experiment-20260829.log`.
   **Since #3165 the first of those two invariants is measured by a different number.** It used to be the
   rows whose reply is still OPEN, which #2985 narrowed it to for a correct reason (`ReplyIdentity.answering`
   short-circuits once a reply is handled, and asserting through it fired when Dan answered one, which is the
@@ -1085,12 +1107,21 @@ Mac suite before any push). This means a merge's Swift verification comes from h
 from CI. Do not merge a Swift change without that local pass in hand.
 
 That one check runs on PULL REQUESTS ONLY. There is no push trigger, and
-`src/lib/ciWorkflow.test.ts` fails if one comes back. The reason is cost, measured 2026-08-16:
-440 workflow runs over seven days, 209 of them push and 227 pull_request. GitHub rounds every
-run up to a full billed minute however short it is. That is roughly 1,890 billed
-minutes a month against the 2,000 a private repo gets on a free personal plan, whose default
-spending limit is zero, so crossing it STOPS CI rather than billing for it and a PR simply sits
-with no checks. About half that spend was the second look at code that had already passed.
+`src/lib/ciWorkflow.test.ts` fails if one comes back. The reason is DUPLICATED WORK, measured
+2026-08-16: 440 workflow runs over seven days, 209 of them push and 227 pull_request, so about half
+of every run this repository made was a second look at code that had already passed.
+This paragraph used to give the reason as MONEY, and that half was wrong (#3233, L32). It said
+the 209 push runs were roughly 1,890 billed minutes a month against the 2,000 a PRIVATE repo gets
+on a free personal plan, and that crossing it would stop CI rather than bill. This repository is
+PUBLIC (`gh repo view --json visibility` answers PUBLIC, checked 2026-08-29) and GitHub does not
+bill a public repository for standard hosted runners, so no run here has ever cost money. It does
+NOT follow that a duplicate run is free, which is the same mistake pointing the other way (L307):
+on a free public repository the budget is the RUNNER CONCURRENCY LIMIT, a job is priced in the
+slots it holds times how long it holds them whoever is waiting, and every job over the limit
+delays every other. Dropping half the runs is therefore worth more here than the old paragraph
+claimed, in queue time rather than dollars. It is corrected rather than removed because it was
+load bearing in the direction that matters: anybody weighing whether to add a job read it as a
+measurement saying there was no room for one.
 What the push run was FOR is the one thing a PR run cannot do, judge the MERGED result rather
 than the branch beside the base it was cut from (L85). That is kept, and more strongly: both
 merge scripts already combine current `origin/main` into the branch and run the FULL suite,

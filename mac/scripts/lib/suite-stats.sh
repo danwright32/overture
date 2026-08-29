@@ -27,12 +27,15 @@
 # not parse the output are different facts, and reporting the second as "0 tests" would state a
 # measurement that was never made.
 test_run_totals() {
-  local output="$1"
+  local output="$1" serial
   # #2317: `tests?` and `suites?`, because Swift Testing writes the words singular when there is one of
   # something ("Test run with 10 tests in 1 suite passed"). Only knowing the plural made a real scoped run
   # read as one that executed nothing, which is the same false alarm the empty-run gate exists to avoid
   # ever raising.
-  printf '%s\n' "${output}" | awk '
+  # #3233: the serial summary FIRST, and the line-counting fallback only where there is none. That
+  # summary is xcodebuild's own total rather than one derived by counting, so a log carrying both
+  # must never be re-counted from the weaker source.
+  serial="$(printf '%s\n' "${output}" | awk '
     match($0, /Test run with [0-9]+ tests? in [0-9]+ suites? (passed|failed) after [0-9.]+ seconds/) {
       line = substr($0, RSTART, RLENGTH)
       split(line, f, " ")
@@ -41,6 +44,63 @@ test_run_totals() {
       seen = 1
     }
     END { if (seen) printf "%d %d %.3f\n", tests, suites, seconds }
+  ')"
+  if [[ -n "${serial}" ]]; then
+    printf '%s\n' "${serial}"
+    return 0
+  fi
+  test_run_totals_parallel "${output}"
+}
+
+# The same totals for a run under `-parallel-testing-enabled YES`, which prints NO summary line at
+# all (#3233). Empty when the output carries no test line either, for test_run_totals' own reason:
+# a reading that could not be taken is not a reading of none.
+#
+# Every test is reported on its own line instead of being summed for you:
+#
+#   Test case 'Suite/test()' passed on 'My Mac - xctest (63822)' (0.013 seconds)
+#
+# Three things about deriving a total from those lines, each of which was wrong in the obvious
+# version of this.
+#
+# Counted by NAME, not by line. A parameterised test prints one line per case and a retried one
+# prints its line again, so a line count reports more tests than ran. It is wrong in the one
+# direction that matters: the number feeds the short-run gate, and an over-count makes a truncated
+# run look longer than it was.
+#
+# The SECONDS never come from those lines. Each ends in "(N seconds)" and N is elapsed since that
+# WORKER began, not what the test cost: in the measured log a one-line boolean reported 64.4
+# seconds, and summing the fixture beside this file gives 338.423s for a run that took 95.447. Both
+# numbers look entirely plausible, which is why this reads the run's own elapsed line or reports
+# nothing.
+#
+# And a lost elapsed reading does not destroy the counts. They are separate measurements, and the
+# duration is the one the format is least able to protect: in the measured log two workers wrote at
+# the same instant and the elapsed reading survived only by being glued onto the end of a
+# half-written test case line. So an unreadable one is named "unknown" here and named in words by
+# format_suite_report, while the counts, which are what gates the run, still arrive.
+test_run_totals_parallel() {
+  local output="$1"
+  printf '%s\n' "${output}" | awk -v q="'" '
+    BEGIN { line_rx = "^Test case " q "[^" q "]+" q " (passed|failed|skipped) on " }
+    $0 ~ line_rx {
+      rest = substr($0, length("Test case " q) + 1)
+      name = substr(rest, 1, index(rest, q) - 1)
+      if (!(name in seen_test)) { seen_test[name] = 1; tests++ }
+      slash = index(name, "/")
+      suite = (slash > 0) ? substr(name, 1, slash - 1) : name
+      if (!(suite in seen_suite)) { seen_suite[suite] = 1; suites++ }
+    }
+    !have_elapsed && match($0, /[0-9]+(\.[0-9]+)? elapsed -- Testing started completed/) {
+      split(substr($0, RSTART, RLENGTH), f, " ")
+      elapsed = f[1]; have_elapsed = 1
+    }
+    END {
+      if (tests > 0) {
+        if (have_elapsed) printf "%d %d %.3f\n", tests, suites, elapsed
+        else              printf "%d %d unknown\n", tests, suites
+      }
+    }
   '
 }
 
@@ -146,7 +206,15 @@ format_suite_report() {
     # #2317: a scoped run really can be one suite, and now that scoped runs go through this wrapper the
     # readout says so in words rather than "1 suites".
     out+="${tests} test$([[ "${tests}" == 1 ]] || echo s)"
-    out+=" in ${suites} suite$([[ "${suites}" == 1 ]] || echo s), ${seconds}s."
+    out+=" in ${suites} suite$([[ "${suites}" == 1 ]] || echo s), "
+    # #3233: a parallel run's counts and its duration are separate measurements, and only the
+    # duration can go missing on its own. Naming it beats printing the token: "26 tests in 12
+    # suites, unknowns" reads as a number nobody quite parsed rather than as a reading not taken.
+    if [[ "${seconds}" == "unknown" ]]; then
+      out+="duration not reported by this run."
+    else
+      out+="${seconds}s."
+    fi
   else
     out+="could not read the test totals from this run."
   fi

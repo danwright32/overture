@@ -93,6 +93,79 @@ assert_empty "a run that started the hosted bundle and died has verified nothing
 assert_empty "and with no names to look for, nothing is claimed either way" \
   "$(hosted_suites_ran "$(cat "${PASSED}")" "")"
 
+# --- and the same question asked of a PARALLEL run (#3233) -------------------------------------------
+#
+# A run under `-parallel-testing-enabled YES` prints no `Suite "..." passed` line ANYWHERE: measured on
+# the 2026-08-29 experiment log, zero of them in 6,489 lines. Every test is reported on its own line
+# instead, and by its Swift TYPE name rather than the display name this file reads:
+#
+#   Test case 'ProspectRowViewReachabilityTests/theBadgeIsDrawn()' passed on 'My Mac - Overture (63823)'
+#
+# So the reader above was blind to it, and the direction it fails in is what makes it worth fixing
+# rather than watching. It says NOT VERIFIED, which is safe once and a false alarm on EVERY run under
+# that flag: the record would freeze, the dormancy would climb, and the sentence saying the screens went
+# unchecked would be printed by runs that had just rendered 49 suites of them. A guard that is wrong on
+# the ordinary case is one people stop reading (L93), and this one exists to be believed.
+#
+# The TYPE names, derived from the same directory for the same reason the display names are: a list
+# written here is a list that only checks what somebody remembered (L96).
+TYPES="$(hosted_suite_types "${WORK}/HostedTests")"
+assert_equals "the type names are read too, including a suite that carries no display name" \
+  "ProspectRowViewReachabilityTests
+SendSheetEditableBodyTests
+SomethingUnnamedTests" "${TYPES}"
+
+PARALLEL="${WORK}/parallel.log"
+cat > "${PARALLEL}" <<'OUT'
+Test case 'ProspectRowViewReachabilityTests/theBadgeIsDrawnOnACardWeCanReach()' passed on 'My Mac - Overture (63823)' (0.032 seconds)
+Test case 'ReplyIdentityTests/aPeerHoldsTheWriter()' passed on 'My Mac - xctest (63822)' (0.004 seconds)
+** TEST SUCCEEDED **
+OUT
+assert_equals "a parallel run naming a hosted test as passed has verified the screens" \
+  "ProspectRowViewReachabilityTests" \
+  "$(hosted_suites_ran "$(cat "${PARALLEL}")" "${NAMES}" "${TYPES}")"
+
+# A pure suite's own tests must not answer for the hosted ones. Nothing here renders a view, so a run
+# that executed only these has verified nothing about the screens however many tests it passed.
+PARALLEL_PURE="${WORK}/parallel-pure.log"
+cat > "${PARALLEL_PURE}" <<'OUT'
+Test case 'ReplyIdentityTests/aPeerHoldsTheWriter()' passed on 'My Mac - xctest (63822)' (0.004 seconds)
+Test case 'ScoutStartGateTests/aRunAlreadyGoingIsNotStartedAgain()' passed on 'My Mac - xctest (63822)' (0.001 seconds)
+** TEST SUCCEEDED **
+OUT
+assert_empty "a parallel run of pure suites only has verified nothing about the screens" \
+  "$(hosted_suites_ran "$(cat "${PARALLEL_PURE}")" "${NAMES}" "${TYPES}")"
+
+# PASSED specifically, here as much as in the serial format. A hosted test that FAILED still rendered
+# something, but this record is what a later reader trusts as "the screens were checked and were fine",
+# and a run whose hosted tests failed has not established that.
+PARALLEL_FAILED="${WORK}/parallel-failed.log"
+cat > "${PARALLEL_FAILED}" <<'OUT'
+Test case 'ProspectRowViewReachabilityTests/theBadgeIsDrawnOnACardWeCanReach()' failed on 'My Mac - Overture (63823)' (0.032 seconds)
+** TEST FAILED **
+OUT
+assert_empty "a hosted test that failed does not stamp the screens as verified" \
+  "$(hosted_suites_ran "$(cat "${PARALLEL_FAILED}")" "${NAMES}" "${PARALLEL_FAILED_TYPES:-${TYPES}}")"
+
+# A suite NAME must not be matched inside a test case line by accident, and a TYPE must not be matched
+# inside a longer one. `ProspectRowViewReachabilityTests` is a prefix of nothing here on purpose: the
+# needle is anchored at the slash, so a suite called `...ReachabilityTestsExtra` cannot answer for it.
+PARALLEL_NEAR_MISS="${WORK}/parallel-near-miss.log"
+cat > "${PARALLEL_NEAR_MISS}" <<'OUT'
+Test case 'ProspectRowViewReachabilityTestsExtra/somethingElse()' passed on 'My Mac - xctest (63822)' (0.002 seconds)
+** TEST SUCCEEDED **
+OUT
+assert_empty "a longer suite name does not answer for the hosted one it starts with" \
+  "$(hosted_suites_ran "$(cat "${PARALLEL_NEAR_MISS}")" "${NAMES}" "${TYPES}")"
+
+# The serial answer is unchanged by any of this, which is the half a new format must not cost.
+assert_equals "a serial run still answers by its display name" \
+  "The reachability badge on a card (#1145)" \
+  "$(hosted_suites_ran "$(cat "${PASSED}")" "${NAMES}" "${TYPES}")"
+
+assert_empty "a directory that is not there yields no types either" \
+  "$(hosted_suite_types "${WORK}/nowhere")"
+
 # --- the record moves only when a run really verified them --------------------------------------------
 #
 # The whole mechanism. Stamping every run would move the date forward while the host stayed broken, the
@@ -150,6 +223,12 @@ assert_contains "and the record is overridable, so a fixture cannot write into t
 # that is handed something it does not understand and answers "nothing" (L52, L98).
 assert_contains "and hands it the same run output its siblings get" \
   "${RUNNER}" 'hosted_suites_ran "${last_output}"'
+# #3233: and the TYPE names beside the display ones, or the parallel half of the reader above is code
+# nothing calls, which looks exactly like a reader that works (L3).
+assert_contains "the runner derives the type names too" \
+  "${RUNNER}" 'hosted_suite_types "${MAC_DIR}/OvertureHostedTests"'
+assert_contains "and hands them to the reader that needs them" \
+  "${RUNNER}" '"${HOSTED_SUITE_TYPES}"'
 assert_contains "which is the same value the live-store report is given" \
   "${RUNNER}" 'live_corpus_report "${last_output}"' 
 

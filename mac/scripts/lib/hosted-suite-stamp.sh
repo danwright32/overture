@@ -39,8 +39,43 @@ hosted_suite_names() {
     | sort -u
 }
 
-# hosted_suites_ran <output-text> <names>: prints the first hosted suite the run reports as PASSED, or
-# nothing.
+# hosted_suite_types <dir>: the Swift TYPE name of every `@Suite` declaration under dir, one per line.
+#
+# #3233: the same question the display names answer, for a run under `-parallel-testing-enabled YES`,
+# which prints no `Suite "..." passed` line anywhere (measured on the 2026-08-29 experiment log: zero of
+# them in 6,489 lines). It reports each test on its own line and names the suite by its TYPE:
+#
+#   Test case 'ProspectRowViewReachabilityTests/theBadgeIsDrawn()' passed on 'My Mac - Overture (63823)'
+#
+# A suite carrying no display name contributes here even though it contributes nothing above, which is a
+# small gain rather than the point: the point is that under that flag the display names find nothing at
+# all, so every run would report the screens as unverified while rendering all 49 suites of them.
+#
+# Read by walking FORWARD from each `@Suite` to the first declaration line, rather than by taking a fixed
+# number of following lines. `@MainActor` sits between them often enough here, and a fixed window is
+# answered by whatever happens to be inside it: a `struct` three lines under a `@Suite` mentioned in a
+# COMMENT would be collected as a hosted suite, and this list is trusted in the direction that says the
+# screens were checked.
+hosted_suite_types() {
+  dir="$1"
+  [ -d "${dir}" ] || return 0
+  find "${dir}" -name '*.swift' -type f -exec awk '
+    /^[[:space:]]*@Suite/ { pending = 1; next }
+    pending {
+      line = $0
+      sub(/^[[:space:]]+/, "", line)
+      if (line == "" || line ~ /^\/\// || line ~ /^@/) next
+      if (match(line, /(^|[[:space:]])(class|struct|enum|actor)[[:space:]]+[A-Za-z_][A-Za-z0-9_]*/)) {
+        n = split(substr($0, RSTART, RLENGTH), parts, /[[:space:]]+/)
+        print parts[n]
+      }
+      pending = 0
+    }
+  ' {} + 2>/dev/null | sort -u
+}
+
+# hosted_suites_ran <output-text> <names> [types]: prints the first hosted suite the run reports as
+# PASSED, or nothing.
 #
 # PASSED specifically, not merely mentioned: a run that started the bundle and died in it has verified
 # nothing, and its output names those suites just as a passing run does.
@@ -55,12 +90,35 @@ hosted_suite_names() {
 hosted_suites_ran() {
   output="$1"
   names="$2"
-  [ -n "${names}" ] || return 0
+  types="${3:-}"
   [ -n "${output}" ] || return 0
-  printf '%s\n' "${names}" | while IFS= read -r name; do
-    [ -n "${name}" ] || continue
-    if printf '%s\n' "${output}" | grep -aqF "Suite \"${name}\" passed"; then
-      printf '%s\n' "${name}"
+
+  if [ -n "${names}" ]; then
+    serial_hit="$(printf '%s\n' "${names}" | while IFS= read -r name; do
+      [ -n "${name}" ] || continue
+      if printf '%s\n' "${output}" | grep -aqF "Suite \"${name}\" passed"; then
+        printf '%s\n' "${name}"
+        break
+      fi
+    done)"
+    if [ -n "${serial_hit}" ]; then
+      printf '%s\n' "${serial_hit}"
+      return 0
+    fi
+  fi
+
+  # #3233: the parallel format, asked only where the serial one found nothing. A run is one or the
+  # other, so this costs a passing serial run nothing.
+  #
+  # Anchored at the SLASH, which is doing real work: `ProspectRowViewReachabilityTestsExtra` would
+  # otherwise answer for `ProspectRowViewReachabilityTests`, and a near miss reads as a verified
+  # screen. And `passed` specifically, as above: a hosted test that FAILED rendered something, but
+  # this record is what a later reader trusts as "the screens were checked and were fine".
+  [ -n "${types}" ] || return 0
+  printf '%s\n' "${types}" | while IFS= read -r type; do
+    [ -n "${type}" ] || continue
+    if printf '%s\n' "${output}" | grep -aqE "^Test case '${type}/[^']*' passed on "; then
+      printf '%s\n' "${type}"
       break
     fi
   done
