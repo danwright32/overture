@@ -13,15 +13,25 @@ import Foundation
 @Suite("The Presenters sheet builds its listing once (#1731)")
 struct OrganisationsSheetModelTests {
 
+    // FRIGID's rows are sized FROM the shortlist cutoff, not written as literals. There were three of
+    // them, which cleared the cutoff when it was three and stopped clearing it when #1732 raised it to
+    // six. It has now moved twice, so a literal fixture breaks on the next move for a reason that has
+    // nothing to do with what either test here asserts. Three of these fixtures were sized that way and
+    // all three broke; this one broke in the FULL suite after a scoped run had passed, which is what a
+    // full run is for. FRIGID New York carries 27 rows on the live store, so this is an understatement.
     private func shows() -> [OrganisationListing.Show] {
-        [
+        var shows = [
             OrganisationListing.Show(presenter: "The Green Room 42", venue: "The Green Room 42", title: "A Cabaret"),
-            OrganisationListing.Show(presenter: "FRIGID New York", venue: "Under St Marks", title: "One"),
-            OrganisationListing.Show(presenter: "FRIGID New York", venue: "Under St Marks", title: "Two"),
-            OrganisationListing.Show(presenter: "FRIGID New York", venue: "Under St Marks", title: "Three"),
+            // Two rooms, and deliberately under the cutoff: a travelling producer the shortlist must not
+            // surface, which is half of what the assertion below is about.
             OrganisationListing.Show(presenter: "Young Concert Artists", venue: "Merkin Hall", title: "A Debut"),
             OrganisationListing.Show(presenter: "Young Concert Artists", venue: "The Cutting Room", title: "B Debut"),
         ]
+        for i in 1...OrganisationListing.shortlistMinimumRows {
+            shows.append(OrganisationListing.Show(presenter: "FRIGID New York",
+                                                  venue: "Under St Marks", title: "Show \(i)"))
+        }
+        return shows
     }
 
     // The whole point. Building the model runs the expensive derivation exactly once, however many

@@ -133,10 +133,30 @@ enum OrganisationListing {
     // Opera, which are genuine producers Dan would wave away. That is the accepted cost.
     //
     // Ranked by ROWS, because rows are what a correction saves or protects, and because ranking by
-    // distinct shows finds only the rented-room shape and is structurally blind to its mirror. The cutoff
-    // is three rows: measured, the refused population runs 27, 11, 10, 7, 6, 4, 3 and then a cliff where
-    // all 110 others carry one or two rows each, where a correction is worth nothing.
-    static let shortlistMinimumRows = 3
+    // distinct shows finds only the rented-room shape and is structurally blind to its mirror.
+    //
+    // It was THREE, on a 724-row store where the refused population ran 27, 11, 10, 7, 6, 4, 3 and then a
+    // cliff at one or two rows each. That cliff is the reason the number existed, and it is no longer
+    // where it was: re-measured 2026-08-28 on 1018 rows, the distribution has filled in and three no
+    // longer cuts anything much.
+    //
+    // #1732 raised it to SIX, and this is now TWO surfaces' number rather than one, which is what makes
+    // the trade-off worth stating here. It decides the Presenters shortlist AND, since #1732, whether a
+    // row offers the presenter correction at all. Measured on the live store across candidate values:
+    //
+    //     bar   rows offering the correction   organisations
+    //      3          195 of 1018                   26
+    //      5          150                           13
+    //      6          130                            9
+    //      8          118                            7
+    //     10           92                            4
+    //     15           56                            1
+    //
+    // Dan's call, 2026-08-28, shown that table: six. It is the largest cut that still leaves the
+    // Presenters sheet a real list to read rather than a handful, since the two move in lockstep and at
+    // fifteen the sheet is down to a single entry. Rows fall more slowly than organisations because the
+    // survivors are the big ones, which is the population a correction is worth anything on.
+    static let shortlistMinimumRows = 6
 
     // #1731: the evidence, as ONE sentence Dan reads. It carries the SHAPE and not just three numbers,
     // because the shape is the whole judgement: many different titles in one room reads as a rented room
