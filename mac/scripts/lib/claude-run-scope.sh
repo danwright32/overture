@@ -111,6 +111,38 @@ claude_run_plugin_lockout() {
   printf '%s' "--settings {\"enabledPlugins\":{${disabled}}}"
 }
 
+# --- the MCP lockout (#2386) ---------------------------------------------------------------------------
+#
+# The tool scope decides what a detached run may DO, and the plugin lockout decides what it is TOLD. This
+# decides what it is OFFERED. Same shape of hole for the third time: MCP servers are NOT plugins, so
+# #1682's lockout never touched them, and a headless `claude -p` on this Mac loads every configured
+# server and hands the run its whole tool surface.
+#
+# Measured on the wire 2026-08-29, a trivial prompt through the same headless path the runners use: 53
+# distinct `mcp__` tool definitions reach the run (Playwright, Slack, Google Calendar, Google Drive,
+# Gmail), and `--strict-mcp-config` takes that to 0 while the run still answers and the
+# dan-wright-brand-voice skill is STILL loaded. That last part is the constraint #1682 established and is
+# why `--setting-sources project,local` is not the route: it would drop ~/.claude and take the skill with
+# it, silently changing the voice of emails reaching strangers.
+#
+# What it was costing, from the 2026-08-09 reachability check: two `mcp__playwright__browser_navigate`
+# calls, both correctly refused, which is the entire content of the "web lookups refused" line Dan asked
+# about on a run where 338 lookups landed (#2362). Nothing broke, so this is cost and noise rather than an
+# active failure: the input-token saving is modest (55,555 to 54,193 on that trivial run, against the
+# 8,471 the plugin lockout saved), and the real gain is a tool list that matches the allowlist, so the run
+# never spends a turn discovering by refusal what could have been true from the start.
+#
+# WHY THERE IS NOTHING TO REFUSE OVER, unlike the plugin half. The plugin lockout must ENUMERATE, because
+# `--settings` merges per key and a list it could not read would disable nothing while reporting success.
+# Here the flag means "only the servers named by --mcp-config", none is passed, and zero follows by
+# construction rather than from a list that can go stale. A claude too old for the flag is not a silent
+# hole either, measured the same day: an unknown option exits with `error: unknown option`, so the run
+# dies loudly rather than quietly running unscoped. A probe of `--help` would guard nothing that is not
+# already loud, and a guard that cannot be seen to fail reads exactly like one that works (L1).
+#
+# One word, no spaces: the runners splice the scope onto the command line by deliberate word splitting.
+CLAUDE_RUN_MCP_LOCKOUT="--strict-mcp-config"
+
 # Emits the claude flags (--allowedTools <list> --permission-mode <mode>) that scope a detached run, and
 # REFUSES (returns nonzero, emits nothing) if the scope has drifted into an unsafe posture: an
 # auto-approving (or empty) permission mode, or a forbidden tool smuggled into the allowlist. Failing loud
@@ -156,7 +188,7 @@ claude_run_scope() {
   local lockout
   lockout="$(claude_run_plugin_lockout "${claude_bin}" "${label}")" || return 1
 
-  printf '%s' "--allowedTools ${allow} --permission-mode ${mode} ${lockout}"
+  printf '%s' "--allowedTools ${allow} --permission-mode ${mode} ${lockout} ${CLAUDE_RUN_MCP_LOCKOUT}"
 }
 
 # --- prep ----------------------------------------------------------------------------------------------
