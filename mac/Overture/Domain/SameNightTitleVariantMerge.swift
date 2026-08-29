@@ -136,6 +136,18 @@ enum SameNightTitleVariantMerge {
                     if survivor.scoutVenue == nil { survivor.scoutVenue = survivor.venue }
                     survivor.venue = room
                 }
+                // #1642: and the same for the TITLE, for the same reason one line up. The survivor is
+                // chosen for what it holds, which says nothing about which billing names the show best,
+                // so on the live store the first run kept `FRIGID Nightcap` over
+                // `FRIGID Nightcap: FUTURE TENSE`. Declines and leaves the name alone whenever the
+                // cluster does not settle it, which is the ordinary case.
+                // A name DAN typed outranks every billing. `groupNameOverriddenByDan` is what stops the
+                // scout clobbering his rename on each re-ingest, and walking over it here would undo his
+                // decision by another route, silently, on a launch he did nothing on (L5, #3124).
+                if !survivor.groupNameOverriddenByDan,
+                   let title = moreInformativeTitle(cluster.map(\.groupName)) {
+                    survivor.groupName = title
+                }
                 for loser in cluster where loser.persistentModelID != survivor.persistentModelID {
                     context.delete(loser)
                     summary.duplicatesDeleted += 1
@@ -222,6 +234,88 @@ enum SameNightTitleVariantMerge {
         let tiedAtBest = cluster.filter { specificity($0.venue) == specificity(best.venue) }
         guard tiedAtBest.count == 1 else { return nil }
         return venue
+    }
+
+    // #1642: which of a cluster's titles names the show best, chosen SEPARATELY from which row survives.
+    //
+    // The survivor is chosen for what it HOLDS (Dan's decision, a paid answer, its contact list, its
+    // age), and none of that has anything to do with which billing reads best, so the first run on the
+    // live store kept the vaguer name: `FRIGID Nightcap` survived over `FRIGID Nightcap: FUTURE TENSE`.
+    // This is the title's version of `preferredRoomName` above, and it is applied the same way.
+    //
+    // THE RULE, and why it is not "prefer the longest". A trailing fragment is real in this data:
+    // `Donnie Vie, Marc Ribler and the Disciples of Soul Tribute to` is a TRUNCATED string and longer
+    // than the clean `...Tribute`, so longest-wins keeps the broken one. `RunGrouping.representativeRow`
+    // prefers the SHORTEST, on the reasoning that it reads as the parent title, which is the opposite
+    // preference and equally wrong here.
+    //
+    // So a title has to EARN it: the winner must extend every other untruncated title in the cluster as a
+    // prefix. Titles that read as cut off are excluded from the field entirely rather than being ranked
+    // below the others, which is what lets the clean shorter name beat the longer fragment. Nothing to
+    // choose between (two unrelated names, one title, all of them cut off) returns nil and the survivor
+    // keeps its own name, exactly as `clearestRoomName` declines on a tie.
+    //
+    // KNOWN LIMIT, the same one the room name carries and worth stating rather than discovering:
+    // `ScoutService.apply` rewrites `groupName` on every re-ingest, so a carried title lasts until the
+    // next scout and is re-applied by this pass at the following launch. That is exactly how the room
+    // name already behaves (`existing.venue = p.venue`, ScoutService.swift:1613); it is not made worse
+    // here, and fixing it is a question about `scoutGroupName`, not about this rule.
+    static func moreInformativeTitle(_ titles: [String]) -> String? {
+        let cleaned = titles
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard cleaned.count > 1 else { return nil }
+
+        // The winner must not itself read as cut off, and must EARN the name against every other title
+        // in the cluster: each one is either a prefix of it (the winner carries extra programme detail)
+        // or a cut-off extension of it (the winner is the clean version of the same name).
+        //
+        // The second half is what makes discounting a truncated title safe, and the first version of this
+        // rule did not have it. It simply removed truncated titles from the field, so a perfectly good
+        // title that happens to end in a dangling word left an unrelated billing standing alone and won
+        // it the name. Measured on the live store before shipping: `What Dreams Are Made Of` and
+        // `A Night of Chills & Thrills` are different shows on one night, and the rule renamed one to the
+        // other. A truncated title may only be discounted when the winner is a PREFIX of it, which is
+        // what makes it the same name cut short rather than a different one (L147).
+        let candidates = cleaned
+            .filter { !readsAsTruncated($0) }
+            .sorted { $0.count > $1.count }
+        for candidate in candidates {
+            let earned = cleaned.allSatisfy { other in
+                if isPrefix(other, of: candidate) { return true }
+                return isPrefix(candidate, of: other) && readsAsTruncated(other)
+            }
+            guard earned else { continue }
+            // Nothing to carry when every row already says this, which is the ordinary merge.
+            guard cleaned.contains(where: { $0 != candidate }) else { return nil }
+            return candidate
+        }
+        return nil
+    }
+
+    // Case and spacing are how one source differs from another, not what a title means, so both are
+    // folded before the comparison. Nothing else is: punctuation is meaning here (`Nightcap: FUTURE
+    // TENSE`), and folding it would let two genuinely different names read as one.
+    private static func folded(_ s: String) -> String {
+        s.lowercased().split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+    }
+
+    private static func isPrefix(_ candidate: String, of whole: String) -> Bool {
+        folded(whole).hasPrefix(folded(candidate))
+    }
+
+    // A title that stops mid-phrase, which a listing produces by cutting a long name to a fixed width.
+    // Judged on the LAST word being one that cannot end a sentence, plus a trailing separator, rather
+    // than on length: a short title is not suspicious and a long one is not wrong.
+    private static let danglingWords: Set<String> = [
+        "a", "an", "and", "at", "by", "for", "from", "in", "of", "on", "or", "the", "to", "with", "featuring", "feat"
+    ]
+
+    private static func readsAsTruncated(_ title: String) -> Bool {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let last = trimmed.last, ",:;-&/+".contains(last) { return true }
+        guard let lastWord = folded(trimmed).split(separator: " ").last else { return false }
+        return danglingWords.contains(String(lastWord))
     }
 
     // Greedy clustering against each cluster's FIRST member, never its most recent one, so membership is

@@ -325,4 +325,129 @@ struct SameNightTitleVariantMergeTests {
         #expect(remaining.first?.recipients.count == 2,
                 "the copy holding two found contacts must be the one that survives")
     }
+
+    // The wiring the pure rule cannot see (L3), and it is the case from the live store: the OLDEST row
+    // carries the vaguer billing, so the survivor selection keeps it and the clearer name is on the row
+    // about to be deleted. Driven through the real merge rather than the rule, because a perfect rule
+    // nothing calls leaves the card exactly as it was.
+    @Test func theSurvivingCardIsNamedByTheClearerBilling() throws {
+        let ctx = try context()
+        insert(ctx, "FRIGID Nightcap", date: "2026-07-31", venue: "Under St Marks", ingestedAt: 1_000)
+        insert(ctx, "FRIGID Nightcap: FUTURE TENSE", date: "2026-07-31", venue: "Under St Marks",
+               ingestedAt: 2_000)
+
+        _ = SameNightTitleVariantMerge.run(in: ctx)
+        try? ctx.save()
+
+        let rows = all(ctx)
+        #expect(rows.count == 1)
+        #expect(rows.first?.groupName == "FRIGID Nightcap: FUTURE TENSE")
+    }
+
+    // A name DAN typed outranks any billing. `groupNameOverriddenByDan` is what stops the scout clobbering
+    // his rename on every re-ingest, and a merge that walked over it would undo his decision by another
+    // route, silently, on a launch he did nothing on (L5, and #3124's whole subject).
+    @Test func aNameDanEnteredHimselfIsNeverReplacedByABilling() throws {
+        let ctx = try context()
+        insert(ctx, "Dan's own name for it", date: "2026-07-31", venue: "Under St Marks",
+               ingestedAt: 1_000) { $0.groupNameOverriddenByDan = true }
+        insert(ctx, "Dan's own name for it: FUTURE TENSE", date: "2026-07-31", venue: "Under St Marks",
+               ingestedAt: 2_000)
+
+        _ = SameNightTitleVariantMerge.run(in: ctx)
+        try? ctx.save()
+
+        let rows = all(ctx)
+        #expect(rows.count == 1)
+        #expect(rows.first?.groupName == "Dan's own name for it")
+    }
+
+    // And it does NOT rename a survivor when the cluster says nothing about which name is better, which
+    // is the state every ordinary merge is in.
+    @Test func aMergeThatLearnsNothingAboutTheNameLeavesItAlone() throws {
+        let ctx = try context()
+        insert(ctx, "FRIGID Nightcap", date: "2026-07-31", venue: "Under St Marks", ingestedAt: 1_000)
+        insert(ctx, "FRIGID Nightcap", date: "2026-07-31", venue: "Under St Marks", ingestedAt: 2_000)
+
+        _ = SameNightTitleVariantMerge.run(in: ctx)
+        try? ctx.save()
+
+        #expect(all(ctx).first?.groupName == "FRIGID Nightcap")
+    }
+
+    // --- #1642: the survivor keeps the more informative title -------------------------------------------
+    //
+    // The surviving ROW is chosen for what it HOLDS (Dan's decision, a paid answer, its contact list, its
+    // age). None of those has anything to do with which billing names the show best, so on the live store
+    // the first run kept the vaguer name: `FRIGID Nightcap` survived over `FRIGID Nightcap: FUTURE TENSE`.
+    // This is the title's version of what `preferredRoomName` already does for the room (#1761): choose
+    // the displayed name separately from choosing the row.
+    //
+    // "Prefer the longest" is the rule that looks obvious and is wrong, which is why the truncation case
+    // below is not a nicety: `...Disciples of Soul Tribute to` is a TRUNCATED string and longer than the
+    // clean `...Tribute`, so longest-wins keeps the broken one. `RunGrouping.representativeRow` prefers
+    // the SHORTEST for its own reasons, which is the opposite preference and equally wrong here.
+
+    @Test func theTitleCarryingTheExtraProgrammeDetailWins() {
+        #expect(SameNightTitleVariantMerge.moreInformativeTitle(
+            ["FRIGID Nightcap", "FRIGID Nightcap: FUTURE TENSE"]) == "FRIGID Nightcap: FUTURE TENSE")
+        // Order must not decide it.
+        #expect(SameNightTitleVariantMerge.moreInformativeTitle(
+            ["FRIGID Nightcap: FUTURE TENSE", "FRIGID Nightcap"]) == "FRIGID Nightcap: FUTURE TENSE")
+    }
+
+    // The live case that made this issue, in the real spelling.
+    @Test func aBillingThatNamesTheSecondEnsembleWins() {
+        let short = "Chasing Dreams: Bard East/West Ensemble with Jindong Cai, Conductor"
+        let long = short + " and China Now Chamber Orchestra"
+        #expect(SameNightTitleVariantMerge.moreInformativeTitle([short, long]) == long)
+    }
+
+    // THE FAILURE PATH, and the whole point: a longer title that is obviously cut off must LOSE to the
+    // clean shorter one. Without this the rule is just longest-wins wearing a better name.
+    @Test func aTruncatedTitleLosesEvenThoughItIsLonger() {
+        let clean = "Donnie Vie, Marc Ribler and the Disciples of Soul Tribute"
+        let cut = clean + " to"
+        #expect(SameNightTitleVariantMerge.moreInformativeTitle([clean, cut]) == clean)
+    }
+
+    // THE LIVE CASE that the first version of this rule got wrong, kept as a test because it is the exact
+    // shape a fixture would never have produced. `What Dreams Are Made Of` is a perfectly good title that
+    // happens to END in a dangling word, so discounting it as truncated left an unrelated billing alone
+    // in the field and the rule renamed one show to the other. Measured on the live store 2026-08-29,
+    // before this shipped.
+    //
+    // The fix is structural rather than a better list of words: a truncated title may only be discounted
+    // when the winner is a PREFIX of it, which is what makes it a cut-off version of the same name rather
+    // than a different show.
+    @Test func aRealTitleEndingInADanglingWordDoesNotHandTheNameToAnUnrelatedShow() {
+        #expect(SameNightTitleVariantMerge.moreInformativeTitle(
+            ["What Dreams Are Made Of", "A Night of Chills & Thrills"]) == nil)
+    }
+
+    // Two titles where neither extends the other say nothing about which is better, so the rule declines
+    // and the existing survivor keeps its own name. A rule that always answers is indistinguishable from
+    // one that answers correctly (L159).
+    @Test func twoUnrelatedTitlesLeaveTheChoiceAlone() {
+        #expect(SameNightTitleVariantMerge.moreInformativeTitle(
+            ["An Evening of Song", "A Night of Strings"]) == nil)
+    }
+
+    @Test func oneTitleOnItsOwnIsNotAPreference() {
+        #expect(SameNightTitleVariantMerge.moreInformativeTitle(["Only One"]) == nil)
+    }
+
+    // Every candidate cut off means nothing here is worth carrying, so it declines rather than picking
+    // the least broken of them.
+    @Test func allTruncatedMeansNoPreference() {
+        #expect(SameNightTitleVariantMerge.moreInformativeTitle(
+            ["A Tribute to", "A Tribute to the"]) == nil)
+    }
+
+    // Case and spacing are how one source differs from another, not what a title means.
+    @Test func aPrefixIsRecognisedThroughCaseAndSpacing() {
+        #expect(SameNightTitleVariantMerge.moreInformativeTitle(
+            ["frigid   nightcap", "FRIGID Nightcap: FUTURE TENSE"]) == "FRIGID Nightcap: FUTURE TENSE")
+    }
+
 }
