@@ -155,8 +155,10 @@ already drifting from the Swift version it mirrored.
   and then pushes straight to main. Revisit if this ever becomes a repo more than one machine clones.
   Since #2557 that same installer also registers a MERGE DRIVER, for the same per-clone reason
   (`merge.<name>.driver` lives in the git config, which is not tracked, and which every worktree shares).
-  `.gitattributes` sends this repo's two GENERATED files, `docs/copy-inventory.md` and
-  `mac/Overture.xcodeproj/project.pbxproj`, to `scripts/lib/merge-generated.sh`. Any two branches that
+  `.gitattributes` sends this repo's GENERATED files to `scripts/lib/merge-generated.sh`: all three
+  generated copy documents (`docs/copy-inventory.md`, and since #3221 `docs/outbound-copy.md` and
+  `docs/copy-surfaces.md`, which arrived with #2946 and had never been registered) plus
+  `mac/Overture.xcodeproj/project.pbxproj`. Any two branches that
   touch the app's wording or its file list conflict on those by construction, and the conflict carries no
   decision: neither side's text is anybody's to write. Measured 2026-08-11, two branches in a row cost a
   manual resolve plus two full suite runs each, roughly twelve minutes apiece, for nothing.
@@ -954,7 +956,13 @@ already drifting from the Swift version it mirrored.
   app's wording or its file list collide that way by construction, which is the whole reason the driver
   exists, and telling that apart from a real conflict used to cost a full extra suite cycle (measured
   2026-08-28 on PR #3196). The cheap kind now names itself and hands over the three commands that bring
-  the branch up to main; the real kind names the files that actually collide.
+  the branch up to main; the real kind names the files that actually collide. Those commands include a
+  `git commit` step and say why: bringing main in fires `scripts/hooks/post-merge`, which regenerates a
+  stale project file and leaves it STAGED, so a push without that commit arrives carrying the staleness
+  the merge gate then refuses. The same block says `scripts/test-all.sh` JUDGES the generated documents
+  rather than regenerating them, and names `TEST_RUNNER_REGENERATE_COPY_INVENTORY=1` for the one that
+  does. A remedy naming a step that does not change the state the reader is stuck in is worse than none
+  (L111), and the first version of this message had both halves wrong.
   **It does not carry on, and that is deliberate.** GitHub will not merge a PR it reports as CONFLICTING
   whatever this Mac resolves, so carrying on would buy a full suite run and then fail at the merge. The
   evidence is PR #3196's own commits, which carry a pushed merge of main AND a pushed

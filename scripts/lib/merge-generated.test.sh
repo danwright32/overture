@@ -170,6 +170,25 @@ while IFS= read -r path; do
   assert_contains "git sends ${path} to the driver" "${ATTR}" "merge: overture-generated"
 done <<< "${GENERATED_PATHS}"
 
+# --- every generated copy document reaches the driver, not just the ones somebody remembered (#3221) ---
+#
+# The loop above walks the driver's OWN list, so it can only ever confirm that what the driver claims is
+# what git sends. It is blind in the direction that actually went wrong: a document that is generated and
+# was never added to the list is not in either half, so both agree and nothing notices (L96).
+#
+# The other side of the question already has a definition, and it is the one the merge paths rebuild
+# from, so this is derived from that rather than written out again (L41). #2946 added
+# docs/outbound-copy.md and docs/copy-surfaces.md to it and neither reached .gitattributes, which is the
+# defect: two branches that both change the app's wording still hand a person a conflict in text neither
+# of them wrote, which is the exact cost #2557 was built to remove.
+# shellcheck source=./copy-docs-rebuild.sh
+source "${REPO_ROOT}/scripts/lib/copy-docs-rebuild.sh"
+assert_equals "there really are generated copy documents to check, so this is not passing over nothing" \
+  "0" "$([[ ${#COPY_DOC_PATHS[@]} -gt 0 ]] && echo 0 || echo 1)"
+for doc in "${COPY_DOC_PATHS[@]}"; do
+  assert_contains "the driver owns the generated document ${doc}" "${GENERATED_PATHS}" "${doc}"
+done
+
 echo
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All merge-generated.sh fixtures passed."

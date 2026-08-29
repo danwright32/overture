@@ -1,4 +1,4 @@
-# The two files in this repo that are GENERATED from the source, sent to a merge driver that resolves
+# The files in this repo that are GENERATED from the source, sent to a merge driver that resolves
 # them instead of asking a person to hand-merge text nobody wrote (#2557).
 #
 # Both are produced from the tree, so any two branches touching the app's wording or its file list
@@ -11,4 +11,6 @@
 # which is exactly the behaviour this repo had before, so a clone that skips the installer is no worse
 # off than it used to be.
 docs/copy-inventory.md merge=overture-generated
+docs/outbound-copy.md merge=overture-generated
+docs/copy-surfaces.md merge=overture-generated
 mac/Overture.xcodeproj/project.pbxproj merge=overture-generated

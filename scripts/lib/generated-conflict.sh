@@ -126,8 +126,15 @@ check_mergeable_locally() {
     echo "touching the app's wording or its file list collide this way by construction." >&2
     echo "Bring the branch up to main and push, and GitHub changes its mind:" >&2
     echo "  git checkout ${branch} && git merge origin/main" >&2
-    echo "  scripts/test-all.sh   # regenerates and judges the generated files on the combined tree" >&2
+    echo "  git commit            # only if the post-merge hook staged a regenerated project file" >&2
+    echo "  scripts/test-all.sh" >&2
     echo "  git push" >&2
+    echo "The commit step is in the list because bringing main in fires scripts/hooks/post-merge, which" >&2
+    echo "regenerates a stale mac/Overture.xcodeproj/project.pbxproj and leaves it STAGED, saying so as it" >&2
+    echo "does. A push without it arrives carrying the very staleness the merge gate then refuses." >&2
+    echo "scripts/test-all.sh does not regenerate the copy documents: it JUDGES them, blocking on a stale" >&2
+    echo "project file and naming any sentence that moved. If it names one, regenerate with" >&2
+    echo "  TEST_RUNNER_REGENERATE_COPY_INVENTORY=1 mac/scripts/run-tests-locked.sh" >&2
     return 1
   fi
 
