@@ -128,18 +128,30 @@ enum OutcomePatterns {
         }
     }
 
+    // #1670, then #1715 for the four beside it: EVERY axis this report groups by reads the value the
+    // pitch actually went out under, falling back to the live value only for a row that was never sent,
+    // which is the one case where nothing was frozen.
+    //
+    // The live value can move after the send on all five: a genre correction moves the discipline, a
+    // producer correction moves the production, a contact check (#1648) moves the coverage, the profile
+    // and the tier. Grouping by it buckets a show under something it did not have when Dan pitched it,
+    // and the report then mixes two scoring bases with nothing marking the change.
+    //
+    // #1715 is what that cost. #1670 fixed the tier and the four frozen fields beside it stayed
+    // write-only: they were stamped on every send and read by nothing anywhere in the app, so the data
+    // they exist to protect was collected and thrown away, while this report went on reading the values
+    // the scout keeps refreshing (L46, L30).
+    //
+    // `venue` has no frozen counterpart and is therefore live, deliberately: nothing freezes it, and a
+    // fallback that invented one would be worse than the honest live read. `fitScoreAtSend` is the one
+    // frozen field with no consumer here, because this report has no score dimension; see #1715.
     private static func dimensionValue(of p: Prospect, by dimension: Dimension) -> String {
         switch dimension {
-        case .production: return p.production
-        case .discipline: return p.discipline
-        // #1670: the tier the pitch actually went out under. The live tier can move after the send (a
-        // genre correction, a performer match, a contact check from #1648), and grouping by it would
-        // bucket a show under a tier it did not have when Dan pitched it, silently mixing two scoring
-        // bases in one report. Falls back to the live tier for a row that has never been sent, which is
-        // the only case where nothing was frozen.
+        case .production: return p.productionAtSend ?? p.production
+        case .discipline: return p.disciplineAtSend ?? p.discipline
         case .tier: return p.tierAtSend ?? p.tier
-        case .coverage: return p.coverage
-        case .profile: return p.profile
+        case .coverage: return p.coverageAtSend ?? p.coverage
+        case .profile: return p.profileAtSend ?? p.profile
         case .venue: return p.venue ?? "No venue"
         }
     }
