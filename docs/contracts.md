@@ -285,6 +285,21 @@ therefore leaned on for four weeks after the last new shoot arrived rather than 
 The same cold-start hole in the sibling checks is #2496; an export whose CLIENT list empties this
 way is #2495.
 
+Which versions this reader accepts is DECLARED, in a file the producing repository can read:
+`integration/downbeat-export-accepted-versions.json`, holding `minimumVersion` and a
+`maximumVersion` that is `null` for no ceiling (#3203). It is not in the catalogue table above
+because it is not a handoff file in the app-support directory: it is committed here and read by
+Downbeat's own push gate, which refuses a push whose export version has outrun what this app
+accepts. That gate used to find the number by pattern matching `DownbeatExport.swift`, understood
+three shapes, and had to grow the third within an hour of being written, so a rename or a
+restructure on this side silently stopped the comparison working and the only remedy over there was
+to teach the script another shape afterwards. The path is a convention shared with Ovation, whose
+handoff decoder declares at `integration/downbeat-handoff-accepted-versions.json`, so Downbeat reads
+both consumers through one file reader. `DownbeatExportAcceptedVersionsTests` keeps the declaration
+honest by BEHAVIOUR rather than by reading `DownbeatBridge.minimumVersion`: it re-stamps a committed
+fixture with the declared minimum, one below it, and (while there is no ceiling) a far higher
+version, and runs the real decoder over each.
+
 ### `overture-history.json`
 
 Past booking history (`{ groupName, status }`), so repeat-client matching and do-not-contact
