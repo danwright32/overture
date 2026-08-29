@@ -106,3 +106,84 @@ struct DownbeatExportContractTests {
         }
     }
 }
+
+// #3203: the versions this app accepts, declared in a file another repository can read.
+//
+// Downbeat has a push gate that refuses a push whose export version has outrun what this app
+// accepts, and it found the number by PATTERN MATCHING `DownbeatExport.swift`. It understood three
+// shapes and had to grow the third within an hour of being written. A rename, a move or a
+// restructure on this side still stops the comparison working, and Downbeat cannot fix that alone:
+// the only remedy from over there is to teach the script another shape after the fact.
+//
+// So the declaration lives here, at a path agreed with the other two repositories
+// (`integration/downbeat-<surface>-accepted-versions.json`, `export` for this repo and `handoff`
+// for Ovation), and this suite is the half that matters. A declared value nothing enforces is the
+// prose problem moved one step along (L27), and a test that READ `DownbeatBridge.minimumVersion`
+// would only confirm the file agrees with a number, which is the same drift one step along (L70).
+// Every assertion below therefore runs the REAL decoder over a real fixture whose version has been
+// rewritten, so the file is judged against what the app actually does with a Downbeat export.
+@Suite("Downbeat export accepted-versions declaration")
+struct DownbeatExportAcceptedVersionsTests {
+
+    private struct Declaration: Decodable {
+        var minimumVersion: Int
+        var maximumVersion: Int?
+    }
+
+    static let declaredPath = "integration/downbeat-export-accepted-versions.json"
+
+    private func declaration() throws -> Declaration {
+        let url = RepoRoot.url.appendingPathComponent(Self.declaredPath)
+        // An absent or unparseable file must fail here rather than leave every assertion below
+        // vacuously satisfied: a declaration nobody can read is what Downbeat's gate reports as
+        // CANNOT MEASURE, and it must never reach this suite as a pass (L98).
+        let data = try Data(contentsOf: url)
+        return try JSONDecoder().decode(Declaration.self, from: data)
+    }
+
+    // A real committed export, re-stamped with the version under test. Rewriting a fixture rather
+    // than hand-building a payload keeps every other key exactly as Downbeat really writes it, so a
+    // version that decodes here decodes a file of the shape the app will actually meet.
+    private func exportFixture(stampedWithVersion version: Int) throws -> Data {
+        let source = RepoRoot.url
+            .appendingPathComponent("fixtures/downbeat-export/v2.json")
+        var object = try #require(
+            try JSONSerialization.jsonObject(with: try Data(contentsOf: source)) as? [String: Any]
+        )
+        object["version"] = version
+        return try JSONSerialization.data(withJSONObject: object)
+    }
+
+    @Test func theDeclaredMinimumIsAVersionTheRealDecoderAccepts() throws {
+        let declared = try declaration()
+        let export = try DownbeatBridge.decode(try exportFixture(stampedWithVersion: declared.minimumVersion))
+        #expect(export.version == declared.minimumVersion)
+    }
+
+    @Test func oneBelowTheDeclaredMinimumIsRefusedByTheRealDecoder() throws {
+        let declared = try declaration()
+        let below = declared.minimumVersion - 1
+        #expect(throws: DownbeatExportError.unsupportedVersion(below)) {
+            try DownbeatBridge.decode(try exportFixture(stampedWithVersion: below))
+        }
+    }
+
+    // The two halves of the ceiling, kept apart so the declaration cannot claim either one wrongly.
+    // Today `maximumVersion` is null and `decode` has no ceiling, which is the state the first
+    // branch asserts; the second exists so that a declaration that ever grows a ceiling is judged
+    // against a decoder that really enforces one, rather than silently going unchecked.
+    @Test func aDeclaredCeilingMatchesWhatTheRealDecoderEnforces() throws {
+        let declared = try declaration()
+        guard let maximum = declared.maximumVersion else {
+            let farAhead = declared.minimumVersion + 10_000
+            let export = try DownbeatBridge.decode(try exportFixture(stampedWithVersion: farAhead))
+            #expect(export.version == farAhead)
+            return
+        }
+        let atCeiling = try DownbeatBridge.decode(try exportFixture(stampedWithVersion: maximum))
+        #expect(atCeiling.version == maximum)
+        #expect(throws: DownbeatExportError.unsupportedVersion(maximum + 1)) {
+            try DownbeatBridge.decode(try exportFixture(stampedWithVersion: maximum + 1))
+        }
+    }
+}
