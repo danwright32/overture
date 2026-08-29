@@ -1812,15 +1812,48 @@ enum QueueModel {
     // #1763: the organisation this row can offer a correction on, or nil when it can offer none. Split
     // out of the build so the rule is testable (#863) rather than stated inside a map closure.
     //
-    // Three questions in order, and the order is the rule: a name the gate cannot key has no organisation
-    // in it at all; a correction already in force always keeps its way back; and what remains is offered
-    // only where a correction could actually move the verdict.
+    // FOUR questions in order now, and the order IS the rule: a name the gate cannot key has no
+    // organisation in it at all; a correction already in force always keeps its way back; what remains is
+    // offered only where a correction could actually move the verdict; and, since #1732, only where it
+    // would be worth something.
+    //
+    // #1732: the last question is the new one. This control was on 618 of 724 rows when Dan asked for it
+    // to show "only where it looks uncertain", and #1763 took it to 306 by removing the rows where a
+    // correction was applied, stored and then ignored by the gate. What was left was still most of the
+    // queue, on the surface he triages in, and this repo's own rule is that a repeated control earns only
+    // its action.
+    //
+    // The bar is `OrganisationListing.shortlistMinimumRows`, the SHORTLIST's own, deliberately rather than
+    // a number chosen here: the Presenters sheet surfaces the same candidates, and two definitions of
+    // "worth correcting" are how the row and the sheet come to disagree (#1702, L16). An organisation
+    // carrying one or two shows is one where a correction saves nothing and protects nothing.
+    //
+    // It is LAST for the counter-risk Dan named when he chose this: a correction already in force keeps
+    // its control however few rows the organisation carries, so he can never set one on a small
+    // organisation and be stranded with a verdict he cannot revisit. That is #1679's shape, and putting
+    // the row-count test above the standing test would reintroduce it.
     static func correctableOrganisation(_ presenter: String?,
                                         venueBrands: ProducerGate.VenueBrands,
-                                        standing: ProducerOverrideEditing.Standing) -> String? {
+                                        standing: ProducerOverrideEditing.Standing,
+                                        rowCount: Int) -> String? {
         guard let presenter, ProducerGate.key(presenter) != nil else { return nil }
         if standing != .none { return presenter }
-        return venueBrands.isRoomName(presenter) ? nil : presenter
+        if venueBrands.isRoomName(presenter) { return nil }
+        return rowCount >= OrganisationListing.shortlistMinimumRows ? presenter : nil
+    }
+
+    // #1732: how many rows each organisation carries, folded the same way the gate folds a presenter, so
+    // the count this rule reads and the organisation it is about are the same thing.
+    //
+    // One pass over the corpus per queue build, not one per row. Deciding this per row would walk every
+    // prospect for every prospect, which is the cost #1687 and #1121 record freezing the machine.
+    static func organisationRowCounts(_ presenters: [String?]) -> [String: Int] {
+        var counts: [String: Int] = [:]
+        for presenter in presenters {
+            guard let key = ProducerGate.key(presenter) else { continue }
+            counts[key, default: 0] += 1
+        }
+        return counts
     }
 
     // What the menu says. One sentence per state, each naming the organisation, so the line Dan reads is
@@ -2414,6 +2447,14 @@ enum QueueModel {
         let venueBrands = ProducerGate.VenueBrands(
             shows: (corpus ?? prospects).map { ProducerGate.Show(presenter: $0.presenter, venue: $0.venue) },
             overrides: overrides)
+        // #1732: how many rows each organisation carries, over the SAME unfiltered corpus venueBrands
+        // judges against, so a dismissal cannot quietly take an organisation under the bar and remove the
+        // control from the rows still showing. Built once here for the same reason as venueBrands above.
+        let rowCounts = organisationRowCounts((corpus ?? prospects).map(\.presenter))
+        func organisationRowCount(_ presenter: String?) -> Int {
+            guard let key = ProducerGate.key(presenter) else { return 0 }
+            return rowCounts[key] ?? 0
+        }
         // #1825: built ONCE, for the same reason as venueBrands above. Every row resolves its own sources
         // through this rather than walking the watchlist per card.
         // #2816: the table lives on QueueModel now, because the reached-out and follow-up rows resolve
@@ -2446,8 +2487,11 @@ enum QueueModel {
             //
             // A correction ALREADY in force keeps its control regardless, because the way back is a real
             // state change and stranding Dan with one he cannot take back is the worse failure.
+            // #1732: and only where the correction would be worth something. The counts are worked out
+            // once for the whole build, above, never per row.
             item.correctableOrganisation = correctableOrganisation(
-                $0.presenter, venueBrands: venueBrands, standing: item.producerStanding)
+                $0.presenter, venueBrands: venueBrands, standing: item.producerStanding,
+                rowCount: organisationRowCount($0.presenter))
             // Read off the SAME corpus verdict the card itself draws from, so the menu can never state a
             // classification the row is not actually using.
             item.treatedAsVenue = venueBrands.contains($0.presenter)

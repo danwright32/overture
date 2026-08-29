@@ -61,9 +61,15 @@ struct ProducerCorrectionControlTests {
         #expect(QueueModel.items(from: all).first?.correctableOrganisation == nil)
     }
 
+    // #1732: three rows, not one, and the extra two are a PRECONDITION rather than padding. The control
+    // is now offered only on an organisation carrying at least `shortlistMinimumRows`, so a one-row
+    // fixture would fail this for a reason that has nothing to do with what it asserts. FRIGID New York
+    // carries 33 on the live store, so three here is an understatement of the case, not an invention of it.
     @Test func aRowWithAnOrganisationNamesItForTheControl() throws {
         let ctx = ModelContext(try container())
-        _ = prospect(ctx, key: "k1", presenter: "FRIGID New York")
+        for n in 1...OrganisationListing.shortlistMinimumRows {
+            _ = prospect(ctx, key: "k\(n)", presenter: "FRIGID New York")
+        }
         let all = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
         #expect(QueueModel.items(from: all).first?.correctableOrganisation == "FRIGID New York")
     }
@@ -87,8 +93,11 @@ struct ProducerCorrectionControlTests {
     // Metropolitan Opera House is the case promotion was written for.
     @Test func aPresenterCaughtOnlyByNameOverlapKeepsItsCorrection() throws {
         let ctx = ModelContext(try container())
+        // #1732: a third row, because the control now needs `shortlistMinimumRows` behind it. Carnegie
+        // Hall Presents carries 28 on the live store, so this is still well under the real figure.
         _ = prospect(ctx, key: "k1", presenter: "Carnegie Hall Presents", venue: "Carnegie Hall")
         _ = prospect(ctx, key: "k2", presenter: "Carnegie Hall Presents", venue: "Zankel Hall")
+        _ = prospect(ctx, key: "k3", presenter: "Carnegie Hall Presents", venue: "Weill Recital Hall")
         let all = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
         let item = QueueModel.items(from: all).first { $0.correctableOrganisation != nil }
         #expect(item?.correctableOrganisation == "Carnegie Hall Presents")
@@ -112,7 +121,10 @@ struct ProducerCorrectionControlTests {
     // The mutation, end to end from the row's own item: it stores the correction the gate will read.
     @Test func correctingFromTheRowStoresWhatTheGateReads() throws {
         let ctx = ModelContext(try container())
-        _ = prospect(ctx, key: "k1", presenter: "FRIGID New York")
+        // #1732: same precondition as above. The control has to be OFFERED before it can be pressed.
+        for n in 1...OrganisationListing.shortlistMinimumRows {
+            _ = prospect(ctx, key: "k\(n)", presenter: "FRIGID New York")
+        }
         let item = QueueModel.items(from: (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []).first!
         let feedback = ActionFeedback()
 
