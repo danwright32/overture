@@ -82,10 +82,16 @@ struct OrganisationListingTests {
     // correction is worth.
     @Test func theShortlistRanksByRowsSoBothMistakesSurface() {
         var shows: [OrganisationListing.Show] = []
+        // Both fixtures are sized from the CUTOFF rather than from literals, because #1732 raised it from
+        // three to six and both of these were written to clear the old one. Sized in literals they break
+        // on the next change to a number that has now moved twice, for a reason that has nothing to do
+        // with what this test asserts. The real figures are larger than either: FRIGID New York carries
+        // 27 rows on the live store and the Neo-Futurists 11.
+        let cutoff = OrganisationListing.shortlistMinimumRows
         // A rented room: many different companies, one venue.
-        for i in 1...9 { shows.append(show("FRIGID New York", at: "Under St Marks", "Fringe Show \(i)")) }
+        for i in 1...(cutoff + 3) { shows.append(show("FRIGID New York", at: "Under St Marks", "Fringe Show \(i)")) }
         // The mirror: one long series, one room, many dates. Ranking by distinct shows never finds it.
-        for _ in 1...5 { shows.append(show("The New York Neo-Futurists", at: "Asylum NYC", "The Infinite Wrench")) }
+        for _ in 1...cutoff { shows.append(show("The New York Neo-Futurists", at: "Asylum NYC", "The Infinite Wrench")) }
         // Below the cutoff: correcting it would save nothing.
         shows.append(show("A Two Row Group", at: "Merkin Hall", "One Night"))
         shows.append(show("A Two Row Group", at: "Merkin Hall", "Another Night"))
@@ -94,7 +100,7 @@ struct OrganisationListingTests {
 
         let shortlist = OrganisationListing.shortlist(shows: shows)
         #expect(shortlist.map(\.name) == ["FRIGID New York", "The New York Neo-Futurists"])
-        #expect(shortlist.first?.rowCount == 9)
+        #expect(shortlist.first?.rowCount == cutoff + 3)
     }
 
     // An organisation Dan has already ruled on is not offered back to him as a suggestion.

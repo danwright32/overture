@@ -93,11 +93,17 @@ struct ProducerCorrectionControlTests {
     // Metropolitan Opera House is the case promotion was written for.
     @Test func aPresenterCaughtOnlyByNameOverlapKeepsItsCorrection() throws {
         let ctx = ModelContext(try container())
-        // #1732: a third row, because the control now needs `shortlistMinimumRows` behind it. Carnegie
-        // Hall Presents carries 28 on the live store, so this is still well under the real figure.
-        _ = prospect(ctx, key: "k1", presenter: "Carnegie Hall Presents", venue: "Carnegie Hall")
-        _ = prospect(ctx, key: "k2", presenter: "Carnegie Hall Presents", venue: "Zankel Hall")
-        _ = prospect(ctx, key: "k3", presenter: "Carnegie Hall Presents", venue: "Weill Recital Hall")
+        // #1732: enough rows to clear `shortlistMinimumRows`, sized FROM the constant rather than in
+        // literals, because that number has now moved twice (three, then six) and a literal fixture
+        // breaks on the next move for a reason unrelated to what this asserts. Carnegie Hall Presents
+        // carries 28 rows on the live store, so this is still well under the real figure. The rooms
+        // repeat deliberately: what makes this organisation correctable is the NAME overlap, not how
+        // many distinct rooms it plays.
+        let rooms = ["Carnegie Hall", "Zankel Hall", "Weill Recital Hall"]
+        for n in 1...OrganisationListing.shortlistMinimumRows {
+            _ = prospect(ctx, key: "k\(n)", presenter: "Carnegie Hall Presents",
+                         venue: rooms[(n - 1) % rooms.count])
+        }
         let all = (try? ctx.fetch(FetchDescriptor<Prospect>())) ?? []
         let item = QueueModel.items(from: all).first { $0.correctableOrganisation != nil }
         #expect(item?.correctableOrganisation == "Carnegie Hall Presents")
