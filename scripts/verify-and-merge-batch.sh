@@ -157,7 +157,10 @@ verify_and_merge_batch() {
       fi
     done
 
-    check_mergeable "${PR_MERGEABLE}" || {
+    # #3210, and NOT check_mergeable: it refuses exactly as before, having first said which kind of
+    # collision it is. This is where the mystery cost the most, since one flagged PR refuses every
+    # other PR named beside it.
+    check_mergeable_locally "${PR_MERGEABLE}" "${PR_NUMBER}" "${PR_BRANCH}" "${REPO_ROOT}" || {
       echo "Nothing was verified and nothing was merged." >&2
       return 1
     }

@@ -18,9 +18,15 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 source "${SCRIPT_DIR}/ci-config.sh"
-# Reuses check_mergeable (and its ${PR_NUMBER}-keyed message) rather than duplicating the
-# CONFLICTING guard; sourcing never runs check-pr-ci.sh's own main().
+# Sourced for gh_as_danwright32 and the rest of the shared CI helpers; sourcing never runs
+# check-pr-ci.sh's own main(). Its check_mergeable is deliberately NOT what the merge paths use any
+# more: see check_mergeable_locally below.
 source "${SCRIPT_DIR}/check-pr-ci.sh"
+# check_mergeable_locally and the trial merge under it (#3210). One implementation, shared with
+# verify-and-merge-batch.sh, so the two merge paths cannot disagree about what a mergeable PR looks
+# like, exactly as they already share the completeness guard and the merge itself.
+# shellcheck source=./lib/generated-conflict.sh
+source "${SCRIPT_DIR}/lib/generated-conflict.sh"
 # delete_merged_local_branch, shared with merge-when-green.sh and tidy-checkout.sh (#2234).
 source "${SCRIPT_DIR}/lib/checkout-tidy.sh"
 # The completeness enumeration AGENTS.md demands. Shared with merge-when-green.sh so the two merge
@@ -139,9 +145,11 @@ setup_worktree() {
 # once merged onto the main that already carried #1575 and #1940, caught only because that merge was
 # combined by hand.
 #
-# It REFUSES rather than resolving anything. A conflict here is a real question about two people's
-# intent, and the repo has no merge driver for its generated files, so the honest answer is to stop
-# and name what could not be combined. The caller must not run the suite over a conflicted tree: a
+# It REFUSES rather than resolving anything. A conflict that reaches here is a real question about two
+# people's intent: the generated files are settled before this by the .gitattributes merge driver
+# (#2557), which is also why the CONFLICTING flag GitHub computes without it is checked rather than
+# believed (#3210). So the honest answer to what is left is to stop and name what could not be
+# combined. The caller must not run the suite over a conflicted tree: a
 # half-merged tree can come back green just as easily as red, and green is the reading that would
 # send the broken combination to main.
 #
@@ -274,7 +282,12 @@ verify_and_merge() {
     return 1
   fi
 
-  check_mergeable "${PR_MERGEABLE}" || return 1
+  # #3210, and NOT check_mergeable: both refuse a CONFLICTING PR, but this one first says WHICH KIND of
+  # collision it is. GitHub computes that flag with a plain text merge that cannot see this repo's
+  # merge driver, so a collision confined to the generated files (which any two branches touching the
+  # app's wording produce by construction) is a mechanical branch update rather than a decision, and
+  # telling the two apart used to cost a full extra suite cycle.
+  check_mergeable_locally "${PR_MERGEABLE}" "${PR_NUMBER}" "${PR_BRANCH}" "${REPO_ROOT}" || return 1
   # BEFORE the suite, deliberately: a body missing the enumeration is refused in seconds rather
   # than after two minutes of exclusive test lock, and the fix does not need a re-run of anything.
   require_pr_completeness "${PR_NUMBER}" "${PR_BODY}" "${PR_AUTHOR:-}" "${PR_FILES:-}"

@@ -926,6 +926,26 @@ already drifting from the Swift version it mirrored.
   the merges themselves happen one at a time on GitHub, so one can be refused after the others land;
   it attempts all of them and its summary says which merged and which did not, rather than stopping at
   the first refusal and leaving the rest unreported.
+  **A refusal on GitHub's CONFLICTING flag now says WHICH KIND of collision it is (#3210).** Both merge
+  paths ask `check_mergeable_locally` (`scripts/lib/generated-conflict.sh`) rather than
+  `check-pr-ci.sh`'s `check_mergeable`, and it still refuses every CONFLICTING PR. What it adds, in
+  seconds, is the half nobody could see: GitHub computes that flag with a plain text merge and cannot
+  see this repo's `.gitattributes` merge driver, so a PR whose only collisions are the generated files
+  is flagged while a trial `git merge-tree` here resolves it and exits 0. Any two branches touching the
+  app's wording or its file list collide that way by construction, which is the whole reason the driver
+  exists, and telling that apart from a real conflict used to cost a full extra suite cycle (measured
+  2026-08-28 on PR #3196). The cheap kind now names itself and hands over the three commands that bring
+  the branch up to main; the real kind names the files that actually collide.
+  **It does not carry on, and that is deliberate.** GitHub will not merge a PR it reports as CONFLICTING
+  whatever this Mac resolves, so carrying on would buy a full suite run and then fail at the merge. The
+  evidence is PR #3196's own commits, which carry a pushed merge of main AND a pushed
+  `Regenerate project.pbxproj` before it would go in. Automating that means pushing a regenerated file
+  to somebody's branch, which is exactly the property #2812's safety argument leans on not being true,
+  so it is #3216 rather than a detail of this.
+  The three outcomes are kept apart on purpose: resolved, really conflicted, and NOT MEASURED (the fetch
+  failed, or git refused the trial merge). A trial merge git declined to attempt exits 1 exactly as a
+  conflicted one does, so what separates them is evidence rather than a status code, the tree OID a real
+  merge writes (L98, L11).
   **Both merge paths now judge each side's project file BEFORE merging, and COMMIT the regeneration the
   post-merge hook makes afterwards (#2812).** Read the pair together, because either half alone is
   wrong. The hook regenerates a stale `mac/Overture.xcodeproj/project.pbxproj` after a merge and leaves
