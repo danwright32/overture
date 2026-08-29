@@ -52,6 +52,72 @@ struct OutcomePatternsTests {
         #expect(names == ["high"])
     }
 
+    // #1715: the same defect #1670 fixed, live four more times.
+    //
+    // `productionAtSend`, `disciplineAtSend`, `coverageAtSend` and `profileAtSend` were frozen on every
+    // send and read by nothing anywhere in the app, so the data they exist to protect was collected and
+    // discarded, and this report went on grouping by values the scout keeps refreshing. Every argument
+    // in the tier case above is true of all four: a genre correction moves the discipline, a contact
+    // check moves the coverage and the profile, and a producer correction moves the production, all of
+    // them AFTER the pitch went out. Grouping by the live value buckets a show under something it did
+    // not have when Dan pitched it, and silently mixes two scoring bases in one report (L46, L30).
+    //
+    // One test per axis rather than a loop, so a failure names the axis that broke.
+    @Test func groupsSentShowsByTheProductionTheyWentOutUnder() throws {
+        let ctx = ModelContext(try container())
+        let p = make(ctx, group: "A", production: "self", discipline: "dance", tier: "high",
+                     status: .approved, outcome: .booked)
+        p.productionAtSend = "self"
+        p.production = "agency"
+        let all = try ctx.fetch(FetchDescriptor<Prospect>())
+        #expect(OutcomePatterns.rankedTallies(from: all, by: .production).map(\.name) == ["self"])
+    }
+
+    @Test func groupsSentShowsByTheDisciplineTheyWentOutUnder() throws {
+        let ctx = ModelContext(try container())
+        let p = make(ctx, group: "A", production: "self", discipline: "choral", tier: "high",
+                     status: .approved, outcome: .booked)
+        p.disciplineAtSend = "choral"
+        p.discipline = "comedy"
+        let all = try ctx.fetch(FetchDescriptor<Prospect>())
+        #expect(OutcomePatterns.rankedTallies(from: all, by: .discipline).map(\.name) == ["choral"])
+    }
+
+    @Test func groupsSentShowsByTheCoverageTheyWentOutUnder() throws {
+        let ctx = ModelContext(try container())
+        let p = make(ctx, group: "A", production: "self", discipline: "dance", tier: "high",
+                     status: .approved, outcome: .booked)
+        p.coverageAtSend = "likely_uncovered"
+        p.coverage = "well_covered"
+        let all = try ctx.fetch(FetchDescriptor<Prospect>())
+        #expect(OutcomePatterns.rankedTallies(from: all, by: .coverage).map(\.name) == ["likely_uncovered"])
+    }
+
+    @Test func groupsSentShowsByTheProfileTheyWentOutUnder() throws {
+        let ctx = ModelContext(try container())
+        let p = make(ctx, group: "A", production: "self", discipline: "dance", tier: "high",
+                     status: .approved, outcome: .booked)
+        p.profileAtSend = "strong"
+        p.profile = "thin"
+        let all = try ctx.fetch(FetchDescriptor<Prospect>())
+        #expect(OutcomePatterns.rankedTallies(from: all, by: .profile).map(\.name) == ["strong"])
+    }
+
+    // The fallback the tier case already has, asserted for all four: a row that was never sent has
+    // nothing frozen, and the live value is the only value there is. Without this the four above would
+    // pass just as well against a reader that returned an empty string for every unsent row (L159).
+    @Test func aRowThatWasNeverSentIsGroupedByItsLiveValues() throws {
+        let ctx = ModelContext(try container())
+        _ = make(ctx, group: "A", production: "agency", discipline: "comedy", tier: "longshot",
+                 status: .approved, outcome: .noResponse)
+        let all = try ctx.fetch(FetchDescriptor<Prospect>())
+        // Nothing was frozen on this row, so every axis must fall back rather than vanish.
+        #expect(OutcomePatterns.rankedTallies(from: all, by: .production).map(\.name) == ["agency"])
+        #expect(OutcomePatterns.rankedTallies(from: all, by: .discipline).map(\.name) == ["comedy"])
+        #expect(OutcomePatterns.rankedTallies(from: all, by: .coverage).map(\.name) == ["likely_uncovered"])
+        #expect(OutcomePatterns.rankedTallies(from: all, by: .profile).map(\.name) == ["strong"])
+    }
+
     @Test func mapsProspectsToSamplesByChosenDimension() throws {
         let ctx = ModelContext(try container())
         _ = make(ctx, group: "A", production: "self", discipline: "choral", tier: "high",
