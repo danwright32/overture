@@ -1890,6 +1890,59 @@ enum QueueModel {
         return standing == .none ? "Overture decided: \(what)" : "You set this: \(what)"
     }
 
+    // #1716: the order of the shows WITHIN one night, stated rather than incidental.
+    //
+    // Best fit first was already happening, through `QueueView`'s own `@Query` (`performanceDate`
+    // forward, then `fitScore` reverse), and it stays the first key here because this function now owns
+    // the whole order: applying only the tiebreak would silently drop it. What never happened is
+    // anything BELOW the score, and ties are the ordinary case rather than the exception. Measured
+    // during #1648 Phase B across 559 untriaged shows: 280 sit at exactly 0 and 58 high-fit shows at
+    // exactly 8, because every axis contributes a small integer from a short fixed set.
+    //
+    // Dan's call, 2026-08-18: a stated tiebreak, and the weights and axes are NOT touched. A weight
+    // change would not re-score what is already stored (`fitScore` is written once by
+    // `ProspectAssembler`), so the queue would hold two generations of scores side by side, which is
+    // the confusion #2004 already records. This is applied at ORDER time, so it needs no backfill and
+    // reaches every row already in the store.
+    //
+    // The keys, and why in this order. A reachable contact is what Dan can act on tonight, and it is
+    // two-valued, so it goes above the many-valued keys: a criterion below one of those is consulted
+    // only on an exact tie of everything above it, which would make it permanently inert while reading
+    // as a criterion that ranks (L170). His originally proposed second key was the soonest date, and
+    // that is exactly the trap: every row in a date group already SHARES its date, so a date key here
+    // could never decide anything. Shown that, his call on 2026-08-28 was the venue instead.
+    //
+    // The natural key is last and is not decoration: without it two shows alike on every key above keep
+    // the store's own order, which is not stable between launches, so the queue would reorder under him
+    // for no change in his data at all.
+    static func orderedWithinNight(_ items: [QueueItem]) -> [QueueItem] {
+        items.sorted { a, b in
+            if a.fitScore != b.fitScore { return a.fitScore > b.fitScore }
+            let (ra, rb) = (reachabilityRank(a), reachabilityRank(b))
+            if ra != rb { return ra < rb }
+            let (va, vb) = (a.venue ?? "", b.venue ?? "")
+            if va != vb {
+                // A show with no venue sorts AFTER one with a name, rather than first as an empty
+                // string otherwise would: a nameless room tells Dan less than a named one.
+                if va.isEmpty { return false }
+                if vb.isEmpty { return true }
+                return va.localizedCaseInsensitiveCompare(vb) == .orderedAscending
+            }
+            return a.id < b.id
+        }
+    }
+
+    // Three states, not two. An UNCHECKED show is unknown, not unreachable, and ranking it with the
+    // shows a check proved have no route would state something no check ever measured (L11). Dan triages
+    // on Scout before any check has run, so unchecked is the common case rather than an edge.
+    private static func reachabilityRank(_ item: QueueItem) -> Int {
+        switch item.reachabilityResult {
+        case .some(.noEmailFound): return 2
+        case .none: return 1
+        case .some: return 0   // every other verdict is a way in: an address, a form, a social profile
+        }
+    }
+
     static func groupByDate(_ items: [QueueItem]) -> [DateGroup] {
         var order: [String] = []
         var buckets: [String: [QueueItem]] = [:]
@@ -1899,7 +1952,10 @@ enum QueueModel {
             buckets[key]?.append(item)
         }
         return order.map { key in
-            let bucket = buckets[key] ?? []
+            // #1716: applied HERE, where the groups are built, because every queue surface renders
+            // through this one function. Applied anywhere else it would reach some screens and not
+            // others, and the order Dan reads is the only thing this issue is about.
+            let bucket = orderedWithinNight(buckets[key] ?? [])
             if key != "tbd", let d = day(key) {
                 let cal = easternCalendar
                 return DateGroup(
