@@ -69,6 +69,12 @@ reset_stubs() {
   # #2812's per-ref freshness gate, stubbed here rather than in every case: unstubbed it would fetch
   # from the REAL origin and run xcodegen against a worktree path these cases invented.
   gate_branch_project_freshness() { shift; GATED_REFS="$*"; return "${GATE_RESULT}"; }
+  # #3210's trial merge, stubbed for reset_stubs' usual reason: unstubbed it would fetch from the REAL
+  # origin and merge refs these cases invented. The default keeps the pre-#3210 cases meaning what they
+  # were written to mean, a CONFLICTING PR refusing the whole batch.
+  TRIAL_MERGE_RESULT="${TRIAL_MERGE_CONFLICTS}"
+  fetch_trial_merge_refs() { return 0; }
+  trial_merge_conflicts() { printf 'docs/contracts.md\n'; return "${TRIAL_MERGE_RESULT}"; }
 }
 
 # resolve_pr keyed by identifier, so one stub serves a whole batch. The branch name is derived from the
@@ -187,6 +193,31 @@ verify_and_merge_batch "41" "42" "43" >/dev/null 2>&1
 assert_eq "one unmergeable PR sets up no worktree" "" "${SETUP_BRANCH}"
 assert_eq "one unmergeable PR costs no suite run" "0" "${SUITE_RUNS}"
 assert_eq "one unmergeable PR merges nothing, including the mergeable ones beside it" "" "${MERGED}"
+
+# --- #3210: a collision this repo's own merge resolves refuses the batch with a DIFFERENT reason ---
+# The batch is where the mystery costs the most: it refuses every PR named alongside the flagged one,
+# so a reader has to know in seconds whether the fix is a mechanical branch update or somebody's
+# decision. It still refuses (GitHub will not merge a CONFLICTING PR whatever this Mac resolves), and
+# the change is that it says which kind and hands over the commands.
+reset_stubs
+TRIAL_MERGE_RESULT="${TRIAL_MERGE_RESOLVED}"
+resolve_pr() {
+  PR_NUMBER="$1"
+  PR_BRANCH="branch-$1"
+  PR_BODY="${COMPLETE_PR_BODY}"
+  if [[ "$1" == "52" ]]; then PR_MERGEABLE="CONFLICTING"; else PR_MERGEABLE="MERGEABLE"; fi
+}
+setup_worktree() { SETUP_BRANCH="$1"; WORKTREE_DIR="/fake/worktree"; }
+combine_branches() { COMBINED_BRANCHES="$*"; return 0; }
+run_full_suite() { SUITE_RUNS=$((SUITE_RUNS + 1)); return 0; }
+release_verify_slot() { RELEASE_CALLED="yes"; }
+merge_pr() { MERGED="${MERGED}${1} "; return 0; }
+
+BATCH_OUTPUT="$(verify_and_merge_batch "51" "52" "53" 2>&1)"
+assert_eq "a collision this repo resolves still costs no suite run" "0" "${SUITE_RUNS}"
+assert_eq "and still merges nothing in the batch" "" "${MERGED}"
+assert_contains "the reader is told which of the two kinds it is" "${BATCH_OUTPUT}" "This is the cheap kind"
+assert_contains "and which branch to bring up to main" "${BATCH_OUTPUT}" "branch-52"
 
 # --- an unresolvable identifier refuses the whole batch, before anything expensive ---
 reset_stubs

@@ -22,6 +22,11 @@ set +e
 
 FAILURES=0
 
+# Where the trial-merge stub records what it was asked, since the caller reads its output through a
+# command substitution and a variable set inside that subshell never reaches an assertion.
+TRIAL_MERGE_LOG="$(mktemp "${TMPDIR:-/tmp}/verify-merge-trial.XXXXXX")"
+trap 'rm -f "${TRIAL_MERGE_LOG}"' EXIT
+
 # The completeness enumeration AGENTS.md demands and the merge now refuses to skip. Stubbed here for
 # every existing case, so those cases keep testing what they were written to test (the merge decision)
 # rather than becoming tests of the new guard.
@@ -69,6 +74,23 @@ reset_stubs() {
   # the REAL origin and run xcodegen against a worktree path these cases invented.
   gate_branch_project_freshness() { shift; GATED_REFS="$*"; return "${GATE_RESULT}"; }
   commit_merge_regeneration() { return "${COMMIT_REGEN_RESULT}"; }
+  # #3210's trial merge. Stubbed here rather than in every case, for reset_stubs' usual reason:
+  # unstubbed it would fetch from the REAL origin and merge refs these cases invented. The default is
+  # the outcome that keeps the pre-#3210 cases meaning what they were written to mean, a CONFLICTING
+  # PR being refused.
+  TRIAL_MERGE_RESULT="${TRIAL_MERGE_CONFLICTS}"
+  TRIAL_MERGE_OUTPUT="docs/contracts.md"
+  # Recorded through a FILE, not a variable. The caller reads this stub's conflicted-file list through
+  # a command substitution, so the stub runs in a subshell and anything it assigns there dies with it:
+  # an assertion on a plain variable would have read empty whatever the caller did, which is a fixture
+  # that can only ever agree with itself.
+  : > "${TRIAL_MERGE_LOG}"
+  fetch_trial_merge_refs() { return 0; }
+  trial_merge_conflicts() {
+    printf '%s %s' "$1" "$2" > "${TRIAL_MERGE_LOG}"
+    [[ -n "${TRIAL_MERGE_OUTPUT}" ]] && printf '%s\n' "${TRIAL_MERGE_OUTPUT}"
+    return "${TRIAL_MERGE_RESULT}"
+  }
 }
 
 # --- happy path: a clean suite merges the resolved PR and releases the verify slot ---
@@ -179,9 +201,63 @@ run_full_suite() { return 0; }
 release_verify_slot() { RELEASE_CALLED="yes"; }
 merge_pr() { MERGE_CALLED="$1"; }
 
-verify_and_merge "44" >/dev/null 2>&1
+OUTPUT="$(verify_and_merge "44" 2>&1)"
 assert_equals "a merge conflict never sets up a worktree" "" "${SETUP_CALLED}"
 assert_equals "a merge conflict never merges" "" "${MERGE_CALLED}"
+# #3210: the refusal says WHICH files collided. Without that, a real conflict and a collision this
+# repo resolves by itself read exactly alike, and the only way to tell them apart was to update the
+# branch by hand and pay for another full suite cycle.
+assert_contains "the refusal names the file that really collided" "${OUTPUT}" "docs/contracts.md"
+assert_contains "and says it is the kind somebody has to resolve" "${OUTPUT}" "This is the real kind"
+
+# --- #3210: a collision this repo's own merge resolves is refused with a DIFFERENT reason ---
+# GitHub computes `mergeable` with a plain text merge and cannot see this repo's .gitattributes merge
+# driver, so any two branches touching the app's wording or its file list report as CONFLICTING. It
+# still refuses, because GitHub will not merge a PR it reports that way whatever this Mac can resolve
+# (PR #3196's own commits are the evidence: a pushed merge of main AND a pushed regeneration before it
+# would go in). What changes is that the reader is told which kind of collision it is, in seconds, and
+# handed the mechanical remedy, instead of paying a full extra suite cycle to find out.
+reset_stubs
+TRIAL_MERGE_RESULT="${TRIAL_MERGE_RESOLVED}"
+TRIAL_MERGE_OUTPUT=""
+resolve_pr() { PR_NUMBER="46"; PR_BRANCH="feature-generated"; PR_MERGEABLE="CONFLICTING"; PR_BODY="${COMPLETE_PR_BODY}"; }
+setup_worktree() { SETUP_CALLED="$1"; WORKTREE_DIR="/fake/worktree-generated"; }
+combine_with_main() { COMBINE_CALLED="$1"; return 0; }
+run_full_suite() { SUITE_RAN="yes"; return 0; }
+release_verify_slot() { RELEASE_CALLED="yes"; }
+merge_pr() { MERGE_CALLED="$1"; }
+
+OUTPUT="$(verify_and_merge "46" 2>&1)"
+assert_equals "a collision this repo resolves still costs no suite run" "" "${SUITE_RAN}"
+assert_equals "and is still never merged, because GitHub will not take it either" "" "${MERGE_CALLED}"
+assert_contains "the reader is told it is the cheap kind" "${OUTPUT}" "This is the cheap kind"
+assert_contains "and handed the command that changes GitHub's mind" "${OUTPUT}" "git merge origin/main"
+assert_not_contains "and it is not described as a conflict somebody has to resolve" \
+  "${OUTPUT}" "This is the real kind"
+assert_equals "the trial merge asked about current main against the branch" \
+  "origin/main origin/feature-generated" "$(cat "${TRIAL_MERGE_LOG}")"
+
+# --- #3210: a trial merge that could not RUN refuses, and says so in its own words ---
+# A merge git REFUSED to attempt and one it attempted and resolved leave the same empty list of
+# conflicted files. Reading the first as the second would wave a PR through on no evidence at all,
+# so the unmeasured case refuses exactly as before and names itself rather than borrowing either
+# verdict (L98, L11).
+reset_stubs
+TRIAL_MERGE_RESULT="${TRIAL_MERGE_UNMEASURED}"
+TRIAL_MERGE_OUTPUT=""
+resolve_pr() { PR_NUMBER="47"; PR_BRANCH="feature-unmeasured"; PR_MERGEABLE="CONFLICTING"; PR_BODY="${COMPLETE_PR_BODY}"; }
+setup_worktree() { SETUP_CALLED="$1"; WORKTREE_DIR="/fake/worktree-unmeasured"; }
+run_full_suite() { SUITE_RAN="yes"; return 0; }
+release_verify_slot() { RELEASE_CALLED="yes"; }
+merge_pr() { MERGE_CALLED="$1"; }
+
+OUTPUT="$(verify_and_merge "47" 2>&1)"
+assert_equals "an unmeasured trial merge never sets up a worktree" "" "${SETUP_CALLED}"
+assert_equals "an unmeasured trial merge never merges" "" "${MERGE_CALLED}"
+assert_contains "and it says which kind of collision it is was never measured" \
+  "${OUTPUT}" "could not be measured"
+assert_not_contains "an unmeasured answer never claims a file collided" "${OUTPUT}" "This is the real kind"
+assert_not_contains "and never claims the collision is the harmless kind either" "${OUTPUT}" "This is the cheap kind"
 
 # --- an unresolvable identifier bails before touching anything else ---
 reset_stubs
