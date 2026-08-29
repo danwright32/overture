@@ -42,13 +42,25 @@ enum SourceFetchError: Error, Equatable, LocalizedError {
     // already on the row is exactly the right next step.
     case addressUnusable
 
+    // #1521: every one of these is said in the PAST tense, because both surfaces that show it are
+    // reporting an attempt that has already finished. `SourceFailure.message` renders it from a row's
+    // stored `lastFailure`, which is by definition what the LAST run found, and the scout results card
+    // renders it from a snapshot taken when that run ended. A present-tense claim there survives Dan
+    // correcting the address and goes on describing a page the card is no longer showing (Dan's call,
+    // 2026-08-11: keep the message, say it as what the last run found). LeadIntakeModel's live fetch is
+    // the third reader and past tense is right there too: its own fallback already reads "Couldn't read
+    // that page."
+    //
+    // Two are deliberately NOT rewritten. `http` and `unreachable` are already past. `addressUnusable`
+    // describes the ADDRESS as it is stored rather than anything a page did, so it is not a claim that
+    // can go stale the way the others can.
     var errorDescription: String? {
         switch self {
         case .http(let code):        return "The page answered with HTTP \(code)."
-        case .notHTML(let type):     return "That link isn't a web page (it served \(type ?? "an unknown type"))."
-        case .redirectedAway(let h): return "That link redirects to a different site (\(h)). Check the address."
+        case .notHTML(let type):     return "That link wasn't a web page (it served \(type ?? "an unknown type"))."
+        case .redirectedAway(let h): return "That link redirected to a different site (\(h)). Check the address."
         case .unreachable:           return "Couldn't reach that page."
-        case .secureConnectionFailed: return "That site is up, but its secure connection is broken, so the page can't be read. A re-check won't clear this."
+        case .secureConnectionFailed: return "That site answered, but its secure connection was broken, so the page couldn't be read. A re-check won't clear this."
         case .addressUnusable:       return "That address is missing the part Overture needs to read this venue's calendar."
         case .feedShapeChanged:      return "That calendar's feed answered but nothing could be read from it, so its format has probably changed."
         }

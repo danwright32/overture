@@ -84,10 +84,10 @@ struct RootView: View {
     @AppStorage(OmniFocusSyncConfig.Keys.enabled) private var omniFocusEnabled = OmniFocusSyncConfig().enabled
     // #236: the natural key of a lead opened from an OmniFocus deep link, handed to the queue to
     // select and scroll to. Cleared by the queue once it has acted on it.
-    @State private var deepLinkedKey: String?
+    @State private var deepLinkedKey: LeadDeepLink?
     // #308: the natural keys of the new leads from a tapped multi-lead away alert, handed to the queue
     // to filter down to exactly them. Cleared by the queue once it has acted on it.
-    @State private var deepLinkedKeys: [String]?
+    @State private var deepLinkedKeys: LeadsDeepLink?
 
     // Kept prospects with no draft yet: what a Prep run would work on.
     // #367: shares PrepQueueBuilder.needsPrepPredicate rather than an inline #Predicate literal,
@@ -269,8 +269,17 @@ struct RootView: View {
             showDaysOff = true
         } label: {
             ToolbarHoverLabel(title: DaysOffAttention.badgeTitle(reason),
-                              systemImage: "calendar.badge.clock")
-                .foregroundStyle(reason != .none ? OVColor.inkSoft : Color.primary)
+                              systemImage: "calendar.badge.clock",
+                              // #1745: the words come up when Overture is blind to his schedule, and the
+                              // ink below is now the SAME in both states. Both halves are the fix: the
+                              // whole message used to be carried by an ink DIMMER than resting. The rule
+                              // lives in DaysOffAttention, not here, so it can be asserted directly
+                              // rather than only by reading this file's text.
+                              showsTitle: DaysOffAttention.showsTitle(reason))
+                // Deliberately unconditional. The resting appearance is unchanged (this was already
+                // Color.primary when nothing needed him), and holding it constant is what stops a later
+                // edit reaching for a softer ink to mean "attention" again.
+                .foregroundStyle(Color.primary)
         }
         .help(DaysOffAttention.help(reason))
     }
@@ -313,7 +322,7 @@ struct RootView: View {
         if StageNavigation.opensInQueue(key: key, in: nonDismissedProspects,
                                         reachedOutKeys: reachedOutKeys,
                                         context: StageContext(geo: geo, clients: clientWindow)) {
-            deepLinkedKey = key
+            deepLinkedKey = LeadDeepLink(key: key)
         } else {
             openArchive(key: key)
         }
@@ -424,8 +433,8 @@ struct RootView: View {
             "daysOffSnoozedUntil": "\(daysOffSnoozedUntil)",
             "feedLastNewAt": "\(feedLastNewAt)",
             "errorMessage": "\(errorMessage != nil)",
-            "deepLinkedKey": deepLinkedKey ?? "none",
-            "deepLinkedKeys": "\(deepLinkedKeys?.count ?? -1)",
+            "deepLinkedKey": deepLinkedKey?.key ?? "none",
+            "deepLinkedKeys": "\(deepLinkedKeys?.keys.count ?? -1)",
             "archiveJumpKey": archiveJumpKey ?? "none",
             "archiveJumpRecipientId": archiveJumpRecipientId ?? "none",
             "archiveOpeningQuery": "\(archiveOpeningQuery.count)",
@@ -568,7 +577,7 @@ struct RootView: View {
                 if OvertureDeepLink.isShowCommand(url) { openWindow(id: "main"); return }
                 // #308: a tapped multi-lead away alert opens overture://leads?key=…&key=…; hand the set
                 // to the queue to filter down to exactly those new leads.
-                if let keys = OvertureDeepLink.leadKeys(from: url) { deepLinkedKeys = keys; return }
+                if let keys = OvertureDeepLink.leadKeys(from: url) { deepLinkedKeys = LeadsDeepLink(keys: keys); return }
                 // #236: a tapped OmniFocus follow-up opens overture://lead?key=<naturalKey>; route it
                 // the same way as a search pick (#628) since a closed show can still generate a due
                 // follow-up (a late reply on a different contact) after it's left the Queue entirely.
@@ -1103,7 +1112,23 @@ struct RootView: View {
             .sheet(isPresented: $showDaysOff) { DaysOffView() }
             .sheet(isPresented: $showOmniFocusSettings) { OmniFocusSettingsView() }
             .sheet(isPresented: $showExcludedTowns) { ExcludedTownsView() }
-            .sheet(isPresented: $showOrganisations) { OrganisationsView() }
+            // #1794: tapping an entry closes the sheet and filters the queue to that organisation's
+            // shows. Through the SAME channel the away-alert leads path uses (`deepLinkedKeys`), never a
+            // second filter mechanism, which is what Dan's note asked for. The request carries its own
+            // identity (#1927), so tapping one organisation, coming back and tapping it again works: a
+            // channel carrying the destination would read the second tap as no change at all.
+            .sheet(isPresented: $showOrganisations) {
+                OrganisationsView(onShowShows: { entry in
+                    let keys = OrganisationListing.naturalKeys(forOrganisation: entry.key,
+                                                               in: nonDismissedProspects)
+                    // An entry covering nothing would close the sheet onto an empty focused list, which
+                    // reads as the tap having broken something. The shortlist's own floor is three rows,
+                    // so this cannot normally fire; it refuses rather than trusting that.
+                    guard !keys.isEmpty else { return }
+                    deepLinkedKeys = LeadsDeepLink(keys: keys, heading: entry.name)
+                    showOrganisations = false
+                })
+            }
             // #924: the date picker a multi-night dismissal opens, pre-filled with the run's dates.
             .sheet(item: Bindable(dayOffOffer).pending) { pending in
                 BlockDaysSheet(pending: pending, undo: undoStack)

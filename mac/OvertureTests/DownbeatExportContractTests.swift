@@ -70,4 +70,39 @@ struct DownbeatExportContractTests {
         #expect(export.bookings.isEmpty)   // no bookings key in a v1 file
         #expect(export.blockedDates.isEmpty)   // v1 predates blockedDates
     }
+
+    // #3193: the gate used to be the exact set [1, 2], so the next bump on the Downbeat side would
+    // have thrown here, and `loadWithHealth` answers a throw with empty clients, empty bookings and
+    // empty blockedDates. The client roster would have emptied and the scout would have stopped
+    // suppressing nights Dan is already shooting, which is a pitch for a night that is taken. The
+    // format is additive by contract and Codable ignores keys this struct does not declare, so a
+    // version at or above the minimum is read for the keys it does declare.
+    // The fixture is deliberately NOT named for any real Downbeat version: nothing here has seen the
+    // next one, so it stands for whatever a later bump carries rather than claiming to be a copy of it.
+    @Test func decodesAFutureVersionCarryingKeysThisReaderDoesNotDeclare() throws {
+        let export = try DownbeatBridge.decode(try fixture("future-version-with-unknown-keys.json"))
+        #expect(export.version == 97)
+        #expect(export.clients.count == 1)
+        #expect(export.clients[0].displayName == "Future Format Chorale")
+        #expect(export.venues.count == 1)
+        #expect(export.venues[0].name == "Merkin Hall")
+        #expect(export.bookings.count == 1)
+        #expect(export.bookings[0].shootName == "Season Opener")
+        #expect(export.bookings[0].venueName == "Merkin Hall")
+        // The half the outage would have cost: a booked night still reaches the scout's blocked set.
+        #expect(export.blockedDates == ["2026-09-14"])
+    }
+
+    // The other half of #3193, so the gate is seen to refuse as well as accept: a version BELOW the
+    // minimum is still a file this reader has no agreement about, and is refused rather than read.
+    @Test func aVersionBelowTheMinimumIsStillRefused() throws {
+        let ancient = Data(#"{"version":0,"clients":[],"venues":[]}"#.utf8)
+        #expect(throws: DownbeatExportError.unsupportedVersion(0)) {
+            try DownbeatBridge.decode(ancient)
+        }
+        let negative = Data(#"{"version":-1,"clients":[],"venues":[]}"#.utf8)
+        #expect(throws: DownbeatExportError.unsupportedVersion(-1)) {
+            try DownbeatBridge.decode(negative)
+        }
+    }
 }

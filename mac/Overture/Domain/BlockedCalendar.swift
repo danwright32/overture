@@ -160,10 +160,29 @@ struct BlockedCalendar: Equatable, Sendable {
     // Nothing blocked at all: the state Overture has been in its whole life.
     static let empty = BlockedCalendar()
 
+    // #2692: `cancelledBookingIds` are the shoots Dan has said are not happening. They are FILTERED here
+    // rather than deleted anywhere, because this function re-reads `bookings` and `blockedDates` from the
+    // export on every call, so a local deletion would come back with the next export. A cancellation is a
+    // preference, and a preference is enforced by filtering what is shown (L116).
+    //
+    // It carries a default, and the default is the SAFE direction rather than a convenience: an empty set
+    // means nothing is cancelled, so a caller that forgets it blocks MORE nights than it should. Blocking
+    // a night Dan is free on costs him one show he could have pitched; failing to block one he is working
+    // costs him a pitch for a night that is taken, which is the failure this whole calendar exists to
+    // prevent (L42's direction).
     static func build(bookings: [OvertureBooking],
                       exportedBlockedDates: [String],
-                      daysOff: [DayOffRange]) -> BlockedCalendar {
+                      daysOff: [DayOffRange],
+                      cancelledBookingIds: Set<String> = []) -> BlockedCalendar {
         var cal = BlockedCalendar()
+        // Which dates a cancellation has actually touched, and which of those still hold a shoot. The flat
+        // `blockedDates` rule below needs both: a date whose every booking is cancelled must lose its flat
+        // entry too, and a date that never had a booking must keep one.
+        let live = bookings.filter { !cancelledBookingIds.contains($0.id) }
+        let datesWithACancellation = Set(bookings.filter { cancelledBookingIds.contains($0.id) }
+            .flatMap { EasternDate.days(from: $0.startDate, through: $0.endDate) })
+        let datesStillHoldingAShoot = Set(live
+            .flatMap { EasternDate.days(from: $0.startDate, through: $0.endDate) })
 
         // Dan's own days first, so a booked shoot lands on top of one where they collide. One entry per
         // date: two of his own ranges overlapping is one decision of his, and both ranges are listed in
@@ -182,7 +201,7 @@ struct BlockedCalendar: Equatable, Sendable {
         // Named bookings, in an order settled here rather than by the export: by shoot name, then by the
         // booking's own id so two shoots sharing a name still land the same way round every time.
         var booked: [String: [Day]] = [:]
-        for b in bookings.sorted(by: { ($0.shootName, $0.id) < ($1.shootName, $1.id) }) {
+        for b in live.sorted(by: { ($0.shootName, $0.id) < ($1.shootName, $1.id) }) {
             for date in EasternDate.days(from: b.startDate, through: b.endDate) {
                 let day = Day(date: date, kind: .bookedShoot, name: b.shootName)
                 // Two bookings alike in name and date are ONE fact to everything downstream: the same
@@ -196,7 +215,17 @@ struct BlockedCalendar: Equatable, Sendable {
         // just has nothing to name it with, and does not pretend otherwise. Only where no booking already
         // names the date: on the live export every blocked date is also a booking's date (measured
         // 2026-08-15, all 12 of them), so listing it beside them would show every shoot twice.
-        for date in exportedBlockedDates where booked[date] == nil {
+        //
+        // #2692: and NOT where every booking on that date has been cancelled. 2027-04-20 arrives twice on
+        // Dan's export, once as a named booking and once as a flat entry, so cancelling only the named
+        // half would leave the day blocked by the other while the sheet reported success (L38: a removal
+        // has to reach every derived thing). The condition is deliberately "this date had a booking and
+        // none of them survives", not the bare "no booking remains": a date carrying a flat entry and no
+        // booking at all satisfies the bare form vacuously, and suppressing that one would unblock a night
+        // Downbeat blocked with nothing to name it by, which is the opposite of what it asked for.
+        for date in exportedBlockedDates
+        where booked[date] == nil
+            && !(datesWithACancellation.contains(date) && !datesStillHoldingAShoot.contains(date)) {
             booked[date] = [Day(date: date, kind: .bookedShoot, name: nil)]
         }
         // Bookings last: a date Downbeat has him working replaces the day off he had blocked there.

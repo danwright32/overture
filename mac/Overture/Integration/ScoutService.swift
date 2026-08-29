@@ -1765,6 +1765,10 @@ enum ScoutService {
                                 context: ModelContext) -> BlockedCalendar {
         BlockedCalendar.build(bookings: export.bookings,
                               exportedBlockedDates: export.blockedDates,
-                              daysOff: DayOffEditing.ranges(in: context))
+                              daysOff: DayOffEditing.ranges(in: context),
+                              // #2692: the shoots Dan has said are not happening. Read HERE, in the one
+                              // place every surface builds its calendar through, so the sheet, the scout
+                              // and the conflict sweep cannot disagree about which nights are blocked.
+                              cancelledBookingIds: CancelledShootEditing.cancelledIds(in: context))
     }
 }

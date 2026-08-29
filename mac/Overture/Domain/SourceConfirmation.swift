@@ -15,6 +15,26 @@ enum SourceConfirmation {
         return readHash == confirmedEmptyHash
     }
 
+    // #1521: the question that comes BEFORE staleness. Is there anything to confirm AT ALL?
+    //
+    // `confirmEmpty` anchors `confirmedEmptyHash` to the bytes last read (`pendingContentHash`, or the
+    // last ingested hash). With neither it takes its no-hash path: it clears the failing display, writes
+    // no anchor, and returns `.noHash`. So a confirm made with no bytes records a judgement about a page
+    // nobody has ever fetched, and its only visible effect is that the card disappears.
+    //
+    // That is exactly the state a corrected address leaves a row in. `WatchlistEditing.editURL` nils both
+    // hashes and leaves `health` at `.neverChecked`, because the page has not been read at its new
+    // address, and the scout results card deliberately STAYS after a correction (#1125, #1499) so Dan can
+    // see it and press "Read the ones I fixed". Confirm was still on that card. Dan's call, 2026-08-11:
+    // it comes off the moment the address is corrected.
+    //
+    // Stated as "are there bytes" rather than as "was the address just corrected", because the bytes are
+    // the reason the button is meaningless and the correction is only one way to arrive there. A source
+    // that has never been read reaches the same state by a different route and gets the same answer.
+    static func hasBytesToConfirm(anchorHash: String?) -> Bool {
+        anchorHash != nil
+    }
+
     // #1048: the mirror question, asked BEFORE Dan confirms rather than at the next ingest. A confirm
     // anchors confirmedEmptyHash to the bytes last READ (`anchorHash`: pendingContentHash, or the last
     // ingested hash). `lastSeenHash` is the newest bytes any fetch has seen, which the free daily

@@ -78,9 +78,8 @@ enum DaysOffAttention {
     //
     // He was right on both counts. Neither "you have no days off" nor "you have no shoots" is a problem,
     // and this state is neither of those things: it is that Downbeat has handed Overture nothing upcoming,
-    // so there is nothing for it to keep clear of. The toolbar now says the same two words whatever the
-    // state, and the difference is carried by the icon's colour alone (RootView). Dan's second call,
-    // 2026-07-24: no words unless something is wrong, and this is not wrong.
+    // so there is nothing for it to keep clear of. So the WORDS are the same two in every state, and
+    // nothing here is ever gold. Both of those stand.
     //
     // The MARK stays, though, because this is the only thing in the app watching for a dry pipe:
     // DownbeatExport.health asks whether the file exists, parses, and is recent, so a fresh export holding
@@ -88,6 +87,29 @@ enum DaysOffAttention {
     // The sentence explaining it lives in `help` and in the sheet, which have room to say it properly; a
     // toolbar has room only to be noticed.
     static func badgeTitle(_ reason: Reason) -> String { "Days off" }
+
+    // #1745: whether the toolbar prints those two words beside the icon, or leaves them to the hover.
+    //
+    // What #1430 left behind was a mark whose ENTIRE difference was the ink, and the ink it reached for
+    // was `OVColor.inkSoft`, which in dark mode is (0.702, 0.722, 0.667) against a near-white resting
+    // `Color.primary`. So the state meaning "Overture is blind to your schedule and cannot keep clear of
+    // your bookings" rendered DIMMER than the state meaning everything is fine. On 2026-07-29 it fired
+    // correctly, unsnoozed, for a whole day, while Dan looked at thirteen Jul 31 prospects and had no idea
+    // Downbeat had handed over none of the two shoots he had that night. An attention state that is less
+    // visible than the resting state is not a quiet warning, it is no warning, and no test can tell the
+    // two apart (L49's shape applied to a warning rather than a control).
+    //
+    // The remedy is the one the Sources button 60 lines below already uses, and its comment records the
+    // reason in a sentence worth repeating: the tint is "a bonus on top of the words, never the message
+    // itself: macOS may do as it likes with a toolbar button's foreground style". Days off was the last
+    // mark in the app still relying on tint alone. So the words come up, and the ink is now the SAME in
+    // both states, which is what makes this structurally unable to come back: there is no longer an ink
+    // to get wrong.
+    //
+    // Dan's call, 2026-08-27, choosing this over swapping the icon for a marked variant: the words appear
+    // and the colour does not change. It does NOT reverse #1430, whose two objections were the wording
+    // and the gold; `badgeTitle` is still the plain two words and nothing here is gold.
+    static func showsTitle(_ reason: Reason) -> Bool { reason != .none }
 
     static func help(_ reason: Reason) -> String {
         switch reason {

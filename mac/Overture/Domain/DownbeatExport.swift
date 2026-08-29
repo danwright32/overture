@@ -73,11 +73,24 @@ enum DownbeatBridge {
     // v1 = clients/venues; v2 adds bookings/blockedDates (downbeat#52). Swift Codable
     // ignores keys this struct doesn't declare, so accepting v2 reads clients/venues
     // without consuming the new keys yet (that's #99). Keep v1 working.
-    static let supportedVersions: Set<Int> = [1, 2]
+    //
+    // #3193: this was the exact set [1, 2] and is now a MINIMUM with no ceiling, which is the
+    // opposite direction from `PrepResultsDecoder`'s closed `minimumVersion...supportedVersion`
+    // range, deliberately. That reader's ceiling exists because Overture WRITES the queue the run
+    // answers, so a results file naming a version it does not know means the run wrote a shape this
+    // build cannot act on, and reading it half-way stamps every show in the run with a floor nothing
+    // upgrades (#1594). This file is the reverse: Overture only ever READS it, from a producer in
+    // another repo on its own release schedule, the format is additive by contract, and the failure
+    // mode of refusing is total. A throw here is answered by `loadWithHealth` with empty clients,
+    // empty bookings and empty blockedDates, so the roster empties AND the scout stops suppressing
+    // nights Dan is already shooting, which is a pitch for a night that is taken. Downbeat bumping
+    // its format is the ordinary case, not an error, so a version at or above the minimum is read
+    // for the keys this struct declares and the rest are ignored (L255).
+    static let minimumVersion = 1
 
     static func decode(_ data: Data) throws -> DownbeatExport {
         let export = try JSONDecoder().decode(DownbeatExport.self, from: data)
-        guard supportedVersions.contains(export.version) else {
+        guard export.version >= minimumVersion else {
             throw DownbeatExportError.unsupportedVersion(export.version)
         }
         return export
@@ -121,7 +134,7 @@ enum DownbeatBridge {
         case .missing:
             return "No Downbeat client export was found, so the scout treated every prospect as a cold lead. Open Downbeat to export your client list, then run the scout again."
         case .unreadable:
-            return "The Downbeat client export couldn't be read (it may be corrupted or a newer format), so the scout treated every prospect as cold. Re-export it from Downbeat."
+            return "The Downbeat client export couldn't be read (it may be corrupted, or not the shape Overture expects), so the scout treated every prospect as cold. Re-export it from Downbeat."
         case .stale(let days):
             return "Your Downbeat client export is \(days) days old. Recently booked clients may be missing, so some warm leads could look cold. Open Downbeat to refresh it."
         }
