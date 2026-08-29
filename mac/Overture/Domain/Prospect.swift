@@ -410,6 +410,11 @@ final class Prospect {
     // never overwrites it (PrepImporter), the recent-openers export never exports his own sentences as
     // shapes for the drafter to avoid (RecentOpenersBuilder), an A/B arm never counts a draft it did not
     // produce (ExperimentReport), and the review card says who wrote it (QueueItem.draftAuthorLabel).
+    // #2014 adds the one that was missing from that list: a BULK re-prep never asks a Prep run to redraft
+    // this text. The single-show control confirms first (#2007) and a bulk one cannot, so it withholds the
+    // destructive half and still finds contacts (ReprepRequest.bulkMode). Keep this list current: it is
+    // the record of who honours the marker, and the sweep was absent from it for a year while quietly
+    // queueing his own words for replacement.
     var draftWrittenByDan: Bool = false
 
     // #5 (opener A/B testing), Phase 1: the experiment stamp. All defaulted so existing records migrate

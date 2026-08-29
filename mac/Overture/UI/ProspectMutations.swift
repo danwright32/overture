@@ -1082,13 +1082,23 @@ enum ProspectMutations {
         }
         let skippedCount = baseEligible.count - eligible.count
         var draftGrantedCount = 0
+        // #2014: a bulk sweep never asks a Prep run to REDRAFT text Dan wrote himself. The single-show
+        // control confirms before doing that; a bulk one cannot, because a dialog per row is not a bulk
+        // action, so the destructive half is withheld and the safe half still happens.
+        var handWrittenSpared = 0
         for p in eligible {
-            if ReprepRequest.apply(mode, to: p) { draftGrantedCount += 1 }
+            guard let rowMode = ReprepRequest.bulkMode(mode, writtenByDan: p.draftWrittenByDan) else {
+                handWrittenSpared += 1
+                continue
+            }
+            if rowMode != mode { handWrittenSpared += 1 }
+            if ReprepRequest.apply(rowMode, to: p) { draftGrantedCount += 1 }
         }
         if context.saveOrWarn(org: "the queue", feedback: feedback) {
             feedback.acknowledge(ActionAck.bulkReprepQueued(mode: mode, total: eligible.count,
                                                             draftGrantedCount: draftGrantedCount,
-                                                            skippedCount: skippedCount))
+                                                            skippedCount: skippedCount,
+                                                            handWrittenSpared: handWrittenSpared))
         }
     }
 

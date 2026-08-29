@@ -115,6 +115,28 @@ enum ReprepRequest {
     // Returns whether the draft-affecting half was actually granted, so a bulk caller can summarize
     // how many prospects got the full request versus a narrowed one.
     @discardableResult
+    // #2014: what a BULK sweep may ask of one row, which is not always what the menu asked for.
+    //
+    // The single-show control confirms before replacing hand-written text (#2007), and a bulk action
+    // cannot: a dialog per row is not a bulk action. So the destructive half is withheld instead. Losing
+    // words Dan typed is the one unrecoverable outcome on this path, because `originalDraftBody` is only
+    // populated when an AI draft is EDITED, so a wholly hand-written draft leaves nothing to fall back to.
+    //
+    // The SAFE half still happens: finding contacts never touches the text, so withholding that too would
+    // make the protection cost him something he never asked to give up. nil means there is nothing left
+    // for this row to be asked, which is a draft-only sweep meeting his own email.
+    //
+    // Pure and here rather than at the call site, so every case can be produced by a fixture and the rule
+    // sits beside `apply`, which is what performs it.
+    static func bulkMode(_ mode: ReprepMode, writtenByDan: Bool) -> ReprepMode? {
+        guard writtenByDan else { return mode }
+        switch mode {
+        case .contactsOnly: return .contactsOnly
+        case .both: return .contactsOnly
+        case .draftOnly: return nil
+        }
+    }
+
     static func apply(_ mode: ReprepMode, to p: Prospect) -> Bool {
         let draftAllowed = p.sentAt == nil
         switch mode {

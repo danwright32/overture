@@ -1,12 +1,17 @@
 import Testing
 import Foundation
+import SwiftData
 
 // #2007, decision 2 (Dan, 2026-08-03): re-prep IS offered on a draft he wrote himself, and it confirms
 // before replacing hand-written text, because clobbering text he typed is the one unrecoverable outcome
 // on this path.
 //
-// Note #2014: the BULK re-prep has no per-show confirm at all, so this covers only the single-row
-// control until that is done.
+// #2014: the BULK re-prep has no per-show confirm and never will, because a dialog per row is not a
+// bulk action. Instead it never asks a Prep run to REDRAFT text Dan wrote: the destructive half is
+// withheld, the safe half (finding contacts) still happens, and the acknowledgement names how many were
+// left alone. Losing hand-written words is the one unrecoverable outcome on this path, and
+// `originalDraftBody` is only populated when an AI draft is EDITED, so a wholly hand-written draft
+// leaves nothing to fall back to.
 @MainActor
 @Suite("Re-prepping over a hand-written draft (#2007)")
 struct ReprepOverHandWrittenTests {
@@ -92,4 +97,77 @@ struct ReprepOverHandWrittenTests {
         #expect(p.reprepDraftRequested == false)
         #expect(p.draftWrittenByDan)
     }
+
+    // MARK: - #2014: the bulk sweep never redrafts his own words
+
+    private func context() throws -> ModelContext {
+        ModelContext(try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
+                                        configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
+    }
+
+    @discardableResult
+    private func drafted(_ ctx: ModelContext, key: String, writtenByDan: Bool) -> Prospect {
+        let p = prospect()
+        p.naturalKey = key
+        p.draftSubject = "s"
+        p.draftBody = "b"
+        p.status = .drafted
+        p.draftWrittenByDan = writtenByDan
+        ctx.insert(p)
+        return p
+    }
+
+    // THE FAILURE PATH the issue asks for: a mixed batch, and his own text is not queued for replacement.
+    @Test func aBulkRedraftOverAMixedBatchLeavesHandWrittenTextAlone() throws {
+        let ctx = try context()
+        let his = drafted(ctx, key: "his", writtenByDan: true)
+        let ai = drafted(ctx, key: "ai", writtenByDan: false)
+
+        ProspectMutations.bulkReprep(.draftOnly, prospects: [his, ai], context: ctx,
+                                     feedback: ActionFeedback(), now: now)
+
+        #expect(ai.reprepDraftRequested)
+        #expect(!his.reprepDraftRequested, "the bulk sweep must never queue his own words for replacement")
+        #expect(his.draftWrittenByDan, "and must not release the marker that protects them")
+    }
+
+    // The SAFE half still happens. Withholding contacts too would make the protection cost him something
+    // he never asked to give up, and finding contacts does not touch the text at all.
+    @Test func aBulkRedraftAndContactsStillFindsContactsForHisOwnDraft() throws {
+        let ctx = try context()
+        let his = drafted(ctx, key: "his", writtenByDan: true)
+
+        ProspectMutations.bulkReprep(.both, prospects: [his], context: ctx,
+                                     feedback: ActionFeedback(), now: now)
+
+        #expect(his.reprepContactsRequested)
+        #expect(!his.reprepDraftRequested)
+    }
+
+    // Contacts-only is untouched by any of this: it was never the destructive mode.
+    @Test func aBulkContactHuntTreatsHisDraftLikeAnyOther() throws {
+        let ctx = try context()
+        let his = drafted(ctx, key: "his", writtenByDan: true)
+
+        ProspectMutations.bulkReprep(.contactsOnly, prospects: [his], context: ctx,
+                                     feedback: ActionFeedback(), now: now)
+
+        #expect(his.reprepContactsRequested)
+    }
+
+    // And it SAYS so. Silently doing less than the button offered is its own defect: the count in the
+    // confirmation was the only signal before, and a count cannot say what it is about to lose (L11).
+    @Test func theAcknowledgementNamesTheEmailsItLeftAlone() {
+        let said = ActionAck.bulkReprepQueued(mode: .draftOnly, total: 3, draftGrantedCount: 2,
+                                              skippedCount: 0, handWrittenSpared: 1)
+        #expect(said.contains("wrote yourself"))
+        #expect(said.contains("1"))
+    }
+
+    @Test func nothingIsSaidAboutHandWrittenDraftsWhenThereWereNone() {
+        let said = ActionAck.bulkReprepQueued(mode: .draftOnly, total: 3, draftGrantedCount: 3,
+                                              skippedCount: 0, handWrittenSpared: 0)
+        #expect(!said.contains("wrote yourself"))
+    }
+
 }
