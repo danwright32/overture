@@ -20,7 +20,7 @@ struct SendConfirmationTests {
                       sentAt: Date? = nil) -> Prospect {
         let key = Prospect.makeNaturalKey(groupName: "G", performanceDate: "2026-07-01", venue: "V")
         let p = Prospect(naturalKey: key, groupName: "G", discipline: "choral", venue: "V",
-                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-07-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: status, ingestedAt: Date())
@@ -63,7 +63,7 @@ struct SendConfirmationTests {
         -> Prospect {
             let key = Prospect.makeNaturalKey(groupName: "G", performanceDate: "2026-07-01", venue: "V")
             let p = Prospect(naturalKey: key, groupName: "G", discipline: "choral", venue: "V",
-                             performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                             performanceDate: "2026-07-01", sourceListingURL: nil,
                              priorRelationship: "none", production: "self", profile: "strong",
                              coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                              matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -236,7 +236,7 @@ struct SendConfirmationTests {
         let ctx = ModelContext(try container())
         let key = Prospect.makeNaturalKey(groupName: "G", performanceDate: "2026-07-01", venue: "V")
         let p = Prospect(naturalKey: key, groupName: "G", discipline: "choral", venue: "V",
-                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-07-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .approved, ingestedAt: Date())

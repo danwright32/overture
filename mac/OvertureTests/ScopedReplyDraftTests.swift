@@ -20,7 +20,7 @@ struct ScopedReplyDraftTests {
     private func repliedShow(_ ctx: ModelContext, key: String, address: String,
                              words: String = "Sounds good, tell me more.") -> Recipient {
         let p = Prospect(naturalKey: key, groupName: key, discipline: "choral", venue: "V",
-                         performanceDate: "2026-10-31", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-10-31", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 8, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)

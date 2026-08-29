@@ -22,7 +22,7 @@ struct InheritedReachabilityTests {
                       contacts: [String] = []) -> QueueItem {
         var i = QueueItem(id: id, groupName: "Light as Air", discipline: "music",
                           venue: "House of the Redeemer", performanceDate: "2026-09-12",
-                          sourceListingURL: "https://example.org/show", websiteURL: nil,
+                          sourceListingURL: "https://example.org/show",
                           priorRelationship: "none", production: "self", profile: "strong",
                           coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
                           matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

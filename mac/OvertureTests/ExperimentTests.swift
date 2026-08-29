@@ -14,7 +14,7 @@ struct ExperimentTests {
 
     private func makeProspect(_ key: String) -> Prospect {
         Prospect(naturalKey: key, groupName: "G", discipline: "music", venue: nil,
-                 performanceDate: nil, sourceListingURL: nil, websiteURL: nil,
+                 performanceDate: nil, sourceListingURL: nil,
                  priorRelationship: "none", production: "", profile: "", coverage: "",
                  fitScore: 50, tier: "B", fitReason: "", matchedClientName: nil,
                  possibleMatchSource: nil, possibleMatchName: nil)
@@ -162,7 +162,7 @@ struct ExperimentTests {
         ctx.insert(exp)
         // A kept-undrafted prospect: needs-prep-eligible, so it is queued and thus assignment-eligible.
         let toPrep = Prospect(naturalKey: "to-prep", groupName: "G", discipline: "music", venue: "V",
-                              performanceDate: "2026-08-01", sourceListingURL: nil, websiteURL: nil,
+                              performanceDate: "2026-08-01", sourceListingURL: nil,
                               priorRelationship: "none", production: "self", profile: "strong",
                               coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                               matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -191,14 +191,14 @@ struct ExperimentTests {
     @Test func buildQueueCarriesTheAssignedArmAsTheItemInstruction() throws {
         let ctx = ModelContext(try container())
         let assigned = Prospect(naturalKey: "assigned", groupName: "G", discipline: "music", venue: "V",
-                                performanceDate: "2026-08-01", sourceListingURL: nil, websiteURL: nil,
+                                performanceDate: "2026-08-01", sourceListingURL: nil,
                                 priorRelationship: "none", production: "self", profile: "strong",
                                 coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                                 matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                                 status: .queued)
         assigned.assignedArm = "credential-first"
         let plain = Prospect(naturalKey: "plain", groupName: "G2", discipline: "music", venue: "V",
-                             performanceDate: "2026-08-02", sourceListingURL: nil, websiteURL: nil,
+                             performanceDate: "2026-08-02", sourceListingURL: nil,
                              priorRelationship: "none", production: "self", profile: "strong",
                              coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                              matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

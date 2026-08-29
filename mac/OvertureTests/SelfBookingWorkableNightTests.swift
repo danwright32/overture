@@ -181,7 +181,7 @@ struct SelfBookingWorkableWiringTests {
                      nightTimes: [String] = [], vary: Bool = false, sent: Bool = false) -> QueueItem {
         var q = QueueItem(
             id: key, groupName: name, discipline: "music", venue: "Weill Recital Hall",
-            performanceDate: "2026-08-06", sourceListingURL: nil, websiteURL: nil,
+            performanceDate: "2026-08-06", sourceListingURL: nil,
             priorRelationship: "none", production: "unknown", profile: "neutral",
             coverage: "unknown", fitScore: 3, tier: "longshot", fitReason: "reason",
             matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil, status: .new

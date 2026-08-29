@@ -20,7 +20,7 @@ struct PrepQueueEligibilityParityTests {
     private func insert(_ ctx: ModelContext, key: String, status: ReviewStatus, hasDraft: Bool,
                         reprepDraftRequested: Bool = false, reprepContactsRequested: Bool = false) {
         let p = Prospect(naturalKey: key, groupName: key, discipline: "choral", venue: "V",
-                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-07-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -52,8 +52,7 @@ struct PrepQueueEligibilityParityTests {
         // could agree perfectly on every case that predates it and still disagree on every case that
         // matters now.
         let conflicted = Prospect(naturalKey: "kept-but-booked", groupName: "g", discipline: "choral",
-                                  venue: "V", performanceDate: "2026-07-01", sourceListingURL: nil,
-                                  websiteURL: nil, priorRelationship: "none", production: "self",
+                                  venue: "V", performanceDate: "2026-07-01", sourceListingURL: nil, priorRelationship: "none", production: "self",
                                   profile: "strong", coverage: "likely_uncovered", fitScore: 5,
                                   tier: "mid", fitReason: "r", matchedClientName: nil,
                                   possibleMatchSource: nil, possibleMatchName: nil, status: .queued)
@@ -62,8 +61,7 @@ struct PrepQueueEligibilityParityTests {
         ctx.insert(conflicted)
 
         let cleared = Prospect(naturalKey: "kept-but-cleared", groupName: "g", discipline: "choral",
-                               venue: "V", performanceDate: "2026-07-01", sourceListingURL: nil,
-                               websiteURL: nil, priorRelationship: "none", production: "self",
+                               venue: "V", performanceDate: "2026-07-01", sourceListingURL: nil, priorRelationship: "none", production: "self",
                                profile: "strong", coverage: "likely_uncovered", fitScore: 5,
                                tier: "mid", fitReason: "r", matchedClientName: nil,
                                possibleMatchSource: nil, possibleMatchName: nil, status: .queued)

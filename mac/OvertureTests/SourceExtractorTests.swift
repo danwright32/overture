@@ -328,8 +328,7 @@ struct ScoutSourceInjectionTests {
                                  kind: .algolia))
         let stored = Prospect(naturalKey: "already-here", groupName: "Already Here", discipline: "music",
                               venue: "Weill Recital Hall", performanceDate: "2099-12-01",
-                              sourceListingURL: "https://www.carnegiehall.org/event/here",
-                              websiteURL: nil, priorRelationship: "none", production: "self",
+                              sourceListingURL: "https://www.carnegiehall.org/event/here", priorRelationship: "none", production: "self",
                               profile: "strong", coverage: "likely_uncovered", fitScore: 5, tier: "mid",
                               fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
                               possibleMatchName: nil)

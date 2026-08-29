@@ -44,7 +44,7 @@ struct TooSoonDismissReasonTests {
                                            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
         let ctx = ModelContext(container)
         let p = Prospect(naturalKey: "Late Find", groupName: "Late Find", discipline: "choral", venue: "V",
-                         performanceDate: "2026-07-20", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-07-20", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

@@ -519,7 +519,7 @@ struct QueueShowableSurfacesAreOnePredicateTests {
     private func show(_ ctx: ModelContext, _ key: String, status: ReviewStatus = .new,
                       date: String = "2026-08-19") -> Prospect {
         let p = Prospect(naturalKey: key, groupName: key, discipline: "music", venue: "Merkin Hall",
-                         performanceDate: date, sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: date, sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

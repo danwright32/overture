@@ -14,7 +14,7 @@ import SwiftData
 struct ManualDraftTests {
     private func prospect(group: String = "Bargemusic", status: ReviewStatus = .queued) -> Prospect {
         Prospect(naturalKey: "\(group)|2026-11-14|Boathouse", groupName: group, discipline: "classical",
-                 venue: "Boathouse", performanceDate: "2026-11-14", sourceListingURL: nil, websiteURL: nil,
+                 venue: "Boathouse", performanceDate: "2026-11-14", sourceListingURL: nil,
                  priorRelationship: "booked", production: "self", profile: "strong",
                  coverage: "likely_uncovered", fitScore: 9, tier: "high", fitReason: "r",
                  matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil, status: status)

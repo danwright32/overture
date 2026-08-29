@@ -40,7 +40,7 @@ struct ReachedOutDuePillCountsWhatIsOwedTests {
     @discardableResult
     private func show(_ ctx: ModelContext, _ key: String, day: String) -> Prospect {
         let p = Prospect(naturalKey: key, groupName: key, discipline: "music", venue: "Merkin Hall",
-                         performanceDate: day, sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: day, sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

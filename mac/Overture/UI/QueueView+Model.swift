@@ -13,7 +13,6 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     let venue: String?
     let performanceDate: String?
     let sourceListingURL: String?
-    let websiteURL: String?
     // #1145: the presenting org, read by the free reachability heuristic on Scout, where Dan triages
     // (#1586: no presenter => nothing to email). Defaulted so existing memberwise-init call sites are
     // unaffected.
@@ -357,7 +356,7 @@ struct QueueItem: Identifiable, Equatable, Sendable {
                                   // answer of the same age expired.
                                   missedByACheck: reachabilityUnansweredAt != nil
                                       && !Reachability.probeIsStale(probedAt: reachabilityUnansweredAt, now: now),
-                                  presenter: presenter, sourceListingURL: sourceListingURL, websiteURL: websiteURL)
+                                  presenter: presenter, sourceListingURL: sourceListingURL)
     }
 
     // #1598 Phase 5: the addresses the row prints under its badge. A show researched itself shows ITS
@@ -1173,8 +1172,12 @@ enum QueueModel {
         return .shown
     }
 
-    static func rowReferenceLinks(_ item: QueueItem) -> (listing: URL?, website: URL?) {
-        (url(item.sourceListingURL), url(item.websiteURL))
+    // #1640: the LISTING link alone. There was a second half here, the act's own site, and it could
+    // never be non-nil: `websiteURL` was populated by nothing, so the "Group website" link it fed has
+    // never rendered on any card in this app's life. Removed with the field rather than left returning a
+    // permanent nil, which is a tuple half nothing can write (L90).
+    static func rowListingLink(_ item: QueueItem) -> URL? {
+        url(item.sourceListingURL)
     }
 
     // #1680: what to call the listing link. A per-event link says "Source listing" as it always has; a link
@@ -1249,8 +1252,7 @@ enum QueueModel {
     }
 
     static func rowHasReferenceLinks(_ item: QueueItem) -> Bool {
-        let links = rowReferenceLinks(item)
-        return links.listing != nil || links.website != nil
+        rowListingLink(item) != nil
     }
 
     private static func url(_ raw: String?) -> URL? {
@@ -2606,7 +2608,6 @@ extension QueueItem {
             venue: p.venue,
             performanceDate: p.performanceDate,
             sourceListingURL: p.sourceListingURL,
-            websiteURL: p.websiteURL,
             presenter: p.presenter,
             reachabilityProbedAt: p.reachabilityProbedAt,
             reachabilityRecheckRequestedAt: p.reachabilityRecheckRequestedAt,

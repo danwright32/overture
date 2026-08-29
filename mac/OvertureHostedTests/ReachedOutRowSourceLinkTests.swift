@@ -18,7 +18,7 @@ struct ReachedOutRowSourceLinkTests {
     private func show(listing: String?) -> (Prospect, Recipient) {
         let p = Prospect(naturalKey: "k", groupName: "Aurora Strings", discipline: "music",
                          venue: "Weill Recital Hall", performanceDate: "2026-08-01",
-                         sourceListingURL: listing, websiteURL: "https://aurorastrings.example",
+                         sourceListingURL: listing,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

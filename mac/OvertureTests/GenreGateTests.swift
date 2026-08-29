@@ -131,7 +131,7 @@ struct GenreGateTests {
             configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
         let p = Prospect(naturalKey: "Aurora|2026-01-05", groupName: "Aurora Strings",
                          discipline: Discipline.other.rawValue, venue: "Jalopy",
-                         performanceDate: "2026-01-05", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-01-05", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

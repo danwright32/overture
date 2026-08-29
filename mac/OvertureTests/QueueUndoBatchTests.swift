@@ -22,8 +22,7 @@ struct QueueUndoBatchTests {
     @discardableResult
     private func dismissedShow(_ ctx: ModelContext, _ key: String, reason: String = "too_soon") -> Prospect {
         let p = Prospect(naturalKey: key, groupName: "Org \(key)", discipline: "music",
-                         venue: "Stern Auditorium", performanceDate: "2026-07-24", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "self", profile: "strong",
+                         venue: "Stern Auditorium", performanceDate: "2026-07-24", sourceListingURL: nil, priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 9, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                          status: .dismissed)

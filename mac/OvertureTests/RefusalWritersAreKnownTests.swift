@@ -130,8 +130,7 @@ struct RefusalWritersAreKnownTests {
         ctx.insert(removed)
 
         let p = Prospect(naturalKey: "k", groupName: "Aurora Strings", discipline: "music",
-                         venue: "Merkin Hall", performanceDate: "2026-11-02", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "self",
+                         venue: "Merkin Hall", performanceDate: "2026-11-02", sourceListingURL: nil, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 7, tier: "high",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
                          possibleMatchName: nil)

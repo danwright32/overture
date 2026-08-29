@@ -17,7 +17,7 @@ struct ReachabilityProbeLaunchTests {
     private func newProspect(_ ctx: ModelContext, group: String, date: String = "2026-09-12") -> String {
         let key = Prospect.makeNaturalKey(groupName: group, performanceDate: date, venue: "Weill Recital Hall")
         let p = Prospect(naturalKey: key, groupName: group, discipline: "music", venue: "Weill Recital Hall",
-                         performanceDate: date, sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: date, sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 6, tier: "mid", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .new)

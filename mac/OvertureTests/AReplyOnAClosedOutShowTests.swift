@@ -26,8 +26,7 @@ struct AReplyOnAClosedOutShowTests {
 
     private func show(_ ctx: ModelContext, key: String = "an evening of song|2026-09-04|the corner room") -> Prospect {
         let p = Prospect(naturalKey: key, groupName: "Corner Room Collective", discipline: "choral",
-                         venue: "the corner room", performanceDate: "2026-09-04", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "self", profile: "strong",
+                         venue: "the corner room", performanceDate: "2026-09-04", sourceListingURL: nil, priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                          status: .contacted)

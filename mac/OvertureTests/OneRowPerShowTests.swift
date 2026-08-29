@@ -26,7 +26,7 @@ struct OneRowPerShowTests {
 
     private func show(_ ctx: ModelContext, key: String = "k") -> Prospect {
         let p = Prospect(naturalKey: key, groupName: "G\(key)", discipline: "music", venue: "V",
-                         performanceDate: "2030-11-18", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2030-11-18", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -186,7 +186,7 @@ struct PerformanceStatusReadsTheShowTests {
 
     private func pitchedShow(_ ending: ShowOutcome?) -> Prospect {
         let p = Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: "V",
-                         performanceDate: "2030-11-18", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2030-11-18", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

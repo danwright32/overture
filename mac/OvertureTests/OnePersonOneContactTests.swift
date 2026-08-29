@@ -25,7 +25,7 @@ struct OnePersonOneContactTests {
                                           performanceDate: "2026-08-11", venue: "54 Below")
         let p = Prospect(naturalKey: key, groupName: "Cabaret for the Chronically Dramatic",
                          discipline: "music", venue: "54 Below", performanceDate: "2026-08-11",
-                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                         sourceListingURL: nil, priorRelationship: "none",
                          production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .queued)

@@ -123,7 +123,7 @@ struct RefusalTeachesTheScoutTests {
 
     private func show(_ outcome: ShowOutcome?, org: String = "Some Org", sent: Bool = true) -> Prospect {
         let p = Prospect(naturalKey: "\(org)|k", groupName: org, discipline: "music", venue: "V",
-                         performanceDate: "2026-11-18", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-11-18", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

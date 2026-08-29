@@ -24,7 +24,7 @@ struct ReplyCaptureTests {
     // thread "t". The lead gmailThreadId is kept for the A3 rollup readers.
     private func sentLead(_ ctx: ModelContext) -> Prospect {
         let p = Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: "V",
-                         performanceDate: "2026-09-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-09-01", sourceListingURL: nil,
                          priorRelationship: "warm", production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 8, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil)

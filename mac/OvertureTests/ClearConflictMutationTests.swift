@@ -18,7 +18,7 @@ struct ClearConflictMutationTests {
     private func conflicted(_ ctx: ModelContext) -> Prospect {
         let p = Prospect(naturalKey: "k", groupName: "Vienna Philharmonic", discipline: "music",
                          venue: "Stern Auditorium / Perelman Stage", performanceDate: "2026-11-14",
-                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                         sourceListingURL: nil, priorRelationship: "none",
                          production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 9, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil)

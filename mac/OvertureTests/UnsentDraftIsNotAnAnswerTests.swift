@@ -97,7 +97,7 @@ struct UnsentDraftIsNotAnAnswerTests {
     private func show(_ ctx: ModelContext) -> Prospect {
         let p = Prospect(naturalKey: "k", groupName: "Fernbrook Players", discipline: "theatre",
                          venue: "Willow Street Playhouse", performanceDate: "2026-11-14",
-                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                         sourceListingURL: nil, priorRelationship: "none",
                          production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 8, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .contacted)

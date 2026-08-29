@@ -21,8 +21,7 @@ struct AnsweredReplyNoteTests {
 
     private func show(_ ctx: ModelContext, key: String = "k") -> Prospect {
         let p = Prospect(naturalKey: key, groupName: "Aurora Strings", discipline: "music",
-                         venue: "Rivermill Hall", performanceDate: "2026-11-20", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "self", profile: "strong",
+                         venue: "Rivermill Hall", performanceDate: "2026-11-20", sourceListingURL: nil, priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 8, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                          status: .contacted)

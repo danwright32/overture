@@ -19,7 +19,7 @@ struct LaunchMigrationsTests {
 
     private func makeProspect(_ key: String) -> Prospect {
         Prospect(naturalKey: key, groupName: key, discipline: "music", venue: nil,
-                 performanceDate: nil, sourceListingURL: nil, websiteURL: nil,
+                 performanceDate: nil, sourceListingURL: nil,
                  priorRelationship: "warm", production: "self", profile: "neutral",
                  coverage: "unknown", fitScore: 3, tier: "longshot", fitReason: "r",
                  matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)

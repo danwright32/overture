@@ -23,8 +23,7 @@ struct GeoRefusalsResolvedTests {
     private func show(_ ctx: ModelContext, key: String, location: String?,
                       discipline: String = "music", status: ReviewStatus = .new) -> Prospect {
         let p = Prospect(naturalKey: key, groupName: "Aurora Strings", discipline: discipline,
-                         venue: "A room", performanceDate: "2026-11-14", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "self", profile: "strong",
+                         venue: "A room", performanceDate: "2026-11-14", sourceListingURL: nil, priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                          status: status)

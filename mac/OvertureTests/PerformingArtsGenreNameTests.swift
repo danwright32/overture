@@ -90,7 +90,7 @@ struct PerformingArtsGenreNameTests {
             for: Schema([Prospect.self]),
             configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
         let p = Prospect(naturalKey: "k", groupName: "G", discipline: "theater", venue: "V",
-                         performanceDate: "2026-09-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-09-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high",
                          fitReason: "Self-produced theater group, a strong-fit target, likely without its own photographer.",

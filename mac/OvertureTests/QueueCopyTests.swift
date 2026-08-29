@@ -48,7 +48,7 @@ struct QueueCopyTests {
                       bookingSuggested: Bool = false) -> QueueItem {
         var i = QueueItem(
             id: id, groupName: "G", discipline: discipline, venue: "V",
-            performanceDate: "2027-01-01", sourceListingURL: nil, websiteURL: nil,
+            performanceDate: "2027-01-01", sourceListingURL: nil,
             priorRelationship: "none", production: "unknown", profile: "neutral",
             coverage: "unknown", fitScore: highFit ? 8 : 3,
             tier: highFit ? "high" : "longshot", fitReason: "reason",

@@ -29,7 +29,7 @@ final class PrepReplyCancelServiceTests {
     private func keptProspect(_ ctx: ModelContext) -> Prospect {
         let key = Prospect.makeNaturalKey(groupName: "Kept Choir", performanceDate: "2026-07-01", venue: "Weill Recital Hall")
         let p = Prospect(naturalKey: key, groupName: "Kept Choir", discipline: "choral", venue: "Weill Recital Hall",
-                         performanceDate: "2026-07-01", sourceListingURL: "https://src", websiteURL: "https://site",
+                         performanceDate: "2026-07-01", sourceListingURL: "https://src",
                          priorRelationship: "none", production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .queued)
@@ -78,7 +78,7 @@ final class PrepReplyCancelServiceTests {
     @discardableResult
     private func repliedContact(_ ctx: ModelContext) -> Prospect {
         let p = Prospect(naturalKey: "k1", groupName: "G", discipline: "music", venue: "Carnegie Hall",
-                         performanceDate: "2026-09-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-09-01", sourceListingURL: nil,
                          priorRelationship: "warm", production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 8, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil)

@@ -26,8 +26,7 @@ struct CardNamesWhoseAddressItIsTests {
 
     private func show(_ ctx: ModelContext) -> Prospect {
         let p = Prospect(naturalKey: "k", groupName: "Rosalind Verrier", discipline: "music",
-                         venue: "The Green Room 42", performanceDate: "2026-08-17", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "self",
+                         venue: "The Green Room 42", performanceDate: "2026-08-17", sourceListingURL: nil, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 5, tier: "mid",
                          fitReason: "", matchedClientName: nil, possibleMatchSource: nil,
                          possibleMatchName: nil, status: .new)

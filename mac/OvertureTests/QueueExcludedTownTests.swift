@@ -7,7 +7,7 @@ import Testing
 private func item(id: String = "k", discipline: String = "theater", location: String? = nil) -> QueueItem {
     QueueItem(
         id: id, groupName: "A Show", discipline: discipline, venue: "Weill Recital Hall",
-        performanceDate: "2026-08-01", sourceListingURL: nil, websiteURL: nil, location: location,
+        performanceDate: "2026-08-01", sourceListingURL: nil, location: location,
         priorRelationship: "none", production: "self", profile: "strong", coverage: "unknown",
         fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
         possibleMatchSource: nil, possibleMatchName: nil, status: .new)

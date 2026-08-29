@@ -16,7 +16,7 @@ struct PrepQueueTests {
                         sentAt: Date? = nil, performanceDate: String = "2026-07-01") -> Prospect {
         let key = Prospect.makeNaturalKey(groupName: group, performanceDate: performanceDate, venue: "Weill Recital Hall")
         let p = Prospect(naturalKey: key, groupName: group, discipline: "choral", venue: "Weill Recital Hall",
-                         performanceDate: performanceDate, sourceListingURL: "https://src", websiteURL: "https://site",
+                         performanceDate: performanceDate, sourceListingURL: "https://src",
                          priorRelationship: "none", production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: status)
@@ -91,7 +91,6 @@ struct PrepQueueTests {
         // The key must be the prospect's exact stored key (opaque token).
         let expectedKey = Prospect.makeNaturalKey(groupName: "Kept Choir", performanceDate: "2026-07-01", venue: "Weill Recital Hall")
         #expect(item.naturalKey == expectedKey)
-        #expect(item.websiteURL == "https://site")
         // #366 Phase 1: the AI research step needs to know if a show is self-produced.
         #expect(item.production == "self")
     }
@@ -392,7 +391,7 @@ struct PrepQueueTests {
     @Test func roundTripsThroughJSON() throws {
         let queue = PrepQueue(version: 2, generatedAt: "now", items: [
             PrepQueueItem(naturalKey: "k", groupName: "G", venue: "V", performanceDate: "2026-07-01",
-                          discipline: "choral", websiteURL: nil, sourceListingURL: nil,
+                          discipline: "choral", sourceListingURL: nil,
                           possibleMatchName: nil, priorRelationship: "none", production: "self")
         ])
         let data = try PrepQueueBuilder.encode(queue)

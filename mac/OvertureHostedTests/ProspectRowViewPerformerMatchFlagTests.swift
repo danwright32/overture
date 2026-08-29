@@ -14,8 +14,7 @@ struct ProspectRowViewPerformerMatchFlagTests {
 
     private func item(corrected: Bool, reviewed: Bool = false, dismissed: Bool = false) -> QueueItem {
         QueueItem(id: "k", groupName: "Emerging Artists Series", discipline: "music",
-                  venue: "Weill Recital Hall", performanceDate: "2026-09-12", sourceListingURL: nil,
-                  websiteURL: nil, priorRelationship: corrected ? "booked" : "none", production: "self",
+                  venue: "Weill Recital Hall", performanceDate: "2026-09-12", sourceListingURL: nil, priorRelationship: corrected ? "booked" : "none", production: "self",
                   profile: "strong", coverage: "likely_uncovered", fitScore: corrected ? 27 : 7,
                   tier: "high", fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
                   possibleMatchName: nil, status: .new,

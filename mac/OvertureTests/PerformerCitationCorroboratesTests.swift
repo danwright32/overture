@@ -139,7 +139,7 @@ struct PerformerCitationCorroboratesTests {
     private func keptProspect(_ ctx: ModelContext, group: String, venue: String) -> String {
         let key = Prospect.makeNaturalKey(groupName: group, performanceDate: "2026-11-14", venue: venue)
         let p = Prospect(naturalKey: key, groupName: group, discipline: "theatre", venue: venue,
-                         performanceDate: "2026-11-14", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-11-14", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

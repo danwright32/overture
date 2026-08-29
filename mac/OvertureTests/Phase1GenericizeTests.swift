@@ -25,7 +25,7 @@ struct Phase1GenericizeTests {
     @discardableResult
     private func bookableProspect(_ ctx: ModelContext, group: String = "Acme Festival Chorus") -> Prospect {
         let p = Prospect(naturalKey: group, groupName: group, discipline: "choral", venue: "V",
-                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-07-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -46,7 +46,7 @@ struct Phase1GenericizeTests {
     @discardableResult
     private func contactedProspect(_ ctx: ModelContext, threadId: String) -> Prospect {
         let p = Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: "V",
-                         performanceDate: "2026-08-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-08-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

@@ -31,7 +31,7 @@ struct StrikeAnAddressAtTriageTests {
                                           performanceDate: "2026-10-03", venue: "54 Below")
         let p = Prospect(naturalKey: key, groupName: "Devin Marlowe", discipline: "music",
                          venue: "54 Below", performanceDate: "2026-10-03",
-                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                         sourceListingURL: nil, priorRelationship: "none",
                          production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 20, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .queued)
@@ -96,7 +96,7 @@ struct StrikeAnAddressAtTriageTests {
         let p = show(ctx, emails: ["devin@devinmarlowe.example"])
         let other = Prospect(naturalKey: "other|2026-11-01|54-below", groupName: "Someone Else",
                              discipline: "music", venue: "54 Below", performanceDate: "2026-11-01",
-                             sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                             sourceListingURL: nil, priorRelationship: "none",
                              production: "self", profile: "strong", coverage: "likely_uncovered",
                              fitScore: 20, tier: "high", fitReason: "r", matchedClientName: nil,
                              possibleMatchSource: nil, possibleMatchName: nil, status: .queued)

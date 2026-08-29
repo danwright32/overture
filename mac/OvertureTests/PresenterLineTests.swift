@@ -137,7 +137,7 @@ struct PastClientPillDedupTests {
         var q = QueueItem(
             id: "k", groupName: "Holiday Modulations", discipline: "music",
             venue: "The Church of St. Mary the Virgin", performanceDate: "2026-12-13",
-            sourceListingURL: nil, websiteURL: nil,
+            sourceListingURL: nil,
             priorRelationship: "booked", production: "unknown", profile: "neutral",
             coverage: "unknown", fitScore: 3, tier: "longshot", fitReason: "reason",
             matchedClientName: matchedClientName, possibleMatchSource: nil,

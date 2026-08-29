@@ -32,7 +32,8 @@ enum PressContactGuard {
     // KNOWN RESIDUAL RISK, recorded rather than guessed at: an act's own press-kit page (its site's
     // "/press") would be flagged, and for a small act that could be the only way through. Nothing in the
     // store lets this tell that apart from a press office, because it would need to know the act's own
-    // domain and `websiteURL` is empty on all 575 untriaged rows. No such form exists in the store today
+    // domain, and the act's own site was never recorded anywhere (#1640 removed that empty field). No
+    // such form exists in the store today
     // (measured 2026-07-27, 14 forms, 1 press page), so the rule is not shaped around a case that has
     // never occurred. If one turns up, that is the signal to revisit, not this comment.
     static func looksLikePressContact(formURL: String?) -> Bool {

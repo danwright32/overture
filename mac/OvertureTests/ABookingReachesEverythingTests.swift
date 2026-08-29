@@ -29,7 +29,7 @@ struct ABookingReachesEverythingTests {
                       clientId: String? = "C698D5AB") -> Prospect {
         let p = Prospect(naturalKey: group, groupName: group, discipline: "choral",
                          venue: "Sakura Park", performanceDate: performanceDate,
-                         sourceListingURL: nil, websiteURL: nil, priorRelationship: priorRelationship,
+                         sourceListingURL: nil, priorRelationship: priorRelationship,
                          production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 8, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .approved)

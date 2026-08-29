@@ -125,7 +125,7 @@ struct ShrunkenFeedCannotCancelTests {
 
     private func prospect(key: String, sourceIds: [String], missed: Int = 0) -> Prospect {
         let p = Prospect(naturalKey: key, groupName: key, discipline: "music", venue: "Kaufman Music Center",
-                         performanceDate: "2026-10-14", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-10-14", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

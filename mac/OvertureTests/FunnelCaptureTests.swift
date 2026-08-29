@@ -49,7 +49,7 @@ struct FunnelCaptureTests {
                       group: String = "Vienna Philharmonic",
                       ingested: Date = Date(timeIntervalSince1970: 1_000)) -> Prospect {
         let p = Prospect(naturalKey: key, groupName: group, discipline: "music", venue: "Stern Auditorium",
-                         performanceDate: date, sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: date, sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 9, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -209,7 +209,7 @@ struct FunnelCaptureTests {
     private func approved(_ ctx: ModelContext) -> Prospect {
         let key = Prospect.makeNaturalKey(groupName: "Aurora", performanceDate: "2026-07-01", venue: "V")
         let p = Prospect(naturalKey: key, groupName: "Aurora", discipline: "choral", venue: "V",
-                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-07-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

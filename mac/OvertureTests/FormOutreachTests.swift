@@ -22,7 +22,7 @@ struct FormOutreachTests {
                                  formURL: String = "https://aurorastrings.example/contact") -> Prospect {
         let key = Prospect.makeNaturalKey(groupName: group, performanceDate: "2026-09-01", venue: "Jalopy")
         let p = Prospect(naturalKey: key, groupName: group, discipline: "music", venue: "Jalopy",
-                         performanceDate: "2026-09-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-09-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -151,7 +151,7 @@ struct FormOutreachTests {
         let sendDay = Date(timeIntervalSince1970: 1_751_328_000 - 30 * 86_400)
         let p = Prospect(naturalKey: "Acme Festival Chorus", groupName: "Acme Festival Chorus",
                          discipline: "choral", venue: "V", performanceDate: "2026-07-01",
-                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                         sourceListingURL: nil, priorRelationship: "none",
                          production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 5, tier: "mid", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .drafted)
@@ -285,7 +285,7 @@ struct FormPitchStateTests {
     private func show(_ ctx: ModelContext, email: String? = nil,
                       formURL: String? = "https://aurorastrings.example/contact") -> Prospect {
         let p = Prospect(naturalKey: "k", groupName: "Aurora Strings", discipline: "music", venue: "Jalopy",
-                         performanceDate: "2026-09-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-09-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

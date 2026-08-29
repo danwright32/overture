@@ -33,8 +33,7 @@ struct StandDownOutreachTests {
     // state each suite is actually about.
     private func sentContact(followUps: Int = 0, sentDaysAgo: Int = 30) -> (Prospect, Recipient) {
         let p = Prospect(naturalKey: "k", groupName: "Aurora Strings", discipline: "music",
-                         venue: "The Room", performanceDate: "2026-07-01", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "self",
+                         venue: "The Room", performanceDate: "2026-07-01", sourceListingURL: nil, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 6, tier: "mid",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
                          possibleMatchName: nil, status: .contacted)
@@ -167,8 +166,7 @@ struct StandDownDueListTests {
         let key = Prospect.makeNaturalKey(groupName: "Aurora Strings", performanceDate: "2026-07-01",
                                           venue: "The Room")
         let p = Prospect(naturalKey: key, groupName: "Aurora Strings", discipline: "music",
-                         venue: "The Room", performanceDate: "2026-07-01", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "self",
+                         venue: "The Room", performanceDate: "2026-07-01", sourceListingURL: nil, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 6, tier: "mid",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
                          possibleMatchName: nil, status: .contacted)
@@ -269,8 +267,7 @@ struct StandDownClosingNoteTests {
         let key = Prospect.makeNaturalKey(groupName: "Aurora Strings", performanceDate: "2026-05-01",
                                           venue: "The Room")
         let p = Prospect(naturalKey: key, groupName: "Aurora Strings", discipline: "music",
-                         venue: "The Room", performanceDate: "2026-05-01", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "self",
+                         venue: "The Room", performanceDate: "2026-05-01", sourceListingURL: nil, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 6, tier: "mid",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
                          possibleMatchName: nil, status: .contacted)
@@ -345,8 +342,7 @@ struct StandDownScopeTests {
         let key = Prospect.makeNaturalKey(groupName: "Aurora Strings", performanceDate: performanceDate,
                                           venue: "The Room")
         let p = Prospect(naturalKey: key, groupName: "Aurora Strings", discipline: "music",
-                         venue: "The Room", performanceDate: performanceDate, sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "self",
+                         venue: "The Room", performanceDate: performanceDate, sourceListingURL: nil, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 6, tier: "mid",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
                          possibleMatchName: nil, status: .contacted)

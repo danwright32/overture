@@ -13,7 +13,7 @@ import Foundation
 struct QueueItemVoiceLearningTests {
     private func prospect(sentAt: Date?, originalDraftBody: String?, excluded: Bool = false) -> Prospect {
         let p = Prospect(naturalKey: "k", groupName: "Aurora Strings", discipline: "music", venue: "V",
-                         performanceDate: "2026-08-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-08-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

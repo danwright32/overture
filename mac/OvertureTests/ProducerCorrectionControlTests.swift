@@ -21,7 +21,7 @@ struct ProducerCorrectionControlTests {
                           venue: String = "Under St Marks") -> Prospect {
         let p = Prospect(naturalKey: key, groupName: "A Show", discipline: "theater",
                          venue: venue, performanceDate: "2026-09-10",
-                         sourceListingURL: nil, websiteURL: nil,
+                         sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)

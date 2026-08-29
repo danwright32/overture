@@ -103,8 +103,7 @@ struct UnaccountedAddressWiringTests {
         let key = Prospect.makeNaturalKey(groupName: "Jordan Smart / Jay Skaggs",
                                           performanceDate: "2026-10-03", venue: "Jalopy Theatre")
         let p = Prospect(naturalKey: key, groupName: "Jordan Smart / Jay Skaggs", discipline: "music",
-                         venue: "Jalopy Theatre", performanceDate: "2026-10-03", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "self",
+                         venue: "Jalopy Theatre", performanceDate: "2026-10-03", sourceListingURL: nil, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 4, tier: "mid",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
                          possibleMatchName: nil, status: .queued)

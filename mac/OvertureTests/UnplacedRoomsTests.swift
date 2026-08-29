@@ -28,7 +28,7 @@ struct UnplacedRoomsTests {
     private func show(_ ctx: ModelContext, key: String, venue: String?, location: String? = nil,
                       title: String = "An evening of songs") -> Prospect {
         let p = Prospect(naturalKey: key, groupName: title, discipline: "music", venue: venue,
-                         performanceDate: "2026-09-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-09-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "neutral",
                          coverage: "unknown", fitScore: 3, tier: "longshot", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
@@ -224,7 +224,7 @@ struct UnplacedRoomsSignatureTests {
     @discardableResult
     private func show(_ ctx: ModelContext, key: String, venue: String?, location: String? = nil) -> Prospect {
         let p = Prospect(naturalKey: key, groupName: "A show", discipline: "music", venue: venue,
-                         performanceDate: "2026-09-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-09-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "neutral",
                          coverage: "unknown", fitScore: 3, tier: "longshot", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
@@ -303,7 +303,7 @@ struct UnplacedRoomsStillAheadTests {
     private func show(_ ctx: ModelContext, key: String, venue: String?, date: String?,
                       runEnd: String? = nil) -> Prospect {
         let p = Prospect(naturalKey: key, groupName: "A show", discipline: "music", venue: venue,
-                         performanceDate: date, sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: date, sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "neutral",
                          coverage: "unknown", fitScore: 3, tier: "longshot", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
@@ -406,7 +406,7 @@ struct UnplacedRoomsFollowTheQueueTests {
                       date: String? = "2026-09-01", runEnd: String? = nil,
                       status: ReviewStatus = .new) -> Prospect {
         let p = Prospect(naturalKey: key, groupName: "A show", discipline: "music", venue: venue,
-                         performanceDate: date, sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: date, sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "neutral",
                          coverage: "unknown", fitScore: 3, tier: "longshot", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

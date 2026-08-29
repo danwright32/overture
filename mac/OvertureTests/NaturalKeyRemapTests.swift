@@ -107,7 +107,7 @@ struct PaidAnswerSurvivesARekeyTests {
 
         let p = Prospect(naturalKey: newKey, groupName: "Aurora Strings", discipline: "music",
                          venue: "Weill Recital Hall", performanceDate: "2026-09-12",
-                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                         sourceListingURL: nil, priorRelationship: "none",
                          production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 6, tier: "mid", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .new)
@@ -143,7 +143,7 @@ struct PaidAnswerSurvivesARekeyTests {
         let newKey = "new|2026-09-12|hall"
 
         let p = Prospect(naturalKey: newKey, groupName: "Aurora", discipline: "music", venue: "Hall",
-                         performanceDate: "2026-09-12", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-09-12", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

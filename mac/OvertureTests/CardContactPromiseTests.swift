@@ -29,8 +29,7 @@ struct PrepIngestReachabilityTests {
         let key = Prospect.makeNaturalKey(groupName: "Battle of the Siblings",
                                           performanceDate: "2026-08-06", venue: "The Green Room 42")
         let p = Prospect(naturalKey: key, groupName: "Battle of the Siblings", discipline: "music",
-                         venue: "The Green Room 42", performanceDate: "2026-08-06", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "self", profile: "neutral",
+                         venue: "The Green Room 42", performanceDate: "2026-08-06", sourceListingURL: nil, priorRelationship: "none", production: "self", profile: "neutral",
                          coverage: "unknown", fitScore: 5, tier: "mid", fitReason: "", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .new)
         if checked {
@@ -153,8 +152,7 @@ struct ContactCountPromiseTests {
 
     private func show(_ ctx: ModelContext) -> Prospect {
         let p = Prospect(naturalKey: "k-battle", groupName: "Battle of the Siblings", discipline: "music",
-                         venue: "The Green Room 42", performanceDate: "2026-08-06", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "self", profile: "neutral",
+                         venue: "The Green Room 42", performanceDate: "2026-08-06", sourceListingURL: nil, priorRelationship: "none", production: "self", profile: "neutral",
                          coverage: "unknown", fitScore: 5, tier: "mid", fitReason: "", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .new)
         ctx.insert(p)

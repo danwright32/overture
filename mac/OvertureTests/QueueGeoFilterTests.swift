@@ -17,7 +17,7 @@ private func item(
 ) -> QueueItem {
     QueueItem(
         id: id, groupName: groupName, discipline: discipline, venue: venue,
-        performanceDate: date, sourceListingURL: nil, websiteURL: nil,
+        performanceDate: date, sourceListingURL: nil,
         location: location,
         priorRelationship: "none", production: "self", profile: "strong", coverage: "unknown",
         fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,

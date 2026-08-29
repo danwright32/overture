@@ -15,7 +15,7 @@ struct DuplicateContactGuardTests {
                               email: String?, closed: Bool = false) -> String {
         let key = Prospect.makeNaturalKey(groupName: group, performanceDate: date, venue: venue)
         let p = Prospect(naturalKey: key, groupName: group, discipline: "music", venue: venue,
-                         performanceDate: date, sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: date, sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

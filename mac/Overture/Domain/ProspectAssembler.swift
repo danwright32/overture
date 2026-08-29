@@ -27,7 +27,6 @@ struct AssembledProspect: Equatable, Sendable {
     // is never persisted on the Prospect, so no store migration. Nil for sources that publish no such id.
     var seriesId: String? = nil
     var sourceListingURL: String?
-    var websiteURL: String?
     var reachable: Bool
     var priorRelationship: String
     var production: String
@@ -132,7 +131,6 @@ enum ProspectAssembler {
             performanceDate: event.performanceDate,
             seriesId: event.seriesId,
             sourceListingURL: event.sourceUrl,
-            websiteURL: nil,
             reachable: c.reachable,
             priorRelationship: verdict.relationship.rawValue,
             production: c.production.rawValue,

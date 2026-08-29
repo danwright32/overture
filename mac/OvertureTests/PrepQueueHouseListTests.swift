@@ -22,8 +22,7 @@ struct PrepQueueHouseListTests {
                         status: ReviewStatus = .queued) -> Prospect {
         let key = Prospect.makeNaturalKey(groupName: group, performanceDate: "2026-09-11", venue: venue)
         let p = Prospect(naturalKey: key, groupName: group, discipline: "theater", venue: venue,
-                         performanceDate: "2026-09-11", sourceListingURL: "https://src",
-                         websiteURL: "https://site", priorRelationship: "none", production: "self",
+                         performanceDate: "2026-09-11", sourceListingURL: "https://src", priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 7, tier: "high",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
                          possibleMatchName: nil, status: status)

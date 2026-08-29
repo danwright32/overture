@@ -29,7 +29,7 @@ struct OmniFocusNoteSaysWhatClearsItTests {
         let showDay = EasternDate.dayString(from: now.addingTimeInterval(TimeInterval(-showDaysAgo) * 86_400))
         let p = Prospect(naturalKey: "aurora|\(showDay)|carnegie", groupName: "Aurora Strings",
                          discipline: "music", venue: "Carnegie Hall", performanceDate: showDay,
-                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                         sourceListingURL: nil, priorRelationship: "none",
                          production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 9, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil)

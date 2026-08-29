@@ -31,8 +31,7 @@ struct HandMarkedReplyTests {
     private func dmPitched(_ ctx: ModelContext, route: String = "https://instagram.com/auroraquartet")
     -> (Prospect, Recipient) {
         let p = Prospect(naturalKey: "Aurora|2026-09-01", groupName: "Aurora Quartet", discipline: "music",
-                         venue: "Jalopy", performanceDate: "2026-09-01", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "self", profile: "strong",
+                         venue: "Jalopy", performanceDate: "2026-09-01", sourceListingURL: nil, priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
                          status: .drafted)

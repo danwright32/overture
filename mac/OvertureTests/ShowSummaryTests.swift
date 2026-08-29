@@ -111,7 +111,7 @@ struct ShowSummaryIngestTests {
                                           venue: "The Example Room")
         let p = Prospect(naturalKey: key, groupName: "Alex Example", discipline: "other",
                          venue: "The Example Room", performanceDate: "2026-09-12",
-                         sourceListingURL: "https://tickets.example/a", websiteURL: nil,
+                         sourceListingURL: "https://tickets.example/a",
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

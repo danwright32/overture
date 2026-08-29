@@ -27,7 +27,7 @@ struct ReplyWatchReadFailureTests {
     @discardableResult
     private func sent(_ ctx: ModelContext, group: String, threadId: String) -> Prospect {
         let p = Prospect(naturalKey: group, groupName: group, discipline: "music", venue: "Merkin Hall",
-                         performanceDate: "2026-11-02", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-11-02", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

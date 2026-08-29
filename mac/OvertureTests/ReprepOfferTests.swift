@@ -16,7 +16,7 @@ struct ReprepOfferTests {
                       formPitch: FormPitch.State = .unavailable,
                       conflict: Bool = false) -> QueueItem {
         var i = QueueItem(id: "k", groupName: "Aurora Strings", discipline: "music", venue: "The Room",
-                          performanceDate: "2026-09-11", sourceListingURL: nil, websiteURL: nil,
+                          performanceDate: "2026-09-11", sourceListingURL: nil,
                           priorRelationship: "none", production: "unknown", profile: "neutral",
                           coverage: "unknown", fitScore: 6, tier: "mid", fitReason: "r",
                           matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -84,8 +84,7 @@ struct ReprepBlockedActionTests {
         let key = Prospect.makeNaturalKey(groupName: "Aurora Strings", performanceDate: "2026-09-11",
                                           venue: "The Room")
         let p = Prospect(naturalKey: key, groupName: "Aurora Strings", discipline: "music",
-                         venue: "The Room", performanceDate: "2026-09-11", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "self",
+                         venue: "The Room", performanceDate: "2026-09-11", sourceListingURL: nil, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 6, tier: "mid",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
                          possibleMatchName: nil, status: .drafted)

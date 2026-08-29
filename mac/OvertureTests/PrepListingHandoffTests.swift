@@ -24,8 +24,7 @@ struct PrepListingHandoffTests {
                         status: ReviewStatus = .queued, presenter: String? = nil) -> Prospect {
         let key = Prospect.makeNaturalKey(groupName: group, performanceDate: "2026-09-11", venue: "The Room")
         let p = Prospect(naturalKey: key, groupName: group, discipline: "other", venue: "The Room",
-                         performanceDate: "2026-09-11", sourceListingURL: listing,
-                         websiteURL: nil, priorRelationship: "none", production: "self",
+                         performanceDate: "2026-09-11", sourceListingURL: listing, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 7, tier: "high",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
                          possibleMatchName: nil, status: status)

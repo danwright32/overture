@@ -16,7 +16,7 @@ struct DismissedProspectsTests {
     private func make(_ ctx: ModelContext, group: String, status: ReviewStatus,
                       reason: ShowOutcome? = nil, ingested: Date) {
         let p = Prospect(naturalKey: group, groupName: group, discipline: "music", venue: "V",
-                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-07-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

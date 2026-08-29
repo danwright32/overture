@@ -35,8 +35,7 @@ struct HeldReachabilityVerdictTests {
 
     private func show(_ ctx: ModelContext, group: String = "54 Sings Shuffle Along") -> Prospect {
         let p = Prospect(naturalKey: "k-\(group)", groupName: group, discipline: "theater",
-                         venue: "54 Below", performanceDate: "2026-08-17", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "unknown",
+                         venue: "54 Below", performanceDate: "2026-08-17", sourceListingURL: nil, priorRelationship: "none", production: "unknown",
                          profile: "neutral", coverage: "unknown", fitScore: 5, tier: "mid",
                          fitReason: "", matchedClientName: nil, possibleMatchSource: nil,
                          possibleMatchName: nil, status: .new)

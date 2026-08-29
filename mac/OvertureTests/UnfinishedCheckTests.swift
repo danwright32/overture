@@ -29,7 +29,7 @@ struct UnfinishedCheckTests {
     private func newProspect(_ ctx: ModelContext, group: String) -> String {
         let key = Prospect.makeNaturalKey(groupName: group, performanceDate: "2026-09-12", venue: "Weill Recital Hall")
         let p = Prospect(naturalKey: key, groupName: group, discipline: "music", venue: "Weill Recital Hall",
-                         performanceDate: "2026-09-12", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-09-12", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -176,7 +176,7 @@ struct FailedAnswerSaveTests {
     private func seedProspect(_ ctx: ModelContext, group: String, presenter: String?) -> String {
         let key = Prospect.makeNaturalKey(groupName: group, performanceDate: "2026-09-12", venue: "Weill Recital Hall")
         let p = Prospect(naturalKey: key, groupName: group, discipline: "music", venue: "Weill Recital Hall",
-                         performanceDate: "2026-09-12", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-09-12", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

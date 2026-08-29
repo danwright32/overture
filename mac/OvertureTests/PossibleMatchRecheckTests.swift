@@ -19,7 +19,7 @@ struct PossibleMatchRecheckTests {
     private func flagged(_ ctx: ModelContext, key: String, groupName: String, presenter: String?,
                          venue: String, source: String?, name: String?) -> Prospect {
         let p = Prospect(naturalKey: key, groupName: groupName, discipline: "music", venue: venue,
-                         performanceDate: "2026-10-08", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-10-08", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: source, possibleMatchName: name,

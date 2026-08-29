@@ -20,7 +20,7 @@ struct NaturalKeyVenueMigrationTests {
     private func insert(_ ctx: ModelContext, key: String, group: String, date: String, venue: String,
                         ingestedAt: Date = Date(), configure: (Prospect) -> Void = { _ in }) -> Prospect {
         let p = Prospect(naturalKey: key, groupName: group, discipline: "music", venue: venue,
-                         performanceDate: date, sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: date, sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

@@ -81,7 +81,7 @@ struct ReplyServiceTests {
     private func make(_ ctx: ModelContext, group: String, threadId: String?, sentAt: Date?,
                       outcome: Outcome = .noResponse, source: OutcomeSource? = nil) -> Prospect {
         let p = Prospect(naturalKey: group, groupName: group, discipline: "choral", venue: "V",
-                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-07-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

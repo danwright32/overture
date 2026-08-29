@@ -98,7 +98,7 @@ struct SendServiceTests {
                           draft: String? = "Hello,\n\nI photograph performing arts.", ingested: Date) {
         let key = Prospect.makeNaturalKey(groupName: group, performanceDate: "2026-07-01", venue: "V")
         let p = Prospect(naturalKey: key, groupName: group, discipline: "choral", venue: "V",
-                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-07-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .approved, ingestedAt: ingested)
@@ -125,7 +125,7 @@ struct SendServiceTests {
                                role: String? = nil, method: ContactMethod? = nil) -> Prospect {
         let key = Prospect.makeNaturalKey(groupName: group, performanceDate: "2026-07-01", venue: "V")
         let p = Prospect(naturalKey: key, groupName: group, discipline: "choral", venue: "V",
-                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-07-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .approved, ingestedAt: ingested)
@@ -196,7 +196,7 @@ struct SendServiceTests {
         // match can tell a genuine new booking from a pre-existing client.
         let ctx = ModelContext(try container())
         let p = Prospect(naturalKey: "k", groupName: "Repeat Client", discipline: "choral", venue: "V",
-                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-07-01", sourceListingURL: nil,
                          priorRelationship: "booked", production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .approved)
@@ -215,7 +215,7 @@ struct SendServiceTests {
         let ctx = ModelContext(try container())
         let key = Prospect.makeNaturalKey(groupName: "Held", performanceDate: "2026-07-01", venue: "V")
         let p = Prospect(naturalKey: key, groupName: "Held", discipline: "choral", venue: "V",
-                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-07-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -263,7 +263,7 @@ struct SendServiceTests {
                              msgId: String? = "<m>") -> (Prospect, Recipient) {
         let key = Prospect.makeNaturalKey(groupName: group, performanceDate: "2026-07-01", venue: "V")
         let p = Prospect(naturalKey: key, groupName: group, discipline: "choral", venue: "V",
-                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-07-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .contacted)
@@ -469,7 +469,7 @@ struct SendServiceTests {
                                      secondName: String? = "Noah Ellis") -> (Prospect, Recipient, Recipient) {
         let key = Prospect.makeNaturalKey(groupName: "Aurora", performanceDate: "2026-07-01", venue: "V")
         let p = Prospect(naturalKey: key, groupName: "Aurora", discipline: "dance", venue: "V",
-                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-07-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -693,7 +693,7 @@ struct SendServiceTests {
     private func twoRecipients(_ ctx: ModelContext, body: String, ingested: Date) -> Prospect {
         let key = Prospect.makeNaturalKey(groupName: "Lumen", performanceDate: "2026-07-01", venue: "V")
         let p = Prospect(naturalKey: key, groupName: "Lumen", discipline: "choral", venue: "V",
-                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-07-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .approved, ingestedAt: ingested)
@@ -781,7 +781,7 @@ struct SendServiceTests {
                                        sharedBody: String, ingested: Date) -> Prospect {
         let key = Prospect.makeNaturalKey(groupName: "Midnight Quartet", performanceDate: "2026-08-15", venue: "Weill Recital Hall")
         let p = Prospect(naturalKey: key, groupName: "Midnight Quartet", discipline: "choral", venue: "Weill Recital Hall",
-                         performanceDate: "2026-08-15", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-08-15", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .approved, ingestedAt: ingested)
@@ -826,7 +826,7 @@ struct SendServiceTests {
         let ctx = ModelContext(try container())
         let key = Prospect.makeNaturalKey(groupName: "Solo Act", performanceDate: "2026-08-15", venue: "Weill Recital Hall")
         let p = Prospect(naturalKey: key, groupName: "Solo Act", discipline: "choral", venue: "Weill Recital Hall",
-                         performanceDate: "2026-08-15", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-08-15", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .approved,

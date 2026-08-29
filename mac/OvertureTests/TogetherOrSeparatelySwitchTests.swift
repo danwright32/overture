@@ -27,7 +27,7 @@ struct TogetherOrSeparatelySwitchTests {
     @discardableResult
     private func show(_ ctx: ModelContext, contacts: Int = 2) -> Prospect {
         let p = Prospect(naturalKey: "k", groupName: "Aurora", discipline: "music", venue: "V",
-                         performanceDate: "2026-12-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-12-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

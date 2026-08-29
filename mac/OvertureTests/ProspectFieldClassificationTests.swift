@@ -51,7 +51,6 @@ struct ProspectFieldClassificationTests {
         "venue": "the room, as the listing gives it",
         "performanceDate": "the date, from the listing",
         "sourceListingURL": "the page this row was read off",
-        "websiteURL": "a site the read found",
         "priorRelationship": "what the matcher made of the name, recomputed from the booking history",
         "production": "the classifier's answer",
         "profile": "the classifier's answer",
@@ -213,7 +212,7 @@ struct ProspectFieldClassificationTests {
     private func makeProspect(_ key: String) -> Prospect {
         Prospect(naturalKey: key, groupName: "Vienna Philharmonic", discipline: "music",
                  venue: "Stern Auditorium", performanceDate: "2026-11-14",
-                 sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                 sourceListingURL: nil, priorRelationship: "none",
                  production: "self", profile: "strong", coverage: "likely_uncovered",
                  fitScore: 9, tier: "high", fitReason: "r", matchedClientName: nil,
                  possibleMatchSource: nil, possibleMatchName: nil)

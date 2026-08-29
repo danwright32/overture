@@ -15,7 +15,7 @@ struct RecipientStorageTests {
 
     private func makeProspect(_ ctx: ModelContext) -> Prospect {
         let p = Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: nil,
-                         performanceDate: nil, sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: nil, sourceListingURL: nil,
                          priorRelationship: "warm", production: "self", profile: "neutral",
                          coverage: "unknown", fitScore: 3, tier: "longshot", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)

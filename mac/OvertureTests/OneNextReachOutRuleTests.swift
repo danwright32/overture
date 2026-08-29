@@ -30,7 +30,7 @@ struct OneNextReachOutRuleTests {
 
     private func makeShow(_ ctx: ModelContext, replySentAt: Date?, noticedAt: Date?) -> (Prospect, Recipient) {
         let p = Prospect(naturalKey: "k", groupName: "Every Voice", discipline: "choral", venue: "V",
-                         performanceDate: nil, sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: nil, sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

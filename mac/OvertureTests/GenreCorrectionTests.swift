@@ -34,7 +34,7 @@ struct GenreCorrectionTests {
                                                              performanceDate: "2026-09-01",
                                                              venue: venue),
                          groupName: title, discipline: discipline, venue: venue,
-                         performanceDate: "2026-09-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-09-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)

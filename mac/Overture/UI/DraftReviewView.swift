@@ -986,7 +986,7 @@ struct DraftReviewView: View {
 #Preview("Draft review (sent, conversation)") {
     var item = QueueItem(
         id: "k", groupName: "Aurora Strings", discipline: "music", venue: "Carnegie Hall",
-        performanceDate: "2026-09-01", sourceListingURL: nil, websiteURL: nil,
+        performanceDate: "2026-09-01", sourceListingURL: nil,
         priorRelationship: "warm", production: "self", profile: "strong", coverage: "likely_uncovered",
         fitScore: 8, tier: "high", fitReason: "Repeat-client-adjacent ensemble at a flagship venue.",
         matchedClientName: "Aurora Strings", possibleMatchSource: nil, possibleMatchName: nil, status: .approved)

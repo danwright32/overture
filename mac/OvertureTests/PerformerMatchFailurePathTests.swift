@@ -113,7 +113,7 @@ final class PerformerMatchFailurePathTests {
                                           performanceDate: "2026-08-02", venue: "Weill Recital Hall")
         let p = Prospect(naturalKey: key, groupName: "Emerging Artists Series", discipline: "music",
                          venue: "Weill Recital Hall", performanceDate: "2026-08-02",
-                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                         sourceListingURL: nil, priorRelationship: "none",
                          production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .queued)

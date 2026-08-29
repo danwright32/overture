@@ -23,7 +23,7 @@ struct PerformerMatchDismissTests {
                                           performanceDate: "2026-08-02", venue: "Weill Recital Hall")
         let p = Prospect(naturalKey: key, groupName: "Emerging Artists Series", discipline: "music",
                          venue: "Weill Recital Hall", performanceDate: "2026-08-02",
-                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "booked",
+                         sourceListingURL: nil, priorRelationship: "booked",
                          production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 27, tier: "high", fitReason: "r", matchedClientName: "Larkin Sable",
                          possibleMatchSource: nil, possibleMatchName: nil, status: .queued)
@@ -137,7 +137,7 @@ struct PerformerMatchDismissTests {
         let ctx = ModelContext(try container())
         let key = Prospect.makeNaturalKey(groupName: "G", performanceDate: "2026-08-02", venue: "V")
         let p = Prospect(naturalKey: key, groupName: "G", discipline: "music", venue: "V",
-                         performanceDate: "2026-08-02", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-08-02", sourceListingURL: nil,
                          priorRelationship: "warm", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 17, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
@@ -204,7 +204,7 @@ struct PerformerMatchDismissTests {
                                           venue: "Weill Recital Hall")
         let p = Prospect(naturalKey: key, groupName: "Aurora Strings", discipline: "music",
                          venue: "Weill Recital Hall", performanceDate: "2026-08-05",
-                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "booked",
+                         sourceListingURL: nil, priorRelationship: "booked",
                          production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 27, tier: "high", fitReason: "r", matchedClientName: "Aurora Strings",
                          possibleMatchSource: nil, possibleMatchName: nil, status: .queued)
@@ -251,7 +251,7 @@ struct PerformerMatchDismissTests {
         let ctx = ModelContext(try container())
         let key = Prospect.makeNaturalKey(groupName: "G", performanceDate: "2026-08-02", venue: "V")
         let p = Prospect(naturalKey: key, groupName: "G", discipline: "music", venue: "V",
-                         performanceDate: "2026-08-02", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-08-02", sourceListingURL: nil,
                          priorRelationship: "warm", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 17, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)

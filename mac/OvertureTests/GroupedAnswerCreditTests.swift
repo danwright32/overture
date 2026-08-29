@@ -100,7 +100,7 @@ struct GroupedAnswerCreditTests {
 
     private func writeQueue(_ url: URL, generatedAt: String, group: [String]) throws {
         let item = PrepQueueItem(naturalKey: lead, groupName: "Aurora Strings", venue: "Weill Recital Hall",
-                                 performanceDate: "2026-09-12", discipline: "music", websiteURL: nil,
+                                 performanceDate: "2026-09-12", discipline: "music",
                                  sourceListingURL: nil, possibleMatchName: nil, priorRelationship: "none",
                                  production: "unknown", reprepMode: "contacts_only",
                                  alsoAnswersFor: group.isEmpty ? nil : group)
@@ -158,7 +158,7 @@ struct GroupedAnswerCreditTests {
     @discardableResult
     private func insert(_ ctx: ModelContext, key: String, group: String, venue: String, date: String) -> Prospect {
         let p = Prospect(naturalKey: key, groupName: group, discipline: "music", venue: venue,
-                         performanceDate: date, sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: date, sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil, status: .new)

@@ -36,8 +36,7 @@ struct ProspectStageReachabilityGuardTests {
 
     private func show(_ ctx: ModelContext, status: ReviewStatus, drafted: Bool, sentAt: Date? = nil) -> Prospect {
         let p = Prospect(naturalKey: "show-1", groupName: "Quartet", discipline: "music",
-                         venue: "Merkin Hall", performanceDate: "2026-09-19", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "self",
+                         venue: "Merkin Hall", performanceDate: "2026-09-19", sourceListingURL: nil, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 5, tier: "mid",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
                          possibleMatchName: nil, status: status)

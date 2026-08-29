@@ -76,8 +76,7 @@ struct ContactTierTests {
 
     private func show(_ ctx: ModelContext) -> Prospect {
         let p = Prospect(naturalKey: "k", groupName: "Music by Matthew Meade", discipline: "music",
-                         venue: "The Green Room 42", performanceDate: "2026-10-03", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "self",
+                         venue: "The Green Room 42", performanceDate: "2026-10-03", sourceListingURL: nil, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 4, tier: "longshot",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
                          possibleMatchName: nil, status: .queued)
@@ -179,8 +178,7 @@ struct ContactTierWiringTests {
 
     private func show(_ ctx: ModelContext, score: Int = 4) -> Prospect {
         let p = Prospect(naturalKey: "k", groupName: "Retreat to Broadway", discipline: "music",
-                         venue: "Don't Tell Mama", performanceDate: "2026-10-03", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "self",
+                         venue: "Don't Tell Mama", performanceDate: "2026-10-03", sourceListingURL: nil, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: score,
                          tier: "longshot", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .queued)

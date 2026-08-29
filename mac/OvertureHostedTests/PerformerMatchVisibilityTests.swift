@@ -37,7 +37,7 @@ struct PerformerMatchVisibilityTests {
                                           performanceDate: "2026-08-02", venue: "Weill Recital Hall")
         let p = Prospect(naturalKey: key, groupName: "Emerging Artists Series", discipline: "music",
                          venue: "Weill Recital Hall", performanceDate: "2026-08-02",
-                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                         sourceListingURL: nil, priorRelationship: "none",
                          production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .queued)
@@ -58,8 +58,7 @@ struct PerformerMatchVisibilityTests {
 
     private func rowShowsTheMatch(_ p: Prospect) throws -> Bool {
         let item = QueueItem(id: p.naturalKey, groupName: p.groupName, discipline: p.discipline,
-                             venue: p.venue, performanceDate: p.performanceDate, sourceListingURL: nil,
-                             websiteURL: nil, priorRelationship: p.priorRelationship,
+                             venue: p.venue, performanceDate: p.performanceDate, sourceListingURL: nil, priorRelationship: p.priorRelationship,
                              production: p.production, profile: p.profile, coverage: p.coverage,
                              fitScore: p.fitScore, tier: p.tier, fitReason: p.fitReason,
                              matchedClientName: p.matchedClientName, possibleMatchSource: nil,

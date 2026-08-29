@@ -35,7 +35,6 @@ struct PrepQueueItem: Codable, Equatable, Sendable {
     // whole run (performanceDate through runEndDate), not just the opening night.
     var runEndDate: String? = nil
     var discipline: String
-    var websiteURL: String?
     var sourceListingURL: String?
     var possibleMatchName: String?
     var priorRelationship: String

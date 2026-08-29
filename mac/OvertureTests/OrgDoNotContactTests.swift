@@ -28,7 +28,7 @@ struct OrgDoNotContactTests {
                       venue: String = "Weill Recital Hall",
                       status: ReviewStatus = .queued, sentAt: Date? = nil) -> Prospect {
         let p = Prospect(naturalKey: "\(group)|\(date)", groupName: group, discipline: "music",
-                         venue: venue, performanceDate: date, sourceListingURL: nil, websiteURL: nil,
+                         venue: venue, performanceDate: date, sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

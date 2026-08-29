@@ -16,7 +16,7 @@ struct VoiceGuidanceGuardTests {
                           contact: String? = "Maria Lopez", production: String = "self",
                           possibleMatch: String? = nil, matchedClient: String? = nil) -> Prospect {
         let p = Prospect(naturalKey: "k-\(group)", groupName: group, discipline: "music", venue: venue,
-                         performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-07-01", sourceListingURL: nil,
                          priorRelationship: "none", production: production, profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: matchedClient, possibleMatchSource: nil,

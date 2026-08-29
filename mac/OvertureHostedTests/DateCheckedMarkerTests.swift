@@ -21,7 +21,7 @@ struct DateCheckedMarkerTests {
     private func item(_ key: String, status: ReviewStatus = .new, discipline: String = "music",
                       location: String? = nil, date: String = "2026-09-12") -> QueueItem {
         var i = QueueItem(id: key, groupName: key, discipline: discipline, venue: "Weill Recital Hall",
-                          performanceDate: date, sourceListingURL: nil, websiteURL: nil,
+                          performanceDate: date, sourceListingURL: nil,
                           priorRelationship: "none", production: "self", profile: "strong",
                           coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
                           matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

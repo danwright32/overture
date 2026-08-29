@@ -25,7 +25,7 @@ struct RowReferenceLinksTests {
     private func builtItem(listing: String?, website: String?, status: ReviewStatus) -> QueueItem {
         QueueItem(id: "k", groupName: "An Evening of Song", discipline: "music",
                   venue: "A Hall", performanceDate: "2026-09-12",
-                  sourceListingURL: listing, websiteURL: website,
+                  sourceListingURL: listing,
                   priorRelationship: "none", production: "unclear", profile: "unknown",
                   coverage: "unknown", fitScore: 5, tier: "mid", fitReason: "",
                   matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -118,22 +118,26 @@ struct RowReferenceLinksTests {
     // Being kept changes nothing about the strip: same card, same two links, decided the same way.
     @Test func keepingAShowDoesNotChangeWhatTheStripHolds() {
         let listing = "https://example.org/show"
-        let untriaged = QueueModel.rowReferenceLinks(item(listing: listing))
-        let kept = QueueModel.rowReferenceLinks(item(listing: listing, status: .queued))
-        #expect(untriaged.listing == kept.listing)
-        #expect(untriaged.website == kept.website)
+        let untriaged = QueueModel.rowListingLink(item(listing: listing))
+        let kept = QueueModel.rowListingLink(item(listing: listing, status: .queued))
+        #expect(untriaged == kept)
+        // #1640: the website half is gone. It was fed by a field nothing ever populated, so the link it
+        // drew has never rendered on any card, and a tuple half nothing can write is not a thing to keep
+        // asserting about (L90).
     }
 
     @Test func aLinkAloneIsEnoughToDrawTheStrip() {
         #expect(QueueModel.rowHasReferenceLinks(item(listing: "https://example.org/show")))
-        #expect(QueueModel.rowHasReferenceLinks(item(website: "https://example.org")))
+        // #1640: there used to be a second case here, a row with only the act's own website. That field
+        // was populated by nothing, so the case it stood for could not occur on any real card.
+        #expect(QueueModel.rowHasReferenceLinks(item(listing: nil)) == false)
     }
 
     // A stored empty string is not a link, and neither is something no URL can be made of. Either one
     // would otherwise draw a strip with an invisible member in it.
     @Test func ablankOrUnusableURLIsNotALink() {
-        #expect(QueueModel.rowReferenceLinks(item(listing: "")).listing == nil)
-        #expect(QueueModel.rowReferenceLinks(item(listing: "   ")).listing == nil)
+        #expect(QueueModel.rowListingLink(item(listing: "")) == nil)
+        #expect(QueueModel.rowListingLink(item(listing: "   ")) == nil)
         #expect(QueueModel.rowHasReferenceLinks(item(listing: "")) == false)
     }
 }

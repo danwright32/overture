@@ -22,8 +22,7 @@ struct DraftModelTraceTests {
     @discardableResult
     private func prospect(_ ctx: ModelContext, key: String = "show") -> Prospect {
         let p = Prospect(naturalKey: key, groupName: "Brooklyn Youth Chorus", discipline: "music",
-                         venue: "Merkin Hall", performanceDate: "2099-09-19", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "self",
+                         venue: "Merkin Hall", performanceDate: "2099-09-19", sourceListingURL: nil, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 5, tier: "mid",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
                          possibleMatchName: nil, status: .queued)

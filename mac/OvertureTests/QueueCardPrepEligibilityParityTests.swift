@@ -45,7 +45,7 @@ struct QueueCardPrepEligibilityParityTests {
                       conflicted: Bool = false, clearedAfterConflict: Bool = false,
                       probedEmail: String? = nil) -> Prospect {
         let p = Prospect(naturalKey: key, groupName: key, discipline: "music", venue: "Merkin Hall",
-                         performanceDate: "2026-09-12", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-09-12", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

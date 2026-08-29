@@ -33,8 +33,7 @@ struct DetachConversationTests {
 
     private func show(_ ctx: ModelContext) -> Prospect {
         let p = Prospect(naturalKey: "k", groupName: "54 Sings Shuffle Along", discipline: "music",
-                         venue: "54 Below", performanceDate: "2026-09-01", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "self",
+                         venue: "54 Below", performanceDate: "2026-09-01", sourceListingURL: nil, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 7, tier: "high",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
                          possibleMatchName: nil)

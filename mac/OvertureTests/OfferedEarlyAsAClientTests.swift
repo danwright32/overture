@@ -89,8 +89,7 @@ struct OfferedEarlyAsAClientTests {
 
     private func show(_ ctx: ModelContext, key: String, on sourceId: String, date: String) -> Prospect {
         let p = Prospect(naturalKey: key, groupName: "Aurora Strings", discipline: "music",
-                         venue: "Merkin Hall", performanceDate: date, sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "self",
+                         venue: "Merkin Hall", performanceDate: date, sourceListingURL: nil, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 7, tier: "high",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
                          possibleMatchName: nil)
@@ -259,7 +258,7 @@ struct OfferedEarlyAsAClientTests {
 
     private func item(priorRelationship: String) -> QueueItem {
         QueueItem(id: "k", groupName: "Aurora Strings", discipline: "music", venue: "Merkin Hall",
-                  performanceDate: tenMonthsOut, sourceListingURL: nil, websiteURL: nil,
+                  performanceDate: tenMonthsOut, sourceListingURL: nil,
                   priorRelationship: priorRelationship, production: "self", profile: "strong",
                   coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                   matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil, status: .new)

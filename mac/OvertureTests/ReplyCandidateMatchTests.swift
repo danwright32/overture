@@ -39,7 +39,7 @@ struct ReplyCandidateMatchTests {
 
     private func show(_ ctx: ModelContext, name: String, venue: String?, presenter: String? = nil) -> Prospect {
         let p = Prospect(naturalKey: name, groupName: name, discipline: "music", venue: venue,
-                         performanceDate: "2026-09-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-09-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)

@@ -20,7 +20,7 @@ struct PrepImporterProbeTests {
                              date: String = "2026-09-12", venue: String = "Weill Recital Hall") -> String {
         let key = Prospect.makeNaturalKey(groupName: group, performanceDate: date, venue: venue)
         let p = Prospect(naturalKey: key, groupName: group, discipline: "music", venue: venue,
-                         performanceDate: date, sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: date, sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 6, tier: "mid", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .new)

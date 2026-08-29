@@ -135,7 +135,7 @@ struct ReplyAnswersTheirMessageTests {
     @Test func theProspectReplySendCarriesTheirMessageAsItsParent() async throws {
         let ctx = ModelContext(try container())
         let p = Prospect(naturalKey: "k", groupName: "Aurora Strings", discipline: "music", venue: "V",
-                         performanceDate: "2026-09-12", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-09-12", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

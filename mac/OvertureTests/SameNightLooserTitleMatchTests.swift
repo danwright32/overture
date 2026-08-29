@@ -35,7 +35,7 @@ struct SameNightLooserTitleMatchTests {
                         ingestedAt: TimeInterval) -> Prospect {
         let p = Prospect(naturalKey: "\(group)|\(date)|\(venue)", groupName: group,
                          discipline: "music", venue: venue, performanceDate: date,
-                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                         sourceListingURL: nil, priorRelationship: "none",
                          production: "unknown", profile: "neutral", coverage: "unknown",
                          fitScore: 5, tier: "mid", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .new,

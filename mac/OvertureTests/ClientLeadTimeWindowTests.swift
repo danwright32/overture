@@ -27,7 +27,7 @@ struct ClientLeadTimeWindowTests {
                      matchedClientName: String? = nil, priorRelationship: String? = nil,
                      sourceIds: [String] = []) -> Prospect {
         let p = Prospect(naturalKey: key, groupName: key, discipline: "music", venue: "Merkin Hall",
-                         performanceDate: date, sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: date, sourceListingURL: nil,
                          priorRelationship: priorRelationship ?? "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 5, tier: "mid",
                          fitReason: "r", matchedClientName: matchedClientName,

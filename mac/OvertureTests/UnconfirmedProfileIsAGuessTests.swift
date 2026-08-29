@@ -39,8 +39,7 @@ struct UnconfirmedProfileIsAGuessTests {
         let key = Prospect.makeNaturalKey(groupName: "Paper Lanterns",
                                           performanceDate: "2026-09-14", venue: "The Lantern Room")
         let p = Prospect(naturalKey: key, groupName: "Paper Lanterns", discipline: "theater",
-                         venue: "The Lantern Room", performanceDate: "2026-09-14", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "self",
+                         venue: "The Lantern Room", performanceDate: "2026-09-14", sourceListingURL: nil, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 2, tier: "longshot",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
                          possibleMatchName: nil, status: .queued)

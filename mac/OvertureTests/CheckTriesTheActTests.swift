@@ -43,8 +43,7 @@ struct CheckTriesTheActTests {
                         listing: String? = "https://thegreenroom42.venuetix.com/showdetails/1/2") -> Prospect {
         let key = Prospect.makeNaturalKey(groupName: group, performanceDate: "2026-09-11", venue: venue)
         let p = Prospect(naturalKey: key, groupName: group, discipline: "music", venue: venue,
-                         performanceDate: "2026-09-11", sourceListingURL: listing,
-                         websiteURL: nil, priorRelationship: "none", production: "unknown",
+                         performanceDate: "2026-09-11", sourceListingURL: listing, priorRelationship: "none", production: "unknown",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 7, tier: "high",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
                          possibleMatchName: nil, status: .new)
@@ -176,8 +175,7 @@ struct CheckTriesTheActTests {
     private func queueItem(group: String) -> QueueItem {
         var i = QueueItem(id: group, groupName: group, discipline: "music",
                           venue: "The Green Room 42", performanceDate: "2026-09-11",
-                          sourceListingURL: "https://thegreenroom42.venuetix.com/showdetails/1/2",
-                          websiteURL: nil, priorRelationship: "none", production: "unknown",
+                          sourceListingURL: "https://thegreenroom42.venuetix.com/showdetails/1/2", priorRelationship: "none", production: "unknown",
                           profile: "strong", coverage: "likely_uncovered", fitScore: 7, tier: "high",
                           fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
                           possibleMatchName: nil, status: .new)

@@ -28,7 +28,7 @@ struct WhoRepliedTests {
 
     private func show(_ ctx: ModelContext) -> Prospect {
         let p = Prospect(naturalKey: "k", groupName: "Pumpkin Singalong", discipline: "choral", venue: "V",
-                         performanceDate: "2026-10-31", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-10-31", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 8, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
@@ -244,7 +244,7 @@ struct ResponderBackfillWiringTests {
 
     private func repliedShow(_ ctx: ModelContext) -> Recipient {
         let p = Prospect(naturalKey: "k", groupName: "Pumpkin Singalong", discipline: "choral", venue: "V",
-                         performanceDate: "2026-10-31", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-10-31", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 8, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)

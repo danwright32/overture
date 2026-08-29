@@ -26,8 +26,7 @@ struct ClosingAPitchOutFromTheRowTests {
     private func show(_ ctx: ModelContext, date: String? = "2026-10-25",
                       runEnd: String? = nil) -> Prospect {
         let p = Prospect(naturalKey: "k", groupName: "Every Voice Choirs", discipline: "choral",
-                         venue: "Sakura Park", performanceDate: date, sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "self",
+                         venue: "Sakura Park", performanceDate: date, sourceListingURL: nil, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 8, tier: "high",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
                          possibleMatchName: nil, status: .approved)

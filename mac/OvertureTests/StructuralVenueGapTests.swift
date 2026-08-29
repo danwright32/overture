@@ -371,7 +371,7 @@ struct StructuralVenueGapTests {
     private func prospectOn(_ date: String, sourceId: String) -> Prospect {
         let p = Prospect(naturalKey: "\(sourceId)-\(date)", groupName: "Smoke Ring Quartet",
                          discipline: "music", venue: "Merkin Hall", performanceDate: date,
-                         sourceListingURL: nil, websiteURL: nil,
+                         sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -395,7 +395,7 @@ struct StructuralVenueGapTests {
     private func storedShow(_ ctx: ModelContext, key: String, listingURL: String) -> Prospect {
         let p = Prospect(naturalKey: key, groupName: "The Metropolitan Opera", discipline: "music",
                          venue: "Lincoln Center for the Performing Arts", performanceDate: "2027-03-14",
-                         sourceListingURL: listingURL, websiteURL: nil,
+                         sourceListingURL: listingURL,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

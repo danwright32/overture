@@ -32,7 +32,7 @@ struct RunNightDropKeyCollisionTests {
         let p = Prospect(naturalKey: Prospect.makeNaturalKey(groupName: group, performanceDate: night,
                                                              venue: venue),
                          groupName: group, discipline: "theater", venue: venue, performanceDate: night,
-                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                         sourceListingURL: nil, priorRelationship: "none",
                          production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 7, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil)
@@ -251,7 +251,7 @@ struct RunNightDropKeyCollisionTests {
                                                                    performanceDate: "2026-10-02",
                                                                    venue: "Joe's Pub"),
                               groupName: "Some Other Show", discipline: "music", venue: "Joe's Pub",
-                              performanceDate: "2026-10-02", sourceListingURL: nil, websiteURL: nil,
+                              performanceDate: "2026-10-02", sourceListingURL: nil,
                               priorRelationship: "none", production: "self", profile: "strong",
                               coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                               matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)

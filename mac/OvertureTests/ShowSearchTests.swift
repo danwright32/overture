@@ -5,7 +5,7 @@ private func item(groupName: String = "Aurora Strings", venue: String? = "Weill 
                   contacts: [RecipientSnapshot] = []) -> QueueItem {
     var q = QueueItem(
         id: "k", groupName: groupName, discipline: "music", venue: venue,
-        performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+        performanceDate: "2026-07-01", sourceListingURL: nil,
         priorRelationship: "none", production: "self", profile: "neutral",
         coverage: "unknown", fitScore: 5, tier: "mid", fitReason: "reason",
         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil, status: .new

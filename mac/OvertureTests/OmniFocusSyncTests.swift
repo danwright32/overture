@@ -25,7 +25,7 @@ struct OmniFocusSyncTests {
                       performanceDate: String? = "1970-04-25",
                       recipientName: String? = "Jane Doe") -> (Prospect, Recipient) {
         let p = Prospect(naturalKey: key, groupName: key, discipline: "choral", venue: "V",
-                         performanceDate: performanceDate, sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: performanceDate, sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)
@@ -177,7 +177,7 @@ struct OmniFocusSyncTests {
         let ctx = ModelContext(try container())
         let now = Date(timeIntervalSince1970: 10_000_000)
         let p = Prospect(naturalKey: "multi", groupName: "Multi Show", discipline: "choral", venue: "V",
-                         performanceDate: nil, sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: nil, sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)

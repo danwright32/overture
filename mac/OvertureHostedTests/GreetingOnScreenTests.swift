@@ -27,7 +27,7 @@ struct ReviewedEmailIsTheSentEmailTests {
     private func draft(_ ctx: ModelContext, body: String) -> (Prospect, Recipient) {
         let p = Prospect(naturalKey: "k|2026-09-12|weill", groupName: "Aurora Strings",
                          discipline: "music", venue: "Weill Recital Hall", performanceDate: "2026-09-12",
-                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                         sourceListingURL: nil, priorRelationship: "none",
                          production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 5, tier: "mid", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: .drafted)
@@ -97,7 +97,7 @@ struct GreetingHoldOnScreenTests {
                       audience: Int = 1, overridden: Bool = false) -> QueueItem {
         var item = QueueItem(
             id: "k", groupName: "Aurora Strings", discipline: "music", venue: "Carnegie Hall",
-            performanceDate: "2026-09-01", sourceListingURL: nil, websiteURL: nil,
+            performanceDate: "2026-09-01", sourceListingURL: nil,
             priorRelationship: "warm", production: "self", profile: "strong",
             coverage: "likely_uncovered", fitScore: 8, tier: "high", fitReason: "r",
             matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil, status: .drafted)

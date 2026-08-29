@@ -25,7 +25,7 @@ struct NoWayToReachThemOutcomeTests {
                            group: String = "Aurora Strings") -> Prospect {
         let p = Prospect(naturalKey: group, groupName: group, discipline: "chamber",
                          venue: "Weill Recital Hall", performanceDate: "2026-09-12",
-                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                         sourceListingURL: nil, priorRelationship: "none",
                          production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 5, tier: "mid", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil,

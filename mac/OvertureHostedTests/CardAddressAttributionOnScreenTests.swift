@@ -13,7 +13,7 @@ struct CardAddressAttributionOnScreenTests {
     private func item(name: String?, role: String?) -> QueueItem {
         var i = QueueItem(id: "k", groupName: "Rosalind Verrier", discipline: "music",
                           venue: "The Green Room 42", performanceDate: "2026-08-17",
-                          sourceListingURL: "https://thegreenroom42.venuetix.com/x", websiteURL: nil,
+                          sourceListingURL: "https://thegreenroom42.venuetix.com/x",
                           priorRelationship: "none", production: "self", profile: "strong",
                           coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                           matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

@@ -24,7 +24,7 @@ struct ReachedOutActionTests {
 
     private func show(_ ctx: ModelContext, event: String? = nil) -> Prospect {
         let p = Prospect(naturalKey: "k", groupName: "G", discipline: "choral", venue: "V",
-                         performanceDate: event, sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: event, sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

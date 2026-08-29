@@ -22,7 +22,7 @@ struct ShowOutcomeStorageTests {
     private func show(_ ctx: ModelContext, key: String = "k",
                       status: ReviewStatus = .new) -> Prospect {
         let p = Prospect(naturalKey: key, groupName: "G", discipline: "music", venue: "V",
-                         performanceDate: "2026-11-18", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-11-18", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -141,7 +141,7 @@ struct ShowOutcomeStorageTests {
     @Test func aNewRowWritesTheOneFieldNotTheLegacyColumn() throws {
         let ctx = try context()
         let p = Prospect(naturalKey: "n", groupName: "G", discipline: "music", venue: "V",
-                         performanceDate: "2026-11-18", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-11-18", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

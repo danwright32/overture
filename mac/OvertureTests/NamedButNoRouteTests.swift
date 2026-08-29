@@ -31,7 +31,7 @@ struct NamedButNoRouteTests {
         let p = Prospect(naturalKey: "summer lovin|2026-08-11|the green room 42",
                          groupName: "Summer Lovin'", discipline: "theater",
                          venue: "The Green Room 42", performanceDate: "2026-08-11",
-                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                         sourceListingURL: nil, priorRelationship: "none",
                          production: "unknown", profile: "neutral", coverage: "unknown",
                          fitScore: 4, tier: "mid", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil)

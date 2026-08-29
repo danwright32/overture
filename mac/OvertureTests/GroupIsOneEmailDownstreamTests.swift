@@ -23,7 +23,7 @@ struct GroupIsOneEmailDownstreamTests {
     private func jointlySent(_ ctx: ModelContext, sentAt: Date = Date(timeIntervalSince1970: 100),
                              group: String? = "grp-1") -> (Prospect, Recipient, Recipient) {
         let p = Prospect(naturalKey: "k", groupName: "Aurora", discipline: "music", venue: "V",
-                         performanceDate: "2026-12-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-12-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

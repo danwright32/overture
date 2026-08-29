@@ -23,7 +23,7 @@ struct PitchingOtherShowsDismissReasonTests {
 
     private func dismissed(_ ctx: ModelContext, group: String, reason: ShowOutcome) {
         let p = Prospect(naturalKey: group, groupName: group, discipline: "music", venue: "The Green Room 42",
-                         performanceDate: "2026-08-03", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-08-03", sourceListingURL: nil,
                          priorRelationship: "none", production: "unknown", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

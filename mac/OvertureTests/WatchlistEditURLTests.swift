@@ -192,8 +192,7 @@ struct WatchlistEditURLTests {
         ctx.insert(s)
 
         let live = Prospect(naturalKey: "OldShow", groupName: "OldShow", discipline: "music",
-                            venue: "Kaufman", performanceDate: "2099-09-19", sourceListingURL: nil,
-                            websiteURL: nil, priorRelationship: "none", production: "self",
+                            venue: "Kaufman", performanceDate: "2099-09-19", sourceListingURL: nil, priorRelationship: "none", production: "self",
                             profile: "strong", coverage: "likely_uncovered", fitScore: 5, tier: "mid",
                             fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
                             possibleMatchName: nil, status: .new)

@@ -22,7 +22,7 @@ struct QueueUndoApplyTests {
                                           performanceDate: "2026-09-12", venue: "Weill Recital Hall")
         let p = Prospect(naturalKey: key, groupName: "The Music Shop", discipline: "music",
                          venue: "Weill Recital Hall", performanceDate: "2026-09-12",
-                         sourceListingURL: nil, websiteURL: nil, priorRelationship: "none",
+                         sourceListingURL: nil, priorRelationship: "none",
                          production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 9, tier: "high", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: status)

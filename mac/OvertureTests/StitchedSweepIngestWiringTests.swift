@@ -45,7 +45,7 @@ struct StitchedSweepIngestWiringTests {
     private func showItListedLastTime(_ ctx: ModelContext) -> Prospect {
         let p = Prospect(naturalKey: "a-show-from-last-time", groupName: "Aurora Strings",
                          discipline: "music", venue: "Merkin Hall", performanceDate: "2099-09-19",
-                         sourceListingURL: "https://kaufman.example/aurora", websiteURL: nil,
+                         sourceListingURL: "https://kaufman.example/aurora",
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

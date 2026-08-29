@@ -31,7 +31,7 @@ struct ProducerOverrideWiringTests {
         for i in 0...1 {
             let p = Prospect(naturalKey: "frigid-\(i)", groupName: "Show \(i)", discipline: "theater",
                              venue: "Under St Marks", performanceDate: "2026-09-1\(i)",
-                             sourceListingURL: nil, websiteURL: nil,
+                             sourceListingURL: nil,
                              priorRelationship: "none", production: "self", profile: "strong",
                              coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                              matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)

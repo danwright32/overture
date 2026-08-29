@@ -67,7 +67,7 @@ struct RowSourceListingLinkTests {
                                     (calendar, "Venue calendar")] {
             var card = QueueItem(id: "k", groupName: "An Evening of Song", discipline: "music",
                                  venue: "A Hall", performanceDate: "2026-09-12",
-                                 sourceListingURL: listing, websiteURL: nil,
+                                 sourceListingURL: listing,
                                  priorRelationship: "none", production: "unclear", profile: "unknown",
                                  coverage: "unknown", fitScore: 5, tier: "mid", fitReason: "",
                                  matchedClientName: nil, possibleMatchSource: nil,

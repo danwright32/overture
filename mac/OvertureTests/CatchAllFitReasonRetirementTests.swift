@@ -58,8 +58,7 @@ struct CatchAllFitReasonRetirementTests {
     private func makeShow(_ ctx: ModelContext, group: String, reason: String,
                           status: ReviewStatus = .new) -> Prospect {
         let p = Prospect(naturalKey: "k-\(group)", groupName: group, discipline: "music",
-                         venue: "A Hall", performanceDate: "2026-09-12", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "unclear",
+                         venue: "A Hall", performanceDate: "2026-09-12", sourceListingURL: nil, priorRelationship: "none", production: "unclear",
                          profile: "unknown", coverage: "unknown", fitScore: 5, tier: "mid",
                          fitReason: reason, matchedClientName: nil, possibleMatchSource: nil,
                          possibleMatchName: nil, status: status)

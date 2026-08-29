@@ -19,8 +19,7 @@ struct ManualPrepMultipleAddressesTests {
     @discardableResult
     private func kept(_ ctx: ModelContext, status: ReviewStatus = .queued) -> Prospect {
         let p = Prospect(naturalKey: "k", groupName: "Bargemusic", discipline: "classical",
-                         venue: "Boathouse", performanceDate: "2026-11-14", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "booked", production: "self",
+                         venue: "Boathouse", performanceDate: "2026-11-14", sourceListingURL: nil, priorRelationship: "booked", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 9, tier: "high",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
                          possibleMatchName: nil, status: status)

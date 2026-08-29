@@ -34,7 +34,7 @@ struct HeldBackMarkTests {
     private func newProspect(_ ctx: ModelContext, group: String) -> String {
         let key = Prospect.makeNaturalKey(groupName: group, performanceDate: "2026-09-12", venue: "Weill Recital Hall")
         let p = Prospect(naturalKey: key, groupName: group, discipline: "music", venue: "Weill Recital Hall",
-                         performanceDate: "2026-09-12", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-09-12", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -137,7 +137,7 @@ struct HeldBackNoteTests {
     private func item(heldBackFrom: String?) -> QueueItem {
         var i = QueueItem(id: "k", groupName: "Aurora Strings", discipline: "music",
                           venue: "Weill Recital Hall", performanceDate: "2026-09-12",
-                          sourceListingURL: nil, websiteURL: nil,
+                          sourceListingURL: nil,
                           priorRelationship: "none", production: "self", profile: "strong",
                           coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
                           matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

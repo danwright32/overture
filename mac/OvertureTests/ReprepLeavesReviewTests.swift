@@ -24,7 +24,7 @@ struct ReprepLeavesReviewTests {
     private func show(_ ctx: ModelContext, key: String, status: ReviewStatus,
                       hasDraft: Bool = true) -> Prospect {
         let p = Prospect(naturalKey: key, groupName: key, discipline: "theatre", venue: "Under St Marks",
-                         performanceDate: "2099-08-14", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2099-08-14", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

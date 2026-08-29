@@ -17,7 +17,7 @@ struct ReachabilityProbeQueueTests {
     private func insert(_ ctx: ModelContext, group: String, date: String, status: ReviewStatus) -> String {
         let key = Prospect.makeNaturalKey(groupName: group, performanceDate: date, venue: "Weill Recital Hall")
         let p = Prospect(naturalKey: key, groupName: group, discipline: "music", venue: "Weill Recital Hall",
-                         performanceDate: date, sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: date, sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong", coverage: "likely_uncovered",
                          fitScore: 6, tier: "mid", fitReason: "r", matchedClientName: nil,
                          possibleMatchSource: nil, possibleMatchName: nil, status: status)
@@ -45,7 +45,7 @@ struct ReachabilityProbeQueueTests {
                         presenter: String?, venue: String) -> String {
         let key = Prospect.makeNaturalKey(groupName: group, performanceDate: date, venue: venue)
         let p = Prospect(naturalKey: key, groupName: group, discipline: "theater", venue: venue,
-                         performanceDate: date, sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: date, sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

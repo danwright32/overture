@@ -30,8 +30,7 @@ struct UnverifiedContactMarkTests {
 
     private func show(_ ctx: ModelContext) -> Prospect {
         let p = Prospect(naturalKey: "k", groupName: "Mind Games", discipline: "theater",
-                         venue: "SoHo Playhouse", performanceDate: "2026-09-18", sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "unknown",
+                         venue: "SoHo Playhouse", performanceDate: "2026-09-18", sourceListingURL: nil, priorRelationship: "none", production: "unknown",
                          profile: "neutral", coverage: "unknown", fitScore: 5, tier: "mid",
                          fitReason: "", matchedClientName: nil, possibleMatchSource: nil,
                          possibleMatchName: nil, status: .new)

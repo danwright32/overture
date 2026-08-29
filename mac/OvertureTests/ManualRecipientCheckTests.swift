@@ -12,7 +12,7 @@ struct ManualRecipientCheckTests {
 
     private func makeProspect(_ ctx: ModelContext, venue: String? = nil) -> Prospect {
         let p = Prospect(naturalKey: "k", groupName: "Aurora Strings", discipline: "music", venue: venue,
-                         performanceDate: nil, sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: nil, sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil)

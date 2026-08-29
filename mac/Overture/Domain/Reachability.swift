@@ -18,11 +18,16 @@ import Foundation
 // not be read literally where it says Review either.
 //
 // Deliberately coarse (the honest limit of free data): at triage a prospect has a presenter name and a
-// source listing URL, but websiteURL is populated during Prep, so a "real website" can only ever be
-// POSITIVE evidence when present, never required. Pure and exhaustively tested (a rule is only as real as
+// source listing URL, and nothing else free. It used to also read the act's own `websiteURL` as positive
+// evidence, and the sentence here said that field was "populated during Prep". It never was: its only
+// writer anywhere was the literal `nil` in `ProspectAssembler`, so the branch reading it could not fire
+// and the comment was the only thing in the tree asserting otherwise (#1640, #3069). Both are gone. Pure and exhaustively tested (a rule is only as real as
 // its detection). Layer 2 (an opt-in per-date probe) upgrades this to a firmer email-found/not-found.
 enum Reachability {
-    enum Signal: Equatable { case likelyReachable, unclear, hardToReach }
+    // #1640: `likelyReachable` is gone with the website branch that was its only writer. A value nothing
+    // produces reads as a case the classifier can reach and is never reached, which is the shape #2811 and
+    // #3154 exist to find.
+    enum Signal: Equatable { case unclear, hardToReach }
 
     // #1308 Layer 2 Phase 2: what the triage row actually shows. Before a probe it is the free heuristic,
     // and only the hard case surfaces (a named presenter with no proven site stays silent, `.none`, so the
@@ -377,7 +382,7 @@ enum Reachability {
     // because a fact measured about a real run beats a guess made from the listing's shape.
     static func badge(result: ProbeResult?, probeIsStale: Bool = false,
                       inherited: ProbeResult? = nil, missedByACheck: Bool = false,
-                      presenter: String?, sourceListingURL: String?, websiteURL: String?) -> Badge {
+                      presenter: String?, sourceListingURL: String?) -> Badge {
         if let result {
             // A stale result (found or not) reverts to "worth re-checking", so it never misleads.
             if probeIsStale { return .staleProbe }
@@ -393,7 +398,7 @@ enum Reachability {
         // it is not re-derived here: one decision, in one place.
         if inherited == .emailFound { return .emailFound }
         if missedByACheck { return .checkMissedIt }
-        switch assess(presenter: presenter, sourceListingURL: sourceListingURL, websiteURL: websiteURL) {
+        switch assess(presenter: presenter, sourceListingURL: sourceListingURL) {
         case .hardToReach:
             // #1859: only the MEASURED dead end still speaks. A social-only listing is one Overture has
             // actually tested (a raw fetch returns a login wall, and lead intake refuses these outright),
@@ -406,23 +411,23 @@ enum Reachability {
             // the check, not the badge, is what answers.
             if let listing = sourceListingURL, isSocialOnly(listing) { return .hardToReach }
             return .none
-        case .likelyReachable, .unclear: return .none
+        case .unclear: return .none
         }
     }
 
-    static func assess(presenter: String?, sourceListingURL: String?, websiteURL: String?) -> Signal {
-        // Dead ends FIRST, so a website can never swallow them (#1335). A website is positive evidence only
-        // ALONGSIDE a presenter on a non-social listing, never a standalone override of these known-dead cases.
+    static func assess(presenter: String?, sourceListingURL: String?) -> Signal {
         // A social-only source is a verified dead end: a raw fetch of these returns a login wall, and lead
-        // intake already refuses them. Hard to reach whatever else is known, website or not.
+        // intake already refuses them. Hard to reach whatever else is known.
         if let listing = sourceListingURL, isSocialOnly(listing) { return .hardToReach }
-        // No presenting org identified, just a venue and a title: there is nothing to email, website or not.
+        // No presenting org identified, just a venue and a title: there is nothing to email.
         if (presenter ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return .hardToReach }
-        // With a presenter in hand and a non-social listing, a confirmed real (non-social) website is
-        // positive evidence: outreach has a live target.
-        if let site = websiteURL, isRealWebsite(site) { return .likelyReachable }
-        // A named presenter on a normal listing, but no proven website: Overture cannot cheaply confirm
-        // reachability here, so it stays silent rather than over-promising.
+        // A named presenter on a normal listing. Overture cannot cheaply confirm reachability here, so it
+        // stays silent rather than over-promising, and the paid check is what answers.
+        //
+        // #1640: there used to be a branch above this returning `likelyReachable` when the act's own
+        // website was known and real. `websiteURL` was never populated by anything, so that branch could
+        // not fire, and the ordering comment explaining that a website must not swallow the dead ends was
+        // describing a case that never occurred.
         return .unclear
     }
 
@@ -448,12 +453,6 @@ enum Reachability {
         return LeadIntake.knownUnreadableHost(url) != nil
     }
 
-    private static func isRealWebsite(_ urlString: String) -> Bool {
-        guard let url = URL(string: urlString.trimmingCharacters(in: .whitespacesAndNewlines)),
-              let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https",
-              url.host != nil else { return false }
-        return LeadIntake.knownUnreadableHost(url) == nil
-    }
 }
 
 // #1145 copy. Kept out of the view (testable, #885) and named so the copy-inventory shows the whole

@@ -310,9 +310,9 @@ struct SeedTableCensusLiveStoreTests {
         out.append("")
         out.append("--- FILL RATES (the store this channel would draw on) ---")
         let withPresenter = prospects.filter { !($0.presenter ?? "").isEmpty }.count
-        let withSite = prospects.filter { !($0.websiteURL ?? "").isEmpty }.count
         out.append("  presenter filled:  \(withPresenter) of \(prospects.count)")
-        out.append("  websiteURL filled: \(withSite) of \(prospects.count)")
+        // #1640: the websiteURL fill rate stood here and read 0 of every row on every run, because
+        // nothing ever wrote that field. The field is gone, and so is the line reporting on it.
         out.append("=== END SEED TABLE CENSUS ===")
         out.append("")
         print(out.joined(separator: "\n"))

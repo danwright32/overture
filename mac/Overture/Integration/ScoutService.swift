@@ -1499,7 +1499,7 @@ enum ScoutService {
     private static func make(_ p: AssembledProspect, key: String) -> Prospect {
         let prospect = Prospect(
             naturalKey: key, groupName: p.groupName, discipline: p.discipline, venue: p.venue,
-            performanceDate: p.performanceDate, sourceListingURL: p.sourceListingURL, websiteURL: p.websiteURL,
+            performanceDate: p.performanceDate, sourceListingURL: p.sourceListingURL,
             priorRelationship: p.priorRelationship, production: p.production, profile: p.profile,
             coverage: p.coverage, fitScore: p.fitScore, tier: p.tier, fitReason: p.fitReason,
             matchedClientName: p.matchedClientName, possibleMatchSource: p.possibleMatchSource,

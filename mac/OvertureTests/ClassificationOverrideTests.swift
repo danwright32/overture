@@ -6,7 +6,7 @@ struct ClassificationOverrideTests {
     private func prospect(discipline: String, production: String, prior: String = "none",
                           profile: String = "strong", coverage: String = "likely_uncovered") -> Prospect {
         Prospect(naturalKey: "k", groupName: "G", discipline: discipline, venue: "V",
-                 performanceDate: "2026-07-01", sourceListingURL: nil, websiteURL: nil,
+                 performanceDate: "2026-07-01", sourceListingURL: nil,
                  priorRelationship: prior, production: production, profile: profile,
                  coverage: coverage, fitScore: 0, tier: "longshot", fitReason: "r",
                  matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

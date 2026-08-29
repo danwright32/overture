@@ -31,8 +31,7 @@ struct EditAFollowUpBeforeItSendsTests {
     private func show(_ ctx: ModelContext, passed: Bool = false) -> (Prospect, Recipient) {
         let date = passed ? "2026-08-01" : "2026-12-01"
         let p = Prospect(naturalKey: "k", groupName: "Devin Marlowe", discipline: "music",
-                         venue: "54 Below", performanceDate: date, sourceListingURL: nil,
-                         websiteURL: nil, priorRelationship: "none", production: "self",
+                         venue: "54 Below", performanceDate: date, sourceListingURL: nil, priorRelationship: "none", production: "self",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 6, tier: "mid",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
                          possibleMatchName: nil, status: .contacted)

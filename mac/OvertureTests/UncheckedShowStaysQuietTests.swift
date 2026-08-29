@@ -21,46 +21,39 @@ struct UncheckedShowStaysQuietTests {
     // about reachability rather than a verdict nothing reached.
     @Test func aShowWithNoOrganiserNamedSaysNothingBeforeACheck() {
         #expect(Reachability.badge(result: nil, presenter: nil,
-                                   sourceListingURL: "https://thegreenroom42.venuetix.com/show/1",
-                                   websiteURL: nil) == .none)
+                                   sourceListingURL: "https://thegreenroom42.venuetix.com/show/1") == .none)
         // A presenter that is only whitespace is not a presenter, and takes the same silence.
         #expect(Reachability.badge(result: nil, presenter: "   ",
-                                   sourceListingURL: "https://example.org/events/1",
-                                   websiteURL: nil) == .none)
+                                   sourceListingURL: "https://example.org/events/1") == .none)
     }
 
     // A show with nothing in hand at all, not even a listing, is still just unlooked-at.
     @Test func aShowWithNoListingEitherIsStillOnlyUnchecked() {
         #expect(Reachability.badge(result: nil, presenter: nil,
-                                   sourceListingURL: nil, websiteURL: nil) == .none)
+                                   sourceListingURL: nil) == .none)
     }
 
     // THE FAILURE DIRECTION, and the reason this is a narrowing rather than a removal: a social-only
     // listing is a dead end Overture actually measured, so it keeps warning, whoever is or is not named.
     @Test func aSocialOnlyListingStillWarns() {
         #expect(Reachability.badge(result: nil, presenter: nil,
-                                   sourceListingURL: "https://www.instagram.com/p/abc123/",
-                                   websiteURL: nil) == .hardToReach)
+                                   sourceListingURL: "https://www.instagram.com/p/abc123/") == .hardToReach)
         #expect(Reachability.badge(result: nil, presenter: "Aurora Strings",
-                                   sourceListingURL: "https://facebook.com/events/123",
-                                   websiteURL: "https://aurorastrings.example") == .hardToReach)
+                                   sourceListingURL: "https://facebook.com/events/123") == .hardToReach)
     }
 
     // And a paid answer still outranks everything: silence before a check never overwrites what a check
     // came back with, in either direction.
     @Test func aCheckedShowStillReportsWhatTheCheckFound() {
         #expect(Reachability.badge(result: .emailFound, presenter: nil,
-                                   sourceListingURL: "https://example.org/events/1",
-                                   websiteURL: nil) == .emailFound)
+                                   sourceListingURL: "https://example.org/events/1") == .emailFound)
         #expect(Reachability.badge(result: .noEmailFound, presenter: nil,
-                                   sourceListingURL: "https://example.org/events/1",
-                                   websiteURL: nil) == .noEmailFound)
+                                   sourceListingURL: "https://example.org/events/1") == .noEmailFound)
     }
 
     // The signal underneath is unchanged and still honest: there IS nothing in hand to email on one of
     // these shows. What changed is only whether that is worth saying to Dan before anything has looked.
     @Test func theUnderlyingSignalStillReadsTheShowTheSameWay() {
-        #expect(Reachability.assess(presenter: nil, sourceListingURL: "https://example.org/events/1",
-                                    websiteURL: nil) == .hardToReach)
+        #expect(Reachability.assess(presenter: nil, sourceListingURL: "https://example.org/events/1") == .hardToReach)
     }
 }

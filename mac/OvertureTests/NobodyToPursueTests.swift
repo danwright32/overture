@@ -44,8 +44,7 @@ struct NobodyToPursueTests {
     // nothing else (#1722's rule, which the fit score, the ledger and the pill palette all rely on).
     @Test func itIsStillTheSameEmptyAnswerUnderneath() {
         #expect(Reachability.badge(result: .noEmailFound, presenter: nil,
-                                   sourceListingURL: "https://example.org/events/1",
-                                   websiteURL: nil) == .noEmailFound)
+                                   sourceListingURL: "https://example.org/events/1") == .noEmailFound)
         #expect(Reachability.tone(for: .noEmailFound) == .warning)
     }
 
@@ -57,8 +56,7 @@ struct NobodyToPursueTests {
                                           venue: "The Green Room 42")
         let p = Prospect(naturalKey: key, groupName: "Feminine Rage", discipline: "music",
                          venue: "The Green Room 42", performanceDate: "2026-08-03",
-                         sourceListingURL: "https://thegreenroom42.venuetix.com/showdetails/1/2",
-                         websiteURL: nil, priorRelationship: "none", production: "unknown",
+                         sourceListingURL: "https://thegreenroom42.venuetix.com/showdetails/1/2", priorRelationship: "none", production: "unknown",
                          profile: "strong", coverage: "likely_uncovered", fitScore: 7, tier: "high",
                          fitReason: "r", matchedClientName: nil, possibleMatchSource: nil,
                          possibleMatchName: nil, status: .new)

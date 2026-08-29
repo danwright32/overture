@@ -26,7 +26,7 @@ struct PostEventPromptTests {
     // A show on 2026-03-01, pitched a month before it.
     private func show(_ ctx: ModelContext, date: String = "2026-03-01") -> Prospect {
         let p = Prospect(naturalKey: "k", groupName: "Aurora Strings", discipline: "music", venue: "V",
-                         performanceDate: date, sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: date, sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
@@ -129,7 +129,7 @@ struct PostEventPromptTests {
     @Test func anundatedShowRaisesNothing() throws {
         let ctx = try context()
         let p = Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: "V",
-                         performanceDate: nil, sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: nil, sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 5, tier: "mid", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,

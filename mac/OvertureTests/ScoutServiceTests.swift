@@ -165,7 +165,7 @@ struct ScoutServiceTests {
         // Dance score (no prior): discipline 3 + self 2 + strong 2 + likely_uncovered 2 = 9.
         let existing = Prospect(naturalKey: key, groupName: "Indianapolis Children's Choir",
                                 discipline: "dance", venue: "Stern Auditorium / Perelman Stage",
-                                performanceDate: "2026-06-24", sourceListingURL: nil, websiteURL: nil,
+                                performanceDate: "2026-06-24", sourceListingURL: nil,
                                 priorRelationship: "none", production: "self", profile: "strong",
                                 coverage: "likely_uncovered", fitScore: 9, tier: "high",
                                 fitReason: "corrected", matchedClientName: nil,
@@ -211,7 +211,7 @@ struct ScoutServiceTests {
         // show was classified dance: booked 20 + dance 3 + self 2 + strong 2 + uncovered 2 = 29.
         let existing = Prospect(naturalKey: key, groupName: "Indianapolis Children's Choir",
                                 discipline: "dance", venue: "Stern Auditorium / Perelman Stage",
-                                performanceDate: "2026-06-24", sourceListingURL: nil, websiteURL: nil,
+                                performanceDate: "2026-06-24", sourceListingURL: nil,
                                 priorRelationship: "booked", production: "self", profile: "strong",
                                 coverage: "likely_uncovered", fitScore: 29, tier: "high",
                                 fitReason: "performer match", matchedClientName: "ICC",
@@ -316,7 +316,7 @@ struct ScoutServiceTests {
     private func performerCorrectedChoirProspect() -> Prospect {
         let p = Prospect(naturalKey: choirKey, groupName: "Indianapolis Children's Choir",
                          discipline: "music", venue: "Stern Auditorium / Perelman Stage",
-                         performanceDate: "2026-06-24", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-06-24", sourceListingURL: nil,
                          priorRelationship: "booked", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 27, tier: "high",
                          fitReason: "performer match", matchedClientName: "Larkin Sable",

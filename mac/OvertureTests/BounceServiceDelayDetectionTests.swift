@@ -13,7 +13,7 @@ struct BounceServiceDelayDetectionTests {
     @MainActor
     private static func prospectWithSentRecipient(threadId: String = "thread-1") -> Prospect {
         let p = Prospect(naturalKey: "k", groupName: "G", discipline: "music", venue: "V",
-                         performanceDate: "2026-08-01", sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: "2026-08-01", sourceListingURL: nil,
                          priorRelationship: "none", production: "self", profile: "strong",
                          coverage: "likely_uncovered", fitScore: 7, tier: "high", fitReason: "r",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
