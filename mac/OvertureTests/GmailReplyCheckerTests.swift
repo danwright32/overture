@@ -149,4 +149,36 @@ struct GmailReplyCheckerTests {
 
         #expect(p.recipients.first?.bounced == false)
     }
+
+    // --- #1912: the two ways the watcher's auth can be dead are different outcomes ----------------------
+    //
+    // The guard at the top of `checkReplies` collapsed "Gmail was never connected" and "the stored
+    // credential could not be refreshed" into one `notConnected`, so the tick could not tell a state Dan
+    // caused from one that happened to him, and the remedy differs. Driven through the pure decision
+    // rather than the singletons the real guard reads, so a fixture can produce every case.
+
+    @Test func gmailNeverConnectedIsItsOwnOutcome() {
+        let outcome = GmailReplyChecker.authFailure(isConnected: false, token: nil)
+        #expect(outcome?.notConnected == true)
+        #expect(outcome?.tokenRefreshFailed == false)
+    }
+
+    @Test func aCredentialThatCouldNotRefreshIsADifferentOutcome() {
+        let outcome = GmailReplyChecker.authFailure(isConnected: true, token: nil)
+        #expect(outcome?.tokenRefreshFailed == true)
+        #expect(outcome?.notConnected == false)
+    }
+
+    // A token in hand is no failure at all, and the pass goes ahead. Asserted so the two above are known
+    // to be reporting the auth state rather than firing on everything (L159).
+    @Test func aWorkingCredentialProducesNoFailureOutcome() {
+        #expect(GmailReplyChecker.authFailure(isConnected: true, token: "ya29.token") == nil)
+    }
+
+    // A token cannot be in hand while Gmail is disconnected, and if it ever were, the disconnected half is
+    // the one to report: it is the state Dan can act on.
+    @Test func aTokenWithoutAConnectionStillReportsTheMissingConnection() {
+        #expect(GmailReplyChecker.authFailure(isConnected: false, token: "ya29.token")?.notConnected == true)
+    }
+
 }

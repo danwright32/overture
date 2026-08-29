@@ -20,7 +20,13 @@ struct GmailReplyChecker {
     // indistinguishable from a conversation nobody answered. The product was quietest exactly when it had
     // stopped working (L10, L11, L98).
     struct Outcome: Equatable, Sendable {
-        var notConnected = false     // no attempt was made, which is not a failure
+        var notConnected = false     // no attempt was made, because Gmail was never connected
+        // #1912: connected, and the stored credential could not be refreshed. Its own field rather than a
+        // share of the one above, because the REMEDY differs: connecting Gmail for the first time is not
+        // the same act as reconnecting a credential that died, and a message may claim only what its check
+        // measured (L11). It is also the one that arrives without Dan having done anything, which is
+        // exactly the state that used to be silent.
+        var tokenRefreshFailed = false
         var threadsChecked = 0       // threads this pass tried to read
         var unreadable = 0           // ...and could not read. Gmail refused, or could not be reached
         var saveFailed = false       // something was found and could not be persisted (#499)
@@ -43,11 +49,26 @@ struct GmailReplyChecker {
         //
         // #2741: `notConnected` rather than a bare false. Nothing was attempted, so this pass established
         // nothing about anybody's replies, and saying so is different from saying nobody wrote.
-        guard GmailConnection.shared.refreshedIsConnected(),
-              let token = try? await GmailAuthManager.shared.validAccessToken() else {
-            return Outcome(notConnected: true)
-        }
+        let connected = GmailConnection.shared.refreshedIsConnected()
+        let token = try? await GmailAuthManager.shared.validAccessToken()
+        // #1912: the two auth states are told apart by a pure decision beside this one, so a fixture can
+        // produce every case without the singletons above. Before this they were one `notConnected` and
+        // nothing in the tick read even that, so a revoked refresh token stopped the reply watching
+        // outright and the first symptom was that replies stopped arriving (L13).
+        if let failure = Self.authFailure(isConnected: connected, token: token) { return failure }
+        guard let token else { return Outcome(notConnected: true) }
         return await markReplies(in: context, token: token, now: now)
+    }
+
+    // Which auth state a pass is in, or nil when there is a usable credential and the pass may go ahead.
+    //
+    // Pure and static so a test can drive all four combinations. A token in hand while Gmail reads as
+    // disconnected cannot happen today; if it ever did, the missing CONNECTION is the half to report,
+    // because that is the one Dan can act on.
+    static func authFailure(isConnected: Bool, token: String?) -> Outcome? {
+        if !isConnected { return Outcome(notConnected: true) }
+        if token == nil { return Outcome(tokenRefreshFailed: true) }
+        return nil
     }
 
     // The testable core: with a token in hand and an injected fetch, pull each unresolved

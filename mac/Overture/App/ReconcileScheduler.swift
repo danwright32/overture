@@ -213,7 +213,9 @@ final class ReconcileScheduler {
                                 replySearchFailure: proposals.failure,             // #2718
                                 replyWatchUnreadable: replyCheck.everyThreadUnreadable,  // #2741
                                 inquiryThreadsUnreadable: proposals.inquiryThreadsUnreadable,  // #2798
-                                inquiryGmailNotConnected: proposals.inquiryNotConnected)       // #2798
+                                inquiryGmailNotConnected: proposals.inquiryNotConnected,       // #2798
+                                replyWatchNotConnected: replyCheck.notConnected,               // #1912
+                                replyWatchTokenExpired: replyCheck.tokenRefreshFailed)         // #1912
     }
 
     // #2718: the mailbox sweep, in its own function so the scheduler body stays readable and so a test can
