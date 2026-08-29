@@ -77,6 +77,26 @@ GH_CALLS="$(tr '\n' ' ' < "${GH_CALL_LOG}")"
 assert_contains "a confirmed merge reports success" "${OUT}" "RC=0"
 assert_contains "and tidies the local branch" "${OUT}" "DELETED=feature-refused"
 assert_contains "and it asked GitHub for the state rather than assuming it" "${GH_CALLS}" "view"
+
+# --- #3187: a decision quoted in the body is recorded on the issue, and only after a real merge --------
+#
+# It rides on merge_pr rather than on either caller, so all three merge paths get it from one place, and
+# it sits with the other things that must not happen unless the PR really reached MERGED. A call recorded
+# for a PR that never landed is a decision nobody made, sitting on the issue looking exactly like one
+# somebody did.
+DECISION_RECORDED=""
+record_pr_decision() { DECISION_RECORDED="$1"; }
+
+OUT="$(merge_refusal_out 0 "MERGED"; echo "RECORDED=${DECISION_RECORDED}")"
+assert_contains "a confirmed merge records the decision its body quoted" "${OUT}" "RECORDED=90"
+
+OUT="$(merge_refusal_out 1 "MERGED"; echo "RECORDED=${DECISION_RECORDED}")"
+assert_contains "a refused merge records nothing" "${OUT}" "RECORDED="
+assert_not_contains "and specifically does not record the PR it failed to merge" "${OUT}" "RECORDED=90"
+
+OUT="$(merge_refusal_out 0 "OPEN"; echo "RECORDED=${DECISION_RECORDED}")"
+assert_not_contains "a PR still OPEN records nothing either" "${OUT}" "RECORDED=90"
+
 rm -f "${GH_CALL_LOG}"
 
 

@@ -190,15 +190,134 @@ pr_body_claims_comment_days() {
 # deliberate: on the incident the decision being quoted lived on #2967 and #2968, and #2968 was one of
 # the numbers GitHub was never going to close, so a pool built from the linked issues alone would have
 # been missing half of the very evidence the report exists to print.
+# pr_body_all_closes <body>: every issue number the Closes line names, linked or not, sorted.
+#
+# One definition, because two callers now build this pool and a decision recorded against a different set
+# of issues than the one the advisory measured would be worse than either alone (L41).
+pr_body_all_closes() {
+  { pr_body_linked_closes "$1"
+    pr_body_unlinked_closes "$1" | tr ' ' '\n'
+  } | grep -E '^[0-9]+$' | sort -u
+}
+
 check_pr_body_claims() {
   local pr_number="$1" body="$2" numbers days
-  numbers="$(
-    { pr_body_linked_closes "${body}"
-      pr_body_unlinked_closes "${body}" | tr ' ' '\n'
-    } | grep -E '^[0-9]+$' | sort -u
-  )"
+  numbers="$(pr_body_all_closes "${body}")"
   # Unquoted on purpose: the numbers are one per line and each is its own argument here.
   # shellcheck disable=SC2086
   days="$(pr_body_claims_comment_days ${numbers})"
   require_pr_body_claims "${pr_number}" "${body}" "${days}"
+}
+
+# --- Giving a decision made in session a durable home (#3187) ----------------------------------------
+#
+# #3159 can NAME a quoted decision that no comment carries, and can do nothing about why: most of Dan's
+# calls are made in the working session, so the sentence lives only in a merged PR body, which is not
+# somewhere anybody looks. #3142 is what that costs, and its own report cannot fix that the call was
+# never written where it would be found.
+#
+# Dan's call, 2026-08-29 (this session, in chat): post it automatically at merge rather than printing a
+# command for somebody to run. A step that needs remembering is a rule living only in a prompt (L27),
+# and the measured rate is about 8 PRs in 200, so roughly one comment a fortnight.
+#
+# It runs AFTER the merge is confirmed, never before, because a decision recorded for a PR that never
+# landed is a call nobody made, sitting on the issue looking exactly like one somebody did.
+
+# pr_body_decision_lines <body> <date>: the whole LINE each decision attribution carrying that date sits
+# on, which is the sentence worth recording. A comment holding only a date records nothing anybody can
+# act on.
+pr_body_decision_lines() {
+  local body="$1" date="$2"
+  [ -n "${date}" ] || return 0
+  printf '%s\n' "${body}" \
+    | grep -F "${date}" \
+    | grep -iE "(^|[^a-z])(dan'?s[[:space:]]+${PR_DECISION_NOUNS}|his[[:space:]]+${PR_DECISION_NOUNS}|decided[[:space:]]+by[[:space:]]+dan|dan[[:space:]]*[,(])"
+}
+
+# decision_record_comment <pr-number> <date> <lines>: what gets posted.
+#
+# It QUOTES the sentence and says where it came from, so what lands on the issue is a record of what a
+# PR claimed rather than a ruling this script is making. It cannot know whether the quote is right, and
+# saying so is what keeps it honest: the same report that produced #3142's finding is right about the
+# date roughly one time in eight (L11, L192).
+decision_record_comment() {
+  local pr_number="$1" date="$2" lines="$3"
+  printf '%s\n' "Recorded from PR #${pr_number}, which quoted a decision dated ${date} that no comment here carried:"
+  printf '\n'
+  printf '%s\n' "${lines}" | sed 's/^/> /'
+  printf '\n'
+  printf '%s\n' "Posted automatically when that PR merged (#3187), so a call made in the working session has a"
+  printf '%s\n' "findable home instead of living only in a merged PR body. This is a record of what the PR"
+  printf '%s\n' "claimed, not a ruling: if the quote or the date is wrong, say so here."
+}
+
+# record_decision_in_issues <pr-number> <body> <unmatched-dates> <issue-number>...
+#
+# Writes nothing at all when there is nothing to record, which is most of the time: no unmatched date
+# (the call is already on the issue, or none was quoted), or a date with no decision sentence behind it.
+# Both are the empty-evidence case the advisory already refuses to speak from, and writing is far worse
+# than speaking because a comment is durable (L98).
+#
+# Assume it runs twice (a rerun after a partial failure, a merge path invoked again): it asks what is
+# already on the issue and does not record the same PR's call a second time.
+#
+# A failed post is LOUD and never fatal. The merge has already happened, so failing here would report a
+# landed change as a failure; saying nothing would lose the call this exists to keep.
+record_decision_in_issues() {
+  local pr_number="$1" body="$2" dates="$3"
+  shift 3
+  [ -n "${dates}" ] || return 0
+  [ "$#" -gt 0 ] || return 0
+
+  if [ -n "${OVERTURE_NO_DECISION_COMMENT:-}" ]; then
+    echo "OVERTURE_NO_DECISION_COMMENT is set, so the decision quoted in PR #${pr_number} was not recorded" >&2
+    echo "on the issues it closes. It still lives only in the PR body (#3187)." >&2
+    return 0
+  fi
+
+  local date lines issue existing comment
+  while IFS= read -r date; do
+    [ -n "${date}" ] || continue
+    lines="$(pr_body_decision_lines "${body}" "${date}")"
+    [ -n "${lines}" ] || continue
+    comment="$(decision_record_comment "${pr_number}" "${date}" "${lines}")"
+    for issue in "$@"; do
+      [ -n "${issue}" ] || continue
+      existing="$("${PR_BODY_CLAIMS_GH:-gh}" issue view "${issue}" --json comments --jq '.comments[].body' 2>/dev/null || true)"
+      if printf '%s\n' "${existing}" | grep -qF "Recorded from PR #${pr_number}"; then
+        continue
+      fi
+      if "${PR_BODY_CLAIMS_GH:-gh}" issue comment "${issue}" --body "${comment}" >/dev/null 2>&1; then
+        echo "Recorded PR #${pr_number}'s quoted decision (${date}) on issue #${issue} (#3187)."
+      else
+        echo "Could not record PR #${pr_number}'s quoted decision on issue #${issue}. The merge is done;" >&2
+        echo "this is the only thing that did not happen, and the call still lives only in the PR body." >&2
+        echo "Post it by hand: gh issue comment ${issue} --body '<the sentence, quoting PR #${pr_number}>'" >&2
+      fi
+    done
+  done <<< "${dates}"
+}
+
+# record_pr_decision <pr-number> [body]
+#
+# The whole of #3187 as merge_pr calls it: fetch the body if it was not handed one, work out which quoted
+# decision dates no comment carries, and write those to the issues the PR closes.
+#
+# A body it cannot read writes nothing, and so does an empty evidence pool, both by
+# pr_body_dates_not_in_evidence's own rule: a failed fetch must never become a durable comment asserting
+# a mismatch nobody measured (L98, L119).
+record_pr_decision() {
+  local pr_number="$1" body="${2:-}" numbers days quoted missing
+  if [ -z "${body}" ]; then
+    body="$("${PR_BODY_CLAIMS_GH:-gh}" pr view "${pr_number}" --json body --jq .body 2>/dev/null || true)"
+  fi
+  [ -n "${body}" ] || return 0
+  numbers="$(pr_body_all_closes "${body}")"
+  [ -n "${numbers}" ] || return 0
+  # shellcheck disable=SC2086
+  days="$(pr_body_claims_comment_days ${numbers})"
+  quoted="$(pr_body_decision_dates "${body}")"
+  missing="$(pr_body_dates_not_in_evidence "${quoted}" "${days}")"
+  # shellcheck disable=SC2086
+  record_decision_in_issues "${pr_number}" "${body}" "${missing}" ${numbers}
 }
