@@ -98,6 +98,23 @@ struct ProducerCorrectionLiveStoreTests {
             // judged a building at all, must KEEP its control, or this fix has traded one defect for the
             // opposite one.
             let stillCorrectable = items.filter { $0.correctableOrganisation != nil }
+            // #1732: SAID OUT LOUD, not merely bounded. This whole issue is about how many rows carry the
+            // control, so a run that only asserts "more than 50" cannot tell 51 from 600, which are the
+            // defect and the fix. The floor stays as the vacuity guard; the line is what makes the
+            // narrowing legible on a real store rather than on a fixture (L182).
+            let organisations = Set(stillCorrectable.compactMap { ProducerGate.key($0.presenter) })
+            // BOTH numbers, on the SAME store, because the only honest way to state what the bar removed
+            // is against the rule it replaced rather than against a figure measured when the store held
+            // 724 rows (L61: a measurement is only true as of its date).
+            let counts = QueueModel.organisationRowCounts(all.map(\.presenter))
+            let withoutTheBar = items.filter {
+                QueueModel.correctableOrganisation($0.presenter, venueBrands: brands,
+                                                   standing: $0.producerStanding,
+                                                   rowCount: OrganisationListing.shortlistMinimumRows) != nil
+            }
+            print("Producer correction corpus: offered on \(stillCorrectable.count) of \(items.count) rows, "
+                  + "across \(organisations.count) organisations. Without the #1732 row-count bar it would "
+                  + "be \(withoutTheBar.count) rows. Organisations in the store: \(counts.count).")
             #expect(stillCorrectable.count > 50,
                     "corrections are still offered where they can actually move the verdict")
             await RealStoreTestLock.shared.release()
