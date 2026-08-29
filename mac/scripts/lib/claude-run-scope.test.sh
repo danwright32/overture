@@ -361,6 +361,44 @@ assert_runner_folds_through_scope() {
 assert_runner_folds_through_scope "prep-run.sh" "prep_claude_scope"
 assert_runner_folds_through_scope "reply-classify-run.sh" "reply_classify_claude_scope"
 
+# --- the MCP lockout (#2386) ---------------------------------------------------------------------------
+#
+# The plugin lockout above decides what a detached run is TOLD. This decides what it is OFFERED. Same
+# hole, third time: MCP servers are not plugins, so #1682's lockout never touched them, and a headless
+# `claude -p` on this Mac loads every configured server.
+#
+# Measured on the wire 2026-08-29 with a trivial prompt: 53 distinct `mcp__` tools reach the run, and
+# `--strict-mcp-config` takes that to 0 while the run still answers and the dan-wright-brand-voice skill
+# is still loaded, which is the constraint #1682 established and the reason `--setting-sources` is not
+# the route. The 2026-08-09 reachability check reached for two of those tools (`browser_navigate`) and
+# was refused, which is the whole content of a "web lookups refused" line on a run where 338 landed.
+#
+# Unlike the plugin half there is nothing to ENUMERATE and so nothing to refuse over: the flag means
+# "only the servers named by --mcp-config", none is passed, and that is zero by construction rather than
+# by a list that could go stale. A claude too old for the flag is not a silent hole either, measured the
+# same day: an unknown option makes it exit with `error: unknown option`, so the run dies loudly instead
+# of quietly running unscoped. A probe of `--help` would guard nothing that is not already loud, and a
+# guard that cannot be seen to fail is one nobody can trust (L1).
+
+for scope_pair in "prep:$(prep_claude_scope "${STUB_TWO}")"                   "reply-classify:$(reply_classify_claude_scope "${STUB_TWO}")"; do
+  scope_name="${scope_pair%%:*}"
+  scope_text="${scope_pair#*:}"
+  assert_contains "the ${scope_name} scope carries the MCP lockout" "${scope_text}" "--strict-mcp-config"
+done
+
+# It is part of the SCOPE, so a refused scope emits it no more than it emits the allowlist. A run that
+# started with the MCP surface closed and every plugin still injecting is the #1682 hole itself, and the
+# mirror of that is just as wrong: nothing may leak out of a refusal (L42).
+refused_scope="$(claude_run_scope "Read" "auto" "" "unit" "${STUB_TWO}" 2>/dev/null)"
+assert_not_contains "an unsafe permission mode emits no MCP flag either" "${refused_scope}" "--strict-mcp-config"
+refused_scope="$(claude_run_scope "Read" "manual" "" "unit" "$(stub_claude '' 1)" 2>/dev/null)"
+assert_not_contains "an unreadable plugin listing emits no MCP flag either" "${refused_scope}" "--strict-mcp-config"
+
+# And the flag is spliced by deliberate word splitting like the rest of the scope, so it must carry no
+# space of its own or it arrives at claude as two broken arguments.
+assert_equals "the MCP lockout is one word, so word splitting cannot break it" \
+  "1" "$(printf '%s' "${CLAUDE_RUN_MCP_LOCKOUT}" | wc -w | tr -d ' ')"
+
 if [[ ${FAILURES} -gt 0 ]]; then
   echo "${FAILURES} failure(s)"
   exit 1
