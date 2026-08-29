@@ -250,6 +250,43 @@ enum AppNotices {
     // and a notice he cannot read is one he cannot act on. An endpoint the table below does not know
     // still gets a line, under its raw name: falling back to silence would exempt every new call site
     // from this surface until somebody remembered to add it (L113, L96).
+    // #2036: a pitch that never arrived, said out loud.
+    //
+    // `BounceService.detectBounces` sets `bounced` on a contact whose thread carries a hard bounce, and
+    // that flag correctly removes the contact from follow-ups and from the reached-out queue. Nothing told
+    // Dan. The show quietly stops being chased, which is indistinguishable from a show that was pitched
+    // and simply got no answer, so at any real volume he stops pitching organisations whose address was
+    // merely typed wrong and never finds out. That is the alert-on-failure half of L13 and the
+    // error-versus-empty distinction of L10, and it is the shape this whole surface exists for.
+    //
+    // A first-party line rather than an OS dialog, which is Dan's stated preference.
+    //
+    // The DELAY notice (`delayNoticeAt`, #656) is deliberately not here. It is informational by
+    // construction, never gates follow-up eligibility, and putting it beside a hard bounce would teach him
+    // that this line sometimes means nothing (L36, L77).
+    struct BouncedPitch: Equatable, Sendable {
+        var email: String
+        var show: String
+    }
+
+    static func pitchesBounced(_ bounced: [BouncedPitch]) -> AppNotice? {
+        guard let first = bounced.first else { return nil }
+        // One literal per sentence, never a concatenation, for `couldNotRead`'s reason: the copy inventory
+        // lists each literal on its own, so a sentence built from two pieces reaches the cold read as two
+        // fragments and cannot be read as the thing Dan actually sees.
+        let text = bounced.count == 1
+            ? "The pitch to \(first.email) for \(first.show) bounced, so nobody ever read it."
+            : "\(bounced.count) pitches bounced, so nobody ever read them."
+        let detail = bounced.map { "\($0.show): \($0.email)" }.joined(separator: "\n")
+        // The help names what CLEARS the line. Without that this is a permanent alarm with no way to learn
+        // what makes it go, which is worse than the silence it replaces (L109, L148). The control is real
+        // and already on the show's own card (DraftReviewView's "Not really bounced", #398).
+        // Worded for one bounce or many, because the same help sits behind both sentences. The cold
+        // read caught it saying "These addresses" above a line naming exactly one.
+        let explanation = "A hard bounce means the mail was rejected outright, so the show has stopped being chased and nobody has seen the pitch. Open the show to fix the address and pitch again. If the address is fine and the bounce was wrong, Not really bounced on the contact clears it."
+        return AppNotice(text: text, tone: .warning, help: "\(explanation)\n\n\(detail)")
+    }
+
     static func responsesNotUnderstood(_ health: [ResponseDecodeFailures.Health]) -> AppNotice? {
         // The condition is decided HERE, not by whoever built the list. A caller handing over every
         // endpoint that has ever had one bad response would otherwise produce a false alarm, and the
@@ -293,6 +330,10 @@ enum AppNotices {
                         // #2888: endpoints whose bodies Overture cannot read. Only the FAILING ones,
                         // which the register decides, so this list is never a per-response warning.
                         failingResponses: [ResponseDecodeFailures.Health] = [],
+                        // #2036: contacts whose pitch hard-bounced and which nobody has dealt with. The
+                        // caller decides which rows qualify, because that needs the store; what a bounce
+                        // MEANS on this surface is decided here.
+                        bouncedPitches: [BouncedPitch] = [],
                         status: StatusLine) -> [AppNotice] {
         var notices: [AppNotice] = []
         if let bookingsVanished { notices.append(downbeatShootsVanished(bookingsVanished)) }
@@ -301,6 +342,7 @@ enum AppNotices {
         }
         if let notice = couldNotRead(unreadableFiles) { notices.append(notice) }
         if let notice = responsesNotUnderstood(failingResponses) { notices.append(notice) }
+        if let notice = pitchesBounced(bouncedPitches) { notices.append(notice) }
         if let shootHistory, let notice = shootHistoryWarning(shootHistory) { notices.append(notice) }
         if let text = status.text {
             notices.append(AppNotice(text: text,

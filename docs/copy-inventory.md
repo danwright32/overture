@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1446 sentences**.
+Every sentence Overture can say to Dan: **1450 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 516 of the 1446 below hold a
+  sentence carrying a VALUE: 519 of the 1450 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -256,6 +256,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
 - "\(explanation)\n\n\(detail)"
   - `Domain/AppNotice.swift`
   - `Domain/AppNotice.swift`
+  - `Domain/AppNotice.swift`
 - "\(min(progress.completed, progress.total)) of \(progress.total)"
   - `Domain/ReplyClassifyProgress.swift`
   - `Domain/ScoutExtractProgress.swift`
@@ -388,6 +389,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/Reachability.swift`
 "A contact on this show is held back by a check (a venue guess, a press address, a duplicate, the salutation, or the draft lint). Look at it below: dismissing the check releases the email."
     `UI/DraftReviewView.swift`
+"A hard bounce means the mail was rejected outright, so the show has stopped being chased and nobody has seen the pitch. Open the show to fix the address and pitch again. If the address is fine and the bounce was wrong, Not really bounced on the contact clears it."
+    `Domain/AppNotice.swift`
 "A later night of this run is out: you blocked \(day) (\(name))."
     `Domain/BlockedCalendar.swift`
 "A later night of this run is out: you blocked \(day)."
@@ -2119,6 +2122,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SourceFixConfirmActions.swift`
 "The pages that changed couldn't be handed off to be read (\(error)). They'll be tried again on the next scout."
     `Integration/ScoutService.swift`
+"The pitch to \(first.email) for \(first.show) bounced, so nobody ever read it."
+    `Domain/AppNotice.swift`
 "The reader came back with nothing for that page. Try again, or paste the org's events page."
     `UI/LeadIntakeModel.swift`
 "The reader didn't finish in time. It may still be running; try again in a minute."
@@ -2564,6 +2569,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/AppNotice.swift`
 "\($0.orgName): \($0.state.failureMessage ?? "couldn't be checked")"
     `Integration/ScoutService.swift`
+"\($0.show): \($0.email)"
+    `Domain/AppNotice.swift`
 "\(-days) days ago"
     `Domain/ReachedOutQueue.swift`
 "\(Discipline.other.label). Set it."
@@ -2606,6 +2613,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/RunProgress.swift`
 "\(base) looks stuck (\(elapsed))"
     `Domain/RunProgress.swift`
+"\(bounced.count) pitches bounced, so nobody ever read them."
+    `Domain/AppNotice.swift`
 "\(calls) refused (\(list(named))): that research never happened"
     `Domain/WebCallRefusals.swift`
 "\(calls) refused: that research never happened"
