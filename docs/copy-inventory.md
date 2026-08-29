@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1433 sentences**.
+Every sentence Overture can say to Dan: **1444 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 510 of the 1433 below hold a
+  sentence carrying a VALUE: 516 of the 1444 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -115,7 +115,7 @@ What is not, and why:
 - `UI/DraftSignaturePreview.swift`: renders the outbound email's own HTML (body + Gmail signature), not Overture's voice (#1203)
 - `UI/DraftSignaturePreview.swift`: browser-side measuring script, not a sentence Overture says to Dan (#915)
 
-## The same sentence, said in more than one place (51)
+## The same sentence, said in more than one place (52)
 
 Two copies of a sentence will drift. #843 owns fixing these.
 
@@ -179,6 +179,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
 - "Not a real reply"
   - `UI/DraftReviewView.swift`
   - `UI/DraftReviewView.swift`
+- "Not happening"
+  - `Domain/CancelledShootCopy.swift`
+  - `Domain/CancelledShootCopy.swift`
 - "Not now"
   - `Domain/BuildFreshnessPanel.swift`
   - `UI/BlockDaysSheet.swift`
@@ -628,6 +631,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OmniFocusSync.swift`
 "Clears when: you record how the show ended in Overture. Ticking this off here only stops OmniFocus asking; Overture still needs the ending from you."
     `Domain/OmniFocusSync.swift`
+"Close this and show only \(name)'s shows in the queue"
+    `Domain/OrganisationsCopy.swift`
 "Close this out"
     `Domain/ReachedOutClose.swift`
 "Close this out without sending"
@@ -1015,6 +1020,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/StageEmptyState.swift`
 "Keep editing"
     `UI/DaysOffView.swift`
+"Keep this night clear for this shoot again."
+    `Domain/CancelledShootCopy.swift`
 "Keep this page but stop flagging it, until its contents change"
     `UI/SourceFixConfirmActions.swift`
 "Keep this show to pitch it"
@@ -1248,6 +1255,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OnboardingState.swift`
 "Not checked yet"
     `Domain/SourceGrade.swift`
+"Not happening"
+    `Domain/CancelledShootCopy.swift`
 "Not installed yet. Run your Overture build once to install it."
     `UI/OnboardingView.swift`
 "Not now"
@@ -1597,6 +1606,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DraftCheck.swift`
 "Put back"
     `Domain/ClientCoverage.swift`
+"Put it back"
+    `Domain/CancelledShootCopy.swift`
 "Put this prospect back in the queue as undecided"
     `UI/ProspectRowView.swift`
 "Queued \(draftGrantedCount) of \(total) \(prospectWord) to \(base); \(narrowedCount) already sent, so \(narrowedCount == 1 ? "it" : "they") only got new contacts"
@@ -1957,10 +1968,16 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DraftCheck.swift`
 "Stern Auditorium / Perelman Stage"
     `Domain/VenueParser.swift`
+"Still blocked by \(names.dropLast().joined(separator: ", ")) and \(names[names.count - 1])."
+    `Domain/CancelledShootCopy.swift`
+"Still blocked by \(names[0])."
+    `Domain/CancelledShootCopy.swift`
 "Still not granted. Allow Overture in the prompt, or in System Settings ▸ Privacy & Security ▸ Automation."
     `Domain/OnboardingState.swift`
 "Still watched and still checked. Overture will keep reporting these every run rather than quietly giving up on them."
     `Domain/SourceGrade.swift`
+"Stop keeping this night clear for this shoot. It stays in Downbeat; Overture just stops protecting it."
+    `Domain/CancelledShootCopy.swift`
 "Stop sending to this contact"
     `Domain/FollowUp.swift`
 "Stop the reply drafting run"
@@ -2002,7 +2019,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Integration/SourceFetcher.swift`
 "That calendar has more months on it (\(list(unreachable.map(name)))), but it moves between them in a way I can't follow yet, so I only read the month it opened on. Paste \(one ? "that month's" : "a month's") own link and I'll read it."
     `UI/LeadIntakeModel.swift`
-"That calendar is drawn by JavaScript, so there is nothing to read in the page we fetch."
+"That calendar was drawn by JavaScript, so there was nothing to read in the page the last scout fetched."
     `Domain/WatchedSource.swift`
 "That calendar's feed answered but nothing could be read from it, so its format has probably changed."
     `Integration/SourceFetcher.swift`
@@ -2016,29 +2033,29 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/WatchlistEditing.swift`
 "That isn't a date Overture can read."
     `Domain/DayOff.swift`
-"That link isn't a web page (it served \(type ?? "an unknown type"))."
+"That link redirected to a different site (\(h)). Check the address."
     `Integration/SourceFetcher.swift`
-"That link redirects to a different site (\(h)). Check the address."
+"That link wasn't a web page (it served \(type ?? "an unknown type"))."
     `Integration/SourceFetcher.swift`
 "That page couldn't be read."
     `Domain/WatchedSource.swift`
 "That page doesn't list any dated events. It may not be their events page: try the link that shows their season or calendar."
     `Domain/LeadIntake.swift`
+"That page had no dated listings on it when the last scout read it. It may be the wrong page for this org."
+    `Domain/WatchedSource.swift`
 "That page has more on it than I could read in one pass, and I didn't find a show in the part I did read. Try again, or paste a narrower link (a specific month or season) if it keeps happening."
     `Domain/LeadIntake.swift`
-"That page has no dated listings on it. It may be the wrong page for this org."
-    `Domain/WatchedSource.swift`
 "That page has not been read. The next scout will try it again."
     `Domain/WatchedSource.swift`
 "That show had already moved on, so there was nothing to undo"
     `App/ActionFeedback.swift`
-"That site is up, but its secure connection is broken, so the page can't be read. A re-check won't clear this."
+"That site answered, but its secure connection was broken, so the page couldn't be read. A re-check won't clear this."
     `Integration/SourceFetcher.swift`
 "That was \(named[0])."
     `Domain/SourceReadability.swift`
 "That's longer than a year. Block a shorter stretch."
     `Domain/DayOff.swift`
-"The Downbeat client export couldn't be read (it may be corrupted or a newer format), so the scout treated every prospect as cold. Re-export it from Downbeat."
+"The Downbeat client export couldn't be read (it may be corrupted, or not the shape Overture expects), so the scout treated every prospect as cold. Re-export it from Downbeat."
     `Domain/DownbeatExport.swift`
 "The Prep run finished but didn't produce any results. It may have hit an error or found no contacts."
     `Domain/DetachedRunOutcome.swift`
@@ -2471,6 +2488,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/FormOutreach.swift`
 "You opened their profile \(when). Did you send it?"
     `Domain/FormOutreach.swift`
+"You said it isn't happening"
+    `Domain/CancelledShootCopy.swift`
 "You set this: \(what)"
     `UI/QueueView+Model.swift`
 "You stopped sending to this contact \(ago(stoodDownAt, now: now))"
@@ -2681,6 +2700,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/RunBoundaryViolations.swift`
 "\(i.followUpsDue) due"
     `Domain/AgentRoster.swift`
+"\(i.followUpsDue) due, somebody may have answered"
+    `Domain/AgentRoster.swift`
 "\(i.keptToPrep) ready to prep"
     `Domain/AgentRoster.swift`
 "\(i.reachedOutDue) due"
@@ -2740,6 +2761,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ProposedConversation.swift`
 "\(name) is a room's name, so Overture reads it as the building, not the presenter."
     `Domain/OrganisationListing.swift`
+"\(name) is holding that night again"
+    `Domain/CancelledShootCopy.swift`
 "\(name) may already be pitched for a nearby show; blocked from sending."
     `Domain/DraftReviewNotes.swift`
 "\(name) may be a press/media contact, not the act; blocked from sending."
@@ -2750,6 +2773,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/OrganisationListing.swift`
 "\(name) will instead receive:"
     `Domain/DraftReviewNotes.swift`
+"\(name) won't hold that night any more"
+    `Domain/CancelledShootCopy.swift`
 "\(names.count) new booking\(names.count == 1 ? "" : "s") (\(names.joined(separator: ", ")))"
     `Domain/OutreachEventPhrasing.swift`
 "\(names.count) new repl\(names.count == 1 ? "y" : "ies") (\(names.joined(separator: ", ")))"

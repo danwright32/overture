@@ -27,7 +27,7 @@ struct PresentersShortlistJumpTests {
                           venue: String, date: String) -> Prospect {
         let p = Prospect(naturalKey: "\(date)|\(venue)|\(group)".lowercased(),
                          groupName: group, discipline: "theatre", venue: venue,
-                         performanceDate: date, sourceListingURL: nil, websiteURL: nil,
+                         performanceDate: date, sourceListingURL: nil,
                          priorRelationship: "none", production: "", profile: "", coverage: "",
                          fitScore: 0, tier: "longshot", fitReason: "",
                          matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
