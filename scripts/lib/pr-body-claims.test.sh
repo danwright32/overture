@@ -206,6 +206,100 @@ while IFS= read -r script; do
 done <<< "${ASKERS}"
 assert_equals "and every one of them also checks the body's claims about the world" "" "${MISSING}"
 
+# --- #3187: a decision with no home is WRITTEN to one, at merge --------------------------------------
+#
+# #3159 could name a quoted decision no comment carries, and could do nothing about the reason: most of
+# Dan's calls are made in the working session, so the sentence lives only in a merged PR body, where
+# nobody looks. #3142 is what that costs, and its own report cannot fix that the call was never written
+# where it would be found.
+#
+# Dan's call, 2026-08-29 (this session, in chat): post it automatically at merge, rather than offering a
+# command for somebody to run. A step that needs remembering is a rule living only in prose (L27), and
+# the measured rate is about 8 PRs in 200, so roughly one comment a fortnight.
+
+SESSION_DECISION_BODY="Closes #4242.
+
+Some preamble that mentions Dan and no date at all.
+
+**Dan's call, 2026-08-22: one number, and the sheet grows a section**
+
+More body after it."
+
+# The SENTENCE, not just the date. A comment carrying only a date records nothing anybody can act on.
+assert_equals "the quoted decision line is what gets recorded" \
+  "**Dan's call, 2026-08-22: one number, and the sheet grows a section**" \
+  "$(pr_body_decision_lines "${SESSION_DECISION_BODY}" "2026-08-22")"
+
+assert_empty "a date the body does not attribute a decision to matches no line" \
+  "$(pr_body_decision_lines "${SESSION_DECISION_BODY}" "2026-08-21")"
+
+# The comment itself. Asserted through the parts a reader needs rather than as one exact string, so
+# rewording it does not fail this for no reason: where it came from, what was claimed, and that it is a
+# record rather than a ruling.
+COMMENT="$(decision_record_comment "3142" "2026-08-22" "**Dan's call, 2026-08-22: one number, and the sheet grows a section**")"
+assert_contains "the comment says which PR it came from" "${COMMENT}" "#3142"
+assert_contains "the comment carries the sentence itself" "${COMMENT}" "one number, and the sheet grows a section"
+assert_contains "the comment quotes it, so it reads as a record of a claim" "${COMMENT}" "> **Dan's call"
+assert_contains "and says it is a record rather than a ruling" "${COMMENT}" "not a ruling"
+
+# --- it writes, and it writes once ------------------------------------------------------------------
+#
+# Assume it runs twice. A merge happens once per PR, but a rerun after a partial failure must not leave
+# the same call recorded twice on the same issue, so the write asks what is already there first.
+
+GH_LOG="$(mktemp "${TMPDIR:-/tmp}/pr-claims-gh.XXXXXX")"
+EXISTING_COMMENTS=""
+stub_gh() {
+  PR_BODY_CLAIMS_GH="fake_gh"
+  fake_gh() {
+    if [ "${2:-}" = "view" ]; then printf '%s\n' "${EXISTING_COMMENTS}"; return 0; fi
+    printf '%s\n' "$*" >> "${GH_LOG}"
+    return 0
+  }
+}
+
+stub_gh
+: > "${GH_LOG}"
+record_decision_in_issues "3142" "${SESSION_DECISION_BODY}" "2026-08-22" "4242" >/dev/null 2>&1
+assert_contains "the decision is posted to the issue the PR closes" "$(cat "${GH_LOG}")" "4242"
+assert_contains "and the posted text carries the sentence" "$(cat "${GH_LOG}")" "the sheet grows a section"
+
+: > "${GH_LOG}"
+EXISTING_COMMENTS="Recorded from PR #3142, which quoted a decision"
+record_decision_in_issues "3142" "${SESSION_DECISION_BODY}" "2026-08-22" "4242" >/dev/null 2>&1
+assert_empty "a call already recorded from this PR is not recorded again" "$(cat "${GH_LOG}")"
+
+# --- nothing is written where there is nothing to record --------------------------------------------
+#
+# Both of these are the empty-evidence case #3159 already refuses to speak from, and writing would be
+# far worse than speaking: a comment is durable (L98).
+
+stub_gh
+: > "${GH_LOG}"
+EXISTING_COMMENTS=""
+record_decision_in_issues "3142" "${SESSION_DECISION_BODY}" "" "4242" >/dev/null 2>&1
+assert_empty "no unmatched date means nothing is written" "$(cat "${GH_LOG}")"
+
+# And it says NOTHING when there is nothing to record, which is the ordinary case on nearly every merge.
+# Asserted through the override's announcement, because that is the one line the code can reach with an
+# empty date list, and a merge that announced an override every single time would be noise the reader
+# stops seeing (L36). This is also what gives the early return teeth: without this the loop's own
+# per-date guard answers for it and the return can be deleted with every assertion still green (L1).
+NOTHING_TO_SAY="$(OVERTURE_NO_DECISION_COMMENT=1 record_decision_in_issues "3142" "${SESSION_DECISION_BODY}" "" "4242" 2>&1)"
+assert_empty "and nothing is SAID either, not even the override" "${NOTHING_TO_SAY}"
+
+: > "${GH_LOG}"
+record_decision_in_issues "3142" "A body quoting nobody." "2026-08-22" "4242" >/dev/null 2>&1
+assert_empty "a date with no decision sentence behind it writes nothing" "$(cat "${GH_LOG}")"
+
+: > "${GH_LOG}"
+OVERTURE_NO_DECISION_COMMENT=1 record_decision_in_issues "3142" "${SESSION_DECISION_BODY}" "2026-08-22" "4242" >/dev/null 2>&1
+assert_empty "the override writes nothing" "$(cat "${GH_LOG}")"
+OVERRIDE_SAID="$(OVERTURE_NO_DECISION_COMMENT=1 record_decision_in_issues "3142" "${SESSION_DECISION_BODY}" "2026-08-22" "4242" 2>&1)"
+assert_contains "and announces itself rather than passing silently" "${OVERRIDE_SAID}" "OVERTURE_NO_DECISION_COMMENT"
+
+rm -f "${GH_LOG}"
+
 echo
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "pr-body-claims.test.sh: all assertions passed"

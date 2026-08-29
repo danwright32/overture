@@ -89,6 +89,25 @@ already drifting from the Swift version it mirrored.
   incident, is `quoted 2026-08-22` against `2026-08-18 2026-08-21`. It says nothing at all when there is no
   evidence, because a failed fetch and an issue with no comments must not read as a mismatch (L98).
 
+  **Since #3187 that report also WRITES, once the merge is confirmed.** The reason the quoted date so
+  often matches nothing is not that the quote is wrong: it is that most of Dan's calls are made in the
+  working session, so the sentence lives only in a merged PR body, which is not somewhere anybody looks.
+  `merge_pr` therefore posts the quoted SENTENCE, quoted as a blockquote and naming the PR it came from,
+  to every issue the body closes, whenever no comment there carries that day. Dan's call, 2026-08-29
+  (this session, in chat): automatic rather than a command printed for somebody to run, because a step
+  that needs remembering is a rule living only in prose (L27). At the measured rate (8 PRs in 200) that
+  is roughly one comment a fortnight.
+  Four things about it are load bearing. It sits in `merge_pr` rather than in either caller, so all three
+  merge paths get it from one place. It runs AFTER GitHub confirms MERGED and never before, because a
+  call recorded for a PR that did not land is a decision nobody made sitting exactly where one somebody
+  made would sit. It asks what is already on the issue first, so a rerun after a partial failure does not
+  record the same call twice. And it writes NOTHING from an empty evidence pool, by the same rule the
+  advisory already speaks by: a failed fetch must never become a durable comment asserting a mismatch
+  nobody measured (L98, L119). The comment says in its own words that it is a record of what the PR
+  claimed rather than a ruling, since the report it rides on is right about the date roughly seven times
+  in eight and cannot tell which. `OVERTURE_NO_DECISION_COMMENT=1` turns it off for one command and
+  announces itself, and says nothing at all when there was nothing to record.
+
 
 - Before pushing anything that touches a cross-language contract (`fixtures/`,
   `docs/contracts.md`), or really before pushing anything at all, run `scripts/test-all.sh`

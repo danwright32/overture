@@ -27,7 +27,8 @@
 # because the branch was already on origin.
 #
 # REQUIRES from the sourcing script: gh_as_danwright32 and REPO (scripts/ci-config.sh),
-# delete_merged_local_branch (scripts/lib/checkout-tidy.sh), and REPO_ROOT.
+# delete_merged_local_branch (scripts/lib/checkout-tidy.sh), record_pr_decision
+# (scripts/lib/pr-body-claims.sh), and REPO_ROOT.
 
 # merge_pr <pr-number> [local-branch-name]
 #
@@ -59,6 +60,12 @@ merge_pr() {
   # is fatal, for the same reason.
   "${REPO_ROOT}/scripts/record-shipped-commit.sh" || true
   "${REPO_ROOT}/mac/scripts/check-release-freshness.sh" || true
+  # #3187: a decision this body quotes that no comment on its issues carries lives only here, in a merged
+  # PR body, which is not somewhere anybody looks. Written to the issue now, after the merge is
+  # confirmed and never before, because a call recorded for a PR that did not land is a decision nobody
+  # made sitting where one somebody made would sit. Here rather than in either caller so all three merge
+  # paths get it from one place, and never fatal for the same reason as the two lines above.
+  PR_BODY_CLAIMS_GH=gh_as_danwright32 record_pr_decision "${pr_number}" || true
   # Explicit, so neither of those `|| true` lines can be mistaken for this function's verdict again.
   return 0
 }
