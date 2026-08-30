@@ -552,6 +552,122 @@ assert_eq "a wholly serial run is still read from its summaries alone" \
   "$(test_run_totals "Test run with 10 tests in 2 suites passed after 1.500 seconds.")" \
   "10 2 1.500"
 
+# ---------------------------------------------------------------------------
+# The count comes from the RESULT BUNDLE, not from the log text (#3243, #3265)
+# ---------------------------------------------------------------------------
+#
+# The count is the number that decides whether a run is trustworthy at all, and until now it was parsed
+# out of xcodebuild's stdout. In a parallel run that stdout is written by several worker processes at
+# once and their lines can collide: in the 2026-08-29 experiment log exactly one line was corrupted that
+# way, which is why the readable count was 4,874 against the bundle's 4,875. One test is immaterial
+# against a 10 percent tolerance; what is not immaterial is that the only thing bounding the error is
+# how often two workers write in the same instant, which nothing measures and which gets worse with more
+# workers.
+#
+# It also settles #3265, which is the sharper half. The gate compares a parallel run's count against a
+# baseline recorded by a SERIAL run, and the two were produced differently: 8,612 by distinct name in
+# parallel against a serial 8,618, with `CityFromAddressTests` alone printing 17 case lines under 6
+# distinct names. Two numbers being CLOSE is worse than their being obviously different, because it
+# reads as trustworthy while comparing two things that are not the same quantity. The bundle's
+# `totalTestCount` is ONE quantity, produced the same way whatever the parallelism: measured 2026-08-30
+# on a real serial run, `totalTestCount` is 8,626 against a summary line of 8,626, and the CASE count is
+# 8,801 in the same bundle (45 tests ran with dynamic parameters over 220 runs). Names, both sides.
+
+BUNDLE_STUB_DIR="$(fixture_scratch_dir)"
+trap 'rm -rf "${BUNDLE_STUB_DIR}"' EXIT
+
+make_xcresulttool_stub() {
+  # $1 is what the stub prints, $2 its exit status.
+  printf '#!/usr/bin/env bash\ncat <<%s\n%s\n%s\nexit %s\n' "JSON" "$1" "JSON" "${2:-0}" \
+    > "${BUNDLE_STUB_DIR}/xcresulttool"
+  chmod +x "${BUNDLE_STUB_DIR}/xcresulttool"
+  echo "${BUNDLE_STUB_DIR}/xcresulttool"
+}
+
+RESULTS_LOG='Test session results, code coverage, and logs:
+	/tmp/DerivedData/Logs/Test/Test-Overture-2026.08.30_10-47-49--0400.xcresult
+
+** TEST SUCCEEDED **'
+
+assert_eq "the result bundle path is read out of the run own output" \
+  "$(test_run_result_bundle "${RESULTS_LOG}")" \
+  "/tmp/DerivedData/Logs/Test/Test-Overture-2026.08.30_10-47-49--0400.xcresult"
+
+# A retried run (the #1331 app-host flake) writes a second bundle, and the LAST one is the run whose
+# result anybody is reading. Taking the first would read the count of the attempt that died.
+TWO_BUNDLES_LOG="${RESULTS_LOG}
+Test session results, code coverage, and logs:
+	/tmp/DerivedData/Logs/Test/Test-Overture-2026.08.30_11-02-11--0400.xcresult
+"
+assert_eq "a retried run is read from its LAST bundle, not its first" \
+  "$(test_run_result_bundle "${TWO_BUNDLES_LOG}")" \
+  "/tmp/DerivedData/Logs/Test/Test-Overture-2026.08.30_11-02-11--0400.xcresult"
+
+assert_eq "a run that named no bundle yields nothing rather than a guess" \
+  "$(test_run_result_bundle '** TEST SUCCEEDED **')" ""
+
+# --- reading the count out of a bundle ---------------------------------------------------------------
+
+STUB="$(make_xcresulttool_stub '{ "totalTestCount" : 8626, "result" : "Passed" }' 0)"
+assert_eq "the bundle count is read" \
+  "$(OVERTURE_XCRESULTTOOL="${STUB}" result_bundle_total_test_count /tmp/some.xcresult)" "8626"
+
+# Every way the reading can fail must come back EMPTY, never zero. Zero is a real measurement (a run
+# that executed nothing) and the empty-run gate acts on it, so a failed read arriving as zero would
+# fail a healthy run and name the wrong cause (L98, L11).
+STUB_FAILS="$(make_xcresulttool_stub 'xcresulttool: could not open bundle' 1)"
+assert_eq "a tool that refuses yields nothing, not zero" \
+  "$(OVERTURE_XCRESULTTOOL="${STUB_FAILS}" result_bundle_total_test_count /tmp/some.xcresult)" ""
+
+STUB_NO_KEY="$(make_xcresulttool_stub '{ "result" : "Passed" }' 0)"
+assert_eq "a summary with no totalTestCount yields nothing" \
+  "$(OVERTURE_XCRESULTTOOL="${STUB_NO_KEY}" result_bundle_total_test_count /tmp/some.xcresult)" ""
+
+STUB_JUNK="$(make_xcresulttool_stub 'not json at all' 0)"
+assert_eq "output that is not JSON yields nothing" \
+  "$(OVERTURE_XCRESULTTOOL="${STUB_JUNK}" result_bundle_total_test_count /tmp/some.xcresult)" ""
+
+assert_eq "and an empty bundle path is not asked about at all" \
+  "$(OVERTURE_XCRESULTTOOL="${STUB}" result_bundle_total_test_count "")" ""
+
+# --- which count wins, and the run says which one it used --------------------------------------------
+
+assert_eq "the bundle count replaces the text count" \
+  "$(totals_with_authoritative_count "8612 1176 366.413" "8626" "")" "8626 1176 366.413 xcresult"
+
+assert_eq "and the suites and the duration still come from the text, which the bundle does not carry" \
+  "$(totals_with_authoritative_count "8612 1176 366.413" "8626" "" | awk '{print $2, $3}')" "1176 366.413"
+
+assert_eq "with no bundle count the text count stands, and says so" \
+  "$(totals_with_authoritative_count "8612 1176 366.413" "" "")" "8612 1176 366.413 log"
+
+# A RESTARTED run is refused the bundle count, deliberately. Its text totals are the totals of the
+# REMAINDER after the relaunch (#2821), and whether the bundle counts the whole run or the remainder is
+# not something anybody has measured. Substituting an unmeasured whole-run count for a remainder is the
+# one direction that disarms the short-run gate, so the restart keeps the reading it already had (L82).
+assert_eq "a restarted run keeps its own count rather than an unmeasured one" \
+  "$(totals_with_authoritative_count "12 2 40.0" "8626" "restarted")" "12 2 40.0 log"
+
+# Nothing to read at all stays nothing. An empty text reading plus no bundle is UNMEASURED, and it must
+# not acquire a source word that makes it look like a reading somebody took.
+assert_eq "no text and no bundle is still nothing" \
+  "$(totals_with_authoritative_count "" "" "")" ""
+
+# A bundle count with no text totals is still worth having: it is the count the gate needs, and the
+# suites and duration honestly say they were not reported rather than being invented.
+assert_eq "a bundle count with no text totals reports the count and admits the rest" \
+  "$(totals_with_authoritative_count "" "8626" "")" "8626 unknown unknown xcresult"
+
+# --- the readout says when it fell back to the log ---------------------------------------------------
+
+FELL_BACK="$(format_suite_report "8612 1176 366.413 log" "1.91 to 1" "2204" "8628")"
+assert_contains "the readout warns when the count came from the log text" "${FELL_BACK}" \
+  "counted from the log text"
+FROM_BUNDLE="$(format_suite_report "8626 1176 366.413 xcresult" "1.91 to 1" "2204" "8628")"
+assert_not_contains "and says nothing extra when it came from the bundle" "${FROM_BUNDLE}" \
+  "counted from the log text"
+assert_contains "which is still the ordinary readout" "${FROM_BUNDLE}" "8626 tests in 1176 suites, 366.413s."
+
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All suite-stats.sh fixtures passed."
   exit 0
