@@ -698,6 +698,60 @@ ${PASS_MARK} Test run with 10 tests in 1 suite passed after 0.029 seconds."
 assert_not_contains "a run that printed its corpus line is not NOT REPORTED" \
   "$(live_corpus_report "${MEASURED_CORPUS}" "2026-08-30" "")" "NOT REPORTED"
 
+# ---------------------------------------------------------------------------
+# #3276: the corpus reading survives a parallel run, because it no longer comes from stdout
+# ---------------------------------------------------------------------------
+# The suite now RECORDS its counts to a file the runner names, as well as printing them. A worker
+# process has a filesystem; it does not have xcodebuild's stdout. So the reading is taken from the file
+# wherever there is one, and from the log otherwise.
+#
+# Both sources carry the SAME sentence, built once by `LiveCorpusReport.line`, which is why one parser
+# reads either: two spellings of this line is how the file and the fallback would come to report
+# different numbers (L263).
+
+assert_eq "the file wins when it carries a corpus line" \
+  "$(corpus_source_text "${CORPUS_LIVE}" "${PARALLEL_NO_CORPUS}")" \
+  "${CORPUS_LIVE}"
+
+assert_eq "the log is the fallback when there is no file" \
+  "$(corpus_source_text "" "${CORPUS_LIVE}")" \
+  "${CORPUS_LIVE}"
+
+# A file that exists and holds something else is NOT a reading. Without this a truncated or half-written
+# file would be preferred over a log line that was perfectly good, which is the fallback being disabled
+# by the very thing it exists to cover (L214).
+assert_eq "a file with no corpus line in it falls back to the log" \
+  "$(corpus_source_text "some other text entirely" "${CORPUS_LIVE}")" \
+  "${CORPUS_LIVE}"
+
+# The case the whole change is for: a PARALLEL run whose log carries no corpus line at all, and whose
+# recorded file does. Before this it reported NOT REPORTED, so turning parallel testing on would have
+# made the readout permanently silent and put the thing #2991 exists to notice back out of sight (L182).
+PARALLEL_WITH_FILE="$(live_corpus_report "${PARALLEL_NO_CORPUS}" "${TODAY}" "${SEEN_BOTH}" "${CORPUS_LIVE}")"
+assert_eq "a parallel run reports the counts its record file carries" \
+  "${PARALLEL_WITH_FILE}" \
+  "Live store invariants: measuring, over 3 rows the writer-resolution rule can judge and 5 reached-out rows in play."
+assert_not_contains "and is no longer NOT REPORTED" "${PARALLEL_WITH_FILE}" "NOT REPORTED"
+
+# And the DURABLE record moves with it. The report and the record must be taken from the same source or
+# a parallel run would print its counts and leave the dormancy date untouched, which is the one number
+# #2991 must never get wrong (L263).
+assert_eq "a parallel run's record is updated from the same file" \
+  "$(live_corpus_seen_update "${PARALLEL_NO_CORPUS}" "${TODAY}" "${SEEN_BOTH}" "${CORPUS_LIVE}")" \
+  "writer=${TODAY}
+reached=${TODAY}"
+
+# A dormant parallel run still leaves the record alone, so the refusal that is the whole mechanism of
+# #2991 is not lost by moving where the counts come from.
+assert_eq "a dormant parallel run still writes nothing" \
+  "$(live_corpus_seen_update "${PARALLEL_NO_CORPUS}" "${TODAY}" "${SEEN_BOTH}" "${CORPUS_DORMANT}")" \
+  "${SEEN_BOTH}"
+
+# Neither source is still NOT REPORTED, which is what a scoped run produces. An unmeasured reading must
+# never read as a measured zero (L98).
+assert_contains "neither a file nor a printed line is still NOT REPORTED" \
+  "$(live_corpus_report "${PARALLEL_NO_CORPUS}" "${TODAY}" "${SEEN_BOTH}" "")" "NOT REPORTED"
+
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All suite-stats.sh fixtures passed."
   exit 0

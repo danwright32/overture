@@ -446,17 +446,42 @@ live_corpus_dormancy_phrase() {
   echo "for as long as this clone has recorded"
 }
 
+# Which text the corpus reading is taken FROM, given what the recorded file holds and what the run
+# printed (#3276).
+#
+# The FILE wins wherever it carries a line, and the log is the fallback. That order rather than the other
+# way round because the file is the only channel a PARALLEL worker has: its stdout does not reach
+# xcodebuild's, so a parallel run's log carries no corpus line at all while its file does. A serial run
+# has both and they are the same sentence, built in one place by `LiveCorpusReport.line` so the two
+# sources cannot report different numbers (L263).
+#
+# Neither one present comes back EMPTY, and the caller reads that as NOT REPORTED. That is the state a
+# scoped run produces, and it must never be folded into a measured zero (L98).
+corpus_source_text() {
+  local file_text="$1" output="$2"
+  if [[ "${file_text}" == *"LIVE STORE CORPUS:"* ]]; then
+    printf '%s\n' "${file_text}"
+    return 0
+  fi
+  printf '%s\n' "${output}"
+}
+
 live_corpus_report() {
-  local output="$1" today="${2:-}" seen="${3:-}" counts open reached
-  if ! counts="$(live_corpus_counts "${output}")"; then
+  local output="$1" today="${2:-}" seen="${3:-}" file_text="${4:-}" counts open reached source
+  source="$(corpus_source_text "${file_text}" "${output}")"
+  if ! counts="$(live_corpus_counts "${source}")"; then
     # #3275: NAME the cause this run's own output supports, rather than the one that is usually right.
     # The corpus line is a `print()` from a test, and a PARALLEL worker's stdout does not reach
     # xcodebuild's: measured 2026-08-30, the suite ran and passed and the line appeared zero times. The
     # message said "a scoped run does not include them" for a run that was not scoped, sending the
     # reader to check a scope they never set (L11). A parallel run is told by its own per-test lines,
     # which is evidence in the output rather than an inference about how it was invoked.
+    # #3276: the parallel case is no longer "the line cannot get here". The suite records its counts to
+    # a file the runner names, which a worker process has and stdout is not, so a parallel run that RAN
+    # the suite reports normally. What this branch now means is that the suite did not run, which for a
+    # parallel run is the same fact as for a serial one, said in the words that fit it.
     if [[ -n "$(test_run_totals_parallel "${output}")" ]]; then
-      echo "Live store invariants: NOT REPORTED. This was a PARALLEL run, and the corpus line is printed by a test, so it never reaches xcodebuild's own output: a worker's stdout is not forwarded. Nothing here says whether the invariants measured anything, and a serial run is currently the only way to find out (#3275, #3276)."
+      echo "Live store invariants: NOT REPORTED. This PARALLEL run left no corpus line in its record file and printed none, so the suite did not run: a scope that excludes it does exactly this. Nothing here says whether the invariants measured anything (#3276)."
       return 0
     fi
     echo "Live store invariants: NOT REPORTED. This run printed no corpus line, so whether they measured anything is unknown; a scoped run does not include them."
@@ -491,8 +516,13 @@ live_corpus_report() {
 #   * A run with no corpus line writes nothing at all. It took no reading, so it is evidence about
 #     nothing, and a scoped run produces exactly this constantly.
 live_corpus_seen_update() {
-  local output="$1" today="$2" seen="$3" counts open reached
-  if ! counts="$(live_corpus_counts "${output}")"; then
+  local output="$1" today="$2" seen="$3" file_text="${4:-}" counts open reached source
+  # The same source rule as the report above, through the same function, so the durable RECORD and the
+  # line on screen can never be taken from different places (L263). Without this a parallel run would
+  # report its counts and then leave the dormancy record untouched, which is the one number #2991 must
+  # never get wrong.
+  source="$(corpus_source_text "${file_text}" "${output}")"
+  if ! counts="$(live_corpus_counts "${source}")"; then
     printf '%s' "${seen}"
     return 0
   fi
