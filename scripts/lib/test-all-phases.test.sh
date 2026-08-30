@@ -230,16 +230,17 @@ mkdir -p "${STOP_DIR}"
 # Written as a script and run as its OWN bash process on purpose: the notice is printed by the shell that
 # owns the job, so a subshell of this fixture would not show it the way a real run does.
 write_stopper() {
-  local path="$1" stop_line="$2"
+  local path="$1" stop_line="$2" injected="${3:-}"
   cat > "${path}" <<STOPPER
 #!/usr/bin/env bash
 set -uo pipefail
 source "${SCRIPT_DIR}/test-all-phases.sh"
 LOG="\$(mktemp "\${TMPDIR:-/tmp}/stopper-log.XXXXXX")"
+trap '${stop_line} rm -f "\${LOG:-}" "\${BACKGROUND_PHASE_STATUS_FILE:-}"' EXIT
+${injected}
 start_background_phase "\${LOG}" sleep 300
 PID="\${BACKGROUND_PHASE_PID}"
 echo "\${PID}" > "${STOP_DIR}/\$(basename "\$0").pid"
-trap '${stop_line} rm -f "\${LOG}" "\${BACKGROUND_PHASE_STATUS_FILE}"' EXIT
 echo "the run ends early, the way a fatal cheap check ends one"
 exit 1
 STOPPER
@@ -248,7 +249,7 @@ STOPPER
 
 # The POSITIVE CONTROL first. Without it, "no notice was printed" is satisfied just as well by a fixture
 # that could never see one, and the test would pass hardest when it was measuring nothing (L159).
-write_stopper "${STOP_DIR}/bare-kill.sh" 'kill "${PID}" 2>/dev/null || true;'
+write_stopper "${STOP_DIR}/bare-kill.sh" 'kill "${PID:-}" 2>/dev/null || true;'
 # Output goes to a FILE, never a command substitution. The background job inherits the stopper's
 # stderr, so `$(...)` would hold the pipe open until that job ended on its own, which both stalls the
 # fixture for the whole sleep and lets a natural expiry stand in for a reap that never happened.
@@ -258,7 +259,7 @@ assert_contains "a bare kill really does announce the job (the control)" "${BARE
 assert_contains "and the notice renders the job's own body" "${BARE_OUT}" "status_file"
 
 # The same script, stopped through the helper.
-write_stopper "${STOP_DIR}/reaped.sh" 'stop_background_phase "${PID}";'
+write_stopper "${STOP_DIR}/reaped.sh" 'stop_background_phase "${PID:-}";'
 bash "${STOP_DIR}/reaped.sh" > "${STOP_DIR}/reaped.out" 2>&1
 REAPED_OUT="$(cat "${STOP_DIR}/reaped.out")"
 # Asserted BEFORE the quiet, because quiet is also what a trap whose command does not exist produces:
@@ -270,6 +271,47 @@ assert_equals "and the phase it names is really gone" "0" "$(kill -0 "${REAPED_P
 assert_not_contains "stopping through the helper announces nothing" "${REAPED_OUT}" "Terminated"
 assert_not_contains "so the job's body never reaches the output" "${REAPED_OUT}" "status_file"
 assert_contains "and the run's own line is still printed" "${REAPED_OUT}" "the run ends early"
+
+# --- the window between creating the log and protecting it -------------------------------------------
+#
+# THE defect, seen on 2026-08-29: a `scripts/test-all.sh` run failed on
+# `run-shell-fixtures.sh` with `test-all-phases.test.sh left files behind in its temp directory`
+# and one `stopper-log.XXXXXX` in it. That runner is right to fail it: a fixture leaking one file
+# per run leaks forever, outside the checkout, where nobody looks (#2585 is the same habit at Xcode
+# scale, and it filled the disk).
+#
+# The stopper used to create its log, then do three more things, and only THEN arm the trap that
+# removes it. Anything going wrong in that window leaks the file, and the window is wider than it
+# looks because `set -u` is on and no errexit is: an unset variable there is a fatal exit with no
+# cleanup armed.
+#
+# The evidence NARROWS it to that window rather than merely being consistent with it. The same trap
+# removes a SECOND file, the status file `start_background_phase` makes for itself, and that one was
+# NOT left behind. A trap that never ran would have left both; a trap that ran would have removed
+# both. Only the log surviving means the script died after `mktemp` and before
+# `start_background_phase` got as far as its own `mktemp`, which is exactly the unprotected span.
+#
+# Driven by INJECTING a death into that span rather than by waiting to see it again, because the real
+# one appeared once in four full runs and is load dependent (this Mac was running two other test
+# suites at the time). A guard that can only be exercised by luck is one nobody can prove (L1).
+EARLY_DIR="${TMP_DIR}/dies-before-the-trap"
+mkdir -p "${EARLY_DIR}"
+write_stopper "${STOP_DIR}/dies-early.sh" 'true;' 'exit 9'
+TMPDIR="${EARLY_DIR}" bash "${STOP_DIR}/dies-early.sh" > /dev/null 2>&1
+
+assert_equals "a stopper that dies before its phase starts still removes the log it just created" \
+  "0" "$(find "${EARLY_DIR}" -name 'stopper-log.*' | grep -c . || true)"
+
+# The positive control for the line above. Without it, "no log was left" is satisfied just as well by
+# a stopper that never created one, and the assertion would pass hardest while measuring nothing
+# (L159), which is the rule this fixture already applies to its bare-kill control.
+write_stopper "${STOP_DIR}/dies-early-keeping.sh" 'true;' 'trap - EXIT; exit 9'
+TMPDIR="${EARLY_DIR}" bash "${STOP_DIR}/dies-early-keeping.sh" > /dev/null 2>&1
+
+assert_equals "and the same stopper with its cleanup disarmed really does leave one (the control)" \
+  "1" "$(find "${EARLY_DIR}" -name 'stopper-log.*' | grep -c . || true)"
+
+find "${EARLY_DIR}" -name 'stopper-log.*' -delete
 
 # An empty or already-gone pid is a no-op rather than an error, because the trap naming it runs on every
 # path, including ones where the phase was never started.
