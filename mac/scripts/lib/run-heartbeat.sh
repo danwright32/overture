@@ -70,9 +70,36 @@ heartbeat_stop_recorded_run() {
 # 2026-08-21: with a bare `kill` the notice and the body appear; with the `wait` after it, neither does.
 # Both are `|| true` because this runs inside an EXIT trap, where a non-zero status is not somebody's
 # problem to hear about and `set -e` would turn one into a different exit code than the run really had.
+# #3292: ends the JOB, not only the subshell that wraps it.
+#
+# This was `kill "$1"`, which signals the heartbeat subshell and leaves the `sleep` inside it running as
+# an orphan. macOS reaps nothing until the next boot, so every detached run left one behind on every
+# stop. Found by #3254's leaked-process check rather than by looking: it named a fixture leaving two
+# `sleep 15` per sweep, and that fixture only runs `prep-run.sh`, so the stray was this code's.
+#
+# It is the same class #3248 fixed for three other helpers, using `set -m` at the start and a group kill
+# at the stop. This one was missed because that sweep searched one directory for the shape rather than
+# every place the shape occurs (L30, L247).
+#
+# WHY THE GROUP KILL IS CONDITIONAL, which is the part to understand before changing it. This function
+# is also called on pids that were NOT started under job control, and `prep-run.sh` calls it on a
+# watchdog pid as well as on the heartbeat. A pid that is not its own group leader belongs to the
+# CALLER's group, so `kill -- -$pid` there would take down the runner, its claude, and everything else
+# in that group. So the group kill happens only where the pid IS the group id, which is exactly what
+# `set -m` makes it and what nothing else does, and the caller's own group is read independently rather
+# than assumed to differ (L70, L321).
+#
+# A pid that has already exited reads no group at all and falls through to the plain kill, which is the
+# no-op it has always been on that path.
 heartbeat_stop() {
   [ -n "${1:-}" ] || return 0
-  kill "$1" 2>/dev/null || true
+  hb_pgid="$(ps -o pgid= -p "$1" 2>/dev/null | tr -d ' ')"
+  hb_own="$(ps -o pgid= -p $$ 2>/dev/null | tr -d ' ')"
+  if [ -n "$hb_pgid" ] && [ "$hb_pgid" = "$1" ] && [ "$hb_pgid" != "$hb_own" ]; then
+    kill -- "-$hb_pgid" 2>/dev/null || true
+  else
+    kill "$1" 2>/dev/null || true
+  fi
   wait "$1" 2>/dev/null || true
 }
 

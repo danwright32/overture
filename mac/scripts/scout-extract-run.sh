@@ -134,6 +134,11 @@ SCOUT_SCOPE="$(scout_extract_claude_scope "$CLAUDE")" || { echo "scout-extract: 
 # runs only on the marker branch), so cooperative-stop safety is intact.
 CANCEL_POLL="${SCOUT_EXTRACT_CANCEL_POLL_SECONDS:-3}"
 MARKER_INTERVAL=60
+# #3292: under JOB CONTROL, so the heartbeat and the `sleep` inside it form a process GROUP that
+# `heartbeat_stop` can end whole. Without it the stop signals the subshell and leaves the sleep running
+# as an orphan on every stop, and macOS reaps nothing until the next boot. Turned off again immediately
+# after, so nothing else in the runner is affected.
+set -m
 ( since_marker=0
   # #2109: any way this loop ends stops the run, including a `set -e` death on a bookkeeping
   # command. See lib/run-heartbeat.sh.
@@ -166,6 +171,7 @@ MARKER_INTERVAL=60
     fi
   done ) &
 HEARTBEAT_PID=$!
+set +m
 # CHUNK_PIDS is filled in below once the chunk processes launch; killing them on exit stops a killed
 # script (Dan quits the app, a crash) from leaving orphaned claude processes running against the queue.
 CHUNK_PIDS=""

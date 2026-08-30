@@ -232,6 +232,70 @@ sleep 0.5
 echo "finished"
 KILLSH
 
+# #3292: a heartbeat started under JOB CONTROL is stopped whole, sleep and all.
+#
+# `heartbeat_stop` was `kill "$1"` on the subshell's pid, which ends the subshell and leaves the `sleep`
+# inside it running as an orphan, one per stop, on every detached run. Found by #3254's leaked-process
+# check, which named `prep-run-chunking.test.sh` leaving two `sleep 15` per sweep, and that fixture only
+# runs prep-run.sh: the stray is the production code's.
+#
+# The helper prints its heartbeat's pid so the FIXTURE can ask the process table what is left, rather
+# than the helper reporting on itself, which would be the thing under test grading its own work.
+cat > "${HB_WORK}/grouped-stop.sh" <<'GROUPEDSH'
+#!/bin/sh
+set -eu
+. "$(dirname "$0")/run-heartbeat.sh"
+set -m
+( sleep 30; echo "the marker text a grep would look for" ) >/dev/null 2>&1 &
+HB=$!
+set +m
+# Waits for a pid to BE ALIVE, with a deadline, rather than sleeping a fixed time and hoping the fork
+# has happened. A fixed sleep here asserts about the machine's load rather than about the stop (L290),
+# and these helpers run beside seven other fixtures.
+hb_wait_alive() {
+  i=0
+  while [ "$i" -lt 100 ]; do
+    kill -0 "$1" 2>/dev/null && return 0
+    sleep 0.05
+    i=$((i + 1))
+  done
+  return 1
+}
+echo "HB=$HB"
+hb_wait_alive "$HB" || echo "the heartbeat never started"
+heartbeat_stop "$HB"
+echo "finished"
+GROUPEDSH
+
+# And the mirror: a pid that is NOT its own group leader must still be stopped with a plain kill, never
+# with a group kill. That is the case that matters most, because the caller's own group is what a group
+# kill on a non-leader would reach, and `prep-run.sh` calls heartbeat_stop on a watchdog pid as well.
+cat > "${HB_WORK}/ungrouped-stop.sh" <<'UNGROUPEDSH'
+#!/bin/sh
+set -eu
+. "$(dirname "$0")/run-heartbeat.sh"
+( sleep 30 ) >/dev/null 2>&1 &
+HB=$!
+# Waits for a pid to BE ALIVE, with a deadline, rather than sleeping a fixed time and hoping the fork
+# has happened. A fixed sleep here asserts about the machine's load rather than about the stop (L290),
+# and these helpers run beside seven other fixtures.
+hb_wait_alive() {
+  i=0
+  while [ "$i" -lt 100 ]; do
+    kill -0 "$1" 2>/dev/null && return 0
+    sleep 0.05
+    i=$((i + 1))
+  done
+  return 1
+}
+echo "HB=$HB"
+hb_wait_alive "$HB" || echo "the job never started"
+heartbeat_stop "$HB"
+echo "still here"
+UNGROUPEDSH
+
+chmod +x "${HB_WORK}/grouped-stop.sh" "${HB_WORK}/ungrouped-stop.sh"
+
 cp "${SCRIPT_DIR}/run-heartbeat.sh" "${HB_WORK}/run-heartbeat.sh"
 chmod +x "${HB_WORK}/with-stop.sh" "${HB_WORK}/bare-kill.sh"
 
@@ -249,6 +313,31 @@ assert_not_contains "and does not echo the subshell's body into the log" "${STOP
 BARE_OUT="$(fixture_run_in_own_group "${HB_WORK}/bare-kill.sh")"
 assert_contains "a bare kill really does announce it on this shell" "${BARE_OUT}" "Terminated"
 assert_contains "and really does render the job's body" "${BARE_OUT}" "the marker text a grep would look for"
+
+# --- #3292: the grouped stop ends the sleep, the ungrouped stop does not reach the caller -------------
+
+GROUPED_OUT="$(fixture_run_in_own_group "${HB_WORK}/grouped-stop.sh")"
+assert_contains "a heartbeat started under job control still lets the script finish" "${GROUPED_OUT}" "finished"
+assert_not_contains "and stopping it prints no termination notice" "${GROUPED_OUT}" "Terminated"
+GROUPED_HB="$(printf '%s\n' "${GROUPED_OUT}" | sed -n 's/^HB=\([0-9][0-9]*\)$/\1/p' | head -1)"
+assert_equals "the helper really reported a heartbeat pid, or nothing below measures anything" "true" \
+  "$([ -n "${GROUPED_HB}" ] && echo true || echo false)"
+# The whole point: nothing of that heartbeat's process group survives it. Waited on with a deadline
+# rather than slept past, so this measures the stop rather than the machine's load (L290).
+GROUPED_SURVIVORS="ungathered"
+for _ in $(seq 1 100); do
+  if ! ps -o pid= -g "${GROUPED_HB}" >/dev/null 2>&1; then GROUPED_SURVIVORS=""; break; fi
+  if [ -z "$(ps -o pid= -g "${GROUPED_HB}" 2>/dev/null)" ]; then GROUPED_SURVIVORS=""; break; fi
+  sleep 0.1
+done
+assert_equals "and the sleep INSIDE the heartbeat is gone with it" "" "${GROUPED_SURVIVORS}"
+
+# The mirror. A pid that is not its own group leader gets a PLAIN kill, because a group kill on one
+# would reach the CALLER's group: this helper is still running when it prints, and a group kill would
+# have taken it with the sleep.
+UNGROUPED_OUT="$(fixture_run_in_own_group "${HB_WORK}/ungrouped-stop.sh")"
+assert_contains "stopping a pid that is not a group leader does not kill its caller" "${UNGROUPED_OUT}" "still here"
+
 
 # And every runner uses it, rather than one of the three keeping a bare kill. Derived from the runners
 # themselves, not a list here, so a fourth runner is covered without anybody remembering (L96).
@@ -394,6 +483,58 @@ assert_not_contains "and every pid in the list really was stopped, not just the 
 rm -rf "${QUOTED_WORK}"
 
 rm -rf "${ALL_WORK}"
+
+# --- everything heartbeat_stop is asked to stop was STARTED under job control (#3292) ----------------
+#
+# The stop is only half the fix: a group kill needs a group, and the group is made by `set -m` at the
+# LAUNCH. Without it the stop falls through to its plain-kill branch on every real run and the leak is
+# exactly as it was, while the fixture above stays green because its own helper sets `set -m` itself.
+# That is a value with no writer wearing the fix's name (L46, L3).
+#
+# Asked of every pid heartbeat_stop is handed, not of the heartbeat alone, which is the whole reason this
+# is a loop over a derived list. `prep-run.sh` has TWO: the heartbeat, and the stuck-tool-call watchdog
+# started later because it needs the chunk pids. Grouping only the heartbeat left the watchdog leaking
+# two `sleep 15` per run, which is precisely what a guard written for the instance rather than the class
+# fails to say (L30).
+HB_STOPPED_PIDS=()
+while IFS= read -r line; do
+  [ -n "${line}" ] && HB_STOPPED_PIDS+=("${line}")
+done < <(grep -rhoE 'heartbeat_stop "\$\{?([A-Z_]+_PID)' "${SCRIPT_DIR}/.." --include='*.sh' 2>/dev/null \
+         | grep -v '\.test\.sh$' \
+         | sed -E 's/.*\$\{?//' | sort -u)
+
+# Zero subjects is unmeasured, never clean: if the search stops matching, this loop runs over nothing and
+# reports every runner as correctly wired (L98).
+HB_SUBJECTS_OK="false"
+[ "${#HB_STOPPED_PIDS[@]}" -ge 2 ] && HB_SUBJECTS_OK="true"
+assert_equals "there are pids heartbeat_stop is asked to stop, or nothing below measures anything" \
+  "true" "${HB_SUBJECTS_OK}"
+
+for hb_var in "${HB_STOPPED_PIDS[@]}"; do
+  while IFS= read -r runner; do
+    [ -n "${runner}" ] || continue
+    hb_name="$(basename "${runner}")"
+    hb_src="$(cat "${runner}")"
+    # The launch is the line that captures the pid. What must sit above it, with no other pid capture
+    # between, is a `set -m`; what must sit below it is a `set +m`. Judged by LINE ORDER rather than by
+    # presence, because both lines being somewhere in the file is exactly what a half-applied change
+    # looks like.
+    hb_pid_line="$(printf '%s\n' "${hb_src}" | grep -n "^ *${hb_var}=\\\$!\$" | head -1 | cut -d: -f1)"
+    [ -n "${hb_pid_line}" ] || continue
+    # The LAST job-control statement before the launch must be `set -m`, not merely SOME `set -m`
+    # somewhere above it. Written the looser way first and proved SURVIVED by mutation: `prep-run.sh`
+    # turns job control on for its heartbeat 250 lines earlier and off again immediately, so a watchdog
+    # launched with no `set -m` of its own still had one "above" it and passed while leaking.
+    hb_last_toggle="$(printf '%s\n' "${hb_src}" | head -n "${hb_pid_line}" | grep -E '^ *set [+-]m$' | tail -1 | tr -d ' ')"
+    hb_close="$(printf '%s\n' "${hb_src}" | tail -n +"${hb_pid_line}" | grep -n '^ *set +m$' | head -1 | cut -d: -f1)"
+    HB_ORDER_OK="false"
+    if [ "${hb_last_toggle}" = "set-m" ] && [ -n "${hb_close}" ]; then
+      HB_ORDER_OK="true"
+    fi
+    assert_equals "${hb_name} starts ${hb_var} under job control, so heartbeat_stop can end its group" \
+      "true" "${HB_ORDER_OK}"
+  done < <(grep -rl "${hb_var}=\\\$!" "${SCRIPT_DIR}/.." --include='*.sh' 2>/dev/null | grep -v '\.test\.sh$' | sort)
+done
 
 rm -rf "${HB_WORK}"
 

@@ -651,6 +651,13 @@ already drifting from the Swift version it mirrored.
     because reporting one and walking past it is how they accumulate; the guard that matters there is
     that `fixture_end_process_group` reads its OWN group independently and refuses to end it, since a
     `set -m` that did not take would otherwise have the runner kill itself (L70).
+    Since #3292 the fourth of those is fixed rather than declared, and the fix was in PRODUCTION code:
+    `heartbeat_stop` was `kill "$1"`, which ends the heartbeat subshell and leaves the `sleep` inside it
+    running, on every stop of every detached run. It now ends the process GROUP, and the three runners
+    start their heartbeat (and prep's stuck-tool-call watchdog) under `set -m` so there is a group to
+    end. The group kill is CONDITIONAL on the pid being its own group leader, which is what `set -m`
+    makes it and what nothing else does: `heartbeat_stop` is also called on pids that were not started
+    that way, and a group kill on one of those would take down the runner and its claude (L70, L321).
     On its first sweep it found FOUR fixtures leaking, which is the check working rather than the
     conversion having been careless: `run-heartbeat.test.sh` (four `sleep 5`), `sleep-guard.test.sh`
     (one `sleep 1`), `stuck-tool-call.test.sh` (one `sleep 1` per watchdog case) and
