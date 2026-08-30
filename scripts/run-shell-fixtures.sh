@@ -8,7 +8,12 @@ set -euo pipefail
 # script misbehaved for real (a bad CI-merge decision, a stale process left running). Wired into
 # scripts/test-all.sh so these fixtures ride along with every other local pre-push check.
 #
-# Usage: scripts/run-shell-fixtures.sh
+# Usage: scripts/run-shell-fixtures.sh [<fixture.test.sh> ...]
+#
+# With no arguments it sweeps every fixture, which is what scripts/test-all.sh calls. Name one or
+# more and it runs only those (#3245), which is how to prove ONE fixture through the runner's own
+# rules (the temp-leak check, the unresolved-command check) without paying for the whole sweep. A
+# named path that is not an existing *.test.sh is refused, never quietly swapped for the sweep.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -413,16 +418,77 @@ WRAPPER
   return "${failures}"
 }
 
-main() {
-  cd "${REPO_ROOT}"
-  local fixtures=()
-  while IFS= read -r -d '' f; do
-    fixtures+=("${f}")
-  done < <(find scripts mac/scripts -name '*.test.sh' -print0 | sort -z)
+# Returns the fixture paths THIS run is about: the ones named on the command line, or every
+# *.test.sh under scripts/ and mac/scripts/ when none were named. One path per line.
+#
+# WHY it exists (#3245). main() globbed both directories and ignored its arguments entirely, so
+# `bash scripts/run-shell-fixtures.sh scripts/lib/test-all-phases.test.sh` ran all 81 fixtures and
+# said nothing about the path it was handed. Proving ONE guard through the runner is the only way to
+# get its temp-leak and unresolved-command rules, and it cost a full sweep every time; #3237 measures
+# that sweep at 65.7s wall, which is the floor of the cheap lane.
+#
+# WHY it REFUSES rather than falling back to the sweep (L100, L98). An argument that is silently
+# ignored is indistinguishable from one that was honoured: the run looks right and is about something
+# else. Falling back on a bad path would be that same defect wearing the fix's name, so a path that
+# matches no fixture stops the run and names itself, and ONE bad path among good ones refuses the
+# whole selection rather than quietly running the rest.
+#
+# Named paths are resolved against the CALLER's directory and returned absolute, so this is called
+# before main cds to the repo root; the default sweep is repo-relative, as it has always been.
+resolve_fixture_paths() {
+  local path abs
+  if [[ "$#" -eq 0 ]]; then
+    (cd "${REPO_ROOT}" && find scripts mac/scripts -name '*.test.sh' | sort)
+    return 0
+  fi
 
+  local resolved=() missing=()
+  for path in "$@"; do
+    if [[ -f "${path}" && "${path}" == *.test.sh ]]; then
+      abs="$(cd "$(dirname "${path}")" && pwd)/$(basename "${path}")"
+      resolved+=("${abs}")
+    else
+      missing+=("${path}")
+    fi
+  done
+
+  if [[ "${#missing[@]}" -gt 0 ]]; then
+    {
+      echo "No fixture matches:"
+      printf '  %s\n' "${missing[@]}"
+      echo "  A named path must be an existing *.test.sh file. NOTHING was run: a path matching no"
+      echo "  fixture is refused rather than falling back to the whole sweep, because a run that"
+      echo "  quietly ran everything instead would look right and be about something else."
+    } >&2
+    return 1
+  fi
+
+  printf '%s\n' "${resolved[@]}"
+}
+
+main() {
+  # Selection happens BEFORE the cd, so a relative path resolves against wherever the person is
+  # standing rather than against the repo root they may not be in.
+  local listing select_status=0
+  listing="$(resolve_fixture_paths "$@")" || select_status=$?
+  if [[ "${select_status}" -ne 0 ]]; then
+    return 2
+  fi
+
+  cd "${REPO_ROOT}"
+  local fixtures=() f
+  while IFS= read -r f; do
+    [[ -n "${f}" ]] && fixtures+=("${f}")
+  done <<< "${listing}"
+
+  # Zero subjects examined is its own outcome and must never read as "everything passed" (L98). This
+  # said "No *.test.sh fixtures found." and exited 0 until #3245: an empty sweep is what a broken
+  # checkout, a bad root or a renamed suffix produces, and the emptiest possible failure must not be
+  # the cleanest possible pass.
   if [[ "${#fixtures[@]}" -eq 0 ]]; then
-    echo "No *.test.sh fixtures found."
-    exit 0
+    echo "UNMEASURED - no *.test.sh fixture was found under scripts/ or mac/scripts/." >&2
+    echo "  Nothing was examined, so this run says nothing about whether the fixtures pass." >&2
+    return 2
   fi
 
   # #2850: read the fixtures' own plumbing BEFORE running them. It costs one grep, and it fires on every

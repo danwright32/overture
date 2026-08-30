@@ -580,6 +580,15 @@ already drifting from the Swift version it mirrored.
     assertion fails, because that is what a fixture looks like when its body did not run (an early
     return, a loop over an empty list, a guard that skipped every case). All 61 fixtures print at least
     one, so the rule costs nothing and only fires on a fixture that stopped working.
+    Since #3245 it also RUNS THE FIXTURES IT IS GIVEN: `scripts/run-shell-fixtures.sh <path> ...` runs
+    only those, and no arguments still sweeps everything, which is what `scripts/test-all.sh` calls. Use
+    the scoped form to prove one fixture through the runner's own rules, which are the only place those
+    rules exist; running the fixture directly gets none of them. Before this the entry point globbed and
+    ignored its arguments entirely, so a scoped proof cost the whole sweep (#3237 measures that at 65.7s)
+    and said nothing about the path it was handed, which is worse than the cost: an argument that is
+    silently ignored is indistinguishable from one that was honoured. A named path matching no fixture is
+    REFUSED rather than falling back to the sweep, and a sweep that finds no fixture at all now says
+    UNMEASURED and exits nonzero, where it used to print `No *.test.sh fixtures found.` and exit 0 (L98).
     Since #2929 it also says when the run has STOPPED MOVING, which that gate cannot: it can only speak
     once a run has ended, and the run this exists for never ends. Output does not stream here (each
     fixture's block prints after it finishes), so a fixture that hangs used to leave the runner silent
