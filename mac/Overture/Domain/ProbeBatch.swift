@@ -48,6 +48,11 @@ enum ProbeBatch {
         // the runner researched another.
         let picked = all.filter { selected.contains($0.key) }
 
+        // #3238: built ONCE, not once per show. `qualifies(_:among:)` rebuilds the whole corpus on every
+        // call, and this loop calls it per picked show, which is the same quadratic as
+        // `OrganisationListing.build` one file over. Same fix, and it is the same overload at fault.
+        let gateCorpus = ProducerGate.Corpus(corpus)
+
         var keysToRun: [String] = []
         var coveredBy: [String: String] = [:]
         var representativeForOrg: [String: String] = [:]
@@ -57,7 +62,7 @@ enum ProbeBatch {
         for show in picked {
             guard let presenter = show.presenter,
                   let orgKey = ProducerGate.key(presenter),
-                  ProducerGate.qualifies(presenter, among: corpus, overrides: overrides) else {
+                  ProducerGate.qualifies(presenter, in: gateCorpus, overrides: overrides) else {
                 // A one-off hunt: its own entry, and it answers for nothing else.
                 keysToRun.append(show.key)
                 performerHuntCount += 1

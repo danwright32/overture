@@ -90,6 +90,16 @@ enum OrganisationListing {
         // #1963: indexed once for the whole listing. Asked per organisation instead, each row would
         // build its own index of the same rooms.
         let venues = ProducerGate.VenueKeyIndex(venueKeys)
+        // #3238: the corpus is built ONCE for the whole listing. The `among:` overload below used to be
+        // called per organisation KEY, and that overload's whole body is `qualifies(presenter, in:
+        // Corpus(shows), overrides:)`, so every row rebuilt the same index of every show: one pass over
+        // the store per organisation, which is the quadratic. #1965 already built the `in:` form for
+        // exactly this reason and `OrgAnswerLedger` already uses it; this call site was missed.
+        //
+        // Measured on the live store (1,018 shows, 200-odd organisation keys):
+        // `OrganisationListingLiveStoreTests` took 23.433s before and is the app's own cost as much as
+        // the test's, since `OrganisationsSheetModel` runs the same function to draw the sheet.
+        let corpus = ProducerGate.Corpus(gateShows)
 
         var byKey: [String: [Show]] = [:]
         var nameForKey: [String: String] = [:]
@@ -108,7 +118,7 @@ enum OrganisationListing {
 
             let isBrand = ProducerGate.isVenueBrand(key, venues: venues, overrides: overrides)
             let verdict: Verdict = isBrand ? .theBuilding
-                : ProducerGate.qualifies(name, among: gateShows, overrides: overrides) ? .sharesOneAnswer
+                : ProducerGate.qualifies(name, in: corpus, overrides: overrides) ? .sharesOneAnswer
                 : .paidForSeparately
 
             // Asked in the order the gate itself asks them, so the reason named is the one that actually
