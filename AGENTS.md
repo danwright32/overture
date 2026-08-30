@@ -637,6 +637,20 @@ already drifting from the Swift version it mirrored.
     have. Both ends are counted, not just finishes: with eight lanes, seven fast ones would otherwise mask
     a hung one for as long as work remained. It WARNS rather than kills, for #2577's reason. Retune with
     `OVERTURE_FIXTURE_STALL_LIMIT_SECONDS` and `OVERTURE_FIXTURE_STALL_CHECK_SECONDS`.
+  - **Anything asking a yes or no question with `cmd | grep -q`: WRONG under `pipefail`, and it fails
+    in the direction that reads as a clean answer (#3275).** `grep -q` exits on its first match, which
+    kills the producer with SIGPIPE, and `set -o pipefail` makes that 141 the pipeline's status, so the
+    condition reads FALSE. Measured 2026-08-30 against a real 1.2MB run log: an EARLY match gave 141, a
+    LATE match 0, and no match 1, so an early match and no match are indistinguishable. It had been
+    live in `hosted_suites_ran` (the screens readout), where it looked correct only because a SERIAL run
+    puts the app-hosted bundle LAST so the match lands near the end; under
+    `-parallel-testing-enabled YES` the hosted lines start at line 1406 and four consecutive runs
+    reported the screens as NOT VERIFIED having just passed all 49 of them.
+    The remedy is a herestring (`grep -q ... <<< "${text}"`), or `grep` with no `-q` redirected to
+    `/dev/null` where the file must stay POSIX for `scripts/check-runner-posix.sh`. Since #3275
+    `scripts/run-shell-fixtures.sh` scans the PRODUCTION scripts for this shape as well as the
+    fixtures, which it had never done, and its needle matches a `-q` anywhere in grep's option cluster
+    rather than the one spelling `grep -q`, because `grep -aqF` is what the real defect was written as.
   - **A raw `xcodebuild`: NOT GATED, and cannot be.** It has no wrapper to hold the rule, which is the
     reason to scope through `mac/scripts/run-tests-locked.sh` rather than around it. A raw run also exits
     0 on a `-only-testing:` path that matches nothing.

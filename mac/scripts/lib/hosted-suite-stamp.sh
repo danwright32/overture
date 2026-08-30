@@ -87,6 +87,22 @@ hosted_suite_types() {
 # VERIFIED by this run, and no run on this clone has ever verified them". An unmeasured state read as a
 # measurement, in the exact shape of the defect this file exists to prevent (L98). The fixture did not
 # catch it because it wrote files and passed paths, which is not how the caller calls it (L52).
+# WHY NEITHER MATCH BELOW USES `grep -q` (#3275). Both were written as
+# `printf '%s\n' "${output}" | grep -q <pattern>`, and `mac/scripts/run-tests-locked.sh` runs under
+# `set -euo pipefail`. Under pipefail that pipeline reports the PRODUCER being killed: grep -q exits the
+# instant it matches, printf is still writing a megabyte into a 64KB pipe, it takes SIGPIPE, and the
+# status is 141. Measured 2026-08-30 against a real 1.2MB parallel run log: an EARLY match gave 141, a
+# LATE match 0, and NO match 1. So the condition read as "no match" for an early match and for no match
+# alike, and the only case it read correctly was a match near the END of the stream (L183, L11).
+#
+# It looked fine because a SERIAL run puts the app-hosted bundle LAST, so the match lands near the end.
+# That is luck. Under `-parallel-testing-enabled YES` the hosted lines are interleaved from the start,
+# and four consecutive runs reported the screens as NOT VERIFIED having just passed all 49 of them.
+#
+# `grep` WITHOUT `-q` reads its whole input, so there is nothing left to kill. A herestring would do the
+# same and is what `scripts/run-shell-fixtures.sh` recommends to fixtures, but this file is under
+# `scripts/check-runner-posix.sh` and `<<<` is a bashism. Do not put the `-q` back to quieten it: the
+# output is already discarded, and the `-q` is the defect rather than the tidying.
 hosted_suites_ran() {
   output="$1"
   names="$2"
@@ -96,7 +112,7 @@ hosted_suites_ran() {
   if [ -n "${names}" ]; then
     serial_hit="$(printf '%s\n' "${names}" | while IFS= read -r name; do
       [ -n "${name}" ] || continue
-      if printf '%s\n' "${output}" | grep -aqF "Suite \"${name}\" passed"; then
+      if printf '%s\n' "${output}" | grep -aF "Suite \"${name}\" passed" >/dev/null; then
         printf '%s\n' "${name}"
         break
       fi
@@ -117,7 +133,7 @@ hosted_suites_ran() {
   [ -n "${types}" ] || return 0
   printf '%s\n' "${types}" | while IFS= read -r type; do
     [ -n "${type}" ] || continue
-    if printf '%s\n' "${output}" | grep -aqE "^Test case '${type}/[^']*' passed on "; then
+    if printf '%s\n' "${output}" | grep -aE "^Test case '${type}/[^']*' passed on " >/dev/null; then
       printf '%s\n' "${type}"
       break
     fi

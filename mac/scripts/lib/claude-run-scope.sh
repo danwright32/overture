@@ -96,7 +96,11 @@ claude_run_plugin_lockout() {
   # The silent-failure case this exists to catch: the listing holds plugins but the field this parser
   # reads has been renamed or reshaped, so it extracts nothing and would emit a map that turns nothing
   # off while reporting success.
-  if [ -z "${ids}" ] && printf '%s' "${listing}" | grep -q '{'; then
+  # #3275: no `-q`. It exits on the first match, killing the producer with SIGPIPE, and under
+  # `set -o pipefail` that 141 becomes the condition's answer, so an early match reads exactly like no
+  # match at all (L183). A herestring would do as well but this file is under
+  # `scripts/check-runner-posix.sh`, so `<<<` is out; grep without `-q` reads its whole input.
+  if [ -z "${ids}" ] && printf '%s' "${listing}" | grep '{' >/dev/null; then
     echo "${label}: refusing to run: 'claude plugin list --json' listed plugins but none carried a readable id, so they cannot be turned off" >&2
     return 1
   fi

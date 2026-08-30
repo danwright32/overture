@@ -58,7 +58,10 @@ trial_merge_conflicts() {
   # tree it produced, whatever it then found, and a refusal writes only its complaint. The OID is
   # looked for on any LINE rather than on the first one, because a merge driver that resolved a file
   # speaks before git prints it, which is precisely the case this whole helper exists for.
-  if ! printf '%s\n' "${out}" | grep -qE '^[0-9a-f]{40}$'; then
+  # #3275: a herestring rather than a pipe. `grep -q` exits on its first match, which kills the
+  # producer with SIGPIPE, and under `set -o pipefail` that 141 becomes the condition's answer, so an
+  # early match reads exactly like no match at all (L183).
+  if ! grep -qE '^[0-9a-f]{40}$' <<< "${out}"; then
     printf '%s\n' "${out}" >&2
     return "${TRIAL_MERGE_UNMEASURED}"
   fi

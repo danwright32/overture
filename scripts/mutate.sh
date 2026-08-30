@@ -517,7 +517,10 @@ if [[ -n "${AIM}" ]]; then
   OUTSIDE_LINES=""
   while IFS= read -r touched_line; do
     [[ -z "${touched_line}" ]] && continue
-    if ! printf '%s\n' "${AIMED_LINES}" | grep -qx -- "${touched_line}"; then
+    # #3275: a herestring rather than a pipe, so an early match cannot be turned into 141 by SIGPIPE
+    # under pipefail and read as no match (L183). This one decides LANDED ELSEWHERE, so a false
+    # negative here refuses a correctly aimed mutation.
+    if ! grep -qx -- "${touched_line}" <<< "${AIMED_LINES}"; then
       OUTSIDE_LINES="${OUTSIDE_LINES}${touched_line} "
     fi
   done <<< "${TOUCHED_LINES}"

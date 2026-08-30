@@ -284,7 +284,9 @@ record_decision_in_issues() {
     for issue in "$@"; do
       [ -n "${issue}" ] || continue
       existing="$("${PR_BODY_CLAIMS_GH:-gh}" issue view "${issue}" --json comments --jq '.comments[].body' 2>/dev/null || true)"
-      if printf '%s\n' "${existing}" | grep -qF "Recorded from PR #${pr_number}"; then
+      # #3275: a herestring rather than a pipe, so an early match cannot be turned into 141 by
+      # SIGPIPE under pipefail and read as no match (L183).
+      if grep -qF "Recorded from PR #${pr_number}" <<< "${existing}"; then
         continue
       fi
       if "${PR_BODY_CLAIMS_GH:-gh}" issue comment "${issue}" --body "${comment}" >/dev/null 2>&1; then

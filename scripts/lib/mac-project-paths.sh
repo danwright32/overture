@@ -8,7 +8,13 @@
 
 paths_touch_mac_project() {
   local paths="$1"
-  if grep -vE '^mac/(scripts|build)/' <<< "${paths}" | grep -qE '^mac/'; then
+  # #3275: the filtering is done first, into a variable, rather than piped into a `grep -q`. The
+  # producer there is the first grep, and it takes SIGPIPE the moment the second one matches early,
+  # which under `set -o pipefail` becomes the condition's answer: an early match reads as no match
+  # (L183). A herestring closes it because a herestring has no producer to kill.
+  local app_paths
+  app_paths="$(grep -vE '^mac/(scripts|build)/' <<< "${paths}" || true)"
+  if grep -qE '^mac/' <<< "${app_paths}"; then
     echo "yes"
   fi
 }

@@ -668,6 +668,36 @@ assert_not_contains "and says nothing extra when it came from the bundle" "${FRO
   "counted from the log text"
 assert_contains "which is still the ordinary readout" "${FROM_BUNDLE}" "8626 tests in 1176 suites, 366.413s."
 
+# --- NOT REPORTED names the cause it measured, not the one it guessed (#3275) -------------------------
+#
+# `ReplyInvariantsLiveStoreTests` prints its corpus line with `print()`, and a parallel worker's stdout
+# does not reach xcodebuild's. Measured 2026-08-30 on a real parallel run: the suite RAN (its tests are
+# in the log, passed) and the corpus line appears zero times. The message printed was
+# `NOT REPORTED ... a scoped run does not include them` for a run that was not scoped, which names a
+# cause that is not the cause and sends the reader to check a scope they never set (L11).
+PARALLEL_NO_CORPUS="Test case 'ReplyIdentityTests/aPeerHoldsTheWriter()' passed on 'My Mac - xctest (63822)' (0.004 seconds)
+Test case 'ReplyInvariantsLiveStoreTests/everyReachedOutRowHasSomeWayToReachThePerson()' passed on 'My Mac - xctest (63822)' (137.995 seconds)
+** TEST SUCCEEDED **"
+PARALLEL_CORPUS_REPORT="$(live_corpus_report "${PARALLEL_NO_CORPUS}" "2026-08-30" "")"
+assert_contains "a parallel run with no corpus line still says NOT REPORTED" \
+  "${PARALLEL_CORPUS_REPORT}" "NOT REPORTED"
+assert_contains "and names the cause it can actually see" "${PARALLEL_CORPUS_REPORT}" "PARALLEL run"
+assert_not_contains "rather than blaming a scope this run did not have" \
+  "${PARALLEL_CORPUS_REPORT}" "a scoped run does not include them"
+
+# The serial case keeps the wording it had, because there the scope really is the likely cause: a
+# scoped run does not include that suite, and nothing else in a serial run swallows a print.
+SERIAL_NO_CORPUS="${PASS_MARK} Test run with 10 tests in 1 suite passed after 0.029 seconds."
+SERIAL_CORPUS_REPORT="$(live_corpus_report "${SERIAL_NO_CORPUS}" "2026-08-30" "")"
+assert_contains "a serial run with no corpus line still names the scope" \
+  "${SERIAL_CORPUS_REPORT}" "a scoped run does not include them"
+
+# And a run that DID report keeps reporting, so the new branch cannot swallow the measuring case.
+MEASURED_CORPUS="LIVE STORE CORPUS: 4 whose writer a contact holds, 4 reached-out rows in play
+${PASS_MARK} Test run with 10 tests in 1 suite passed after 0.029 seconds."
+assert_not_contains "a run that printed its corpus line is not NOT REPORTED" \
+  "$(live_corpus_report "${MEASURED_CORPUS}" "2026-08-30" "")" "NOT REPORTED"
+
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All suite-stats.sh fixtures passed."
   exit 0

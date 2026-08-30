@@ -117,7 +117,10 @@ mutation_scope_reached_file() {
   local suite
   while IFS= read -r suite; do
     [[ -n "${suite}" ]] || continue
-    if printf '%s\n' "${executed}" | grep -qxF "${suite}"; then
+    # #3275: a herestring rather than a pipe. `executed` is a whole run's suite list, which is well
+    # past a pipe buffer, so an early match would be turned into 141 by SIGPIPE and read as no match
+    # under pipefail (L183).
+    if grep -qxF "${suite}" <<< "${executed}"; then
       echo "REACHED"
       echo "  ${suite}"
       return 0
