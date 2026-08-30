@@ -120,7 +120,20 @@ enum CopySurfaces {
         }
     }
 
+    // #3235: built once per process for the default root, on CopyInventory's reasoning and with its
+    // refusals. This one was four calls at about 12.6s each, roughly 50s of a 507s suite.
+    private static let defaultMemo = BuildMemo<Report>()
+
+    static var buildsPerformed: Int { defaultMemo.buildsPerformed }
+
     static func build(root: URL = CopyInventory.appRoot) throws -> Report {
+        guard root == CopyInventory.appRoot else { return try buildUncached(root: root) }
+        return try defaultMemo.value(keepIf: { $0.filesScanned > 0 }) {
+            try buildUncached(root: CopyInventory.appRoot)
+        }
+    }
+
+    private static func buildUncached(root: URL) throws -> Report {
         var report = Report()
         let files = try swiftFiles(under: root)
         report.filesScanned = files.count

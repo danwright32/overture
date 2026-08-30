@@ -47,7 +47,10 @@ enum AppSourceWalk {
     // floor still cannot pass on an empty walk. It returns what it found rather than halting, so one
     // broken path reports itself once instead of taking down the whole run.
     static func urls(under root: URL, floor: Int = appFloor, extensions: Set<String> = ["swift"]) -> [URL] {
-        let found = walk(root, extensions: extensions)
+        let found = memo.urls(root: root, extensions: extensions) { walk(root, extensions: extensions) }
+        // Evaluated on EVERY call, never once when the memo was filled. Two guards standing on the
+        // same broken path must both go red: a refusal that reached only whichever of them happened
+        // to walk first would let the other report a clean app (#3235, L98).
         if let refusal = refusal(found: found.count, floor: floor, directory: root.path) {
             Issue.record(Comment(rawValue: refusal))
         }
@@ -58,9 +61,11 @@ enum AppSourceWalk {
     // that cannot be read is dropped from the list and counted against the floor, so a directory of
     // unreadable files refuses exactly like an empty one.
     static func files(under root: URL, floor: Int = appFloor, extensions: Set<String> = ["swift"]) -> [File] {
-        let found = walk(root, extensions: extensions).compactMap { url -> File? in
-            guard let text = try? String(contentsOf: url, encoding: .utf8) else { return nil }
-            return File(url: url, name: url.lastPathComponent, text: text)
+        let found = memo.files(root: root, extensions: extensions) {
+            walk(root, extensions: extensions).compactMap { url -> File? in
+                guard let text = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+                return File(url: url, name: url.lastPathComponent, text: text)
+            }
         }
         if let refusal = refusal(found: found.count, floor: floor, directory: root.path) {
             Issue.record(Comment(rawValue: refusal))
@@ -76,6 +81,62 @@ enum AppSourceWalk {
     // DATA has to read the fixtures too (.json, .txt, .md, .html) and the alternative was that guard
     // declaring its own enumerator, which is exactly what noTestFileDeclaresItsOwnAppSourceWalker forbids
     // and what #2311 consolidated. Defaulted to swift, so every existing caller is unchanged.
+    // #3235: one walk per (root, extensions) per process, because the same scan was being paid for
+    // twelve times a run. What it will NOT keep is the whole safety of it: an EMPTY result is never
+    // remembered, so a broken path re-walks and re-refuses instead of being handed to every guard in
+    // the suite as "checked everything, found nothing wrong" (L286). The floor is deliberately NOT part
+    // of the key and NOT consulted here: the refusal is the caller's, evaluated per call, so a result
+    // kept for a caller with a low floor cannot pass silently to one with a high floor (L98).
+    //
+    // A class behind a lock rather than a bare `static var`, so this is still correct when the suite
+    // runs its tests in parallel.
+    private final class Memo: @unchecked Sendable {
+        private let lock = NSLock()
+        private var urlsByKey: [String: [URL]] = [:]
+        private var filesByKey: [String: [File]] = [:]
+        private var walks = 0
+
+        var walksPerformed: Int {
+            lock.lock(); defer { lock.unlock() }
+            return walks
+        }
+
+        private func key(_ root: URL, _ extensions: Set<String>) -> String {
+            "\(root.standardizedFileURL.path)\u{1F}\(extensions.sorted().joined(separator: ","))"
+        }
+
+        func urls(root: URL, extensions: Set<String>, build: () -> [URL]) -> [URL] {
+            let k = key(root, extensions)
+            lock.lock()
+            if let hit = urlsByKey[k] { lock.unlock(); return hit }
+            walks += 1
+            lock.unlock()
+            let found = build()
+            guard !found.isEmpty else { return found }
+            lock.lock(); urlsByKey[k] = found; lock.unlock()
+            return found
+        }
+
+        func files(root: URL, extensions: Set<String>, build: () -> [File]) -> [File] {
+            let k = key(root, extensions)
+            lock.lock()
+            if let hit = filesByKey[k] { lock.unlock(); return hit }
+            walks += 1
+            lock.unlock()
+            let found = build()
+            guard !found.isEmpty else { return found }
+            lock.lock(); filesByKey[k] = found; lock.unlock()
+            return found
+        }
+    }
+
+    private static let memo = Memo()
+
+    // How many times a walk has actually touched the disk. Exists so the memo can be PROVED rather
+    // than assumed: a memo that silently stopped working would be invisible otherwise, because the
+    // fallback is correct and merely slower (L289).
+    static var walksPerformed: Int { memo.walksPerformed }
+
     private static func walk(_ root: URL, extensions: Set<String> = ["swift"]) -> [URL] {
         guard let walker = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil)
         else { return [] }

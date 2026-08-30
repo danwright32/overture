@@ -107,3 +107,188 @@ struct AppSourceWalkTests {
         }
     }
 }
+
+// #3235: the same walk was being paid for over and over. Twelve suites are 361 of the suite's 507
+// serial seconds, and most of that is one scan repeated: `CopyInventory.build()` twelve times at 5.9s
+// each, `CopySurfaces.build()` four times at 12.6s, and four tests in the #2839 guard each re-walking
+// `mac`, `fixtures`, `src` and `docs` at about 12s a walk.
+//
+// The memo is only safe because of what it refuses to keep. A memoised EMPTY scan would pass every
+// guard in the suite at once, which is the exact failure #2311 exists to prevent, so the refusal is
+// evaluated on EVERY call rather than once, and an empty result is never kept at all (L286, L98).
+@Suite("The shared walk is paid for once per root (#3235)")
+struct AppSourceWalkMemoTests {
+
+    private func makeSources(count: Int) throws -> URL {
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("app-source-walk-memo-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        for index in 0..<count {
+            try "enum Sample\(index) {}\n".write(
+                to: directory.appendingPathComponent("Sample\(index).swift"),
+                atomically: true, encoding: .utf8)
+        }
+        return directory
+    }
+
+    @Test func asecondWalkOfTheSameRootReadsNothingFromDisk() throws {
+        let root = try makeSources(count: 4)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let before = AppSourceWalk.walksPerformed
+        let first = AppSourceWalk.files(under: root, floor: 1)
+        let afterFirst = AppSourceWalk.walksPerformed
+        let second = AppSourceWalk.files(under: root, floor: 1)
+        let afterSecond = AppSourceWalk.walksPerformed
+
+        #expect(afterFirst == before + 1, "the first call has to actually walk, or this proves nothing")
+        #expect(afterSecond == afterFirst, "the second call must be answered from the memo")
+        #expect(first.count == 4)
+        #expect(first.map(\.name) == second.map(\.name))
+        #expect(first.map(\.text) == second.map(\.text))
+    }
+
+    // THE case the memo must not break. A scan that came back empty is the one result that must never
+    // be kept: every guard downstream reads an empty list as "checked everything, found nothing wrong",
+    // so keeping it would turn one broken path into a whole suite passing over nothing at once.
+    @Test func anEmptyWalkIsNeverKept() throws {
+        let empty = try makeSources(count: 0)
+        defer { try? FileManager.default.removeItem(at: empty) }
+
+        let before = AppSourceWalk.walksPerformed
+        withKnownIssue("an empty walk refuses") { _ = AppSourceWalk.files(under: empty, floor: 10) }
+        let afterFirst = AppSourceWalk.walksPerformed
+        withKnownIssue("and refuses again, rather than being answered from a memo") {
+            _ = AppSourceWalk.files(under: empty, floor: 10)
+        }
+        let afterSecond = AppSourceWalk.walksPerformed
+
+        #expect(afterFirst == before + 1)
+        #expect(afterSecond == afterFirst + 1, "an empty result must be re-walked, never remembered")
+    }
+
+    // The url-only walk is a SECOND code path with its own memo, and CopyInventory is its caller, so
+    // it needs its own proof rather than inheriting the one above. Two lines that look identical are
+    // exactly where a single mutation proves only one of them (this test exists because one did).
+    @Test func anEmptyUrlWalkIsNeverKeptEither() throws {
+        let empty = try makeSources(count: 0)
+        defer { try? FileManager.default.removeItem(at: empty) }
+
+        let before = AppSourceWalk.walksPerformed
+        withKnownIssue("an empty walk refuses") { _ = AppSourceWalk.urls(under: empty, floor: 10) }
+        let afterFirst = AppSourceWalk.walksPerformed
+        withKnownIssue("and refuses again rather than being answered from a memo") {
+            _ = AppSourceWalk.urls(under: empty, floor: 10)
+        }
+        #expect(afterFirst == before + 1)
+        #expect(AppSourceWalk.walksPerformed == afterFirst + 1,
+                "an empty url walk must be re-walked, never remembered")
+    }
+
+    @Test func asecondUrlWalkOfTheSameRootReadsNothingFromDisk() throws {
+        let root = try makeSources(count: 4)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let before = AppSourceWalk.walksPerformed
+        let first = AppSourceWalk.urls(under: root, floor: 1)
+        let afterFirst = AppSourceWalk.walksPerformed
+        let second = AppSourceWalk.urls(under: root, floor: 1)
+
+        #expect(afterFirst == before + 1)
+        #expect(AppSourceWalk.walksPerformed == afterFirst, "the second call must be answered from the memo")
+        #expect(first == second)
+    }
+
+    // A result that is SHORT but not empty is kept, because re-walking it saves nothing, but the
+    // refusal has to reach every caller rather than only the one that happened to walk first: two
+    // guards standing on the same broken path must both go red.
+    @Test func aShortWalkIsRefusedOnEveryCallEvenWhenItIsKept() throws {
+        let root = try makeSources(count: 3)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        withKnownIssue("a short walk refuses") { _ = AppSourceWalk.files(under: root, floor: 100) }
+        let afterFirst = AppSourceWalk.walksPerformed
+        withKnownIssue("and refuses for the SECOND caller too, off the memo") {
+            _ = AppSourceWalk.files(under: root, floor: 100)
+        }
+        #expect(AppSourceWalk.walksPerformed == afterFirst, "it was kept")
+    }
+
+    // The extensions are part of what was asked for, not a detail: a guard over test data asks for
+    // json and md as well, and handing it the swift-only answer would silently narrow what it checks.
+    @Test func adifferentSetOfExtensionsIsADifferentQuestion() throws {
+        let root = try makeSources(count: 3)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try "{}\n".write(to: root.appendingPathComponent("fixture.json"), atomically: true, encoding: .utf8)
+
+        let swiftOnly = AppSourceWalk.files(under: root, floor: 1)
+        let withJSON = AppSourceWalk.files(under: root, floor: 1, extensions: ["swift", "json"])
+
+        #expect(swiftOnly.count == 3)
+        #expect(withJSON.count == 4, "the json file must not be lost to the swift-only memo")
+    }
+}
+
+// #3235: the same three whole-tree documents were being built over and over from an unchanged tree.
+// Written order-independently, by comparing the count either side of a SECOND call rather than
+// asserting it is one: another suite may legitimately have built it first, and a test that only passes
+// when it runs first is a test about the run order.
+@Suite("The generated copy documents are built once per process (#3235)")
+struct CopyDocumentMemoTests {
+
+    @Test func theInventoryIsBuiltOncePerProcess() throws {
+        _ = try CopyInventory.build()
+        let afterFirst = CopyInventory.buildsPerformed
+        _ = try CopyInventory.build()
+        #expect(CopyInventory.buildsPerformed == afterFirst, "the second call must be answered from the memo")
+    }
+
+    @Test func thesurfacesReportIsBuiltOncePerProcess() throws {
+        _ = try CopySurfaces.build()
+        let afterFirst = CopySurfaces.buildsPerformed
+        _ = try CopySurfaces.build()
+        #expect(CopySurfaces.buildsPerformed == afterFirst)
+    }
+
+    @Test func theOutboundDocumentIsBuiltOncePerProcess() throws {
+        _ = try OutboundCopy.build()
+        let afterFirst = OutboundCopy.buildsPerformed
+        _ = try OutboundCopy.build()
+        #expect(OutboundCopy.buildsPerformed == afterFirst)
+    }
+
+    // The memo must not reach the tests OF the builder. Those inject a two-file tree on purpose, and
+    // handing them a remembered answer about the real app would make every one of them assert nothing.
+    @Test func aninjectedRootKeepsBuilding() throws {
+        let tree = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("copy-memo-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tree, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tree) }
+        try "enum A { static let line = \"Hello there.\" }\n"
+            .write(to: tree.appendingPathComponent("A.swift"), atomically: true, encoding: .utf8)
+
+        let before = CopyInventory.buildsPerformed
+        _ = try CopyInventory.build(root: tree, floor: 1)
+        _ = try CopyInventory.build(root: tree, floor: 1)
+        #expect(CopyInventory.buildsPerformed == before,
+                "an injected root must not touch the default memo's accounting at all")
+    }
+
+    // The one result that must never be kept. A scan that read nothing is indistinguishable downstream
+    // from a tree with no copy in it, so remembering it would let one broken path pass every copy guard
+    // in the suite at once.
+    @Test func ascanThatReadNothingIsNeverKept() {
+        let memo = BuildMemo<Int>()
+        var builds = 0
+        let first = memo.value(keepIf: { $0 > 0 }) { builds += 1; return 0 }
+        let second = memo.value(keepIf: { $0 > 0 }) { builds += 1; return 0 }
+        #expect(first == 0 && second == 0)
+        #expect(builds == 2, "an empty scan must be built again, never remembered")
+
+        var laterBuilds = 0
+        let kept = BuildMemo<Int>()
+        _ = kept.value(keepIf: { $0 > 0 }) { laterBuilds += 1; return 5 }
+        _ = kept.value(keepIf: { $0 > 0 }) { laterBuilds += 1; return 5 }
+        #expect(laterBuilds == 1, "and a real one IS remembered, or the memo saves nothing")
+    }
+}
