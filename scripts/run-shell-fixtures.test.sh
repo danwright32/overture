@@ -630,6 +630,108 @@ EMPTY_OUT="$(REPO_ROOT="${TMP_DIR}/empty-root" main 2>&1)" || EMPTY_RC=$?
 assert_equals "a sweep that found no fixture at all refuses" "2" "${EMPTY_RC}"
 assert_contains "and says it measured nothing rather than that all is well" "${EMPTY_OUT}" "UNMEASURED"
 
+# Waits for a pattern to stop matching any process, with a deadline, rather than sleeping a fixed time
+# and hoping. A fixed sleep asserts about the machine's load rather than about the code (L290), and these
+# cases run beside seven other fixtures on a busy Mac.
+wait_for_no_process_matching() {
+  local pattern="$1" attempt=0
+  while [[ "${attempt}" -lt 100 ]]; do
+    pgrep -f "${pattern}" >/dev/null 2>&1 || { echo 0; return 0; }
+    sleep 0.1
+    attempt=$(( attempt + 1 ))
+  done
+  pgrep -f "${pattern}" 2>/dev/null | wc -l | tr -d ' '
+}
+
+# --- a fixture that leaves a PROCESS running fails, not only one that leaves a file (#3254) -----------
+#
+# The runner has checked for leaked FILES since #2850 and never looked at what is still RUNNING. A
+# leaked process is the worse of the two: it holds the run's stdout open, so anything capturing that
+# output waits for it (L235), it can hold the shared xcodebuild lock, and macOS reaps nothing until the
+# next boot. #3248 found one fixture that had been leaking two `sleep 300` per run for as long as it had
+# existed, and three helpers that orphaned a child per stop, none of it visible to the runner that gates
+# every push.
+#
+# Attribution is the hard half, not detection: eight fixtures run at once, so "whose leak is this" needs
+# an answer before a report is worth anything. Each fixture already runs as a background job under
+# `set -m`, which gives it a process GROUP of its own, and the group is the answer.
+
+LEAKY="${TMP_DIR}/leaky.test.sh"
+printf '#!/usr/bin/env bash\nsleep 300 &\necho "ok - started something and walked away"\nexit 0\n' > "${LEAKY}"
+chmod +x "${LEAKY}"
+LEAK_OUTPUT="$(run_shell_fixtures "${LEAKY}" 2>&1)"
+LEAK_STATUS=$?
+assert_equals "a fixture that leaves a process running fails" "1" "${LEAK_STATUS}"
+case "${LEAK_OUTPUT}" in
+  *"leaky.test.sh"*) echo "ok - and the report names the fixture" ;;
+  *) echo "FAIL - the leak report did not name the fixture"; echo "${LEAK_OUTPUT}"; FAILURES=$((FAILURES + 1)) ;;
+esac
+case "${LEAK_OUTPUT}" in
+  *"sleep 300"*) echo "ok - and names what was left running" ;;
+  *) echo "FAIL - the leak report did not name the process"; echo "${LEAK_OUTPUT}"; FAILURES=$((FAILURES + 1)) ;;
+esac
+
+# And it must not leave the leak running, which is the whole harm. Reporting a stray process and then
+# walking past it is how the machine collected them in the first place; the runner made the process
+# group precisely so it can end one. Asserted rather than assumed, because a report that claims a
+# cleanup it did not do is worse than no cleanup (L12).
+assert_equals "and the leak is not still running after the report" "0" \
+  "$(wait_for_no_process_matching 'sleep 300')"
+
+# The mirror, so the rule cannot be satisfied by condemning everything: an ordinary fixture that starts
+# something and waits for it is fine. Without this the check could pass by failing every fixture.
+TIDY="${TMP_DIR}/tidy.test.sh"
+printf '#!/usr/bin/env bash\nsleep 0.2 &\nwait\necho "ok - waited for its own child"\nexit 0\n' > "${TIDY}"
+chmod +x "${TIDY}"
+run_shell_fixtures "${TIDY}" >/dev/null 2>&1
+assert_equals "a fixture that waits for its own child passes" "0" "$?"
+
+# A fixture may DECLARE a leak it cannot fix, naming the issue that will. The precedent and the reason
+# are `shell-fixture-expects-missing-command:` one field over: a rule whose only answers are pass and
+# fail gets switched off the first time somebody meets a case it cannot express.
+# `mac/scripts/prep-run-chunking.test.sh` is the real one: it runs prep-run.sh end to end, and the stray
+# is created by the production code under test (#3292), not by the fixture.
+DECLARED="${TMP_DIR}/declared.test.sh"
+printf '#!/usr/bin/env bash\necho "shell-fixture-leaks-process: sleep 300 (#3292)"\nsleep 300 &\necho "ok - declared it"\nexit 0\n' > "${DECLARED}"
+chmod +x "${DECLARED}"
+run_shell_fixtures "${DECLARED}" >/dev/null 2>&1
+assert_equals "a DECLARED leak does not fail the fixture" "0" "$?"
+assert_equals "and the declared leak is ended anyway, because declaring is not keeping" "0" \
+  "$(wait_for_no_process_matching 'sleep 300')"
+
+# The declaration is per COMMAND, never a blanket exemption, so a fixture that declares one stray and
+# leaves a different one is still caught. Without this the mechanism is an off switch.
+PARTLY="${TMP_DIR}/partly.test.sh"
+printf '#!/usr/bin/env bash\necho "shell-fixture-leaks-process: sleep 300 (#3292)"\nsleep 300 &\nsleep 301 &\necho "ok - declared one of two"\nexit 0\n' > "${PARTLY}"
+chmod +x "${PARTLY}"
+PARTLY_OUT="$(run_shell_fixtures "${PARTLY}" 2>&1)"
+PARTLY_STATUS=$?
+assert_equals "an UNdeclared stray in a declaring fixture is still caught" "1" "${PARTLY_STATUS}"
+case "${PARTLY_OUT}" in
+  *"sleep 301"*) echo "ok - and the report names the undeclared one" ;;
+  *) echo "FAIL - the report did not name the undeclared stray"; FAILURES=$((FAILURES + 1)) ;;
+esac
+case "${PARTLY_OUT}" in
+  *"    sleep 300"*) echo "FAIL - the report named the declared one too"; FAILURES=$((FAILURES + 1)) ;;
+  *) echo "ok - and does not name the declared one" ;;
+esac
+assert_equals "and both are ended" "0" "$(wait_for_no_process_matching 'sleep 30[01]')"
+
+# A declaration with no issue number is not a declaration. It is a debt with an owner or it is nothing,
+# because an exemption nobody has to come back to is permanent (L523, L65).
+UNOWNED="${TMP_DIR}/unowned.test.sh"
+printf '#!/usr/bin/env bash\necho "shell-fixture-leaks-process: sleep 300"\nsleep 300 &\necho "ok - declared without an owner"\nexit 0\n' > "${UNOWNED}"
+chmod +x "${UNOWNED}"
+run_shell_fixtures "${UNOWNED}" >/dev/null 2>&1
+assert_equals "a declaration carrying no issue number does not exempt anything" "1" "$?"
+assert_equals "and that leak is ended too" "0" "$(wait_for_no_process_matching 'sleep 300')"
+
+# Zero subjects examined is UNMEASURED, never clean (L98). A process group that could not be read and a
+# process group with nothing left in it leave the same empty answer, and only one of them is a pass.
+SURVIVORS_NONE="$(fixture_surviving_processes "")"
+assert_equals "a process group that could not be read reports itself as unmeasured" \
+  "UNMEASURED" "${SURVIVORS_NONE}"
+
 echo
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All run-shell-fixtures.sh fixtures passed."

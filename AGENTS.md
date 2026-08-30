@@ -613,6 +613,34 @@ already drifting from the Swift version it mirrored.
     `vitest.config.ts` now names an include anchored inside `src/`, which a nested checkout cannot be
     reached by whatever it is called, and `src/lib/testDiscoveryScope.test.ts` guards both that anchor
     and the other half, that no test file of this repo's own is left outside where the include looks.
+  - **A fixture that leaves a PROCESS running: GATED since #3254.** The runner had checked for leaked
+    FILES since #2850 and never looked at what was still running, and a leaked process is the worse of
+    the two: it holds the run's stdout open so anything capturing that output waits for it (L235), it
+    can hold the shared xcodebuild lock, and macOS reaps nothing until the next boot. #3248 found one
+    fixture that had been leaking two `sleep 300` per run for as long as it had existed and three
+    helpers that orphaned a child per stop, none of it visible to the runner that gates every push.
+    ATTRIBUTION is the hard half, not detection: eight fixtures run at once, so a stray in the process
+    table belongs to nobody in particular. Each fixture now runs as a background job under `set -m`, so
+    it and everything it starts get a process GROUP of their own, and the group answers the question.
+    `scripts/lib/fixture-process-leak.sh` holds one implementation, sourced by the runner AND by the
+    per-fixture wrapper it writes, so the two cannot drift (L263). Strays are ENDED as well as named,
+    because reporting one and walking past it is how they accumulate; the guard that matters there is
+    that `fixture_end_process_group` reads its OWN group independently and refuses to end it, since a
+    `set -m` that did not take would otherwise have the runner kill itself (L70).
+    On its first sweep it found FOUR fixtures leaking, which is the check working rather than the
+    conversion having been careless: `run-heartbeat.test.sh` (four `sleep 5`), `sleep-guard.test.sh`
+    (one `sleep 1`), `stuck-tool-call.test.sh` (one `sleep 1` per watchdog case) and
+    `prep-run-chunking.test.sh` (two `sleep 15`). The first three create their stray deliberately, to
+    demonstrate that a bare `kill` on a subshell leaves the `sleep` inside it, and are right to create
+    one and wrong to walk away from it: they now use `fixture_run_in_own_group`.
+    The fourth is DECLARED rather than fixed, with `shell-fixture-leaks-process: sleep (#3292)`, because
+    its stray is created by the production code it runs end to end (`heartbeat_stop` ends the heartbeat
+    subshell and not the `sleep` inside it, which is #3248's class unconverted in `run-heartbeat.sh`).
+    The declaration is the same shape as `shell-fixture-expects-missing-command:` and for the same
+    reason: a rule whose only answers are pass and fail gets switched off the first time somebody meets
+    a case it cannot express. It names the COMMAND, so an undeclared stray in a declaring fixture is
+    still caught, and it MUST carry an issue number, so it is a debt with an owner rather than a
+    permanent exemption (L523, L65). A declared leak is still ended.
   - `scripts/run-shell-fixtures.sh`: GATED since #2541. A fixture that exits 0 having printed no passing
     assertion fails, because that is what a fixture looks like when its body did not run (an early
     return, a loop over an empty list, a guard that skipped every case). All 61 fixtures print at least
