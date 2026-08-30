@@ -3,10 +3,13 @@
 # Three DISTINCT parallel names here (one of them parameterised, printed three times), plus the run's
 # own elapsed line and the serial testable's summary. Expected reading: 3 + 300 tests, 3 + 49 suites,
 # and the duration from the elapsed line, never the sum.
+# The leading pass mark xcodebuild prints on the summary line is REMOVED, not stored: the style gate
+# forbids that literal character in a tracked file and the parser matches on 'Test run with' and
+# never on the mark. Same reason suite-stats.test.sh builds its own PASS_MARK from bytes.
 Test case 'IndividualBilledAsProducingTests/proseIsNotACredit(_:)' passed on 'My Mac - xctest (3462)' (0.000 seconds)
 Test case 'IndividualBilledAsProducingTests/proseIsNotACredit(_:)' passed on 'My Mac - xctest (3462)' (0.000 seconds)
 Test case 'IndividualBilledAsProducingTests/proseIsNotACredit(_:)' passed on 'My Mac - xctest (3462)' (0.000 seconds)
 Test case 'WatchGapTests/theWindowIsThreeMissedChecksOfWhateverTheCadenceIs()' passed on 'My Mac - xctest (3462)' (36.939 seconds)
 Test case 'WrapHStackPackingTests/aChildWiderThanTheWholeRowIsHeldInsideIt()' passed on 'My Mac - xctest (3462)' (36.857 seconds)
 Test case '2026-08-30 10:16:24.085 xcodebuild[2567:260385261] [MT] IDETestOperationsObserverDebug: 162.335 elapsed -- Testing started completed.
-✔ Test run with 300 tests in 49 suites passed after 5.207 seconds.
+Test run with 300 tests in 49 suites passed after 5.207 seconds.
