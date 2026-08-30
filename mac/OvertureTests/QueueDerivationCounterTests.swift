@@ -14,7 +14,7 @@ import Foundation
 //
 // DEBUG only. In Release this is a counter nobody reads, ticking shared mutable state on the main thread
 // for no reason, so its absence there is part of the rule rather than an accident of where it was written.
-@Suite("The queue counts its own whole-store derivations (#1774)")
+@Suite("The queue counts its own whole-store derivations (#1774)", .sharesTheRenderCounter)
 struct QueueDerivationCounterTests {
     private var queueView: String { SourceGuardHelper.source("Overture/UI/QueueView.swift") }
     // #1913: the derivation moved here, so the guards on its shape moved with it.

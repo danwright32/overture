@@ -95,10 +95,21 @@ enum AppSourceWalk {
         private var urlsByKey: [String: [URL]] = [:]
         private var filesByKey: [String: [File]] = [:]
         private var walks = 0
+        private var walksByRoot: [String: Int] = [:]
 
         var walksPerformed: Int {
             lock.lock(); defer { lock.unlock() }
             return walks
+        }
+
+        // Per ROOT, because the total is shared with every other test in the process and a test that
+        // reads it either side of its own call is really measuring what else happened to be walking at
+        // that moment. That is not hypothetical: asserting on the total passed serially and failed the
+        // first time the suite was run in parallel (#3234). Each caller owns its own root, so a count
+        // keyed by root is a measurement of that caller alone.
+        func walks(forRootAt path: String) -> Int {
+            lock.lock(); defer { lock.unlock() }
+            return walksByRoot[path] ?? 0
         }
 
         private func key(_ root: URL, _ extensions: Set<String>) -> String {
@@ -110,6 +121,7 @@ enum AppSourceWalk {
             lock.lock()
             if let hit = urlsByKey[k] { lock.unlock(); return hit }
             walks += 1
+            walksByRoot[root.standardizedFileURL.path, default: 0] += 1
             lock.unlock()
             let found = build()
             guard !found.isEmpty else { return found }
@@ -122,6 +134,7 @@ enum AppSourceWalk {
             lock.lock()
             if let hit = filesByKey[k] { lock.unlock(); return hit }
             walks += 1
+            walksByRoot[root.standardizedFileURL.path, default: 0] += 1
             lock.unlock()
             let found = build()
             guard !found.isEmpty else { return found }
@@ -136,6 +149,10 @@ enum AppSourceWalk {
     // than assumed: a memo that silently stopped working would be invisible otherwise, because the
     // fallback is correct and merely slower (L289).
     static var walksPerformed: Int { memo.walksPerformed }
+
+    // The count for ONE root, which is what a test can assert about without measuring the rest of the
+    // suite at the same time.
+    static func walksPerformed(forRootAt root: URL) -> Int { memo.walks(forRootAt: root.standardizedFileURL.path) }
 
     private static func walk(_ root: URL, extensions: Set<String> = ["swift"]) -> [URL] {
         guard let walker = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil)

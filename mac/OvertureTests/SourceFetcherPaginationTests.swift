@@ -9,7 +9,7 @@ import Testing
 // because that set is what re-keys prospects and drives "was this show cancelled?". Four pages the app
 // fetched and hashed together preserve that property exactly. Four pages an AI wandered off to find
 // would destroy it.
-@Suite("Reading four months of a calendar, not just the one you land on (#858)")
+@Suite("Reading four months of a calendar, not just the one you land on (#858)", .sharesTheNetworkStub)
 struct SourceFetcherPaginationTests {
 
     private let base = "https://www.kaufmanmusiccenter.org/mch/calendar/"

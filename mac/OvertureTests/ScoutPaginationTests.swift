@@ -11,7 +11,7 @@ import SwiftData
 // read downgrades to incompleteExtraction and can mark nothing gone) is proven end to end and separately in
 // StitchedSweepIngestWiringTests; it is not re-proven here. This test's job is only "is it on".
 @MainActor
-@Suite("The scout pages forward on monthly calendars (#1210)")
+@Suite("The scout pages forward on monthly calendars (#1210)", .sharesTheNetworkStub)
 struct ScoutPaginationTests {
     private let base = "https://www.kaufmanmusiccenter.org/mch/calendar/"
 

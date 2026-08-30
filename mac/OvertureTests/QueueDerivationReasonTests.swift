@@ -12,7 +12,7 @@ import SwiftData
 //
 // The rule it reports by is pure and tested here, because a diagnostic used to judge everything else is
 // the last thing that should be taken on trust.
-@Suite("Each derivation says which of its inputs moved (#1930)")
+@Suite("Each derivation says which of its inputs moved (#1930)", .sharesTheRenderCounter)
 struct QueueDerivationReasonTests {
     @Test func theFirstRenderHasNothingToCompareAgainst() {
         #expect(QueueRenderCounter.reason(for: ["prospects": "724"], since: [:])
@@ -121,7 +121,7 @@ struct QueueDerivationReasonTests {
 // pins it: the @Query array cannot see an in-place edit (QueryResultEqualityTests measured that), and the
 // rows derived from it can.
 @MainActor
-@Suite("A derivation reports a row edit that moved no count (#1931)")
+@Suite("A derivation reports a row edit that moved no count (#1931)", .sharesTheRenderCounter)
 struct DerivationRowChangeTests {
     private func container() throws -> ModelContainer {
         try ModelContainer(for: Schema([Prospect.self, Recipient.self]),
@@ -221,7 +221,7 @@ struct DerivationRowChangeTests {
 //
 // Both surfaces write to one log so the two streams interleave in the order they happened, which is what
 // makes a queue derivation attributable to the render above it that triggered it.
-@Suite("The screen above the queue keeps its own trace (#1930)")
+@Suite("The screen above the queue keeps its own trace (#1930)", .sharesTheRenderCounter)
 struct RenderTraceSurfaceTests {
     // The failure this shape exists to avoid: one shared "previous inputs" would make every queue
     // derivation report the ROOT's inputs as having moved, and the diagnostic would name the wrong
@@ -283,7 +283,7 @@ struct RenderTraceSurfaceTests {
 // The wiring half. The rule above can be perfect and report nothing at all if the screen above the queue
 // never records a render, and no running test can evaluate RootView's body (its @Query properties need a
 // live container), so this guards the shape the way QueueInvalidationGuardTests does.
-@Suite("The screen above the queue is actually wired to the trace (#1930)")
+@Suite("The screen above the queue is actually wired to the trace (#1930)", .sharesTheRenderCounter)
 struct RootRenderTraceWiringTests {
     private var rootView: String { SourceGuardHelper.source("Overture/App/RootView.swift") }
 

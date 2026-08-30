@@ -90,7 +90,14 @@ struct SendDeadlockGuardTests {
     }
 
     @Test func sendOneOnTheMainActorCompletesWithoutBlocking() async {
-        let outcome = await completes(within: 5) { await SendDeadlockGuardTests.sendOne(with: MainHopSender()) }
+        // The budget is deliberately far larger than the work. What this guard asks is whether the send
+        // COMPLETES AT ALL or is deadlocked on the main actor, and a deadlock never completes however
+        // long it is given, so a generous window costs nothing and removes the one thing that was
+        // wrong with the old five seconds: under a parallel run the main actor is contended by every
+        // other test, so the budget was measuring the machine's load rather than the send path (L224).
+        // It went red exactly that way on the first parallel run, 2026-08-30 (#3234). A run where this
+        // is genuinely broken pays the sixty seconds once and says so.
+        let outcome = await completes(within: 60) { await SendDeadlockGuardTests.sendOne(with: MainHopSender()) }
         #expect(outcome == true,
                 "SendService.sendOne did not complete within the watchdog window — the Send path may be blocking the main thread again.")
     }

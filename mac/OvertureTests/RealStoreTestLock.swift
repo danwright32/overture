@@ -3,7 +3,18 @@ import Foundation
 // #1006: `main`'s swift-tests job crashed twice (not an assertion failure) with a SwiftData
 // "PersistentIdentifier ... was remapped to a temporary identifier during save: This is a fatal
 // logic error in DefaultStore" signature, always around a real, disk-backed ModelContainer save.
-// Swift Testing runs suites concurrently by default, and this crash shape is CoreData's own
+// Swift Testing runs suites concurrently by default. That sentence is TRUE of `swift test` and was
+// never true of this suite: both testables in the scheme carry `parallelizable = "NO"`, which is what
+// xcodegen writes when `mac/project.yml` says nothing, and it has said nothing since 5732781a. So what
+// actually stopped the #1006 crash was the serial scheme, and this lock has been belt to that braces
+// for as long as it has existed (measured 2026-08-30, #3234).
+//
+// It is not therefore decoration. It is what will keep these suites safe the moment parallel testing is
+// turned on, which is #3266's business rather than this file's, and it is the only thing standing
+// between them and the race below at that point. Do not remove it on the grounds that the suite is
+// serial today.
+//
+// This crash shape is CoreData's own
 // store-coordinator bookkeeping racing across containers built at the same moment, even when each
 // points at its own unique on-disk file. `.serialized` only orders tests WITHIN one suite, so it
 // can't fix a race ACROSS suites (WatchlistSeedTests, ImmutableStoreFixture's callers,

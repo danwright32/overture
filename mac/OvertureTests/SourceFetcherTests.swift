@@ -77,7 +77,7 @@ private func stubSession() -> URLSession {
 //     nothing" is not an acceptable rendering of "the page 404s".
 //   - The page is NORMALIZED and hashed here, so a page that has not changed never reaches an AI at
 //     all. That is the cost model, not an optimization.
-@Suite("Source fetch and page pin (#799)", .serialized)
+@Suite("Source fetch and page pin (#799)", .serialized, .sharesTheNetworkStub)
 struct SourceFetcherTests {
     private let url = URL(string: "https://org.example/events")!
 
@@ -799,7 +799,7 @@ struct SourceFetcherTests {
 // "cannot regress anything" argument on two facts, both pinned here: a working (https) source is handed
 // back untouched, and a non-http scheme is left alone, so the only URL this ever rewrites is a cleartext
 // one that (with no ATS exception) could not have succeeded anyway. #982: previously untested.
-@Suite("Scheme upgrade (#972)")
+@Suite("Scheme upgrade (#972)", .sharesTheNetworkStub)
 struct SecuredSchemeTests {
     @Test func cleartextHttpIsUpgradedToHttps() {
         #expect(SourceFetcher.secured(URL(string: "http://rainercrosett.com/events")!)
@@ -833,7 +833,7 @@ struct SecuredSchemeTests {
 // The pinned page is the exact file the agent reads. It must live FLAT in the handoff directory (the
 // #321 guard) and its name must be derived safely: a source id is data, and data must never be able to
 // reach outside the folder it is written into.
-@Suite("Scout page pin (#799)")
+@Suite("Scout page pin (#799)", .sharesTheNetworkStub)
 struct ScoutPagePinTests {
     @Test func theFileIsFlatInTheHandoffDirectory() {
         let url = ScoutPagePin.url(forSourceId: "bargemusic")
