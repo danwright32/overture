@@ -24,6 +24,67 @@
 # of them exits: a fixture runs all its checks and reports the total at the end, so one failure never
 # hides the ones behind it.
 
+# --- the scratch a fixture works in (#3249) ------------------------------------------------------
+#
+# `mktemp` on macOS IGNORES `TMPDIR` unless the path is spelled out. Measured 2026-08-30 with
+# /usr/bin/mktemp:
+#
+#   TMPDIR=$H mktemp -d                     ->  /var/folders/.../T/tmp.J0OeBuDNBF    (NOT in $H)
+#   TMPDIR=$H mktemp -d -t probe            ->  /var/folders/.../T/probe.U7wI8OQOAx  (NOT in $H)
+#   TMPDIR=$H mktemp -d "$TMPDIR/tpl.XXXXX" ->  $H/tpl.uHBabi                        (in $H)
+#
+# Two things follow, and the second is the one nobody knew.
+#
+# Scoping `TMPDIR` contains nothing by itself, so #3249's own proposed remedy would have looked right
+# and done nothing. And `scripts/run-shell-fixtures.sh` scopes `TMPDIR` per fixture and then inspects
+# that directory for leaks, which means every fixture using the bare form writes somewhere the check
+# cannot see. 56 of this repo's 81 fixtures did exactly that, across 75 call sites, so the guard was
+# blind to three quarters of its subjects on EVERY path, not only on a direct run. It is not wrong
+# about what it does catch: its own fixture drives a stub that leaks with an explicit template, which
+# is a fixture shaped so the rule fires (L48), and that is why this stayed invisible.
+#
+# `fixture_scratch_dir` and `fixture_scratch_file` spell the path out, so what they make is inside
+# whatever directory is in force: the runner's, where its leak check can see it, or the per-run one
+# below when a person runs a fixture by hand.
+fixture_scratch_dir() {
+  mktemp -d "${TMPDIR:-/tmp}/scratch.XXXXXX"
+}
+
+fixture_scratch_file() {
+  mktemp "${TMPDIR:-/tmp}/scratch.XXXXXX"
+}
+
+# Scoping and sweeping happen HERE, on source, which is the one thing every fixture does.
+#
+# On SOURCE rather than on an EXIT trap, and that is load bearing rather than a shortcut. A shell keeps
+# exactly one EXIT trap and 59 of the 81 fixtures install their own AFTER sourcing this file, so the
+# second one silently wins: a cleanup hung on a trap here would be replaced in three quarters of the
+# cases and would read as working the whole time. This is the same defect the runner's own leak message
+# already warns about, one level up. Sweeping instead means the mess never accumulates, because the next
+# run clears what the last one left.
+#
+# The runner keeps its own scoping untouched, announced by OVERTURE_FIXTURE_TMPDIR_SCOPED. Nesting one
+# inside it would put every fixture's real leak one level below where `fixture_left_temp_files` looks,
+# so a check that works today would start reporting one tidy directory and seeing nothing inside it.
+#
+# A scratch root is kept unless the run that made it is GONE, judged by the pid in its name rather than
+# by age: a fixture running right now beside this one owns its root and must keep it, and a sweep that
+# removes everything is not a sweep, it is a different way of losing work.
+if [[ -z "${OVERTURE_FIXTURE_TMPDIR_SCOPED:-}" ]]; then
+  for _fixture_stale in "${TMPDIR:-/tmp}"/overture-fixture-*-*; do
+    [[ -d "${_fixture_stale}" ]] || continue
+    _fixture_stale_pid="${_fixture_stale##*/overture-fixture-}"
+    _fixture_stale_pid="${_fixture_stale_pid%%-*}"
+    [[ "${_fixture_stale_pid}" =~ ^[0-9]+$ ]] || continue
+    kill -0 "${_fixture_stale_pid}" 2>/dev/null && continue
+    rm -rf "${_fixture_stale}"
+  done
+  unset _fixture_stale _fixture_stale_pid
+  TMPDIR="$(mktemp -d "${TMPDIR:-/tmp}/overture-fixture-$$-XXXXXX")"
+  export TMPDIR
+  export OVERTURE_FIXTURE_TMPDIR_SCOPED=1
+fi
+
 # Bumps the shared counter without tripping `set -u` in a fixture that never initialised it.
 shell_assertion_record_failure() {
   FAILURES=$(( ${FAILURES:-0} + 1 ))

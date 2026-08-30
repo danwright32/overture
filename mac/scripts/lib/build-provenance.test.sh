@@ -24,7 +24,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${HERE}/build-provenance.sh"
 
 FAILURES=0
-WORK="$(mktemp -d)"
+WORK="$(fixture_scratch_dir)"
 trap 'rm -rf "${WORK}"' EXIT
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
 

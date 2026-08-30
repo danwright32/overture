@@ -25,7 +25,13 @@ FAILURES=0
 # Where the trial-merge stub records what it was asked, since the caller reads its output through a
 # command substitution and a variable set inside that subshell never reaches an assertion.
 TRIAL_MERGE_LOG="$(mktemp "${TMPDIR:-/tmp}/verify-merge-trial.XXXXXX")"
-trap 'rm -f "${TRIAL_MERGE_LOG}"' EXIT
+# The scratch is held in a name of its OWN rather than in REPO_ROOT, which this fixture reassigns
+# further down: a trap naming a variable removes whatever that variable holds when it FIRES, not what
+# it held when the trap was written, so pointing it at REPO_ROOT lost the directory the moment line 404
+# reassigned it. And it is one trap rather than two, because bash keeps exactly ONE EXIT trap and a
+# second would silently replace this one and leave the log behind instead (#3249).
+SCRATCH_REPO_ROOT=""
+trap 'rm -f "${TRIAL_MERGE_LOG}"; rm -rf "${SCRATCH_REPO_ROOT:-}"' EXIT
 
 # The completeness enumeration AGENTS.md demands and the merge now refuses to skip. Stubbed here for
 # every existing case, so those cases keep testing what they were written to test (the merge decision)
@@ -316,7 +322,8 @@ delete_merged_local_branch() { LOCAL_BRANCH_DELETED="$1"; }
 # merge_pr's two trailing side-effect scripts are neutralised by pointing REPO_ROOT at an empty
 # directory, so they are simply absent; both are already `|| true` in the source, so their absence
 # changes nothing else.
-REPO_ROOT="$(mktemp -d)"
+SCRATCH_REPO_ROOT="$(fixture_scratch_dir)"
+REPO_ROOT="${SCRATCH_REPO_ROOT}"
 
 verify_and_merge "45" >/dev/null 2>&1
 assert_equals "the merged branch's local ref is handed to the cleanup" "feature-tidy" "${LOCAL_BRANCH_DELETED}"

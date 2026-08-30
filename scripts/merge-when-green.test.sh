@@ -109,7 +109,7 @@ assert_equals "a base still running is unknown, not red" \
 run_main_with_stubs() {
   local base_conclusion="$1" override="${2:-}"
   local tmp
-  tmp="$(mktemp -d)"
+  tmp="$(fixture_scratch_dir)"
 
   # A check-pr-ci.sh that reports a genuine pass, so the ONLY thing that can stop the merge is
   # the base-branch gate under test.
@@ -195,7 +195,7 @@ echo
 run_main_with_pbxproj() {
   local fresh_result="$1"   # "fresh" or "stale"
   local tmp
-  tmp="$(mktemp -d)"
+  tmp="$(fixture_scratch_dir)"
   cat > "${tmp}/check-pr-ci.sh" <<'STUB'
 #!/usr/bin/env bash
 echo "PR #1 on danwright32/overture, commit abc1234"
@@ -251,7 +251,7 @@ assert_equals "a real failing test is still classified as failed" \
 # exits 0: a test that says it failed and reports success. Found by breaking the guard and watching
 # exactly that happen.
 completeness_refusal_check() (
-  tmp="$(mktemp -d)"
+  tmp="$(fixture_scratch_dir)"
   trap 'rm -rf "${tmp}"' EXIT
   SCRIPT_DIR="${tmp}"
   gh_as_danwright32() {

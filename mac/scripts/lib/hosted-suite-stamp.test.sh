@@ -25,7 +25,7 @@ source "${SCRIPT_DIR}/hosted-suite-stamp.sh"
 PASS_MARK="$(printf '\xe2\x9c\x94')"
 STARTED_MARK="$(printf '\xe2\x97\x87')"
 
-WORK="$(mktemp -d)"
+WORK="$(fixture_scratch_dir)"
 trap 'rm -rf "${WORK}"' EXIT
 FAILURES=0
 

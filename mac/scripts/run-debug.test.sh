@@ -132,7 +132,7 @@ assert_fails "refuses an unexpected identity" \
 # pointing at deleted DerivedData folders and retired worktrees. The bundle is single-instance, so
 # launching it asks LaunchServices to route to an existing instance against that pile of phantoms.
 # This script is the one that rebuilds the Debug bundle, so it is where the count is kept at one.
-LSTMP="$(mktemp -d)"
+LSTMP="$(fixture_scratch_dir)"
 trap 'rm -rf "${LSTMP}"' EXIT
 LSLOG="${LSTMP}/asked"
 cat >"${LSTMP}/lsregister" <<EOF

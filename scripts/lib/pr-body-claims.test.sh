@@ -151,7 +151,7 @@ assert_contains "and announces itself rather than passing silently" "${OVERRIDDE
 # Driven through PR_BODY_CLAIMS_GH rather than the network. It matters that the pool covers the UNLINKED
 # numbers too: on the incident the decision lived on #2967 and #2968, and #2968 was one GitHub was never
 # going to close.
-STUB_DIR="$(mktemp -d)"
+STUB_DIR="$(fixture_scratch_dir)"
 cat > "${STUB_DIR}/gh" <<'STUB'
 #!/usr/bin/env bash
 # args: issue view <n> --json ... --jq ...

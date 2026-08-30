@@ -114,8 +114,15 @@ done
 # node. record_model runs at the very end of a detached run, so anything it does wrong lands on Dan as a
 # corrupted results file or a run that dies after doing all its real work.
 
-TMP="$(mktemp -d)"
-trap 'rm -rf "${TMP}"' EXIT
+# One trap naming every scratch this fixture makes (#3249). It used to be one trap per directory, and
+# bash keeps exactly ONE EXIT trap, so the later one silently replaced this one and the first directory
+# was left behind on every run. Invisible until #3249 gave the runner's leak check sight of scratches
+# made this way. WEBTMP and FIXTMP are declared here, empty, so this trap can name them under `set -u`
+# before the lines that fill them are reached.
+TMP="$(fixture_scratch_dir)"
+WEBTMP=""
+FIXTMP=""
+trap 'rm -rf "${TMP}" "${WEBTMP:-}" "${FIXTMP:-}"' EXIT
 
 # The happy path: the model is stamped in, and nothing else is disturbed.
 printf '%s' '{"version":2,"generatedAt":"2026-07-12T00:00:00Z","results":[{"naturalKey":"show"}]}' \
@@ -407,8 +414,7 @@ assert_contains "a non-JSON line still reaches the log instead of vanishing" \
 # in Dan's real 2026-07-28 run, chunk 3 reached the web with mcp__playwright__browser_navigate, and the
 # prep scope deliberately allows Bash, so curl is a route too. A counter blind to those reports a small
 # number for a run that made many calls, which is the same false comfort as no counter at all.
-WEBTMP="$(mktemp -d)"
-trap 'rm -rf "${WEBTMP}"' EXIT
+WEBTMP="$(fixture_scratch_dir)"
 
 # One stream carrying every route, in the real stream-json shape: tool_use blocks inside an assistant
 # message's content array.
@@ -614,7 +620,7 @@ fi
 # it is the key set the honest/partial split lives in: a `usd` appearing on the incomplete path, or a
 # `partialTotal` disappearing from it, changes it here and fails.
 
-FIXTMP="$(mktemp -d)"
+FIXTMP="$(fixture_scratch_dir)"
 FIXTURES="$(cd "${SCRIPT_DIR}/../../.." && pwd)/fixtures/prep-results"
 
 emit_tool_uses() {

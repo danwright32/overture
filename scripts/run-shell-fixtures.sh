@@ -320,7 +320,7 @@ idx="${pair%%$'\t'*}"
 fixture="${pair#*$'\t'}"
 mkdir -p "${scratch}/tmp-${idx}"
 echo "started ${fixture}" >> "${scratch}/progress"
-( set +e; TMPDIR="${scratch}/tmp-${idx}" "${fixture}" >"${scratch}/log-${idx}" 2>&1; echo "$?" > "${scratch}/status-${idx}" )
+( set +e; TMPDIR="${scratch}/tmp-${idx}" OVERTURE_FIXTURE_TMPDIR_SCOPED=1 "${fixture}" >"${scratch}/log-${idx}" 2>&1; echo "$?" > "${scratch}/status-${idx}" )
 echo "finished ${fixture}" >> "${scratch}/progress"
 echo "finished ${fixture}"
 exit 0
@@ -333,6 +333,26 @@ WRAPPER
   # watcher that outlived its run would sit warning about a file nobody is writing.
   : > "${scratch}/progress"
   start_fixture_watch "${scratch}/progress"
+  # The caller's own EXIT trap is put BACK when this returns (#3249). A trap set inside a function
+  # belongs to the whole shell, so this line used to disarm whatever cleanup the caller had installed,
+  # permanently: every call after the first ran with the caller's trap gone. That is the same defect
+  # this file's own leak message warns about, one level up, and it is what leaked one directory per run
+  # out of scripts/run-shell-fixtures.test.sh, which removes its scratch from an EXIT trap installed
+  # before it ever calls this function. Invisible until now, because the leak landed where the check
+  # below could not see it.
+  #
+  # Restored rather than CHAINED, which was tried first and is wrong: this function is routinely called
+  # inside a `$(...)`, and a chained trap then runs the caller's cleanup when that subshell exits, which
+  # deleted the caller's scratch in the middle of its own run.
+  #
+  # And restored ONLY at the top level, which is the same trap wearing a different hat. Inside a
+  # `$(...)` nothing this function does to the trap can reach the caller anyway, so there is nothing to
+  # put back; putting it back there instead ARMS the caller's cleanup on the substitution's own exit,
+  # which deleted the caller's scratch mid-run exactly as chaining did. BASH_SUBSHELL is 0 only in the
+  # shell that will still be running when this returns (measured on bash 3.2, this Mac's bash: 0 at the
+  # top level, 1 inside both `$(...)` and `( ... )`).
+  local previous_exit_trap=""
+  [[ "${BASH_SUBSHELL:-0}" -eq 0 ]] && previous_exit_trap="$(trap -p EXIT)"
   trap 'stop_fixture_watch "${FIXTURE_WATCH_PID}"' EXIT
 
   local i=0
@@ -342,6 +362,15 @@ WRAPPER
   done | xargs -0 -n 1 -P "${jobs}" "${scratch}/run-one.sh" "${scratch}"
 
   stop_fixture_watch "${FIXTURE_WATCH_PID}"
+  # Handed back exactly as it was found. `trap -p` prints a runnable `trap -- '<body>' EXIT`, so the
+  # caller's own trap is reinstalled by running what it printed rather than by rebuilding it.
+  if [[ "${BASH_SUBSHELL:-0}" -eq 0 ]]; then
+    if [[ -n "${previous_exit_trap}" ]]; then
+      eval "${previous_exit_trap}"
+    else
+      trap - EXIT
+    fi
+  fi
 
   # Every fixture has finished; now read each one's verdict, in list order.
   i=0

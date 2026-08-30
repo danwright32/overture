@@ -30,7 +30,7 @@ assert_eq() {
   fi
 }
 
-TMP="$(mktemp -d)"
+TMP="$(fixture_scratch_dir)"
 git -C "${TMP}" init -q
 
 install_hooks_into "${TMP}"

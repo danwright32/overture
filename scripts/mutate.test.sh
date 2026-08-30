@@ -18,7 +18,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/shell-assertions.sh"
 # real Swift suite.
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MUTATE="${HERE}/mutate.sh"
-WORK="$(mktemp -d)"
+WORK="$(fixture_scratch_dir)"
 trap 'rm -rf "${WORK}"' EXIT
 
 SUBJECT="${WORK}/Subject.swift"

@@ -40,7 +40,7 @@ assert_contains() {
   fi
 }
 
-TMP_ROOT="$(mktemp -d)"
+TMP_ROOT="$(fixture_scratch_dir)"
 trap 'rm -rf "${TMP_ROOT}"' EXIT
 
 # --- SUPPORT resolution ---

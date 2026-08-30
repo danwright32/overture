@@ -16,7 +16,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHECK="${SCRIPT_DIR}/check-test-identity-provenance.sh"
 FAILURES=0
 
-WORK="$(mktemp -d)"
+WORK="$(fixture_scratch_dir)"
 MAIN_SHELL_PID="${BASHPID:-$$}"
 trap '[ "${BASHPID:-$$}" = "${MAIN_SHELL_PID}" ] && rm -rf "${WORK}"' EXIT
 

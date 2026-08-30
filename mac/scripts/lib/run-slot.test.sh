@@ -15,7 +15,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../scripts/lib/shell
 # value nobody recognises is the opposite: the two halves disagree about what a slot IS, and guessing
 # there is how one run comes to write another run's files.
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-WORK="$(mktemp -d)"
+WORK="$(fixture_scratch_dir)"
 trap 'rm -rf "${WORK}"' EXIT
 # A SPACE in the path, because the live one has one: "~/Library/Application Support/Overture". A fixture
 # on a tidy path cannot see the whole class of defect where an unquoted expansion word-splits, and the

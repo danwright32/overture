@@ -40,7 +40,7 @@ assert_empty() {
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/check-runner-posix.sh"
 
-TMP="$(mktemp -d)"
+TMP="$(fixture_scratch_dir)"
 trap 'rm -rf "${TMP}"' EXIT
 
 # The exact construct that took the first real reachability check down on 2026-07-27. `bash -n` accepts

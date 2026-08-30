@@ -40,7 +40,7 @@ assert_empty() {
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/check-pure-suite-imports.sh"
 
-TMP="$(mktemp -d)"
+TMP="$(fixture_scratch_dir)"
 trap 'rm -rf "${TMP}"' EXIT
 
 # The exact line that stopped the whole Swift suite compiling on 2026-08-03, in the spelling all four

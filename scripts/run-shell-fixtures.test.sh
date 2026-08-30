@@ -33,7 +33,7 @@ assert_equals() {
   fi
 }
 
-TMP_DIR="$(mktemp -d)"
+TMP_DIR="$(fixture_scratch_dir)"
 trap 'rm -rf "${TMP_DIR}"' EXIT
 
 PASSING="${TMP_DIR}/passing.test.sh"
@@ -230,6 +230,41 @@ chmod +x "${TIDY}"
 
 run_shell_fixtures "${TIDY}" >/dev/null 2>&1
 assert_equals "a fixture that cleans up after itself passes" "0" "$?"
+
+# --- the caller's own EXIT trap survives being called (#3249) ------------------------------------
+#
+# `run_shell_fixtures` installs an EXIT trap for its watcher, and a trap set inside a function belongs
+# to the whole shell, so it used to disarm whatever cleanup its caller had installed, permanently, from
+# the first call onward. THIS fixture is the one it bit: it removes its scratch from a trap installed
+# at the top of the file, and that trap was gone by the time the file ended, so it leaked one directory
+# per run into the shared folder where nothing could see it.
+#
+# Driven in a child shell rather than here, because the assertion is about what the trap IS after the
+# call, and asking that of this shell would mean rearranging this file's own cleanup around the test.
+# Both live INSIDE this fixture's own scratch, which its EXIT trap already removes, rather than being
+# two more scratches of their own. The first version made them with the helpers and cleaned neither,
+# and the leak check restored by this very change is what caught it on the next full run.
+TRAP_PROBE="${TMP_DIR}/trap-probe.sh"
+TRAP_STUB_DIR="${TMP_DIR}/trap-stub"
+mkdir -p "${TRAP_STUB_DIR}"
+printf '#!/usr/bin/env bash\necho ok\nexit 0\n' > "${TRAP_STUB_DIR}/stub.test.sh"
+chmod +x "${TRAP_STUB_DIR}/stub.test.sh"
+cat > "${TRAP_PROBE}" <<TRAP_EOF
+source "${SCRIPT_DIR}/run-shell-fixtures.sh"
+trap 'echo THE_CALLERS_OWN' EXIT
+echo REACHED_THE_CALL
+run_shell_fixtures "${TRAP_STUB_DIR}/stub.test.sh" >/dev/null 2>&1
+echo RETURNED_FROM_THE_CALL
+TRAP_EOF
+TRAP_OUT="$(bash "${TRAP_PROBE}" 2>&1)"
+# Asserted FIRST, and it is not decoration. The probe runs under the sourced script's `set -e`, so
+# anything undefined in it kills the shell, the EXIT trap fires at THAT point, and the line below then
+# passes without run_shell_fixtures ever having been called. That is exactly what the first version of
+# this test did (L159), and the only thing separating the two is this line.
+assert_contains "the probe really reached the call, rather than dying before it" \
+  "${TRAP_OUT}" "RETURNED_FROM_THE_CALL"
+assert_contains "the caller's own EXIT trap still runs after run_shell_fixtures returns" \
+  "${TRAP_OUT}" "THE_CALLERS_OWN"
 
 # The allowed names are DERIVED from the account the run is under, not written down. tsx names its cache
 # after the user id, so a hardcoded one is correct only on the machine it was written on: on any other

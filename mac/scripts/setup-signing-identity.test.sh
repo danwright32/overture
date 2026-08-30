@@ -28,7 +28,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SETUP="${SCRIPT_DIR}/setup-signing-identity.sh"
 
 FAILURES=0
-TMP="$(mktemp -d)"
+TMP="$(fixture_scratch_dir)"
 trap 'rm -rf "${TMP}"' EXIT
 
 # Runs the real script's entry point in a subshell with the three keychain seams replaced by recorders,

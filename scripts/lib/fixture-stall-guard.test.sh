@@ -8,7 +8,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fixture-stall-guard.sh"
 
 # #2929: the shell fixture runner had no stall guard, so a fixture that never returns left it silent
 # forever, and a silent runner is indistinguishable from one still working.
-WORK="$(mktemp -d)"
+WORK="$(fixture_scratch_dir)"
 trap 'rm -rf "${WORK}"' EXIT
 
 PROGRESS="${WORK}/progress"

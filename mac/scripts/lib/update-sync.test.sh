@@ -114,7 +114,7 @@ got="$(overture_update_reason refuse:diverged)"
 
 # --- the doing, against real repositories ---
 
-TMP="$(mktemp -d)"
+TMP="$(fixture_scratch_dir)"
 trap 'rm -rf "${TMP}"' EXIT
 
 # A remote with two commits on main, and a clone. Real git, because the whole point is what happens to

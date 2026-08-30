@@ -332,7 +332,7 @@ run_wrapper_with_stub_xcodebuild() {
   local daemon_pid="${5:-}" daemon_etime="${6:-}" starting_baseline="${7:-}"
   local bin_dir output code log_calls baseline hosted_record
 
-  bin_dir="$(mktemp -d)"
+  bin_dir="$(fixture_scratch_dir)"
   [[ -n "${diagnostics_dir}" ]] || diagnostics_dir="${bin_dir}/diagnostics"
 
   # flock's real job is serialising xcodebuild across worktrees, which is irrelevant here; once it
@@ -761,7 +761,7 @@ assert_contains "a run with no corpus line says it is unmeasured rather than say
 # EVERY run below writes its record into a throwaway path, never the repository. Without this the
 # "measuring" case wrote into the real repo root, recording that both invariants had measured rows on
 # a day the live store held none. A test must be structurally unable to touch the live tree (L2).
-CORPUS_RECORD_DIR="$(mktemp -d)"
+CORPUS_RECORD_DIR="$(fixture_scratch_dir)"
 export OVERTURE_LIVE_CORPUS_RECORD="${CORPUS_RECORD_DIR}/seen"
 
 # #3172: the repo-root default, and what is there BEFORE any stub below runs.
@@ -931,8 +931,8 @@ assert_contains "the cap keeps the LAST lines, nearest the death" \
 
 echo
 # The kept file itself: it must survive the run, and the directory holding it must not grow forever.
-KEEP_DIR="$(mktemp -d)"
-KEEP_SOURCE="$(mktemp)"
+KEEP_DIR="$(fixture_scratch_dir)"
+KEEP_SOURCE="$(fixture_scratch_file)"
 printf 'the whole pure-suite log\n' > "${KEEP_SOURCE}"
 
 KEPT_ONE="$(keep_diagnostic_file "${KEEP_SOURCE}" "${KEEP_DIR}" 3)"
@@ -995,7 +995,7 @@ Failing tests:
 assert_equals "a host that died is still a crash, and still probes the pure suite" \
   "crashed" "$(run_outcome "${HOST_DIED_OUTPUT}" 65)"
 
-PURE_DIAG_DIR="$(mktemp -d)"
+PURE_DIAG_DIR="$(fixture_scratch_dir)"
 PURE_FAIL_RUN="$(run_wrapper_with_stub_xcodebuild "${HOST_DIED_OUTPUT}" 65 "" "${PURE_DIAG_DIR}")"
 PURE_SECTION="$(pure_suite_section "${PURE_FAIL_RUN}")"
 
@@ -1018,7 +1018,7 @@ assert_contains "and it holds the pure suite's whole output, not just the lines 
 
 # The common path pays nothing. A run with nothing to explain must leave no file behind at all, or a
 # shared directory fills up with the output of runs nobody will ever read.
-PASS_DIAG_DIR="$(mktemp -d)"
+PASS_DIAG_DIR="$(fixture_scratch_dir)"
 run_wrapper_with_stub_xcodebuild "${PASSING_OUTPUT}" 0 "" "${PASS_DIAG_DIR}" > /dev/null
 assert_equals "a passing run keeps no diagnostic at all" \
   "0" "$(find "${PASS_DIAG_DIR}" -type f | grep -c .)"

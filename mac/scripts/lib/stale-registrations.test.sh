@@ -33,7 +33,7 @@ fail() {
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/stale-registrations.sh"
 
-TMP="$(mktemp -d)"
+TMP="$(fixture_scratch_dir)"
 trap 'rm -rf "${TMP}"' EXIT
 
 SEP="--------------------------------------------------------------------------------"

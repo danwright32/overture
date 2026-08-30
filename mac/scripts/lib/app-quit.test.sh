@@ -27,7 +27,7 @@ fail() {
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/app-quit.sh"
 
-TMP="$(mktemp -d)"
+TMP="$(fixture_scratch_dir)"
 trap 'rm -rf "${TMP}"' EXIT
 
 # ---- pids_inside_bundle: the pure filter ----------------------------------------------------

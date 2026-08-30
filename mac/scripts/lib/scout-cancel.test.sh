@@ -27,7 +27,7 @@ refute() {
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/scout-cancel.sh"
 
-TMP="$(mktemp -d)"
+TMP="$(fixture_scratch_dir)"
 trap 'rm -rf "${TMP}"' EXIT
 CANCEL="${TMP}/scout-extract-cancel"
 

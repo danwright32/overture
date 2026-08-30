@@ -30,7 +30,7 @@ if ! command -v security >/dev/null 2>&1 || ! command -v codesign >/dev/null 2>&
 fi
 
 FAILURES=0
-WORK="$(mktemp -d)"
+WORK="$(fixture_scratch_dir)"
 trap 'rm -rf "${WORK}"' EXIT
 
 pass() { echo "ok - $1"; }

@@ -29,7 +29,7 @@ FAILURES=0
 # shellcheck source=./mutation-scope.sh
 source "${SCRIPT_DIR}/mutation-scope.sh"
 
-WORK="$(mktemp -d)"
+WORK="$(fixture_scratch_dir)"
 MAIN_SHELL_PID="${BASHPID:-$$}"
 trap '[ "${BASHPID:-$$}" = "${MAIN_SHELL_PID}" ] && rm -rf "${WORK}"' EXIT
 

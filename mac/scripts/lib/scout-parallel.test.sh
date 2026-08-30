@@ -53,7 +53,7 @@ source "${SCRIPT_DIR}/scout-parallel.sh"
 
 command -v node >/dev/null 2>&1 || { echo "ok - node absent, scout-parallel degrades (skipped)"; exit 0; }
 
-TMP="$(mktemp -d)"
+TMP="$(fixture_scratch_dir)"
 trap 'rm -rf "${TMP}"' EXIT
 
 QUEUE="${TMP}/queue.json"
@@ -267,7 +267,7 @@ assert_equals "the guard reports that sources were missing, so the runner can fa
 echo
 echo "--- the prep-shaped merge (#1597) ---"
 
-PREPTMP="$(mktemp -d)"
+PREPTMP="$(fixture_scratch_dir)"
 
 cat > "${PREPTMP}/prep-queue.json" <<'EOF'
 {"version":6,"generatedAt":"2026-07-27T00:00:00Z","items":[
@@ -335,7 +335,7 @@ rm -rf "${PREPTMP}"
 # an hour. Finding nothing is not success (L98), so both have to be REPORTABLE outcomes attributed to the
 # chunk, not silences the whole-queue backstop later smooths over into an anonymous not_read.
 # ---------------------------------------------------------------------------
-SHORTTMP="$(mktemp -d)"
+SHORTTMP="$(fixture_scratch_dir)"
 mkdir -p "${SHORTTMP}/chunks"
 
 write_chunk_queue() {   # <n> <id>...

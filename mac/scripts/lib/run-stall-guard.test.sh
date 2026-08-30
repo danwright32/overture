@@ -52,7 +52,7 @@ for fn in stall_signature stall_tick stall_stalled_seconds; do
 done
 if [ "${FAILURES}" -ne 0 ]; then echo "${FAILURES} failure(s)"; exit 1; fi
 
-TMP="$(mktemp -d)"
+TMP="$(fixture_scratch_dir)"
 MAIN_SHELL_PID="${BASHPID:-$$}"
 trap '[ "${BASHPID:-$$}" = "${MAIN_SHELL_PID}" ] && rm -rf "${TMP}"' EXIT
 
