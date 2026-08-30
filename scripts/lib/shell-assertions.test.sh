@@ -86,8 +86,17 @@ expect_fail "assert_empty fails on a non-empty value" assert_empty "desc" "somet
 # something waits on it, and `kill -0` succeeds on a zombie, so a child would read as alive long after
 # it had exited and the waiting case below could never pass. An orphan is reaped by launchd instead.
 
+# Waited ON rather than waited OUT: a fixed delay here would be an assertion about how busy this Mac
+# is, and it is the slower answer too, since the ordinary case clears on the first look (L290). This
+# is the fixture for a helper whose whole subject is that mistake, so it must not make it.
 PIDS_GONE_EXITED="$(bash -c 'sleep 0 >/dev/null 2>&1 & echo $!')"
-sleep 0.4
+WAITED=0
+while kill -0 "${PIDS_GONE_EXITED}" 2>/dev/null && [[ "${WAITED}" -lt 200 ]]; do
+  sleep 0.05
+  WAITED=$((WAITED + 1))
+done
+check "the already-gone pid really did go, so the next line is about a dead pid" \
+  "$(if kill -0 "${PIDS_GONE_EXITED}" 2>/dev/null; then echo false; else echo true; fi)"
 expect_pass "assert_pids_gone passes on a pid that has already gone" \
   assert_pids_gone "the job is gone" "${PIDS_GONE_EXITED}"
 

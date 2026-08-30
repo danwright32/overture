@@ -109,8 +109,16 @@ assert_equals "which is not this run's own group, so stopping it cannot take the
   "different" \
   "$(if [[ "${WATCH_PGID}" != "${SHELL_PGID}" ]]; then echo "different"; else echo "the same: ${WATCH_PGID}"; fi)"
 
-sleep 1
-WATCH_CHILDREN="$(pgrep -P "${WATCH_PID}" 2>/dev/null | tr '\n' ' ')"
+# Waited ON rather than waited OUT, for the reason this whole change is about (L290): a fixed delay
+# here asserts how busy the Mac is, and the ordinary case clears on the first look.
+WAITED=0
+WATCH_CHILDREN=""
+while [[ -z "${WATCH_CHILDREN// /}" && "${WAITED}" -lt 200 ]]; do
+  WATCH_CHILDREN="$(pgrep -P "${WATCH_PID}" 2>/dev/null | tr '\n' ' ')"
+  [[ -n "${WATCH_CHILDREN// /}" ]] && break
+  sleep 0.05
+  WAITED=$((WAITED + 1))
+done
 # Asserted before the stop, because everything after it is vacuous if there was no sleeping child to
 # leave behind (L159).
 assert_equals "a watcher mid-interval really does have a sleeping child to leave behind" \
