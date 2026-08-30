@@ -105,6 +105,54 @@ struct VenueKeyStabilityLiveStoreTests {
     // Asserted separately from the test above because the two fail for different reasons and a single
     // status shared between them would let one hide the other: this one says "a venue of the dangerous
     // shape has appeared", the other says "a key has actually moved".
+
+    // True when any BALANCED bracket pair in the string contains a comma. Scanned by depth so a string
+    // with several bracket groups is judged group by group, which is the whole correction in #3314.
+    // An UNBALANCED bracket matches nothing here, exactly as `VenueNormalization.strippingParentheticals`
+    // leaves one alone, so the two readings agree about what a bracket is.
+    private func commaInsideABracket(_ venue: String) -> Bool {
+        var depth = 0
+        var sawCommaAtDepth = false
+        for character in venue {
+            if character == "(" {
+                depth += 1
+                if depth == 1 { sawCommaAtDepth = false }
+            } else if character == ")" {
+                if depth > 0 {
+                    depth -= 1
+                    if depth == 0 && sawCommaAtDepth { return true }
+                }
+            } else if character == "," && depth > 0 {
+                sawCommaAtDepth = true
+            }
+        }
+        return false
+    }
+
+    // #3314: the predicate itself, on the two real strings that exposed it, plus the shapes either side
+    // of them. The live-store test above cannot cover this: since its assertion became a property of the
+    // KEY rather than a claim of absence, a wrong predicate only widens the set it checks and every
+    // member still passes, so reverting this scan to its old form there is invisible (proved by
+    // mutation, SURVIVED). These cases are where the scan is actually pinned.
+    @Test func aCommaBetweenTwoBracketsIsNotACommaInsideOne() {
+        // The false positive. Two bracket groups, neither holding a comma, and the comma the old
+        // first-open-to-last-close reading found sits between them, in the open.
+        #expect(commaInsideABracket(
+            "Montague Street (between Henry & Hicks Streets), Brooklyn Heights, NY (offsite)") == false)
+        // The genuine one, from the same store on the same day.
+        #expect(commaInsideABracket("St. Peter's Episcopal Church (Morristown, NJ)"))
+        // The plain shapes either side, so the scan is not simply answering yes or no to everything.
+        #expect(commaInsideABracket("Carnegie Hall") == false)
+        #expect(commaInsideABracket("Carnegie Hall, New York") == false)
+        #expect(commaInsideABracket("Somewhere (Times Square)") == false)
+        // Nested, where the comma is deeper than the outermost pair.
+        #expect(commaInsideABracket("A Room (a wing (east, west) of it)"))
+        // An UNBALANCED bracket matches nothing, which is the same answer
+        // `VenueNormalization.strippingParentheticals` gives it, so the two readings agree about what a
+        // bracket is.
+        #expect(commaInsideABracket("A Room (never closed, and so not a pair") == false)
+    }
+
     @Test(.enabled(if: liveStoreExists, "no live store on this machine"))
     func noVenueCarriesABracketSpanningAComma() async throws {
         await RealStoreTestLock.shared.acquire()
@@ -119,15 +167,29 @@ struct VenueKeyStabilityLiveStoreTests {
             let venues = Set(try ctx.fetch(FetchDescriptor<Prospect>()).compactMap { $0.venue })
             #expect(venues.count > 50, "the live store still holds a real spread of venues to measure")
 
-            let spanning = venues.filter { venue in
-                guard let open = venue.firstIndex(of: "("),
-                      let close = venue.lastIndex(of: ")"),
-                      let comma = venue.firstIndex(of: ","),
-                      open < close else { return false }
-                return open < comma && comma < close
+            // #3314: asked per BALANCED BRACKET GROUP, not from the first "(" to the last ")". That
+            // earlier reading treated two separate brackets as one span, so
+            // `Montague Street (between Henry & Hicks Streets), Brooklyn Heights, NY (offsite)` was
+            // reported: neither of its brackets holds a comma, and the comma it found sits between them,
+            // in the open. It fired on an ordinary address, which is how a guard gets switched off (L93).
+            let spanning = venues.filter { commaInsideABracket($0) }
+
+            // #3314: and what is asserted is the PROPERTY, not the absence. The dangerous thing about
+            // this shape was never the shape: it was that the comma split ran BEFORE the bracket strip,
+            // so `... (Morristown, NJ)` was cut into a fragment ending in an unbalanced "(" that the
+            // stripper could not match, and the key silently moved. #1764 fixed that by stripping before
+            // the split as well as after, which means a venue of this shape is now folded correctly and
+            // its arrival is not a defect.
+            //
+            // Kept as a live-store guard rather than deleted, because the property is worth pinning on
+            // real data: for every such venue the key must carry no bracket at all. A leftover "(" in a
+            // key is the #1764 defect itself, and it is what an assertion of mere absence could never
+            // have caught, since absence stops being checkable the moment such a venue appears.
+            for venue in spanning.sorted() {
+                let key = VenueNormalization.keyName(venue)
+                #expect(!key.contains("(") && !key.contains(")"),
+                        "the fold left a bracket in this venue's key, which is the #1764 defect: VENUE[\(venue)] KEY[\(key)]")
             }
-            #expect(spanning.isEmpty,
-                    "venues whose bracket spans a comma, so the fold now reduces them further: \(spanning.sorted())")
             await RealStoreTestLock.shared.release()
         } catch {
             await RealStoreTestLock.shared.release()
