@@ -77,6 +77,81 @@ expect_fail "assert_eq fails on different values" assert_eq "desc" "one" "other"
 expect_pass "assert_empty passes on an empty value" assert_empty "desc" ""
 expect_fail "assert_empty fails on a non-empty value" assert_empty "desc" "something"
 
+# --- assert_pids_gone (#3248) -------------------------------------------------------------------
+#
+# The one helper here that is about TIME rather than about a value, so it is driven against real
+# processes rather than against strings. Every process it is pointed at below is a GRANDCHILD of this
+# fixture (started by a `bash -c` that exits immediately), never a child of it, for a reason that
+# decides whether these cases measure anything at all: a dead CHILD of this shell stays a zombie until
+# something waits on it, and `kill -0` succeeds on a zombie, so a child would read as alive long after
+# it had exited and the waiting case below could never pass. An orphan is reaped by launchd instead.
+
+# Waited ON rather than waited OUT: a fixed delay here would be an assertion about how busy this Mac
+# is, and it is the slower answer too, since the ordinary case clears on the first look (L290). This
+# is the fixture for a helper whose whole subject is that mistake, so it must not make it.
+PIDS_GONE_EXITED="$(bash -c 'sleep 0 >/dev/null 2>&1 & echo $!')"
+WAITED=0
+while kill -0 "${PIDS_GONE_EXITED}" 2>/dev/null && [[ "${WAITED}" -lt 200 ]]; do
+  sleep 0.05
+  WAITED=$((WAITED + 1))
+done
+check "the already-gone pid really did go, so the next line is about a dead pid" \
+  "$(if kill -0 "${PIDS_GONE_EXITED}" 2>/dev/null; then echo false; else echo true; fi)"
+expect_pass "assert_pids_gone passes on a pid that has already gone" \
+  assert_pids_gone "the job is gone" "${PIDS_GONE_EXITED}"
+
+# THE case, and the one a single `kill -0` cannot pass: a process still on its way out when the
+# assertion is made. #3248 is exactly this, seen live on 2026-08-29 as `still alive: 20800` from a
+# fixture that sampled once, on a Mac that was running the Swift suite beside it.
+PIDS_GONE_LEAVING="$(bash -c 'sleep 3 >/dev/null 2>&1 & echo $!')"
+LEAVING_ALIVE_AT_FIRST="false"
+kill -0 "${PIDS_GONE_LEAVING}" 2>/dev/null && LEAVING_ALIVE_AT_FIRST="true"
+# Asserted BEFORE the case it sets up, because a process that had already exited would satisfy the
+# waiting case just as well as a helper that waits, and the case would pass hardest while measuring
+# nothing (L159). Three seconds is chosen so it is still alive after this fixture's own subshell
+# setup, not because three is a meaningful duration.
+check "the leaving process really is still alive when the assertion is made" "${LEAVING_ALIVE_AT_FIRST}"
+LEAVING_STARTED_AT="${SECONDS}"
+expect_pass "assert_pids_gone waits out a process that is still on its way out" \
+  assert_pids_gone "the job is gone" "${PIDS_GONE_LEAVING}"
+LEAVING_TOOK=$(( SECONDS - LEAVING_STARTED_AT ))
+LEAVING_WAITED="false"
+[[ "${LEAVING_TOOK}" -ge 1 ]] && LEAVING_WAITED="true"
+check "and really waited for it rather than finding it already gone" "${LEAVING_WAITED}"
+
+# And it FAILS on one that really stays, rather than hanging: a wait with no deadline cannot fail, it
+# can only hang, and a hang is worse than a failure because it is indistinguishable from slowness
+# (L110). The deadline is injected rather than waited out, so this case costs a second (L290).
+PIDS_GONE_STAYING="$(bash -c 'sleep 45 >/dev/null 2>&1 & echo $!')"
+STAYING_STARTED_AT="${SECONDS}"
+STAYING_OUT="$(SHELL_ASSERTION_PIDS_GONE_DEADLINE_SECONDS=1 run_helper \
+  assert_pids_gone "the job is gone" "${PIDS_GONE_STAYING}")"
+STAYING_TOOK=$(( SECONDS - STAYING_STARTED_AT ))
+STAYING_OK="false"
+[[ "${STAYING_OUT}" == *"FAIL - "* && "${STAYING_OUT}" == *"FAILURES=1"* ]] && STAYING_OK="true"
+check "assert_pids_gone fails on a process that really stays" "${STAYING_OK}"
+[[ "${STAYING_OK}" == "true" ]] || echo "  got: ${STAYING_OUT}"
+
+# Naming the survivor is the whole value of the failure: the pid is the only thing that lets anyone
+# ask what it was (L11, L148).
+NAMES_OK="false"
+[[ "${STAYING_OUT}" == *"${PIDS_GONE_STAYING}"* ]] && NAMES_OK="true"
+check "and names the pid that survived, so it can be looked up" "${NAMES_OK}"
+[[ "${NAMES_OK}" == "true" ]] || echo "  got: ${STAYING_OUT}"
+
+BOUNDED_OK="false"
+[[ "${STAYING_TOOK}" -lt 20 ]] && BOUNDED_OK="true"
+check "and returns on its deadline rather than waiting the process out" "${BOUNDED_OK}"
+[[ "${BOUNDED_OK}" == "true" ]] || echo "  took ${STAYING_TOOK}s against a 45 second process"
+
+kill "${PIDS_GONE_STAYING}" 2>/dev/null || true
+
+# Nothing to wait for is its own outcome and must never read as the cleanest possible pass (L98).
+# Every caller collects the pids first and has already asserted it found some, so an empty list here
+# means that collection came back empty and the assertion measured nothing.
+expect_fail "assert_pids_gone given no pids at all reports measuring nothing" \
+  assert_pids_gone "the job is gone"
+
 # The counter has to survive `set -u` in a fixture that never initialised FAILURES, or sourcing this
 # library would turn a clean fixture into an unbound-variable crash on its first failing assertion.
 UNSET_OUT="$(

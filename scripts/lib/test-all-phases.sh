@@ -29,14 +29,30 @@ TEST_ALL_CHEAP_FAILURES=()
 # a child of the shell asking, and the answer it gives otherwise is a status of its own (255 here) that
 # is indistinguishable from the phase having failed. The whole combined verdict hangs off this number,
 # so it must not depend on which shell is holding it.
+#
+# The job is started under `set -m` so that it gets a process group OF ITS OWN, which is the only thing
+# that makes stopping it whole possible (#3248). Without job control a background job shares the
+# shell's process group, so there is no group to address that is not also the run itself, and the pid
+# recorded here is only the WRAPPER: the compound command above forks, and the work happens in a child
+# of it. Killing the wrapper leaves that child alive and reparented to launchd, still holding the log
+# and the run's stdout. Measured 2026-08-29, that orphaned two `sleep 300` processes per run of this
+# file's own fixture, and in test-all.sh it is an xcodebuild still holding the shared lock.
+#
+# Job control is turned back off immediately, and only if it was off to begin with, because it is a
+# property of the whole shell rather than of this call: a caller that had it on keeps it.
 start_background_phase() {
   local log="$1"
   shift
   : > "${log}"
   BACKGROUND_PHASE_STATUS_FILE="$(mktemp "${TMPDIR:-/tmp}/overture-phase-status.XXXXXX")"
   local status_file="${BACKGROUND_PHASE_STATUS_FILE}"
+  local restore_job_control=0
+  case "$-" in *m*) ;; *) restore_job_control=1 ;; esac
+  set -m
   { "$@" >"${log}" 2>&1; echo "$?" > "${status_file}"; } &
   BACKGROUND_PHASE_PID=$!
+  [[ "${restore_job_control}" -eq 1 ]] && set +m
+  return 0
 }
 
 # stop_background_phase <pid>
@@ -59,10 +75,33 @@ start_background_phase() {
 # because this runs inside an EXIT trap, where a non-zero status is not somebody's problem to hear about
 # and would otherwise become a different exit code than the run really had. An empty pid is a no-op
 # returning 0, because the trap naming it is installed on paths where the phase was never started.
+#
+# #3248: it kills the process GROUP rather than the pid, because the pid is the wrapper and the work is
+# its child. A group kill reaches every descendant however deep, and it cannot race the fork the way
+# reading `pgrep -P` before killing can: a group that has been signalled has no live member left to
+# spawn anything new.
+#
+# `-"${pid}"` can only ever name the job's own group. A process group id is the pid of its leader, and
+# this pid belongs to a process this shell just started, so either it leads a group (which is what
+# `set -m` in start_background_phase arranges) or no such group exists and the kill is a no-op. It can
+# never be the run's own group by accident. A pid that is not a plain number above 1 is refused
+# outright rather than passed through, because `kill -- -0` and `kill -- -1` mean the caller's own
+# group and every process on the machine.
 stop_background_phase() {
-  [[ -n "${1:-}" ]] || return 0
-  kill "$1" 2>/dev/null || true
-  wait "$1" 2>/dev/null || true
+  local pid="${1:-}"
+  [[ -n "${pid}" ]] || return 0
+  [[ "${pid}" =~ ^[0-9]+$ ]] || return 0
+  [[ "${pid}" -gt 1 ]] || return 0
+  kill -- -"${pid}" 2>/dev/null || true
+  # And the pid itself, which is NOT redundant: it is what keeps a missing group a FAILURE rather than a
+  # HANG. Measured 2026-08-29 by taking `set -m` away with only the group kill here: the group does not
+  # exist, the kill reaches nothing, and the `wait` below then sits on the job for its whole life,
+  # so the guard written to catch exactly that can never speak, because it can only speak once the run
+  # is over (L110, and #2577's own lesson turned on its author). With this line the same mutation is
+  # red in seconds instead. It cannot be shown to fail on its own, since the group kill covers it
+  # whenever `set -m` worked, and that is the point of it.
+  kill "${pid}" 2>/dev/null || true
+  wait "${pid}" 2>/dev/null || true
   return 0
 }
 
