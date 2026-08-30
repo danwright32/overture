@@ -219,3 +219,23 @@ mutation_scope_format_candidates() {
   printf '%s\n' "${shown}" | sed 's/^/    /'
   echo "    ... and $(( total - max )) more of the ${total} suites that name it, not listed here."
 }
+
+# #3264: whether this run was genuinely SCOPED, asked by looking for a `-only-testing:` argument rather
+# than by counting arguments.
+#
+# The exemptions below used to ask `$# -eq 0` and `$# -gt 0`, which is "was anything passed at all". That
+# is the same defect #3264 records one script over: `run-tests-locked.sh`'s short-run gate stood down on
+# ANY argument, so every parallel experiment (which passes `-parallel-testing-enabled YES`, not a scope)
+# ran with the gate off, and one of them lost 40 percent of the suite and printed an ordinary verdict.
+#
+# Here the trailing arguments are documented as test scopes, so counting them is USUALLY right, and that
+# is exactly what makes it worth fixing rather than leaving: the one time it is wrong is a run carrying a
+# runner FLAG instead of a scope, which is the run most likely to be doing something unusual and least
+# likely to be watched closely. A stand-down must be no broader than its reason (L324).
+mutate_run_is_scoped() {
+  local arg
+  for arg in "$@"; do
+    [[ "${arg}" == -only-testing:* ]] && return 0
+  done
+  return 1
+}

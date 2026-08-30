@@ -247,6 +247,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # #3258: scratch that honours TMPDIR, so a leak is visible to the checks that look there.
 # shellcheck source=./lib/scratch.sh
 . "${REPO_ROOT}/scripts/lib/scratch.sh"
+
 # #3098: the rule that says whether a scope reached the tests for the file it broke. In its own file
 # because the whole of it is testable without paying for a mutation run, which driving mutate.sh is not.
 # shellcheck source=lib/mutation-scope.sh
@@ -671,7 +672,7 @@ if [[ "${RUN_STATUS}" -ne 0 ]]; then
   # A SCOPED run is exempt and deliberately so: a scope naming the one suite that holds the guard is
   # expected to go entirely red, and that is the ordinary proof shape. Condemning it would fire on the
   # common case and be switched off within a day (L93).
-  if [[ "${NEAR_TOTAL}" == "true" && $# -eq 0 ]]; then
+  if [[ "${NEAR_TOTAL}" == "true" ]] && ! mutate_run_is_scoped "$@"; then
     echo "NOT PROOF - ${BREADTH_FAILED} of ${BREADTH_TOTAL} went red, so the instrument misfired."
     echo "  ${EXPRESSION}"
     echo
@@ -766,7 +767,7 @@ case "${SCOPE_VERDICT%%$'\n'*}" in
     printf '%s\n' "${SCOPE_VERDICT}" | tail -n +2 | sed 's/^/  /'
     ;;
   REACHED)
-    if [[ $# -gt 0 ]]; then
+    if mutate_run_is_scoped "$@"; then
       echo "  The scope did reach a suite that names ${TARGET##*/}, so it is the right scope:"
       printf '%s\n' "${SCOPE_VERDICT}" | tail -n +2 | sed 's/^/  /'
     fi
