@@ -56,11 +56,14 @@ detached_runner_scope_violations() {
   code="$(printf '%s\n' "${text}" | grep -v '^[[:space:]]*#')"
 
   # No detached headless run in this file: nothing to guard, regardless of what else it contains.
-  if ! printf '%s' "${code}" | grep -q '"\$CLAUDE"[[:space:]]*-p'; then
+  # #3275: a herestring rather than a pipe. `grep -q` exits on its first match, which kills the
+  # producer with SIGPIPE, and under `set -o pipefail` that 141 becomes the condition's answer, so an
+  # early match reads exactly like no match at all (L183).
+  if ! grep -q '"\$CLAUDE"[[:space:]]*-p' <<< "${code}"; then
     return 0
   fi
 
-  if printf '%s' "${code}" | grep -q -- '--allowedTools'; then
+  if grep -q -- '--allowedTools' <<< "${code}"; then
     echo "hardcodes a literal --allowedTools on a \"\$CLAUDE\" -p call site instead of folding through a *_claude_scope function"
   fi
 
@@ -69,11 +72,11 @@ detached_runner_scope_violations() {
   # hand-written map turns nothing off). A literal one at a call site either disables nothing or overrides
   # the scope's, and either way the run silently starts carrying whatever plugin hooks are installed that
   # day. Same hole as the bare allowlist, one flag along.
-  if printf '%s' "${code}" | grep -q -- '--settings'; then
+  if grep -q -- '--settings' <<< "${code}"; then
     echo "hardcodes a literal --settings on a \"\$CLAUDE\" -p call site instead of folding through a *_claude_scope function"
   fi
 
-  if ! printf '%s' "${code}" | grep -Eq "${SCOPE_FOLD_PATTERN}"; then
+  if ! grep -Eq "${SCOPE_FOLD_PATTERN}" <<< "${code}"; then
     echo "invokes \"\$CLAUDE\" -p without calling any *_claude_scope function anywhere in the file"
   fi
 

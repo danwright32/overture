@@ -424,6 +424,65 @@ chmod +x "${FIXED}"
 fixture_sources_avoid_short_circuit_pipes "${FIXED}" >/dev/null 2>&1
 assert_equals "the herestring remedy is accepted" "0" "$?"
 
+# #3275: a FLAG CLUSTER counts. The needle used to be the literal `grep -q`, so `grep -aqF` and
+# `grep -qE` walked straight past it, and `grep -aqF` is exactly what
+# `mac/scripts/lib/hosted-suite-stamp.sh` was using when it reported the screens as unverified on four
+# consecutive runs that had passed all 49 of them. A guard that only catches one spelling of the thing
+# it forbids is exempt from it wherever anybody wrote another spelling (L96).
+CLUSTERED="${TMP_DIR}/clustered.test.sh"
+printf '#!/usr/bin/env bash\nif printf "%%s" "${x:-a}" | grep -aqF a; then echo "ok - x"; fi\n' > "${CLUSTERED}"
+chmod +x "${CLUSTERED}"
+fixture_sources_avoid_short_circuit_pipes "${CLUSTERED}" >/dev/null 2>&1
+assert_equals "a -q hidden inside a flag cluster is caught too" "1" "$?"
+
+CLUSTERED_E="${TMP_DIR}/clustered-e.test.sh"
+printf '#!/usr/bin/env bash\nif printf "%%s" "${x:-a}" | grep -qE "a"; then echo "ok - x"; fi\n' > "${CLUSTERED_E}"
+chmod +x "${CLUSTERED_E}"
+fixture_sources_avoid_short_circuit_pipes "${CLUSTERED_E}" >/dev/null 2>&1
+assert_equals "and so is one written after the other flags" "1" "$?"
+
+# The mirror, so widening the needle cannot condemn a grep that reads its whole input. That IS the
+# remedy this file recommends to a POSIX script, which cannot use a herestring, so a rule that flagged
+# it would forbid its own fix.
+WHOLE_INPUT="${TMP_DIR}/whole-input.test.sh"
+printf '#!/usr/bin/env bash\nif printf "%%s" "${x:-a}" | grep -aF a >/dev/null; then echo "ok - x"; fi\n' > "${WHOLE_INPUT}"
+chmod +x "${WHOLE_INPUT}"
+fixture_sources_avoid_short_circuit_pipes "${WHOLE_INPUT}" >/dev/null 2>&1
+assert_equals "a grep that reads its whole input is accepted" "0" "$?"
+
+# --- the same rule reaches the PRODUCTION scripts, not only the fixtures (#3275) ---------------------
+#
+# The guard has always run over `*.test.sh` alone, so every script that ships was exempt from the rule
+# written for the defect, while running far more often: `scripts/test-all.sh` on every push,
+# `verify-and-merge-branch.sh` on every merge. That is the same asymmetry #3258 records one field over
+# (the bare-mktemp rule covers fixtures and not production). The instance that proves it is
+# `hosted-suite-stamp.sh`, which is production, and which had the defect for real.
+#
+# Derived from git rather than listed, so a script added next year is covered by a rule it never heard
+# of (L96). Asserted as a real scan over the real tree, because the value here is not that the function
+# can refuse, which the cases above already prove, but that something actually POINTS it at these files.
+PRODUCTION_SHELL=()
+while IFS= read -r f; do
+  [[ -n "${f}" ]] && PRODUCTION_SHELL+=("${REPO_ROOT}/${f}")
+done < <(cd "${REPO_ROOT}" && git ls-files '*.sh' | grep -v '\.test\.sh$')
+assert_equals "there are production shell scripts to scan at all" "true" \
+  "$([[ "${#PRODUCTION_SHELL[@]}" -gt 20 ]] && echo true || echo false)"
+fixture_sources_avoid_short_circuit_pipes "${PRODUCTION_SHELL[@]}" >/dev/null 2>&1
+assert_equals "and none of them reads a short-circuiting pipe as a condition" "0" "$?"
+
+# Asserted on the CALL, not on the name. The name occurs twice in that file (the definition and the
+# call), so a check for the bare name is answered by the definition and stays green with nothing
+# calling it, which is a guard defending nothing (L135). Proved by mutation: deleting the call while
+# the definition stood was reported SURVIVED until this named the call site.
+RUNNER_MAIN_SRC="$(cat "${SCRIPT_DIR}/run-shell-fixtures.sh")"
+assert_contains "the runner really scans them, rather than this being the only place that does" \
+  "${RUNNER_MAIN_SRC}" 'done < <(production_shell_scripts)'
+assert_contains "and hands what it found to the same rule the fixtures are judged by" \
+  "${RUNNER_MAIN_SRC}" 'fixture_sources_avoid_short_circuit_pipes "${production[@]}"'
+# Zero production scripts must read as unmeasured, never as a clean scan (L98).
+assert_contains "and an empty production list is unmeasured rather than clean" \
+  "${RUNNER_MAIN_SRC}" "UNMEASURED - no production shell script was found to scan"
+
 # --- #3125: a background job must not be killed in the breath it is started --------------------------
 #
 # The proven defect. `run-heartbeat.test.sh` started a stand-in and killed it on the very next line, then

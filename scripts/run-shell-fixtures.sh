@@ -161,16 +161,22 @@ fixture_sources_avoid_short_circuit_pipes() {
   local offenders
   # The needle is BUILT rather than written, so this file does not match its own rule and the scan cannot
   # condemn the line describing it (the trick #2193 established for the style gate).
-  local q="grep -q"
+  # #3275: any `-q` in grep's option cluster, not the one spelling `grep -q`. The needle was literally
+  # that, so `grep -aqF` and `grep -qE` walked past it, and `grep -aqF` is what
+  # `mac/scripts/lib/hosted-suite-stamp.sh` was using when it reported the screens as unverified on four
+  # consecutive runs that had passed all 49 of them. A guard that catches one spelling of the thing it
+  # forbids is exempt from it wherever anybody wrote another (L96).
+  local q="grep[^|]*[[:space:]]-[A-Za-z]*q"
   # -H as well as -n: grep omits the filename when it is given exactly ONE file, so a scan of a single
   # fixture named a line number and no file, which is the half the reader needs.
   offenders="$(grep -HnE "^[[:space:]]*(if|elif|while)[[:space:]].*\| *(${q}|head )" "$@" 2>/dev/null || true)"
   [[ -z "${offenders}" ]] && return 0
-  echo "FAIL - a fixture pipes into a consumer that exits early (#2850)"
+  echo "FAIL - a script pipes into a consumer that exits early (#2850, #3275)"
   sed 's/^/    /' <<< "${offenders}"
   echo "  'grep -q' stops at its first match and 'head' at its Nth line, which closes the pipe and kills"
   echo "  the producer. Every fixture sets pipefail, so that becomes the pipeline's status and the"
-  echo "  assertion reports a failure that never happened. Use a herestring: cmd <<< \"\${text}\"."
+  echo "  assertion reports a failure that never happened. Use a herestring: cmd <<< \"\${text}\", or"
+  echo "  drop the -q and redirect to /dev/null where the file must stay POSIX (grep then reads it all)."
   return 1
 }
 
@@ -466,6 +472,13 @@ resolve_fixture_paths() {
   printf '%s\n' "${resolved[@]}"
 }
 
+# Every shell script this repo SHIPS, as opposed to the fixtures that test them. Derived from git so a
+# script added next year is covered by a rule it never heard of, rather than by a list holding whatever
+# somebody remembered (L96).
+production_shell_scripts() {
+  (cd "${REPO_ROOT}" && git ls-files '*.sh' | grep -v '\.test\.sh$' | sed "s|^|${REPO_ROOT}/|")
+}
+
 main() {
   # Selection happens BEFORE the cd, so a relative path resolves against wherever the person is
   # standing rather than against the repo root they may not be in.
@@ -496,6 +509,28 @@ main() {
   # witness. The runtime half still runs per fixture below and catches shapes this pattern does not know.
   local source_status=0
   fixture_sources_avoid_short_circuit_pipes "${fixtures[@]}" || source_status=1
+  # #3275: and the PRODUCTION scripts, which were exempt from this rule while running far more often
+  # (`scripts/test-all.sh` on every push, `verify-and-merge-branch.sh` on every merge). The instance that
+  # proves it needed doing is `mac/scripts/lib/hosted-suite-stamp.sh`, which had the defect for real and
+  # is not a fixture. Same asymmetry #3258 records one field over.
+  #
+  # Scanned on the DEFAULT sweep only. A scoped run is about the fixtures somebody named, and reporting
+  # a defect in an unrelated production script there would make a targeted run about something else,
+  # which is the whole of what #3245 fixed.
+  if [[ "$#" -eq 0 ]]; then
+    local production=()
+    while IFS= read -r p; do
+      [[ -n "${p}" ]] && production+=("${p}")
+    done < <(production_shell_scripts)
+    if [[ "${#production[@]}" -eq 0 ]]; then
+      # Zero subjects is unmeasured, never clean (L98). git ls-files answering nothing means the scan
+      # was pointed at nothing, not that the repo holds no shell.
+      echo "UNMEASURED - no production shell script was found to scan for short-circuiting pipes." >&2
+      source_status=1
+    else
+      fixture_sources_avoid_short_circuit_pipes "${production[@]}" || source_status=1
+    fi
+  fi
   # Both run, and neither is allowed to stand for the other: each prints its own refusal naming its own
   # defect, so a run carrying both shapes reports both rather than the first one found (L11).
   fixture_sources_avoid_kill_wait_on_a_fresh_job "${fixtures[@]}" || source_status=1

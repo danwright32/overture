@@ -449,6 +449,16 @@ live_corpus_dormancy_phrase() {
 live_corpus_report() {
   local output="$1" today="${2:-}" seen="${3:-}" counts open reached
   if ! counts="$(live_corpus_counts "${output}")"; then
+    # #3275: NAME the cause this run's own output supports, rather than the one that is usually right.
+    # The corpus line is a `print()` from a test, and a PARALLEL worker's stdout does not reach
+    # xcodebuild's: measured 2026-08-30, the suite ran and passed and the line appeared zero times. The
+    # message said "a scoped run does not include them" for a run that was not scoped, sending the
+    # reader to check a scope they never set (L11). A parallel run is told by its own per-test lines,
+    # which is evidence in the output rather than an inference about how it was invoked.
+    if [[ -n "$(test_run_totals_parallel "${output}")" ]]; then
+      echo "Live store invariants: NOT REPORTED. This was a PARALLEL run, and the corpus line is printed by a test, so it never reaches xcodebuild's own output: a worker's stdout is not forwarded. Nothing here says whether the invariants measured anything, and a serial run is currently the only way to find out (#3275, #3276)."
+      return 0
+    fi
     echo "Live store invariants: NOT REPORTED. This run printed no corpus line, so whether they measured anything is unknown; a scoped run does not include them."
     return 0
   fi

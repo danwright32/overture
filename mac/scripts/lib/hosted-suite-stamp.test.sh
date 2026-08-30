@@ -232,6 +232,87 @@ assert_contains "and hands them to the reader that needs them" \
 assert_contains "which is the same value the live-store report is given" \
   "${RUNNER}" 'live_corpus_report "${last_output}"' 
 
+# --- a match EARLY in a LARGE output still counts (#3275) ---------------------------------------------
+#
+# Every case above hands this function a log of a few lines, which is what a fixture is: minimal by
+# construction. That is exactly why none of them could see this defect, because it only exists above the
+# size of a pipe buffer (L101).
+#
+# `hosted_suites_ran` asked its question as `printf '%s\n' "${output}" | grep -aq <pattern>`, and
+# `mac/scripts/run-tests-locked.sh` runs under `set -euo pipefail`. Under pipefail that pipeline reports
+# the PRODUCER being killed: grep -q exits the instant it matches, printf is still writing into a 64KB
+# pipe, it takes SIGPIPE, and the status is 141. Measured 2026-08-30 against a real 1.2MB parallel log:
+#
+#   EARLY match (line 1406 of 10059):  141
+#   LATE match (near the end):           0
+#   NO match:                            1
+#
+# So the `if` read as "no match" for an early match and as "no match" for no match at all, and the only
+# case it read correctly was a match near the END of the stream (L183, L11).
+#
+# Why nobody saw it: in a SERIAL run the app-hosted bundle runs LAST, so the match lands near the end and
+# the status is 0. That is luck rather than design. The same tree under `-parallel-testing-enabled YES`
+# interleaves the hosted lines from the start, and four consecutive runs reported
+# `Screen tests: NOT VERIFIED by this run` having passed all 49 hosted suites and all 300 of their tests.
+#
+# Driven under `set -euo pipefail` in a SUBSHELL, which is the whole point: without those options the old
+# code passes this case, so a test written the way the ones above are would have gone green on the defect.
+BIG_EARLY="${WORK}/big-early.log"
+{
+  echo "Test case 'ProspectRowViewReachabilityTests/theBadgeIsDrawnOnACardWeCanReach()' passed on 'My Mac - Overture (63823)' (0.032 seconds)"
+  # Well past a 64KB pipe buffer, so the producer is still writing when grep matches and exits.
+  awk 'BEGIN { for (i = 0; i < 4000; i++) print "Test case ChatterTests/filler" i "() passed on My Mac - xctest (63822) (0.001 seconds)" }'
+  echo "** TEST SUCCEEDED **"
+} > "${BIG_EARLY}"
+
+BIG_EARLY_BYTES="$(wc -c < "${BIG_EARLY}" | tr -d ' ')"
+BIG_IS_BIG_ENOUGH="false"
+[[ "${BIG_EARLY_BYTES}" -gt 65536 ]] && BIG_IS_BIG_ENOUGH="true"
+assert_equals "the fixture really is bigger than a pipe buffer, or it proves nothing" "true" "${BIG_IS_BIG_ENOUGH}"
+
+UNDER_PIPEFAIL="$(
+  set -euo pipefail
+  # shellcheck source=./hosted-suite-stamp.sh
+  source "${SCRIPT_DIR}/hosted-suite-stamp.sh"
+  hosted_suites_ran "$(cat "${BIG_EARLY}")" "${NAMES}" "${TYPES}"
+)"
+assert_equals "a hosted suite matched EARLY in a large output is still verified under pipefail" \
+  "ProspectRowViewReachabilityTests" "${UNDER_PIPEFAIL}"
+
+# The display-name branch has the identical shape and the identical fix, so it gets the identical case.
+# It is the branch a SERIAL run takes, and its correctness there is currently an accident of the hosted
+# bundle running last.
+BIG_EARLY_SERIAL="${WORK}/big-early-serial.log"
+{
+  echo "${PASS_MARK} Suite \"The reachability badge on a card (#1145)\" passed after 0.310 seconds."
+  awk 'BEGIN { for (i = 0; i < 4000; i++) print "Test case ChatterTests/filler" i "() passed on My Mac - xctest (63822) (0.001 seconds)" }'
+  echo "** TEST SUCCEEDED **"
+} > "${BIG_EARLY_SERIAL}"
+
+UNDER_PIPEFAIL_SERIAL="$(
+  set -euo pipefail
+  # shellcheck source=./hosted-suite-stamp.sh
+  source "${SCRIPT_DIR}/hosted-suite-stamp.sh"
+  hosted_suites_ran "$(cat "${BIG_EARLY_SERIAL}")" "${NAMES}" "${TYPES}"
+)"
+assert_equals "and a display name matched early in a large output is verified too" \
+  "The reachability badge on a card (#1145)" "${UNDER_PIPEFAIL_SERIAL}"
+
+# The mirror, so the fix cannot be "say yes to everything": a large output naming NO hosted suite is
+# still unverified, under the same options.
+BIG_NONE="${WORK}/big-none.log"
+{
+  awk 'BEGIN { for (i = 0; i < 4000; i++) print "Test case ChatterTests/filler" i "() passed on My Mac - xctest (63822) (0.001 seconds)" }'
+  echo "** TEST SUCCEEDED **"
+} > "${BIG_NONE}"
+UNDER_PIPEFAIL_NONE="$(
+  set -euo pipefail
+  # shellcheck source=./hosted-suite-stamp.sh
+  source "${SCRIPT_DIR}/hosted-suite-stamp.sh"
+  hosted_suites_ran "$(cat "${BIG_NONE}")" "${NAMES}" "${TYPES}"
+)"
+assert_equals "a large run naming no hosted suite is still not verified" "" "${UNDER_PIPEFAIL_NONE}"
+
 echo
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "hosted-suite-stamp.test.sh: all assertions passed"
