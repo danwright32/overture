@@ -25,22 +25,51 @@ import Foundation
 // count), which is not Sendable, so a non-isolated async helper would be sending it across an isolation
 // boundary. All three suites that wait are already `@MainActor`, so matching them is what lets the
 // closure stay an ordinary one instead of forcing every call site to wrap its state in a box.
+//
+// #3266: the deadline is necessary and NOT sufficient. A timeout claims the condition stayed false, and
+// that claim is only measured if the condition was actually READ. Measured 2026-08-30 on the first
+// complete one-worker parallel run of the whole suite: the run's only failure was this file's own test,
+// and the reason the bundle gives is `(readings -> 2) == 3`. A wait whose condition becomes true on its
+// third reading had read it twice when ten seconds were up, because one `Task.sleep(for:
+// .milliseconds(1))` resumed more than ten seconds late. #3277 stopped the waiter BURNING a pool thread;
+// nothing stopped it being starved of one, and a deadline spent entirely unscheduled is a measurement of
+// the scheduler rather than of the condition (L98).
+//
+// So `minimumPolls` is how many times it must have looked before it may say the condition never became
+// true. The bound the deadline exists for survives (L110): the extra waiting is at most `minimumPolls`
+// sleeps, never the length of the starvation, so a fixture that genuinely cannot reach its state still
+// fails rather than hanging. That is asserted by its own test, since a fix for a false failure that
+// removes the ability to fail at all is the original defect wearing the remedy's name.
+//
+// `now` and `sleep` are seams and their defaults are the real implementations. They exist because the
+// two cases above cannot be driven by real time without measuring what else the machine is running
+// (L224, L290): the starved case advances an injected clock by eleven seconds a poll and waits for
+// nothing at all.
 @MainActor
 @discardableResult
 func waitUntil(_ whatIsAwaited: String,
                timeout: Duration = .seconds(10),
+               minimumPolls: Int = 3,
+               now: () -> ContinuousClock.Instant = { ContinuousClock.now },
+               sleep: () async -> Void = { try? await Task.sleep(for: .milliseconds(1)) },
                sourceLocation: SourceLocation = #_sourceLocation,
                _ condition: () -> Bool) async -> Bool {
-    let deadline = ContinuousClock.now + timeout
-    while !condition() {
-        if ContinuousClock.now >= deadline {
+    let deadline = now() + timeout
+    var polls = 0
+    while true {
+        polls += 1
+        if condition() { return true }
+        if now() >= deadline && polls >= minimumPolls {
             Issue.record("""
-                Timed out after \(timeout) waiting for: \(whatIsAwaited).
-                The usual cause is a fixture that cannot reach the state being awaited, for example a \
-                draft body with no greeting, which is held at send (Recipient.isBlockedByGreeting) so the \
-                send never happens. Check that first.
-                It is not ALWAYS the fixture: under parallel testing this can also be work that was never \
-                scheduled, which is what #3277 was (a five second deadline noticed after forty five). \
+                Timed out after \(timeout) waiting for: \(whatIsAwaited), having read the condition \
+                \(polls) times.
+                READ THAT COUNT FIRST. A healthy wait polls about once a millisecond, so a few polls over \
+                a whole deadline means this task was starved of a thread rather than that the condition \
+                stayed false: under parallel testing the tests of one process share a cooperative pool \
+                that this suite's synchronous source scans and SQLite clones keep busy (#3266, L241).
+                A count in the thousands is the ordinary cause instead: a fixture that cannot reach the \
+                state being awaited, for example a draft body with no greeting, which is held at send \
+                (Recipient.isBlockedByGreeting) so the send never happens.
                 This used to say "This is a FAILURE, not a slow machine", which was true serially and \
                 false there, in the wording most likely to stop somebody looking further (L11).
                 """,
@@ -66,7 +95,6 @@ func waitUntil(_ whatIsAwaited: String,
         //
         // `try?` swallows only the cancellation error, and the loop is still bounded by the deadline
         // above rather than by the sleep, so a cancelled task ends at the deadline instead of hanging.
-        try? await Task.sleep(for: .milliseconds(1))
+        await sleep()
     }
-    return true
 }

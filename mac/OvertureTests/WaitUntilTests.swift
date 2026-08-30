@@ -87,6 +87,70 @@ struct WaitUntilTests {
     // Judged by scanning BACKWARD to the nearest loop keyword rather than by a fixed window of lines: a
     // window is answered by whatever happens to be inside it, and a comment added above the loop moves
     // the code out of it (L518).
+    // #3266: a timeout may be declared only on EVIDENCE, and the evidence is having actually read the
+    // condition.
+    //
+    // Measured 2026-08-30 on the first complete one-worker parallel run of the whole suite (8,633 tests,
+    // 140.0s): the only failure in it was `aConditionThatBecomesTrueIsNoticed`, and the result bundle
+    // gives the reason as `(readings -> 2) == 3`. The wait read its condition TWICE inside a ten second
+    // deadline. Its condition becomes true on the third reading and nothing else is involved in it, so
+    // nothing was slow except the waiter itself: one `Task.sleep(for: .milliseconds(1))` resumed more
+    // than ten seconds late, because Swift Testing runs the tests of one process concurrently on a
+    // cooperative pool that this suite's thousands of synchronous source scans and SQLite clones keep
+    // busy. #3277 stopped the waiter BURNING a pool thread; it did not stop the waiter being starved of
+    // one.
+    //
+    // The claim a timeout makes is "the condition stayed false". Read twice, that claim is not
+    // measured, and an unmeasured claim must not be reported as a measured one (L98). So the deadline
+    // is necessary and no longer sufficient: the wait also has to have LOOKED, and `minimumPolls` is
+    // how many times. That keeps the bound the deadline exists for (L110), because the extra waiting is
+    // at most `minimumPolls` sleeps and not one more.
+    //
+    // Both seams are injected rather than driven by real time, so neither case here waits for anything
+    // or measures what else the machine is running (L290, L224). The starved sleeper advances the fake
+    // clock by 11 seconds per poll, which is the shape of the real failure and past the 10 second
+    // deadline in one hop.
+    @Test func aStarvedWaitIsNotReadAsAConditionThatNeverBecameTrue() async {
+        var readings = 0
+        var clock = ContinuousClock.now
+        let answered = await waitUntil("a condition that becomes true on its third reading",
+                                       timeout: .seconds(10),
+                                       now: { clock },
+                                       sleep: { clock = clock.advanced(by: .seconds(11)) }) {
+            readings += 1
+            return readings >= 3
+        }
+        #expect(answered, "the wait gave up on a condition that did become true, having been starved")
+        #expect(readings == 3, "the wait read the condition \(readings) times, so the deadline was spent unscheduled")
+    }
+
+    // The other half, and it is what stops the rule above becoming a hang: a condition that never
+    // becomes true is still given up on, and the extra waiting is BOUNDED by the poll count rather than
+    // being extended for as long as the starvation lasts. Without this the fix for the case above is a
+    // wait that can never fail, which is the defect `waitUntil` was built to remove (L110).
+    //
+    // `minimumPolls` is passed here rather than left at its default, and the expected count is the value
+    // passed. That is what makes this a test of the parameter rather than of the number 3: with the
+    // default on both sides, an implementation that ignored the argument entirely and hard-coded its own
+    // bound would pass (L70).
+    @Test func aStarvedWaitStillGivesUpRatherThanWaitingForever() async {
+        var polls = 0
+        var clock = ContinuousClock.now
+        var answered = true
+        await withKnownIssue("the timeout is the point of this case") {
+            answered = await waitUntil("something that never happens",
+                                       timeout: .seconds(10),
+                                       minimumPolls: 2,
+                                       now: { clock },
+                                       sleep: { clock = clock.advanced(by: .seconds(11)) }) {
+                polls += 1
+                return false
+            }
+        }
+        #expect(answered == false, "a timed-out wait must report false, not true")
+        #expect(polls == 2, "a starved wait read the condition \(polls) times, so its extra waiting is not bounded")
+    }
+
     @Test func noTestSpinsOnAnUnboundedTaskYield() throws {
         let roots = ["OvertureTests", "OvertureHostedTests", "TestSupport"]
         var filesRead = 0
