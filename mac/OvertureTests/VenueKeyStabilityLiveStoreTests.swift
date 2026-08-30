@@ -129,6 +129,30 @@ struct VenueKeyStabilityLiveStoreTests {
         return false
     }
 
+    // #3314: the predicate itself, on the two real strings that exposed it, plus the shapes either side
+    // of them. The live-store test above cannot cover this: since its assertion became a property of the
+    // KEY rather than a claim of absence, a wrong predicate only widens the set it checks and every
+    // member still passes, so reverting this scan to its old form there is invisible (proved by
+    // mutation, SURVIVED). These cases are where the scan is actually pinned.
+    @Test func aCommaBetweenTwoBracketsIsNotACommaInsideOne() {
+        // The false positive. Two bracket groups, neither holding a comma, and the comma the old
+        // first-open-to-last-close reading found sits between them, in the open.
+        #expect(commaInsideABracket(
+            "Montague Street (between Henry & Hicks Streets), Brooklyn Heights, NY (offsite)") == false)
+        // The genuine one, from the same store on the same day.
+        #expect(commaInsideABracket("St. Peter's Episcopal Church (Morristown, NJ)"))
+        // The plain shapes either side, so the scan is not simply answering yes or no to everything.
+        #expect(commaInsideABracket("Carnegie Hall") == false)
+        #expect(commaInsideABracket("Carnegie Hall, New York") == false)
+        #expect(commaInsideABracket("Somewhere (Times Square)") == false)
+        // Nested, where the comma is deeper than the outermost pair.
+        #expect(commaInsideABracket("A Room (a wing (east, west) of it)"))
+        // An UNBALANCED bracket matches nothing, which is the same answer
+        // `VenueNormalization.strippingParentheticals` gives it, so the two readings agree about what a
+        // bracket is.
+        #expect(commaInsideABracket("A Room (never closed, and so not a pair") == false)
+    }
+
     @Test(.enabled(if: liveStoreExists, "no live store on this machine"))
     func noVenueCarriesABracketSpanningAComma() async throws {
         await RealStoreTestLock.shared.acquire()
