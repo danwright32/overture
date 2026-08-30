@@ -10,7 +10,7 @@ import Foundation
 // These are the blind spot. Each object counts its own writes WHERE THEY HAPPEN, which creates no
 // dependency on anything, and the screen's fingerprint reads the counts. A render that follows a write
 // then names the object that moved instead of reporting silence.
-@Suite("A live object counts its writes where they happen (#1930)")
+@Suite("A live object counts its writes where they happen (#1930)", .sharesTheRenderCounter)
 struct QueueWriteTraceTests {
     @Test func writesAreCountedPerObjectAndClearedOnReset() {
         QueueRenderCounter.reset()

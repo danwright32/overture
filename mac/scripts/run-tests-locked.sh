@@ -247,6 +247,25 @@ executed_test_count() {
   return 0
 }
 
+# run_is_scoped <args...>: whether this run was deliberately narrowed to a subset of the suite.
+#
+# ONLY a `-only-testing:` argument narrows a run. Every other argument (the parallel-testing flags, a
+# destination, a result-bundle path) leaves the whole suite selected, and treating those as a scope
+# turns the short-run gate OFF for a run that should be judged hardest.
+#
+# It used to be `[[ $# -gt 0 ]]`, any argument at all, and that is how #3234's parallel experiment came
+# to be measured with no gate on it. Measured 2026-08-30: a parallel run executed 5,217 tests against a
+# baseline of 8,618, lost the whole share of its second worker with no crash line anywhere, and printed
+# an ordinary verdict, because passing `-parallel-testing-enabled YES` had marked it scoped. That is the
+# gate switching itself off precisely where it was needed (L98, L259).
+run_is_scoped() {
+  local arg
+  for arg in "$@"; do
+    [[ "${arg}" == -only-testing:* ]] && return 0
+  done
+  return 1
+}
+
 # truncated_report <executed> <baseline>. Prints the sentence when a run came back materially short,
 # and nothing when it did not.
 #
@@ -592,7 +611,7 @@ main() {
   # the gate for every full run after it. The empty-run gate below is judged on every run either way,
   # because "nothing ran" is never correct.
   local executed baseline="" truncated="" scoped=0 restarted=""
-  [[ $# -gt 0 ]] && scoped=1
+  run_is_scoped "$@" && scoped=1
   executed="$(executed_test_count "${last_output}")"
   # #2821: whether the test process was RELAUNCHED partway through, which makes every count below a
   # count of the REMAINDER rather than of this run.

@@ -135,11 +135,11 @@ struct AppSourceWalkMemoTests {
         let root = try makeSources(count: 4)
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let before = AppSourceWalk.walksPerformed
+        let before = AppSourceWalk.walksPerformed(forRootAt: root)
         let first = AppSourceWalk.files(under: root, floor: 1)
-        let afterFirst = AppSourceWalk.walksPerformed
+        let afterFirst = AppSourceWalk.walksPerformed(forRootAt: root)
         let second = AppSourceWalk.files(under: root, floor: 1)
-        let afterSecond = AppSourceWalk.walksPerformed
+        let afterSecond = AppSourceWalk.walksPerformed(forRootAt: root)
 
         #expect(afterFirst == before + 1, "the first call has to actually walk, or this proves nothing")
         #expect(afterSecond == afterFirst, "the second call must be answered from the memo")
@@ -155,13 +155,13 @@ struct AppSourceWalkMemoTests {
         let empty = try makeSources(count: 0)
         defer { try? FileManager.default.removeItem(at: empty) }
 
-        let before = AppSourceWalk.walksPerformed
+        let before = AppSourceWalk.walksPerformed(forRootAt: empty)
         withKnownIssue("an empty walk refuses") { _ = AppSourceWalk.files(under: empty, floor: 10) }
-        let afterFirst = AppSourceWalk.walksPerformed
+        let afterFirst = AppSourceWalk.walksPerformed(forRootAt: empty)
         withKnownIssue("and refuses again, rather than being answered from a memo") {
             _ = AppSourceWalk.files(under: empty, floor: 10)
         }
-        let afterSecond = AppSourceWalk.walksPerformed
+        let afterSecond = AppSourceWalk.walksPerformed(forRootAt: empty)
 
         #expect(afterFirst == before + 1)
         #expect(afterSecond == afterFirst + 1, "an empty result must be re-walked, never remembered")
@@ -174,14 +174,14 @@ struct AppSourceWalkMemoTests {
         let empty = try makeSources(count: 0)
         defer { try? FileManager.default.removeItem(at: empty) }
 
-        let before = AppSourceWalk.walksPerformed
+        let before = AppSourceWalk.walksPerformed(forRootAt: empty)
         withKnownIssue("an empty walk refuses") { _ = AppSourceWalk.urls(under: empty, floor: 10) }
-        let afterFirst = AppSourceWalk.walksPerformed
+        let afterFirst = AppSourceWalk.walksPerformed(forRootAt: empty)
         withKnownIssue("and refuses again rather than being answered from a memo") {
             _ = AppSourceWalk.urls(under: empty, floor: 10)
         }
         #expect(afterFirst == before + 1)
-        #expect(AppSourceWalk.walksPerformed == afterFirst + 1,
+        #expect(AppSourceWalk.walksPerformed(forRootAt: empty) == afterFirst + 1,
                 "an empty url walk must be re-walked, never remembered")
     }
 
@@ -189,13 +189,13 @@ struct AppSourceWalkMemoTests {
         let root = try makeSources(count: 4)
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let before = AppSourceWalk.walksPerformed
+        let before = AppSourceWalk.walksPerformed(forRootAt: root)
         let first = AppSourceWalk.urls(under: root, floor: 1)
-        let afterFirst = AppSourceWalk.walksPerformed
+        let afterFirst = AppSourceWalk.walksPerformed(forRootAt: root)
         let second = AppSourceWalk.urls(under: root, floor: 1)
 
         #expect(afterFirst == before + 1)
-        #expect(AppSourceWalk.walksPerformed == afterFirst, "the second call must be answered from the memo")
+        #expect(AppSourceWalk.walksPerformed(forRootAt: root) == afterFirst, "the second call must be answered from the memo")
         #expect(first == second)
     }
 
@@ -207,11 +207,11 @@ struct AppSourceWalkMemoTests {
         defer { try? FileManager.default.removeItem(at: root) }
 
         withKnownIssue("a short walk refuses") { _ = AppSourceWalk.files(under: root, floor: 100) }
-        let afterFirst = AppSourceWalk.walksPerformed
+        let afterFirst = AppSourceWalk.walksPerformed(forRootAt: root)
         withKnownIssue("and refuses for the SECOND caller too, off the memo") {
             _ = AppSourceWalk.files(under: root, floor: 100)
         }
-        #expect(AppSourceWalk.walksPerformed == afterFirst, "it was kept")
+        #expect(AppSourceWalk.walksPerformed(forRootAt: root) == afterFirst, "it was kept")
     }
 
     // The extensions are part of what was asked for, not a detail: a guard over test data asks for
@@ -267,11 +267,16 @@ struct CopyDocumentMemoTests {
         try "enum A { static let line = \"Hello there.\" }\n"
             .write(to: tree.appendingPathComponent("A.swift"), atomically: true, encoding: .utf8)
 
-        let before = CopyInventory.buildsPerformed
-        _ = try CopyInventory.build(root: tree, floor: 1)
-        _ = try CopyInventory.build(root: tree, floor: 1)
-        #expect(CopyInventory.buildsPerformed == before,
-                "an injected root must not touch the default memo's accounting at all")
+        // Asserted on the ANSWER rather than on a global counter. The counter is shared with every other
+        // test in the process, so reading it either side of this call measures whatever else happened to
+        // be building at that moment, which is a test about the run order (this is the shape that failed
+        // the first parallel run, #3234). What the defect would actually look like is unmistakable here:
+        // the real app has hundreds of files and this tree has one.
+        let first = try CopyInventory.build(root: tree, floor: 1)
+        let second = try CopyInventory.build(root: tree, floor: 1)
+        #expect(first.filesScanned == 1, "an injected root must be scanned, not answered from the memo")
+        #expect(second.filesScanned == 1, "and again on the second call")
+        #expect(first.occurrences.keys.contains("Hello there."))
     }
 
     // The one result that must never be kept. A scan that read nothing is indistinguishable downstream

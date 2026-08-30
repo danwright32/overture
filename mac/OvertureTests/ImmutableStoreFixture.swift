@@ -13,10 +13,20 @@ enum ImmutableStoreFixture {
     // the ordering has no other observable consequence: both orders leave the caller seeing a torn-down
     // fixture, and the difference is only visible to whatever runs NEXT. See ImmutableStoreFixtureTests.
     enum Step: Equatable { case toreDown, releasedLock }
-    static var stepsForTesting: [Step]?
 
-    private static func note(_ step: Step) {
-        if stepsForTesting != nil { stepsForTesting?.append(step) }
+    // #3234: the recorder belongs to the CALL, not to the process. It used to be one `static var` that a
+    // watching test armed before calling in, and every other suite that uses this fixture recorded into
+    // it too. That is correct while exactly one test runs at a time and wrong the instant two do: the
+    // watcher reads back its own steps interleaved with somebody else's. Both tests in
+    // ImmutableStoreFixtureTests failed that way on the first parallel run, 2026-08-30, and `.serialized`
+    // on their suite did not help, because the interference comes from OTHER suites entirely.
+    //
+    // A box passed in by the caller also fixes the one thing a lock could not: `.releasedLock` is noted
+    // AFTER the lock is handed on, so at that moment another call legitimately owns the fixture. Nothing
+    // global is being written, so it no longer matters who that is.
+    final class StepRecorder {
+        var steps: [Step] = []
+        init() {}
     }
 
     // `seed` runs against a first, disposable container to create the on-disk store with whatever
@@ -31,7 +41,8 @@ enum ImmutableStoreFixture {
     static func withFailingSave<T>(
         schema: Schema,
         seed: (ModelContext) throws -> Void,
-        body: (ModelContext) async throws -> T
+        body: (ModelContext) async throws -> T,
+        recorder: StepRecorder? = nil
     ) async throws -> T {
         await RealStoreTestLock.shared.acquire()
         let dir = FileManager.default.temporaryDirectory
@@ -55,7 +66,7 @@ enum ImmutableStoreFixture {
         func tearDown() {
             for suffix in ["", "-wal", "-shm"] { _ = chflags(storeURL.path + suffix, 0) }
             try? FileManager.default.removeItem(at: dir)
-            note(.toreDown)
+            recorder?.steps.append(.toreDown)
         }
         do {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -77,12 +88,12 @@ enum ImmutableStoreFixture {
             }()
             tearDown()
             await RealStoreTestLock.shared.release()
-            note(.releasedLock)
+            recorder?.steps.append(.releasedLock)
             return result
         } catch {
             tearDown()
             await RealStoreTestLock.shared.release()
-            note(.releasedLock)
+            recorder?.steps.append(.releasedLock)
             throw error
         }
     }

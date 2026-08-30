@@ -1356,6 +1356,30 @@ assert_equals "and no run in this fixture changed the repository's screens recor
 # silences under test are silences in time) and the fixtures run concurrently, so in their own file
 # that waiting happens beside this file's work instead of after it.
 
+
+# --- only a test scope switches the short-run gate off (#3234) -----------------------------------
+#
+# The gate compares what a run executed against the last green full run and refuses a materially short
+# one. It has to stand down for a deliberately scoped run, which legitimately executes a handful of
+# tests, and it used to do that for ANY argument at all.
+#
+# That is how #3234's parallel experiment came to be measured with no gate on it. Measured 2026-08-30:
+# a parallel run executed 5,217 tests against a baseline of 8,618, lost its second worker's entire share
+# with no crash line anywhere, and printed an ordinary verdict, because `-parallel-testing-enabled YES`
+# had marked the run scoped. A gate that switches itself off exactly where it is needed is the shape
+# this repo keeps writing down (L98, L259).
+assert_equals "a run with no arguments is not scoped" "not scoped" \
+  "$(run_is_scoped && echo scoped || echo "not scoped")"
+assert_equals "the parallel flags do NOT scope a run, which is the whole of #3234's blind spot" \
+  "not scoped" \
+  "$(run_is_scoped -parallel-testing-enabled YES -parallel-testing-worker-count 12 && echo scoped || echo "not scoped")"
+assert_equals "nor does a destination or a result bundle" "not scoped" \
+  "$(run_is_scoped -destination 'platform=macOS' -resultBundlePath /tmp/x && echo scoped || echo "not scoped")"
+assert_equals "a -only-testing: argument DOES scope it" "scoped" \
+  "$(run_is_scoped -only-testing:OvertureTests/SomeSuite && echo scoped || echo "not scoped")"
+assert_equals "and it is found wherever it sits in the arguments" "scoped" \
+  "$(run_is_scoped -parallel-testing-enabled YES -only-testing:OvertureTests/SomeSuite && echo scoped || echo "not scoped")"
+
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All run-tests-locked.sh stale-host fixtures passed."
   exit 0
