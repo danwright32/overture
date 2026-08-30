@@ -174,12 +174,12 @@ assert_eq "a parallel run with no test lines yields nothing, not a zero" \
 ** TEST SUCCEEDED **")" \
   ""
 
-# The serial summary still wins wherever it exists. It is xcodebuild's own total rather than one
-# derived by counting lines, so a log carrying both must never be re-counted from the weaker source.
-assert_eq "a serial summary is preferred over counting lines" \
-  "$(test_run_totals "Test case 'A/one()' passed on 'My Mac - xctest (1)' (0.1 seconds)
-${PASS_MARK} Test run with 5923 tests in 835 suites passed after 102.546 seconds.")" \
-  "5923 835 102.546"
+# The test that used to sit here asserted that a serial summary is PREFERRED over counting lines, and
+# it is deleted rather than adjusted because #3266 reversed that rule: a log carrying both is a MIXED
+# run, where the summary covers only the serial testable and the lines only the parallel one, so the two
+# are summed. A test defending a reversed decision is not stale coverage, it is a guard for the
+# behaviour that was rejected (L252). What replaces it is the mixed-run block below, driven by a real
+# trimmed log rather than by the two hand-written lines that one used.
 
 # The failing list is read from xcodebuild's own block either way, so a parallel run's failures are
 # named exactly as a serial run's are. Worth asserting rather than assuming: this block is what the
@@ -516,6 +516,41 @@ assert_eq "the test that PRINTS the line writes the clause the parser reads" \
   "$([ "$(grep -ac 'whose writer a contact holds' \
             "${REPO_FOR_CORPUS}/mac/OvertureTests/ReplyInvariantsLiveStoreTests.swift" || echo 0)" -ge 1 ] \
      && echo yes || echo no)" "yes"
+
+
+# --- a MIXED run, one testable parallel and one serial (#3266) -----------------------------------
+#
+# The shape the parallel work actually produces: `OvertureTests` parallelizable, `OvertureHostedTests`
+# left serial because it launches the app. Such a run prints per-test lines for the parallel testable
+# and NO summary, and a summary for the serial one and no per-test lines.
+#
+# Preferring the summary, which is what this did, read the hosted suite's 300 as the whole run.
+# Measured 2026-08-30: a COMPLETE run (8,323 distinct parallel names plus that 300, against a baseline
+# of 8,624) was reported as 300 tests and refused by the short-run gate. Under-reporting by 96% makes
+# the gate block a healthy push, which is the failure that gets a gate switched off rather than trusted.
+MIXED_LOG="$(cat "${SCRIPT_DIR}/fixtures/mixed-run-20260830.log")"
+
+assert_eq "a mixed run counts BOTH testables, not whichever printed a summary" \
+  "$(test_run_totals "${MIXED_LOG}" | awk '{print $1}')" \
+  "303"
+
+assert_eq "and its suites are both testables' too" \
+  "$(test_run_totals "${MIXED_LOG}" | awk '{print $2}')" \
+  "52"
+
+# The DURATION is the one number that must NOT be summed. The parallel reading already takes the run's
+# own elapsed line, which spans both testables, so adding the serial half's 5.207s to it would count
+# that stretch twice and report a run as longer than it was.
+assert_eq "the duration comes from the run's own elapsed line, never the sum" \
+  "$(test_run_totals "${MIXED_LOG}" | awk '{print $3}')" \
+  "162.335"
+
+# Summing cannot double count, and that is measured rather than assumed: a wholly serial run prints no
+# per-test worker lines at all, so the two sources never describe the same test. This pins the half that
+# would break first if that ever changed.
+assert_eq "a wholly serial run is still read from its summaries alone" \
+  "$(test_run_totals "Test run with 10 tests in 2 suites passed after 1.500 seconds.")" \
+  "10 2 1.500"
 
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All suite-stats.sh fixtures passed."

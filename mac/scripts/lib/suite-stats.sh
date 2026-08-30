@@ -32,9 +32,10 @@ test_run_totals() {
   # something ("Test run with 10 tests in 1 suite passed"). Only knowing the plural made a real scoped run
   # read as one that executed nothing, which is the same false alarm the empty-run gate exists to avoid
   # ever raising.
-  # #3233: the serial summary FIRST, and the line-counting fallback only where there is none. That
-  # summary is xcodebuild's own total rather than one derived by counting, so a log carrying both
-  # must never be re-counted from the weaker source.
+  # #3233 read the serial summary FIRST and used the line count only where there was none, on the
+  # reasoning that a summary is xcodebuild's own total rather than one derived by counting. #3266
+  # reversed that: a log carrying BOTH is a mixed run, and the two describe different testables. See
+  # the summing below.
   serial="$(printf '%s\n' "${output}" | awk '
     match($0, /Test run with [0-9]+ tests? in [0-9]+ suites? (passed|failed) after [0-9.]+ seconds/) {
       line = substr($0, RSTART, RLENGTH)
@@ -45,11 +46,39 @@ test_run_totals() {
     }
     END { if (seen) printf "%d %d %.3f\n", tests, suites, seconds }
   ')"
+  local parallel
+  parallel="$(test_run_totals_parallel "${output}")"
+
+  # #3266: the two readings are SUMMED, not preferred between, because a run can carry both. Setting
+  # one testable parallel and leaving the other serial is exactly what the parallel work does, and such
+  # a run prints per-test lines for the parallel testable and a summary for the serial one. Preferring
+  # the summary read the hosted suite's 300 as the whole run: measured 2026-08-30, a COMPLETE run
+  # (8,323 parallel names plus that 300, against a baseline of 8,624) was reported as 300 and refused by
+  # the short-run gate. Under-reporting by 96% makes the gate block a healthy push, which is the failure
+  # that gets a gate switched off rather than the one that gets it trusted.
+  #
+  # Summing cannot double count, and that is measured rather than assumed: a serial run prints NO
+  # `Test case ... on 'My Mac - xctest (N)'` lines at all (checked over a full serial run, 2026-08-30),
+  # so the per-test lines only ever belong to a parallel testable and the summaries only ever to a
+  # serial one.
+  if [[ -n "${serial}" && -n "${parallel}" ]]; then
+    # The DURATION is not summed. The parallel reading takes the run's own elapsed line, which already
+    # spans both testables, so adding the serial half's seconds to it would count that stretch twice.
+    awk -v s="${serial}" -v p="${parallel}" '
+      BEGIN {
+        split(s, a, " "); split(p, b, " ")
+        if (b[3] == "unknown") printf "%d %d unknown\n", a[1] + b[1], a[2] + b[2]
+        else                   printf "%d %d %.3f\n", a[1] + b[1], a[2] + b[2], b[3]
+      }'
+    return 0
+  fi
   if [[ -n "${serial}" ]]; then
     printf '%s\n' "${serial}"
     return 0
   fi
-  test_run_totals_parallel "${output}"
+  printf '%s' "${parallel}"
+  [[ -n "${parallel}" ]] && echo
+  return 0
 }
 
 # The same totals for a run under `-parallel-testing-enabled YES`, which prints NO summary line at

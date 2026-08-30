@@ -1,0 +1,12 @@
+# Trimmed from the real mixed run of 2026-08-30 (#3266): OvertureTests parallelizable, OvertureHostedTests
+# serial. The parallel testable prints per-test lines and NO summary; the serial one prints a summary.
+# Three DISTINCT parallel names here (one of them parameterised, printed three times), plus the run's
+# own elapsed line and the serial testable's summary. Expected reading: 3 + 300 tests, 3 + 49 suites,
+# and the duration from the elapsed line, never the sum.
+Test case 'IndividualBilledAsProducingTests/proseIsNotACredit(_:)' passed on 'My Mac - xctest (3462)' (0.000 seconds)
+Test case 'IndividualBilledAsProducingTests/proseIsNotACredit(_:)' passed on 'My Mac - xctest (3462)' (0.000 seconds)
+Test case 'IndividualBilledAsProducingTests/proseIsNotACredit(_:)' passed on 'My Mac - xctest (3462)' (0.000 seconds)
+Test case 'WatchGapTests/theWindowIsThreeMissedChecksOfWhateverTheCadenceIs()' passed on 'My Mac - xctest (3462)' (36.939 seconds)
+Test case 'WrapHStackPackingTests/aChildWiderThanTheWholeRowIsHeldInsideIt()' passed on 'My Mac - xctest (3462)' (36.857 seconds)
+Test case '2026-08-30 10:16:24.085 xcodebuild[2567:260385261] [MT] IDETestOperationsObserverDebug: 162.335 elapsed -- Testing started completed.
+✔ Test run with 300 tests in 49 suites passed after 5.207 seconds.
