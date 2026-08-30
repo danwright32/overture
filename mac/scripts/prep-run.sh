@@ -204,6 +204,11 @@ printf '{"version":1,"total":%s,"completed":0}\n' "$TOTAL" > "$PROGRESS"
 # (the derive runs only on the marker branch), so no draft is corrupted mid-write.
 CANCEL_POLL="${PREP_CANCEL_POLL_SECONDS:-3}"
 MARKER_INTERVAL=60
+# #3292: under JOB CONTROL, so the heartbeat and the `sleep` inside it form a process GROUP that
+# `heartbeat_stop` can end whole. Without it the stop signals the subshell and leaves the sleep running
+# as an orphan on every stop, and macOS reaps nothing until the next boot. Turned off again immediately
+# after, so nothing else in the runner is affected.
+set -m
 ( since_marker=0
   # #2109: any way this loop ends stops the run, including a `set -e` death on a bookkeeping
   # command. See lib/run-heartbeat.sh.
@@ -243,6 +248,7 @@ MARKER_INTERVAL=60
     fi
   done ) &
 HEARTBEAT_PID=$!
+set +m
 # #3007: filled in below once the chunks launch, and empty for a single-claude run, which has no chunk to
 # kill. Declared here so the EXIT trap can name it whether or not it was ever set (the script runs under
 # `set -u`).
@@ -452,8 +458,15 @@ if [ "${CHUNK_COUNT:-0}" -ge 1 ]; then
   #
   # Started AFTER the chunks, unlike the heartbeat, because it needs their pids. It is killed by the same
   # trap, through heartbeat_stop, so it leaves no job notice behind (#2981).
+  # #3292: under job control, for the same reason as the heartbeat above. This watchdog polls with
+  # `sleep "$STUCK_TOOL_CALL_POLL"` (15s by default), and it is stopped through `heartbeat_stop`, so
+  # without a group of its own the stop ends the wrapper and leaves that sleep running. It was the
+  # SECOND leaker in this runner and the one the heartbeat fix did not reach: measured 2026-08-30, two
+  # `sleep 15` survived every sweep of prep-run-chunking.test.sh even after the heartbeat was grouped.
+  set -m
   stuck_watchdog_run "$CHUNK_COUNT" "$CHUNK_PIDS" &
   STUCK_WATCHDOG_PID=$!
+  set +m
 
   # Wait for every chunk, capturing each status so one failure is recorded without hiding the others.
   # The first non-zero becomes the run's status. Written as `||` so a chunk exiting non-zero cannot trip

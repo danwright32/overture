@@ -120,6 +120,11 @@ printf '{"version":1,"total":%s,"completed":0}\n' "$TOTAL" > "$PROGRESS"
 # marker branch, so a cancel that lands on a plain cancel-poll tick never interrupts a results write.
 CANCEL_POLL="${REPLY_CLASSIFY_CANCEL_POLL_SECONDS:-3}"
 MARKER_INTERVAL=60
+# #3292: under JOB CONTROL, so the heartbeat and the `sleep` inside it form a process GROUP that
+# `heartbeat_stop` can end whole. Without it the stop signals the subshell and leaves the sleep running
+# as an orphan on every stop, and macOS reaps nothing until the next boot. Turned off again immediately
+# after, so nothing else in the runner is affected.
+set -m
 ( since_marker=0
   # #2109: any way this loop ends stops the run, including a `set -e` death on a bookkeeping
   # command. See lib/run-heartbeat.sh.
@@ -151,6 +156,7 @@ MARKER_INTERVAL=60
     fi
   done ) &
 HEARTBEAT_PID=$!
+set +m
 # CLAUDE_PID is filled in below once claude launches; killing it on exit stops a killed script from
 # leaving an orphaned claude running against the queue.
 CLAUDE_PID=""
