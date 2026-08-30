@@ -148,3 +148,168 @@ struct LiveStoreCopyGuardTests {
         #expect(!text.contains("copyItem("))
     }
 }
+
+// #3349: the clone WAITS for a contended lock instead of giving up on the first attempt.
+//
+// Found by running. On the first complete parallel run of the whole suite the only failure was
+// `SameNightRoomVariantMergeLiveStoreTests.everySurvivingRowStillNamesItsRoom()`, and the result bundle
+// gives the reason as `LiveStoreClone.swift: Caught error: ... Error: database is locked`. Serially it
+// had never happened, because nothing else was cloning at the same moment: Swift Testing runs the tests
+// of one process concurrently, and twenty-two suites here take their own clone of Dan's real store.
+//
+// It is NOT a lock that fixes it, and the reason is worth keeping. Thirteen of the suites that clone
+// never took `RealStoreTestLock`, six of them reaching the clone through `MigrationRehearsal` rather
+// than naming it, so a lock would have been a convention repeated at thirty-seven call sites with
+// thirteen already forgetting it (L274, L96). A busy timeout is answered by the one thing every one of
+// them goes through, and it also covers the contention no test lock can reach, which is Dan's live app
+// writing while a suite clones.
+//
+// WHAT THESE MEASURE, and it is deliberately not "several clones at once". That was written first and
+// it did not discriminate: twelve simultaneous clones of a scratch database passed with the timeout set
+// to ZERO, which is the configuration the defect lives in, so the test would have been green whether
+// the fix was there or not (L159). Contention is a property of the source's lock, not of the number of
+// callers, so these hold the lock EXPLICITLY and measure the one thing the timeout changes: whether the
+// backup waits for it. Measured in a shell before it was written, against a source held by an exclusive
+// transaction: `.timeout 0` fails in 0.00 seconds, `.timeout 800` fails after 0.891, and both say
+// `Error: database is locked`.
+//
+// The corpus is a scratch database rather than the live store, deliberately: this must measure the same
+// thing on a machine that has no live store at all, and a test of lock contention has no business
+// opening Dan's queue (L2).
+@Suite("The clone waits for a contended lock (#3349)")
+struct ContendedLiveStoreCloneTests {
+
+    private func sqlite(_ arguments: [String]) throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
+        process.arguments = arguments
+        process.standardOutput = Pipe()
+        process.standardError = Pipe()
+        try process.run()
+        process.waitUntilExit()
+        #expect(process.terminationStatus == 0,
+                "the fixture's own sqlite3 call failed, so nothing below measures anything")
+    }
+
+    /// A source in ROLLBACK JOURNAL mode, held by an exclusive transaction in another process.
+    ///
+    /// Rollback journal rather than WAL on purpose: in WAL a writer does not block a reader, so an
+    /// exclusive transaction there contends with nothing and the fixture would prove the opposite of
+    /// what it claims. Measured, not assumed: the WAL version of this was tried first and every backup
+    /// succeeded while the lock was held.
+    private final class ExclusiveHolder {
+        private let process = Process()
+        private let input = Pipe()
+        init(holding database: URL) throws {
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
+            process.arguments = [database.path]
+            process.standardInput = input
+            process.standardOutput = Pipe()
+            process.standardError = Pipe()
+            try process.run()
+            // Left UNCOMMITTED and the pipe left open, which is what holds the lock.
+            try input.fileHandleForWriting.write(contentsOf: Data("BEGIN EXCLUSIVE;\nINSERT INTO t VALUES(99);\n".utf8))
+        }
+        /// Commits and lets the process end. Idempotent, so `defer` can call it after the test already has.
+        ///
+        /// The wait is BOUNDED and ends in a `terminate()`. `Process.waitUntilExit()` has no deadline, so
+        /// a holder that did not exit on EOF would hang the suite while holding the machine-wide
+        /// xcodebuild lock, which is worse than any failure this fixture can report (L110).
+        func release() {
+            try? input.fileHandleForWriting.close()
+            let deadline = ContinuousClock.now + .seconds(10)
+            while process.isRunning && ContinuousClock.now < deadline {
+                usleep(2_000)
+            }
+            if process.isRunning {
+                process.terminate()
+                process.waitUntilExit()
+            }
+        }
+        /// The last resort, so a fixture that fails early cannot leave a process holding a lock behind it.
+        func endWhateverHappened() {
+            if process.isRunning { process.terminate() }
+            release()
+        }
+    }
+
+    /// Returns the refusal a clone made, or nil when it succeeded, with how long the attempt took.
+    private func attemptClone(of source: URL, into dir: URL, timeoutMilliseconds: Int)
+        -> (failure: String?, elapsed: Duration) {
+        let started = ContinuousClock.now
+        do {
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            _ = try LiveStoreClone.makeClone(ofBackupAt: source, in: dir,
+                                             timeoutMilliseconds: timeoutMilliseconds)
+            return (nil, ContinuousClock.now - started)
+        } catch {
+            return ("\(error)", ContinuousClock.now - started)
+        }
+    }
+
+    // The shipped path really asks for a retry window. Asserted on the arguments rather than on a
+    // comment, because the whole defect was a wait nobody had asked for (L3).
+    @Test func thebackupAsksSqliteToWaitForTheLock() {
+        let arguments = LiveStoreClone.backupArguments(source: URL(fileURLWithPath: "/tmp/a.store"),
+                                                       clone: URL(fileURLWithPath: "/tmp/b.store"),
+                                                       timeoutMilliseconds: 1234)
+        #expect(arguments.contains(".timeout 1234"),
+                "the backup does not pass a busy timeout, so the first contended attempt fails outright: \(arguments)")
+        // Before the database, because `-cmd` runs ahead of what follows it: a timeout set afterwards
+        // would be set on a connection that has already failed.
+        let timeoutAt = arguments.firstIndex(of: ".timeout 1234")
+        let databaseAt = arguments.firstIndex(of: "/tmp/a.store")
+        #expect(timeoutAt != nil && databaseAt != nil && timeoutAt! < databaseAt!,
+                "the timeout must be set before the database is opened: \(arguments)")
+        #expect(LiveStoreClone.busyTimeoutMilliseconds > 0,
+                "a zero busy timeout is the same as none at all, which is the defect this fixes")
+    }
+
+    @Test func acontendedCloneWaitsForTheLockRatherThanGivingUpAtOnce() throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("clone-contention-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let sourceDir = root.appendingPathComponent("source", isDirectory: true)
+        try FileManager.default.createDirectory(at: sourceDir, withIntermediateDirectories: true)
+        let source = sourceDir.appendingPathComponent("Overture.store")
+        try sqlite([source.path, "PRAGMA journal_mode=DELETE; CREATE TABLE t(a INTEGER); INSERT INTO t VALUES(1);"])
+
+        let holder = try ExclusiveHolder(holding: source)
+        defer { holder.endWhateverHappened() }
+
+        // Both attempts are made against the SAME held lock, so the only difference between them is the
+        // timeout. Comparing them against each other rather than against a fixed number is what keeps
+        // this a measurement of the wait and not of the machine (L224).
+        let withoutWaiting = attemptClone(of: source, into: root.appendingPathComponent("no-wait"),
+                                          timeoutMilliseconds: 0)
+        let waiting = attemptClone(of: source, into: root.appendingPathComponent("waits"),
+                                   timeoutMilliseconds: 400)
+
+        // Both still FAIL, because the lock is never released here. That is the point: the timeout buys
+        // a wait, not an exemption, and a clone that could not be taken must still say so rather than
+        // hand back a torn copy (L11).
+        #expect(withoutWaiting.failure?.contains("locked") == true,
+                "a clone with no busy timeout should be refused by the held lock: \(withoutWaiting.failure ?? "it succeeded")")
+        #expect(waiting.failure?.contains("locked") == true,
+                "a clone whose wait ran out should still be refused: \(waiting.failure ?? "it succeeded")")
+
+        #expect(waiting.elapsed > withoutWaiting.elapsed,
+                "the clone with a 1500ms timeout took \(waiting.elapsed) against \(withoutWaiting.elapsed) with none, so it did not wait at all")
+        // A floor far below the 400ms asked for, and it cannot be reached by a slow machine, because
+        // what is being waited on is a sleep rather than work. 400 rather than a comfortable few seconds
+        // because this is real time the suite pays on every run, and the measured separation is wide:
+        // with no timeout the same call returned in 0.07 seconds (L290).
+        #expect(waiting.elapsed > .milliseconds(150),
+                "the clone waited only \(waiting.elapsed) for a lock it was told to wait 400ms for")
+
+        // And with the lock gone the same clone succeeds, so the refusals above are the lock and not a
+        // fixture that could never have worked (L1).
+        holder.release()
+        let afterRelease = attemptClone(of: source, into: root.appendingPathComponent("released"),
+                                        timeoutMilliseconds: LiveStoreClone.busyTimeoutMilliseconds)
+        #expect(afterRelease.failure == nil,
+                "the clone failed even with nothing holding the lock, so this fixture proves nothing: \(afterRelease.failure ?? "")")
+    }
+}

@@ -80,11 +80,18 @@ enum LiveStoreClone {
     }
 
     /// A consistent clone of one of those backups inside `dir`, taken exactly as the live one is.
-    static func makeClone(ofBackupAt backup: URL, in dir: URL) throws -> URL {
-        try clone(backup, in: dir, named: backup.deletingLastPathComponent().lastPathComponent + ".store")
+    ///
+    /// `timeoutMilliseconds` is a seam and its default is the shipped value. It exists because the only
+    /// way to watch the busy timeout DO anything is to contend for a lock on purpose, and a test that
+    /// cannot ask for a different one can only assert that the default is written down (#3349, L3).
+    static func makeClone(ofBackupAt backup: URL, in dir: URL,
+                          timeoutMilliseconds: Int = busyTimeoutMilliseconds) throws -> URL {
+        try clone(backup, in: dir, named: backup.deletingLastPathComponent().lastPathComponent + ".store",
+                  timeoutMilliseconds: timeoutMilliseconds)
     }
 
-    private static func clone(_ source: URL, in dir: URL, named name: String) throws -> URL {
+    private static func clone(_ source: URL, in dir: URL, named name: String,
+                              timeoutMilliseconds: Int = busyTimeoutMilliseconds) throws -> URL {
         let clone = dir.appendingPathComponent(name)
         // The refusal, before anything opens anything. It can only fire if the directory handed in
         // resolves to the source's own, which is exactly when a guard is worth having: the cost of being
@@ -95,7 +102,7 @@ enum LiveStoreClone {
             throw Refusal.wouldHaveHandedOverTheLiveStore(source.path)
         }
 
-        try backUp(source, to: clone)
+        try backUp(source, to: clone, timeoutMilliseconds: timeoutMilliseconds)
         return clone
     }
 
@@ -108,10 +115,43 @@ enum LiveStoreClone {
     /// A failure THROWS. It does not fall back to copying the three files: falling back would reintroduce
     /// the torn-copy risk this exists to remove, at the one moment there is evidence something is wrong,
     /// and a dry run against a torn copy answers a question nobody asked (L11).
-    private static func backUp(_ live: URL, to clone: URL) throws {
+    /// How long the backup waits for the source's lock before giving up, in milliseconds.
+    ///
+    /// #3349: without one, `sqlite3` returns SQLITE_BUSY on the FIRST contended attempt and the clone
+    /// fails outright. Measured 2026-08-30 against a WAL database with the same sidecars the live store
+    /// has, twelve concurrent `.backup` runs at a time: **six of twelve failed** with
+    /// `Error: database is locked`, and with this timeout in place **none of twelve failed**.
+    ///
+    /// That is the same message a real run produced. On a full parallel run of the suite the only
+    /// failure was `SameNightRoomVariantMergeLiveStoreTests`, with
+    /// `LiveStoreClone.swift: Caught error: ... Error: database is locked`. Serially it never happened,
+    /// because nothing else was cloning at the same moment.
+    ///
+    /// A timeout rather than a lock, and that is the point rather than an economy. Thirteen of the
+    /// suites that clone never took `RealStoreTestLock`, and wrapping each of them would leave the rule
+    /// as a convention repeated at every call site, which the next suite written is free to forget
+    /// (L274, L96). It also covers the contention no test lock can reach: Dan's live app writing to the
+    /// store while a suite clones it, which is the situation #1672 was built for in the first place.
+    ///
+    /// Thirty seconds because the wait is only ever paid under real contention and the alternative is a
+    /// failed run. A clone of this store takes well under a second, so even every cloning suite starting
+    /// at once queues far inside it, and exceeding it still FAILS loudly with the message above rather
+    /// than falling back to a torn copy.
+    static let busyTimeoutMilliseconds = 30_000
+
+    /// The arguments for the online backup, built here rather than inline so the timeout the shipped
+    /// path asks for is a value a test can read rather than a claim about the code (L3).
+    static func backupArguments(source: URL, clone: URL, timeoutMilliseconds: Int) -> [String] {
+        // `-cmd` runs before the argument that follows, so the timeout is in force when `.backup` opens
+        // the source. Passing it afterwards would set it for a connection that has already failed.
+        ["-cmd", ".timeout \(timeoutMilliseconds)", source.path, ".backup '\(clone.path)'"]
+    }
+
+    private static func backUp(_ live: URL, to clone: URL, timeoutMilliseconds: Int) throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
-        process.arguments = [live.path, ".backup '\(clone.path)'"]
+        process.arguments = backupArguments(source: live, clone: clone,
+                                            timeoutMilliseconds: timeoutMilliseconds)
         let errors = Pipe()
         process.standardError = errors
         process.standardOutput = Pipe()
