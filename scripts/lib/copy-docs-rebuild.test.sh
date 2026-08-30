@@ -71,6 +71,14 @@ assert_equals "a run that touched anything else is refused" "1" "${STATUS}"
 assert_contains "and names the file it does not own" "${OUT}" "mac/source.swift"
 assert_contains "and says nothing was merged" "${OUT}" "Nothing was merged"
 assert_equals "and commits nothing" "1" "$(git -C "${DIR}" rev-list --count HEAD)"
+# #3258: the refusal KEEPS its log on purpose, and names it, because it is the evidence a person needs
+# to see what the run did. That is the library behaving correctly, so the fixture that provoked it is
+# what cleans up: a deliberate stray belongs to whoever made it (#3254). Removed by the path the
+# refusal itself printed, so this cannot drift from where the log actually lands.
+KEPT_LOG="$(printf '%s\n' "${OUT}" | sed -n "s/.*The rebuild's log is at \\(.*\\)\\./\\1/p" | head -1)"
+assert_equals "the refusal names where it kept its log" "true" \
+  "$([ -n "${KEPT_LOG}" ] && [ -f "${KEPT_LOG}" ] && echo true || echo false)"
+rm -f "${KEPT_LOG}"
 
 # --- all three documents are covered, not just the inventory -----------------------------------------
 # The issue names the inventory; there are three generated copy documents and they go stale together.

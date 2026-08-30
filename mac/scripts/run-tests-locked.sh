@@ -38,6 +38,9 @@ DIAGNOSTICS_DIR="${OVERTURE_TEST_DIAGNOSTICS_DIR:-${HOME}/.overture-mac-test-dia
 DIAGNOSTICS_KEEP=5
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MAC_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+# #3258: scratch that honours TMPDIR, so a leak is visible to the checks that look there.
+# shellcheck source=../../scripts/lib/scratch.sh
+. "${SCRIPT_DIR}/../../scripts/lib/scratch.sh"
 # #2193/#2232: the suite's own shape, reported by the run instead of hand-written into a document.
 # shellcheck source=./lib/suite-stats.sh
 source "${SCRIPT_DIR}/lib/suite-stats.sh"
@@ -534,7 +537,7 @@ main() {
   while true; do
     test_exit_code=0
     started_at="${SECONDS}"
-    output_file="$(mktemp)"
+    output_file="$(overture_scratch_file run-tests-output)"
     # #2577: watch this attempt's own log while it streams. Started BEFORE flock, deliberately, so
     # the wait for the shared lock is inside what the watcher can see: an empty log is how it knows
     # the run is queued rather than stalled, and a run that sits behind another worktree's suite for
@@ -778,7 +781,7 @@ main() {
       echo >&2
       echo "run-tests-locked.sh: asking the PURE suite directly, since it does not need the app..." >&2
       local pure_output pure_code=0 pure_outcome
-      pure_output="$(mktemp)"
+      pure_output="$(overture_scratch_file pure-suite-output)"
       # #2577: the SIBLING of the run above, and the identical shape: flock, then xcodebuild, into a
       # file. It queues for the same lock and runs the same tests, so it can wait the same way and
       # hang the same way, and it is reached at the worst possible moment (after a crash, when

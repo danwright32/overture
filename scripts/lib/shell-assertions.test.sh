@@ -285,6 +285,10 @@ rm -rf "${SCOPE_HOME}" "${RUNNER_HOME}" "${SWEEP_HOME}"
 UNSOURCED=()
 while IFS= read -r -d '' fixture; do
   [[ "${fixture}" == "scripts/lib/shell-assertions.test.sh" ]] && continue
+  # Two files DOCUMENT the forbidden forms in order to forbid them, and a scan that condemned them would
+  # be condemning its own remedy. Named individually rather than by a pattern, so nothing else is exempt.
+  [[ "${fixture}" == "scripts/lib/shell-assertions.sh" ]] && continue
+  [[ "${fixture}" == "scripts/lib/scratch.sh" ]] && continue
   STRIPPED="$(sed 's/#.*//' "${REPO_ROOT}/${fixture}")"
   if [[ "${STRIPPED}" != *"shell-assertions.sh"* ]]; then
     UNSOURCED+=("${fixture}")
@@ -299,6 +303,10 @@ done < <(cd "${REPO_ROOT}" && find scripts mac/scripts -name '*.test.sh' -print0
 BARE_MKTEMP=()
 while IFS= read -r -d '' fixture; do
   [[ "${fixture}" == "scripts/lib/shell-assertions.test.sh" ]] && continue
+  # Two files DOCUMENT the forbidden forms in order to forbid them, and a scan that condemned them would
+  # be condemning its own remedy. Named individually rather than by a pattern, so nothing else is exempt.
+  [[ "${fixture}" == "scripts/lib/shell-assertions.sh" ]] && continue
+  [[ "${fixture}" == "scripts/lib/scratch.sh" ]] && continue
   IN_HEREDOC=""
   LINE_NO=0
   while IFS= read -r line; do
@@ -315,12 +323,23 @@ while IFS= read -r -d '' fixture; do
       IN_HEREDOC="${BASH_REMATCH[1]}"
     fi
   done < "${REPO_ROOT}/${fixture}"
-done < <(cd "${REPO_ROOT}" && find scripts mac/scripts -name '*.test.sh' -print0 | sort -z)
+done < <(cd "${REPO_ROOT}" && { find scripts mac/scripts -name '*.test.sh' -print0; \
+                                 git ls-files -z '*.sh' | grep -zv '\.test\.sh$'; } | sort -z -u)
 
+# #3258: the PRODUCTION scripts are scanned too, not the fixtures alone. They had no rule at all while
+# running far more often (`scripts/test-all.sh` on every push, `verify-and-merge-branch.sh` on every
+# merge), which is the same asymmetry the leak check had before #3254.
+#
+# What the measurement actually said, recorded because it changes what this is for: on this Mac after 16
+# days of uptime the shared per-user temp folder held 52,515 entries and ZERO matched any shape these
+# scripts make. They clean up. So this is not about reclaiming disk, and claiming it were would be a
+# number nobody checked. It is about VISIBILITY: a script that writes where nothing can look leaks
+# silently the day its cleanup stops working, which is #3065 measured at 52 directories a run on the
+# Swift side before anybody noticed.
 if [[ "${#BARE_MKTEMP[@]}" -eq 0 ]]; then
-  echo "ok - no fixture uses a bare mktemp, which would write past every scoping there is"
+  echo "ok - no script uses a bare mktemp, which would write past every scoping there is"
 else
-  echo "FAIL - ${#BARE_MKTEMP[@]} bare mktemp call(s) in fixtures; use fixture_scratch_dir or fixture_scratch_file"
+  echo "FAIL - ${#BARE_MKTEMP[@]} bare mktemp call(s); use fixture_scratch_dir/fixture_scratch_file in a fixture, or overture_scratch_dir/overture_scratch_file from scripts/lib/scratch.sh in a script"
   printf '  %s\n' "${BARE_MKTEMP[@]}"
   FAILURES=$((FAILURES + 1))
 fi

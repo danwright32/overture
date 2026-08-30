@@ -46,6 +46,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+# #3258: scratch that honours TMPDIR, so a leak is visible to the checks that look there.
+# shellcheck source=./lib/scratch.sh
+. "${SCRIPT_DIR}/lib/scratch.sh"
 
 SHIFT_YEARS="${OVERTURE_AGE_SHIFT_YEARS:-3}"
 BASELINE_REL="fixtures/year-sensitive-tests.txt"
@@ -181,7 +184,7 @@ main() {
   done <<< "${files}"
 
   local log
-  log="$(mktemp -t overture-ageless)"
+  log="$(overture_scratch_file overture-ageless)"
   echo "check-fixtures-do-not-age: running the Swift suite against the shifted tree (this takes minutes)."
   set +e
   mac/scripts/run-tests-locked.sh > "${log}" 2>&1

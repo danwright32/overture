@@ -25,6 +25,9 @@ source "${SCRIPT_DIR}/lib/fixture-stall-guard.sh"
 # per-fixture wrapper written below, from one file, so the two cannot drift apart (L263).
 # shellcheck source=./lib/fixture-process-leak.sh
 source "${SCRIPT_DIR}/lib/fixture-process-leak.sh"
+# #3258: scratch that honours TMPDIR, so a leak is visible to the checks that look there.
+# shellcheck source=./lib/scratch.sh
+source "${SCRIPT_DIR}/lib/scratch.sh"
 
 # The shape bash prints when a name resolves to nothing: "line 12: assert_contains: command not
 # found". A fixture that hits this keeps going, its assertion silently does nothing, and it exits 0
@@ -387,7 +390,7 @@ run_shell_fixtures() {
   local failures=0
   local fixture rc
   local scratch
-  scratch="$(mktemp -d)"
+  scratch="$(overture_scratch_dir fixture-run)"
   local jobs="${OVERTURE_FIXTURE_JOBS:-8}"
 
   # The per-fixture wrapper xargs fans out to. `set +e` around the fixture is load-bearing, not

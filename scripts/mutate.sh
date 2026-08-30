@@ -244,6 +244,9 @@ if PERL_VARIABLE="$(unescaped_perl_variable "${EXPRESSION}")"; then
 fi
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# #3258: scratch that honours TMPDIR, so a leak is visible to the checks that look there.
+# shellcheck source=./lib/scratch.sh
+. "${REPO_ROOT}/scripts/lib/scratch.sh"
 # #3098: the rule that says whether a scope reached the tests for the file it broke. In its own file
 # because the whole of it is testable without paying for a mutation run, which driving mutate.sh is not.
 # shellcheck source=lib/mutation-scope.sh
@@ -364,7 +367,7 @@ unescaped_metacharacters() {
 probe_matched_length() {
   local file="$1" expression="$2"
   local prog report copy status out
-  prog="$(mktemp)"; report="$(mktemp)"; copy="$(mktemp)"
+  prog="$(overture_scratch_file mutate-prog)"; report="$(overture_scratch_file mutate-report)"; copy="$(overture_scratch_file mutate-copy)"
   cp "${file}" "${copy}"
   {
     echo 'my ($f, $r) = @ARGV;'
@@ -441,7 +444,7 @@ mutation_failure_breadth() {
 # the one where this script does not reach its end: a killed run, a Ctrl-C, an error under `set -e`. A
 # restore that only happens on the happy path leaves the repo holding a deliberate defect, which is the
 # single worst thing this tool could do.
-BACKUP="$(mktemp)"
+BACKUP="$(overture_scratch_file mutate-backup)"
 cp "${TARGET}" "${BACKUP}"
 restore() {
   cp "${BACKUP}" "${TARGET}"

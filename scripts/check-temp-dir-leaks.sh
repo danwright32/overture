@@ -26,6 +26,13 @@
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 
+LEAKS_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# #3258: scratch that honours TMPDIR, so a leak is visible to the checks that look there. This script
+# in particular: its whole subject is scratch nobody reclaims, and it was making its own where it
+# could not see it.
+# shellcheck source=./lib/scratch.sh
+. "${LEAKS_SCRIPT_DIR}/lib/scratch.sh"
+
 UUID_SHAPE='[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}'
 
 # The roots holding the code that creates sandboxes. Overridable so the fixture can drive the judging half
@@ -113,7 +120,7 @@ LEAK_PATTERN="^(${ALTERNATION})${UUID_SHAPE}"
 # Real mode: take both snapshots around a genuine run of the Mac suite. The runner is injectable so the
 # fixture can drive this path without paying for a suite run.
 if [ -z "$BEFORE" ] && [ -z "$AFTER" ] && [ -z "$LOG" ]; then
-  WORK=$(mktemp -d) || exit 2
+  WORK=$(overture_scratch_dir temp-dir-leaks) || exit 2
   trap 'rm -rf "$WORK"' EXIT
   BEFORE="$WORK/before.txt"; AFTER="$WORK/after.txt"; LOG="$WORK/run.log"
   snapshot > "$BEFORE"

@@ -32,6 +32,9 @@ set -euo pipefail
 # Usage: scripts/check-pbxproj-fresh.sh [repo-or-worktree-dir]   (defaults to this repo root)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# #3258: scratch that honours TMPDIR, so a leak is visible to the checks that look there.
+# shellcheck source=./lib/scratch.sh
+. "${SCRIPT_DIR}/lib/scratch.sh"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=./ci-config.sh
 source "${SCRIPT_DIR}/ci-config.sh"
@@ -122,7 +125,7 @@ check_pbxproj_fresh() {
   # is the same side the version gate falls on: a check that cannot verify must not pass, and here it must
   # also not destroy.
   local snapshot
-  snapshot="$(mktemp -d)"
+  snapshot="$(overture_scratch_dir pbxproj-snapshot)"
   if ! cp -R "${dir}/mac/Overture.xcodeproj" "${snapshot}/" 2>/dev/null; then
     rm -rf "${snapshot}"
     echo "check-pbxproj-fresh: cannot verify: could not snapshot ${dir}/mac/Overture.xcodeproj before regenerating." >&2

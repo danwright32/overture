@@ -21,6 +21,9 @@ set -euo pipefail
 # so it can never unregister a bundle that is actually installed.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# #3258: scratch that honours TMPDIR, so a leak is visible to the checks that look there.
+# shellcheck source=../../scripts/lib/scratch.sh
+. "${SCRIPT_DIR}/../../scripts/lib/scratch.sh"
 # shellcheck source=scripts/lib/stale-registrations.sh
 source "${SCRIPT_DIR}/lib/stale-registrations.sh"
 
@@ -37,7 +40,7 @@ main() {
 
   # Global, not local: the trap below runs after main has returned, and a local would be gone by then
   # (unbound under `set -u`, which is a failing script reporting nothing about what it removed).
-  DUMP_FILE="$(mktemp)"
+  DUMP_FILE="$(overture_scratch_file prune-registrations)"
   local dump="${DUMP_FILE}"
   trap 'rm -f "${DUMP_FILE:-}"' EXIT
   "${LSREGISTER_BIN}" -dump > "${dump}" 2>/dev/null || true
