@@ -144,6 +144,33 @@ else
   echo "  to make it blocking."
 fi
 
+# #3270: stored process-wide statics in the test targets that nobody has accounted for. Each one is a
+# single variable shared by every test in the process, so once parallel testing is on it is a test that
+# fails once in four runs rather than reliably, which is the shape that trains people to re-run until
+# green. Four were found in #3234 by running the suite in parallel four times and reading the wreckage,
+# a full run per round; a fifth was found by hand in seconds by listing the mutable statics. This is
+# that listing, kept.
+#
+# ADVISORY, never blocking, on the same footing as pnpm find-vacuous-guards above and
+# check-branch-backlog.sh below: a new stored static is not automatically a defect, and Dan's standing
+# rule is that he wants an override on anything, with the reason named in the message. It rides along
+# here rather than sitting behind a command nobody types, which is what #2773 cost: the tool shipped,
+# nothing ran it, and 17 entries had accumulated by the time anybody looked. It is one grep.
+#
+# Exit 2 is UNMEASURED and is NOT folded into the advisory: a run that read no Swift at all says nothing
+# about the tree, and the emptiest possible failure must not read as the cleanest possible pass (L98).
+echo "==> scripts/check-test-shared-state.sh"
+SHARED_STATE_STATUS=0
+"${REPO_ROOT}/scripts/check-test-shared-state.sh" || SHARED_STATE_STATUS=$?
+if [ "${SHARED_STATE_STATUS}" = "2" ]; then
+  TEST_ALL_CHEAP_FAILURES+=("scripts/check-test-shared-state.sh")
+  echo "FAILED - scripts/check-test-shared-state.sh could not measure anything (exit 2)"
+elif [ "${SHARED_STATE_STATUS}" != "0" ]; then
+  echo "  Advisory, so this does NOT fail the run. Give the suites that touch it a shared lock"
+  echo "  (mac/OvertureTests/SharedStateTestLock.swift), or record why it cannot collide with"
+  echo "  scripts/check-test-shared-state.sh --record."
+fi
+
 # Warns if docs/prep-runbook.md and the external dan-wright-brand-voice skill have drifted apart
 # (#731). Skips cleanly (exit 0) on any machine without the skill installed, since it lives outside
 # this clone, so it never breaks CI or a fresh checkout; it only fails locally on genuine drift.

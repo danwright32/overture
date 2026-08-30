@@ -1,0 +1,22 @@
+# Test harnesses that hold one piece of state for the WHOLE PROCESS (#3270).
+#
+# One stored mutable `static var` per line, as `<path>:<name>`, followed by the REASON it is accounted
+# for: which named lock holds it, or why it cannot collide. The reason is the point of the file. A line
+# with no reason has been seen and not yet judged.
+#
+# This file GROWS. It is a triage log, not a ratchet: new harnesses legitimately arrive with new tests,
+# and recording one is the act of having looked at it.
+#
+# Regenerate with: scripts/check-test-shared-state.sh --record
+# Read the list it prints before you commit the result, and write the reason for anything new.
+mac/OvertureTests/CarnegieExtractorTests.swift:callCount  # CarnegieExtractorTests' StubURLProtocol, held by .sharesTheCarnegieStub (#3269)
+mac/OvertureTests/CarnegieExtractorTests.swift:responses  # CarnegieExtractorTests' StubURLProtocol, held by .sharesTheCarnegieStub (#3269)
+mac/OvertureTests/SourceFetcherTests.swift:bodiesByURL  # PageStubURLProtocol, held by .sharesTheNetworkStub (#3234)
+mac/OvertureTests/SourceFetcherTests.swift:body  # PageStubURLProtocol, held by .sharesTheNetworkStub (#3234)
+mac/OvertureTests/SourceFetcherTests.swift:contentType  # PageStubURLProtocol, held by .sharesTheNetworkStub (#3234)
+mac/OvertureTests/SourceFetcherTests.swift:finalURL  # PageStubURLProtocol, held by .sharesTheNetworkStub (#3234)
+mac/OvertureTests/SourceFetcherTests.swift:requestedURLs  # PageStubURLProtocol, held by .sharesTheNetworkStub (#3234)
+mac/OvertureTests/SourceFetcherTests.swift:status  # PageStubURLProtocol, held by .sharesTheNetworkStub (#3234)
+mac/OvertureTests/SourceFetcherTests.swift:statusByURL  # PageStubURLProtocol, held by .sharesTheNetworkStub (#3234)
+mac/OvertureTests/SourceFetcherTests.swift:transportError  # PageStubURLProtocol, held by .sharesTheNetworkStub (#3234)
+mac/OvertureTests/SourceFetcherTests.swift:transportErrorsByURL  # PageStubURLProtocol, held by .sharesTheNetworkStub (#3234)

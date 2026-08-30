@@ -330,6 +330,43 @@ already drifting from the Swift version it mirrored.
   `scripts/check-test-identity-provenance.test.sh`, which drives it against a throwaway git repository
   with real commits rather than a stub of `git log` (L52).
 
+- **Asking which test harnesses hold state for the whole process: `scripts/check-test-shared-state.sh`
+  (#3270).** A stored `static var` in a test target is one variable per process, so two tests running at
+  once share it. That is the defect standing between this repo and parallel testing: every remaining
+  piece of it is a test that fails once in four runs rather than reliably, which is the shape that trains
+  people to re-run until green.
+  Four of them were found in #3234 by running the suite in parallel and reading which tests went red,
+  over four rounds. That costs a full run per round and only finds the ones that happened to collide that
+  time. A fifth (`StubURLProtocol` in `CarnegieExtractorTests`, #3269) was found afterwards by hand, by
+  listing the mutable statics, which took seconds. This is that listing, kept, so a new one arrives as a
+  line in a report rather than as an intermittent failure months later.
+  It REPORTS and does not refuse, and it rides along in `scripts/test-all.sh` as an advisory. A new
+  stored static is not automatically a defect (it may be covered by a lock, or unable to collide), so a
+  gate would fire on the ordinary case and be switched off within a day (L93). It rides along rather than
+  sitting behind a command nobody types, which is what #2773 cost: the tool shipped, nothing ran it, and
+  17 entries had accumulated by the time anybody looked. It is one grep.
+  Read its answer correctly. Three exit codes, and the third is the one that matters: `2` is UNMEASURED,
+  because a tree with no Swift read and a tree with no shared state in it leave the same empty result,
+  and only exit 2 fails the run (L98, L11). What it judges as a subject is a STORED mutable static; a
+  COMPUTED one derives its value on every read and holds nothing, and computed is by far the commoner
+  shape in these targets (a `liveStoreURL`, a source root, a lazily built fixture), so counting those
+  would fire on the ordinary case. Prose is not a declaration either: three files in the tree explain in
+  a comment why they are NOT a `static var`, and a reader that counted those would report the code that
+  fixed this defect as an instance of it. The one stored shape that LOOKS computed, a closure initialiser
+  (`static var x: T = { ... }()`), is treated as stored, which is what it is.
+  Its baseline, `fixtures/test-shared-state.txt`, GROWS, like `fixtures/test-identity-provenance.txt` and
+  unlike `fixtures/test-data-email-domains.txt`: it is a triage log over declarations somebody has read,
+  not a ratchet, and new harnesses legitimately arrive with new tests. Each line carries the REASON, which
+  is the point of the file: which named lock accounts for it. `--record` preserves a reason already
+  written and marks a new entry `NOT YET EXPLAINED`, and prints what it is adding, because recording
+  without reading is how a count driven to zero stops being a measurement (L182).
+  **The reason is prose, so a second guard checks it is still true.** `SharedStateWiringTests` asserts
+  that every suite MENTIONING one of the stubs carries that stub's trait, derived from the files rather
+  than from a list, so a suite that loses its lock in a refactor is red rather than intermittently red
+  months later. `.serialized` is deliberately not accepted as the answer: it orders a suite's own tests
+  and the interference comes from OTHER suites, which is why `SourceFetcherTests` carried `.serialized`
+  and still failed.
+
 - **Before implementing a decision Dan has REVERSED, list the tests that assert the old one:
   `scripts/find-tests-naming.sh <symbol> [<symbol> ...]` (#3163).** It prints every test in either Swift
   test target that names any of the symbols, attributed to the `@Test func` that encloses the mention, or
