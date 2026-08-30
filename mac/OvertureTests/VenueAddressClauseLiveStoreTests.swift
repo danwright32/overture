@@ -210,42 +210,20 @@ struct VenueAddressClauseLiveStoreTests {
         }
     }
 
-    // The rows #2568 and #2566 were filed on, named individually for the same reason the suite above
-    // names #2378's: each is a string Dan has been looking at. Skipped, not failed, when a row leaves
-    // the store, with the number actually checked asserted so this can never quietly check nothing.
-    // LIVE-STORE-CLAIM verified=2026-08-16 measure="the specific rows #2568 and #2566 were filed on, re-read through the shipping rule"
-    @Test(.enabled(if: liveStoreExists, "no live store on this machine"))
-    func theRowsTheseIssuesWereFiledOnAreNoLongerPlacedWrongly() async throws {
-        await RealStoreTestLock.shared.acquire()
-        do {
-        var checked = 0
-
-        // #2568: the venue string that named Georgia. The curated table has always had it right.
-        let vancouver = "Rosewood Hotel Georgia, Vancouver, BC, Canada"
-        if Set(try liveVenues()).contains(vancouver) {
-            #expect(EventLocationFill.location(title: "Cocktail Hour: The Show", venue: vancouver,
-                                               published: nil) == "Vancouver, BC, Canada")
-            checked += 1
-        }
-
-        // #2566: the two published locations that are really descriptions of a room. Both must now be
-        // refused, so the first stops reading as Indiana and the second stops standing in for a place.
-        let locations = Set(try liveLocations())
-        for described in [
-            "The Soldiers' and Sailors' Monument, on the North Patio, behind the monument. "
-                + "W. 89th St. & Riverside Drive, in Riverside Park",
-            "The Sanctuary of Brick Presbyterian Church, 1144 Park Avenue",
-        ] where locations.contains(described) {
-            #expect(EventLocationFill.location(title: "A Show", venue: described,
-                                               published: described) == nil, "\(described)")
-            checked += 1
-        }
-
-        #expect(checked > 0, "no row #2568 or #2566 was filed on is still in the store: checked nothing")
-        await RealStoreTestLock.shared.release()
-        } catch {
-            await RealStoreTestLock.shared.release()
-            throw error
-        }
-    }
+    // #3314: the test that stood here read the SPECIFIC rows #2568 and #2566 were filed on, by their
+    // exact venue and location strings, and skipped any that had left the store. It carried
+    // `#expect(checked > 0)` so it could never quietly check nothing, and on 2026-08-30 that assertion
+    // fired: all three of its subjects are gone from Dan's store.
+    //
+    // That is the guard working, not a defect, and the honest answer to it is retirement rather than a
+    // looser assertion. A test pinned to particular live rows has a premise that expires the day those
+    // rows are cleared, and re-pinning it to whatever is in the store today would only move the expiry.
+    //
+    // What it was FOR is untouched, which is the half worth stating so its absence is not read as
+    // coverage lost (L129). `EventLocationFillTests` asserts all three rules on the same three strings,
+    // verbatim: "Rosewood Hotel Georgia, Vancouver, BC, Canada" resolving to Vancouver rather than to
+    // Georgia (#2568), and the two described rooms being refused rather than standing in for a place
+    // (#2566). Those are synthetic and cannot expire. The two live-store tests ABOVE are also untouched
+    // and still measure the rules against whatever is really in the store, which is the part a live
+    // corpus is uniquely good for; what has gone is only the pinning to three named rows.
 }
