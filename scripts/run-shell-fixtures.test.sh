@@ -503,6 +503,74 @@ assert_contains "and that it finished" "${RUNNER_SRC}" 'echo "finished ${fixture
 # and sits warning about a file nobody is writing.
 assert_contains "the watch is stopped from a trap too" "${RUNNER_SRC}" "trap 'stop_fixture_watch"
 
+# --- the runner runs the fixtures it is GIVEN (#3245) ------------------------------------------------
+#
+# main() globbed scripts/ and mac/scripts/ and ignored its arguments entirely, so
+# `bash scripts/run-shell-fixtures.sh scripts/lib/test-all-phases.test.sh` ran all 81 fixtures and said
+# nothing about the path it was handed. Two costs. Proving ONE guard through the runner (the only way to
+# get its temp-leak and unresolved-command rules) cost a full sweep, roughly a minute of the cheap lane's
+# 65.7s. And an argument that is silently ignored is indistinguishable from one that was honoured: the
+# run looks right and is about something else.
+#
+# Driven through resolve_fixture_paths rather than through main, deliberately: main RUNS what it
+# selects, so a case asserting the default is every fixture would cost a full sweep inside a fixture.
+# The selection is the thing under test and it is pure.
+
+SELECTED_EXPLICIT="$(resolve_fixture_paths "${PASSING}" "${ALSO_PASSING}")"
+assert_contains "a named fixture is selected" "${SELECTED_EXPLICIT}" "passing.test.sh"
+assert_contains "and so is the second one" "${SELECTED_EXPLICIT}" "also-passing.test.sh"
+assert_equals "and nothing else is" "2" "$(echo "${SELECTED_EXPLICIT}" | grep -c .)"
+
+# The order given is the order run, because the read-out prints each verdict in list order and a
+# reordering would put a failure under another fixture's header.
+assert_equals "the order given is kept" "also-passing.test.sh" \
+  "$(basename "$(echo "$(resolve_fixture_paths "${ALSO_PASSING}" "${PASSING}")" | head -1)")"
+
+# No arguments still means every fixture in the repo, which is what test-all.sh calls.
+SELECTED_DEFAULT="$(resolve_fixture_paths)"
+assert_contains "with no arguments the default sweep is selected" "${SELECTED_DEFAULT}" \
+  "scripts/run-shell-fixtures.test.sh"
+DEFAULT_COUNT="$(echo "${SELECTED_DEFAULT}" | grep -c .)"
+DEFAULT_IS_THE_WHOLE_SWEEP="false"
+[[ "${DEFAULT_COUNT}" -gt 20 ]] && DEFAULT_IS_THE_WHOLE_SWEEP="true"
+assert_equals "and it is the whole sweep, not a handful" "true" "${DEFAULT_IS_THE_WHOLE_SWEEP}"
+
+# A path that matches no fixture REFUSES, and runs nothing. Falling back to the default sweep here
+# would be the same defect wearing the fix's name: the run would look right and be about everything
+# except what was asked for (L100, L98).
+MISSING_RC=0
+MISSING_OUT="$(resolve_fixture_paths "${TMP_DIR}/no-such-thing.test.sh" 2>&1)" || MISSING_RC=$?
+assert_equals "a path matching no fixture is refused" "1" "${MISSING_RC}"
+assert_contains "and the refusal names the path" "${MISSING_OUT}" "no-such-thing.test.sh"
+assert_not_contains "and selects nothing at all" "${MISSING_OUT}" "mac/scripts/"
+
+# An existing file that is not a fixture is the same refusal: the runner's rules (the temp-leak check,
+# the unresolved-command check) are rules about fixtures, so a plain script is not a subject it can judge.
+NOT_A_FIXTURE="${TMP_DIR}/ordinary.sh"
+printf '#!/usr/bin/env bash\nexit 0\n' > "${NOT_A_FIXTURE}"
+chmod +x "${NOT_A_FIXTURE}"
+NOT_A_FIXTURE_RC=0
+NOT_A_FIXTURE_OUT="$(resolve_fixture_paths "${NOT_A_FIXTURE}" 2>&1)" || NOT_A_FIXTURE_RC=$?
+assert_equals "a file that is not a *.test.sh is refused too" "1" "${NOT_A_FIXTURE_RC}"
+assert_contains "and that refusal names it" "${NOT_A_FIXTURE_OUT}" "ordinary.sh"
+
+# One bad path among good ones refuses the WHOLE run rather than quietly running the rest, because a
+# run that dropped one of the fixtures it was given is a run about something other than what was asked.
+PARTIAL_RC=0
+PARTIAL_OUT="$(resolve_fixture_paths "${PASSING}" "${TMP_DIR}/absent.test.sh" 2>&1)" || PARTIAL_RC=$?
+assert_equals "one bad path refuses the whole selection" "1" "${PARTIAL_RC}"
+assert_contains "naming only the bad one" "${PARTIAL_OUT}" "absent.test.sh"
+
+# A sweep that found NOTHING is unmeasured, not clean (L98). This said "No *.test.sh fixtures found."
+# and exited 0 until #3245, so a broken checkout, a bad root or a renamed suffix produced the emptiest
+# possible failure wearing the cleanest possible pass. Driven by pointing REPO_ROOT at a tree with the
+# two directories and no fixtures in them, which is exactly that state.
+mkdir -p "${TMP_DIR}/empty-root/scripts" "${TMP_DIR}/empty-root/mac/scripts"
+EMPTY_RC=0
+EMPTY_OUT="$(REPO_ROOT="${TMP_DIR}/empty-root" main 2>&1)" || EMPTY_RC=$?
+assert_equals "a sweep that found no fixture at all refuses" "2" "${EMPTY_RC}"
+assert_contains "and says it measured nothing rather than that all is well" "${EMPTY_OUT}" "UNMEASURED"
+
 echo
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All run-shell-fixtures.sh fixtures passed."
