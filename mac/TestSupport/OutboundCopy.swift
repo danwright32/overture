@@ -52,7 +52,22 @@ enum OutboundCopy {
         }
     }
 
+    // #3235: built once per process for the default root, on CopyInventory's reasoning and with its
+    // refusals.
+    private static let defaultMemo = BuildMemo<Document>()
+
+    static var buildsPerformed: Int { defaultMemo.buildsPerformed }
+
     static func build(root: URL = CopyInventory.appRoot, floor: Int = 50) throws -> Document {
+        guard root == CopyInventory.appRoot, floor == 50 else {
+            return try buildUncached(root: root, floor: floor)
+        }
+        return try defaultMemo.value(keepIf: { $0.filesScanned > 0 }) {
+            try buildUncached(root: CopyInventory.appRoot, floor: 50)
+        }
+    }
+
+    private static func buildUncached(root: URL, floor: Int) throws -> Document {
         var document = Document()
         let files = AppSourceWalk.urls(under: root, floor: floor)
         document.filesScanned = files.count

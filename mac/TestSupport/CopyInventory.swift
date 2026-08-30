@@ -167,7 +167,28 @@ enum CopyInventory {
     // `floor` is what the walk refuses below (#2311). It defaults to the real app's floor and is
     // lowered only by the fixture tests, which deliberately build a two-file tree: refusing there
     // would be refusing the test's own setup rather than catching a broken path.
+    // #3235: the DEFAULT build is paid for once per process. It was being made twelve times a run at
+    // about 5.9s each, roughly 70s of a 507s suite, and every one of those twelve produced the same
+    // document from the same unchanged tree.
+    //
+    // Only the default root and floor are kept. A caller that INJECTS a root is the test OF this
+    // builder, and handing it a remembered answer about a different tree would make those tests assert
+    // nothing. And a scan that read NO files is never kept: an empty inventory reads downstream as "the
+    // app says nothing", which is exactly what a broken path produces, so keeping it would let one bad
+    // path pass every copy guard in the suite at once (L286, L98). `theScanIsStillProvenToHaveRun` and
+    // the `filesScanned` floors are what would catch that, and they still run against this.
+    private static let defaultMemo = BuildMemo<Inventory>()
+
+    static var buildsPerformed: Int { defaultMemo.buildsPerformed }
+
     static func build(root: URL = appRoot, floor: Int = 50) throws -> Inventory {
+        guard root == appRoot, floor == 50 else { return try buildUncached(root: root, floor: floor) }
+        return try defaultMemo.value(keepIf: { $0.filesScanned > 0 }) {
+            try buildUncached(root: appRoot, floor: 50)
+        }
+    }
+
+    private static func buildUncached(root: URL, floor: Int) throws -> Inventory {
         var inventory = Inventory()
         let files = try swiftFiles(under: root, floor: floor)
         inventory.filesScanned = files.count

@@ -97,7 +97,19 @@ struct TestDataEmailDomainGuardTests {
 
     struct Finding: Hashable { let domain: String; let file: String }
 
+    // #3235: three of this suite's four tests ask for the same findings over the same unchanged tree,
+    // and each was paying about 11.6s for it. Built once per process, on the same terms as the copy
+    // documents: a run that scanned NO files is never kept, because an empty finding list is exactly
+    // what a broken path produces and is indistinguishable downstream from a clean tree (L286, L98).
+    // `theWalkReachesTheTestSources` is the test that would catch a kept empty scan, and it still runs
+    // against this.
+    private static let findingsMemo = BuildMemo<(all: [Finding], filesScanned: Int)>()
+
     static func findings() throws -> (all: [Finding], filesScanned: Int) {
+        try findingsMemo.value(keepIf: { $0.filesScanned > 0 }) { try scanForFindings() }
+    }
+
+    private static func scanForFindings() throws -> (all: [Finding], filesScanned: Int) {
         let allowedByApp = domainsAppSourceNames()
         var out: [Finding] = []
         var scanned = 0
@@ -226,6 +238,13 @@ struct TestDataEmailDomainGuardTests {
                 .filter { $0.contains(" ") }
                 .map { $0.replacingOccurrences(of: " ", with: separator) }
         }
+        // #3235: ONE pass per file for the whole list, instead of one Unicode-aware string search per
+        // name per file. This test alone measured 216 seconds of a 705 second suite on 2026-08-29,
+        // about 150 names across about 1,000 files. The scanner is judged against the search it
+        // replaces by a differential test rather than by a list of cases (ForbiddenTextScannerTests),
+        // and it keeps the slow path for the accented names, where a byte comparison would let a real
+        // person through.
+        let scanner = ForbiddenTextScanner(needles: forbidden)
         var hits: [String] = []
         for root in ["mac", "fixtures", "src", "docs"] {
             let dir = RepoRoot.url.appendingPathComponent(root)
@@ -234,8 +253,7 @@ struct TestDataEmailDomainGuardTests {
                 guard !file.url.path.contains("Overture.xcodeproj") else { continue }
                 // Its own source has to NAME what it forbids, so it is the one file it cannot police.
                 guard file.name != "TestDataEmailDomainGuardTests.swift" else { continue }
-                let text = file.text.lowercased()
-                for name in forbidden where text.contains(name) {
+                for name in scanner.matches(in: file.text) {
                     hits.append("\(name) in \(file.name)")
                 }
             }
