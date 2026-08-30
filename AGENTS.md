@@ -697,10 +697,19 @@ already drifting from the Swift version it mirrored.
   DURATION never comes from those per-test seconds, which are elapsed since that WORKER began rather
   than what the test cost (in the real log a one-line boolean reported 64.4s, and the trimmed fixture's
   lines sum to 338.423s for a run that took 95.447): it comes from the run's own elapsed line, or the
-  readout says the duration was not reported. And a serial summary still wins wherever one exists,
-  since it is xcodebuild's own total rather than one derived by counting. The fixture is that run's own
-  output, trimmed, at `mac/scripts/lib/fixtures/parallel-run-20260829.log`; the full 839KB log is kept
-  at `~/.overture-mac-test-diagnostics/parallel-experiment-20260829.log`.
+  readout says the duration was not reported. And a log carrying BOTH a summary and per-test lines is a
+  MIXED run, where the two are SUMMED rather than one preferred (#3266, reversing what #3233 wrote here).
+  That is the shape the parallel work produces: one testable parallel, printing per-test lines and no
+  summary, and the app-hosted one left serial, printing a summary and no per-test lines. Preferring the
+  summary read the hosted suite's 300 as the whole run, so a COMPLETE run of 8,623 was reported as 300
+  and refused by the short-run gate (measured 2026-08-30). Note which way that fails: under-reporting by
+  96% makes the gate block a healthy push, which is the failure that gets a gate switched off rather
+  than trusted. Summing cannot double count, and that is measured rather than assumed: a wholly serial
+  run prints no `Test case ... on 'My Mac - xctest (N)'` lines at all. The DURATION is the one number
+  not summed, since the parallel reading already takes the run's own elapsed line, which spans both
+  testables. The fixtures are those runs' own output, trimmed, at
+  `mac/scripts/lib/fixtures/parallel-run-20260829.log` and `mac/scripts/lib/fixtures/mixed-run-20260830.log`;
+  the full 839KB parallel log is kept at `~/.overture-mac-test-diagnostics/parallel-experiment-20260829.log`.
   **Since #3165 the first of those two invariants is measured by a different number.** It used to be the
   rows whose reply is still OPEN, which #2985 narrowed it to for a correct reason (`ReplyIdentity.answering`
   short-circuits once a reply is handled, and asserting through it fired when Dan answered one, which is the
