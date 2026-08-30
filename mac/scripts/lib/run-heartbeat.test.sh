@@ -249,8 +249,20 @@ set -m
 ( sleep 30; echo "the marker text a grep would look for" ) >/dev/null 2>&1 &
 HB=$!
 set +m
+# Waits for a pid to BE ALIVE, with a deadline, rather than sleeping a fixed time and hoping the fork
+# has happened. A fixed sleep here asserts about the machine's load rather than about the stop (L290),
+# and these helpers run beside seven other fixtures.
+hb_wait_alive() {
+  i=0
+  while [ "$i" -lt 100 ]; do
+    kill -0 "$1" 2>/dev/null && return 0
+    sleep 0.05
+    i=$((i + 1))
+  done
+  return 1
+}
 echo "HB=$HB"
-sleep 0.2
+hb_wait_alive "$HB" || echo "the heartbeat never started"
 heartbeat_stop "$HB"
 echo "finished"
 GROUPEDSH
@@ -264,8 +276,20 @@ set -eu
 . "$(dirname "$0")/run-heartbeat.sh"
 ( sleep 30 ) >/dev/null 2>&1 &
 HB=$!
+# Waits for a pid to BE ALIVE, with a deadline, rather than sleeping a fixed time and hoping the fork
+# has happened. A fixed sleep here asserts about the machine's load rather than about the stop (L290),
+# and these helpers run beside seven other fixtures.
+hb_wait_alive() {
+  i=0
+  while [ "$i" -lt 100 ]; do
+    kill -0 "$1" 2>/dev/null && return 0
+    sleep 0.05
+    i=$((i + 1))
+  done
+  return 1
+}
 echo "HB=$HB"
-sleep 0.2
+hb_wait_alive "$HB" || echo "the job never started"
 heartbeat_stop "$HB"
 echo "still here"
 UNGROUPEDSH
