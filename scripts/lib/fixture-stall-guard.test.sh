@@ -90,6 +90,50 @@ assert_not_contains "a run that keeps moving is never warned about" "$(cat "${OU
 fixture_watch_loop "${PROGRESS}" 2 0
 assert_equals "a zero interval returns instead of spinning" "0" "$?"
 
+# --- starting and stopping the watcher whole (#3248) ---------------------------------------------------
+#
+# Everything above drives the LOOP directly and says nothing about the pair that ships. The loop spends
+# almost all its life inside `sleep`, and killing it does not take that child with it: it is reparented
+# to launchd, runs out its full interval, and holds the runner's stdout open the whole time, so anything
+# capturing that output waits for it (#2577 measured this on the Swift side). The twin of this pair in
+# mac/scripts/lib/test-progress-watch.sh had the same defect and the same fix.
+OVERTURE_FIXTURE_STALL_CHECK_SECONDS=30 FIXTURE_STALL_CHECK_SECONDS=30 start_fixture_watch "${PROGRESS}"
+WATCH_PID="${FIXTURE_WATCH_PID}"
+assert_equals "starting a watcher records a PID to stop it by" \
+  "recorded" "$(if [[ -n "${WATCH_PID}" ]]; then echo recorded; else echo empty; fi)"
+
+WATCH_PGID="$(ps -o pgid= -p "${WATCH_PID}" 2>/dev/null | tr -d ' ')"
+SHELL_PGID="$(ps -o pgid= -p $$ 2>/dev/null | tr -d ' ')"
+assert_equals "the watcher leads a process group of its own" "${WATCH_PID}" "${WATCH_PGID}"
+assert_equals "which is not this run's own group, so stopping it cannot take the run with it" \
+  "different" \
+  "$(if [[ "${WATCH_PGID}" != "${SHELL_PGID}" ]]; then echo "different"; else echo "the same: ${WATCH_PGID}"; fi)"
+
+sleep 1
+WATCH_CHILDREN="$(pgrep -P "${WATCH_PID}" 2>/dev/null | tr '\n' ' ')"
+# Asserted before the stop, because everything after it is vacuous if there was no sleeping child to
+# leave behind (L159).
+assert_equals "a watcher mid-interval really does have a sleeping child to leave behind" \
+  "has children" \
+  "$(if [[ -n "${WATCH_CHILDREN// /}" ]]; then echo "has children"; else echo "none, so nothing below is proved"; fi)"
+
+STOP_STARTED_AT="${SECONDS}"
+stop_fixture_watch "${WATCH_PID}"
+STOP_TOOK=$(( SECONDS - STOP_STARTED_AT ))
+assert_equals "stopping it does not wait out its 30 second interval" \
+  "prompt" \
+  "$(if [[ "${STOP_TOOK}" -le 5 ]]; then echo "prompt"; else echo "took ${STOP_TOOK}s"; fi)"
+# shellcheck disable=SC2086
+assert_pids_gone "and it leaves neither the loop nor its sleeping child behind" \
+  "${WATCH_PID}" ${WATCH_CHILDREN}
+
+# Called from the normal path AND from an EXIT trap, so a second call is the ordinary case rather than
+# an error, and neither it nor an empty pid may take the run down under `set -e`.
+stop_fixture_watch "${WATCH_PID}"
+assert_equals "stopping it twice is safe, which is what the EXIT trap does" "0" "$?"
+stop_fixture_watch ""
+assert_equals "and stopping a watcher that was never started is safe too" "0" "$?"
+
 if [[ "${FAILURES:-0}" -ne 0 ]]; then
   echo "${FAILURES} failure(s)"
   exit 1

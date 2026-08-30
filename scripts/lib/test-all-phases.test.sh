@@ -160,6 +160,45 @@ fi
 assert_contains "and says that is why, rather than looking like an ordinary failure" \
   "${KILLED_OUT}" "never recorded how it ended"
 
+# --- the phase gets a process group of its own (#3248) -----------------------------------------------
+#
+# Everything above is satisfied by a job started with no job control at all, because a job in the
+# shell's own process group is started, streamed and waited on identically: the only thing it cannot do
+# is be stopped WHOLE. The one `set -m` that arranges it is therefore invisible to every behavioural
+# assertion in this file, and a later edit removing it would take nothing red with it while quietly
+# restoring the orphan (L281). So it is asserted directly, on the running process, rather than by
+# reading the source for the flag.
+LOG6="${TMP_DIR}/phase6.log"
+start_background_phase "${LOG6}" sh -c 'sleep 30'
+PID6="${BACKGROUND_PHASE_PID}"
+STATUS_FILE6="${BACKGROUND_PHASE_STATUS_FILE}"
+JOB_PGID="$(ps -o pgid= -p "${PID6}" 2>/dev/null | tr -d ' ')"
+SHELL_PGID="$(ps -o pgid= -p $$ 2>/dev/null | tr -d ' ')"
+assert_equals "the background phase leads a process group of its own" "${PID6}" "${JOB_PGID}"
+# Both halves, because the first is also satisfied by a shell that happens to be its own group leader,
+# in which case there is no group to address that is not the whole run (L70).
+assert_equals "which is not the run's own group, so stopping it cannot take the run with it" \
+  "different" \
+  "$(if [[ "${JOB_PGID}" != "${SHELL_PGID}" ]]; then echo "different"; else echo "the same: ${JOB_PGID}"; fi)"
+PHASE6_CHILDREN="$(pgrep -P "${PID6}" 2>/dev/null | tr '\n' ' ')"
+assert_equals "and it really has a child of its own to leave behind" \
+  "has a child" \
+  "$(if [[ -n "${PHASE6_CHILDREN// /}" ]]; then echo "has a child"; else echo "none, so the next line proves nothing"; fi)"
+# Timed, because "everything is gone afterwards" is also what a job that simply RAN OUT looks like: with
+# no group to signal, the kill reaches nothing and the `wait` behind it sits for the job's whole life,
+# after which the assertion below passes for a reason unrelated to stopping anything (L165). The bound
+# is against a 30 second job and a stop that returns in milliseconds, so it is nowhere near what this
+# Mac's load can move.
+PHASE6_STOP_STARTED_AT="${SECONDS}"
+stop_background_phase "${PID6}"
+PHASE6_STOP_TOOK=$(( SECONDS - PHASE6_STOP_STARTED_AT ))
+assert_equals "stopping the phase returns at once rather than waiting the job out" \
+  "prompt" \
+  "$(if [[ "${PHASE6_STOP_TOOK}" -le 5 ]]; then echo "prompt"; else echo "took ${PHASE6_STOP_TOOK}s of a 30s job"; fi)"
+# shellcheck disable=SC2086
+assert_pids_gone "and stopping it takes the wrapper and its child together" "${PID6}" ${PHASE6_CHILDREN}
+rm -f "${STATUS_FILE6}"
+
 # --- the vacuous-guard advisory warns and does not block, and can be made to block -------------------
 #
 # Dan's standing rule is that he wants the override on anything, with the reason named in the message. It
@@ -229,8 +268,13 @@ mkdir -p "${STOP_DIR}"
 
 # Written as a script and run as its OWN bash process on purpose: the notice is printed by the shell that
 # owns the job, so a subshell of this fixture would not show it the way a real run does.
+# The job is given a distinctive argv[0] so it can be found by name rather than by walking a process
+# tree that no longer exists: once the wrapper has been killed, its child is reparented to launchd and
+# there is nothing left to ask `pgrep -P` (#3248). STOPPER_JOB_MARKER is set for the caller to look it
+# up by, and carries this fixture's own pid so two runs on one Mac cannot see each other's jobs.
 write_stopper() {
   local path="$1" stop_line="$2" injected="${3:-}"
+  STOPPER_JOB_MARKER="overture-test-all-phases-job-$$-$(basename "${path}" .sh)"
   cat > "${path}" <<STOPPER
 #!/usr/bin/env bash
 set -uo pipefail
@@ -238,9 +282,20 @@ source "${SCRIPT_DIR}/test-all-phases.sh"
 LOG="\$(mktemp "\${TMPDIR:-/tmp}/stopper-log.XXXXXX")"
 trap '${stop_line} rm -f "\${LOG:-}" "\${BACKGROUND_PHASE_STATUS_FILE:-}"' EXIT
 ${injected}
-start_background_phase "\${LOG}" sleep 300
+start_background_phase "\${LOG}" bash -c 'exec -a ${STOPPER_JOB_MARKER} sleep 300'
 PID="\${BACKGROUND_PHASE_PID}"
 echo "\${PID}" > "${STOP_DIR}/\$(basename "\$0").pid"
+# Waits until the job is really up before going on, so everything the caller then asserts is about
+# STOPPING it rather than about whether it ever started. Without this the success case and the case
+# where the wrapper died before it could fork are the same empty answer, and the assertion that the
+# job is gone would pass hardest when there had never been one (L159, L98).
+JOB=""
+for _ in \$(seq 1 200); do
+  JOB="\$(pgrep -f "${STOPPER_JOB_MARKER}" | tr '\\n' ' ')"
+  [[ -n "\${JOB// /}" ]] && break
+  sleep 0.05
+done
+echo "\${JOB}" > "${STOP_DIR}/\$(basename "\$0").job.pid"
 echo "the run ends early, the way a fatal cheap check ends one"
 exit 1
 STOPPER
@@ -258,6 +313,23 @@ BARE_OUT="$(cat "${STOP_DIR}/bare-kill.out")"
 assert_contains "a bare kill really does announce the job (the control)" "${BARE_OUT}" "Terminated"
 assert_contains "and the notice renders the job's own body" "${BARE_OUT}" "status_file"
 
+# The second half of the same control, and the one #3248 is about. The pid the helper is handed is the
+# WRAPPER's, not the job's: start_background_phase runs a compound command, so the thing that does the
+# work is a child of that wrapper. Killing the wrapper does not take its child with it on any Unix, so
+# a bare kill leaves the real job running, orphaned to launchd, holding the run's stdout open. This is
+# what the fixture itself did twice per run until now, measured 2026-08-29: two `sleep 300` survivors.
+BARE_JOB_PIDS="$(cat "${STOP_DIR}/bare-kill.sh.job.pid" 2>/dev/null | tr '\n' ' ')"
+assert_equals "and the job it started really is left running by a bare kill (the control)" \
+  "left running" \
+  "$(if [[ -n "${BARE_JOB_PIDS// /}" ]] && kill -0 ${BARE_JOB_PIDS} 2>/dev/null; then
+       echo "left running"
+     else
+       echo "nothing was left, so the case below proves nothing"
+     fi)"
+# shellcheck disable=SC2086
+kill ${BARE_JOB_PIDS} 2>/dev/null || true
+assert_pids_gone "and this fixture cleans up the orphan its own control makes" ${BARE_JOB_PIDS}
+
 # The same script, stopped through the helper.
 write_stopper "${STOP_DIR}/reaped.sh" 'stop_background_phase "${PID:-}";'
 bash "${STOP_DIR}/reaped.sh" > "${STOP_DIR}/reaped.out" 2>&1
@@ -271,6 +343,20 @@ assert_equals "and the phase it names is really gone" "0" "$(kill -0 "${REAPED_P
 assert_not_contains "stopping through the helper announces nothing" "${REAPED_OUT}" "Terminated"
 assert_not_contains "so the job's body never reaches the output" "${REAPED_OUT}" "status_file"
 assert_contains "and the run's own line is still printed" "${REAPED_OUT}" "the run ends early"
+
+# THE assertion #3248 adds. Everything above this line is satisfied by a helper that kills the wrapper
+# and walks away, which is what it did: the wrapper is gone, the shell says nothing, and the job the
+# wrapper was started for runs on for its full five minutes with nobody's name on it.
+#
+# Waited for rather than sampled once, because a signalled process is not a reaped one and how long
+# the gap is depends on what else this Mac is running. Sampling once is the defect on the other side
+# of this same issue, which failed a merge on 2026-08-29 on a change that was green (L524).
+REAPED_JOB_PIDS="$(cat "${STOP_DIR}/reaped.sh.job.pid" 2>/dev/null | tr '\n' ' ')"
+assert_equals "the helper's own run really did get a job started (so the next line measures one)" \
+  "started" \
+  "$(if [[ -n "${REAPED_JOB_PIDS// /}" ]]; then echo "started"; else echo "none, so nothing below is proved"; fi)"
+assert_pids_gone "and stopping through the helper ends the JOB, not only the wrapper it rode in on" \
+  ${REAPED_JOB_PIDS}
 
 # --- the window between creating the log and protecting it -------------------------------------------
 #
@@ -320,10 +406,22 @@ assert_contains "an empty pid is a no-op" "${STOP_STATUS_OUT}" "status=0"
 
 # Whatever the verdict, this fixture leaves no process of its own behind: on the path where the helper
 # is missing the phase is still running, and a red fixture must not leak one.
+#
+# The claim in that sentence was false for as long as it stood, which is why #3248 says a claim a
+# measurement disproves is worse than no claim. `*.pid` holds the WRAPPER pids, and every one of them
+# is already dead by the time this runs: what survived was the wrapper's child, which this loop never
+# named. Measured 2026-08-29 on this file as it stood: two `sleep 300` per run, forever, since macOS
+# reaps nothing until the next boot. `*.job.pid` is the other half, and the wait is what makes the
+# claim checkable rather than asserted (L524).
+_LEFTOVER_PIDS=""
 for _pidfile in "${STOP_DIR}"/*.pid; do
   [[ -f "${_pidfile}" ]] || continue
-  kill "$(cat "${_pidfile}")" 2>/dev/null || true
+  _LEFTOVER_PIDS="${_LEFTOVER_PIDS} $(tr '\n' ' ' < "${_pidfile}")"
 done
+# shellcheck disable=SC2086
+kill ${_LEFTOVER_PIDS} 2>/dev/null || true
+# shellcheck disable=SC2086
+assert_pids_gone "and this fixture really does leave no process of its own behind" ${_LEFTOVER_PIDS}
 
 # The half that stops it coming back. test-all.sh is where the trap lives, and a later edit putting a
 # bare kill back would be invisible to every behavioural test above, which drives the helper directly.

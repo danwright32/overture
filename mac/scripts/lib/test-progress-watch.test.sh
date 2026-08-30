@@ -313,6 +313,17 @@ assert_eq "a watcher mid-interval really does have a sleeping child to leave beh
   "has children" \
   "$(if [[ -n "${SLOW_CHILDREN// /}" ]]; then echo "has children"; else echo "none, so nothing below is proved"; fi)"
 
+# The group is what makes stopping it whole possible, and it is invisible to every other assertion
+# here: a watcher in the run's own process group starts, warns and is killed identically, and only
+# fails to take its sleeping child with it. So it is asserted on the running process rather than by
+# reading the source for the flag that arranges it (L281).
+SLOW_PGID="$(ps -o pgid= -p "${SLOW_PID}" 2>/dev/null | tr -d ' ')"
+SHELL_PGID="$(ps -o pgid= -p $$ 2>/dev/null | tr -d ' ')"
+assert_eq "the watcher leads a process group of its own" "${SLOW_PID}" "${SLOW_PGID}"
+assert_eq "which is not the run's own group, so stopping it cannot take the run with it" \
+  "different" \
+  "$(if [[ "${SLOW_PGID}" != "${SHELL_PGID}" ]]; then echo "different"; else echo "the same: ${SLOW_PGID}"; fi)"
+
 STOP_STARTED_AT="${SECONDS}"
 stop_progress_watch "${SLOW_PID}"
 STOP_TOOK=$(( SECONDS - STOP_STARTED_AT ))
@@ -321,13 +332,15 @@ assert_eq "stopping a watcher does not wait out its 30 second interval" \
   "prompt" \
   "$(if [[ "${STOP_TOOK}" -le 3 ]]; then echo "prompt"; else echo "took ${STOP_TOOK}s"; fi)"
 
-STILL_ALIVE=""
-for CHILD_PID in ${SLOW_CHILDREN}; do
-  kill -0 "${CHILD_PID}" 2>/dev/null && STILL_ALIVE="${STILL_ALIVE} ${CHILD_PID}"
-done
-assert_eq "and it leaves no sleeping orphan behind holding the run's output open" \
-  "none left" \
-  "$(if [[ -z "${STILL_ALIVE// /}" ]]; then echo "none left"; else echo "still alive:${STILL_ALIVE}"; fi)"
+# WAITED for rather than sampled once (#3248). A signalled process is not yet a reaped one, and how
+# wide the gap is depends on what else this Mac is doing: these children are grandchildren of this
+# fixture, so nothing here can `wait` on them and launchd reaps them on its own schedule. Sampling
+# once made this assertion a check on the machine's load. It failed exactly that way on 2026-08-29,
+# `still alive: 20800`, with the Swift suite running beside it, and blocked a merge whose own change
+# was green. The wait has a deadline, so a real leak still fails rather than hanging (L110, L524).
+# shellcheck disable=SC2086
+assert_pids_gone "and it leaves no sleeping orphan behind holding the run's output open" \
+  ${SLOW_CHILDREN}
 
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All test-progress-watch checks passed."

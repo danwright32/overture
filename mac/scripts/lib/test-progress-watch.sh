@@ -278,28 +278,62 @@ progress_watch_loop() {
 # Not written as `PID="$(start...)"`, because a command substitution runs in a subshell and the
 # background job would be that subshell's child rather than this script's. It would still be
 # killable, but never reapable, so the script would end holding a zombie it could not wait on.
+#
+# Started under `set -m` so the watcher gets a process group OF ITS OWN (#3248). Without job control a
+# background job shares the shell's group, so there is nothing to address that is not also the run
+# itself. The group is what lets stop_progress_watch end the loop and the `sleep` it is sitting in as
+# one act, instead of reading the children first and hoping none is forked in the gap. Job control is
+# turned back off immediately, and only if it was off to begin with, since it is a property of the
+# whole shell rather than of this call.
+#
+# Enabling job control does NOT make this script fight for the terminal, which is the thing that would
+# have made it unusable here: run-tests-locked.sh is itself started as a background job by
+# scripts/test-all.sh, and a background process group that tries to take the terminal is stopped by
+# SIGTTOU rather than told about it. Measured 2026-08-29 on this Mac, under a real pty and nested
+# exactly that way (bash 3.2, non-interactive): the inner script kept running and its watcher got its
+# own group. A non-interactive bash sets job control without taking terminal control.
 PROGRESS_WATCH_PID=""
 start_progress_watch() {
   local log_file="$1"
+  local restore_job_control=0
+  case "$-" in *m*) ;; *) restore_job_control=1 ;; esac
+  set -m
   progress_watch_loop "${log_file}" \
     "${TEST_STALL_LIMIT_SECONDS}" "${TEST_STALL_CHECK_SECONDS}" "${TEST_LOCK_NOTICE_SECONDS}" &
   PROGRESS_WATCH_PID=$!
+  [[ "${restore_job_control}" -eq 1 ]] && set +m
+  return 0
 }
 
 # Stops it, and tolerates every way it might already be gone. Called on the normal path AND from an
 # EXIT trap, so it has to be safe to call twice and safe to call on a PID that never existed: a
 # watcher outliving the run that spawned it would sit printing about a log nobody is writing.
 stop_progress_watch() {
-  local pid="${1:-}" children=""
+  local pid="${1:-}"
   [[ -n "${pid}" ]] || return 0
+  # A pid that is not a plain number above 1 is refused rather than passed through, because
+  # `kill -- -0` and `kill -- -1` mean this run's own group and every process on the machine.
+  [[ "${pid}" =~ ^[0-9]+$ ]] || return 0
+  [[ "${pid}" -gt 1 ]] || return 0
   # The loop spends almost all of its life inside `sleep`, and killing the loop does NOT take that
   # child with it: it is reparented to launchd and runs out its full interval. Measured on
-  # 2026-08-12, that left a `sleep 30` alive after the run had finished. So the children are read off
-  # BEFORE the parent dies, because once it has, there is no longer anything to ask `pgrep -P`.
-  children="$(pgrep -P "${pid}" 2>/dev/null || true)"
+  # 2026-08-12, that left a `sleep 30` alive after the run had finished, holding the run's stdout
+  # open, so anything capturing that output waited the whole interval out.
+  #
+  # #3248: the whole GROUP is signalled rather than the loop and a list of children read just before
+  # it. Reading the list first leaves a gap the loop can fork into, and it is the wrong shape anyway,
+  # since it only ever reaches one generation. `-"${pid}"` can only name the watcher's own group: a
+  # group id is the pid of its leader, and this pid belongs to a process this script just started, so
+  # either it leads a group (which `set -m` in start_progress_watch arranges) or no such group exists.
+  kill -- -"${pid}" 2>/dev/null || true
+  # And the pid itself, which is NOT redundant: it is what keeps a missing group a FAILURE rather than a
+  # HANG. Measured 2026-08-29 by taking `set -m` away with only the group kill here: the group does not
+  # exist, the kill reaches nothing, and the `wait` below then sits on a `while :` loop that never ends,
+  # so the guard written to catch exactly that can never speak, because it can only speak once the run
+  # is over (L110, and #2577's own lesson turned on its author). With this line the same mutation is
+  # red in seconds instead. It cannot be shown to fail on its own, since the group kill covers it
+  # whenever `set -m` worked, and that is the point of it.
   kill "${pid}" 2>/dev/null || true
-  # shellcheck disable=SC2086
-  [[ -n "${children}" ]] && kill ${children} 2>/dev/null
   wait "${pid}" 2>/dev/null || true
   PROGRESS_WATCH_PID=""
   return 0

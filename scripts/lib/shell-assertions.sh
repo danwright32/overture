@@ -90,3 +90,63 @@ assert_empty() {
     shell_assertion_record_failure
   fi
 }
+
+# assert_pids_gone <description> <pid>...
+#
+# Waits, up to a deadline, for every pid named to be gone, and reports one verdict (#3248).
+#
+# The only helper here that is about TIME rather than about a value, and it exists because sampling
+# once is wrong. A fixture that stops a background job and immediately asks `kill -0` whether its
+# children are gone is asking a question the answer to which depends on how busy the Mac is: the
+# signal has been delivered, the process has not been reaped yet, and it reads as a leak. That failed
+# a merge on 2026-08-29 (`still alive: 20800`, while the Swift suite ran beside it) on a change whose
+# own work was green. Waiting on the condition rather than on a fixed delay is also the faster answer,
+# because the ordinary case returns on the first poll (L290, L524).
+#
+# It has a DEADLINE because a wait without one cannot fail, it can only hang, and a hang is worse than
+# a failure: it is indistinguishable from slowness and holds whatever the run was holding (L110). The
+# deadline is generous, since it is a bound on a pathology rather than a measurement of speed, and it
+# is injectable so the fixture proving the failing verdict does not have to wait it out.
+#
+# Being given NO pids fails rather than passes. Every caller collects the pids first and has already
+# asserted that it found some, so an empty list means that collection came back empty, and zero
+# subjects examined must never read as the cleanest possible pass (L98).
+SHELL_ASSERTION_PIDS_GONE_DEADLINE_SECONDS="${SHELL_ASSERTION_PIDS_GONE_DEADLINE_SECONDS:-15}"
+SHELL_ASSERTION_PIDS_GONE_POLL_SECONDS="${SHELL_ASSERTION_PIDS_GONE_POLL_SECONDS:-0.05}"
+
+assert_pids_gone() {
+  local desc="$1"; shift
+  local pids=() pid alive started_at now
+  for pid in "$@"; do
+    [[ -n "${pid}" ]] && pids+=("${pid}")
+  done
+
+  if [[ "${#pids[@]}" -eq 0 ]]; then
+    echo "FAIL - ${desc}"
+    echo "  no pids were given, so nothing was waited for and nothing was measured"
+    shell_assertion_record_failure
+    return 0
+  fi
+
+  # Elapsed time comes from the shell's own clock, never from adding up the sleeps: a timer built by
+  # summing its own delays counts iterations rather than seconds, and every poll costs more than the
+  # sleep it asked for (L226).
+  started_at="${SECONDS}"
+  while :; do
+    alive=""
+    for pid in "${pids[@]}"; do
+      kill -0 "${pid}" 2>/dev/null && alive="${alive} ${pid}"
+    done
+    [[ -n "${alive// /}" ]] || break
+    now="${SECONDS}"
+    if [[ $(( now - started_at )) -ge "${SHELL_ASSERTION_PIDS_GONE_DEADLINE_SECONDS}" ]]; then
+      echo "FAIL - ${desc}"
+      echo "  still alive after ${SHELL_ASSERTION_PIDS_GONE_DEADLINE_SECONDS}s:${alive}"
+      shell_assertion_record_failure
+      return 0
+    fi
+    sleep "${SHELL_ASSERTION_PIDS_GONE_POLL_SECONDS}"
+  done
+
+  echo "ok - ${desc}"
+}

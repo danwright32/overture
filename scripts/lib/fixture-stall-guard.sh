@@ -103,24 +103,42 @@ fixture_watch_loop() {
   done
 }
 
+#
+# Started under `set -m` so the watcher gets a process group of its own, for the reason and with the
+# measurement recorded beside its twin in mac/scripts/lib/test-progress-watch.sh (#3248). Job control
+# is restored to whatever the caller had it at, since it is a property of the whole shell.
 FIXTURE_WATCH_PID=""
 start_fixture_watch() {
   local progress_file="$1"
+  local restore_job_control=0
+  case "$-" in *m*) ;; *) restore_job_control=1 ;; esac
+  set -m
   fixture_watch_loop "${progress_file}" \
     "${FIXTURE_STALL_LIMIT_SECONDS}" "${FIXTURE_STALL_CHECK_SECONDS}" &
   FIXTURE_WATCH_PID=$!
+  [[ "${restore_job_control}" -eq 1 ]] && set +m
+  return 0
 }
 
-# Safe to call twice and safe to call on a PID that never existed. The children are read BEFORE the
-# parent dies, because killing the loop does not take its sleep with it and once the parent is gone
-# there is nothing left to ask `pgrep -P` (#2577 measured a `sleep 30` outliving its run).
+# Safe to call twice and safe to call on a PID that never existed.
+#
+# #3248: the whole GROUP is signalled, because killing the loop does not take the `sleep` it is sitting
+# in with it (#2577 measured a `sleep 30` outliving its run, holding that run's output open). Reading
+# the children first with `pgrep -P` and killing them, which is what this did, leaves a gap the loop can
+# fork into and only ever reaches one generation. `-"${pid}"` can only name this watcher's own group: a
+# group id is the pid of its leader, and this pid belongs to a process this script just started. A pid
+# that is not a plain number above 1 is refused rather than passed through, because `kill -- -0` and
+# `kill -- -1` mean the caller's own group and every process on the machine.
 stop_fixture_watch() {
-  local pid="${1:-}" children=""
+  local pid="${1:-}"
   [[ -n "${pid}" ]] || return 0
-  children="$(pgrep -P "${pid}" 2>/dev/null || true)"
+  [[ "${pid}" =~ ^[0-9]+$ ]] || return 0
+  [[ "${pid}" -gt 1 ]] || return 0
+  kill -- -"${pid}" 2>/dev/null || true
+  # And the pid itself, which is NOT redundant: it is what keeps a missing group a FAILURE rather than
+  # a HANG, exactly as recorded beside its twin. The loop here is a `while :`, so a `wait` on a watcher
+  # nothing killed never returns at all.
   kill "${pid}" 2>/dev/null || true
-  # shellcheck disable=SC2086
-  [[ -n "${children}" ]] && kill ${children} 2>/dev/null
   wait "${pid}" 2>/dev/null || true
   FIXTURE_WATCH_PID=""
   return 0
