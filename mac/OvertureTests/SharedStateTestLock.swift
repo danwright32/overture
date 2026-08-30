@@ -90,6 +90,14 @@ extension Trait where Self == SharesGlobalState {
     /// The four suites that drive the network through `PageStubURLProtocol`'s process-global statics.
     static var sharesTheNetworkStub: Self { Self(name: "PageStubURLProtocol") }
 
+    /// The suites that drive the Algolia stub in `CarnegieExtractorTests`, whose `responses` and
+    /// `callCount` are process-global exactly like `PageStubURLProtocol`'s (#3269). It is one suite
+    /// today, which is a property of the current tree and not of the design: the moment a second suite
+    /// uses that stub it has the identical defect, and `.serialized` would not close it, because
+    /// `.serialized` orders a suite's own tests and the interference comes from other suites.
+    /// `SourceFetcherTests` carried `.serialized` and still failed for exactly that reason.
+    static var sharesTheCarnegieStub: Self { Self(name: "CarnegieStubURLProtocol") }
+
     /// The three suites that read `QueueRenderCounter`, which is one counter for the whole process:
     /// each of them resets it and reads it back, which is correct only while one of them runs at a time.
     /// Measured 2026-08-30, it went red once in a parallel run and passed in the run before it, which is

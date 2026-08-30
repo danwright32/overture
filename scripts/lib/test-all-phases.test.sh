@@ -215,6 +215,25 @@ assert_equals "it can still be made blocking" "1" "$([ -n "${TA_BLOCK_LINE}" ] &
 TA_GUARD="$(printf '%s' "${TA_SRC}" | sed -n "$((TA_BLOCK_LINE - 1))p")"
 assert_contains "and that path is reachable only through the override" "${TA_GUARD}" "OVERTURE_VACUOUS_GUARDS_STRICT"
 
+# --- the shared-state check rides along, advisory, and its UNMEASURED verdict does NOT (#3270) -------
+#
+# The check itself is proved by scripts/check-test-shared-state.test.sh. What is proved HERE is that
+# anything runs it at all: a guard nobody invokes is a value with no writer (L46), and #2773 is the
+# record of what that costs (the tool shipped, nothing ran it, 17 entries accumulated).
+#
+# Its three exit codes are not one thing. 1 is advisory, because a new stored static may be perfectly
+# safe and a rule that fires on the ordinary case gets switched off (L93). 2 is UNMEASURED and DOES fail
+# the run, because a pass that examined nothing must never read like a pass that examined everything
+# (L98, L11), and folding the two together is exactly how that happens.
+assert_contains "the shared-state check rides along" "${TA_SRC}" "scripts/check-test-shared-state.sh"
+assert_contains "and its findings say they are not failing the run" "${TA_SRC}" \
+  "Advisory, so this does NOT fail the run. Give the suites that touch it a shared lock"
+TA_SHARED_BLOCK_LINE="$(printf '%s' "${TA_SRC}" | grep -n 'TEST_ALL_CHEAP_FAILURES+=("scripts/check-test-shared-state.sh")' | cut -d: -f1)"
+assert_equals "an unmeasured run still reaches the failure list" "1" \
+  "$([ -n "${TA_SHARED_BLOCK_LINE}" ] && echo 1 || echo 0)"
+TA_SHARED_GUARD="$(printf '%s' "${TA_SRC}" | sed -n "$((TA_SHARED_BLOCK_LINE - 1))p")"
+assert_contains "and that path is reached only by exit 2, never by a finding" "${TA_SHARED_GUARD}" '= "2"'
+
 # --- the dependency install happens BEFORE the working-tree snapshot (#3168) -------------------------
 #
 # check-tree-untouched.sh reports the IGNORED paths a run changed, and that report is only worth
