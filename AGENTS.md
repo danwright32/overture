@@ -756,6 +756,32 @@ already drifting from the Swift version it mirrored.
   testables. The fixtures are those runs' own output, trimmed, at
   `mac/scripts/lib/fixtures/parallel-run-20260829.log` and `mac/scripts/lib/fixtures/mixed-run-20260830.log`;
   the full 839KB parallel log is kept at `~/.overture-mac-test-diagnostics/parallel-experiment-20260829.log`.
+  **Since #3243 the COUNT on that line, and the count the short run gate is judged by, come from the
+  run's own RESULT BUNDLE rather than from the log text.** Two reasons, and the second is the sharper
+  one. A parallel run's stdout is written by several worker processes at once and their per-test lines
+  can collide: in the 2026-08-29 experiment log exactly one line was corrupted that way, which is why
+  the readable count was 4,874 against the bundle's 4,875. One test is immaterial against a 10 percent
+  tolerance; what is not is that the only thing bounding the error is how often two workers write in
+  the same instant, which nothing measures and which gets worse with more workers. And the gate
+  compares this number against a baseline a SERIAL run recorded, which used to be produced a different
+  way (#3265): 8,612 by distinct name in parallel against a serial 8,618, with `CityFromAddressTests`
+  alone printing 17 case lines under 6 distinct names. Two numbers being CLOSE is worse than their
+  being obviously different, because it reads as trustworthy while comparing two things that are not
+  the same quantity.
+  `totalTestCount` is ONE quantity however the run was parallelised, and it is by test NAME. Measured
+  2026-08-30 on a real serial run: `totalTestCount` 8,626 against a summary line of 8,626, while the
+  same bundle's per-configuration figures come to 8,801, because 45 tests ran with dynamic parameters
+  over 220 runs. Names on both sides of the comparison, which is what the gate needs.
+  Three things to know. Every way the read can FAIL comes back empty rather than zero, because zero is
+  a real measurement that the empty-run gate acts on, so a failed read arriving as zero would fail a
+  healthy run and name the wrong cause (L98, L11); the log parsers stay as the fallback and the readout
+  SAYS so when it fell back, which is a warning only in the case that needs one. A RESTARTED run is
+  refused the bundle count deliberately: its text totals are the totals of the remainder after the
+  relaunch (#2821), and whether the bundle counts the whole run or the remainder is not something
+  anybody has measured, so substituting an unmeasured whole-run count there is the one direction that
+  disarms the gate (L82). And it costs one `xcresulttool` call, measured at 6.2s against a suite of
+  about 330s; `OVERTURE_XCRESULTTOOL` is the seam the fixture drives it through.
+
   **Since #3165 the first of those two invariants is measured by a different number.** It used to be the
   rows whose reply is still OPEN, which #2985 narrowed it to for a correct reason (`ReplyIdentity.answering`
   short-circuits once a reply is handled, and asserting through it fired when Dan answered one, which is the

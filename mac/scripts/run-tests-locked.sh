@@ -612,10 +612,23 @@ main() {
   # because "nothing ran" is never correct.
   local executed baseline="" truncated="" scoped=0 restarted=""
   run_is_scoped "$@" && scoped=1
-  executed="$(executed_test_count "${last_output}")"
   # #2821: whether the test process was RELAUNCHED partway through, which makes every count below a
   # count of the REMAINDER rather than of this run.
   restarted="$(test_run_restarted "${last_output}")"
+
+  # #3243 / #3265: the count that decides everything below comes from the run's own RESULT BUNDLE where
+  # one can be read, and from the log text only where one cannot. Two reasons, and the second is the
+  # sharper one. A parallel run's stdout is written by several workers at once and their per-test lines
+  # can collide, so a count parsed from it is short by however many collided and nothing bounds that.
+  # And the short-run gate compares this number against a baseline a SERIAL run recorded, which used to
+  # be produced a different way: `totalTestCount` is one quantity, by test NAME, however the run was
+  # parallelised, so both sides of that comparison are now the same thing.
+  #
+  # It costs one `xcresulttool` call, measured at 6.2s against a suite of about 330s.
+  local bundle_count authoritative
+  bundle_count="$(result_bundle_total_test_count "$(test_run_result_bundle "${last_output}")")"
+  authoritative="$(totals_with_authoritative_count "$(test_run_totals "${last_output}")" "${bundle_count}" "${restarted}")"
+  executed="$(awk '{print $1}' <<< "${authoritative}")"
   if [[ "${scoped}" -eq 0 ]]; then
     [[ -f "${BASELINE_FILE}" ]] && baseline="$(cat "${BASELINE_FILE}" 2>/dev/null || true)"
     truncated="$(truncated_report "${executed}" "${baseline}")"
@@ -661,7 +674,7 @@ main() {
   # drifted, one by 768 tests, which quietly weakened the very warning it was giving about a scoped
   # run that executes nothing. A readout the run produces itself cannot drift.
   echo >&2
-  echo "run-tests-locked.sh: $(suite_report_for_run "${last_output}" "${MAC_DIR}")" >&2
+  echo "run-tests-locked.sh: $(suite_report_for_run "${last_output}" "${MAC_DIR}" "${authoritative}")" >&2
 
   # #2991: and whether the LIVE store invariants measured anything, AND FOR HOW LONG THEY HAVE NOT,
   # beside the shape rather than buried thousands of lines up in the log. The corpus line has been

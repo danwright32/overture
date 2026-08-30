@@ -1380,6 +1380,30 @@ assert_equals "a -only-testing: argument DOES scope it" "scoped" \
 assert_equals "and it is found wherever it sits in the arguments" "scoped" \
   "$(run_is_scoped -parallel-testing-enabled YES -only-testing:OvertureTests/SomeSuite && echo scoped || echo "not scoped")"
 
+# --- the gate is judged by the RESULT BUNDLE's count, and the readout by the same one (#3243) --------
+#
+# suite-stats.test.sh proves the reading decides correctly and would keep passing if this runner never
+# called it. A guard whose input nothing supplies is a value with no writer (L46), and this one has a
+# second half that only exists here: the count feeding the SHORT RUN gate and the count printed in the
+# readout must be the SAME number. Two independent readings of one run is how a readout comes to
+# contradict the verdict beside it (L53).
+# NOTE: this file defines its own assert_contains as (desc, NEEDLE, haystack), the reverse of the
+# shared vocabulary in scripts/lib/shell-assertions.sh. Written the other way round first, and every
+# assertion below passed while comparing the wrong pair.
+RTL_SRC="$(cat "${SCRIPT_DIR}/run-tests-locked.sh" 2>/dev/null || echo "")"
+assert_contains "the runner asks the run for its result bundle" "test_run_result_bundle" "${RTL_SRC}"
+assert_contains "and reads the count out of it" "result_bundle_total_test_count" "${RTL_SRC}"
+assert_contains "and decides which count wins in one place" "totals_with_authoritative_count" "${RTL_SRC}"
+assert_contains "the gate is judged by that decision" \
+  'executed="$(awk '"'"'{print $1}'"'"' <<< "${authoritative}")"' "${RTL_SRC}"
+assert_contains "and the readout is handed the very same one" \
+  'suite_report_for_run "${last_output}" "${MAC_DIR}" "${authoritative}"' "${RTL_SRC}"
+
+# The restart refusal has to reach the runner too: it is passed through, not re-derived, so the runner
+# cannot end up asking a different question than the one the fixture proved.
+assert_contains "and the restart verdict is passed into that decision" \
+  'totals_with_authoritative_count "$(test_run_totals "${last_output}")" "${bundle_count}" "${restarted}"' "${RTL_SRC}"
+
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All run-tests-locked.sh stale-host fixtures passed."
   exit 0

@@ -220,6 +220,93 @@ line_ratio() {
 # than small is the single reading it must never produce, so it states none: not the totals, not the
 # ratio, not the guard share, because a plausible-looking figure standing beside a warning is what
 # makes a remainder readable as a measurement in the first place.
+# #3243 / #3265: the run's own RESULT BUNDLE, which is where the trustworthy count lives.
+#
+# WHY NOT THE LOG. Everything above reads xcodebuild's stdout. In a parallel run that stdout is written
+# by several worker processes at once and their lines can collide: in the 2026-08-29 experiment log
+# exactly one per-test line was corrupted that way, which is why the readable count was 4,874 against
+# the bundle's 4,875. One test is immaterial against a 10 percent tolerance. What is not immaterial is
+# that the only thing bounding the error is how often two workers happen to write in the same instant,
+# which nothing measures and which gets worse with more workers.
+#
+# WHY IT ALSO SETTLES #3265, which is the sharper half. The short-run gate compares a parallel run's
+# count against a baseline recorded by a SERIAL run, and until now the two were produced differently:
+# a summary line on one side, distinct per-test NAMES on the other. Measured 2026-08-30, 8,612 by name
+# in parallel against a serial 8,618, with `CityFromAddressTests` alone printing 17 case lines under 6
+# distinct names. Two numbers being CLOSE is worse than their being obviously different, because it
+# reads as trustworthy while comparing two things that are not the same quantity.
+#
+# `totalTestCount` is ONE quantity however the run was parallelised, and it is by NAME. Measured
+# 2026-08-30 on a real serial run: `totalTestCount` 8,626 against a summary line of 8,626, while the
+# same bundle's per-configuration figures come to 8,801 because 45 tests ran with dynamic parameters
+# over 220 runs. Names on both sides of the comparison, which is what the gate needs.
+#
+# The path is taken from the run's own output rather than from a `-resultBundlePath` this script sets,
+# because xcodebuild prints where it wrote the bundle whether anybody asked for a path or not, and a
+# path this script chose would have to be cleaned up by this script.
+test_run_result_bundle() {
+  local output="$1"
+  # The LAST one. A retried run (the #1331 app-host flake) writes a second bundle, and the run whose
+  # result anybody is reading is the last attempt, not the one that died.
+  printf '%s\n' "${output}" | awk '
+    /\.xcresult$/ {
+      line = $0
+      gsub(/^[ \t]+|[ \t]+$/, "", line)
+      if (line ~ /\.xcresult$/) last = line
+    }
+    END { if (last != "") print last }
+  '
+}
+
+# The count out of one bundle, or NOTHING. Every way the reading can fail comes back empty rather than
+# zero, and that is the whole contract: zero is a real measurement (a run that executed nothing) which
+# the empty-run gate acts on, so a failed read arriving as zero would fail a healthy run and name the
+# wrong cause (L98, L11).
+#
+# OVERTURE_XCRESULTTOOL is the seam, so a fixture can drive every one of those failures without a real
+# bundle. It defaults to the real tool.
+result_bundle_total_test_count() {
+  local bundle="$1"
+  [[ -n "${bundle}" ]] || return 0
+  local tool=("${OVERTURE_XCRESULTTOOL:-}")
+  if [[ -z "${OVERTURE_XCRESULTTOOL:-}" ]]; then
+    tool=(xcrun xcresulttool)
+  fi
+  local summary
+  summary="$("${tool[@]}" get test-results summary --path "${bundle}" 2>/dev/null)" || return 0
+  [[ -n "${summary}" ]] || return 0
+  local count
+  count="$(printf '%s' "${summary}" | jq -r 'if type == "object" and (.totalTestCount | type) == "number" then .totalTestCount else empty end' 2>/dev/null)" || return 0
+  [[ "${count}" =~ ^[0-9]+$ ]] || return 0
+  printf '%s\n' "${count}"
+}
+
+# Which count the run is judged by, and a fourth field naming WHICH SOURCE it came from, because a
+# count read from the weaker source and a count read from the stronger one must not be indistinguishable
+# once one of them is the only one available (L11).
+#
+# A RESTARTED run is refused the bundle count, deliberately. Its text totals are the totals of the
+# REMAINDER after xcodebuild relaunched the test process (#2821), and whether the bundle counts the
+# whole run or only that remainder is not something anybody has measured. Substituting an unmeasured
+# whole-run count for a remainder is the one direction that disarms the short-run gate, so a restarted
+# run keeps the reading it already had until somebody measures the other (L82).
+totals_with_authoritative_count() {
+  local totals="$1" bundle_count="$2" restarted="${3:-}"
+  if [[ -n "${restarted}" || -z "${bundle_count}" ]]; then
+    [[ -n "${totals}" ]] && printf '%s log\n' "${totals}"
+    return 0
+  fi
+  if [[ -z "${totals}" ]]; then
+    # A bundle count with no text totals is still the count the gate needs. The suites and the duration
+    # say they were not reported rather than being invented from it.
+    printf '%s unknown unknown xcresult\n' "${bundle_count}"
+    return 0
+  fi
+  local tests suites seconds
+  read -r tests suites seconds <<< "${totals}"
+  printf '%s %s %s xcresult\n' "${bundle_count}" "${suites}" "${seconds}"
+}
+
 format_suite_report() {
   local totals="$1" ratio="$2" guard_decls="$3" total_decls="$4" restarted="${5:-}"
   local out="Suite shape: "
@@ -230,8 +317,11 @@ format_suite_report() {
   fi
 
   if [[ -n "${totals}" ]]; then
-    local tests suites seconds
-    read -r tests suites seconds <<< "${totals}"
+    # #3243: an optional FOURTH field naming where the count came from. Absent means the caller did not
+    # ask the question, which is what every existing caller and fixture does, so the readout is
+    # unchanged for them.
+    local tests suites seconds count_source
+    read -r tests suites seconds count_source <<< "${totals}"
     # #2317: a scoped run really can be one suite, and now that scoped runs go through this wrapper the
     # readout says so in words rather than "1 suites".
     out+="${tests} test$([[ "${tests}" == 1 ]] || echo s)"
@@ -243,6 +333,12 @@ format_suite_report() {
       out+="duration not reported by this run."
     else
       out+="${seconds}s."
+    fi
+    # Said only when the WEAKER source was used, so it is a warning rather than noise. A count parsed
+    # from stdout can be corrupted by two parallel workers writing in the same instant, and nothing
+    # bounds how often that happens (#3243).
+    if [[ "${count_source:-}" == "log" ]]; then
+      out+=" The count was counted from the log text rather than read from the result bundle, so it may be short by however many per-test lines collided."
     fi
   else
     out+="could not read the test totals from this run."
@@ -446,8 +542,13 @@ source_guard_declarations_under() {
 }
 
 # The whole readout for a finished run, given that run's output and the repo's mac directory.
+# #3243: `totals` is the already-decided totals line (count, suites, seconds, source) when the caller
+# has one. Optional, so every existing caller and fixture reads exactly as before, computing the totals
+# from the text. The runner passes it because it has already read the result bundle for the gate, and
+# the readout and the gate must be judging the same number: two independent readings of one run is how
+# a readout comes to disagree with the verdict beside it (L53).
 suite_report_for_run() {
-  local output="$1" mac_dir="$2"
+  local output="$1" mac_dir="$2" totals="${3:-}"
   local app_lines test_lines guard_decls total_decls
 
   app_lines="$(swift_lines_under "${mac_dir}/Overture")"
@@ -459,7 +560,8 @@ suite_report_for_run() {
   guard_decls=$(( $(source_guard_declarations_under "${mac_dir}/OvertureTests") \
                 + $(source_guard_declarations_under "${mac_dir}/OvertureHostedTests") ))
 
-  format_suite_report "$(test_run_totals "${output}")" \
+  [[ -n "${totals}" ]] || totals="$(test_run_totals "${output}")"
+  format_suite_report "${totals}" \
                       "$(line_ratio "${app_lines}" "${test_lines}")" \
                       "${guard_decls}" "${total_decls}" \
                       "$(test_run_restarted "${output}")"
