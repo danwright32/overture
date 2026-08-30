@@ -33,7 +33,7 @@ assert_equals() {
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/progress-watcher.sh"
 
-TMP="$(mktemp -d)"
+TMP="$(fixture_scratch_dir)"
 trap 'rm -rf "${TMP}"' EXIT
 
 QUEUE="${TMP}/queue.json"

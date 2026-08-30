@@ -32,7 +32,7 @@ source "${REPO_ROOT}/scripts/install-git-hooks.sh"
 set +e
 
 FAILURES=0
-TMP="$(mktemp -d)"
+TMP="$(fixture_scratch_dir)"
 trap 'rm -rf "${TMP}"' EXIT
 
 # A throwaway repo carrying this repo's real .gitattributes and the real driver, wired by the real

@@ -8,7 +8,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./stuck-tool-call.sh
 . "${HERE}/stuck-tool-call.sh"
 
-WORK="$(mktemp -d)"
+WORK="$(fixture_scratch_dir)"
 trap 'rm -rf "${WORK}"' EXIT
 
 # The shapes are copied from a REAL stream on this Mac (check-run-events.chunk-4.jsonl), not invented:

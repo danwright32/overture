@@ -27,7 +27,7 @@ fail() {
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/await-registered.sh"
 
-TMP="$(mktemp -d)"
+TMP="$(fixture_scratch_dir)"
 trap 'rm -rf "${TMP}"' EXIT
 
 # Never actually sleep between probes in the test.

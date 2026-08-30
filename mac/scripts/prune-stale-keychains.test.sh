@@ -37,7 +37,7 @@ FAILURES=0
 
 # `security list-keychains` indents each entry and wraps it in quotes. Real shape, from the reading
 # above, with this Mac's own paths replaced by the fixture's so nothing here depends on them.
-WORK_DIR="$(mktemp -d)"
+WORK_DIR="$(fixture_scratch_dir)"
 LOGIN_KC="${WORK_DIR}/login.keychain-db"
 SIGNING_KC="${WORK_DIR}/overture-signing.keychain-db"
 SYSTEM_KC="${WORK_DIR}/System.keychain"
@@ -107,7 +107,7 @@ run_prune_with_stub_security() {
   shift
   local bin_dir out code calls
 
-  bin_dir="$(mktemp -d)"
+  bin_dir="$(fixture_scratch_dir)"
   cat > "${bin_dir}/security" <<STUB
 #!/usr/bin/env bash
 echo "\$*" >> "${bin_dir}/security-calls"

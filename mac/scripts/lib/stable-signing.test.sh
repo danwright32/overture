@@ -27,7 +27,7 @@ source "${SCRIPT_DIR}/stable-signing.sh"
 set +e
 
 FAILURES=0
-WORK="$(mktemp -d)"
+WORK="$(fixture_scratch_dir)"
 trap 'rm -rf "${WORK}"' EXIT
 
 pass() { echo "ok - $1"; }

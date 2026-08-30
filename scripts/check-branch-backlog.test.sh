@@ -24,7 +24,7 @@ FAILURES=0
 # passed inline so it never depends on this Mac's git config being set.
 make_repo_with_branches() {
   local count="$1" repo i
-  repo="$(mktemp -d)"
+  repo="$(fixture_scratch_dir)"
   git -C "${repo}" init -q -b main >/dev/null 2>&1
   git -C "${repo}" -c user.name=fixture -c user.email=fixture@example.com \
     commit -q --allow-empty -m "root" >/dev/null 2>&1
@@ -67,7 +67,7 @@ assert_contains "and exits 0 too" "${QUIET_RUN}" "exit=0"
 
 # A count that could not be read is not a count of zero. Reporting a clean checkout on the strength
 # of a git that never answered is the empty-result-reads-as-success defect (L98, L11).
-NOT_A_REPO="$(mktemp -d)"
+NOT_A_REPO="$(fixture_scratch_dir)"
 BROKEN_RUN="$(run_check "${NOT_A_REPO}" 3)"
 
 assert_contains "somewhere it cannot count says so, rather than reporting a clean checkout" \

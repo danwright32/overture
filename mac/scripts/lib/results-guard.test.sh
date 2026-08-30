@@ -71,7 +71,7 @@ assert_contains() {
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/results-guard.sh"
 
-TMP="$(mktemp -d)"
+TMP="$(fixture_scratch_dir)"
 trap 'rm -rf "${TMP}"' EXIT
 
 QUEUE="${TMP}/queue.json"

@@ -183,6 +183,97 @@ OVERRIDE_OK="false"
 check "a fixture's own definition replaces the shared one" "${OVERRIDE_OK}"
 [[ "${OVERRIDE_OK}" == "true" ]] || echo "  got: ${OVERRIDE_OUT}"
 
+# --- the scoped scratch directory (#3249) --------------------------------------------------------
+#
+# The rule that fails a fixture for leaving files behind lives in the RUNNER, which gives each fixture
+# its own temp directory and inspects it afterwards. Run a fixture the way a person actually runs one
+# while working, `bash scripts/lib/whatever.test.sh`, and none of that applies: the fixture writes into
+# the real shared folder, which macOS clears only at boot, and nothing looks. So the protection is
+# strongest exactly where it is least needed and absent where the mess accumulates.
+#
+# Sourcing this library is the one thing every fixture does, so it is where the scoping can be made to
+# hold wherever the fixture is invoked from.
+
+# A fresh scratch is made when nothing has scoped one already.
+SCOPE_HOME="$(mktemp -d "${TMPDIR:-/tmp}/scope-home.XXXXXX")"
+SCOPE_OUT="$(TMPDIR="${SCOPE_HOME}" OVERTURE_FIXTURE_TMPDIR_SCOPED="" bash -c '
+  source "'"${LIB}"'"
+  echo "${TMPDIR}"
+')"
+SCOPE_OK="false"
+[[ "${SCOPE_OUT}" == "${SCOPE_HOME}"/* && -d "${SCOPE_OUT}" ]] && SCOPE_OK="true"
+check "sourcing the library points TMPDIR at a fresh directory of its own" "${SCOPE_OK}"
+[[ "${SCOPE_OK}" == "true" ]] || echo "  got: ${SCOPE_OUT} (home was ${SCOPE_HOME})"
+
+# THE case, and the one that decides whether any of this contains anything. On macOS `mktemp` ignores
+# TMPDIR unless the path is spelled out: measured 2026-08-30, `TMPDIR=$H mktemp -d` lands in the real
+# shared folder and so does `TMPDIR=$H mktemp -d -t probe`, while `mktemp -d "$TMPDIR/tpl.XXXXXX"`
+# lands in $H. So scoping TMPDIR by itself contains NOTHING, and every fixture using the bare form
+# (56 of the 81 here, 75 call sites) writes past both this scoping and the runner's.
+HELPER_OUT="$(TMPDIR="${SCOPE_HOME}" OVERTURE_FIXTURE_TMPDIR_SCOPED="" bash -c '
+  source "'"${LIB}"'"
+  fixture_scratch_dir
+')"
+HELPER_OK="false"
+[[ -n "${HELPER_OUT}" && "${HELPER_OUT}" == "${SCOPE_HOME}"/* && -d "${HELPER_OUT}" ]] && HELPER_OK="true"
+check "fixture_scratch_dir makes its directory INSIDE the scope, not in the shared folder" "${HELPER_OK}"
+[[ "${HELPER_OK}" == "true" ]] || echo "  got: ${HELPER_OUT} (scope was under ${SCOPE_HOME})"
+
+# The control for the line above. Without it, "the helper landed inside the scope" is satisfied by a
+# machine where the bare form would have landed there too, and the case would prove nothing about the
+# helper (L159). This is the measurement, made by the test rather than quoted from a comment.
+BARE_OUT="$(TMPDIR="${SCOPE_HOME}" bash -c 'mktemp -d')"
+BARE_ESCAPED="false"
+[[ "${BARE_OUT}" != "${SCOPE_HOME}"/* ]] && BARE_ESCAPED="true"
+check "and a bare mktemp -d really does escape it, which is why the helper exists" "${BARE_ESCAPED}"
+[[ "${BARE_ESCAPED}" == "true" ]] || echo "  bare mktemp landed at ${BARE_OUT}, inside the scope, so the helper is not needed here"
+rm -rf "${BARE_OUT}"
+
+# The runner keeps its own scoping, untouched. Nesting one inside it would put every fixture's real
+# leak one level below where `fixture_left_temp_files` looks, so the check that already works would
+# start reporting one tidy directory and seeing nothing inside it (L98).
+RUNNER_HOME="$(mktemp -d "${TMPDIR:-/tmp}/runner-home.XXXXXX")"
+RUNNER_OUT="$(TMPDIR="${RUNNER_HOME}" OVERTURE_FIXTURE_TMPDIR_SCOPED=1 bash -c '
+  source "'"${LIB}"'"
+  echo "${TMPDIR}"
+')"
+RUNNER_OK="false"
+[[ "${RUNNER_OUT}" == "${RUNNER_HOME}" ]] && RUNNER_OK="true"
+check "a directory the runner already scoped is left exactly as it was" "${RUNNER_OK}"
+[[ "${RUNNER_OK}" == "true" ]] || echo "  got: ${RUNNER_OUT} (runner gave ${RUNNER_HOME})"
+
+# And under the runner the helper's directory lands where the runner LOOKS, which is the half that
+# gives the existing leak check its sight back.
+RUNNER_HELPER="$(TMPDIR="${RUNNER_HOME}" OVERTURE_FIXTURE_TMPDIR_SCOPED=1 bash -c '
+  source "'"${LIB}"'"
+  fixture_scratch_dir
+')"
+RUNNER_HELPER_OK="false"
+[[ "${RUNNER_HELPER}" == "${RUNNER_HOME}"/* ]] && RUNNER_HELPER_OK="true"
+check "and a scratch made under the runner lands where its leak check looks" "${RUNNER_HELPER_OK}"
+[[ "${RUNNER_HELPER_OK}" == "true" ]] || echo "  got: ${RUNNER_HELPER}"
+
+# Cleaning happens on SOURCE rather than on exit, and that is the load-bearing choice. A shell keeps one
+# EXIT trap, 59 of this repo's 81 fixtures install their own AFTER sourcing this file, and the second one
+# silently wins, so a cleanup hung on a trap here would be replaced in three quarters of the cases and
+# would look like it was working the whole time.
+SWEEP_HOME="$(mktemp -d "${TMPDIR:-/tmp}/sweep-home.XXXXXX")"
+mkdir -p "${SWEEP_HOME}/overture-fixture-999999-deadpid"
+touch "${SWEEP_HOME}/overture-fixture-999999-deadpid/left-behind"
+mkdir -p "${SWEEP_HOME}/overture-fixture-$$-mine"
+touch "${SWEEP_HOME}/not-ours"
+TMPDIR="${SWEEP_HOME}" OVERTURE_FIXTURE_TMPDIR_SCOPED="" bash -c 'source "'"${LIB}"'"' >/dev/null 2>&1
+SWEPT_OK="false"
+[[ ! -d "${SWEEP_HOME}/overture-fixture-999999-deadpid" ]] && SWEPT_OK="true"
+check "sourcing it sweeps a scratch left by a run that has since ended" "${SWEPT_OK}"
+
+# Both halves, because a sweep that removes everything is not a sweep, it is a different way of losing
+# work: another fixture running right now owns its scratch and must keep it (L104).
+KEPT_OK="false"
+[[ -d "${SWEEP_HOME}/overture-fixture-$$-mine" && -f "${SWEEP_HOME}/not-ours" ]] && KEPT_OK="true"
+check "and keeps one whose run is still going, and anything that is not ours at all" "${KEPT_OK}"
+rm -rf "${SCOPE_HOME}" "${RUNNER_HOME}" "${SWEEP_HOME}"
+
 # The wiring, derived from the tree rather than from a list somebody maintained: a registry only ever
 # checks what it remembers, and the fixture that forgets to source this is exactly the one missing
 # from it (L96). Comments are stripped before matching, so a file that only MENTIONS the library in a
@@ -199,6 +290,40 @@ while IFS= read -r -d '' fixture; do
     UNSOURCED+=("${fixture}")
   fi
 done < <(cd "${REPO_ROOT}" && find scripts mac/scripts -name '*.test.sh' -print0 | sort -z)
+
+# The other half of the wiring, and the one that keeps #3249 fixed. A bare `mktemp` writes past every
+# scoping there is on macOS, so a fixture using one is invisible to the runner's leak check whatever
+# directory the runner puts it in. Derived from the tree for L96's reason: a hand-kept list of the 56
+# fixtures that had this only ever checks what somebody remembered. Heredoc bodies are skipped, because
+# those are generated stub scripts that do not source this library and must spell mktemp themselves.
+BARE_MKTEMP=()
+while IFS= read -r -d '' fixture; do
+  [[ "${fixture}" == "scripts/lib/shell-assertions.test.sh" ]] && continue
+  IN_HEREDOC=""
+  LINE_NO=0
+  while IFS= read -r line; do
+    LINE_NO=$((LINE_NO + 1))
+    if [[ -n "${IN_HEREDOC}" ]]; then
+      [[ "$(printf '%s' "${line}" | tr -d '[:space:]')" == "${IN_HEREDOC}" ]] && IN_HEREDOC=""
+      continue
+    fi
+    STRIPPED="${line%%#*}"
+    if [[ "${STRIPPED}" == *'$(mktemp)'* || "${STRIPPED}" == *'$(mktemp -d)'* || "${STRIPPED}" == *'mktemp -t '* ]]; then
+      BARE_MKTEMP+=("${fixture}:${LINE_NO}")
+    fi
+    if [[ "${line}" =~ \<\<-?[[:space:]]*\'?([A-Za-z_][A-Za-z0-9_]*)\'?[[:space:]]*$ ]]; then
+      IN_HEREDOC="${BASH_REMATCH[1]}"
+    fi
+  done < "${REPO_ROOT}/${fixture}"
+done < <(cd "${REPO_ROOT}" && find scripts mac/scripts -name '*.test.sh' -print0 | sort -z)
+
+if [[ "${#BARE_MKTEMP[@]}" -eq 0 ]]; then
+  echo "ok - no fixture uses a bare mktemp, which would write past every scoping there is"
+else
+  echo "FAIL - ${#BARE_MKTEMP[@]} bare mktemp call(s) in fixtures; use fixture_scratch_dir or fixture_scratch_file"
+  printf '  %s\n' "${BARE_MKTEMP[@]}"
+  FAILURES=$((FAILURES + 1))
+fi
 
 if [[ "${#UNSOURCED[@]}" -eq 0 ]]; then
   echo "ok - every fixture sources the shared assertion vocabulary"

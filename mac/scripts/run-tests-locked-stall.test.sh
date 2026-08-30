@@ -44,7 +44,7 @@ run_wrapper_with_slow_xcodebuild() {
   local stall_limit="$6" check_every="$7" lock_notice="$8"
   local bin_dir output
 
-  bin_dir="$(mktemp -d)"
+  bin_dir="$(fixture_scratch_dir)"
 
   # The real flock blocks until the lock is free and only THEN execs xcodebuild, writing nothing
   # itself. That silence is the whole signal, so the stub reproduces it exactly.

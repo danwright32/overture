@@ -28,7 +28,7 @@ fail() {
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/install-dedupe.sh"
 
-TMP="$(mktemp -d)"
+TMP="$(fixture_scratch_dir)"
 trap 'rm -rf "${TMP}"' EXIT
 
 # A stub standing in for LaunchServices' lsregister: records its args so we can prove the installed

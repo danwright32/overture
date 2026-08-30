@@ -19,7 +19,7 @@ set +e
 
 FAILURES=0
 
-TMP_DIR="$(mktemp -d)"
+TMP_DIR="$(fixture_scratch_dir)"
 trap 'rm -rf "${TMP_DIR}"' EXIT
 
 # ---------------------------------------------------------------------------

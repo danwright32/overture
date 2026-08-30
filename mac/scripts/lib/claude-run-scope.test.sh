@@ -56,7 +56,7 @@ source "${SCRIPT_DIR}/claude-run-scope.sh"
 # plugin half of the scope is driven by a listing this file controls rather than by whatever happens to
 # be installed on the Mac running the suite. That is the whole point of #1682: the list must be DERIVED
 # from the machine, so a fixture that hardcoded Dan's current seven plugins would assert nothing.
-STUB_ROOT="$(mktemp -d)"
+STUB_ROOT="$(fixture_scratch_dir)"
 trap 'rm -rf "${STUB_ROOT}"' EXIT
 
 # stub_claude <plugin-list-json> [exit-status]: prints the path to a fresh executable stub.

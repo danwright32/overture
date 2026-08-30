@@ -56,7 +56,7 @@ source "${SCRIPT_DIR}/scout-tools.sh"
 # binary to enumerate them with. A stand-in whose `plugin list --json` prints a listing this fixture
 # controls, so the assertion holds whatever is really installed. Same shape as the stub in
 # claude-run-scope.test.sh; each fixture stays self-contained, as every fixture in this repo is.
-STUB_ROOT="$(mktemp -d)"
+STUB_ROOT="$(fixture_scratch_dir)"
 trap 'rm -rf "${STUB_ROOT}"' EXIT
 STUB_CLAUDE="${STUB_ROOT}/claude"
 cat > "${STUB_CLAUDE}" <<'STUB'

@@ -49,7 +49,7 @@ assert_contains() {
 
 command -v node >/dev/null 2>&1 || { echo "skip - node unavailable"; exit 0; }
 
-TMP="$(mktemp -d)"
+TMP="$(fixture_scratch_dir)"
 trap 'rm -rf "${TMP}"' EXIT
 
 SUPPORT="${TMP}/Application Support/Overture"

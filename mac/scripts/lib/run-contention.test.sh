@@ -17,7 +17,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../scripts/lib/shell
 # contention is a fact about the run's whole span and the other run may well end first. And it never
 # counts the run's OWN marker, which is always present: prep-run.sh creates it before the work starts.
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-WORK="$(mktemp -d)"
+WORK="$(fixture_scratch_dir)"
 trap 'rm -rf "${WORK}"' EXIT
 # A SPACE in the path, because the live one has one: "~/Library/Application Support/Overture". A fixture
 # on a tidy path cannot see the class of defect where an unquoted expansion word-splits.

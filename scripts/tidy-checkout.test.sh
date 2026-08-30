@@ -34,7 +34,7 @@ assert() {
   fi
 }
 
-WORK="$(mktemp -d)"
+WORK="$(fixture_scratch_dir)"
 trap 'rm -rf "${WORK}"' EXIT
 
 # A stub gh that always fails, on PATH ahead of the real one.

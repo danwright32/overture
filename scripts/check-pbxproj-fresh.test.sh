@@ -141,7 +141,7 @@ assert_not_contains "staged: does NOT call the file stale" "${MSG}" "is stale"
 # xcodegen is stubbed rather than run: the real one needs a real Xcode project, and what is under test
 # is the git comparison, not the generator.
 
-GATE_WORK="$(mktemp -d)"
+GATE_WORK="$(fixture_scratch_dir)"
 trap 'rm -rf "${GATE_WORK}"' EXIT
 
 STUB_BIN="${GATE_WORK}/bin"

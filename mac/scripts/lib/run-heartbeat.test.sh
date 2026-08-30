@@ -36,7 +36,7 @@ refute() {
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/run-heartbeat.sh"
 
-TMP="$(mktemp -d)"
+TMP="$(fixture_scratch_dir)"
 # Guarded on the shell's own pid: bash hands the EXIT trap down to command-substitution subshells, so an
 # unguarded `rm -rf` here fires the first time the test runs `$(cat ...)` and deletes the fixtures out
 # from under the rest of the run. That is not hypothetical, it happened while writing this.
@@ -205,7 +205,7 @@ done
 # with orphaned sleeps still alive minutes later. One bounded sleep leaves at most one orphan, which exits
 # by itself in five seconds and holds no descriptor the runner waits on. The job's body still CONTAINS the
 # marker text, which is all the notice needs in order to render it: the echo never has to run.
-HB_WORK="$(mktemp -d)"
+HB_WORK="$(fixture_scratch_dir)"
 
 cat > "${HB_WORK}/with-stop.sh" <<'STOPSH'
 #!/bin/sh
@@ -269,7 +269,7 @@ done
 # of every chunk. Driven as real processes, for #2981's reason: the notice comes from the SHELL and no
 # reading of the script can tell you whether it appears. Bounded `sleep` jobs, not loops, for the reason
 # recorded above this.
-ALL_WORK="$(mktemp -d)"
+ALL_WORK="$(fixture_scratch_dir)"
 
 cat > "${ALL_WORK}/with-stop-all.sh" <<'STOPALLSH'
 #!/bin/sh
@@ -363,7 +363,7 @@ done
 # NOTHING, so on a crash or an app quit a parallel prep run orphaned every chunk it had launched, which
 # is the whole thing that line exists to prevent. Asserted on the behaviour rather than the spelling, so
 # a helper that word-splits is what passes it.
-QUOTED_WORK="$(mktemp -d)"
+QUOTED_WORK="$(fixture_scratch_dir)"
 cat > "${QUOTED_WORK}/list.sh" <<'LISTSH'
 #!/bin/sh
 set -eu

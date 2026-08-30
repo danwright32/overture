@@ -14,7 +14,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./copy-docs-rebuild.sh
 source "${HERE}/copy-docs-rebuild.sh"
 
-WORK="$(mktemp -d)"
+WORK="$(fixture_scratch_dir)"
 trap 'rm -rf "${WORK}"' EXIT
 
 # A worktree with the three documents committed and a stub runner in the place the real one lives.

@@ -27,7 +27,7 @@ fail() {
   FAILURES=$((FAILURES + 1))
 }
 
-TMP="$(mktemp -d)"
+TMP="$(fixture_scratch_dir)"
 trap 'rm -rf "${TMP}"' EXIT
 
 # Records that the install ran, so a test can prove it did NOT on the refusing paths.

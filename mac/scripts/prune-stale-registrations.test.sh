@@ -27,7 +27,7 @@ fail() {
   FAILURES=$((FAILURES + 1))
 }
 
-TMP="$(mktemp -d)"
+TMP="$(fixture_scratch_dir)"
 trap 'rm -rf "${TMP}"' EXIT
 
 SEP="--------------------------------------------------------------------------------"

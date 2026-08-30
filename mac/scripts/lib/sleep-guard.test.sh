@@ -27,7 +27,7 @@ fail() {
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/sleep-guard.sh"
 
-TMP="$(mktemp -d)"
+TMP="$(fixture_scratch_dir)"
 trap 'rm -rf "${TMP}"' EXIT
 
 is_alive() { kill -0 "$1" 2>/dev/null; }

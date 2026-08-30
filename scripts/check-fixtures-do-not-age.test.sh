@@ -100,7 +100,7 @@ assert_contains "and the epoch end moves in the same pass" "${out}" "1849094400"
 
 # Reported, never shifted, because there is nothing to shift: the data comes from the live store, which
 # no rewrite of mac/ can touch, so the other side of every comparison moves on its own every day.
-PINWORK="$(mktemp -d)"
+PINWORK="$(fixture_scratch_dir)"
 mkdir -p "${PINWORK}/mac/OvertureTests" "${PINWORK}/mac/OvertureHostedTests"
 cat > "${PINWORK}/mac/OvertureTests/PinnedLiveTests.swift" <<'SWIFT'
 struct PinnedLiveTests {
@@ -152,7 +152,7 @@ rm -rf "${PINWORK}"
 
 # MARK: failing_test_names
 
-log="$(mktemp -t ageless-log)"
+log="$(fixture_scratch_file)"
 cat > "${log}" <<'LOG'
 some build noise
 Failing tests:
@@ -176,7 +176,7 @@ rm -f "${log}"
 
 # MARK: declared_year_sensitive
 
-baseline="$(mktemp -t ageless-baseline)"
+baseline="$(fixture_scratch_file)"
 cat > "${baseline}" <<'BASE'
 # a comment line
 #
