@@ -726,6 +726,21 @@ already drifting from the Swift version it mirrored.
   reaches for. Two tells worth knowing: NO OUTPUT AT ALL from something that normally prints a line
   per check means it died rather than passed, and `set -o pipefail` or `${PIPESTATUS[0]}` is what
   makes the reading honest when a pipe is genuinely wanted.
+- **Scratch in any script: `overture_scratch_dir` / `overture_scratch_file` from
+  `scripts/lib/scratch.sh` (#3258), or `fixture_scratch_dir` / `fixture_scratch_file` in a fixture.**
+  On macOS `mktemp -d` and `mktemp -t NAME` IGNORE `TMPDIR` unless the path is spelled out in the
+  template, so a bare one writes to the shared per-user temp folder, which macOS clears only at boot and
+  which no check in this repository can see into. #3249 converted the 81 fixtures; #3258 converted the
+  production scripts, 13 call sites across 10 files, and the guard in
+  `scripts/lib/shell-assertions.test.sh` now scans every tracked `*.sh` rather than the fixtures alone.
+  Read what the measurement said, because it changes what this is FOR: on this Mac after 16 days of
+  uptime the shared folder held 52,515 entries and ZERO matched any shape these scripts make. They clean
+  up. This is not reclaiming disk, and saying it were would be a number nobody checked. It is about
+  VISIBILITY, so a script whose cleanup stops working leaks where something can see it rather than
+  silently, which is #3065 measured at 52 directories a run on the Swift side before anybody noticed.
+  Two files are exempt by name, `shell-assertions.sh` and `scratch.sh`, because they DOCUMENT the
+  forbidden forms in order to forbid them and a scan condemning them would be condemning its own remedy.
+
 - **Writing a shell fixture: the assertions come from `scripts/lib/shell-assertions.sh`, which every
   `*.test.sh` sources.** It gives one vocabulary (`pass`, `fail`, `assert_contains`,
   `assert_not_contains`, `assert_equals`, `assert_eq`, `assert_empty`), all reporting through

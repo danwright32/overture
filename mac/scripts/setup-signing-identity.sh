@@ -26,6 +26,9 @@ set -euo pipefail
 # never be run end to end by a fixture, which is the stated reason #1526 left this undone.
 
 SETUP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# #3258: scratch that honours TMPDIR, so a leak is visible to the checks that look there.
+# shellcheck source=../../scripts/lib/scratch.sh
+. "${SETUP_DIR}/../../scripts/lib/scratch.sh"
 # shellcheck source=lib/stable-signing.sh
 source "${SETUP_DIR}/lib/stable-signing.sh"
 
@@ -138,7 +141,7 @@ overture_setup_signing_identity() {
   overture_setup_prepare_keychain
 
   local tmp rc=0
-  tmp="$(mktemp -d)"
+  tmp="$(overture_scratch_dir signing-identity)"
   # Called through `|| rc=$?` so that a failure ANYWHERE inside it still reaches the cleanup below. The
   # scratch directory holds the certificate's PRIVATE KEY, and a half finished run is exactly when it
   # would otherwise be left lying in the temp directory. errexit is suspended for the duration of a

@@ -40,6 +40,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+# #3258: scratch that honours TMPDIR, so a leak is visible to the checks that look there.
+# shellcheck source=./lib/scratch.sh
+. "${SCRIPT_DIR}/lib/scratch.sh"
 
 # shellcheck disable=SC1090
 source "${SCRIPT_DIR}/lib/fixture-date-shift.sh"
@@ -347,8 +350,8 @@ main() {
   fi
 
   local before after
-  before="$(mktemp -t overture-farfuture-before)"
-  after="$(mktemp -t overture-farfuture-after)"
+  before="$(overture_scratch_file overture-farfuture-before)"
+  after="$(overture_scratch_file overture-farfuture-after)"
   trap 'git checkout -- mac/OvertureTests mac/OvertureHostedTests 2>/dev/null || true' EXIT INT TERM
 
   echo "check-far-future-fixtures: running the suite as it stands (this takes minutes)."

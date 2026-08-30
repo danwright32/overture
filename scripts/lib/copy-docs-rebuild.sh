@@ -53,10 +53,16 @@ COPY_DOC_SUITES=(
 # being asked, and anything else the run was unhappy about is judged by the full suite that follows, on
 # the same tree, seconds later. A build that failed outright therefore reaches a person as a failing
 # suite rather than as silence (L98).
+# #3258: scratch that honours TMPDIR, so a leak is visible to the checks that look there. Resolved from
+# this file's own path rather than from a caller's variable, because this is a library and its callers
+# do not all define one.
+# shellcheck source=./scratch.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/scratch.sh"
+
 rebuild_copy_docs() {
   local dir="$1"
   local log
-  log="$(mktemp)"
+  log="$(overture_scratch_file copy-docs-rebuild)"
 
   TEST_RUNNER_REGENERATE_COPY_INVENTORY=1 \
     "${dir}/mac/scripts/run-tests-locked.sh" "${COPY_DOC_SUITES[@]}" > "${log}" 2>&1 || true
