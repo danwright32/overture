@@ -36,14 +36,37 @@ func waitUntil(_ whatIsAwaited: String,
         if ContinuousClock.now >= deadline {
             Issue.record("""
                 Timed out after \(timeout) waiting for: \(whatIsAwaited).
-                This is a FAILURE, not a slow machine. The usual cause is a fixture that cannot reach the \
-                state being awaited, for example a draft body with no greeting, which is held at send \
-                (Recipient.isBlockedByGreeting) so the send never happens.
+                The usual cause is a fixture that cannot reach the state being awaited, for example a \
+                draft body with no greeting, which is held at send (Recipient.isBlockedByGreeting) so the \
+                send never happens. Check that first.
+                It is not ALWAYS the fixture: under parallel testing this can also be work that was never \
+                scheduled, which is what #3277 was (a five second deadline noticed after forty five). \
+                This used to say "This is a FAILURE, not a slow machine", which was true serially and \
+                false there, in the wording most likely to stop somebody looking further (L11).
                 """,
                 sourceLocation: sourceLocation)
             return false
         }
-        await Task.yield()
+        // #3277: SUSPEND, do not spin. This was `await Task.yield()`, which reschedules the waiter
+        // immediately, so the loop ran as fast as a core would allow and one waiter burned that core for
+        // as long as it waited. Measured 2026-08-30: 12,322 polls in 200 milliseconds, on an idle
+        // machine, from a single test.
+        //
+        // Serially that is invisible, because one spinner on an otherwise idle machine always gets its
+        // answer. Under `-parallel-testing-enabled YES -parallel-testing-worker-count 12` there are
+        // twelve worker PROCESSES, each with its own cooperative pool sized to the whole machine, and
+        // the spinners starve the very work they are waiting for (L241). Two of five consecutive full
+        // parallel runs went red, and every failure in both was a test that waits: the clearest was
+        // `LoopbackListener.start(timeout: 5)` reporting `failed (45.464 seconds)`, which is not a bind
+        // that was refused but a five second deadline that took forty five seconds to be noticed.
+        //
+        // One millisecond because the cost is what a waiting test can afford to add to its own latency
+        // and nothing else: a wait that resolves in 20ms still resolves in about 20ms, and the poll count
+        // over the ten second default falls from tens of thousands to ten thousand at worst.
+        //
+        // `try?` swallows only the cancellation error, and the loop is still bounded by the deadline
+        // above rather than by the sleep, so a cancelled task ends at the deadline instead of hanging.
+        try? await Task.sleep(for: .milliseconds(1))
     }
     return true
 }

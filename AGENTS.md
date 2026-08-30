@@ -367,6 +367,30 @@ already drifting from the Swift version it mirrored.
   and the interference comes from OTHER suites, which is why `SourceFetcherTests` carried `.serialized`
   and still failed.
 
+- **Waiting for something in a Swift test: `waitUntil` in `mac/TestSupport/WaitUntil.swift`, and it
+  SUSPENDS rather than spins (#2576, #3277).** It is the one way this suite waits, and it carries a
+  deadline, because the obvious spelling (`while !condition { await Task.yield() }`) cannot fail: it can
+  only hang, and a hang takes the whole suite plus the machine-wide xcodebuild lock with it while being
+  indistinguishable from a slow machine (L110).
+  What #3277 changed is the poll. It used `Task.yield()`, which reschedules the waiter immediately, so
+  the loop ran as fast as a core allowed and one waiter burned that core for the length of the wait:
+  measured 2026-08-30, 12,322 polls in 200 milliseconds, on an idle machine, from a single test. Serially
+  that is invisible, because one spinner on an otherwise idle machine always gets its answer. Under
+  `-parallel-testing-enabled YES -parallel-testing-worker-count 12` there are twelve worker PROCESSES,
+  each with its own cooperative pool sized to the whole machine, and the spinners starve the work they
+  are waiting for (L241). Two of five consecutive full parallel runs went red and every failure in both
+  was a test that waits; the clearest was `LoopbackListener.start(timeout: 5)` reporting
+  `failed (45.464 seconds)`, which is a five second deadline that took forty five seconds to be noticed
+  rather than a bind that was refused.
+  `WaitUntilTests` guards it by POLL COUNT rather than by duration, because a duration compared against
+  a fixed number measures what else the machine is running (L224): a suspending wait can only poll about
+  as often as its sleep allows however fast the machine, while a spinner polls as fast as a core will
+  let it. It also guards the CLASS, flagging any `Task.yield()` whose nearest enclosing loop is a
+  `while`; a bounded `for _ in 0..<8 { await Task.yield() }` is deliberately left alone, since it returns
+  the thread after a fixed number of turns, which is what `SharedStateTestLockTests` uses.
+  The timeout message no longer says "This is a FAILURE, not a slow machine". That was true serially and
+  false under parallel, in the wording most likely to stop somebody looking further (L11).
+
 - **Before implementing a decision Dan has REVERSED, list the tests that assert the old one:
   `scripts/find-tests-naming.sh <symbol> [<symbol> ...]` (#3163).** It prints every test in either Swift
   test target that names any of the symbols, attributed to the `@Test func` that encloses the mention, or
