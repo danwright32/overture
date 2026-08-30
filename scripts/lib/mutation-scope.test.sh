@@ -198,6 +198,29 @@ REFUSAL_BLOCK="$(awk '/echo "SCOPE MISSED THE FILE/{f=1} f{print} f&&/^fi$/{exit
 assert_contains "the refusal hands its candidate list through the cap" "${REFUSAL_BLOCK}" "mutation_scope_format_candidates 15"
 assert_contains "and exits rather than falling through to the SURVIVED report" "${REFUSAL_BLOCK}" "exit 2"
 
+# --- the scoped exemption asks for a SCOPE, not for any argument at all (#3264) -----------------------
+#
+# `mutate_run_is_scoped` decides whether mutate.sh's NOT PROOF refusal stands down. It used to be
+# `$# -eq 0`, "was anything passed at all", which is the defect #3264 records one script over: the
+# short-run gate in `run-tests-locked.sh` stood down on ANY argument, so every parallel experiment ran
+# with the gate off, and one of them lost 40 percent of the suite and printed an ordinary verdict.
+#
+# The trailing arguments to mutate.sh ARE documented as test scopes, so counting them is usually right,
+# and that is exactly what makes it worth fixing rather than leaving: the one run it gets wrong is one
+# carrying a runner FLAG instead of a scope, which is the run least likely to be watched closely. A
+# stand-down must be no broader than its reason (L324).
+mutate_run_is_scoped "-only-testing:OvertureTests/SomeSuite"
+assert_equals "a -only-testing: argument is a scope" "0" "$?"
+
+mutate_run_is_scoped
+assert_equals "no arguments at all is not a scope" "1" "$?"
+
+mutate_run_is_scoped "-parallel-testing-enabled" "YES"
+assert_equals "a runner FLAG is not a scope, which is the whole correction" "1" "$?"
+
+mutate_run_is_scoped "-parallel-testing-enabled" "YES" "-only-testing:OvertureTests/SomeSuite"
+assert_equals "and a scope is still found beside a flag, wherever it sits" "0" "$?"
+
 if [ "${FAILURES}" -ne 0 ]; then
   echo "${FAILURES} failure(s)"
   exit 1
