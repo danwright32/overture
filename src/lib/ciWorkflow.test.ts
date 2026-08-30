@@ -2,12 +2,18 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-// The CI workflow's TRIGGERS are a cost decision as much as a safety one, and nothing guarded them
-// before this file. Measured 2026-08-16: 440 runs in seven days, 209 of them `push` and 227
-// `pull_request`. GitHub bills a whole minute minimum per run however short it is, so that is about
-// 1,890 billed minutes against the 2,000 a private repo gets on a free personal plan, and the
-// default spending limit is zero, which means CI STOPS rather than bills. Halving it is what makes
-// the repository affordable to keep private.
+// The CI workflow's TRIGGERS are a duplication decision, and nothing guarded them before this file.
+// Measured 2026-08-16: 440 runs in seven days, 209 of them `push` and 227 `pull_request`, so about
+// half of every run this repository made was a second look at code that had already passed.
+//
+// This comment used to call it a MONEY decision, on the reasoning that those runs came close to the
+// 2,000 monthly minutes a private repo gets on a free personal plan. The repository is PUBLIC
+// (checked 2026-08-29) and GitHub does not bill a public repository for standard hosted runners, so
+// no run here has ever cost money. That does not make a duplicate run free: on a free public
+// repository the budget is the runner concurrency limit, and a job is priced in the slots it holds
+// and the queue time it imposes on everything else (L307). The rule below is unchanged and never
+// rested on either reading: what a push run buys is a weaker copy of a check the local merge scripts
+// already make on the merged result (#3233, L32).
 //
 // The comments are stripped before any of this matches, deliberately. A guard that is satisfied by
 // prose ABOUT the rule is indistinguishable from one that works, and the block below deliberately
@@ -43,7 +49,7 @@ describe("the CI workflow's triggers", () => {
     // MERGED result, which a PR run genuinely cannot make (L85), is the local one:
     // verify-and-merge-branch.sh and verify-and-merge-batch.sh both merge origin/main into the
     // branch and run the whole suite before anything merges. So a push trigger here buys a second,
-    // weaker copy of a check that already happened, at half the repository's CI budget.
+    // weaker copy of a check that already happened, for half of every run this repository makes.
     expect(triggerBlock()).not.toMatch(/^\s{2}push:/m);
   });
 

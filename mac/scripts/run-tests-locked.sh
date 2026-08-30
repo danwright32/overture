@@ -695,7 +695,11 @@ main() {
   HOSTED_STAMP_TODAY="$(date +%Y-%m-%d)"
   HOSTED_STAMP_SEEN="$(cat "${HOSTED_STAMP_RECORD}" 2>/dev/null || true)"
   HOSTED_SUITE_NAMES="$(hosted_suite_names "${MAC_DIR}/OvertureHostedTests")"
-  HOSTED_VERIFIED="$(hosted_suites_ran "${last_output}" "${HOSTED_SUITE_NAMES}")"
+  # #3233: the TYPE names beside the display ones. A parallel run prints no `Suite "..." passed` line
+  # at all and names each suite by its type, so without these the screens read as unverified on every
+  # run under that flag, by runs that had just rendered all of them.
+  HOSTED_SUITE_TYPES="$(hosted_suite_types "${MAC_DIR}/OvertureHostedTests")"
+  HOSTED_VERIFIED="$(hosted_suites_ran "${last_output}" "${HOSTED_SUITE_NAMES}" "${HOSTED_SUITE_TYPES}")"
   while IFS= read -r hosted_line; do
     [[ -n "${hosted_line}" ]] && echo "run-tests-locked.sh: ${hosted_line}" >&2
   done <<< "$(hosted_freshness_line "${HOSTED_VERIFIED}" "$(hosted_stamp_date "${HOSTED_STAMP_SEEN}")" \
