@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
+# #3254 / #3292: this fixture runs prep-run.sh end to end, and prep-run's heartbeat_stop ends the
+# heartbeat SUBSHELL without ending the `sleep` inside it, so every run leaves one behind. The stray is
+# created by the production code under test, not by anything this fixture does, so it is DECLARED here
+# rather than hidden: #3292 is the fix, and removing this line is part of it.
+echo "shell-fixture-leaks-process: sleep (#3292)"
+
 # The shared assertion vocabulary: pass, fail, assert_contains, assert_not_contains,
 # assert_equals, assert_eq, assert_empty (#2501). A definition later in this file replaces
 # the shared one, so nothing below changes meaning by sourcing this.

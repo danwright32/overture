@@ -2,6 +2,8 @@
 set -uo pipefail
 # shellcheck source=../../../scripts/lib/shell-assertions.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../scripts/lib/shell-assertions.sh"
+# shellcheck source=../../../scripts/lib/fixture-process-leak.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)/scripts/lib/fixture-process-leak.sh"
 
 # #3007: coverage for the per-request elapsed-time read.
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -107,11 +109,18 @@ OUT_FILE="${WORK}/wd.out"
 (
   sleep 120 & P1=$!
   sleep 120 & P2=$!
+  set -m
   ( stuck_watchdog_run 2 "${P1} ${P2}" > "${OUT_FILE}" 2>&1 ) & WD_PID=$!
+  set +m
   # Two polls' worth, so a loop that never ticks fails rather than passing on a race.
   sleep 3
   kill "${WD_PID}" 2>/dev/null || true
   wait "${WD_PID}" 2>/dev/null || true
+  # #3254: and the `sleep` INSIDE the watchdog subshell, which the kill above does not reach. The
+  # watchdog polls with `sleep "$STUCK_TOOL_CALL_POLL"`, so killing its wrapper leaves that sleep
+  # running as an orphan, one per case, every sweep. This is the same defect the fixture is testing
+  # for one field over (L321).
+  fixture_end_process_group "${WD_PID}"
   # Both read BEFORE either is reaped, so the answers are honest.
   kill -0 "${P2}" 2>/dev/null && echo 1 > "${WORK}/p2.alive" || echo 0 > "${WORK}/p2.alive"
   kill -0 "${P1}" 2>/dev/null && echo 1 > "${WORK}/p1.alive" || echo 0 > "${WORK}/p1.alive"
@@ -134,10 +143,17 @@ rm -f "${WD}/events-1.jsonl"
 OUT_FILE="${WORK}/wd2.out"
 (
   sleep 120 & P3=$!
+  set -m
   ( stuck_watchdog_run 1 "${P3}" > "${OUT_FILE}" 2>&1 ) & WD_PID=$!
+  set +m
   sleep 4
   kill "${WD_PID}" 2>/dev/null || true
   wait "${WD_PID}" 2>/dev/null || true
+  # #3254: and the `sleep` INSIDE the watchdog subshell, which the kill above does not reach. The
+  # watchdog polls with `sleep "$STUCK_TOOL_CALL_POLL"`, so killing its wrapper leaves that sleep
+  # running as an orphan, one per case, every sweep. This is the same defect the fixture is testing
+  # for one field over (L321).
+  fixture_end_process_group "${WD_PID}"
   kill -0 "${P3}" 2>/dev/null && echo 1 > "${WORK}/p3.alive" || echo 0 > "${WORK}/p3.alive"
   kill "${P3}" 2>/dev/null || true
   wait 2>/dev/null || true
@@ -167,10 +183,17 @@ stuck_tool_call_seconds() { echo "not a number"; }
 sleep 120 & P4=$!
 OUT_FILE="${WORK}/wd3.out"
 (
+  set -m
   ( stuck_watchdog_run 1 "${P4}" > "${OUT_FILE}" 2>&1 ) & WD_PID=$!
+  set +m
   sleep 3
   kill "${WD_PID}" 2>/dev/null || true
   wait "${WD_PID}" 2>/dev/null || true
+  # #3254: and the `sleep` INSIDE the watchdog subshell, which the kill above does not reach. The
+  # watchdog polls with `sleep "$STUCK_TOOL_CALL_POLL"`, so killing its wrapper leaves that sleep
+  # running as an orphan, one per case, every sweep. This is the same defect the fixture is testing
+  # for one field over (L321).
+  fixture_end_process_group "${WD_PID}"
   kill -0 "${P4}" 2>/dev/null && echo 1 > "${WORK}/p4.alive" || echo 0 > "${WORK}/p4.alive"
   kill "${P4}" 2>/dev/null || true
   wait 2>/dev/null || true
@@ -182,10 +205,17 @@ stuck_tool_call_seconds() { echo ""; }
 sleep 120 & P5=$!
 OUT_FILE="${WORK}/wd4.out"
 (
+  set -m
   ( stuck_watchdog_run 1 "${P5}" > "${OUT_FILE}" 2>&1 ) & WD_PID=$!
+  set +m
   sleep 3
   kill "${WD_PID}" 2>/dev/null || true
   wait "${WD_PID}" 2>/dev/null || true
+  # #3254: and the `sleep` INSIDE the watchdog subshell, which the kill above does not reach. The
+  # watchdog polls with `sleep "$STUCK_TOOL_CALL_POLL"`, so killing its wrapper leaves that sleep
+  # running as an orphan, one per case, every sweep. This is the same defect the fixture is testing
+  # for one field over (L321).
+  fixture_end_process_group "${WD_PID}"
   kill -0 "${P5}" 2>/dev/null && echo 1 > "${WORK}/p5.alive" || echo 0 > "${WORK}/p5.alive"
   kill "${P5}" 2>/dev/null || true
   wait 2>/dev/null || true

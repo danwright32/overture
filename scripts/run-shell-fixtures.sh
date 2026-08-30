@@ -21,6 +21,10 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # after it finishes), so without this a fixture that never returns leaves the runner silent forever.
 # shellcheck source=./lib/fixture-stall-guard.sh
 source "${SCRIPT_DIR}/lib/fixture-stall-guard.sh"
+# #3254: what a finished fixture LEFT RUNNING, attributed by process group. Sourced here AND by the
+# per-fixture wrapper written below, from one file, so the two cannot drift apart (L263).
+# shellcheck source=./lib/fixture-process-leak.sh
+source "${SCRIPT_DIR}/lib/fixture-process-leak.sh"
 
 # The shape bash prints when a name resolves to nothing: "line 12: assert_contains: command not
 # found". A fixture that hits this keeps going, its assertion silently does nothing, and it exits 0
@@ -291,6 +295,77 @@ fixture_left_temp_files() {
   return 1
 }
 
+# Reads one finished fixture's surviving-process record and returns nonzero when it left anything
+# running. Prints what was left (#3254).
+#
+# The record is written by the wrapper, which is the only place that knows the fixture's process group,
+# and it holds the single word UNMEASURED when that group could not be read. That is its own outcome and
+# is reported as such rather than folded into either verdict: a fixture whose group could not be read is
+# not a fixture that left nothing behind (L98, L11).
+#
+# The processes are already ENDED by the time this runs, by the wrapper, which is deliberate. Reporting
+# a stray and walking past it is how they accumulate, and the runner made the group precisely so it can
+# end one; the message says so rather than leaving the reader to check.
+# A fixture may DECLARE a leak it cannot fix, naming the issue that will, with a line in its output:
+#
+#   shell-fixture-leaks-process: sleep 15 (#3292)
+#
+# The precedent is `shell-fixture-expects-missing-command:` one field over, and so is the reason: a rule
+# whose only two answers are pass and fail gets switched off the first time somebody meets a case it
+# cannot express. This one is narrow in the same way. It names the COMMAND, so an undeclared stray in a
+# declaring fixture is still caught, and it must carry an issue number, so the declaration is a debt with
+# an owner rather than a permanent exemption (L523, L65).
+#
+# The declared leak is still ENDED. Declaring it says the fixture cannot prevent it, never that the
+# machine should keep it.
+fixture_declared_leaks() {
+  local log="$1"
+  [[ -f "${log}" ]] || return 0
+  grep -aoE 'shell-fixture-leaks-process:[^(]*\(#[0-9]+\)' "${log}" 2>/dev/null \
+    | sed -e 's/^shell-fixture-leaks-process:[[:space:]]*//' -e 's/[[:space:]]*(#[0-9]*)$//' || true
+}
+
+fixture_left_processes() {
+  local record="$1" survivors log="${2:-}"
+  [[ -f "${record}" ]] || return 0
+  survivors="$(cat "${record}" 2>/dev/null)"
+  [[ -n "${survivors}" ]] || return 0
+
+  if [[ "${survivors}" != "UNMEASURED" && -n "${log}" ]]; then
+    local declared undeclared="" line keep
+    declared="$(fixture_declared_leaks "${log}")"
+    if [[ -n "${declared}" ]]; then
+      while IFS= read -r line; do
+        [[ -n "${line}" ]] || continue
+        keep="yes"
+        while IFS= read -r pattern; do
+          [[ -n "${pattern}" ]] || continue
+          [[ "${line}" == *"${pattern}"* ]] && keep="no"
+        done <<< "${declared}"
+        [[ "${keep}" == "yes" ]] && undeclared+="${line}"$'\n'
+      done <<< "${survivors}"
+      survivors="$(printf '%s' "${undeclared}" | grep -v '^$' || true)"
+      [[ -n "${survivors}" ]] || return 0
+    fi
+  fi
+
+  if [[ "${survivors}" == "UNMEASURED" ]]; then
+    echo "FAIL - ${FIXTURE_PATH_FOR_REPORT:-a fixture} could not be checked for leaked processes"
+    echo "  Its process group could not be read, so whether it left anything running is UNKNOWN. That is"
+    echo "  not the same as having left nothing, and it must not be read as one."
+    return 1
+  fi
+
+  echo "FAIL - ${FIXTURE_PATH_FOR_REPORT:-a fixture} left a process running after it exited"
+  sed 's/^/    /' <<< "${survivors}"
+  echo "  A leaked process is worse than a leaked file: it holds this run's stdout open so anything"
+  echo "  capturing the output waits for it, it can hold the shared xcodebuild lock, and macOS reaps"
+  echo "  nothing until the next boot. Wait for what the fixture starts, or stop it before returning;"
+  echo "  scripts/lib/shell-assertions.sh has assert_pids_gone for the second."
+  echo "  These have been ended, so the machine is clean; the fixture is what needs fixing."
+  return 1
+}
+
 # Runs the given fixture scripts CONCURRENTLY (#2601) and returns the count of fixtures that exited
 # nonzero OR that called a command bash could not resolve (so 0 means every fixture passed and every
 # assertion in it was real). Never stops at the first failure, so one broken fixture doesn't hide
@@ -326,12 +401,25 @@ run_shell_fixtures() {
   # names, so an interleaved pair would cost nothing anyway.
   cat > "${scratch}/run-one.sh" <<'WRAPPER'
 #!/usr/bin/env bash
-scratch="$1"; pair="$2"
+scratch="$1"; leak_lib="$2"; pair="$3"
+# shellcheck source=./lib/fixture-process-leak.sh
+source "${leak_lib}"
 idx="${pair%%$'\t'*}"
 fixture="${pair#*$'\t'}"
 mkdir -p "${scratch}/tmp-${idx}"
 echo "started ${fixture}" >> "${scratch}/progress"
-( set +e; TMPDIR="${scratch}/tmp-${idx}" OVERTURE_FIXTURE_TMPDIR_SCOPED=1 "${fixture}" >"${scratch}/log-${idx}" 2>&1; echo "$?" > "${scratch}/status-${idx}" )
+# #3254: `set -m` so the fixture and everything it starts get a process GROUP of their own, which is
+# what makes "whose stray process is this" answerable while eight fixtures run at once. Under job
+# control the background job's own pid IS its group id (measured on this Mac's bash 3.2), so the group
+# is known without a `ps` lookup that would race a fast fixture into looking unmeasured.
+set -m
+( set +e; TMPDIR="${scratch}/tmp-${idx}" OVERTURE_FIXTURE_TMPDIR_SCOPED=1 "${fixture}" >"${scratch}/log-${idx}" 2>&1; echo "$?" > "${scratch}/status-${idx}" ) &
+job=$!
+wait "${job}"
+set +m
+# Recorded BEFORE the group is ended, or the report would be of a group this line had just emptied.
+fixture_surviving_processes "${job}" > "${scratch}/leaked-${idx}"
+fixture_end_process_group "${job}"
 echo "finished ${fixture}" >> "${scratch}/progress"
 echo "finished ${fixture}"
 exit 0
@@ -370,7 +458,7 @@ WRAPPER
   for fixture in "$@"; do
     printf '%d\t%s\0' "${i}" "${fixture}"
     i=$((i + 1))
-  done | xargs -0 -n 1 -P "${jobs}" "${scratch}/run-one.sh" "${scratch}"
+  done | xargs -0 -n 1 -P "${jobs}" "${scratch}/run-one.sh" "${scratch}" "${SCRIPT_DIR}/lib/fixture-process-leak.sh"
 
   stop_fixture_watch "${FIXTURE_WATCH_PID}"
   # Handed back exactly as it was found. `trap -p` prints a runnable `trap -- '<body>' EXIT`, so the
@@ -414,6 +502,8 @@ WRAPPER
       elif ! FIXTURE_PATH_FOR_REPORT="${fixture}" fixture_pipeline_did_not_break "${scratch}/log-${i}"; then
         failures=$((failures + 1))
       elif ! FIXTURE_PATH_FOR_REPORT="${fixture}" fixture_left_temp_files "${scratch}/tmp-${i}"; then
+        failures=$((failures + 1))
+      elif ! FIXTURE_PATH_FOR_REPORT="${fixture}" fixture_left_processes "${scratch}/leaked-${i}" "${scratch}/log-${i}"; then
         failures=$((failures + 1))
       fi
     fi

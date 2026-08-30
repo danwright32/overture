@@ -6,6 +6,8 @@ set -uo pipefail
 # the shared one, so nothing below changes meaning by sourcing this.
 # shellcheck source=../../../scripts/lib/shell-assertions.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../scripts/lib/shell-assertions.sh"
+# shellcheck source=../../../scripts/lib/fixture-process-leak.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)/scripts/lib/fixture-process-leak.sh"
 
 # #1009: the detached runs (prep, reply-classify, scout-extract) are long, headless claude runs that
 # nobody supervises. Nothing held a power assertion, so an idle-sleep timeout or a lid close mid run
@@ -123,13 +125,21 @@ fi
 # it) so this fixture never fails for a reason unrelated to our code.
 REAL_CAFFEINATE="/usr/bin/caffeinate"
 if [ -x "${REAL_CAFFEINATE}" ]; then
+  # #3254: started in a process group of its OWN, so the `sleep 1` inside the subshell can be ended with
+  # it. `kill "${WATCHED}"` below ends the subshell and NOT its child, which is the very defect the
+  # detached runners were fixed for in #3248 and is exactly what this case has to reproduce; it just must
+  # not walk away from the child afterwards. Measured before this line existed: one `sleep 1` survived
+  # every sweep of this fixture.
+  set -m
   ( while :; do sleep 1; done ) &
   WATCHED=$!
+  set +m
   # Keep bash from printing a "Terminated" job-control notice when we kill WATCHED below.
   disown "${WATCHED}" 2>/dev/null || true
   REAL_GUARD="$(SLEEP_GUARD_BIN="${REAL_CAFFEINATE}" start_sleep_guard "${WATCHED}")"
   if [ -n "${REAL_GUARD}" ] && is_alive "${REAL_GUARD}"; then
     kill "${WATCHED}" 2>/dev/null
+    fixture_end_process_group "${WATCHED}"
     if wait_gone "${REAL_GUARD}"; then
       pass "real caffeinate guard self-releases when the watched run dies (crash path)"
     else

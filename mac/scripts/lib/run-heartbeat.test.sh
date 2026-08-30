@@ -6,6 +6,8 @@ set -uo pipefail
 # the shared one, so nothing below changes meaning by sourcing this.
 # shellcheck source=../../../scripts/lib/shell-assertions.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../scripts/lib/shell-assertions.sh"
+# shellcheck source=../../../scripts/lib/fixture-process-leak.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)/scripts/lib/fixture-process-leak.sh"
 
 # #2106: a run that can no longer report it is alive must STOP, not go on working unobserved.
 #
@@ -233,14 +235,18 @@ KILLSH
 cp "${SCRIPT_DIR}/run-heartbeat.sh" "${HB_WORK}/run-heartbeat.sh"
 chmod +x "${HB_WORK}/with-stop.sh" "${HB_WORK}/bare-kill.sh"
 
-STOP_OUT="$("${HB_WORK}/with-stop.sh" 2>&1)"
+# #3254: run in a process group of its own and end it afterwards. These helpers exist to demonstrate
+# that a bare `kill` on a subshell leaves the `sleep` inside it running, so demonstrating it means
+# creating a stray; the fixture is right to create one and wrong to walk away from it. Measured before
+# this line existed: four `sleep 5` survived every sweep of this fixture.
+STOP_OUT="$(fixture_run_in_own_group "${HB_WORK}/with-stop.sh")"
 assert_contains "a stopped heartbeat lets the script finish" "${STOP_OUT}" "finished"
 assert_not_contains "and prints no termination notice" "${STOP_OUT}" "Terminated"
 assert_not_contains "and does not echo the subshell's body into the log" "${STOP_OUT}" "the marker text a grep would look for"
 
 # The positive control. Without this the assertions above would pass on any shell that never prints the
 # notice at all, and would be proving nothing about the fix (L159).
-BARE_OUT="$("${HB_WORK}/bare-kill.sh" 2>&1)"
+BARE_OUT="$(fixture_run_in_own_group "${HB_WORK}/bare-kill.sh")"
 assert_contains "a bare kill really does announce it on this shell" "${BARE_OUT}" "Terminated"
 assert_contains "and really does render the job's body" "${BARE_OUT}" "the marker text a grep would look for"
 
@@ -324,18 +330,18 @@ EDGESH
 cp "${SCRIPT_DIR}/run-heartbeat.sh" "${ALL_WORK}/run-heartbeat.sh"
 chmod +x "${ALL_WORK}/with-stop-all.sh" "${ALL_WORK}/bare-kill-all.sh" "${ALL_WORK}/edges.sh"
 
-ALL_OUT="$("${ALL_WORK}/with-stop-all.sh" 2>&1)"
+ALL_OUT="$(fixture_run_in_own_group "${ALL_WORK}/with-stop-all.sh")"
 assert_contains "a list of stopped jobs lets the script finish" "${ALL_OUT}" "finished"
 assert_not_contains "and prints no termination notice" "${ALL_OUT}" "Terminated"
 assert_not_contains "and does not echo the chunk bodies into the log" "${ALL_OUT}" "the chunk body a grep would look for"
 
 # The positive control, for the same reason as the one above: without it these would pass on a shell that
 # never prints the notice at all and would be proving nothing about the fix (L159).
-BARE_ALL_OUT="$("${ALL_WORK}/bare-kill-all.sh" 2>&1)"
+BARE_ALL_OUT="$(fixture_run_in_own_group "${ALL_WORK}/bare-kill-all.sh")"
 assert_contains "a bare kill of a list really does announce it on this shell" "${BARE_ALL_OUT}" "Terminated"
 assert_contains "and really does render the chunk bodies" "${BARE_ALL_OUT}" "the chunk body a grep would look for"
 
-EDGE_OUT="$("${ALL_WORK}/edges.sh" 2>&1)"
+EDGE_OUT="$(fixture_run_in_own_group "${ALL_WORK}/edges.sh")"
 assert_contains "empty, blank, single and already-reaped all survive under set -eu" "${EDGE_OUT}" "finished"
 assert_not_contains "and the single stop prints no notice either" "${EDGE_OUT}" "Terminated"
 assert_not_contains "and does not echo the single body" "${EDGE_OUT}" "the single body a grep would look for"
