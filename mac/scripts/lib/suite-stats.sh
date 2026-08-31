@@ -281,6 +281,47 @@ result_bundle_total_test_count() {
   printf '%s\n' "${count}"
 }
 
+# The test whose EXECUTION TIME ALLOWANCE ran out, or nothing (#3266).
+#
+# This is the missing half of #2821's restart detection, and it is the cause of every short run this
+# repository has recorded. A test that exceeds its `.timeLimit` is KILLED, xcodebuild relaunches the test
+# process and carries on, and the totals it prints afterwards are the totals of the remainder.
+#
+# Measured 2026-08-30 over twenty-three full parallel runs: seventeen COMPLETE runs carry no such
+# failure, and all six SHORT runs carry exactly one. There is no third case.
+#
+# Nothing in the log says so. `test_run_restarted` greps for `Restarting after unexpected exit`, and that
+# phrase, along with `unexpected exit`, `terminated` and `crashed`, appears ZERO times in every one of
+# those short-run logs: xcodebuild prints NOTHING at the relaunch, and the next line is simply a test on
+# a new pid. So the run reported a plausible small number, which is the one answer #2821 says it must
+# never give, and the cause went undiagnosed across three sessions.
+#
+# Read from the RESULT BUNDLE, from the same `summary` call the count already makes, so it costs no
+# extra `xcresulttool` invocation. The wording is Swift Testing's own
+# ("Test exceeded execution time allowance of 1 minute"), matched on the stable part of it rather than
+# on the duration, so a suite that declares a different `.timeLimit` is covered without anything being
+# listed here (L96).
+#
+# Every way the read can fail comes back EMPTY, never as a false "no kill": an unreadable bundle must
+# not read as a clean run, and the caller keeps whatever the log-based check already said (L98).
+result_bundle_time_limit_kill() {
+  local bundle="$1"
+  [[ -n "${bundle}" ]] || return 0
+  local tool=("${OVERTURE_XCRESULTTOOL:-}")
+  if [[ -z "${OVERTURE_XCRESULTTOOL:-}" ]]; then
+    tool=(xcrun xcresulttool)
+  fi
+  local summary
+  summary="$("${tool[@]}" get test-results summary --path "${bundle}" 2>/dev/null)" || return 0
+  [[ -n "${summary}" ]] || return 0
+  printf '%s' "${summary}" \
+    | jq -r 'if type == "object" and (.testFailures | type) == "array"
+             then (.testFailures[] | select((.failureText // "") | test("execution time allowance")) | .testName // empty)
+             else empty end' 2>/dev/null \
+    | head -n 1
+  return 0
+}
+
 # Which count the run is judged by, and a fourth field naming WHICH SOURCE it came from, because a
 # count read from the weaker source and a count read from the stronger one must not be indistinguishable
 # once one of them is the only one available (L11).
@@ -312,6 +353,14 @@ format_suite_report() {
   local out="Suite shape: "
 
   if [[ -n "${restarted}" ]]; then
+    # #3266: NAME the cause when it is known. Every short run this repository has recorded was a test
+    # killed at its time limit, and the run that follows one reports the remainder. Saying which test
+    # is the difference between a re-run and a fix, and the reason was previously unavailable anywhere
+    # in the log (L11).
+    if [[ "${restarted}" == time-limit\ * ]]; then
+      echo "${out}NOT REPORTED. ${restarted#time-limit } EXCEEDED ITS TIME LIMIT, so xcodebuild killed the test process and relaunched it, and the totals it printed cover only what ran AFTER that, not this whole run. Nothing here can be read as the size of the suite. That test is the thing to fix, not the run to repeat. See #3266, #2821."
+      return 0
+    fi
     echo "${out}NOT REPORTED. The test process RESTARTED during this run (xcodebuild relaunched it after an unexpected exit, crash or test timeout), so the totals it printed cover only what ran AFTER the last restart, not this whole run. Nothing here can be read as the size of the suite. Re-run it. See #2821."
     return 0
   fi
