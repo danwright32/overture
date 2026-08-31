@@ -20,9 +20,19 @@ enum LoopbackListener {
         }
     }
 
+    /// How long the bind is given before Connect Gmail gives up (#54).
+    ///
+    /// Named rather than written inline so the shipped value has a reader. It is short on purpose: a
+    /// PERSON is waiting on this, having just pressed Connect Gmail, and a wedged bind that is not
+    /// refused leaves them looking at a control that did nothing (L110, L148). The tests deliberately do
+    /// NOT run at this value, because under parallel testing a saturated machine can delay the readiness
+    /// callback by tens of seconds and the test would then be measuring the machine rather than the
+    /// listener (#3266, L290); they pass their own far larger ceiling and assert this one separately.
+    static let defaultTimeout: TimeInterval = 10
+
     static func start(
         queue: DispatchQueue,
-        timeout: TimeInterval = 10,
+        timeout: TimeInterval = LoopbackListener.defaultTimeout,
         log: (@Sendable (String) -> Void)? = nil,
         onConnection: @escaping @Sendable (NWConnection) -> Void
     ) async throws -> (listener: NWListener, port: UInt16) {

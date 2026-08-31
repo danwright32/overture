@@ -200,7 +200,9 @@ struct ContendedLiveStoreCloneTests {
     private final class ExclusiveHolder {
         private let process = Process()
         private let input = Pipe()
+        private let database: URL
         init(holding database: URL) throws {
+            self.database = database
             process.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
             process.arguments = [database.path]
             process.standardInput = input
@@ -210,6 +212,43 @@ struct ContendedLiveStoreCloneTests {
             // Left UNCOMMITTED and the pipe left open, which is what holds the lock.
             try input.fileHandleForWriting.write(contentsOf: Data("BEGIN EXCLUSIVE;\nINSERT INTO t VALUES(99);\n".utf8))
         }
+        /// Blocks until the lock is observably HELD, and says whether it got there.
+        ///
+        /// #3266: `init` starts a process and writes to its stdin, both of which return long before
+        /// sqlite has read the input and taken the lock. On an idle machine that gap is invisible. Under
+        /// a full parallel run it is not: measured 2026-08-30, both clones in this test SUCCEEDED,
+        /// because the holder had not taken the lock yet, and the test then failed on a confusing
+        /// comparison of two durations rather than saying the fixture had not set up (L159).
+        ///
+        /// It waits on the CONDITION rather than for a duration, so it costs nothing on an idle machine
+        /// and does not measure what else is running (L290). The condition is read the same way the
+        /// thing under test reads it: a `.timeout 0` connection that is REFUSED means the lock is held.
+        /// The gap between probes is 50 milliseconds and that number is load bearing, not a guess. Each
+        /// probe SPAWNS A PROCESS, so a tight loop is not a cheap poll: at two milliseconds it spawned
+        /// thousands of them and starved the holder of the CPU it needed to read its own stdin, so the
+        /// lock was never taken and this reported "never held" for the full thirty seconds. A poll whose
+        /// cost is a process has to be paced against that cost rather than against how quickly an answer
+        /// is wanted.
+        func waitUntilHeld() -> Bool {
+            let deadline = ContinuousClock.now + .seconds(30)
+            while ContinuousClock.now < deadline {
+                if !canReadWithoutWaiting() { return true }
+                usleep(50_000)
+            }
+            return false
+        }
+
+        private func canReadWithoutWaiting() -> Bool {
+            let probe = Process()
+            probe.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
+            probe.arguments = ["-cmd", ".timeout 0", database.path, "SELECT count(*) FROM t;"]
+            probe.standardOutput = Pipe()
+            probe.standardError = Pipe()
+            do { try probe.run() } catch { return true }
+            probe.waitUntilExit()
+            return probe.terminationStatus == 0
+        }
+
         /// Commits and lets the process end. Idempotent, so `defer` can call it after the test already has.
         ///
         /// The wait is BOUNDED and ends in a `terminate()`. `Process.waitUntilExit()` has no deadline, so
@@ -278,31 +317,34 @@ struct ContendedLiveStoreCloneTests {
 
         let holder = try ExclusiveHolder(holding: source)
         defer { holder.endWhateverHappened() }
+        // Asserted, not assumed. A fixture that has not taken the lock lets every clone below succeed,
+        // and the failure then reads as an argument about durations rather than as a setup that did not
+        // happen (L1, L98).
+        #expect(holder.waitUntilHeld(),
+                "the fixture never took the lock on the source, so nothing below measures contention")
 
-        // Both attempts are made against the SAME held lock, so the only difference between them is the
-        // timeout. Comparing them against each other rather than against a fixed number is what keeps
-        // this a measurement of the wait and not of the machine (L224).
-        let withoutWaiting = attemptClone(of: source, into: root.appendingPathComponent("no-wait"),
-                                          timeoutMilliseconds: 0)
-        let waiting = attemptClone(of: source, into: root.appendingPathComponent("waits"),
-                                   timeoutMilliseconds: 400)
+        // Two attempts against the SAME held lock, differing only in the timeout, and the assertion is on
+        // the DIFFERENCE between them. Both pay the same process spawn, so the difference isolates the
+        // wait and cancels the machine out of it, which a comparison of one attempt against a fixed
+        // number cannot (L224). The first version compared a zero timeout against a short one and went
+        // red under load with 0.200s against 0.288s, which is spawn latency varying rather than a wait.
+        let short = attemptClone(of: source, into: root.appendingPathComponent("short-wait"),
+                                 timeoutMilliseconds: 100)
+        let long = attemptClone(of: source, into: root.appendingPathComponent("long-wait"),
+                                timeoutMilliseconds: 1200)
 
         // Both still FAIL, because the lock is never released here. That is the point: the timeout buys
         // a wait, not an exemption, and a clone that could not be taken must still say so rather than
         // hand back a torn copy (L11).
-        #expect(withoutWaiting.failure?.contains("locked") == true,
-                "a clone with no busy timeout should be refused by the held lock: \(withoutWaiting.failure ?? "it succeeded")")
-        #expect(waiting.failure?.contains("locked") == true,
-                "a clone whose wait ran out should still be refused: \(waiting.failure ?? "it succeeded")")
+        #expect(short.failure?.contains("locked") == true,
+                "a clone with a 100ms wait should still be refused by a lock nobody released: \(short.failure ?? "it succeeded")")
+        #expect(long.failure?.contains("locked") == true,
+                "a clone whose wait ran out should still be refused: \(long.failure ?? "it succeeded")")
 
-        #expect(waiting.elapsed > withoutWaiting.elapsed,
-                "the clone with a 1500ms timeout took \(waiting.elapsed) against \(withoutWaiting.elapsed) with none, so it did not wait at all")
-        // A floor far below the 400ms asked for, and it cannot be reached by a slow machine, because
-        // what is being waited on is a sleep rather than work. 400 rather than a comfortable few seconds
-        // because this is real time the suite pays on every run, and the measured separation is wide:
-        // with no timeout the same call returned in 0.07 seconds (L290).
-        #expect(waiting.elapsed > .milliseconds(150),
-                "the clone waited only \(waiting.elapsed) for a lock it was told to wait 400ms for")
+        // The floor is well under the 1100ms of extra wait asked for, so ordinary variation cannot reach
+        // it, and it is far above the spawn variation measured when this went wrong (about 90ms).
+        #expect(long.elapsed - short.elapsed > .milliseconds(500),
+                "a 1200ms wait took \(long.elapsed) against \(short.elapsed) for a 100ms one, so the timeout is not being honoured")
 
         // And with the lock gone the same clone succeeds, so the refusals above are the lock and not a
         // fixture that could never have worked (L1).

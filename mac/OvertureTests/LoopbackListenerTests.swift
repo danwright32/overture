@@ -16,8 +16,51 @@ import Network
 // these fast, deterministic bind checks.
 @Suite("Loopback OAuth listener")
 struct LoopbackListenerTests {
+
+    // #3266: every bound in this file has to survive a SATURATED machine, and both halves of that are
+    // measured rather than guessed.
+    //
+    // These are the only tests in the tree that bound a real network operation by the wall clock, so
+    // they are the only ones whose verdict moves with what else the machine is running (L290, L224).
+    // Under `-parallel-testing-enabled YES` Swift Testing runs the tests of one process concurrently and
+    // this suite's thousands of synchronous source scans and SQLite clones keep the thread pool busy, so
+    // a callback that arrives in milliseconds on an idle Mac can arrive tens of seconds later.
+    // Measured 2026-08-30: `LoopbackListener.start(timeout: 5)` reported `failed (45.464 seconds)`,
+    // which is not a bind that was refused but a listener whose readiness was not scheduled.
+    //
+    // Two changes, and the first is the one that addresses the CAUSE. The queue is now a dedicated
+    // serial one, which is what GmailAuthManager actually passes
+    // (`DispatchQueue(label: "com.danwright.overture.gmail-loopback")`). These tests used `.global()`,
+    // the shared concurrent queue every other piece of background work on the machine is also queued
+    // on, so the one thing separating them from the shipped path was the thing making them flaky (L52).
+    //
+    // The ceiling is the second half, and it is deliberately far above any real bind rather than near
+    // one. What it exists for is a WEDGED listener, so that a hang becomes a failure (L110); it is not a
+    // performance assertion, and setting it anywhere near a healthy bind's real duration would make it
+    // one. Nothing here waits for it on the happy path.
+    private static let wedgedCeiling: TimeInterval = 90
+
+    /// A dedicated serial queue, the shape production uses, rather than the shared `.global()` one.
+    private func listenerQueue(_ label: String) -> DispatchQueue {
+        DispatchQueue(label: "overture-test-loopback-\(label)")
+    }
+
+    // The shipped default has a reader, which it would otherwise lose the moment these tests stopped
+    // running at it. It is short because a person is waiting on it, and the tests are long because a
+    // saturated machine is not a person: those are different numbers for different reasons, and the one
+    // that ships is this one.
+    @Test func thebindGivesUpQuicklyEnoughForSomebodyWaitingOnIt() {
+        #expect(LoopbackListener.defaultTimeout <= 15,
+                "Connect Gmail waits \(LoopbackListener.defaultTimeout)s on a wedged bind before saying so, which is a person watching a control that did nothing (#54)")
+        #expect(LoopbackListener.defaultTimeout > 0,
+                "a zero timeout would refuse every bind before it could report ready")
+        #expect(Self.wedgedCeiling > LoopbackListener.defaultTimeout,
+                "the tests' ceiling must be looser than the shipped one, or they measure the machine rather than the listener")
+    }
+
     @Test func bindsToARealNonZeroPort() async throws {
-        let (listener, port) = try await LoopbackListener.start(queue: .global()) { conn in
+        let (listener, port) = try await LoopbackListener.start(queue: listenerQueue("non-zero-port"),
+                                                                timeout: Self.wedgedCeiling) { conn in
             conn.cancel()
         }
         defer { listener.cancel() }
@@ -26,7 +69,8 @@ struct LoopbackListenerTests {
 
     @Test func bindsSuccessfullyWithinAnExplicitTimeout() async throws {
         // The bind timeout (#54) must not interfere with the normal, fast happy path.
-        let (listener, port) = try await LoopbackListener.start(queue: .global(), timeout: 5) { $0.cancel() }
+        let (listener, port) = try await LoopbackListener.start(queue: listenerQueue("explicit-timeout"),
+                                                                timeout: Self.wedgedCeiling) { $0.cancel() }
         defer { listener.cancel() }
         #expect(port != 0)
     }
@@ -45,7 +89,7 @@ struct LoopbackListenerTests {
     // cancellation propagated, a ready listener stays alive and accepts. A 3s ceiling keeps this from ever
     // freezing the suite the way the old version did.
     @Test func aReadyListenerStaysAliveAndAcceptsAConnection() async throws {
-        let queue = DispatchQueue(label: "test-loopback-roundtrip")
+        let queue = listenerQueue("roundtrip")
         let (listener, port) = try await LoopbackListener.start(queue: queue) { conn in
             conn.start(queue: queue)
             conn.send(content: Data("hi".utf8), completion: .contentProcessed { _ in conn.cancel() })
@@ -63,7 +107,14 @@ struct LoopbackListenerTests {
                 }
             }
             client.start(queue: queue)
-            Task { try? await Task.sleep(nanoseconds: 3_000_000_000); if once.fire() { cont.resume(returning: false) } }
+            // The same ceiling and for the same reason: it is what turns a connection that never
+            // resolves into a failure rather than a hang, not a budget for how fast a loopback connect
+            // ought to be. At three seconds this was the tightest bound in the file and the one a loaded
+            // machine reached first.
+            Task {
+                try? await Task.sleep(nanoseconds: UInt64(Self.wedgedCeiling * 1_000_000_000))
+                if once.fire() { cont.resume(returning: false) }
+            }
         }
         #expect(connected)
     }
