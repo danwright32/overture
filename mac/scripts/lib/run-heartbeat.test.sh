@@ -319,7 +319,12 @@ assert_contains "and really does render the job's body" "${BARE_OUT}" "the marke
 GROUPED_OUT="$(fixture_run_in_own_group "${HB_WORK}/grouped-stop.sh")"
 assert_contains "a heartbeat started under job control still lets the script finish" "${GROUPED_OUT}" "finished"
 assert_not_contains "and stopping it prints no termination notice" "${GROUPED_OUT}" "Terminated"
-GROUPED_HB="$(printf '%s\n' "${GROUPED_OUT}" | sed -n 's/^HB=\([0-9][0-9]*\)$/\1/p' | head -1)"
+# #3401: one `awk` rather than a pipe into `head`. `head` closes the pipe as soon as it has its line,
+# which kills the producer with SIGPIPE, and the producer then prints `write error: Broken pipe`, which
+# the runner reads as a fixture breaking a pipe while asserting. Whether it happens at all depends on how
+# much the producer still had to write, so it is a race that fails a push at random (#2850's runtime half
+# firing on a shape #2850's source half deliberately exempts).
+GROUPED_HB="$(awk -F= '/^HB=[0-9]+$/ { print $2; exit }' <<< "${GROUPED_OUT}")"
 assert_equals "the helper really reported a heartbeat pid, or nothing below measures anything" "true" \
   "$([ -n "${GROUPED_HB}" ] && echo true || echo false)"
 # The whole point: nothing of that heartbeat's process group survives it. Waited on with a deadline
@@ -446,7 +451,8 @@ for runner in "${SCRIPT_DIR}/../"*-run.sh; do
   [ -f "${runner}" ] || continue
   name="$(basename "${runner}")"
   grep -q 'HEARTBEAT_PID' "${runner}" || continue
-  trap_line="$(grep -n "^trap .*' EXIT$" "${runner}" | head -1)"
+  # #3401: `-m1` rather than a pipe into `head`, so nothing is killed mid-write.
+  trap_line="$(grep -n -m1 "^trap .*' EXIT$" "${runner}")"
   assert "${name} has an EXIT trap the guard can read" test -n "${trap_line}"
   assert_not_contains "${name}'s EXIT trap bare-kills nothing" "${trap_line}" "kill"
 done
@@ -519,14 +525,18 @@ for hb_var in "${HB_STOPPED_PIDS[@]}"; do
     # between, is a `set -m`; what must sit below it is a `set +m`. Judged by LINE ORDER rather than by
     # presence, because both lines being somewhere in the file is exactly what a half-applied change
     # looks like.
-    hb_pid_line="$(printf '%s\n' "${hb_src}" | grep -n "^ *${hb_var}=\\\$!\$" | head -1 | cut -d: -f1)"
+    # #3401: the three readings below took a whole runner script through a pipe into `head` or `tail`,
+    # which is the biggest producer in this fixture and so the one the SIGPIPE race actually bit. Each is
+    # now one process reading a herestring, which is a file: a consumer that stops early has nothing to
+    # kill.
+    hb_pid_line="$(awk -v v="${hb_var}" '$0 == "  " v "=$!" || $0 ~ "^ *" v "=[$]!$" { print NR; exit }' <<< "${hb_src}")"
     [ -n "${hb_pid_line}" ] || continue
     # The LAST job-control statement before the launch must be `set -m`, not merely SOME `set -m`
     # somewhere above it. Written the looser way first and proved SURVIVED by mutation: `prep-run.sh`
     # turns job control on for its heartbeat 250 lines earlier and off again immediately, so a watchdog
     # launched with no `set -m` of its own still had one "above" it and passed while leaking.
-    hb_last_toggle="$(printf '%s\n' "${hb_src}" | head -n "${hb_pid_line}" | grep -E '^ *set [+-]m$' | tail -1 | tr -d ' ')"
-    hb_close="$(printf '%s\n' "${hb_src}" | tail -n +"${hb_pid_line}" | grep -n '^ *set +m$' | head -1 | cut -d: -f1)"
+    hb_last_toggle="$(awk -v n="${hb_pid_line}" 'NR <= n && /^ *set [+-]m$/ { last = $0 } END { gsub(/ /, "", last); print last }' <<< "${hb_src}")"
+    hb_close="$(awk -v n="${hb_pid_line}" 'NR >= n && /^ *set \+m$/ { print NR - n + 1; exit }' <<< "${hb_src}")"
     HB_ORDER_OK="false"
     if [ "${hb_last_toggle}" = "set-m" ] && [ -n "${hb_close}" ]; then
       HB_ORDER_OK="true"

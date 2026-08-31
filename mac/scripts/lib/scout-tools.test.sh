@@ -173,8 +173,8 @@ else
   fail "scout-extract-run.sh must call scout_extract_claude_scope \"\$CLAUDE\"" \
        "without the binary the scope cannot enumerate this Mac's plugins, so it refuses and the run never starts"
 fi
-resolve_line="$(printf '%s\n' "${runner_code}" | grep -n '^resolve_claude' | head -1 | cut -d: -f1)"
-scope_line="$(printf '%s\n' "${runner_code}" | grep -n 'scout_extract_claude_scope "\$CLAUDE"' | head -1 | cut -d: -f1)"
+resolve_line="$(grep -n -m1 '^resolve_claude' <<< "${runner_code}" | cut -d: -f1)"
+scope_line="$(grep -n -m1 'scout_extract_claude_scope "\$CLAUDE"' <<< "${runner_code}" | cut -d: -f1)"
 if [[ -n "${resolve_line}" && -n "${scope_line}" && "${resolve_line}" -lt "${scope_line}" ]]; then
   pass "scout-extract-run.sh resolves the claude binary before building its scope"
 else

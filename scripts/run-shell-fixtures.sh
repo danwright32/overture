@@ -161,9 +161,15 @@ fixture_pipeline_did_not_break() {
 # pipeline's STATUS IS READ, which means the condition of an `if`, `elif` or `while`. That is where the
 # damage is: pipefail turns the producer's SIGPIPE into the pipeline's status and the condition flips.
 #
-# A pipeline inside `$(...)` whose value is assigned is deliberately left alone, and measured rather than
-# assumed: eight such lines exist here (`x="$(printf ... | grep -n ... | head -1)"`), and none of them
-# reads the status at all, so none can be flipped by it. A consumer that reads to the end is fine too.
+# A pipeline inside `$(...)` whose value is assigned was left alone for that reason, and the reason is
+# true about the STATUS and incomplete about the FAILURE. #3401: `run-heartbeat.test.sh` failed a
+# mandatory pre-push run with `printf: write error: Broken pipe` and passed on the very next run of the
+# same fixture on the same tree. SIGPIPE does not only set a status: a BUILTIN producer prints that
+# message, and the runtime half of this guard reads it and fails the fixture. So the assignment form is
+# covered too now, by `fixture_sources_avoid_builtin_into_early_exit` below, which asks the narrower
+# question that separates the racing shape from the ordinary one.
+#
+# A consumer that reads to the end (`tail`, a bare `grep`) is fine either way.
 fixture_sources_avoid_short_circuit_pipes() {
   local offenders
   # The needle is BUILT rather than written, so this file does not match its own rule and the scan cannot
@@ -184,6 +190,66 @@ fixture_sources_avoid_short_circuit_pipes() {
   echo "  the producer. Every fixture sets pipefail, so that becomes the pipeline's status and the"
   echo "  assertion reports a failure that never happened. Use a herestring: cmd <<< \"\${text}\", or"
   echo "  drop the -q and redirect to /dev/null where the file must stay POSIX (grep then reads it all)."
+  return 1
+}
+
+# fixture_sources_avoid_builtin_into_early_exit FILE...
+#
+# #3401: a BUILTIN producer piped into a consumer that exits early, anywhere, not only in a condition.
+#
+# The distinction is the whole of why this is a separate rule rather than a widening of the one above,
+# and it is the fixture runner's own probe that records it: "The producer is a BUILTIN (printf in a loop)
+# so bash itself reports the write error; an external command is killed by the signal silently." So
+# `printf ... | grep ... | head -1` prints `write error: Broken pipe` and fails the fixture, while
+# `grep ... | head -1` over a file does not. Whether it happens at all depends on how much the producer
+# still had to write when the consumer stopped, which makes it a race that fails a push at random.
+#
+# NARROW, and measured before it was written rather than after (L147). Over every tracked `*.sh`:
+#   * 45 lines pipe into a short-circuiting consumer outside a condition. Flagging all of them would fire
+#     on the ordinary case, since most producers are external commands that die silently (L93).
+#   * 23 of those had a BUILTIN producer. All 23 were converted in #3401, so this rule can BLOCK with no
+#     exemptions, the same argument #3255 used.
+# `grep -q` is deliberately NOT part of this rule: its output is empty, so it only ever appears in a
+# condition, which the rule above already owns. That is also what keeps this from condemning the
+# runner's own broken-pipe probe, which builds a `grep -q` on purpose.
+fixture_sources_avoid_builtin_into_early_exit() {
+  local offenders
+  # One `awk` pass per file rather than a `grep -E`, because two things have to be removed from the line
+  # before the question can be asked at all, and both were found by running it (L1 applies to the reader
+  # as much as to the rule):
+  #
+  #   * A COMMENT. This function's own prose names the shape in order to describe it, and the first
+  #     version condemned the line explaining the exclusion below.
+  #   * A SINGLE QUOTED SPAN. `printf '...| head -1...' > "${file}"` WRITES a fixture carrying the shape
+  #     and does not run it, and `run-shell-fixtures.test.sh` does exactly that to build the synthetic
+  #     offender the older rule is tested with. Stripping quoted spans keeps that line, and keeps every
+  #     real offender, because a real one has its `| head` OUTSIDE the quotes: the quoted part is the
+  #     format string.
+  #
+  # The builtin must OPEN the pipeline. `<(` and `>(` are deliberately not command positions here: in
+  # `diff <(echo a) <(echo b) | head -60` the consumer kills `diff`, which is external and silent, and
+  # that line is the one real case the looser reading got wrong.
+  offenders="$(awk '
+    FILENAME != last { last = FILENAME }
+    {
+      line = $0
+      sub(/^[[:space:]]*#.*/, "", line)
+      gsub(/\047[^\047]*\047/, "", line)
+      if (line ~ /^[[:space:]]*(if|elif|while)[[:space:]]/) next
+      if (line !~ /\|[[:space:]]*(head([[:space:]]|$)|grep[^|]*[[:space:]]-[A-Za-z]*m([[:space:]]|[0-9]))/) next
+      if (line !~ /(^|[=;&]|[$][(])[[:space:]]*(printf|echo)[[:space:]][^|]*\|/) next
+      printf "%s:%d: %s\n", FILENAME, FNR, $0
+    }
+  ' "$@" 2>/dev/null || true)"
+  [[ -z "${offenders}" ]] && return 0
+  echo "FAIL - a script pipes a shell builtin into a consumer that exits early (#3401)"
+  sed 's/^/    /' <<< "${offenders}"
+  echo "  'head' stops at its Nth line and closes the pipe, which kills the producer with SIGPIPE. A"
+  echo "  BUILTIN producer is bash itself, so bash prints 'write error: Broken pipe' and the run reads"
+  echo "  that as a fixture breaking a pipe. Whether it happens depends on how much was left to write,"
+  echo "  so it fails a push at random rather than every time."
+  echo "  Feed the first real command from a herestring instead: grep -n -m1 '...' <<< \"\${text}\","
+  echo "  or head -1 <<< \"\${text}\". Where the file must stay POSIX, use an awk that reads to the end."
   return 1
 }
 
@@ -682,11 +748,16 @@ main() {
       source_status=1
     else
       fixture_sources_avoid_short_circuit_pipes "${production[@]}" || source_status=1
+      fixture_sources_avoid_builtin_into_early_exit "${production[@]}" || source_status=1
     fi
   fi
   # Both run, and neither is allowed to stand for the other: each prints its own refusal naming its own
   # defect, so a run carrying both shapes reports both rather than the first one found (L11).
   fixture_sources_avoid_kill_wait_on_a_fresh_job "${fixtures[@]}" || source_status=1
+  # #3401: the builtin-into-head race, over the fixtures and, on a default sweep, the production scripts
+  # too. Both, because the instance that caused it was a fixture and one of the 23 was production
+  # (`mac/scripts/lib/hosted-suite-stamp.sh`), which is the same asymmetry #3275 removed one rule over.
+  fixture_sources_avoid_builtin_into_early_exit "${fixtures[@]}" || source_status=1
   # #3255: and the probe-in-the-same-breath shape, which BLOCKS because the tree now holds none of it.
   fixture_sources_avoid_probing_a_just_killed_job "${fixtures[@]}" || source_status=1
 

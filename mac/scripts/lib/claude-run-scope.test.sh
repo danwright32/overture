@@ -338,8 +338,8 @@ assert_runner_folds_through_scope() {
     fail "${script} must call ${scope_fn} \"\$CLAUDE\"" \
          "without the binary the scope cannot enumerate this Mac's plugins, so it refuses and the run never starts"
   fi
-  resolve_line="$(printf '%s\n' "${code}" | grep -n '^resolve_claude' | head -1 | cut -d: -f1)"
-  scope_line="$(printf '%s\n' "${code}" | grep -n "${scope_fn} \"\$CLAUDE\"" | head -1 | cut -d: -f1)"
+  resolve_line="$(grep -n -m1 '^resolve_claude' <<< "${code}" | cut -d: -f1)"
+  scope_line="$(grep -n -m1 "${scope_fn} \"\$CLAUDE\"" <<< "${code}" | cut -d: -f1)"
   if [[ -n "${resolve_line}" && -n "${scope_line}" && "${resolve_line}" -lt "${scope_line}" ]]; then
     pass "${script} resolves the claude binary before building its scope"
   else

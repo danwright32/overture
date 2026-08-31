@@ -158,8 +158,13 @@ hosted_stamp_update() {
 }
 
 # hosted_stamp_date <contents>: the recorded date, or nothing.
+# #3401: one `awk` that reads to the END rather than a `printf` piped into `head`. `head` closes the pipe
+# as soon as it has its line, which kills the builtin `printf` with SIGPIPE, and bash then prints
+# `write error: Broken pipe`, which the fixture runner reads as a fixture breaking a pipe while
+# asserting. Whether it happens depends on how much was left to write, so it is a race. This file is
+# `#!/bin/sh`, so a herestring is not available and not short-circuiting at all is the fix.
 hosted_stamp_date() {
-  printf '%s\n' "$1" | sed -n 's/^screens=\([0-9][0-9-]*\).*/\1/p' | head -1
+  printf '%s\n' "$1" | awk 'found { next } /^screens=[0-9-]+/ { sub(/^screens=/, ""); sub(/[^0-9-].*$/, ""); print; found = 1 }'
 }
 
 # hosted_stamp_age_days <recorded> <today>: whole days between two yyyy-mm-dd dates, or nothing.
