@@ -390,11 +390,15 @@ struct ReplyInvariantsLiveStoreTests {
             // asked a question its corpus could not hold.
             let writerHeld = writerHeldRows(in: shows)
             let inPlay = ReachedOutQueue.activeWithDates(from: shows, now: Date())
-            print("LIVE STORE CORPUS: \(shows.count) shows, \(replied.count) replied rows, "
-                  + "\(open.count) with a reply still open, "
-                  + "\(writerHeld.count) whose writer a contact holds, "
-                  + "\(inPlay.count) reached-out rows in play. "
-                  + "A zero here means the invariants in this suite ran over nothing.")
+            // #3276: printed AND recorded. The print is what a person reading a serial log sees and is
+            // where the readout has always come from; the file is the only channel that survives a
+            // parallel run, because a worker process's stdout does not reach xcodebuild's. Both carry
+            // the same sentence, built in one place, so the two cannot drift into different numbers.
+            let corpus = LiveCorpusReport.line(shows: shows.count, replied: replied.count,
+                                               open: open.count, writerHeld: writerHeld.count,
+                                               inPlay: inPlay.count)
+            print(corpus)
+            LiveCorpusReport.record(corpus)
             // An open reply is a replied row, by construction, so the narrower set can never be the larger.
             #expect(open.count <= replied.count)
             // And so is a row whose writer a contact holds, by the same construction. The containment is

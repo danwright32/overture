@@ -538,6 +538,22 @@ main() {
     test_exit_code=0
     started_at="${SECONDS}"
     output_file="$(overture_scratch_file run-tests-output)"
+    # #3276: where the live store suite records the corpus counts it measured.
+    #
+    # The corpus line is a `print()` from a test, and a PARALLEL worker's stdout does not reach
+    # xcodebuild's: measured 2026-08-30, the suite ran and passed and the line appeared zero times in
+    # 10,059 lines. A file is a channel a worker process actually has.
+    #
+    # xcodebuild forwards only `TEST_RUNNER_`-prefixed variables to the test process and strips the
+    # prefix, so the bare name would be silently ignored.
+    #
+    # A FRESH path per attempt, deliberately. A fixed one would let the previous run's numbers be read
+    # as this one's, and a retry after a crash would report the crashed attempt's corpus as its own
+    # (L133, L98). The suite writes it only when it actually measures, so an absent file and a measured
+    # zero stay different facts.
+    corpus_file="$(overture_scratch_file live-corpus)"
+    rm -f "${corpus_file}"
+    export TEST_RUNNER_OVERTURE_CORPUS_FILE="${corpus_file}"
     # #2577: watch this attempt's own log while it streams. Started BEFORE flock, deliberately, so
     # the wait for the shared lock is inside what the watcher can see: an empty log is how it knows
     # the run is queued rather than stalled, and a run that sits behind another worktree's suite for
@@ -590,7 +606,10 @@ main() {
     # #2195: kept so the completeness check below can read this attempt's counts. The file itself still
     # goes, since it holds the whole streamed log.
     last_output="$(cat "${output_file}")"
-    rm -f "${output_file}"
+    # #3276: read BEFORE the scratch file goes, and kept per attempt for the same reason `last_output`
+    # is: a retry's reading must be the retry's own.
+    last_corpus_file_text="$(cat "${corpus_file}" 2>/dev/null || true)"
+    rm -f "${output_file}" "${corpus_file}"
 
     [[ -z "$(should_retry "${outcome}" "${attempt}" "${max_attempts}")" ]] && break
     echo >&2
@@ -702,11 +721,11 @@ main() {
   LIVE_CORPUS_RECORD="${OVERTURE_LIVE_CORPUS_RECORD:-${MAC_DIR}/../.overture-live-corpus-seen}"
   LIVE_CORPUS_TODAY="$(date +%Y-%m-%d)"
   LIVE_CORPUS_SEEN="$(cat "${LIVE_CORPUS_RECORD}" 2>/dev/null || true)"
-  echo "run-tests-locked.sh: $(live_corpus_report "${last_output}" "${LIVE_CORPUS_TODAY}" "${LIVE_CORPUS_SEEN}")" >&2
+  echo "run-tests-locked.sh: $(live_corpus_report "${last_output}" "${LIVE_CORPUS_TODAY}" "${LIVE_CORPUS_SEEN}" "${last_corpus_file_text:-}")" >&2
   # Written only when this run actually measured something. `live_corpus_seen_update` decides that and
   # returns the whole new contents, so a dormant run and a scoped run both come back unchanged and the
   # last real measurement is preserved rather than stamped over.
-  LIVE_CORPUS_NEXT="$(live_corpus_seen_update "${last_output}" "${LIVE_CORPUS_TODAY}" "${LIVE_CORPUS_SEEN}")"
+  LIVE_CORPUS_NEXT="$(live_corpus_seen_update "${last_output}" "${LIVE_CORPUS_TODAY}" "${LIVE_CORPUS_SEEN}" "${last_corpus_file_text:-}")"
   if [[ -n "${LIVE_CORPUS_NEXT}" && "${LIVE_CORPUS_NEXT}" != "${LIVE_CORPUS_SEEN}" ]]; then
     printf '%s\n' "${LIVE_CORPUS_NEXT}" > "${LIVE_CORPUS_RECORD}" 2>/dev/null || true
   fi
