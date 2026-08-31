@@ -483,6 +483,29 @@ assert_contains "and hands what it found to the same rule the fixtures are judge
 assert_contains "and an empty production list is unmeasured rather than clean" \
   "${RUNNER_MAIN_SRC}" "UNMEASURED - no production shell script was found to scan"
 
+# WIRED, not merely callable (#3391). Every assertion above calls the scan directly, which proves the
+# rule and says nothing about whether the sweep runs it (L3). The shape #3390 established: drive the real
+# runner over a fixture that would otherwise PASS, so execution cannot be what fails it and the source
+# scan is the only thing left. Through `main`, because that is where the scans are called from;
+# `run_shell_fixtures` only RUNS fixtures, and a test driving it would pass while proving nothing.
+#
+# The offender is written by `printf` rather than typed here, so this file's own source carries no line
+# beginning `if` that pipes into a short-circuiting consumer: the sweep scans its own fixtures, so a
+# literal one would condemn the file describing it (the #2193 build-the-needle trick).
+WIRED_PIPE="${TMP_DIR}/wired-pipe.test.sh"
+printf '#!/usr/bin/env bash\necho "ok - nothing below this line runs"\nexit 0\nif printf a | grep -q a; then echo m; fi\n' > "${WIRED_PIPE}"
+chmod +x "${WIRED_PIPE}"
+WIRED_PIPE_OUT="$(main "${WIRED_PIPE}" 2>&1)"
+WIRED_PIPE_STATUS=$?
+assert_equals "the sweep itself refuses a fixture piping into an early-exiting consumer" "1" "${WIRED_PIPE_STATUS}"
+assert_contains "and says which rule refused it" "${WIRED_PIPE_OUT}" "pipes into a consumer that exits early"
+# The other direction, or a runner that refused everything would satisfy the assertion above (L1).
+WIRED_PIPE_OK="${TMP_DIR}/wired-pipe-ok.test.sh"
+printf '#!/usr/bin/env bash\necho "ok - nothing below this line runs"\nexit 0\nif printf a | grep -aF a >/dev/null; then echo m; fi\n' > "${WIRED_PIPE_OK}"
+chmod +x "${WIRED_PIPE_OK}"
+main "${WIRED_PIPE_OK}" >/dev/null 2>&1
+assert_equals "and accepts the same fixture with a consumer that reads its whole input" "0" "$?"
+
 # --- #3125: a background job must not be killed in the breath it is started --------------------------
 #
 # --- #3255: probing a process in the same breath it was killed ----------------------------------------
@@ -608,6 +631,24 @@ assert_equals "an identifier merely carrying the words kill and wait is not a ki
 # The real fixture that carried the defect, so this cannot be marked fixed while the fixture still has it.
 fixture_sources_avoid_kill_wait_on_a_fresh_job "${REPO_ROOT}/mac/scripts/lib/run-heartbeat.test.sh" >/dev/null 2>&1
 assert_equals "run-heartbeat.test.sh no longer kills a job it just started" "0" "$?"
+
+# WIRED, not merely callable (#3391), on the same shape as the pipe scan above. This one has to write a
+# fixture with REAL physical lines, which `printf` gives (the escapes expand in the written file), because
+# the scan reads physical lines and cannot see an offender that lives on one line of the writer's source.
+# That is also what keeps this file safe from its own rule.
+WIRED_KILL="${TMP_DIR}/wired-kill.test.sh"
+printf '#!/usr/bin/env bash\necho "ok - nothing below this line runs"\nexit 0\nsleep 5 & JOB=$!\nkill "${JOB}"\nwait "${JOB}"\n' > "${WIRED_KILL}"
+chmod +x "${WIRED_KILL}"
+WIRED_KILL_OUT="$(main "${WIRED_KILL}" 2>&1)"
+WIRED_KILL_STATUS=$?
+assert_equals "the sweep itself refuses a fixture killing a job it just started" "1" "${WIRED_KILL_STATUS}"
+assert_contains "and says which rule refused it" "${WIRED_KILL_OUT}" "kills and waits for a background job it has only just started"
+# The other direction, so a runner that refused every fixture could not answer the assertion above (L1).
+WIRED_KILL_OK="${TMP_DIR}/wired-kill-ok.test.sh"
+printf '#!/usr/bin/env bash\necho "ok - nothing below this line runs"\nexit 0\n( exit 0 ) & JOB=$!\nwait "${JOB}" 2>/dev/null\n' > "${WIRED_KILL_OK}"
+chmod +x "${WIRED_KILL_OK}"
+main "${WIRED_KILL_OK}" >/dev/null 2>&1
+assert_equals "and accepts the same fixture with a job left to exit on its own" "0" "$?"
 
 # --- the stall guard is actually WIRED IN (#2929) -----------------------------------------------------
 #
