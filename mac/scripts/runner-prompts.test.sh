@@ -232,7 +232,7 @@ assert_no_dashes() {
   content="$(sed 's/## Dan.s notes (authoritative [^)]*)//' "${file}")"
   if grep -q "${DASH_CLASS}" <<< "${content}"; then
     fail "${label} contains an em or en dash" \
-         "$(printf '%s' "${content}" | grep -n "${DASH_CLASS}" | head -2)"
+         "$(grep -n "${DASH_CLASS}" <<< "${content}" | head -2)"
   else
     echo "ok - ${label} carries no dashes for the model to imitate into Dan's emails"
   fi

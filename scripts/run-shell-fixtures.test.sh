@@ -506,6 +506,124 @@ chmod +x "${WIRED_PIPE_OK}"
 main "${WIRED_PIPE_OK}" >/dev/null 2>&1
 assert_equals "and accepts the same fixture with a consumer that reads its whole input" "0" "$?"
 
+# Every tracked shell file, as an ARRAY, so a path containing a space stays one argument.
+#
+# #3401: written first as `fixture_sources_... $(git ls-files | sed ...)`, unquoted, which word-splits.
+# This repository lives under "Photography Assets/Dan Wright Photography", so EVERY path split into four
+# or five arguments, none of them a readable file, and the scans skip what they cannot read. The
+# assertions built on it therefore examined NOTHING and passed, which is the emptiest possible failure
+# reading as the cleanest possible pass (L98). Found by mutation: reverting a converted line in
+# `scripts/lib/mutation-scope.sh` was reported SURVIVED by a check that names the whole tree.
+tracked_shell_files() {
+  local pattern="$1"
+  TRACKED_SHELL=()
+  local f
+  while IFS= read -r f; do
+    [[ -n "${f}" ]] && TRACKED_SHELL+=("${REPO_ROOT}/${f}")
+  done < <(git -C "${REPO_ROOT}" ls-files "${pattern}")
+}
+
+# --- #3401: a BUILTIN producer piped into a consumer that exits early --------------------------------
+# The rule above asks about the pipeline's STATUS and so covers only a condition. This one asks about the
+# producer's STDERR, which is what actually failed a push: `run-heartbeat.test.sh` reported
+# `printf: write error: Broken pipe` on a mandatory pre-push run and passed on the very next run of the
+# same fixture on the same tree.
+#
+# The distinction the rule turns on is recorded in this file already, beside the broken-pipe probe: a
+# BUILTIN producer is bash itself, so bash prints the write error, while an external command killed by
+# SIGPIPE is silent. That is why this is a separate rule rather than a widening of the one above, and it
+# is what keeps it off the 22 lines where the producer is an external command.
+BUILTIN_PIPE="${TMP_DIR}/builtin-pipe.test.sh"
+printf '#!/usr/bin/env bash\nsrc="a"\nn="$(printf "%%s" "${src}" | grep -n a | head -1)"\necho "ok - $n"\n' > "${BUILTIN_PIPE}"
+chmod +x "${BUILTIN_PIPE}"
+BUILTIN_OUT="$(fixture_sources_avoid_builtin_into_early_exit "${BUILTIN_PIPE}" 2>&1)"
+BUILTIN_STATUS=$?
+assert_equals "a builtin piped into head is refused" "1" "${BUILTIN_STATUS}"
+assert_contains "and the refusal names the line" "${BUILTIN_OUT}" "head -1"
+assert_contains "and says what to use instead" "${BUILTIN_OUT}" "<<<"
+
+# `grep -m` short-circuits exactly like `head`, and a rule catching one spelling is exempt from the thing
+# it forbids wherever anybody wrote the other (L96).
+BUILTIN_GREP_M="${TMP_DIR}/builtin-grep-m.test.sh"
+printf '#!/usr/bin/env bash\nsrc="a"\nn="$(printf "%%s" "${src}" | grep -n -m1 a)"\necho "ok - $n"\n' > "${BUILTIN_GREP_M}"
+chmod +x "${BUILTIN_GREP_M}"
+fixture_sources_avoid_builtin_into_early_exit "${BUILTIN_GREP_M}" >/dev/null 2>&1
+assert_equals "a builtin piped into grep -m is refused too" "1" "$?"
+
+# The other direction, five ways, because a rule that refuses everything is indistinguishable from one
+# that works (L1). Each of these is a shape the tree really holds.
+BUILTIN_OK="${TMP_DIR}/builtin-ok.test.sh"
+# 1. the remedy itself: no builtin in the pipeline at all.
+printf '#!/usr/bin/env bash\nsrc="a"\nn="$(grep -n -m1 a <<< "${src}")"\necho "ok - $n"\n' > "${BUILTIN_OK}"
+chmod +x "${BUILTIN_OK}"
+fixture_sources_avoid_builtin_into_early_exit "${BUILTIN_OK}" >/dev/null 2>&1
+assert_equals "a herestring feeding the consumer is accepted" "0" "$?"
+
+# 2. a consumer that reads to the END cannot kill anything.
+BUILTIN_TAIL="${TMP_DIR}/builtin-tail.test.sh"
+printf '#!/usr/bin/env bash\nsrc="a"\nn="$(printf "%%s" "${src}" | tail -1)"\necho "ok - $n"\n' > "${BUILTIN_TAIL}"
+chmod +x "${BUILTIN_TAIL}"
+fixture_sources_avoid_builtin_into_early_exit "${BUILTIN_TAIL}" >/dev/null 2>&1
+assert_equals "a consumer that reads to the end is accepted" "0" "$?"
+
+# 3. an EXTERNAL producer dies silently, which is the whole reason this rule is narrower than the 45
+# lines that pipe into a short-circuiting consumer.
+BUILTIN_EXTERNAL="${TMP_DIR}/builtin-external.test.sh"
+printf '#!/usr/bin/env bash\nn="$(grep -n a /etc/hosts | head -1)"\necho "ok - $n"\n' > "${BUILTIN_EXTERNAL}"
+chmod +x "${BUILTIN_EXTERNAL}"
+fixture_sources_avoid_builtin_into_early_exit "${BUILTIN_EXTERNAL}" >/dev/null 2>&1
+assert_equals "an external producer is accepted" "0" "$?"
+
+# 4. a builtin inside a PROCESS SUBSTITUTION is feeding something else, and the consumer kills that
+# something else. `scripts/check-tree-untouched.sh` really holds this line, and the looser reading of the
+# rule condemned it.
+BUILTIN_PROCSUB="${TMP_DIR}/builtin-procsub.test.sh"
+printf '#!/usr/bin/env bash\na="x"\nb="y"\ndiff <(echo "${a}") <(echo "${b}") | head -60\necho "ok - diffed"\n' > "${BUILTIN_PROCSUB}"
+chmod +x "${BUILTIN_PROCSUB}"
+fixture_sources_avoid_builtin_into_early_exit "${BUILTIN_PROCSUB}" >/dev/null 2>&1
+assert_equals "a builtin inside a process substitution is accepted" "0" "$?"
+
+# 5. a line that WRITES the shape into a file rather than running it, which is how this very file builds
+# the synthetic offender for the rule above. Stripping single-quoted spans is what keeps it, and a real
+# offender survives that stripping because its `| head` is outside the quotes.
+BUILTIN_WRITES="${TMP_DIR}/builtin-writes.test.sh"
+# Through a QUOTED heredoc rather than a printf with quote characters as arguments. Written that way
+# first, and the scan condemned this very file: the stripper pairs single quotes in order, and a line
+# passing a bare "'" as an argument shifts that pairing so the payload stops being seen as quoted.
+cat > "${BUILTIN_WRITES}" <<'WRITES_EOF'
+#!/usr/bin/env bash
+printf '%s' 'line="$(printf "%s" "abc" | grep -n b | head -1)"' > /dev/null
+echo "ok - wrote it"
+WRITES_EOF
+chmod +x "${BUILTIN_WRITES}"
+fixture_sources_avoid_builtin_into_early_exit "${BUILTIN_WRITES}" >/dev/null 2>&1
+assert_equals "a line that writes the shape rather than running it is accepted" "0" "$?"
+
+# And the real tree is silent, or the rule is blocking every run from the moment it lands. It BLOCKS
+# rather than reports because #3401 converted all 23 instances, which is the same argument #3255 used.
+tracked_shell_files "*.sh"
+assert_equals "there are tracked shell files to scan at all, so the check below measures something" "true" \
+  "$([[ "${#TRACKED_SHELL[@]}" -gt 80 ]] && echo true || echo false)"
+# `${a[@]+"${a[@]}"}` because bash 3.2 under `set -u` treats an empty array as unbound: without it a
+# genuinely empty list kills the fixture with an unbound-variable error INSTEAD of reporting the
+# unmeasured corpus the assertion above exists to name. Seen while proving that assertion.
+fixture_sources_avoid_builtin_into_early_exit "${TRACKED_SHELL[@]+"${TRACKED_SHELL[@]}"}" >/dev/null 2>&1
+assert_equals "the tree as it stands carries none of the shape" "0" "$?"
+
+# The proven defect, kept so this cannot be marked fixed while the fixture still has it.
+fixture_sources_avoid_builtin_into_early_exit "${REPO_ROOT}/mac/scripts/lib/run-heartbeat.test.sh" >/dev/null 2>&1
+assert_equals "run-heartbeat.test.sh no longer pipes a builtin into head" "0" "$?"
+
+# WIRED, not merely callable (L3), on the shape #3390 established: a fixture that would otherwise PASS,
+# driven through `main`, so execution cannot be what fails it.
+WIRED_BUILTIN="${TMP_DIR}/wired-builtin.test.sh"
+printf '#!/usr/bin/env bash\necho "ok - nothing below this line runs"\nexit 0\nsrc="a"\nn="$(printf "%%s" "${src}" | grep -n a | head -1)"\n' > "${WIRED_BUILTIN}"
+chmod +x "${WIRED_BUILTIN}"
+WIRED_BUILTIN_OUT="$(main "${WIRED_BUILTIN}" 2>&1)"
+WIRED_BUILTIN_STATUS=$?
+assert_equals "the sweep itself refuses a fixture piping a builtin into head" "1" "${WIRED_BUILTIN_STATUS}"
+assert_contains "and says which rule refused it" "${WIRED_BUILTIN_OUT}" "pipes a shell builtin into a consumer that exits early"
+
 # --- #3125: a background job must not be killed in the breath it is started --------------------------
 #
 # --- #3255: probing a process in the same breath it was killed ----------------------------------------
@@ -571,7 +689,10 @@ assert_equals "the sweep itself refuses a fixture carrying the shape" "1" "${WIR
 assert_contains "and says which rule refused it" "${WIRED_OUT}" "probes a process it has only just killed"
 
 # The real tree must be silent, or the guard is blocking every run from the moment it lands.
-fixture_sources_avoid_probing_a_just_killed_job $(git -C "${REPO_ROOT}" ls-files "*.test.sh" | sed "s|^|${REPO_ROOT}/|") >/dev/null 2>&1
+tracked_shell_files "*.test.sh"
+assert_equals "there are tracked fixtures to scan at all, so the check below measures something" "true" \
+  "$([[ "${#TRACKED_SHELL[@]}" -gt 50 ]] && echo true || echo false)"
+fixture_sources_avoid_probing_a_just_killed_job "${TRACKED_SHELL[@]+"${TRACKED_SHELL[@]}"}" >/dev/null 2>&1
 assert_equals "the tree as it stands carries none of the shape" "0" "$?"
 
 # The proven defect. `run-heartbeat.test.sh` started a stand-in and killed it on the very next line, then
@@ -690,7 +811,7 @@ assert_equals "and nothing else is" "2" "$(echo "${SELECTED_EXPLICIT}" | grep -c
 # The order given is the order run, because the read-out prints each verdict in list order and a
 # reordering would put a failure under another fixture's header.
 assert_equals "the order given is kept" "also-passing.test.sh" \
-  "$(basename "$(echo "$(resolve_fixture_paths "${ALSO_PASSING}" "${PASSING}")" | head -1)")"
+  "$(basename "$(head -1 <<< "$(resolve_fixture_paths "${ALSO_PASSING}" "${PASSING}")")")"
 
 # No arguments still means every fixture in the repo, which is what test-all.sh calls.
 SELECTED_DEFAULT="$(resolve_fixture_paths)"

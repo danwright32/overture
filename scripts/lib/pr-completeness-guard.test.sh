@@ -170,8 +170,8 @@ done
 # It has to run BEFORE the expensive part, or a missing body costs two minutes of exclusive test lock
 # to discover. Checked by position, since "it is called somewhere" would pass with it at the end.
 VAM="$(cat "${REPO_ROOT}/scripts/verify-and-merge-branch.sh" 2>/dev/null || echo "")"
-GUARD_LINE="$(printf '%s\n' "${VAM}" | grep -n 'require_pr_completeness' | head -1 | cut -d: -f1)"
-SUITE_LINE="$(printf '%s\n' "${VAM}" | grep -n 'setup_worktree "' | head -1 | cut -d: -f1)"
+GUARD_LINE="$(grep -n -m1 'require_pr_completeness' <<< "${VAM}" | cut -d: -f1)"
+SUITE_LINE="$(grep -n -m1 'setup_worktree "' <<< "${VAM}" | cut -d: -f1)"
 if [[ -n "${GUARD_LINE}" && -n "${SUITE_LINE}" && "${GUARD_LINE}" -lt "${SUITE_LINE}" ]]; then
   echo "ok - the refusal happens before the worktree and the suite"
 else

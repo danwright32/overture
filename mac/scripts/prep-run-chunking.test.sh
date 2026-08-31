@@ -90,8 +90,8 @@ done
 flat="$(printf '%s' "$prompt" | tr '\n' ' ')"
 # Anchored on the words AROUND the path, not on "no spaces", because the real support directory is
 # "Application Support" and a path here legitimately contains one.
-queue="$(printf '%s' "$flat" | sed -n 's|.*work-list at \(.*\.json\),\{0,1\} and for every.*|\1|p' | head -1)"
-results="$(printf '%s' "$flat" | sed -n 's|.*rewrite \(.*\.json\) with the complete.*|\1|p' | head -1)"
+queue="$(sed -n 's|.*work-list at \(.*\.json\),\{0,1\} and for every.*|\1|p' <<< "$flat" | head -1)"
+results="$(sed -n 's|.*rewrite \(.*\.json\) with the complete.*|\1|p' <<< "$flat" | head -1)"
 printf '%s\n' "$queue" > "${STUB_LOG_DIR}/queue.$$"
 printf '%s\n' "$flat" > "${STUB_LOG_DIR}/prompt.$$"
 printf '%s\n' "$model" > "${STUB_LOG_DIR}/model.$$"
