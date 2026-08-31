@@ -82,6 +82,47 @@ DID_NAME_THE_CAUSE="false"
 assert_equals "the harness says the fixture called something that does not exist" \
   "true" "${DID_NAME_THE_CAUSE}"
 
+# #3408: the SAME defect wearing different words, found on 2026-08-31 while proving an unrelated
+# mutation. An assertion bash cannot PARSE never runs either, and it leaves the fixture reporting every
+# other check passed and exiting 0, exactly as a mistyped helper name does. It had been live in
+# `mac/scripts/lib/suite-stats.test.sh`, where a needle containing `$(` inside single quotes inside a
+# command substitution is mis-parsed by bash 3.2: the assertion about a scoped run never writing the
+# duration series printed nothing at all, on every run since it was written, while the sweep passed.
+#
+# `command not found` could not see it, because nothing was looked up: the line was never a command.
+PARSE_ERROR="${TMP_DIR}/parse-error.test.sh"
+cat > "${PARSE_ERROR}" <<'FIXTURE'
+#!/usr/bin/env bash
+say_ok() { echo "ok - $1"; }
+SOURCE_FILE="/etc/hosts"
+say_ok "a check that did run"
+# The real shape, verbatim, including the line continuation that is part of it: a single-quoted needle
+# carrying an unbalanced quote and a `$(`, inside a command substitution on a continued line. bash 3.2
+# loses the closing paren, so this whole assertion is never a command and prints nothing at all.
+say_ok "the assertion below" \
+  "$(grep -cF 'NEEDLE="$(cat "${SOMETHING}"' "${SOURCE_FILE}" || true)"
+exit 0
+FIXTURE
+chmod +x "${PARSE_ERROR}"
+
+run_shell_fixtures "${PARSE_ERROR}" >/dev/null 2>&1
+assert_equals "a fixture holding a line bash could not parse is a failure, not a pass" "1" "$?"
+
+PARSE_ERROR_OUTPUT="$(run_shell_fixtures "${PARSE_ERROR}" 2>&1)"
+DID_NAME_THE_PARSE_CAUSE="false"
+[[ "${PARSE_ERROR_OUTPUT}" == *"could not PARSE"* ]] && DID_NAME_THE_PARSE_CAUSE="true"
+assert_equals "and the harness says it was a parse failure rather than a missing command" \
+  "true" "${DID_NAME_THE_PARSE_CAUSE}"
+
+# The mirror, and it is the one that decides whether this rule survives: a fixture may legitimately
+# PRINT those words, and one that does must still pass.
+QUOTES_PARSE_PHRASE="${TMP_DIR}/quotes-parse.test.sh"
+printf '#!/usr/bin/env bash\necho "ok - would have said bad substitution"\nexit 0\n' > "${QUOTES_PARSE_PHRASE}"
+chmod +x "${QUOTES_PARSE_PHRASE}"
+
+run_shell_fixtures "${QUOTES_PARSE_PHRASE}" >/dev/null 2>&1
+assert_equals "a fixture that merely quotes a parse error still passes" "0" "$?"
+
 # The phrase only condemns a fixture when it is bash reporting an unresolved command. A fixture
 # that legitimately prints the words (stable-signing.test.sh quotes them back when its own guard
 # against this defect fires) must still be allowed to pass.

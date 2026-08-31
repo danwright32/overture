@@ -313,6 +313,44 @@ UNDER_PIPEFAIL_NONE="$(
 )"
 assert_equals "a large run naming no hosted suite is still not verified" "" "${UNDER_PIPEFAIL_NONE}"
 
+# --- what the answer IS when several suites passed, and what a display name may contain (#3408) -------
+#
+# Both pin behaviour that a rewrite must carry over unchanged, and neither had a test. The loop asked one
+# grep per name over the WHOLE output: 49 names plus 49 types is about 200 processes and 98 re-reads of a
+# log that is megabytes in a real run, paid on every wrapper run including all 28 of the stubbed ones in
+# `mac/scripts/run-tests-locked.test.sh`.
+#
+# The answer is the first name in the NAMES list that appears, never the first one to appear in the
+# OUTPUT. Nothing downstream reads which name it is (`hosted_stamp_update` only asks whether it is empty),
+# so this is here to make the choice a decision rather than an accident of how the loop was written.
+BOTH_PASSED="${WORK}/both-passed.log"
+cat > "${BOTH_PASSED}" <<OUT
+${PASS_MARK} Suite "The send sheet's editable body (#2086)" passed after 0.011 seconds.
+${PASS_MARK} Suite "The reachability badge on a card (#1145)" passed after 0.018 seconds.
+${PASS_MARK} Test run with 296 tests in 49 suites passed after 4.9 seconds.
+OUT
+assert_equals "with several hosted suites passed, the answer is the first NAME, not the first line" \
+  "The reachability badge on a card (#1145)" \
+  "$(hosted_suites_ran "$(cat "${BOTH_PASSED}")" "${NAMES}")"
+
+# A display name is a sentence Dan wrote, so it holds punctuation freely: every one in this tree already
+# carries brackets and a `#`, and one carries an apostrophe. It is matched LITERALLY, and the case that
+# proves it is a name whose characters would match a DIFFERENT suite if they were read as a pattern.
+META_NAMES="A.*suite (#9)"
+META_MISS="${WORK}/meta-miss.log"
+cat > "${META_MISS}" <<OUT
+${PASS_MARK} Suite "AnotherXsuite (#9)" passed after 0.1 seconds.
+OUT
+assert_empty "a display name holding regex characters does not match a different suite" \
+  "$(hosted_suites_ran "$(cat "${META_MISS}")" "${META_NAMES}")"
+
+META_HIT="${WORK}/meta-hit.log"
+cat > "${META_HIT}" <<OUT
+${PASS_MARK} Suite "A.*suite (#9)" passed after 0.1 seconds.
+OUT
+assert_equals "and does match the suite that really carries those characters" \
+  "A.*suite (#9)" "$(hosted_suites_ran "$(cat "${META_HIT}")" "${META_NAMES}")"
+
 echo
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "hosted-suite-stamp.test.sh: all assertions passed"

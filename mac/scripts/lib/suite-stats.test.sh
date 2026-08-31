@@ -1066,8 +1066,20 @@ assert_eq "and appends this run to it afterwards" "1" \
   "$(grep -cF 'suite_run_series_append "${SUITE_SERIES_TEXT}"' "${SERIES_SRC}" || true)"
 # A SCOPED run must not write: its size is a handful of tests and its duration a handful of seconds, and
 # both would poison the series exactly as they would poison the short-run baseline (#2317).
-assert_eq "and a scoped run neither reads nor writes it" "1" \
-  "$(grep -cF 'SUITE_SERIES_TEXT="$(cat "${SUITE_SERIES_RECORD}"' "${SERIES_SRC}" || true)"
+#
+# #3408: the needle is assigned to a variable FIRST, and that is the whole of why this assertion runs at
+# all. Written inline it holds `$(` inside single quotes inside a command substitution on a continued
+# line, which bash 3.2 mis-parses: it printed `bad substitution: no closing )` to stderr and the
+# assertion never ran, on every sweep since it was written, while the fixture reported every other check
+# passing and exited 0. `scripts/run-shell-fixtures.sh` now fails a fixture that does this.
+#
+# What it asks is that the read is GUARDED, not merely that the read is there: the read is present
+# whether or not a scoped run is excluded from it, so a count of the read alone would pass with the
+# exclusion deleted. Read as "the line after the record's path is the scoped guard", because that guard
+# line appears three times in the file and a count of it says nothing about which block it opens.
+assert_eq "and a scoped run neither reads nor writes it" \
+  "$(awk '/^ *SUITE_SERIES_RECORD=/ { getline; if ($0 ~ /scoped.*-eq 0/) print "guarded" }' \
+       "${SERIES_SRC}")" "guarded"
 # The record is overridable, so the fixture that drives the real wrapper cannot write into the tree (L2).
 assert_eq "and the record's path is overridable" "1" \
   "$(grep -cF 'OVERTURE_SUITE_RUN_SERIES:-' "${SERIES_SRC}" || true)"
@@ -1075,6 +1087,57 @@ assert_eq "and the record's path is overridable" "1" \
 # the series has to say so or it reads a doubled run as a duration regression (L11, #3392).
 assert_eq "and the retry reason reaches the series" "1" \
   "$(grep -cF '"${authoritative}" "${restarted}"' "${SERIES_SRC}" || true)"
+
+# --- counting the source-text guards, in one pass rather than one process per file (#3408) -----------
+#
+# `source_guard_declarations_under` ran `grep -o | wc -l | tr -d` PER FILE, so the readout every run
+# prints cost about 1,400 processes: measured 2026-08-31 on a stubbed wrapper run, it and the loop in
+# `hosted_suites_ran` were 940 and 200 of the 2,436 traced lines, and the run took 5.07s with no build
+# and no tests in it. `mac/scripts/run-tests-locked.test.sh` pays that 28 times.
+#
+# What the batching must not change is the count, and the risk it introduces is the one this
+# repository's own path carries: A DIRECTORY NAME WITH A SPACE IN IT. A batched read that splits its
+# file list on whitespace counts nothing at all here and reports a clean zero for it (L98).
+GUARD_COUNT_DIR="$(fixture_scratch_dir)/a dir with spaces"
+mkdir -p "${GUARD_COUNT_DIR}"
+cat > "${GUARD_COUNT_DIR}/GuardOne.swift" <<'SWIFT'
+import Testing
+// reads the app's source through SwiftSource
+@Test func first() {}
+@Test func second() {}
+SWIFT
+cat > "${GUARD_COUNT_DIR}/GuardTwo.swift" <<'SWIFT'
+import Testing
+// through CopyInventory
+@Test func third() {}
+SWIFT
+cat > "${GUARD_COUNT_DIR}/NotAGuard.swift" <<'SWIFT'
+import Testing
+@Test func behaviour() {}
+SWIFT
+cat > "${GUARD_COUNT_DIR}/NotSwift.txt" <<'TEXT'
+SourceGuardHelper @Test @Test @Test
+TEXT
+
+assert_eq "every @Test in a file that reads the app's source is counted, whatever the path holds" \
+  "$(source_guard_declarations_under "${GUARD_COUNT_DIR}")" "3"
+
+assert_eq "a test that does not read the source is not one of them" \
+  "$(test_declarations_under "${GUARD_COUNT_DIR}")" "4"
+
+assert_eq "a directory that is not there counts nothing rather than failing" \
+  "$(source_guard_declarations_under "${GUARD_COUNT_DIR}/nowhere")" "0"
+
+# The empty case, which is the one a batched read gets wrong in the reassuring direction: with no file
+# matching, an unguarded `xargs` runs `grep` over STDIN and hangs, and an unguarded pipeline reports a
+# blank rather than a zero.
+EMPTY_GUARD_DIR="$(fixture_scratch_dir)"
+cat > "${EMPTY_GUARD_DIR}/Plain.swift" <<'SWIFT'
+import Testing
+@Test func nothingToSeeHere() {}
+SWIFT
+assert_eq "a directory whose files read no source counts zero, promptly" \
+  "$(source_guard_declarations_under "${EMPTY_GUARD_DIR}")" "0"
 
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All suite-stats.sh fixtures passed."

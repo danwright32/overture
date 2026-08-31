@@ -75,6 +75,56 @@ struct LoopbackListenerTests {
         #expect(port != 0)
     }
 
+    // --- #3409: a bind that is refused at one instant and granted at the next ---------------------
+    //
+    // A full parallel run on 2026-08-31 went red with three failures, all in this suite, all
+    // `POSIXErrorCode(rawValue: 49): Can't assign requested address`, and the very next run of the same
+    // tree passed all three. EADDRNOTAVAIL is not a port collision (that is 48) and 127.0.0.1 does not
+    // stop being a local address, so the reading that fits is a bind refused at that instant.
+    //
+    // Neither of the two causes #3409 offered turned out to be it, and that was MEASURED rather than
+    // reasoned: `scripts/../loopback-probe` bound 400 listeners at once with the shipped parameters, and
+    // then 400 more with `allowLocalEndpointReuse` off, and every one of the 800 reached `.ready`. So the
+    // parameters are not the cause and neither is the number of listeners. What is left is a transient
+    // condition, and what a transient condition wants is not a different address but another attempt.
+    //
+    // The retry is bounded, shares the caller's own deadline rather than extending it, and fires only on
+    // the failures that can plausibly clear. A permanent one (no permission, no route) must still fail at
+    // once: retrying that spends a person's whole timeout to reach the same answer more slowly.
+    @Test func aBindRefusedAtThisInstantIsWorthAnotherAttempt() {
+        #expect(LoopbackListener.isTransientBindFailure(
+            "POSIXErrorCode(rawValue: 49): Can't assign requested address"))
+        #expect(LoopbackListener.isTransientBindFailure(
+            "POSIXErrorCode(rawValue: 48): Address already in use"))
+    }
+
+    @Test func aPermanentBindFailureIsNotRetried() {
+        #expect(!LoopbackListener.isTransientBindFailure(
+            "POSIXErrorCode(rawValue: 1): Operation not permitted"))
+        #expect(!LoopbackListener.isTransientBindFailure(
+            "POSIXErrorCode(rawValue: 65): No route to host"))
+        #expect(!LoopbackListener.isTransientBindFailure(""))
+        // The numbers are read as whole numbers, not as digits inside a longer one: 490 is not 49.
+        #expect(!LoopbackListener.isTransientBindFailure(
+            "POSIXErrorCode(rawValue: 490): Something else entirely"))
+    }
+
+    // The retry may not buy itself more time than the caller allowed. A person pressing Connect Gmail
+    // waits `defaultTimeout` once, not once per attempt, which is the difference between a retry and a
+    // hang wearing a retry's name (L110).
+    @Test func theRetriesShareTheCallersDeadlineRatherThanExtendingIt() {
+        #expect(LoopbackListener.remainingBudget(deadline: 100, now: 90) == 10)
+        #expect(LoopbackListener.remainingBudget(deadline: 100, now: 100) == 0)
+        #expect(LoopbackListener.remainingBudget(deadline: 100, now: 130) == 0,
+                "a budget past its deadline must never come back negative and be read as forever")
+    }
+
+    @Test func theBindIsAttemptedMoreThanOnceAndABoundedNumberOfTimes() {
+        #expect(LoopbackListener.bindAttempts > 1, "one attempt is no retry at all")
+        #expect(LoopbackListener.bindAttempts <= 4,
+                "an unbounded retry spends the whole timeout on a failure that was never going to clear")
+    }
+
     // A one-shot latch so a connection's state handler resolves the round-trip exactly once.
     private final class Once: @unchecked Sendable {
         private let lock = NSLock()

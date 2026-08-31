@@ -30,10 +30,81 @@ enum LoopbackListener {
     /// listener (#3266, L290); they pass their own far larger ceiling and assert this one separately.
     static let defaultTimeout: TimeInterval = 10
 
+    /// How many times the bind is attempted before the failure is the answer (#3409).
+    ///
+    /// A full parallel test run on 2026-08-31 failed three binds with
+    /// `POSIXErrorCode(rawValue: 49): Can't assign requested address`, and the next run of the same tree
+    /// passed all three. EADDRNOTAVAIL is not a port already taken (that is 48) and 127.0.0.1 does not
+    /// stop being a local address, so what it reports is a bind refused at that instant.
+    ///
+    /// Both of the causes that suggested themselves were measured and ruled out: 400 concurrent binds
+    /// with these exact parameters, and 400 more with `allowLocalEndpointReuse` off, all 800 reached
+    /// `.ready` on this Mac. So the parameters are not it and neither is the count of listeners. A
+    /// transient refusal is answered by another attempt, not by a different address.
+    ///
+    /// Small on purpose. The attempts share the caller's deadline rather than each getting their own, so
+    /// this is a number of tries inside one wait, not a multiplier on how long a person waits.
+    static let bindAttempts = 3
+
+    /// How long to wait before trying again. Short, because the condition being waited out is momentary
+    /// and the waiting comes out of the caller's own budget.
+    static let bindRetryDelay: TimeInterval = 0.1
+
+    /// Whether a bind failure is one that could plausibly clear on its own.
+    ///
+    /// Only these two. A permanent failure (no permission, no route) has to be reported at once: retrying
+    /// it spends the person's whole timeout to arrive at the same answer more slowly (L110).
+    ///
+    /// Matched as a whole number rather than as a substring, or `rawValue: 490` would read as 49.
+    static func isTransientBindFailure(_ message: String) -> Bool {
+        [48, 49].contains { code in
+            guard let range = message.range(of: "rawValue: \(code)") else { return false }
+            let next = message[range.upperBound...].first
+            return next == nil || !next!.isNumber
+        }
+    }
+
+    /// What is left of the caller's wait, never negative: a negative budget handed to a sleep or a
+    /// timeout reads as no limit at all, which is the one failure a deadline exists to prevent.
+    static func remainingBudget(deadline: TimeInterval, now: TimeInterval) -> TimeInterval {
+        max(0, deadline - now)
+    }
+
     static func start(
         queue: DispatchQueue,
         timeout: TimeInterval = LoopbackListener.defaultTimeout,
         log: (@Sendable (String) -> Void)? = nil,
+        onConnection: @escaping @Sendable (NWConnection) -> Void
+    ) async throws -> (listener: NWListener, port: UInt16) {
+        let deadline = Date().timeIntervalSince1970 + timeout
+        var lastError: Error = LoopbackError.timedOut
+
+        for attempt in 1...bindAttempts {
+            let budget = remainingBudget(deadline: deadline, now: Date().timeIntervalSince1970)
+            // Out of time is the caller's own answer, whatever the last attempt said: another attempt
+            // here would be waiting past the moment the person was promised.
+            guard budget > 0 else { break }
+            do {
+                return try await startOnce(queue: queue, timeout: budget, log: log, onConnection: onConnection)
+            } catch let error as LoopbackError {
+                guard case .failed(let message) = error,
+                      isTransientBindFailure(message),
+                      attempt < bindAttempts
+                else { throw error }
+                lastError = error
+                // copy-inventory:ignore-start  developer diagnostic log, not the app's voice (#915)
+                log?("bind refused (\(message)); attempt \(attempt) of \(bindAttempts), trying again")
+                // copy-inventory:ignore-end
+                try? await Task.sleep(nanoseconds: UInt64(bindRetryDelay * 1_000_000_000))
+            }
+        }
+        throw lastError
+    }
+
+    private static func startOnce(
+        queue: DispatchQueue,
+        timeout: TimeInterval,
+        log: (@Sendable (String) -> Void)?,
         onConnection: @escaping @Sendable (NWConnection) -> Void
     ) async throws -> (listener: NWListener, port: UInt16) {
         let params = NWParameters.tcp
@@ -81,6 +152,9 @@ enum LoopbackListener {
                     }
                 case .failed(let error):
                     timeoutTask.cancel()
+                    // #3409: released here, because a failed attempt may be followed by another one and a
+                    // listener left behind per attempt is a leak the retry would introduce.
+                    listener.cancel()
                     box.resume(throwing: LoopbackError.failed("\(error)"))
                 default:
                     break

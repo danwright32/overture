@@ -25,9 +25,25 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../scripts/lib/shell-as
 #
 # A separate file from run-tests-locked.test.sh on purpose (#2601): these two scenarios spend real
 # wall-clock seconds by design (the silences under test are silences in time), and the fixtures run
-# concurrently, so carrying them in their own file lets this waiting happen beside its sibling's 30
-# seconds of work instead of after it. The sleeps themselves are already at the floor the 1-second
-# check cadence allows; shrinking them further is what would make these flaky.
+# concurrently, so carrying them in their own file lets this waiting happen beside its sibling's work
+# instead of after it.
+#
+# #3408: and the SECOND is now shorter than the second the watcher counts. The whole schedule under test
+# is counted in the watcher's OWN TICKS: `progress_watch_loop` accumulates `stalled + interval` per pass
+# rather than reading a clock, deliberately, so that a Mac that goes to sleep cannot mint a phantom
+# stall. Nothing in it measures real time at all. The only real time anywhere here is the `sleep` the
+# loop sits in between ticks, and the matching ones in the stubs, so scaling every `sleep` by one factor
+# leaves every relationship the guard depends on exactly as it was and stops the fixture living through
+# thirteen seconds to assert a thirteen-tick schedule (L290, L524).
+#
+# It is injected the way everything else here is injected: a `sleep` on the stub PATH, ahead of the real
+# one. That reaches the watcher's sleep and both stubs' sleeps at once, which is what keeps them in step;
+# a seam that reached only one of the two would change the schedule rather than the clock.
+#
+# Retunable here rather than hidden, because it is the one number that decides whether this fixture is
+# quick or flaky: at 0.25 the fixture's slowest wait is one second of real time, and each tick still
+# leaves the watcher an order of magnitude more time than the few milliseconds its own work takes.
+TICK_SCALE="${OVERTURE_STALL_FIXTURE_TICK_SCALE:-0.25}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FAILURES=0
@@ -81,7 +97,15 @@ STUB
 echo ""
 STUB
 
-  chmod +x "${bin_dir}/flock" "${bin_dir}/ps" "${bin_dir}/xcodebuild" "${bin_dir}/log"
+  # Every `sleep` the run makes, scaled by one factor: the watcher's own tick, the flock stub's wait for
+  # the lock and the xcodebuild stub's two silences. Calls the real one by absolute path, which is not
+  # tidiness: found through PATH it would find itself.
+  cat > "${bin_dir}/sleep" <<STUB
+#!/usr/bin/env bash
+exec /bin/sleep "\$(awk -v seconds="\$1" -v scale="${TICK_SCALE}" 'BEGIN { printf "%.3f", seconds * scale }')"
+STUB
+
+  chmod +x "${bin_dir}/flock" "${bin_dir}/ps" "${bin_dir}/xcodebuild" "${bin_dir}/log" "${bin_dir}/sleep"
 
   # #3166: EVERY record the wrapper writes is redirected into the throwaway bin dir, not just the ones
   # this fixture reads. It drives the REAL wrapper, so anything it does not override it writes into the
