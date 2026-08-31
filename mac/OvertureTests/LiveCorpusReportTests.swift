@@ -34,7 +34,7 @@ struct LiveCorpusReportTests {
 
         let wrote = LiveCorpusReport.record(line, environment: [LiveCorpusReport.pathVariable: file.path])
 
-        #expect(wrote, "the writer reported that it did not write, having been given a path")
+        #expect(wrote == .wrote, "the writer reported \(wrote), having been given a usable path")
         let written = try String(contentsOf: file, encoding: .utf8)
         #expect(written.contains(line), "the file does not carry the line: \(written)")
     }
@@ -45,7 +45,7 @@ struct LiveCorpusReportTests {
     @Test func itwritesNothingWhenNobodyAskedForIt() {
         #expect(LiveCorpusReport.recordPath(environment: [:]) == nil,
                 "a run with no path set must not choose one")
-        #expect(LiveCorpusReport.record("LIVE STORE CORPUS: anything", environment: [:]) == false,
+        #expect(LiveCorpusReport.record("LIVE STORE CORPUS: anything", environment: [:]) == .nobodyAsked,
                 "the writer claimed to have written with no path to write to")
     }
 
@@ -55,16 +55,25 @@ struct LiveCorpusReportTests {
         #expect(LiveCorpusReport.recordPath(environment: [LiveCorpusReport.pathVariable: ""]) == nil,
                 "an empty path was read as a real one")
         #expect(LiveCorpusReport.record("LIVE STORE CORPUS: anything",
-                                        environment: [LiveCorpusReport.pathVariable: ""]) == false)
+                                        environment: [LiveCorpusReport.pathVariable: ""]) == .nobodyAsked)
     }
 
     // A path that cannot be written is NOT a test failure: the measurement is a readout, and the runner's
     // own reading is what reports it missing. Turning a green suite red over a scratch file would be the
-    // readout deciding the verdict (L11).
-    @Test func anunwritablePathIsReportedRatherThanThrown() {
-        let wrote = LiveCorpusReport.record("LIVE STORE CORPUS: anything",
-                                            environment: [LiveCorpusReport.pathVariable:
-                                                            "/no-such-directory-3276/corpus.txt"])
-        #expect(wrote == false, "the writer claimed to have written to a path that cannot exist")
+    // readout deciding the verdict.
+    //
+    // But it must not look like NOBODY ASKING either. Those are different facts, and a single boolean
+    // would leave the readout downstream unable to tell "the suite did not run" from "it ran and could
+    // not record what it measured" (L11).
+    @Test func anunwritablePathIsToldApartFromNobodyAsking() {
+        let outcome = LiveCorpusReport.record("LIVE STORE CORPUS: anything",
+                                              environment: [LiveCorpusReport.pathVariable:
+                                                              "/no-such-directory-3276/corpus.txt"])
+        #expect(outcome != .wrote, "the writer claimed to have written to a path that cannot exist")
+        #expect(outcome != .nobodyAsked,
+                "a failed write reported itself as nobody having asked, which is a different fact")
+        if case .failed = outcome {} else {
+            Issue.record("a failed write must say so: \(outcome)")
+        }
     }
 }

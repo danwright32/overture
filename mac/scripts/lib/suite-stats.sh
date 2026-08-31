@@ -481,7 +481,7 @@ live_corpus_report() {
     # the suite reports normally. What this branch now means is that the suite did not run, which for a
     # parallel run is the same fact as for a serial one, said in the words that fit it.
     if [[ -n "$(test_run_totals_parallel "${output}")" ]]; then
-      echo "Live store invariants: NOT REPORTED. This PARALLEL run left no corpus line in its record file and printed none, so the suite did not run: a scope that excludes it does exactly this. Nothing here says whether the invariants measured anything (#3276)."
+      echo "Live store invariants: NOT REPORTED. This PARALLEL run left no corpus line in its record file and printed none, which is either a scope that excluded the suite or a run that could not write the file it was given. Nothing here says whether the invariants measured anything (#3276)."
       return 0
     fi
     echo "Live store invariants: NOT REPORTED. This run printed no corpus line, so whether they measured anything is unknown; a scoped run does not include them."

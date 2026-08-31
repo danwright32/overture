@@ -51,20 +51,31 @@ enum LiveCorpusReport {
         return path
     }
 
-    /// Writes `line` where the runner asked, and returns whether it wrote. `false` for "nobody asked",
-    /// which is not a failure and is the common case outside the runner.
+    /// What `record` did. THREE outcomes, not two: nobody asking and a write that failed are different
+    /// facts, and a single boolean would collapse them into one value that the readout downstream then
+    /// has to guess about (L11). Nobody asking is the ordinary case outside the runner; a failed write
+    /// is a defect in the path the runner supplied.
+    enum Outcome: Equatable {
+        case wrote
+        case nobodyAsked
+        case failed(String)
+    }
+
+    /// Writes `line` where the runner asked.
+    ///
+    /// A failed write is deliberately NOT a test failure. The measurement is a readout, and a run that
+    /// could not write it should report the readout as missing rather than turn a green suite red over a
+    /// scratch file. What it must not do is look like nobody having asked, which is why the reason comes
+    /// back rather than a bare `false`.
     @discardableResult
     static func record(_ line: String,
-                       environment: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
-        guard let path = recordPath(environment: environment) else { return false }
+                       environment: [String: String] = ProcessInfo.processInfo.environment) -> Outcome {
+        guard let path = recordPath(environment: environment) else { return .nobodyAsked }
         do {
             try (line + "\n").write(toFile: path, atomically: true, encoding: .utf8)
-            return true
+            return .wrote
         } catch {
-            // Deliberately not a test failure. The measurement is a readout, and a run that could not
-            // write it should report NOT REPORTED rather than turn a green suite red over a scratch
-            // file. The runner's own reading is what says the line is missing.
-            return false
+            return .failed("\(error)")
         }
     }
 }
