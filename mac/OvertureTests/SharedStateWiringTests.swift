@@ -29,6 +29,10 @@ struct SharedStateWiringTests {
         ("PageStubURLProtocol", "sharesTheNetworkStub"),
         ("StubURLProtocol", "sharesTheCarnegieStub"),
         ("QueueRenderCounter", "sharesTheRenderCounter"),
+        // #3272: matched as `ResponseDecodeFailures.shared` rather than as the type, because the type is
+        // also used to build a PRIVATE register (`ResponseDecodeFailures()`), which is the correct thing
+        // to do and needs no lock. Only the singleton is process-wide.
+        ("ResponseDecodeFailures.shared", "sharesTheDecodeFailureRegister"),
     ]
 
     // Prose is not a use. `SourceFetcherTests.swift` says in a COMMENT that its stub is "distinct from
@@ -92,7 +96,12 @@ struct SharedStateWiringTests {
                 guard Self.mentions(family.stub, in: Self.code(in: file.text)) else { continue }
                 guard file.text.contains("@Suite") else { continue }
                 subjectsExamined += 1
-                if !file.text.contains(".\(family.trait)") {
+                // #3272: the TRAIT is looked for in the code too, not in the raw text. A comment naming
+                // the trait satisfied this, which is the same "prose is not a use" rule the line above
+                // already applies to the stub, applied to only one of the two halves. Found by mutation:
+                // removing the trait from a suite declaration whose own comment explains the trait was
+                // reported SURVIVED (L135).
+                if !Self.code(in: file.text).contains(".\(family.trait)") {
                     missing.append("\(file.name) touches \(family.stub) and does not carry .\(family.trait)")
                 }
             }

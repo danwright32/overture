@@ -26,7 +26,10 @@ struct ThreadingRepairFailureIsReportedTests {
     private func tick(_ ctx: ModelContext,
                       repair: GmailThreadingRepair.Outcome?) async -> ReconcileSummary {
         await ReconcileScheduler(context: ctx, replyRunAlive: { _ in false }).runSafeReconcilesOnce(
-            defaults: UserDefaults(suiteName: "overture.tests.2679") ?? .standard,
+            // #3272: UUID scoped, and no `?? .standard` fallback. That fallback would have handed the
+            // REAL shared defaults to a test, by a spelling the guard forbidding `UserDefaults.standard`
+            // cannot see, and it is unreachable in practice, so it was a silent hole rather than safety.
+            defaults: UserDefaults(suiteName: "overture.tests.2679-\(UUID().uuidString)")!,
             repairThreading: { _ in repair })
     }
 

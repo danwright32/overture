@@ -264,7 +264,7 @@ struct ResponseDecodeFailureTests {
 // `ResponseBody`, and the suite above proves `ResponseBody` records; what these two add is that the
 // composition really happens end to end, which neither of those can show on its own.
 @MainActor
-@Suite("A malformed body leaves each reader answering safely (#2888)")
+@Suite("A malformed body leaves each reader answering safely (#2888)", .sharesTheDecodeFailureRegister)
 struct MalformedResponseAtEachSiteTests {
 
     // A 200 whose body is an error page, which is the shape a proxy or an outage produces.
@@ -338,10 +338,18 @@ struct MalformedResponseAtEachSiteTests {
 
     // MARK: - The reporting really reaches the register
 
-    // Through a REAL call site, not through `ResponseBody` directly. `.serialized` and a reset because
-    // these two read the process-wide register, which is what the app itself uses; the assertions are on
-    // a DELTA for the one endpoint each touches, so a neighbour recording something else cannot decide
-    // the verdict.
+    // Through a REAL call site, not through `ResponseBody` directly. A reset and the suite's
+    // `.sharesTheDecodeFailureRegister` lock, because these two read the process-wide register the app
+    // itself uses; the assertions are on a DELTA for the one endpoint each touches, so a neighbour
+    // recording something else cannot decide the verdict.
+    //
+    // #3272: this comment used to say `.serialized`, and the trait was not there. Swift Testing runs the
+    // tests of one suite concurrently, so these two could reset each other's register between the drive
+    // and the read. `.serialized` would have closed that, since both are in this suite; the lock is used
+    // instead because it also closes the case `.serialized` cannot, a suite added later that records
+    // into the same endpoints. Neither `scripts/check-test-shared-state.sh` nor anything else could see
+    // this: the state is a singleton in the APP reached through a computed `.shared`, and that check
+    // finds a stored `static var` in a test target (L129).
     @Test func amalformedGmailThreadIsCountedAgainstItsEndpoint() {
         ResponseDecodeFailures.shared.reset()
         _ = ReplyDetection.fromAddresses(threadJSON: junk)
