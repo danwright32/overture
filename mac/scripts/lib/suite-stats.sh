@@ -322,6 +322,37 @@ result_bundle_time_limit_kill() {
   return 0
 }
 
+# The same reading taken from the run's own OUTPUT, for when the bundle cannot be read (#3385).
+#
+# #3384 read the kill from the result bundle only, and the bundle is also where the executed count comes
+# from, so one unreadable bundle took BOTH: the detection fell silent and the count fell back to the log
+# text and printed the remainder as if it were a size. Measured on the first real truncated run after
+# that shipped: `Suite shape: 5035 tests in 782 suites`, naming no cause, for a run that had lost 3,608
+# tests. A guard must not draw on the same source as the reading it would refuse, or it is absent exactly
+# when that reading is least trustworthy.
+#
+# The signature is exact and needs no list of declared limits. Swift Testing expresses a time limit in
+# whole MINUTES, so a killed test reports a duration that is a whole number of minutes in seconds, to
+# three decimals: `60.000`, `120.000`. Measured across twenty-three full runs, every one of the six short
+# ones carries exactly one such line and none of the seventeen complete ones carries any.
+#
+# A FAILED line only. A test that passes cannot have been killed, and a passing test whose elapsed
+# reading happens to land on a whole minute is the ordinary case in a parallel log, where the seconds are
+# elapsed since the worker began rather than what the test cost.
+output_time_limit_kill() {
+  local output="$1"
+  printf '%s\n' "${output}" | awk -v q="'" '
+    match($0, "^Test case " q "[^" q "]+" q " failed on ") {
+      rest = substr($0, length("Test case " q) + 1)
+      name = substr(rest, 1, index(rest, q) - 1)
+      if (match($0, /\(([0-9]+)\.000 seconds\)$/)) {
+        seconds = substr($0, RSTART + 1, RLENGTH - 11) + 0
+        if (seconds >= 60 && seconds % 60 == 0) { print name; exit }
+      }
+    }
+  '
+}
+
 # Which count the run is judged by, and a fourth field naming WHICH SOURCE it came from, because a
 # count read from the weaker source and a count read from the stronger one must not be indistinguishable
 # once one of them is the only one available (L11).
