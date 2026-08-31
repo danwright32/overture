@@ -182,13 +182,81 @@ failing_test_names() {
 # Deliberately uncapped. The list is the whole point, and a cap would reintroduce an under-count at
 # exactly the size where one matters most; the count leads so a very long list announces itself
 # before it scrolls.
+# Since #3348 it also carries each failure's REASON, when it is given a result bundle to read one from.
+# Under `-parallel-testing-enabled YES` the reason does not reach the log at all: a worker's stdout does
+# not reach xcodebuild's, and Swift Testing writes an issue's text there. Measured 2026-08-30, three full
+# parallel runs carrying three real failures between them held ZERO occurrences of `Expectation failed`
+# or `recorded an issue`, so a red run was a list of names nobody could diagnose from, and the reason
+# behind the one that mattered was read out of the bundle by hand.
+#
+# BESIDE the names, never instead of them. The block above is xcodebuild's own list and is what the count
+# is taken from; this adds a line under each name.
+#
+# The second argument may be an empty string, which is its own outcome (this run named no bundle) and
+# gets its own sentence. Called with ONE argument it is the list alone, exactly as before.
 failing_tests_report() {
   local output="$1" names count
+  local bundle="" offered=0
+  if [[ "$#" -ge 2 ]]; then
+    offered=1
+    bundle="$2"
+  fi
   names="$(failing_test_names "${output}")"
+  # A green run reads no bundle whatever it was handed: the count call already costs 6.2s and a run with
+  # nothing to report must not pay for a second one.
   [[ -n "${names}" ]] || return 0
   count="$(grep -c . <<< "${names}")"
   echo "FAILING TEST$([[ "${count}" == 1 ]] || echo S) (${count}), reprinted so the list is the last thing on screen:"
-  sed 's/^/  /' <<< "${names}"
+  if [[ "${offered}" -eq 0 ]]; then
+    sed 's/^/  /' <<< "${names}"
+    return 0
+  fi
+  if [[ -z "${bundle}" ]]; then
+    sed 's/^/  /' <<< "${names}"
+    echo "  REASONS NOT READ - this run named no result bundle, so these are names without reasons."
+    return 0
+  fi
+  local reasons=""
+  if ! reasons="$(result_bundle_failure_reasons "${bundle}")"; then
+    sed 's/^/  /' <<< "${names}"
+    echo "  REASONS NOT READ - the result bundle could not be read, so these are names without reasons:"
+    echo "    ${bundle}"
+    return 0
+  fi
+  # Paired by SUFFIX, in both directions, because the two spellings differ by a target prefix that is
+  # present in some runs and not others: the block has written both `OvertureTests.FooTests.bar()` and
+  # `LoopbackListenerTests.bindsToARealNonZeroPort()`, and the bundle writes the suite and test alone.
+  # Matching on the shorter one being the tail of the longer is specific enough for a name carrying its
+  # suite, and it does not invent a rule about which prefix a given xcodebuild version prints.
+  # The names reach awk through the ENVIRONMENT rather than through -v, because -v processes escapes and
+  # refuses a real newline, and this list is one name per line.
+  NAMES="${names}" awk -F'\t' '
+    { key[NR] = $1; text[NR] = $2; n = NR }
+    END {
+      split(ENVIRON["NAMES"], want, "\n")
+      for (i = 1; i in want; i++) {
+        name = want[i]
+        if (name == "") continue
+        print "  " name
+        found = ""
+        for (j = 1; j <= n; j++) {
+          k = key[j]
+          if (k == "") continue
+          if (k == name \
+              || (length(k) < length(name) && substr(name, length(name) - length(k) + 1) == k) \
+              || (length(name) < length(k) && substr(k, length(k) - length(name) + 1) == name)) {
+            found = text[j]
+            break
+          }
+        }
+        if (found == "") {
+          print "      NO REASON IN THE BUNDLE - this run recorded no failure text for this test."
+        } else {
+          print "      " found
+        }
+      }
+    }
+  ' <<< "${reasons}"
 }
 
 # Test Swift measured against app Swift, to two decimal places, or "unknown" when it cannot be a
@@ -319,6 +387,49 @@ result_bundle_time_limit_kill() {
              then (.testFailures[] | select((.failureText // "") | test("execution time allowance")) | .testName // empty)
              else empty end' 2>/dev/null \
     | head -n 1
+  return 0
+}
+
+# Every failure the run's result bundle records, one per line, as the test's identifier and a TAB and the
+# reason (#3348).
+#
+# Read from the same `get test-results summary` call the executed count already makes, so a red run pays
+# for no second `xcresulttool` invocation and nothing has to be added to the tests themselves.
+#
+# The identifier is normalised to xcodebuild's own `Suite.test()` spelling, since the bundle writes
+# `Suite/test()` and the `Failing tests:` block writes dots: a reason that cannot be paired with a name
+# is no use to the person reading the screen.
+#
+# One line per failure whatever the reason contains. Swift Testing routinely records a multi-line body in
+# an expectation's text, and a reason spilling onto its own lines would read as several failures.
+#
+# Unlike its neighbours this one answers with its STATUS as well as its output: 1 when the bundle could
+# not be READ at all, 0 when it was. An unreadable bundle and a run whose failures carry no text look
+# identical from an empty answer, and the caller has to say which it met (L98, L11).
+result_bundle_failure_reasons() {
+  local bundle="$1"
+  [[ -n "${bundle}" ]] || return 1
+  local tool=("${OVERTURE_XCRESULTTOOL:-}")
+  if [[ -z "${OVERTURE_XCRESULTTOOL:-}" ]]; then
+    tool=(xcrun xcresulttool)
+  fi
+  local summary
+  summary="$("${tool[@]}" get test-results summary --path "${bundle}" 2>/dev/null)" || return 1
+  [[ -n "${summary}" ]] || return 1
+  local lines
+  lines="$(printf '%s' "${summary}" | jq -r '
+      if type == "object" and (.testFailures | type) == "array"
+      then (.testFailures[]
+            | ((.testIdentifierString // .testName // "") | gsub("/"; "."))
+              + "\t"
+              + ((.failureText // "") | gsub("[[:space:]]+"; " ")))
+      else error("no testFailures") end' 2>/dev/null)" || return 1
+  # A summary that read fine and names no failure prints nothing and SUCCEEDS, which is what a green
+  # bundle says and is a different thing from a bundle nobody could open.
+  [[ -n "${lines}" ]] || return 0
+  # A record with no identifier cannot be paired with a name, so it is dropped here and the name it
+  # belongs to says the bundle held no reason for it, rather than a blank line appearing under one.
+  grep -v '^	' <<< "${lines}" || true
   return 0
 }
 

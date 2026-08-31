@@ -854,6 +854,132 @@ assert_empty "a failure at thirty seconds is not a time limit" \
 
 assert_empty "a run with no test lines at all yields nothing" "$(output_time_limit_kill "")"
 
+echo
+# ---------------------------------------------------------------------------
+# #3348: a failing test's REASON, which does not reach the log under parallel testing
+# ---------------------------------------------------------------------------
+# Measured 2026-08-30, both sides in one session. A SERIAL run prints
+# `recorded an issue at WaitUntilTests.swift:151:9: Expectation failed: (polls -> 100) == 2`. Three full
+# PARALLEL runs carrying three real failures between them contain ZERO occurrences of
+# `Expectation failed` or `recorded an issue`: a parallel worker's stdout does not reach xcodebuild's,
+# and Swift Testing writes an issue's text there. What survives is xcodebuild's own `Failing tests:`
+# block, which is names only, so a red run becomes a list nobody can diagnose from.
+#
+# The reason IS in the run's own result bundle, in the same `summary` call the executed count already
+# makes, so nothing has to be added to the tests and no second `xcresulttool` invocation is paid for.
+
+REASONS_SUMMARY='{ "totalTestCount" : 20, "testFailures" : [
+  { "testName" : "aGuardHolds()", "testIdentifierString" : "BarTests/aGuardHolds()", "targetName" : "OvertureTests", "failureText" : "Expectation failed: the venue guard did not fire" },
+  { "testName" : "wraps()", "testIdentifierString" : "BazTests/wraps()", "targetName" : "OvertureTests", "failureText" : "Expectation failed: (body ->\n  \"two lines\") is wrong" } ] }'
+STUB_REASONS="$(make_xcresulttool_stub "${REASONS_SUMMARY}" 0)"
+
+# The identifier is normalised to xcodebuild's own spelling, since the bundle writes `Suite/test()` and
+# the block writes `Suite.test()`, and a reason that cannot be paired with a name is no use.
+assert_eq "each failure comes back as its test and its reason" \
+  "$(OVERTURE_XCRESULTTOOL="${STUB_REASONS}" result_bundle_failure_reasons /tmp/a.xcresult)" \
+  "BarTests.aGuardHolds()	Expectation failed: the venue guard did not fire
+BazTests.wraps()	Expectation failed: (body -> \"two lines\") is wrong"
+
+# One line per failure, whatever the reason contains. Swift Testing routinely records a multi-line body
+# in an expectation's text, and a reason spilling onto its own lines would break the pairing above and
+# read as several failures.
+assert_eq "a multi-line reason is collapsed onto one line" \
+  "$(OVERTURE_XCRESULTTOOL="${STUB_REASONS}" result_bundle_failure_reasons /tmp/a.xcresult | grep -c .)" \
+  "2"
+
+# Read versus unreadable, told apart by STATUS rather than by silence, because a bundle that could not be
+# opened and a run whose failures carry no text look identical from an empty answer (L98, L11).
+OVERTURE_XCRESULTTOOL="${STUB_REASONS}" result_bundle_failure_reasons /tmp/a.xcresult >/dev/null 2>&1
+assert_eq "a bundle that was read reports success" "0" "$?"
+STUB_UNREADABLE="$(make_xcresulttool_stub 'xcresulttool: could not open bundle' 1)"
+OVERTURE_XCRESULTTOOL="${STUB_UNREADABLE}" result_bundle_failure_reasons /tmp/a.xcresult >/dev/null 2>&1
+assert_eq "a bundle that could not be read reports failure" "1" "$?"
+STUB_NOT_JSON="$(make_xcresulttool_stub 'not json at all' 0)"
+OVERTURE_XCRESULTTOOL="${STUB_NOT_JSON}" result_bundle_failure_reasons /tmp/a.xcresult >/dev/null 2>&1
+assert_eq "a summary that is not JSON reports failure too" "1" "$?"
+OVERTURE_XCRESULTTOOL="${STUB_REASONS}" result_bundle_failure_reasons "" >/dev/null 2>&1
+assert_eq "and no bundle path at all reports failure" "1" "$?"
+
+# A summary that READ but names no failure is a different state again, and it is not an error: it is
+# what a green bundle says. It prints nothing and succeeds.
+STUB_NO_FAILURES="$(make_xcresulttool_stub '{ "totalTestCount" : 10, "testFailures" : [] }' 0)"
+assert_empty "a bundle recording no failure prints nothing" \
+  "$(OVERTURE_XCRESULTTOOL="${STUB_NO_FAILURES}" result_bundle_failure_reasons /tmp/a.xcresult)"
+
+# --- and the reprint carries them, beside the names rather than instead of them -----------------------
+# The `Failing tests:` block is xcodebuild's own list and is what the count is taken from, so this adds
+# the reason under each name and never replaces the list (#2600 is why the list leads).
+REASONS_OUTPUT="Failing tests:
+	OvertureTests.BarTests.aGuardHolds()
+	OvertureTests.BazTests.wraps()
+
+** TEST FAILED **"
+
+# Re-made here rather than reused from above: `make_xcresulttool_stub` writes to ONE fixed path, so the
+# stub built last is the one every earlier handle now points at. Found by writing these assertions, which
+# read the empty-failures stub and reported every test as having no reason.
+STUB_REASONS="$(make_xcresulttool_stub "${REASONS_SUMMARY}" 0)"
+PAIRED="$(OVERTURE_XCRESULTTOOL="${STUB_REASONS}" failing_tests_report "${REASONS_OUTPUT}" /tmp/a.xcresult)"
+assert_contains "the reprint still leads with the count" "${PAIRED}" "FAILING TESTS (2)"
+assert_contains "and still names every test xcodebuild named" "${PAIRED}" "OvertureTests.BarTests.aGuardHolds()"
+assert_contains "and carries the reason under it" "${PAIRED}" "the venue guard did not fire"
+assert_contains "and the reason of the second one too" "${PAIRED}" "two lines"
+
+# A name the bundle records no failure for says so in its own words rather than showing a blank, because
+# a missing reason and a reason nobody read must not look the same (L11).
+STUB_REASONS="$(make_xcresulttool_stub "${REASONS_SUMMARY}" 0)"
+ONE_KNOWN="$(OVERTURE_XCRESULTTOOL="${STUB_REASONS}" failing_tests_report "Failing tests:
+	OvertureTests.BarTests.aGuardHolds()
+	OvertureTests.QuxTests.somethingElse()
+
+** TEST FAILED **" /tmp/a.xcresult)"
+assert_contains "a test the bundle records no failure for is named all the same" \
+  "${ONE_KNOWN}" "OvertureTests.QuxTests.somethingElse()"
+assert_contains "and says the bundle held no reason for it" "${ONE_KNOWN}" "NO REASON IN THE BUNDLE"
+
+# An unreadable bundle SAYS so, and the names survive. Printing the list alone would be indistinguishable
+# from a run whose failures genuinely carried no text (L98).
+STUB_UNREADABLE="$(make_xcresulttool_stub 'xcresulttool: could not open bundle' 1)"
+UNREADABLE_REPORT="$(OVERTURE_XCRESULTTOOL="${STUB_UNREADABLE}" failing_tests_report "${REASONS_OUTPUT}" /tmp/a.xcresult)"
+assert_contains "an unreadable bundle still reprints every name" \
+  "${UNREADABLE_REPORT}" "OvertureTests.BazTests.wraps()"
+assert_contains "and says the reasons could not be read" "${UNREADABLE_REPORT}" "REASONS NOT READ"
+assert_contains "and names the bundle it could not read" "${UNREADABLE_REPORT}" "/tmp/a.xcresult"
+
+# A run whose output named no bundle at all is its own cause, and gets its own sentence.
+NO_BUNDLE_REPORT="$(failing_tests_report "${REASONS_OUTPUT}" "")"
+assert_contains "a run that named no result bundle still reprints the names" \
+  "${NO_BUNDLE_REPORT}" "OvertureTests.BarTests.aGuardHolds()"
+assert_contains "and says that is why there are no reasons" \
+  "${NO_BUNDLE_REPORT}" "named no result bundle"
+
+# The one-argument form is unchanged, so the callers that only ever want the list are untouched.
+assert_eq "asked for the list alone, it is still the list alone" \
+  "$(failing_tests_report "${REASONS_OUTPUT}")" \
+  "FAILING TESTS (2), reprinted so the list is the last thing on screen:
+  OvertureTests.BarTests.aGuardHolds()
+  OvertureTests.BazTests.wraps()"
+
+# A GREEN run reads no bundle at all, whatever it is handed. The count call already costs 6.2s and a run
+# with nothing to report must not pay for a second one.
+assert_empty "a passing run reports nothing even when a bundle is offered" \
+  "$(OVERTURE_XCRESULTTOOL=/bin/false failing_tests_report "Test run with 10 tests in 2 suites passed after 1.0 seconds.
+** TEST SUCCEEDED **" /tmp/a.xcresult)"
+
+# WIRED, not merely callable (L3). The library being right is worth nothing if the runner still asks for
+# the list alone: the one-argument form is still supported, so an unwired runner would print exactly what
+# it printed before and nothing would go red. Asserted on the runner's source, because exercising it needs
+# a real red xcodebuild run.
+# Asserted as a COUNT rather than by handing the whole file to assert_contains, which would print the
+# runner's source on failure. That source carries the line the runner prints when a run executes no
+# tests, and `scripts/mutate.sh` reads its own run log for that phrase, so proving this guard by
+# mutation reported NOTHING RAN for a run that had really gone red. L156 one level further out than the
+# comment in mutate.sh that already records it: a check for a substring of the thing being talked about
+# also matches a dump of the code that says it.
+WIRED_BUNDLE_ARG="$(grep -cF 'failing_tests_report "${last_output}" "$(test_run_result_bundle "${last_output}")"' \
+  "${SCRIPT_DIR}/../run-tests-locked.sh" || true)"
+assert_eq "the runner hands the reprint a result bundle to read reasons from" "${WIRED_BUNDLE_ARG}" "1"
+
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All suite-stats.sh fixtures passed."
   exit 0
