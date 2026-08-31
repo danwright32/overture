@@ -6,7 +6,6 @@ import Foundation
 // error Dan recovers from by simply retrying. RootView presenting an alert is view-only wiring with no
 // runtime seam a unit test can drive (like the other view invariants guarded from source in this repo), so
 // the wiring is pinned from source and paired here with a behavioral check of the message it actually shows.
-@MainActor
 @Suite("A failed Gmail connect gets its own actionable, retryable alert")
 struct GmailConnectFailureAlertTests {
     // Behavioral: the message the alert shows for the health-check failure is specific and actionable, not a

@@ -27,7 +27,6 @@ struct BusinessDayTests {
     }
 }
 
-@MainActor
 @Suite("Inquiry follow-up nudge and closing suggestion")
 struct InquiryNudgeTests {
     private func date(_ day: String) -> Date { EasternDate.date(from: day)! }

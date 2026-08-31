@@ -19,7 +19,6 @@ import SwiftData
 // moves behind his back and no paid AI draft is thrown away; what changes is that the row and the
 // stage's own number stop pretending the work is available. The two alternatives he was offered were
 // falling back to kept with the draft kept, and falling back with it discarded.
-@MainActor
 @Suite("A drafted show with nobody to send to says so (#2674)")
 struct DraftedWithNobodyToSendToTests {
 

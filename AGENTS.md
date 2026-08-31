@@ -330,6 +330,27 @@ already drifting from the Swift version it mirrored.
   `scripts/check-test-identity-provenance.test.sh`, which drives it against a throwaway git repository
   with real commits rather than a stub of `git log` (L52).
 
+- **Asking how much of the Swift suite runs on the main actor: `scripts/check-main-actor-share.sh`
+  (#3386).** The main actor is one serial executor, so under `-parallel-testing-enabled YES` two
+  `@MainActor` suites in one process cannot overlap however they are written: they queue, and a test
+  that awaits anything waits for everything ahead of it. Past its `.timeLimit` it is KILLED, which
+  truncates the whole run (#3266). Before this nobody could say how big that queue was.
+  It REPORTS and does not refuse, and rides along in `scripts/test-all.sh` as an advisory. Most
+  main-actor suites here are main-actor for a real reason: of the 462 files carrying the attribute when
+  this was written, 300 touch SwiftData, whose containers are main-actor bound, so a gate would fire on
+  the ordinary case and be switched off within a day (L93). What #3386 removed was the other kind, the
+  suites that carried it and did not need it, which the COMPILER decides rather than a reading of the
+  code: strip the attribute, build, and put it back wherever the build says it was load bearing. Of 85
+  suites tried that way, 83 did not need it and 2 did.
+  Read its answer correctly. Three exit codes, and the third is the one that matters: `2` is UNMEASURED,
+  because a tree where no suite could be read and a tree with no main-actor suites leave the same empty
+  result (L98). The unit is the SUITE rather than the file, since one file can declare several, and a
+  `@MainActor` on a nested helper inside a suite is not counted, because it isolates the helper rather
+  than the tests.
+  The record is `.overture-main-actor-share` beside the repo, gitignored and per machine, on
+  `.overture-hosted-suite-seen`'s precedent: a tracked file rewritten by every run is git noise on every
+  branch and a conflict on every merge.
+
 - **Asking which test harnesses hold state for the whole process: `scripts/check-test-shared-state.sh`
   (#3270).** A stored `static var` in a test target is one variable per process, so two tests running at
   once share it. That is the defect standing between this repo and parallel testing: every remaining
@@ -765,6 +786,19 @@ already drifting from the Swift version it mirrored.
   exempts the one command named and nothing else. A fixture keeping its own definition of a helper is
   fine and deliberately still supported: two fixtures read `assert_contains` as
   (desc, needle, haystack), and a definition after the source line wins.
+  **Since #3408 the runner also fails a fixture holding a line bash could not PARSE.** It is the same
+  defect as the unresolved-command rule wearing different words, and that rule structurally cannot see
+  it, because nothing was ever looked up: a line that does not parse was never a command. Found by
+  accident on 2026-08-31, and it had been live in two places. `suite-stats.test.sh` held a needle with
+  `$(` inside single quotes inside a command substitution on a continued line, which bash 3.2
+  mis-parses, so its assertion that a scoped run never writes the duration series had printed nothing at
+  all on every sweep since it was written. `pr-completeness-guard.test.sh` held a COMMENT between two
+  stages of a pipeline inside a command substitution, which bash 3.2 also refuses: it dropped the `awk`
+  stage, left the variable holding the whole lowercased script, and both assertions under it then passed
+  on any file containing the word "author" anywhere in it (L135). Both are fixed, and the rule is what
+  finds the next one. Two shapes are matched, `: bad substitution` and
+  `: syntax error near unexpected token`, each carrying its leading colon so a fixture that merely
+  QUOTES the words still passes.
 - **Quoting a character the style gate forbids: write it as an escape, never override the gate.**
   The pre-push style gate blocks any new line holding an em dash, en dash or emoji, and it cannot
   tell a line that USES one from a line that must QUOTE one, which is the gate working correctly.

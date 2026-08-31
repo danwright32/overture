@@ -58,7 +58,10 @@ enum LoopbackListener {
     /// Matched as a whole number rather than as a substring, or `rawValue: 490` would read as 49.
     static func isTransientBindFailure(_ message: String) -> Bool {
         [48, 49].contains { code in
+            // copy-inventory:ignore-start  a POSIX error code read out of Network.framework's own
+            // message, not a sentence Overture says to Dan (#915)
             guard let range = message.range(of: "rawValue: \(code)") else { return false }
+            // copy-inventory:ignore-end
             let next = message[range.upperBound...].first
             return next == nil || !next!.isNumber
         }

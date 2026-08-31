@@ -7,7 +7,6 @@ import Foundation
 // (`Recipient.isBlockedByGreeting`). The sheet where he types the whole email himself said nothing about
 // it, so he found out afterwards, on a different screen. That round trip is the thing the manual path
 // exists to avoid.
-@MainActor
 @Suite("The manual prep sheet warns about a missing greeting (#2574)")
 struct ManualPrepGreetingHintTests {
 

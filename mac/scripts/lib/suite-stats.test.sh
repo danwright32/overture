@@ -1098,7 +1098,8 @@ assert_eq "and the retry reason reaches the series" "1" \
 # What the batching must not change is the count, and the risk it introduces is the one this
 # repository's own path carries: A DIRECTORY NAME WITH A SPACE IN IT. A batched read that splits its
 # file list on whitespace counts nothing at all here and reports a clean zero for it (L98).
-GUARD_COUNT_DIR="$(fixture_scratch_dir)/a dir with spaces"
+GUARD_COUNT_ROOT="$(fixture_scratch_dir)"
+GUARD_COUNT_DIR="${GUARD_COUNT_ROOT}/a dir with spaces"
 mkdir -p "${GUARD_COUNT_DIR}"
 cat > "${GUARD_COUNT_DIR}/GuardOne.swift" <<'SWIFT'
 import Testing
@@ -1138,6 +1139,11 @@ import Testing
 SWIFT
 assert_eq "a directory whose files read no source counts zero, promptly" \
   "$(source_guard_declarations_under "${EMPTY_GUARD_DIR}")" "0"
+
+# Removed here rather than in a trap: this file already has an EXIT trap, and bash keeps exactly one, so
+# a second would silently replace the first and leak what that one was cleaning (#3065's own message
+# says so). Nothing below reads either directory.
+rm -rf "${GUARD_COUNT_ROOT}" "${EMPTY_GUARD_DIR}"
 
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All suite-stats.sh fixtures passed."

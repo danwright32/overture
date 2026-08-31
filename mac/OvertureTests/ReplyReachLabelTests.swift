@@ -7,7 +7,6 @@ import Foundation
 //
 // It says so ONLY when the reply reaches somebody besides that contact. On the ordinary one-to-one reply
 // the line would restate the card it sits on, which is the duplicate-copy shape #843 exists to stop.
-@MainActor
 @Suite("What the reply card says about who the reply reaches")
 struct ReplyReachLabelTests {
     // MARK: - The shared list joiner (#2063 consolidation)

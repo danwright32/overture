@@ -22,7 +22,6 @@ import Foundation
 // while a spinner polls as fast as a core will let it, which is orders of magnitude more. The bound
 // below is set far above a correct implementation's real figure and far below a spinner's measured one.
 @Suite("waitUntil suspends between polls (#3277)")
-@MainActor
 struct WaitUntilTests {
 
     @Test func aWaitThatTimesOutDoesNotSpinTheCPU() async {

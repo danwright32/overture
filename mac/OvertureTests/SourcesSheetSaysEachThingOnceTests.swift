@@ -13,7 +13,6 @@ import SwiftData
 //
 // Copy that repeats itself trains him to skim, and the one line that matters here (a calendar whose
 // listings changed and that NOBODY has read) is the line that must never be skimmed past.
-@MainActor
 @Suite("The Sources sheet says each thing once (#840/#841/#842)")
 struct SourcesSheetSaysEachThingOnceTests {
     private let now = Date(timeIntervalSince1970: 1_800_000_000)
@@ -253,7 +252,6 @@ struct SingleVenueFeedAddressNudgeTests {
 // reads fine but is empty, no failure) could never be re-pointed from the sheet. The safe re-point logic
 // (WatchlistEditing.editURL) and the editor (SourceFixConfirmActions) already existed; this wires them in
 // without a second edit path.
-@MainActor
 @Suite("The address editor is offered on every editable source row (#1177)")
 struct SourceAddressEditorEverywhereTests {
 

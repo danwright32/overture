@@ -11,7 +11,6 @@ import Foundation
 // It needs no new bookkeeping. A show a run never reached is already stamped by the settle, and it was
 // deliberately never given a probe date (#1594), so it is already a candidate. The only thing missing was
 // gathering them.
-@MainActor
 @Suite("Finishing the shows a check missed (#1805)")
 struct FinishTheShowsACheckMissedTests {
 

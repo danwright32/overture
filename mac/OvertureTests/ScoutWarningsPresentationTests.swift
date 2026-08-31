@@ -5,7 +5,6 @@ import Foundation
 // function a test can pin (#863: logic that sat in a view drifted twice under a green suite). A manual
 // run Dan started gets the branded popup; an unattended scheduled run leaves only a quiet masthead line
 // and never pops a modal at him; a clean run shows nothing.
-@MainActor
 @Suite("Where a finished scout's warnings go (#1027)")
 struct ScoutWarningsPresentationTests {
     private func warnings(saveFailed: Bool = false) -> ScoutWarnings {

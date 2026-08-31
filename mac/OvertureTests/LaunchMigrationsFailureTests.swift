@@ -13,7 +13,6 @@ import UserNotifications
 // cards. If that save fails, the deletes evaporate, the duplicates come back, and the only symptom is a
 // feature that looks like it was never built. "A caught error that never reaches monitoring is invisible
 // twice" is the exact shape of LESSONS L13, and the standing rule is fail loud, not silent.
-@MainActor
 @Suite("A failed launch save is reported, not swallowed (#1601)")
 struct LaunchMigrationsFailureTests {
     private struct SaveFailed: Error {}

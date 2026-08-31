@@ -15,7 +15,6 @@ import Foundation
 // The month arithmetic here comes from Foundation's own calendar rather than from
 // `CalendarMonthIndex`, deliberately: a guard whose two sides come from one implementation can only
 // prove that implementation is self-consistent, never that it is right (L70).
-@MainActor
 @Suite("The queue window against the scout horizon (#1571)")
 struct QueueWindowAndScoutHorizonTests {
 

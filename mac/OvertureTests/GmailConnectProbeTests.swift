@@ -8,7 +8,6 @@ import Network
 // give-up window before any actionable failure. connect() now health-checks the just-bound listener BEFORE
 // opening the browser: if a throwaway loopback connection can't reach it, connect() aborts at once with a
 // specific, actionable error and never sends Dan to the browser, instead of a long silent wait.
-@MainActor
 @Suite("Gmail connect health-checks the loopback listener before opening the browser")
 struct GmailConnectProbeTests {
     private func tmpClient() throws -> URL {

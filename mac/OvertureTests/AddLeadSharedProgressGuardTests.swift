@@ -7,7 +7,6 @@ import Testing
 // Guarded by source: the swap is view wiring (the behavior of the shared component and its live snapshot
 // is unit-tested in RunProgressViewStateTests and RunProgressSnapshotTests). What this pins is that
 // AddLeadSheet does not quietly grow a second, divergent progress view again.
-@MainActor
 @Suite("Add-a-lead shows the shared scout progress surface (#1036)")
 struct AddLeadSharedProgressGuardTests {
     private var addLead: String { SourceGuardHelper.source("Overture/UI/AddLeadSheet.swift") }

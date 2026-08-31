@@ -7,7 +7,6 @@ import Foundation
 // in the masthead and has no navigable pill, #1436 walk finding). Once he has sent the first reply and
 // is awaiting a response, it moves to reached-out (.reachedOut). A booked or hand-lost inquiry is
 // closed and belongs to no stage.
-@MainActor
 @Suite("Inquiry stage placement")
 struct InquiryStageTests {
     private func inquiry() -> Inquiry {

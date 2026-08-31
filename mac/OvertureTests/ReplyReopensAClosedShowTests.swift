@@ -21,7 +21,6 @@ import SwiftData
 // carries NO stamp is never auto-reopened: refusing is the safe direction, because the alternative is
 // overwriting a recorded fact on the strength of a comparison that could not be made. Every ending
 // written before this shipped is in that state, and Dan can still reopen any of them by hand.
-@MainActor
 @Suite("A reply after a close out reopens a show that was closed as never heard back (#2915)")
 struct ReplyReopensAClosedShowTests {
     private let closedAt = Date(timeIntervalSince1970: 1_780_000_000)

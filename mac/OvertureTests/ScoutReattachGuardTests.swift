@@ -13,7 +13,6 @@ import Testing
 // Guarded by source, mirroring ScoutExtractWatchGuardTests: the reattach lives in a `.task` and drives
 // @State, and the failure it prevents is silent (remove it and everything still compiles and passes,
 // the only symptom being a live run that shows nothing after a relaunch).
-@MainActor
 @Suite("A live scout-extract read is reattached at launch (#1035)")
 struct ScoutReattachGuardTests {
     private var rootView: String { SourceGuardHelper.source("Overture/App/RootView.swift") }

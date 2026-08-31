@@ -8,7 +8,6 @@ import WebKit
 // (its frame always equals its content height) it never has anywhere to scroll ITSELF. So the
 // gesture died inside it, the enclosing scroller never moved, and Dan could not reach his own
 // signature on the one screen captioned "The email that will send".
-@MainActor
 @Suite("Scroll gestures pass through the email preview (#2081)")
 struct ScrollPassthroughWebViewTests {
 

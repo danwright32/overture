@@ -9,7 +9,6 @@ import Foundation
 // one, that both runners honour the cancel sentinel on a short poll, and that the app's Cancel controls
 // actually write the sentinel. A guard and its wiring are two separate claims (#887); this pins the wiring
 // so a silent disconnect (a Cancel that does nothing, a count that sits stuck) cannot slip through.
-@MainActor
 @Suite("Prep and reply-classify progress + cancel wiring (#1023, #1038)")
 struct PrepReplyRunnerWiringGuardTests {
     private func source(_ relativeFromMac: String, file: StaticString = #filePath) -> String {

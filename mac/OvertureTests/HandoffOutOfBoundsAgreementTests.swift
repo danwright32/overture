@@ -71,7 +71,6 @@ struct HandoffOutOfBoundsAgreementTests {
 
 // The pin's own result was written and never read anywhere (L46), so nothing had ever seen it fire. It
 // is the more important of the two protections, because deletion is worse than writing.
-@MainActor
 @Suite("The handoff sweep refuses to delete from the live folder under test (#2342)")
 struct HandoffSweepRefusesTheLiveFolderTests {
 

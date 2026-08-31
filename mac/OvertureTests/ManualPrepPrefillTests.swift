@@ -9,7 +9,6 @@ import Foundation
 // source named, because that column "routinely holds an AGENT's address, an ensemble's, an unrelated
 // org's, or no address at all" (HistoryMatch), and a prefilled field does not invite the second look
 // that would catch it. With neither, the field is empty and says which sources were checked.
-@MainActor
 @Suite("Manual prep prefill (#2007)")
 struct ManualPrepPrefillTests {
     private func prospect(_ group: String, presenter: String? = nil, date: String = "2026-11-14") -> Prospect {

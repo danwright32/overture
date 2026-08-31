@@ -15,7 +15,6 @@ import SwiftData
 // urgent, so `.sendApproved` only ever became a pill's focus when approved PROSPECTS put it there. An
 // inquiry sitting alone in that stage had nothing to click, which a test seeded with prospects would
 // have missed entirely.
-@MainActor
 @Suite("An inquiry may only be placed in a navigable stage (#1505)")
 struct InquiryStageReachabilityGuardTests {
     private func inquiry(sent: Bool, replied: Bool, outcome: Outcome?) -> Inquiry {

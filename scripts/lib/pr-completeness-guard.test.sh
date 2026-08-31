@@ -159,9 +159,16 @@ done
 # (one carries them in globals, one inlines the gh calls).
 for script in verify-and-merge-branch.sh merge-when-green.sh verify-and-merge-batch.sh; do
   src="$(cat "${REPO_ROOT}/scripts/${script}" 2>/dev/null || echo "")"
+  # Comment lines are skipped: one of the three explains the guard in prose above the call, and a needle
+  # satisfied by a comment ABOUT the thing is not a guard on the thing (L103).
+  #
+  # #3408: the comment sits ABOVE the pipeline rather than inside it. bash 3.2 cannot parse a comment
+  # between two stages of a pipeline inside a command substitution: it reported
+  # `syntax error near unexpected token |`, DROPPED the awk stage, and left `call` holding the whole
+  # lowercased script. Both assertions below then passed on any file containing the word "author"
+  # anywhere in it, which is a guard over a whole file rather than over the call (L135). Found by the
+  # parse-failure rule `scripts/run-shell-fixtures.sh` gained in the same change.
   call="$(printf '%s' "${src}" | tr '[:upper:]' '[:lower:]' \
-  # Comment lines are skipped: one of the three explains the guard in prose above the call, and a
-  # needle satisfied by a comment ABOUT the thing is not a guard on the thing (L103).
     | awk '/^[[:space:]]*#/{next} /require_pr_completeness/{found=1} found{print; if (!/\\$/) exit}')"
   assert_contains "${script} hands the guard an author" "${call}" "author"
   assert_contains "${script} hands the guard the changed files" "${call}" "files"

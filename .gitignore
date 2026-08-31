@@ -74,3 +74,5 @@ DerivedData/
 # Per machine for the same reason as the line above, and the date lives inside the file rather than
 # being its mtime, which a clone rewrites.
 .overture-hosted-suite-seen
+# #3386: the main-actor share this machine last measured, for the same reason as the line above.
+.overture-main-actor-share

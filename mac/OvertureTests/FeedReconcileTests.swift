@@ -14,7 +14,6 @@ import SwiftData
 // source that is structurally unable to tell "source 7's scraper died" from "source 1 had a big
 // season", and the cost of getting it wrong is a show Dan kept, drafted and emailed vanishing from his
 // queue.
-@MainActor
 @Suite("Feed reconcile, per source (#133, #801)")
 struct FeedReconcileTests {
     private func prospect(key: String, date: String?, source: String?,

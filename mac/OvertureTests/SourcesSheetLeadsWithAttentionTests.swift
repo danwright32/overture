@@ -27,7 +27,6 @@ import Foundation
 // re-derived approximation. #805, #863 and #885 all turn on the badge's number and the rows behind it
 // being one number by construction. A section showing 2 rows under a badge reading 1 would be worse than
 // the scrolling it replaces.
-@MainActor
 @Suite("The Sources sheet leads with what needs a look (#1541)")
 struct SourcesSheetLeadsWithAttentionTests {
 

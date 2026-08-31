@@ -8,7 +8,6 @@ import SwiftData
 // holds every draft it produced, so it derives the recently-used opening SENTENCES here and hands
 // them to the next run to steer away from. These fixtures pin that derivation: which drafts count,
 // how an opener is extracted, dedup, recency order, and the cap.
-@MainActor
 @Suite("Recent openers export (#730)")
 struct RecentOpenersBuilderTests {
     private func prospect(key: String, discipline: String = "music",

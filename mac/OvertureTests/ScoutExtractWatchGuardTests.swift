@@ -8,7 +8,6 @@ import Testing
 // Everything still compiles, every other test still passes, and the entire feature silently does
 // nothing. Prep hit exactly this shape of bug (#435), which is why watchPrepRun exists and why this
 // mirrors it rather than inventing a second pattern.
-@MainActor
 @Suite("The scout follows its reading run to completion (#802)")
 struct ScoutExtractWatchGuardTests {
     private var rootView: String { SourceGuardHelper.source("Overture/App/RootView.swift") }
