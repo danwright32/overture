@@ -253,6 +253,66 @@ fixture_sources_avoid_kill_wait_on_a_fresh_job() {
   return 1
 }
 
+# fixture_sources_avoid_probing_a_just_killed_job FILE...
+#
+# #3255: a fixture must not ask whether a process is gone in the same breath it kills it.
+#
+# The defect #3248 hit for real on 2026-08-29: `kill` returns as soon as the SIGNAL is delivered, not when
+# the process has been reaped, so a `kill -0` or a `pgrep` on the very next line can still find it and the
+# fixture reports a leak that is not one. It is load dependent, so it fires on a busy Mac and passes on a
+# quiet one, and each occurrence costs a full verification cycle on a change that was green.
+#
+# This BLOCKS rather than reports, and it can only do that because the shape now has ZERO instances. When
+# #3255 was measured there were two, both in `fixture-stall-guard.test.sh`, and both were benign: their
+# `pgrep -P` was hand-rolled process-tree CLEANUP rather than a liveness probe, so a rule forbidding the
+# shape would have carried two permanent exemptions and no instances, which is the rule that gets switched
+# off (L93). Converting them to `fixture_end_process_group`, which stops the whole group and needs no
+# `pgrep` at all, removed the shape from the tree instead of exempting it. A guard with no exemptions can
+# refuse.
+#
+# NARROW, on the sibling scan's precedent. The probe must name the SAME variable the kill named, within a
+# short window, with nothing in between that waits: `wait`, `sleep`, `assert_pids_gone`, `wait_gone` and
+# `fixture_end_process_group` all close it. PHYSICAL lines, so a synthetic offender built by a `printf`
+# with `\n` escapes is invisible to this and a fixture testing this guard is not condemned by it.
+fixture_sources_avoid_probing_a_just_killed_job() {
+  local offenders="" f n i j var line probe
+  local -a lines
+  for f in "$@"; do
+    [[ -r "${f}" ]] || continue
+    lines=()
+    while IFS= read -r line || [[ -n "${line}" ]]; do lines+=("${line}"); done < "${f}"
+    n=${#lines[@]}
+    for (( i = 0; i < n; i++ )); do
+      # A kill on a variable, and NOT `kill -0`, which is itself a probe rather than a signal.
+      [[ "${lines[i]}" =~ (^|[^[:alnum:]_])kill[[:space:]]+\"?\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?\"? ]] || continue
+      # Captured BEFORE the next test, because a `[[ =~ ]]` with no groups RESETS BASH_REMATCH and the
+      # read then fails on an unbound element. Caught by this guard's own first run over the tree.
+      var="${BASH_REMATCH[2]}"
+      [[ "${lines[i]}" =~ kill[[:space:]]+-0 ]] && continue
+      for (( j = i + 1; j < n && j <= i + 3; j++ )); do
+        line="${lines[j]}"
+        # Anything that waits closes the window, and so does ending the group, which reaps as it goes.
+        [[ "${line}" =~ (^|[^[:alnum:]_])(wait|sleep|assert_pids_gone|wait_gone|fixture_end_process_group)([[:space:]]|$) ]] && break
+        probe=""
+        [[ "${line}" =~ pgrep[^\n]*\$\{?${var}\}? ]] && probe="pgrep"
+        [[ "${line}" =~ kill[[:space:]]+-0[^\n]*\$\{?${var}\}? ]] && probe="kill -0"
+        [[ -n "${probe}" ]] || continue
+        offenders+="${f}: line $((j + 1)): ${line}"$'\n'
+        break
+      done
+    done
+  done
+  [[ -z "${offenders}" ]] && return 0
+  echo "FAIL - a fixture probes a process it has only just killed (#3255)"
+  printf '%s' "${offenders}" | sed 's/^/    /'
+  echo "  kill returns when the SIGNAL is delivered, not when the process has been reaped, so the probe"
+  echo "  can still find it and the fixture reports a leak that is not one. It is load dependent, so it"
+  echo "  passes on a quiet Mac and fails on a busy one."
+  echo "  Wait on the condition with assert_pids_gone, or stop the whole group with"
+  echo "  fixture_end_process_group, which reaps as it goes and needs no probe at all."
+  return 1
+}
+
 # fixture_temp_allowed_names <uid>: the names a fixture may leave in its private temp directory without
 # being called a leak, because it did not create them. node and tsx write these caches wherever TMPDIR
 # points, on any run that shells out to either.
@@ -627,6 +687,8 @@ main() {
   # Both run, and neither is allowed to stand for the other: each prints its own refusal naming its own
   # defect, so a run carrying both shapes reports both rather than the first one found (L11).
   fixture_sources_avoid_kill_wait_on_a_fresh_job "${fixtures[@]}" || source_status=1
+  # #3255: and the probe-in-the-same-breath shape, which BLOCKS because the tree now holds none of it.
+  fixture_sources_avoid_probing_a_just_killed_job "${fixtures[@]}" || source_status=1
 
   echo "Running ${#fixtures[@]} shell fixture(s)..."
   local run_status=0
