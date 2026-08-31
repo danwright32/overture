@@ -485,6 +485,72 @@ assert_contains "and an empty production list is unmeasured rather than clean" \
 
 # --- #3125: a background job must not be killed in the breath it is started --------------------------
 #
+# --- #3255: probing a process in the same breath it was killed ----------------------------------------
+# `kill` returns when the SIGNAL is delivered, not when the process has been reaped, so a `pgrep` or a
+# `kill -0` on the next line can still find it and the fixture reports a leak that is not one. It is load
+# dependent, so it passes on a quiet Mac and fails on a busy one, and it failed a merge on 2026-08-29.
+#
+# This one BLOCKS, which it could not before: when #3255 was measured the shape had two instances, both
+# benign process-tree cleanup, so a rule forbidding it would have carried two permanent exemptions and no
+# instances (L93). Both were converted to `fixture_end_process_group`, which stops the whole group and
+# needs no probe, so the shape has none left and the rule can refuse.
+PROBED_KILL="${TMP_DIR}/probed-kill.test.sh"
+printf '#!/usr/bin/env bash\n( sleep 5 ) &\nLOOP=$!\nkill "${LOOP}"\nCHILDREN="$(pgrep -P "${LOOP}")"\n' > "${PROBED_KILL}"
+chmod +x "${PROBED_KILL}"
+PROBE_OUTPUT="$(fixture_sources_avoid_probing_a_just_killed_job "${PROBED_KILL}" 2>&1)"
+PROBE_STATUS=$?
+assert_equals "a probe in the same breath as the kill is refused" "1" "${PROBE_STATUS}"
+assert_contains "and the refusal names the line" "${PROBE_OUTPUT}" "pgrep -P"
+assert_contains "and says what to use instead" "${PROBE_OUTPUT}" "fixture_end_process_group"
+
+# `kill -0` is the other spelling of the probe, and a guard that catches one spelling is exempt from the
+# thing it forbids wherever anybody wrote the other (L96).
+PROBED_KILL0="${TMP_DIR}/probed-kill-zero.test.sh"
+printf '#!/usr/bin/env bash\n( sleep 5 ) &\nP=$!\nkill "${P}"\nkill -0 "${P}" && echo alive\n' > "${PROBED_KILL0}"
+chmod +x "${PROBED_KILL0}"
+fixture_sources_avoid_probing_a_just_killed_job "${PROBED_KILL0}" >/dev/null 2>&1
+assert_equals "kill -0 in the same breath is refused too" "1" "$?"
+
+# The other direction, three ways, because a guard that refuses everything is indistinguishable from one
+# that works (L1). Anything that WAITS closes the window.
+PROBE_WAITED="${TMP_DIR}/probe-waited.test.sh"
+printf '#!/usr/bin/env bash\n( sleep 5 ) &\nP=$!\nkill "${P}"\nassert_pids_gone "${P}"\npgrep -P "${P}"\n' > "${PROBE_WAITED}"
+chmod +x "${PROBE_WAITED}"
+fixture_sources_avoid_probing_a_just_killed_job "${PROBE_WAITED}" >/dev/null 2>&1
+assert_equals "a probe after assert_pids_gone is fine" "0" "$?"
+
+PROBE_GROUPED="${TMP_DIR}/probe-grouped.test.sh"
+printf '#!/usr/bin/env bash\n( sleep 5 ) &\nP=$!\nfixture_end_process_group "${P}"\nwait "${P}"\n' > "${PROBE_GROUPED}"
+chmod +x "${PROBE_GROUPED}"
+fixture_sources_avoid_probing_a_just_killed_job "${PROBE_GROUPED}" >/dev/null 2>&1
+assert_equals "ending the group instead of probing is fine" "0" "$?"
+
+# And a probe on a DIFFERENT pid is not this defect at all: the whole shape is asking about the process
+# that was just signalled.
+PROBE_OTHER="${TMP_DIR}/probe-other.test.sh"
+printf '#!/usr/bin/env bash\n( sleep 5 ) &\nP=$!\n( sleep 5 ) &\nQ=$!\nkill "${P}"\npgrep -P "${Q}"\n' > "${PROBE_OTHER}"
+chmod +x "${PROBE_OTHER}"
+fixture_sources_avoid_probing_a_just_killed_job "${PROBE_OTHER}" >/dev/null 2>&1
+assert_equals "a probe on a different pid is not refused" "0" "$?"
+
+# WIRED, not merely callable. Every assertion above calls the scan directly, which proves the rule and
+# says nothing about whether the sweep runs it (L3). This drives the real runner over a fixture that
+# would otherwise PASS: it prints an ok line and exits before reaching the offending lines, so execution
+# cannot be what fails it and the source scan is the only thing left.
+WIRED_PROBE="${TMP_DIR}/wired-probe.test.sh"
+printf '#!/usr/bin/env bash\necho "ok - nothing below this line runs"\nexit 0\n( sleep 5 ) &\nLOOP=$!\nkill "${LOOP}"\nCHILDREN="$(pgrep -P "${LOOP}")"\n' > "${WIRED_PROBE}"
+chmod +x "${WIRED_PROBE}"
+# Through `main`, which is where the source scans live: `run_shell_fixtures` only RUNS fixtures, and a
+# test that drove it would have passed while proving nothing about the sweep. Found by writing this.
+WIRED_OUT="$(main "${WIRED_PROBE}" 2>&1)"
+WIRED_STATUS=$?
+assert_equals "the sweep itself refuses a fixture carrying the shape" "1" "${WIRED_STATUS}"
+assert_contains "and says which rule refused it" "${WIRED_OUT}" "probes a process it has only just killed"
+
+# The real tree must be silent, or the guard is blocking every run from the moment it lands.
+fixture_sources_avoid_probing_a_just_killed_job $(git -C "${REPO_ROOT}" ls-files "*.test.sh" | sed "s|^|${REPO_ROOT}/|") >/dev/null 2>&1
+assert_equals "the tree as it stands carries none of the shape" "0" "$?"
+
 # The proven defect. `run-heartbeat.test.sh` started a stand-in and killed it on the very next line, then
 # waited for it. The kill is sent so soon after the fork that it sometimes does not take, and the wait
 # then sits for the stand-in's whole lifetime. Measured 2026-08-22 under the real runner: one round in

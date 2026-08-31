@@ -5,6 +5,13 @@ set -uo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/shell-assertions.sh"
 # shellcheck source=./fixture-stall-guard.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fixture-stall-guard.sh"
+# #3255: `fixture_end_process_group`, so the watcher below is stopped WHOLE rather than by killing it and
+# then hunting its children with `pgrep -P`. That hand-rolled shape was the last instance in the tree of
+# the thing #3248 hit for real, a `kill` followed by a probe with no wait between them, and it is the
+# reason a guard forbidding it could only ever REPORT: with these two sites converted the shape has no
+# instances left, so the rule can block.
+# shellcheck source=./fixture-process-leak.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fixture-process-leak.sh"
 
 # #2929: the shell fixture runner had no stall guard, so a fixture that never returns left it silent
 # forever, and a silent runner is indistinguishable from one still working.
@@ -61,12 +68,14 @@ assert_contains "and names the knob rather than teaching the reader to ignore it
 # loop that never fires reads exactly like one whose condition is right (L1).
 printf 'started scripts/a.test.sh\n' > "${PROGRESS}"
 OUT="${WORK}/watch.err"
+# `set -m` gives the watcher a process GROUP of its own, so the sleep inside it is stopped with it. A
+# bare `kill` on the subshell leaves that sleep running, which is #3248's defect exactly.
+set -m
 ( fixture_watch_loop "${PROGRESS}" 2 1 2>"${OUT}" ) &
 LOOP=$!
+set +m
 sleep 5
-kill "${LOOP}" 2>/dev/null || true
-CHILDREN="$(pgrep -P "${LOOP}" 2>/dev/null || true)"
-[[ -n "${CHILDREN}" ]] && kill ${CHILDREN} 2>/dev/null
+fixture_end_process_group "${LOOP}"
 wait "${LOOP}" 2>/dev/null || true
 assert_contains "a file that stops moving produces the warning" "$(cat "${OUT}")" "NO FIXTURE HAS STARTED OR FINISHED"
 assert_contains "and the warning names the fixture still running" "$(cat "${OUT}")" "scripts/a.test.sh"
@@ -74,15 +83,15 @@ assert_contains "and the warning names the fixture still running" "$(cat "${OUT}
 # The other direction, which is what keeps it from being a guard that fires on everything (L93).
 printf 'started scripts/a.test.sh\n' > "${PROGRESS}"
 OUT2="${WORK}/watch2.err"
+set -m
 ( fixture_watch_loop "${PROGRESS}" 2 1 2>"${OUT2}" ) &
 LOOP2=$!
+set +m
 for i in 1 2 3 4 5 6; do
   printf 'finished scripts/%s.test.sh\nstarted scripts/%s-next.test.sh\n' "${i}" "${i}" >> "${PROGRESS}"
   sleep 1
 done
-kill "${LOOP2}" 2>/dev/null || true
-CHILDREN2="$(pgrep -P "${LOOP2}" 2>/dev/null || true)"
-[[ -n "${CHILDREN2}" ]] && kill ${CHILDREN2} 2>/dev/null
+fixture_end_process_group "${LOOP2}"
 wait "${LOOP2}" 2>/dev/null || true
 assert_not_contains "a run that keeps moving is never warned about" "$(cat "${OUT2}")" "NO FIXTURE HAS"
 
