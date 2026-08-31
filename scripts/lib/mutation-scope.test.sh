@@ -91,7 +91,7 @@ log_with 'Suite "Say the reader is busy before spending a run on it (#2208)" sta
          'Suite "Say the reader is busy before spending a run on it (#2208)" passed after 0.01 seconds.' \
          'Test run with 9 tests in 1 suites passed after 0.2 seconds.'
 OUT="$(mutation_scope_reached_file "${WORK}/run.log" "${WORK}/src/ScoutService.swift" "${SCOPED}")"; ST=$?
-assert_equals "the incident's scope is judged not to have reached the file" "NOT_REACHED" "$(printf '%s' "${OUT}" | head -1)"
+assert_equals "the incident's scope is judged not to have reached the file" "NOT_REACHED" "$(head -1 <<< "${OUT}")"
 assert_equals "and it refuses, rather than reporting" "1" "${ST}"
 assert_contains "and it names the suite that does mention the file, which is what tells you where to look" \
   "${OUT}" "The scout press consults the gate (#2208)"
@@ -103,7 +103,7 @@ log_with 'Suite "The scout press consults the gate (#2208)" started.' \
          'Suite "The scout press consults the gate (#2208)" passed after 0.01 seconds.' \
          'Test run with 1 tests in 1 suites passed after 0.2 seconds.'
 OUT="$(mutation_scope_reached_file "${WORK}/run.log" "${WORK}/src/ScoutService.swift" "-only-testing:OvertureTests/ScoutStartGateWiringTests")"; ST=$?
-assert_equals "the right scope reaches the file" "REACHED" "$(printf '%s' "${OUT}" | head -1)"
+assert_equals "the right scope reaches the file" "REACHED" "$(head -1 <<< "${OUT}")"
 assert_equals "and is not refused" "0" "${ST}"
 
 # --- an UNSCOPED run reaches everything, and must never be refused -----------------------------------
@@ -112,7 +112,7 @@ assert_equals "and is not refused" "0" "${ST}"
 log_with 'Suite "Say the reader is busy before spending a run on it (#2208)" started.' \
          'Test run with 9 tests in 1 suites passed after 0.2 seconds.'
 OUT="$(mutation_scope_reached_file "${WORK}/run.log" "${WORK}/src/ScoutService.swift")"; ST=$?
-assert_equals "an unscoped run is never judged on its scope" "REACHED" "$(printf '%s' "${OUT}" | head -1)"
+assert_equals "an unscoped run is never judged on its scope" "REACHED" "$(head -1 <<< "${OUT}")"
 assert_equals "and is not refused" "0" "${ST}"
 
 # --- a file no suite mentions ------------------------------------------------------------------------
@@ -123,7 +123,7 @@ log_with 'Suite "Say the reader is busy before spending a run on it (#2208)" sta
          'Test run with 9 tests in 1 suites passed after 0.2 seconds.'
 : > "${WORK}/src/NobodyMentionsMe.swift"
 OUT="$(mutation_scope_reached_file "${WORK}/run.log" "${WORK}/src/NobodyMentionsMe.swift" "${SCOPED}")"; ST=$?
-assert_equals "a file no suite mentions says so in its own words" "NO_SUITE_MENTIONS_IT" "$(printf '%s' "${OUT}" | head -1)"
+assert_equals "a file no suite mentions says so in its own words" "NO_SUITE_MENTIONS_IT" "$(head -1 <<< "${OUT}")"
 assert_equals "and is not refused" "0" "${ST}"
 
 # --- a suite with no display name, matched on its type name ------------------------------------------
@@ -131,7 +131,7 @@ log_with 'Suite ExperimentTests started.' \
          'Test run with 1 tests in 1 suites passed after 0.2 seconds.'
 : > "${WORK}/src/VenueRenamer.swift"
 OUT="$(mutation_scope_reached_file "${WORK}/run.log" "${WORK}/src/VenueRenamer.swift" "-only-testing:OvertureTests/ExperimentTests")"; ST=$?
-assert_equals "a suite with no display name is matched on the type name the log prints" "REACHED" "$(printf '%s' "${OUT}" | head -1)"
+assert_equals "a suite with no display name is matched on the type name the log prints" "REACHED" "$(head -1 <<< "${OUT}")"
 assert_equals "and is not refused" "0" "${ST}"
 
 # --- word, not substring -----------------------------------------------------------------------------
@@ -140,7 +140,7 @@ assert_equals "and is not refused" "0" "${ST}"
 log_with 'Suite "A different type with a longer name" started.' \
          'Test run with 1 tests in 1 suites passed after 0.2 seconds.'
 OUT="$(mutation_scope_reached_file "${WORK}/run.log" "${WORK}/src/ScoutService.swift" "${SCOPED}")"; ST=$?
-assert_equals "a longer name containing the symbol does not count as mentioning it" "NOT_REACHED" "$(printf '%s' "${OUT}" | head -1)"
+assert_equals "a longer name containing the symbol does not count as mentioning it" "NOT_REACHED" "$(head -1 <<< "${OUT}")"
 assert_not_contains "and the near miss is not offered as the suite to scope to" "${OUT}" "A different type with a longer name"
 
 # --- a runner whose log has no suite lines at all ----------------------------------------------------
@@ -149,13 +149,13 @@ assert_not_contains "and the near miss is not offered as the suite to scope to" 
 # It cannot be REACHED either: that would be claiming something was measured when nothing was (L98).
 log_with 'ok - some shell fixture assertion' 'all checks passed'
 OUT="$(mutation_scope_reached_file "${WORK}/run.log" "${WORK}/src/ScoutService.swift" "${SCOPED}")"; ST=$?
-assert_equals "a log with no suite lines is not judged at all" "CANNOT_JUDGE" "$(printf '%s' "${OUT}" | head -1)"
+assert_equals "a log with no suite lines is not judged at all" "CANNOT_JUDGE" "$(head -1 <<< "${OUT}")"
 assert_equals "and is not refused" "2" "${ST}"
 assert_contains "and says why, rather than leaving silence to stand for a measurement" "${OUT}" "no suite"
 
 # --- a log that is not there -------------------------------------------------------------------------
 OUT="$(mutation_scope_reached_file "${WORK}/absent.log" "${WORK}/src/ScoutService.swift" "${SCOPED}")"; ST=$?
-assert_equals "an unreadable log is not judged at all" "CANNOT_JUDGE" "$(printf '%s' "${OUT}" | head -1)"
+assert_equals "an unreadable log is not judged at all" "CANNOT_JUDGE" "$(head -1 <<< "${OUT}")"
 assert_equals "and is not refused" "2" "${ST}"
 
 # --- the candidate list is capped, and says what it dropped ------------------------------------------

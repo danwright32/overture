@@ -215,7 +215,7 @@ mutation_scope_format_candidates() {
     printf '%s\n' "${all}" | sed 's/^/    /'
     return 0
   fi
-  shown="$(printf '%s\n' "${all}" | head -n "${max}")"
+  shown="$(head -n "${max}" <<< "${all}")"
   printf '%s\n' "${shown}" | sed 's/^/    /'
   echo "    ... and $(( total - max )) more of the ${total} suites that name it, not listed here."
 }

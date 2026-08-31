@@ -75,7 +75,7 @@ assert_equals "and commits nothing" "1" "$(git -C "${DIR}" rev-list --count HEAD
 # to see what the run did. That is the library behaving correctly, so the fixture that provoked it is
 # what cleans up: a deliberate stray belongs to whoever made it (#3254). Removed by the path the
 # refusal itself printed, so this cannot drift from where the log actually lands.
-KEPT_LOG="$(printf '%s\n' "${OUT}" | sed -n "s/.*The rebuild's log is at \\(.*\\)\\./\\1/p" | head -1)"
+KEPT_LOG="$(sed -n "s/.*The rebuild's log is at \\(.*\\)\\./\\1/p" <<< "${OUT}" | head -1)"
 assert_equals "the refusal names where it kept its log" "true" \
   "$([ -n "${KEPT_LOG}" ] && [ -f "${KEPT_LOG}" ] && echo true || echo false)"
 rm -f "${KEPT_LOG}"

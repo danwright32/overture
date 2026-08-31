@@ -250,8 +250,8 @@ assert_contains "and that path is reached only by exit 2, never by a finding" "$
 #
 # Asserted as a LINE ORDER rather than as two presences, because both lines being present is exactly
 # what the defect looked like.
-TA_INSTALL_LINE="$(printf '%s' "${TA_SRC}" | grep -n '^pnpm install' | head -1 | cut -d: -f1)"
-TA_RECORD_LINE="$(printf '%s' "${TA_SRC}" | grep -n 'check-tree-untouched.sh" record' | head -1 | cut -d: -f1)"
+TA_INSTALL_LINE="$(grep -n -m1 '^pnpm install' <<< "${TA_SRC}" | cut -d: -f1)"
+TA_RECORD_LINE="$(grep -n -m1 'check-tree-untouched.sh" record' <<< "${TA_SRC}" | cut -d: -f1)"
 assert_equals "test-all.sh installs the node dependencies itself" \
   "1" "$([ -n "${TA_INSTALL_LINE}" ] && echo 1 || echo 0)"
 assert_equals "test-all.sh records the working-tree snapshot" \
