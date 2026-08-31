@@ -433,6 +433,79 @@ result_bundle_failure_reasons() {
   return 0
 }
 
+# suite_run_series_append <existing text> <date> <totals> <retry reason>
+#
+# #3166: the new contents of the series file, with this run appended, or the existing text unchanged.
+#
+# Every run states its own size and duration, and AGENTS.md deliberately refuses to write a duration
+# down, because a stale figure weakens the very warning it exists to support (#2532, L32). That is right,
+# and the consequence is that the number is only ever read in the moment and compared against nothing.
+# This repository pays the full suite twice per issue and serialises it through one lock across every
+# worktree, so suite duration is close to the dominant cost of shipping anything here, and a slow climb
+# is invisible: no single run looks wrong and there is no series to look at.
+#
+# `<totals>` is `tests suites seconds`, the same shape `test_run_totals` produces. A run that could not
+# state a size writes NOTHING: its counts are the totals of the REMAINDER after a relaunch (#2821), and a
+# series carrying those would be a record of something nobody measured (L98).
+#
+# The RETRY REASON is recorded beside the duration and is not decoration: a retried run's duration covers
+# TWO attempts (#3392), so a series that did not say so would read a doubled run as a duration regression
+# and name the wrong cause (L11).
+SUITE_RUN_SERIES_KEEP="${OVERTURE_SUITE_RUN_SERIES_KEEP:-40}"
+suite_run_series_append() {
+  local existing="$1" today="$2" totals="$3" reason="${4:-}"
+  local tests suites seconds
+  tests="$(awk '{print $1}' <<< "${totals}")"
+  suites="$(awk '{print $2}' <<< "${totals}")"
+  seconds="$(awk '{print $3}' <<< "${totals}")"
+  # All three, or nothing. A partial reading is what a truncated or unparsed run produces.
+  if [[ ! "${tests}" =~ ^[0-9]+$ || ! "${suites}" =~ ^[0-9]+$ || ! "${seconds}" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+    printf '%s' "${existing}"
+    return 0
+  fi
+  local whole="${seconds%%.*}"
+  local line="${today} ${tests} ${suites} ${whole} ${reason:-none}"
+  # Header lines first, then the last N readings. Capped, because a machine that runs the suite all day
+  # would otherwise grow this without bound, and because the advisory only ever reads the recent window.
+  local header body
+  header="$(grep '^#' <<< "${existing}" || true)"
+  body="$(grep -v '^#' <<< "${existing}" | grep -a '[^[:space:]]' || true)"
+  body="${body}${body:+$'\n'}${line}"
+  body="$(tail -n "${SUITE_RUN_SERIES_KEEP}" <<< "${body}")"
+  printf '%s\n%s' "${header}" "${body}"
+}
+
+# suite_run_series_line <series text> <this run's seconds>
+#
+# #3166: one advisory line when this run is well outside the recent spread, or nothing.
+#
+# Judged against the MEDIAN of the readings the series holds rather than a written-down number, for
+# AGENTS.md's own reason: a figure in a document drifts and then weakens the warning it is quoted in
+# support of.
+#
+# The threshold is TWICE the median, and it is measured rather than chosen. Every full run on this Mac on
+# 2026-08-31 fell between 391s and 679s against a median of about 449, so the slowest healthy run of that
+# day is 1.51x, and its only problem was that something else was running. A 1.5x rule would have fired on
+# it, which is the shape that gets an advisory switched off within a day (L93, L172).
+#
+# Too little history says NOTHING rather than comparing against one or two runs, because a median of two
+# is not a spread and an advisory built on it would be noise (L98).
+SUITE_RUN_SERIES_MINIMUM="${OVERTURE_SUITE_RUN_SERIES_MINIMUM:-5}"
+suite_run_series_line() {
+  local series="$1" seconds="${2:-}"
+  [[ "${seconds}" =~ ^[0-9]+$ ]] || return 0
+  local readings count median
+  readings="$(grep -v '^#' <<< "${series}" | awk 'NF >= 4 { print $4 }' | grep -aE '^[0-9]+$' | sort -n || true)"
+  count="$(grep -c . <<< "${readings}")"
+  [[ "${count}" -ge "${SUITE_RUN_SERIES_MINIMUM}" ]] || return 0
+  median="$(awk -v n="${count}" 'NR == int((n + 1) / 2) { print; exit }' <<< "${readings}")"
+  [[ "${median}" =~ ^[0-9]+$ && "${median}" -gt 0 ]] || return 0
+  if [[ "${seconds}" -gt $(( median * 2 )) ]]; then
+    echo "This run took ${seconds}s, SLOWER than twice the median of the last ${count} full runs (${median}s)."
+  fi
+  return 0
+}
+
 # The same reading taken from the run's own OUTPUT, for when the bundle cannot be read (#3385).
 #
 # #3384 read the kill from the result bundle only, and the bundle is also where the executed count comes

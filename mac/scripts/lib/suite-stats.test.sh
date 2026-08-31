@@ -980,6 +980,102 @@ WIRED_BUNDLE_ARG="$(grep -cF 'failing_tests_report "${last_output}" "$(test_run_
   "${SCRIPT_DIR}/../run-tests-locked.sh" || true)"
 assert_eq "the runner hands the reprint a result bundle to read reasons from" "${WIRED_BUNDLE_ARG}" "1"
 
+echo
+# ---------------------------------------------------------------------------
+# #3166: each full run's cost is APPENDED to a series, so a climb has something to be seen against
+# ---------------------------------------------------------------------------
+# Every run states its own size and duration, and AGENTS.md deliberately refuses to write a duration
+# down, because a stale figure weakens the very warning it exists to support (#2532, L32). The
+# consequence is that the number is only ever read in the moment and compared against nothing. This repo
+# pays the full suite twice per issue and serialises it through one lock across every worktree, so suite
+# duration is close to the dominant cost of shipping anything here.
+
+SERIES_HEADER='# One line per FULL suite run: date, tests, suites, seconds, and why it was retried.'
+
+# A run that stated a size is appended, with its retry reason, which is a value the series needs and
+# nothing else records: a retried run's duration is the sum of TWO attempts, so a series that did not
+# say so would read a doubled run as a duration regression and name the wrong cause (L11).
+APPENDED="$(suite_run_series_append "${SERIES_HEADER}" "2026-08-31" "8649 1181 420.231" "")"
+assert_contains "a full run is appended to the series" "${APPENDED}" "2026-08-31 8649 1181 420 none"
+assert_contains "and the file's own header survives" "${APPENDED}" "One line per FULL suite run"
+
+# A RETRIED run says so, and says why, because its duration covers two attempts.
+RETRIED="$(suite_run_series_append "${SERIES_HEADER}" "2026-08-31" "8649 1181 900.5" "time-limit Slow/thing()")"
+assert_contains "a retried run records the reason beside its duration" "${RETRIED}" "time-limit"
+assert_not_contains "and is not recorded as an ordinary run" "${RETRIED}" "900 none"
+
+# A run that could not state a size writes NOTHING. Its counts are the remainder after a relaunch
+# (#2821), and a series carrying those would be a record of something nobody measured (L98).
+assert_eq "a run with no size states nothing" \
+  "$(suite_run_series_append "${SERIES_HEADER}" "2026-08-31" "" "")" "${SERIES_HEADER}"
+assert_eq "and neither does one with no duration" \
+  "$(suite_run_series_append "${SERIES_HEADER}" "2026-08-31" "8649 1181" "")" "${SERIES_HEADER}"
+
+# The series is CAPPED, so it cannot grow without bound on a machine that runs the suite all day.
+MANY="${SERIES_HEADER}"
+for n in $(seq 1 60); do
+  MANY="$(suite_run_series_append "${MANY}" "2026-08-31" "8649 1181 400.0" "")"
+done
+MANY_LINES="$(grep -c "^2026" <<< "${MANY}")"
+assert_eq "the series keeps a bounded window rather than growing forever" "true" \
+  "$([[ "${MANY_LINES}" -le 50 && "${MANY_LINES}" -ge 20 ]] && echo true || echo false)"
+assert_contains "and the header is never dropped by the capping" "${MANY}" "One line per FULL suite run"
+
+# --- the advisory ------------------------------------------------------------------------------------
+# Judged against the MEDIAN of the recent runs rather than a written-down number, for AGENTS.md's own
+# reason: a figure in a document drifts and then weakens the warning it is quoted in support of.
+SPREAD="${SERIES_HEADER}
+2026-08-20 8649 1181 391 none
+2026-08-21 8649 1181 404 none
+2026-08-22 8649 1181 412 none
+2026-08-23 8649 1181 420 none
+2026-08-24 8649 1181 442 none
+2026-08-25 8649 1181 455 none
+2026-08-26 8649 1181 459 none
+2026-08-27 8649 1181 499 none
+2026-08-28 8649 1181 520 none
+2026-08-29 8649 1181 559 none"
+
+# The threshold is 2x the median, and it is measured rather than chosen. Every full run on this Mac on
+# 2026-08-31 fell between 391s and 679s against a median of about 449, so the worst healthy run of the
+# day is 1.51x. A 1.5x rule would have fired on a run whose only problem was that something else was
+# running, which is the shape that gets an advisory switched off within a day (L93, L172).
+assert_empty "a run inside the recent spread says nothing" \
+  "$(suite_run_series_line "${SPREAD}" "679")"
+assert_contains "a run at more than twice the median says so" \
+  "$(suite_run_series_line "${SPREAD}" "1000")" "SLOWER"
+assert_contains "and names both numbers, so the reader can judge rather than trust" \
+  "$(suite_run_series_line "${SPREAD}" "1000")" "median"
+
+# Too little history is UNMEASURED, and it says nothing rather than comparing against one run (L98).
+assert_empty "a series with almost no history makes no claim" \
+  "$(suite_run_series_line "${SERIES_HEADER}
+2026-08-29 8649 1181 400 none" "1000")"
+
+# A run with no duration of its own cannot be compared either.
+assert_empty "a run that stated no duration is not judged" "$(suite_run_series_line "${SPREAD}" "")"
+
+# WIRED, not merely callable (L3). The functions above would keep passing with nothing in the runner
+# calling them, which is a value with no writer (#3166, L46). Asserted as COUNTS rather than by handing
+# the whole file to assert_contains, for #3395's reason: that source carries the line the runner prints
+# when a run executes no tests, and mutate.sh reads its own log for that phrase.
+SERIES_SRC="${SCRIPT_DIR}/../run-tests-locked.sh"
+assert_eq "the runner reads the series before judging this run against it" "1" \
+  "$(grep -cF 'suite_run_series_line "${SUITE_SERIES_TEXT}"' "${SERIES_SRC}" || true)"
+assert_eq "and appends this run to it afterwards" "1" \
+  "$(grep -cF 'suite_run_series_append "${SUITE_SERIES_TEXT}"' "${SERIES_SRC}" || true)"
+# A SCOPED run must not write: its size is a handful of tests and its duration a handful of seconds, and
+# both would poison the series exactly as they would poison the short-run baseline (#2317).
+assert_eq "and a scoped run neither reads nor writes it" "1" \
+  "$(grep -cF 'SUITE_SERIES_TEXT="$(cat "${SUITE_SERIES_RECORD}"' "${SERIES_SRC}" || true)"
+# The record is overridable, so the fixture that drives the real wrapper cannot write into the tree (L2).
+assert_eq "and the record's path is overridable" "1" \
+  "$(grep -cF 'OVERTURE_SUITE_RUN_SERIES:-' "${SERIES_SRC}" || true)"
+# The RETRY REASON is passed through, not re-derived: a retried run's duration covers two attempts, and
+# the series has to say so or it reads a doubled run as a duration regression (L11, #3392).
+assert_eq "and the retry reason reaches the series" "1" \
+  "$(grep -cF '"${authoritative}" "${restarted}"' "${SERIES_SRC}" || true)"
+
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All suite-stats.sh fixtures passed."
   exit 0

@@ -122,6 +122,36 @@ find_untagged_claims() {
   done <<< "${text}"
 }
 
+# claim_candidates FILE... : the subset of those files that could possibly carry a claim.
+#
+# #3237: this scan cost 46 seconds of the cheap lane, and almost all of it was reading files that say
+# nothing. It forked a `cat` and ran two whole-text bash loops for every one of the ~1,500 tracked Swift
+# and Markdown files, and this repo's macOS bash is 3.2, where that is slow.
+#
+# Both parsers can only ever emit for a line holding `LIVE-STORE-CLAIM`, or `live store` / `live rows`.
+# So a file with none of those produces nothing however carefully it is read, and one `grep -l` over the
+# whole list replaces ~1,500 forks with one.
+#
+# DELIBERATELY LOOSER than the parsers. `find_untagged_claims` also requires a digit on the same line,
+# and this filter does not ask for one: reproducing the parsers' exact conditions here would be a second
+# definition of the rule, free to drift against the first in the direction that hides a finding (L107).
+# Being a superset is the only property that matters, and it is what the fixture asserts.
+claim_candidates() {
+  [[ "$#" -gt 0 ]] || return 0
+  local out status=0
+  out="$(grep -lE 'LIVE-STORE-CLAIM|[Ll]ive[[:space:]](store|rows)' -- "$@" 2>/dev/null)" || status=$?
+  # grep exits 1 for "matched nothing", which is a real answer, and >1 for an ERROR, which is not. A
+  # failed grep coming back as an empty list would empty the corpus and the summary would then report
+  # zero claims, which is exactly what a tree with no claims reports (L98).
+  if [[ "${status}" -gt 1 ]]; then
+    echo "check-live-store-claims: could not read the file list (grep exit ${status}); refusing to" >&2
+    echo "  report on a corpus it could not narrow." >&2
+    return 2
+  fi
+  printf '%s\n' "${out}"
+  return 0
+}
+
 # Whole days between two YYYY-MM-DD dates (today minus the given date). Uses BSD date -j -f, matching
 # this repo's macOS-only tooling (xcodebuild, flock-based locks) elsewhere in scripts/.
 days_since() {
@@ -152,14 +182,37 @@ main() {
   local today
   today="$(date +%Y-%m-%d)"
 
-  local files=("$@")
+  local files=("$@") swept=0
   if [[ "${#files[@]}" -eq 0 ]]; then
+    swept=1
     local file_list
     file_list="$(git ls-files '*.swift' '*.md')"
     while IFS= read -r f; do
       files+=("${f}")
     done <<< "${file_list}"
   fi
+
+  # #3237: read only the files that could carry a claim. Equivalent by construction, since the parsers
+  # emit nothing for the rest, and it is what takes this from 46 seconds to about a second.
+  local candidate_list candidate_status=0
+  candidate_list="$(claim_candidates "${files[@]}")" || candidate_status=$?
+  if [[ "${candidate_status}" -ne 0 ]]; then
+    exit 2
+  fi
+  local narrowed=()
+  while IFS= read -r f; do
+    [[ -n "${f}" ]] && narrowed+=("${f}")
+  done <<< "${candidate_list}"
+
+  # A SWEEP that narrows to nothing is unmeasured, never clean: this repository holds 152 tagged claims,
+  # so an empty result means the filter is broken rather than that the tree is (L98). A run given
+  # explicit files is different: a test legitimately hands it a file with no claims in it.
+  if [[ "${swept}" -eq 1 && "${#narrowed[@]}" -eq 0 ]]; then
+    echo "check-live-store-claims: the sweep narrowed ${#files[@]} tracked files to none, which is a" >&2
+    echo "  broken filter rather than a tree with no claims. Nothing was examined." >&2
+    exit 2
+  fi
+  files=("${narrowed[@]+"${narrowed[@]}"}")
 
   local total_claims=0 malformed=0 stale=0 mismatches=0 untagged=0
   local report=""

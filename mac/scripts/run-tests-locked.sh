@@ -785,6 +785,33 @@ main() {
     printf '%s\n' "${LIVE_CORPUS_NEXT}" > "${LIVE_CORPUS_RECORD}" 2>/dev/null || true
   fi
 
+  # #3166: and this run's cost, appended to a local series, so a climb has something to be seen against.
+  #
+  # Advisory only and never blocking, in the way `check-branch-backlog.sh` already rides along: the point
+  # is a trend nobody has to remember to look for, not a threshold. The record lives beside the repo and
+  # is gitignored, per machine, on `.overture-live-corpus-seen`'s exact precedent, and it is OVERRIDABLE
+  # for that record's exact reason: the fixture drives the real wrapper, so without a seam its runs would
+  # write into the actual repository (L2).
+  #
+  # A SCOPED run writes nothing, for the same reason it cannot move the short-run baseline: its size is a
+  # handful of tests and its duration is a handful of seconds, and both would poison the series. A run
+  # that could not state a size writes nothing either, decided inside `suite_run_series_append`.
+  SUITE_SERIES_RECORD="${OVERTURE_SUITE_RUN_SERIES:-${MAC_DIR}/../.overture-suite-run-series}"
+  if [[ "${scoped}" -eq 0 ]]; then
+    SUITE_SERIES_TEXT="$(cat "${SUITE_SERIES_RECORD}" 2>/dev/null || true)"
+    if [[ -z "${SUITE_SERIES_TEXT}" ]]; then
+      SUITE_SERIES_TEXT="# One line per FULL suite run: date, tests, suites, seconds, and why it was retried."
+    fi
+    SUITE_SERIES_ADVISORY="$(suite_run_series_line "${SUITE_SERIES_TEXT}" "$(awk '{print int($3)}' <<< "${authoritative}")")"
+    [[ -n "${SUITE_SERIES_ADVISORY}" ]] && echo "run-tests-locked.sh: ${SUITE_SERIES_ADVISORY}" >&2
+    # Appended AFTER the advisory is read, so a run is judged against the runs before it rather than
+    # against itself.
+    SUITE_SERIES_NEXT="$(suite_run_series_append "${SUITE_SERIES_TEXT}" "$(date +%Y-%m-%d)" "${authoritative}" "${restarted}")"
+    if [[ -n "${SUITE_SERIES_NEXT}" && "${SUITE_SERIES_NEXT}" != "${SUITE_SERIES_TEXT}" ]]; then
+      printf '%s\n' "${SUITE_SERIES_NEXT}" > "${SUITE_SERIES_RECORD}" 2>/dev/null || true
+    fi
+  fi
+
   # #1995: and whether THIS run verified the screens, beside the two readouts above.
   #
   # The hosted tests are the only ones that render a real SwiftUI view, and since #1967 a launch fault

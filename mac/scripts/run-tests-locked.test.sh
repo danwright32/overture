@@ -451,9 +451,17 @@ STUB
   # gate itself. Absent by default, which is a Mac that has never had a green full run and so makes
   # no claim about any of these, leaving every call above this one unchanged.
   [[ -z "${starting_baseline}" ]] || echo "${starting_baseline}" > "${baseline_file}"
+  # #3166: the run-duration series, into the throwaway bin dir. Defaulted HERE rather than exported
+  # around one block, so every call in this fixture is structurally unable to write the repository's own
+  # (L2). It is not hypothetical: without it, nine stubbed runs of the wrapper appended their fake sizes
+  # to the live series on the first full run after the series shipped, and its advisory then reported the
+  # real suite as "SLOWER than twice the median of the last 18 full runs (19s)". Found by reading the
+  # file after a run, exactly as the same defect was found for the live-store corpus record.
+  SUITE_SERIES_AFTER_RUN="${bin_dir}/suite-run-series"
   output="$(PATH="${bin_dir}:${PATH}" OVERTURE_TEST_BASELINE_FILE="${baseline_file}" \
     OVERTURE_TEST_DIAGNOSTICS_DIR="${diagnostics_dir}" \
     OVERTURE_HOSTED_SUITE_RECORD="${HOSTED_RECORD_AFTER_PARALLEL}" \
+    OVERTURE_SUITE_RUN_SERIES="${SUITE_SERIES_AFTER_RUN}" \
     "${SCRIPT_DIR}/run-tests-locked.sh" 2>&1)"
   code=$?
   log_calls="$(grep -c . "${bin_dir}/log-calls" 2>/dev/null || echo 0)"
@@ -464,9 +472,15 @@ STUB
   # Read out here, because "did this run stamp the screens?" is not answerable from anything the
   # script prints and the file goes with the directory below.
   hosted_record="$(cat "${HOSTED_RECORD_AFTER_PARALLEL}" 2>/dev/null || true)"
+  # #3166: how many readings this run appended to its OWN series. Read out here for the same reason the
+  # two above are: the file goes with the directory below, and "did this run record its duration?" is not
+  # answerable from anything the script prints. A count rather than the text, because the date and the
+  # duration are this machine's and would make the assertion about the day it ran.
+  local series_lines
+  series_lines="$(grep -c '^20' "${SUITE_SERIES_AFTER_RUN}" 2>/dev/null || echo 0)"
   rm -rf "${bin_dir}"
-  printf '%s\nbaseline=%s\nscreensrecord=%s\nlogcalls=%s\nexit=%s\n' \
-    "${output}" "${baseline}" "${hosted_record}" "${log_calls}" "${code}"
+  printf '%s\nbaseline=%s\nscreensrecord=%s\nseriesrecord=%s\nlogcalls=%s\nexit=%s\n' \
+    "${output}" "${baseline}" "${hosted_record}" "${series_lines}" "${log_calls}" "${code}"
 }
 
 # #3233: the repository's OWN screens record, and what is in it BEFORE any stub run below.
@@ -486,6 +500,27 @@ repo_hosted_record_state() {
   fi
 }
 REPO_HOSTED_RECORD_BEFORE="$(repo_hosted_record_state)"
+
+# #3166: the same, for the run-duration series. Same shape and the same reason, and it is not
+# hypothetical here either: the series shipped without this fixture overriding it, and the nine stubbed
+# wrapper runs below appended their fake sizes to the live file on the very first full run afterwards.
+# The advisory then reported the real suite as slower than twice the median of "the last 18 full runs",
+# where the median was 19 seconds, because seventeen of those runs were this fixture's stubs.
+REPO_SUITE_SERIES="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}/.overture-suite-run-series"
+
+# Judged by CONTENT SIGNATURE rather than by a hash taken before and after, and the difference is not
+# fussiness. `scripts/test-all.sh` runs the REAL suite in one lane while this fixture runs in the other,
+# and a real run legitimately appends to this file, so a before-against-after hash is racing the run in
+# the next lane: it went red on exactly that, reporting the real suite's own reading as this fixture's
+# pollution. What is actually forbidden is this fixture's FAKE sizes appearing there, and the stub logs
+# below are the only place those numbers come from.
+repo_suite_series_holds_a_stub_reading() {
+  [[ -e "${REPO_SUITE_SERIES}" ]] || { echo no; return 0; }
+  local count
+  count="$(awk '$2 == 1574 || $2 == 2400 || $2 == 12 || $2 == 26 { n++ } END { print n + 0 }' \
+    "${REPO_SUITE_SERIES}" 2>/dev/null || echo 0)"
+  [[ "${count}" -gt 0 ]] && echo yes || echo no
+}
 
 # THE case. Two deliberately-red guards on #1451 came out of this wrapper labelled a crashed run.
 REAL_FAILURE_RUN="$(run_wrapper_with_stub_xcodebuild "${REAL_FAILURE_OUTPUT}" 65)"
@@ -1388,6 +1423,15 @@ assert_equals "and records that against the run's own throwaway file, never the 
 # (#3172's reason, and its shape).
 assert_equals "and no run in this fixture changed the repository's screens record" \
   "${REPO_HOSTED_RECORD_BEFORE}" "$(repo_hosted_record_state)"
+
+# #3166: nor its run-duration series. None of this fixture's fake sizes may appear there.
+assert_equals "and no run in this fixture wrote its fake sizes into the repository's series" \
+  "no" "$(repo_suite_series_holds_a_stub_reading)"
+
+# And a run really did write its OWN series, or the assertion above would pass by nothing being written
+# anywhere and the override would be untested (L3, L98).
+assert_equals "while a full run writes one reading into its own series" \
+  "seriesrecord=1" "$(grep '^seriesrecord=' <<< "${PARALLEL_RUN}")"
 
 # ---------------------------------------------------------------------------
 # #2577: the stall-versus-queue scenarios live in run-tests-locked-stall.test.sh
