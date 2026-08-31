@@ -752,6 +752,67 @@ assert_eq "a dormant parallel run still writes nothing" \
 assert_contains "neither a file nor a printed line is still NOT REPORTED" \
   "$(live_corpus_report "${PARALLEL_NO_CORPUS}" "${TODAY}" "${SEEN_BOTH}" "")" "NOT REPORTED"
 
+# ---------------------------------------------------------------------------
+# #3266: a run whose test process was KILLED at a time limit says so, and states no size
+# ---------------------------------------------------------------------------
+# This is the cause of every short run this repository has recorded. A test that exceeds its
+# `.timeLimit` is killed, xcodebuild relaunches the test process and carries on, and the totals it
+# prints afterwards are the totals of the remainder. Measured over twenty-three full parallel runs:
+# seventeen complete ones carry no such failure and all six short ones carry exactly one.
+#
+# The log cannot show it. `Restarting after unexpected exit` appears ZERO times in every one of those
+# short-run logs, so the existing check stays silent and the run reports a plausible small number, which
+# is precisely the answer #2821 says it must never give.
+
+KILL_SUMMARY='{ "totalTestCount" : 5087, "testFailures" : [ { "testName" : "aCheckStartedWhileAPrepIsLiveIsStillFollowed()", "failureText" : "Test exceeded execution time allowance of 1 minute" } ] }'
+CLEAN_SUMMARY='{ "totalTestCount" : 8643, "testFailures" : [ { "testName" : "somethingElse()", "failureText" : "Expectation failed: 1 == 2" } ] }'
+
+STUB_KILL="$(make_xcresulttool_stub "${KILL_SUMMARY}" 0)"
+assert_eq "a bundle whose summary names a time limit kill reports the test" \
+  "$(OVERTURE_XCRESULTTOOL="${STUB_KILL}" result_bundle_time_limit_kill /tmp/whatever.xcresult)" \
+  "aCheckStartedWhileAPrepIsLiveIsStillFollowed()"
+
+# An ordinary failure is NOT a kill. Without this the reading would fire on any red run at all, which is
+# the shape that gets a check switched off within a day (L93).
+STUB_CLEAN="$(make_xcresulttool_stub "${CLEAN_SUMMARY}" 0)"
+assert_empty "an ordinary test failure is not a time limit kill" \
+  "$(OVERTURE_XCRESULTTOOL="${STUB_CLEAN}" result_bundle_time_limit_kill /tmp/whatever.xcresult)"
+
+# Every way the read can fail comes back EMPTY rather than as a false "no kill", because an unreadable
+# bundle must not read as a clean run (L98). Three ways, each driven separately.
+STUB_BROKEN="$(make_xcresulttool_stub 'xcresulttool: could not open bundle' 1)"
+assert_empty "an unreadable bundle yields nothing" \
+  "$(OVERTURE_XCRESULTTOOL="${STUB_BROKEN}" result_bundle_time_limit_kill /tmp/whatever.xcresult)"
+STUB_JUNK2="$(make_xcresulttool_stub 'not json at all' 0)"
+assert_empty "a summary that is not JSON yields nothing" \
+  "$(OVERTURE_XCRESULTTOOL="${STUB_JUNK2}" result_bundle_time_limit_kill /tmp/whatever.xcresult)"
+STUB_NOKEY="$(make_xcresulttool_stub '{ "totalTestCount" : 10 }' 0)"
+assert_empty "a summary with no testFailures yields nothing" \
+  "$(OVERTURE_XCRESULTTOOL="${STUB_NOKEY}" result_bundle_time_limit_kill /tmp/whatever.xcresult)"
+assert_empty "no bundle path yields nothing" \
+  "$(OVERTURE_XCRESULTTOOL="${STUB_KILL}" result_bundle_time_limit_kill "")"
+
+# And the readout NAMES the test, which is the whole difference between a re-run and a fix. The reason
+# was previously unavailable anywhere: the log says nothing and the old message could only guess between
+# three causes (L11).
+KILL_REPORT="$(format_suite_report "5087 785 182.509" "1.92 to 1" "2206" "8647" "time-limit aCheckStartedWhileAPrepIsLiveIsStillFollowed()")"
+assert_contains "a killed run states no size" "${KILL_REPORT}" "NOT REPORTED"
+assert_contains "and names the test that was killed" \
+  "${KILL_REPORT}" "aCheckStartedWhileAPrepIsLiveIsStillFollowed()"
+assert_contains "and says the counts are of the remainder" "${KILL_REPORT}" "AFTER that"
+assert_not_contains "and does not print the remainder as if it were the suite" "${KILL_REPORT}" "5087 tests"
+
+# A restart detected the OLD way keeps its own words, because that one really is a choice of three
+# causes and naming a test it does not know would be a claim nothing measured (L11).
+PLAIN_RESTART_REPORT="$(format_suite_report "12 2 0.6" "1.92 to 1" "2206" "8647" "restarted")"
+assert_contains "a restart with no named cause still says NOT REPORTED" "${PLAIN_RESTART_REPORT}" "NOT REPORTED"
+assert_contains "and keeps the wording that lists the causes it cannot tell apart" \
+  "${PLAIN_RESTART_REPORT}" "unexpected exit, crash or test timeout"
+
+# And a healthy run is untouched by any of it.
+assert_contains "a run that was not killed still states its size" \
+  "$(format_suite_report "8643 1179 144.834" "1.92 to 1" "2206" "8647" "")" "8643 tests in 1179 suites"
+
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All suite-stats.sh fixtures passed."
   exit 0

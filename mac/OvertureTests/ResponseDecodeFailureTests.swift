@@ -264,7 +264,7 @@ struct ResponseDecodeFailureTests {
 // `ResponseBody`, and the suite above proves `ResponseBody` records; what these two add is that the
 // composition really happens end to end, which neither of those can show on its own.
 @MainActor
-@Suite("A malformed body leaves each reader answering safely (#2888)", .serialized)
+@Suite("A malformed body leaves each reader answering safely (#2888)")
 struct MalformedResponseAtEachSiteTests {
 
     // A 200 whose body is an error page, which is the shape a proxy or an outage produces.

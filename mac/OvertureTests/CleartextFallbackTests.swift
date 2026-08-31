@@ -15,7 +15,7 @@ import Foundation
 // Two gates have to agree for a cleartext read to happen at all: the OS one (Info.plist) and the app's
 // own (the rules in SourceFetcher). A permission granted in two places that can drift is the trap #887
 // named, so the first test here pins them to each other rather than trusting either alone.
-@Suite("Cleartext fallback for a broken handshake (#1544)", .serialized, .sharesTheNetworkStub)
+@Suite("Cleartext fallback for a broken handshake (#1544)", .sharesTheNetworkStub)
 struct CleartextFallbackTests {
 
     private let concerts = URL(string: "http://dinumihailescu.com/concerts/")!

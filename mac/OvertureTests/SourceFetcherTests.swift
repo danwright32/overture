@@ -77,7 +77,7 @@ private func stubSession() -> URLSession {
 //     nothing" is not an acceptable rendering of "the page 404s".
 //   - The page is NORMALIZED and hashed here, so a page that has not changed never reaches an AI at
 //     all. That is the cost model, not an optimization.
-@Suite("Source fetch and page pin (#799)", .serialized, .sharesTheNetworkStub)
+@Suite("Source fetch and page pin (#799)", .sharesTheNetworkStub)
 struct SourceFetcherTests {
     private let url = URL(string: "https://org.example/events")!
 

@@ -33,7 +33,7 @@ private func pageJSON(title: String, url: String, nbPages: Int) -> Data {
     Data("{\"results\":[{\"nbPages\":\(nbPages),\"hits\":[{\"title\":\"\(title)\",\"url\":\"\(url)\"}]}]}".utf8)
 }
 
-@Suite("Carnegie extractor", .serialized, .sharesTheCarnegieStub)
+@Suite("Carnegie extractor", .sharesTheCarnegieStub)
 struct CarnegieExtractorTests {
     @Test func paginatesAndMapsEvents() async throws {
         StubURLProtocol.callCount = 0

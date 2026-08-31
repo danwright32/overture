@@ -637,6 +637,14 @@ main() {
   # #2821: whether the test process was RELAUNCHED partway through, which makes every count below a
   # count of the REMAINDER rather than of this run.
   restarted="$(test_run_restarted "${last_output}")"
+  # #3266: the half the log cannot show. A test killed at its `.timeLimit` makes xcodebuild relaunch the
+  # test process and print NOTHING about it, so the totals below are the totals of the remainder and the
+  # log-based check above stays silent. Read from the result bundle, and only when the log said nothing,
+  # so the cheaper reading still wins where it works.
+  if [[ -z "${restarted}" ]]; then
+    TIME_LIMIT_KILL="$(result_bundle_time_limit_kill "$(test_run_result_bundle "${last_output}")")"
+    [[ -n "${TIME_LIMIT_KILL}" ]] && restarted="time-limit ${TIME_LIMIT_KILL}"
+  fi
 
   # #3243 / #3265: the count that decides everything below comes from the run's own RESULT BUNDLE where
   # one can be read, and from the log text only where one cannot. Two reasons, and the second is the
