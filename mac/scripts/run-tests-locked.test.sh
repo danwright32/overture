@@ -266,6 +266,46 @@ assert_equals "a genuine test failure is never retried" \
 assert_equals "a pass is never retried" \
   "" "$(should_retry "" 1 2)"
 
+# --- #3392: a run TRUNCATED by a time limit kill is retried once, and the retry names the test -------
+#
+# This is the other transient cause and by far the commoner one. A test that exceeds its `.timeLimit` is
+# killed, xcodebuild relaunches the test process without printing anything about it, and the totals cover
+# only what ran afterwards. Measured over twenty-nine full parallel runs on 2026-08-30: roughly one in
+# five. Since #3384 and #3389 the truncation is detected from two independent sources and the short-run
+# gate refuses the result, so nothing can be read from such a run; what was missing is that somebody had
+# to notice and re-run by hand.
+
+# The killed test is itself a NAMED failure, so a truncated run's outcome is almost always "failed". A
+# rule that kept "failed" unretryable would therefore never fire at all, which is the thing to get right
+# here rather than to assume.
+assert_equals "a truncated run is retried even though its outcome is a named failure" \
+  "retry" "$(should_retry "failed" 1 2 "RunStateIsPerSlotTests/aCheckStartedWhileAPrepIsLiveIsStillFollowed()")"
+
+# And a truncated run whose remainder PASSED is the dangerous shape: exit 0, a plausible small count, and
+# nothing wrong on screen but the short-run gate. It is retried too.
+assert_equals "a truncated run whose remainder passed is retried" \
+  "retry" "$(should_retry "" 1 2 "Slow/thing()")"
+
+# ONCE, like the crash retry. A test that is killed on every run must not be paid for forever.
+assert_equals "a second truncation is not retried" \
+  "" "$(should_retry "failed" 2 2 "Slow/thing()")"
+
+# The other direction, or the change would have turned this into a rule that retries every red run (L1).
+# Only these two causes are known to be transient; a run short for any other reason is not retried,
+# because that would paper over exactly the blindness the short-run gate exists to remove.
+assert_equals "an ordinary red with no truncation is still never retried" \
+  "" "$(should_retry "failed" 1 2 "")"
+assert_equals "a build failure with no truncation is still never retried" \
+  "" "$(should_retry "build-failed" 1 2 "")"
+assert_equals "and a clean pass is still never retried" \
+  "" "$(should_retry "" 1 2 "")"
+
+# The crash retry is untouched, including its own one-retry limit.
+assert_equals "a host crash with no truncation is still retried" \
+  "retry" "$(should_retry "crashed" 1 2 "")"
+assert_equals "and still only once" \
+  "" "$(should_retry "crashed" 2 2 "")"
+
 echo
 # --- the wiring, not the functions (#1459) ------------------------------------------------
 #
@@ -1403,6 +1443,51 @@ assert_contains "and the readout is handed the very same one" \
 # cannot end up asking a different question than the one the fixture proved.
 assert_contains "and the restart verdict is passed into that decision" \
   'totals_with_authoritative_count "$(test_run_totals "${last_output}")" "${bundle_count}" "${restarted}"' "${RTL_SRC}"
+
+# --- #3392: the truncation retry, driven end to end -------------------------------------------------
+#
+# The decision has to be made INSIDE the retry loop, and every assertion above would keep passing with
+# the reading left where it was, after the loop, where the retry can never see it (L3). This drives the
+# real script with a stubbed xcodebuild whose log carries the exact signature of a time limit kill: a
+# FAILED test line reporting a whole number of minutes to three decimals.
+#
+# Deliberately no `.xcresult` path in the log, so the bundle reading finds nothing to open and the
+# output reading is what answers. That is the #3385 half, and it keeps the fixture off `xcresulttool`.
+#
+# NOTE: this file defines its own assert_contains as (desc, NEEDLE, haystack), the reverse of the shared
+# vocabulary in scripts/lib/shell-assertions.sh.
+TRUNCATED_RUN_LOG="Test Suite started
+Test case 'RunStateIsPerSlotTests/aCheckStartedWhileAPrepIsLiveIsStillFollowed()' failed on 'My Mac - xctest (92479)' (60.000 seconds)
+Test run with 5087 tests in 785 suites failed after 182.509 seconds.
+Failing tests:
+	RunStateIsPerSlotTests.aCheckStartedWhileAPrepIsLiveIsStillFollowed()
+
+** TEST FAILED **"
+
+TRUNCATED_RUN="$(run_wrapper_with_stub_xcodebuild "${TRUNCATED_RUN_LOG}" 65 "" "" "" "" 8643)"
+assert_contains "a truncated run is retried" "Retrying once" "${TRUNCATED_RUN}"
+assert_contains "and says the run was truncated rather than that the host crashed" \
+  "TRUNCATED" "${TRUNCATED_RUN}"
+assert_contains "and NAMES the test that was killed" \
+  "aCheckStartedWhileAPrepIsLiveIsStillFollowed" "${TRUNCATED_RUN}"
+assert_not_contains "and never blames the known host-crash flake for it" \
+  "known self-hosted" "${TRUNCATED_RUN}"
+# The retry is bounded, and the stub returns the same truncated log every time, so a run that retried
+# without bound would never finish. That it finishes at all is the bound; this names it.
+assert_contains "and the retry says which attempt it is" "attempt 2 of 2" "${TRUNCATED_RUN}"
+
+# The other direction, so the change cannot have turned this into a runner that retries every red run.
+# The same stub log WITHOUT the time limit line is an ordinary red and is run once.
+ORDINARY_RED_LOG="Test Suite started
+Test case 'SomeTests/aThing()' failed on 'My Mac - xctest (92479)' (0.013 seconds)
+Test run with 8643 tests in 1179 suites failed after 182.509 seconds.
+Failing tests:
+	SomeTests.aThing()
+
+** TEST FAILED **"
+ORDINARY_RED="$(run_wrapper_with_stub_xcodebuild "${ORDINARY_RED_LOG}" 65 "" "" "" "" 8643)"
+assert_not_contains "an ordinary red is not retried" "Retrying once" "${ORDINARY_RED}"
+assert_not_contains "and is never described as truncated" "TRUNCATED" "${ORDINARY_RED}"
 
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All run-tests-locked.sh stale-host fixtures passed."

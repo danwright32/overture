@@ -328,9 +328,29 @@ nothing_executed_report() {
 # (failed, nothing named) but none of its cause, so a second attempt just builds the same broken code
 # and prints the same errors again. Telling the two apart is run_outcome's job, so nothing changes
 # here beyond the outcome it is handed.
+# #3392: and a run TRUNCATED by a test hitting its `.timeLimit`, which is the other transient cause and
+# by far the commoner one. xcodebuild kills the test process, silently relaunches it, and the totals
+# cover only what ran afterwards. Measured over twenty-nine full parallel runs on 2026-08-30, roughly one
+# in five ends that way, and since #3384 and #3389 it is detected from two independent sources and the
+# responsible test is named, so the retry can say WHICH test was killed rather than retrying blind (L11).
+# Without this somebody has to notice the SHORT RUN refusal and re-run by hand.
+#
+# The fourth argument is that test's name, empty when no kill was detected. It is a NAME rather than a
+# boolean so the retry notice can carry it: a test killed on every run must be visible rather than
+# silently paid for twice (L98).
+#
+# It is retried WHATEVER the outcome, which is the part to get right rather than assume. The killed test
+# is itself a named failure, so a truncated run's outcome is almost always "failed", and a rule that kept
+# "failed" unretryable would never fire at all. A truncated run whose remainder PASSED is retried too:
+# that is the dangerous shape, exit 0 over a plausible small count.
+#
+# Only these two causes. A run short for any OTHER reason is never retried, because only these are known
+# to be transient and a retry over an unexplained short run would paper over exactly the blindness the
+# short-run gate exists to remove.
 should_retry() {
-  local outcome="$1" attempt="$2" max_attempts="$3"
-  [[ "${outcome}" == "crashed" && "${attempt}" -lt "${max_attempts}" ]] && echo "retry"
+  local outcome="$1" attempt="$2" max_attempts="$3" time_limit_kill="${4:-}"
+  [[ "${attempt}" -lt "${max_attempts}" ]] || return 0
+  [[ "${outcome}" == "crashed" || -n "${time_limit_kill}" ]] && echo "retry"
   return 0
 }
 
@@ -534,6 +554,9 @@ main() {
   # self-hosted flake) retry once. A genuine failure or a pass is never retried (see should_retry).
   local test_exit_code=0 outcome="" attempt=1 max_attempts=2 output_file pid
   local host_pid="" started_at=0 log_window=60 last_output=""
+  # #3392: set inside the loop below and read after it. Declared here so a retry cannot inherit the
+  # previous attempt's reading, which is the same reason `last_output` is per attempt.
+  local restarted="" TIME_LIMIT_KILL=""
   while true; do
     test_exit_code=0
     started_at="${SECONDS}"
@@ -611,10 +634,41 @@ main() {
     last_corpus_file_text="$(cat "${corpus_file}" 2>/dev/null || true)"
     rm -f "${output_file}" "${corpus_file}"
 
-    [[ -z "$(should_retry "${outcome}" "${attempt}" "${max_attempts}")" ]] && break
+    # #2821: whether the test process was RELAUNCHED partway through, which makes every count taken from
+    # this attempt a count of the REMAINDER rather than of the run.
+    #
+    # #3392: read HERE, inside the loop, rather than after it, because the retry decision needs it. It is
+    # the same reading the report below uses and is taken once per attempt, so a run that is not retried
+    # pays exactly what it paid before.
+    restarted="$(test_run_restarted "${last_output}")"
+    # #3266: the half the log cannot show. A test killed at its `.timeLimit` makes xcodebuild relaunch
+    # the test process and print NOTHING about it, so the totals are the totals of the remainder and the
+    # log-based check above stays silent. Read from the result bundle, and only when the log said
+    # nothing, so the cheaper reading still wins where it works.
+    TIME_LIMIT_KILL=""
+    if [[ -z "${restarted}" ]]; then
+      TIME_LIMIT_KILL="$(result_bundle_time_limit_kill "$(test_run_result_bundle "${last_output}")")"
+      # #3385: and from the run's own output when the bundle could not be read. The bundle is ALSO where
+      # the executed count comes from, so reading the kill only from there meant one unreadable bundle
+      # took both at once: the detection fell silent and the count printed the remainder as a size. The
+      # two sources now fail independently.
+      [[ -z "${TIME_LIMIT_KILL}" ]] && TIME_LIMIT_KILL="$(output_time_limit_kill "${last_output}")"
+      [[ -n "${TIME_LIMIT_KILL}" ]] && restarted="time-limit ${TIME_LIMIT_KILL}"
+    fi
+
+    [[ -z "$(should_retry "${outcome}" "${attempt}" "${max_attempts}" "${TIME_LIMIT_KILL}")" ]] && break
     echo >&2
-    echo "run-tests-locked.sh: the test host crashed with no named test failure (a known self-hosted" >&2
-    echo "flake, #1331). Retrying once (attempt $((attempt + 1)) of ${max_attempts})..." >&2
+    if [[ -n "${TIME_LIMIT_KILL}" ]]; then
+      # NAMED, always. A test killed on every run would otherwise be paid for twice per run forever with
+      # nothing on screen saying which one it is (#3392, #3386).
+      echo "run-tests-locked.sh: this run was TRUNCATED. ${TIME_LIMIT_KILL} exceeded its execution time" >&2
+      echo "allowance, so xcodebuild killed the test process and the totals cover only what ran after it" >&2
+      echo "(#3266). Retrying once (attempt $((attempt + 1)) of ${max_attempts})..." >&2
+      echo "If the same test is named on the retry it is not transient, it is #3386." >&2
+    else
+      echo "run-tests-locked.sh: the test host crashed with no named test failure (a known self-hosted" >&2
+      echo "flake, #1331). Retrying once (attempt $((attempt + 1)) of ${max_attempts})..." >&2
+    fi
     attempt=$((attempt + 1))
   done
 
@@ -632,24 +686,12 @@ main() {
   # as a 99% truncation, and a green one would then overwrite the baseline with that handful and disable
   # the gate for every full run after it. The empty-run gate below is judged on every run either way,
   # because "nothing ran" is never correct.
-  local executed baseline="" truncated="" scoped=0 restarted=""
+  local executed baseline="" truncated="" scoped=0
   run_is_scoped "$@" && scoped=1
-  # #2821: whether the test process was RELAUNCHED partway through, which makes every count below a
-  # count of the REMAINDER rather than of this run.
-  restarted="$(test_run_restarted "${last_output}")"
-  # #3266: the half the log cannot show. A test killed at its `.timeLimit` makes xcodebuild relaunch the
-  # test process and print NOTHING about it, so the totals below are the totals of the remainder and the
-  # log-based check above stays silent. Read from the result bundle, and only when the log said nothing,
-  # so the cheaper reading still wins where it works.
-  if [[ -z "${restarted}" ]]; then
-    TIME_LIMIT_KILL="$(result_bundle_time_limit_kill "$(test_run_result_bundle "${last_output}")")"
-    # #3385: and from the run's own output when the bundle could not be read. The bundle is ALSO where
-    # the executed count comes from, so reading the kill only from there meant one unreadable bundle took
-    # both at once: the detection fell silent and the count printed the remainder as a size. The two
-    # sources now fail independently.
-    [[ -z "${TIME_LIMIT_KILL}" ]] && TIME_LIMIT_KILL="$(output_time_limit_kill "${last_output}")"
-    [[ -n "${TIME_LIMIT_KILL}" ]] && restarted="time-limit ${TIME_LIMIT_KILL}"
-  fi
+  # #3392: `restarted` and `TIME_LIMIT_KILL` are this attempt's own, read inside the loop above because
+  # the retry decision needs them. Read once per attempt either way, so a run that is not retried costs
+  # what it did before, and a retried one describes the attempt whose result is being reported rather
+  # than the one that was thrown away (L133).
 
   # #3243 / #3265: the count that decides everything below comes from the run's own RESULT BUNDLE where
   # one can be read, and from the log text only where one cannot. Two reasons, and the second is the
