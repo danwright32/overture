@@ -11,7 +11,6 @@ import ViewInspector
 //
 // @MainActor: inspecting a SwiftUI view must run on the main actor, or it crashes intermittently
 // depending on the parallel runner's thread. Every ViewInspector suite in this repo carries it.
-@MainActor
 @Suite("The send sheet renders the styled preview (#2053)")
 struct SendConfirmSheetStyledPreviewTests {
     private let sig = OutboundSignature(

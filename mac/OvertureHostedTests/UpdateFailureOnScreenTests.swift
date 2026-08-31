@@ -9,7 +9,6 @@ import ViewInspector
 // Deciding that a refused update is worth showing proves nothing about it reaching the screen: a rule and
 // its wiring are two separate claims (L3), and the claim that failed on 2026-08-06 was the second one.
 // The run refused, said why into a Terminal window, and the app displayed nothing at all.
-@MainActor
 @Suite("A refused update is on screen, in the words the run used (#2188)")
 struct UpdateFailureOnScreenTests {
     private let refusal = "There is unsaved work in progress in the code folder, and updating would disturb it. Ask Claude to finish or put aside that work, then press Update again."

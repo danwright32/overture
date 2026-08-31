@@ -15,7 +15,6 @@ import ViewInspector
 //
 // @MainActor: inspecting a SwiftUI view must run on the main actor, or it crashes intermittently depending
 // on the parallel runner's thread. Every ViewInspector suite in this repo carries it.
-@MainActor
 @Suite("The send sheet offers the contact picker (#2017)")
 struct SendConfirmSheetPickerTests {
     private func show(contacts: Int) throws -> Prospect {

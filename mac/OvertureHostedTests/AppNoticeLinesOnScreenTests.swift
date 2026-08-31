@@ -7,7 +7,6 @@ import ViewInspector
 // #2204: the messages reaching the SCREEN, which is a separate claim from the decision about which to
 // show being right (L3). That gap is the whole issue here: the decision was correct for months, the
 // priority rule protecting it was correct, and none of it was ever on screen at the width Dan uses.
-@MainActor
 @Suite("The app's messages on screen (#2204)")
 struct AppNoticeLinesOnScreenTests {
     // The sentences actually drawn. A tooltip is a Text too as far as ViewInspector is concerned, so the

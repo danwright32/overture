@@ -14,7 +14,6 @@ import WebKit
 // nothing anywhere loaded the document and looked at what it said about itself.
 //
 // @MainActor: web views and windows are main-actor only.
-@MainActor
 @Suite("The draft preview re-measures when its width changes (#2062)")
 struct PreviewCardMeasureLiveTests {
     // Collects what the page posts back, so a test can wait for the NEXT report rather than guess a delay.

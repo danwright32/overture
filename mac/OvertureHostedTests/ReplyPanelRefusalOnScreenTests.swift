@@ -12,7 +12,6 @@ import ViewInspector
 // the Send button went dead and nothing on screen said why, on exactly the conversation he is least able
 // to diagnose. A guard and the sentence that explains it are two separate claims, and the decision being
 // right in ReplyPanel proves nothing about the panel showing it (L3).
-@MainActor
 @Suite("The reply panel says why it will not send (#2152)")
 struct ReplyPanelRefusalOnScreenTests {
     private func container() throws -> ModelContainer {

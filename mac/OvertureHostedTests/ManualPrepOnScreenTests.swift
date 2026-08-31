@@ -8,7 +8,6 @@ import ViewInspector
 // These render the real views. The RULES they draw are unit-tested elsewhere (QueueModel.manualPrepOffer,
 // ManualPrepPrefill, ManualPrepEditing); what is checked here is that the rules reach the screen at all,
 // which no pure test can see (L3: built is not wired).
-@MainActor
 @Suite("Prep manually on screen (#2007)")
 struct ManualPrepOnScreenTests {
     private func item(status: ReviewStatus = .queued, draftBody: String? = nil,

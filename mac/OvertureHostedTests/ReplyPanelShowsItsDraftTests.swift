@@ -10,7 +10,6 @@ import ViewInspector
 // ReplyPanel deciding what the box should open with proves nothing about the panel putting it there: a
 // seam and its wiring are two separate claims (L3). This is the claim that failed, since the decision
 // never existed and the view held a hard-coded empty string.
-@MainActor
 @Suite("The reply panel renders the draft waiting on the contact (#2143)")
 struct ReplyPanelShowsItsDraftTests {
     private func container() throws -> ModelContainer {

@@ -10,7 +10,6 @@ import ViewInspector
 // (comment at the top of ArchiveView.swift), so this proves ArchiveView's OWN outboundSending
 // dict threads through ProspectRowFactory into the rendered branch, the integration link one
 // level up from what ProspectRowViewSendStateTests already covers for ProspectRowView itself.
-@MainActor
 @Suite("ArchiveView send state (#710)")
 struct ArchiveViewSendStateTests {
     private func approvedItemWithDraft() -> QueueItem {

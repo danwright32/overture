@@ -10,7 +10,6 @@ import ViewInspector
 // Reading only the populated branch is how #1547 shipped: a sentence that was correct, tested and inside
 // the branch nobody was in, over a heading that then read as the opposite of what it meant. So all four
 // states the reached-out row can render are here, and each one says what it draws and what it does not.
-@MainActor
 @Suite("The reached-out row says a reply was answered (#2919)")
 struct ReachedOutRowAnsweredReplyTests {
 

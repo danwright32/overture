@@ -14,7 +14,6 @@ import ViewInspector
 // screen any more and nothing is composed above the body, so the email Dan reads must now be, character
 // for character, a single string the card renders. If anything ever starts being appended again, this is
 // the test that goes red.
-@MainActor
 @Suite("The reviewed email is the sent email (#2018)")
 struct ReviewedEmailIsTheSentEmailTests {
     private let signature = OutboundSignature(html: nil, plainText: "Best,\nDan")
@@ -86,7 +85,6 @@ struct ReviewedEmailIsTheSentEmailTests {
 // That question is the whole reason the sentence lives with the send button rather than up by the body.
 // A refusal only the disabled action could have spoken is a refusal nobody ever reads (L109), and Dan has
 // met exactly that here before: a greyed Send with nothing said next to it (#2052, #2012).
-@MainActor
 @Suite("The greeting hold says why, on screen (#2545)")
 struct GreetingHoldOnScreenTests {
     private func allTexts(_ view: some View) throws -> [String] {

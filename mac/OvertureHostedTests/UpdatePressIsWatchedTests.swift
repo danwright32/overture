@@ -9,7 +9,6 @@ import ViewInspector
 // Everything else can be right and this can be missing, and the result is the state Dan met on
 // 2026-08-06: the panel closes, the run refuses, and nothing ever says so. A rule and its wiring are two
 // claims (L3), and this file holds the wiring one.
-@MainActor
 @Suite("Pressing Update starts something watching for how it went (#2188)")
 struct UpdatePressIsWatchedTests {
     // The button reports the press rather than quietly dismissing the panel and forgetting it. Before

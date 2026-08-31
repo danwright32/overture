@@ -9,7 +9,6 @@ import ViewInspector
 // the stalled branch show Retry, does runAlive suppress it, does it name the source and count) has to be
 // exercised too. Calls `content(now:)` directly with a fixed instant, exactly as LiveRunLabelViewState
 // tests do (see LiveRunLabel.swift's #470 comment: `body` wraps it in a real TimelineView).
-@MainActor
 @Suite("Scout progress modal view state (#1034)")
 struct RunProgressViewStateTests {
     private func allTexts(_ view: some View) throws -> [String] {

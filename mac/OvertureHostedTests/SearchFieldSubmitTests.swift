@@ -16,7 +16,6 @@ import ViewInspector
 // A field with no submit handler registered is the whole defect, so the assertions below are about
 // the handler EXISTING and about it doing nothing to the query, not about the sheet, which SwiftUI
 // will not let a test press a real Return key into.
-@MainActor
 @Suite("The shared search field handles its own Return (#2217)")
 struct SearchFieldSubmitTests {
 

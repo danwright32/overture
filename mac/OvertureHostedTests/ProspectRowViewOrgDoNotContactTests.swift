@@ -5,7 +5,6 @@ import ViewInspector
 
 // #769: do-not-contact is the most consequential state a row can carry, and the one that is worst to
 // hold invisibly. If Dan can't see it, he can't trust it, and he can't undo a mis-click.
-@MainActor
 @Suite("ProspectRowView org do-not-contact flag (#769)")
 struct ProspectRowViewOrgDoNotContactTests {
     private func item(orgDoNotContact: Bool) -> QueueItem {

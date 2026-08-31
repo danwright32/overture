@@ -11,7 +11,6 @@ import ViewInspector
 // The empty branch is the one worth rendering. A source can leave a show with no listing URL at all, and
 // the failure that ships from a populated-branch-only read is a heading over nothing, a gap, or a dead
 // control (L45, and #1547 is this repo's worked example of exactly that).
-@MainActor
 @Suite("The source link on the reached-out row (#2816)")
 struct ReachedOutRowSourceLinkTests {
 

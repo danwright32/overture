@@ -11,7 +11,6 @@ import ViewInspector
 // `Reachability.recheckState`, which is already covered, but WHICH of them reaches the screen depends on
 // the two run facts being threaded into the row. A break in that threading leaves every pure test green
 // while the card shows a running label over nothing, or an enabled button that fails when pressed.
-@MainActor
 @Suite("The re-check control on a card (#2267)")
 struct RecheckControlOnTheRowTests {
 

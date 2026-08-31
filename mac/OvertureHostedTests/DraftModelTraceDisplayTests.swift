@@ -18,7 +18,6 @@ import ViewInspector
 // SwiftUI body: #863 is the standing lesson here, a rule stated in a comment and computed in a view
 // drifted twice while the suite stayed green. Same reason RecipientSnapshot.contactSourceLinkURL lives
 // beside the data rather than in the row.
-@MainActor
 @Suite("A draft shows what wrote it (#846)")
 struct DraftModelTraceDisplayTests {
 

@@ -18,7 +18,6 @@ import ViewInspector
 // rendered it. This is the reader (L46), and it is the same `LiveRunLabel` the Review card and the
 // Follow-ups rows have had since #710. The closing note sent from Follow-ups showed "Sending"; the same
 // closing note sent from the queue showed nothing, and the queue is where Dan works.
-@MainActor
 @Suite("The reached-out row's send state (#2644)")
 struct ReachedOutRowSendStateTests {
 

@@ -8,7 +8,6 @@ import ViewInspector
 // differently; nothing there would notice if the control that reaches the dark one were never drawn, and
 // a preview whose second background is unreachable is a preview with one background (L3, and #2098's
 // whole existence: a guard that fires into a surface nobody can reach is indistinguishable from none).
-@MainActor
 @Suite("The preview's light and dark switch on screen (#2086)")
 struct PreviewBackgroundSwitchTests {
     private let body = "Hello there.\n\nDan"

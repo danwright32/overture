@@ -8,7 +8,6 @@ import ViewInspector
 // candidate (not yet sent, not booked), so it aids the keep/dismiss decision without cluttering finished
 // rows. Verified through the ViewInspector harness so the badge is proven to actually appear, not merely
 // defined ("logic in a SwiftUI view is untestable" unless exercised).
-@MainActor
 @Suite("ProspectRowView reachability badge (#1145)")
 struct ProspectRowViewReachabilityTests {
     private func item(presenter: String?, sourceListingURL: String? = nil,

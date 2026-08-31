@@ -7,7 +7,6 @@ import ViewInspector
 // #2675: the send problems reaching the SCREEN, which is a separate claim from the row carrying them
 // (L3). That gap is the whole issue: all three facts had writers, the flags were correct, and nothing
 // anywhere in the app drew any of them.
-@MainActor
 @Suite("An inquiry's send problems on screen (#2675)")
 struct InquirySendProblemsOnScreenTests {
 

@@ -16,7 +16,6 @@ import ViewInspector
 // probe. It found the state UNREACHABLE, so the tests below pin it that way rather than fixing anything:
 // the first test builds the bad state by hand and shows what it would cost, so nothing here is vacuous,
 // and the rest drive every real path that touches the pair.
-@MainActor
 @Suite("A live performer match is never invisible on the row (#1466)")
 struct PerformerMatchVisibilityTests {
     private func container() throws -> ModelContainer {

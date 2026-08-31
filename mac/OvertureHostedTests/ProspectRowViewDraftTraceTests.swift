@@ -8,7 +8,6 @@ import ViewInspector
 // place it is actually most useful: comparing outcomes across models. The row's persistent tags
 // (fitReason, coverage, contact count, …) are the one part of the card that keeps showing after a
 // show is archived, so the trace belongs there, not only inside DraftReviewView.
-@MainActor
 @Suite("ProspectRowView draft trace tag (#879)")
 struct ProspectRowViewDraftTraceTests {
     private func item(draftModel: String?) -> QueueItem {

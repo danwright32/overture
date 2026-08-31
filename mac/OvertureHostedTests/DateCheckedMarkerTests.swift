@@ -12,7 +12,6 @@ import ViewInspector
 // The marker claims only what it measured. A date can be bare for reasons that have nothing to do with
 // having been checked (nothing on it is still open, everything on it is somewhere Dan refuses to travel),
 // and saying "Reachability checked" there would be a sentence the code never verified.
-@MainActor
 @Suite("Date fully checked marker (#1617)")
 struct DateCheckedMarkerTests {
     private let now = Date(timeIntervalSince1970: 1_780_000_100)

@@ -9,7 +9,6 @@ import ViewInspector
 // neither would notice if this line rendered nothing. That gap is not hypothetical here: #2098 is open
 // precisely because #2087's warning was shipped without anyone confirming it reaches a surface Dan
 // looks at, and a guard that fires into a surface nobody looks at is indistinguishable from no guard.
-@MainActor
 @Suite("The watch gap line on screen (#2091)")
 struct WatchGapLineOnScreenTests {
     private let now = Date(timeIntervalSince1970: 1_700_000_000)

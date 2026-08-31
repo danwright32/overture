@@ -12,7 +12,6 @@ import ViewInspector
 // intermittently via MainActor.assumeIsolated depending on the parallel runner's thread. Every ViewInspector
 // suite in this repo carries it (DraftReviewViewSendStateTests, SendConfirmSheetTests, ...); omitting it here
 // was the cause of the flaky mid-run test-host crashes on #1249.
-@MainActor
 @Suite("Self-booking confirm is a branded sheet (#1249)")
 struct SelfBookingConfirmSheetTests {
     @Test func showsTheTitleMessageAndBothButtons() throws {

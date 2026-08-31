@@ -7,7 +7,6 @@ import ViewInspector
 // and Dan has no way to see why, agree, or reject it. Mirrors alreadyCoveredFlag's Menu-wrapped
 // capsule idiom (#611), but carries two actions rather than one, because an unconfirmed match is
 // held back from the drafting tone until Dan actively says it is right (#752, his call).
-@MainActor
 @Suite("ProspectRowView performer-match flag (#753)")
 struct ProspectRowViewPerformerMatchFlagTests {
     private let note = "Matched performer 'Larkin Sable' to Downbeat client Larkin Sable."

@@ -10,7 +10,6 @@ import ViewInspector
 // The contact list, the add control and the per-row remove already existed. What did not was the
 // information: a row showed a person's NAME and fell back to the address only when there was no name, and
 // nothing said which of several contacts the next Send would actually reach.
-@MainActor
 @Suite("Every address is on screen (#2015)")
 struct EveryAddressOnScreenTests {
     private func allTexts(_ view: some View) throws -> [String] {

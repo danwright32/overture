@@ -7,7 +7,6 @@ import ViewInspector
 // renders under the right conditions and that a tap reports exactly the date's candidate keys up to the
 // caller (which opens the confirm sheet). Rendered directly through ViewInspector because the enclosing
 // QueueView reads @Query/@State a unit test can't inject.
-@MainActor
 @Suite("Reachability probe control (#1308)")
 struct ReachabilityProbeControlTests {
     private func item(_ key: String, status: ReviewStatus = .new) -> QueueItem {

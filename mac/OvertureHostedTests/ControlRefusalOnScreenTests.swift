@@ -17,7 +17,6 @@ import ViewInspector
 // `.help()` puts its string into the view hierarchy too, so a text search passes with the visible line
 // deleted and only the tooltip left, which is exactly the state L49 calls a defect. The identifier is
 // carried only by the visible line.
-@MainActor
 @Suite("A refusing control says why, on screen (#2546)")
 struct ControlRefusalOnScreenTests {
 

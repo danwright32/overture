@@ -7,7 +7,6 @@ import ViewInspector
 // card actually DRAWS it, which no model test can see (L3: built is not wired). Rendered through the
 // ViewInspector harness, so a name that never reaches the screen fails here rather than shipping as an
 // invisible feature.
-@MainActor
 @Suite("The card draws whose address it is printing (#2623)")
 struct CardAddressAttributionOnScreenTests {
     private func item(name: String?, role: String?) -> QueueItem {

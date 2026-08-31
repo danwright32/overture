@@ -9,7 +9,6 @@ import ViewInspector
 // a Retry button, does the runAlive override actually suppress it, has never been exercised by any
 // test. Calls `content(now:)` directly with a fixed instant (see LiveRunLabel.swift's #470 comment
 // for why: `body` wraps it in a real TimelineView, which would mean driving an async timer).
-@MainActor
 @Suite("LiveRunLabel view state (#470)")
 struct LiveRunLabelViewStateTests {
     private func allTexts(_ view: some View) throws -> [String] {

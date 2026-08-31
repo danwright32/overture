@@ -9,7 +9,6 @@ import ViewInspector
 // file's own entry count via lib/progress-watcher.sh), which is not Swift, so there is no second
 // programmatic side to assert. This fixture pins the Swift decode and is the canonical example the
 // runbook points the run at. Mirrors PrepProgressContractTests (#354).
-@MainActor
 @Suite("Reply-classify progress contract fixtures (#1081)")
 struct ReplyClassifyProgressContractTests {
     private func fixtureDirectory() -> URL {

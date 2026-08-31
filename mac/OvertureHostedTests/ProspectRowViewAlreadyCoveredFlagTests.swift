@@ -7,7 +7,6 @@ import ViewInspector
 // from #470/#710. Mirrors bookingSuggestionFlag's visual shape (a Menu-wrapped capsule with a
 // dismiss action) but is its own view since the underlying signal is a different concept
 // (external research about the org, not the drafted email's own text).
-@MainActor
 @Suite("ProspectRowView already-covered flag (#611)")
 struct ProspectRowViewAlreadyCoveredFlagTests {
     private func item(alreadyCoveredNote: String?, alreadyCoveredDismissed: Bool = false) -> QueueItem {

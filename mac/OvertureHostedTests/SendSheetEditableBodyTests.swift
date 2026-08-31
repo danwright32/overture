@@ -8,7 +8,6 @@ import ViewInspector
 // #2575, the rendering half. The pure suite proves the SEND honours an edited body; only a rendered sheet
 // can show that a box exists for Dan to type in, which is the whole of what he was missing when he said
 // "I have no way to edit closing notes" (L3: built is not wired, and wired is not proven).
-@MainActor
 @Suite("The send sheet's text box (#2575)")
 struct SendSheetEditableBodyTests {
 

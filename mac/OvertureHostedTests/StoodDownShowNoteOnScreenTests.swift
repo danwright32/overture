@@ -17,7 +17,6 @@ import ViewInspector
 // Measured on the live store 2026-08-21: one stood-down show, carrying `turned_them_down`. So the first
 // test here is not decoration, it is the proof that the branch the other two read is one the app can
 // actually be in (L159).
-@MainActor
 @Suite("The post-event row says the show was stood down (#3068)")
 struct StoodDownShowNoteOnScreenTests {
 

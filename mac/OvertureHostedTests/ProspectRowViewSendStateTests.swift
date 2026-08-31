@@ -10,7 +10,6 @@ import ViewInspector
 // row shows the nested DraftReviewView at all (gated on item.hasDraft), and whether
 // outboundSendSince actually threads all the way from the row down into a rendered "Sending"
 // state, not just into DraftReviewView directly.
-@MainActor
 @Suite("ProspectRowView send state (#710)")
 struct ProspectRowViewSendStateTests {
     private func approvedItemWithDraft() -> QueueItem {

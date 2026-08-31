@@ -9,7 +9,6 @@ import ViewInspector
 // (a @State property, not settable from outside a view instance), so they're refactored to take
 // `since: Date?` explicitly, the same prop-threading shape DraftReviewView/ProspectRowView already
 // use, making them directly testable without needing to fight @State from outside the view.
-@MainActor
 @Suite("FollowUpsView send state (#710)")
 struct FollowUpsViewSendStateTests {
     private func prospectAndRecipient() -> (Prospect, Recipient) {

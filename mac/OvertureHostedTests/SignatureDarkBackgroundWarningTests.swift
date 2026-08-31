@@ -16,7 +16,6 @@ import ViewInspector
 // So the sentence is gone and Overture strips the borders instead (Dan's call). What this suite pins now
 // is the pair of claims that replaced it: the preview no longer says the thing that cannot be acted on,
 // and the message it renders no longer carries the defect on EITHER background.
-@MainActor
 @Suite("What the preview shows once Overture strips the border (#2086)")
 struct SignatureDarkBackgroundWarningTests {
     private let body = "I photograph performing arts in New York."

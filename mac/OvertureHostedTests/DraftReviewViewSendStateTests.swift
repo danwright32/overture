@@ -7,7 +7,6 @@ import ViewInspector
 // #470: demonstrates the ViewInspector harness on a real consumer, not just LiveRunLabel in
 // isolation, proving the QueueView outboundSending state -> DraftReviewView prop -> rendered
 // branch link end to end (the exact gap the issue named).
-@MainActor
 @Suite("DraftReviewView send state (#470)")
 struct DraftReviewViewSendStateTests {
     private func approvedItem() -> QueueItem {
@@ -102,7 +101,6 @@ struct DraftReviewViewSendStateTests {
 // #789: the draft-lint block on the review surface. Same two-step shape as the salutation block
 // above (a plain statement of fact plus a deliberate Override), but it must NAME the finding, and,
 // unlike the advisory voice warnings, it must still show on a draft Dan edited himself.
-@MainActor
 @Suite("DraftReviewView draft lint block (#789)")
 struct DraftReviewViewDraftLintTests {
     private func item(blockers: [DraftIssue], blocked: Bool, editedByDan: Bool = false) -> QueueItem {
@@ -160,7 +158,6 @@ struct DraftReviewViewDraftLintTests {
 }
 
 // #733: guard against repeatedly re-prepping the same prospect.
-@MainActor
 @Suite("DraftReviewView re-prep cooldown (#733)")
 struct DraftReviewViewReprepCooldownTests {
     private func item(status: ReviewStatus = .drafted, reprepDraftRequested: Bool = false,
@@ -226,7 +223,6 @@ struct DraftReviewViewReprepCooldownTests {
 // Unapprove, and nothing said so. Dan met the note on a hand-written manual prep and read the surface
 // as offering no way to edit short of a re-prep that would destroy his text. The note and the control
 // it names must live on the same card.
-@MainActor
 @Suite("DraftReviewView approved card offers Edit (#2073)")
 struct DraftReviewViewApprovedEditTests {
     private func approvedItem(subject: String? = "S") -> QueueItem {
@@ -267,7 +263,6 @@ struct DraftReviewViewApprovedEditTests {
 // #388: a contact whose address looks like the host venue shows a dismissible warning, listed for
 // EVERY flagged contact (not just the primary one contactLine shows), since a secondary contact
 // (e.g. a presenter) would otherwise be invisible before send.
-@MainActor
 @Suite("DraftReviewView venue-match warning (#388)")
 struct DraftReviewViewVenueMatchTests {
     private func recipient(id: String, name: String?, looksLikeVenue: Bool, dismissed: Bool = false,
@@ -332,7 +327,6 @@ struct DraftReviewViewVenueMatchTests {
 }
 
 // #722: same shape as DraftReviewViewVenueMatchTests above, for a suspected press/media contact.
-@MainActor
 @Suite("DraftReviewView press-contact warning (#722)")
 struct DraftReviewViewPressContactTests {
     private func recipient(id: String, name: String?, looksLikePressContact: Bool, dismissed: Bool = false,
