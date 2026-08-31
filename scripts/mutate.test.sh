@@ -43,6 +43,49 @@ ${X} Test run with 12 tests in 2 suites failed after 0.1 seconds with 1 issue.")
 GREEN_RUNNER="$(make_runner green 0 '✔ Test run with 12 tests in 2 suites passed after 0.1 seconds.')"
 EMPTY_RUNNER="$(make_runner empty 1 'run-tests-locked.sh: NOTHING RAN. The scope matched no tests.')"
 
+# --- #3395: the phrase in a DUMP of the code that prints it is not the runner saying it ---------------
+# #3035 already narrowed this once, because a Swift failure prints the source around it and any comment
+# MENTIONING the phrase put it in the log. The anchor it settled on allowed a `: ` prefix anywhere on the
+# line, which lets the phrase back in one level further out: a fixture whose failing assertion PRINTS A
+# SCRIPT'S SOURCE puts the runner's own `echo "run-tests-locked.sh: NOTHING RAN. ..."` into the log.
+#
+# Measured 2026-08-31 while proving #3348's wiring guard: a run that had really gone red on exactly the
+# assertion under test was reported NOTHING RAN, so the proof had to be re-read by hand. It lies in the
+# direction that refuses a real CAUGHT, which costs a rerun rather than a false proof.
+DUMPED_RUNNER="$(make_runner dumped 1 "${X} Test \"the guard fires\" failed after 0.01 seconds with 1 issue.
+  echo \"run-tests-locked.sh: NOTHING RAN. \${nothing_ran_detail}\" >&2
+${X} Test run with 12 tests in 2 suites failed after 0.1 seconds with 1 issue.")"
+write_subject
+OUT="$(OVERTURE_MUTATE_RUNNER="${DUMPED_RUNNER}" "${MUTATE}" --at 'static let answer' "${SUBJECT}" 's/"yes"/"no"/' 2>&1)"
+assert_contains "a quoted echo of the phrase in the log is not the runner saying it" "${OUT}" "CAUGHT"
+# On the VERDICT line, not on the phrase: mutate.sh echoes the last lines of the run log, so the log's
+# own text is in this output by design and asserting its absence would be asserting about the fixture.
+assert_not_contains "and the run is not refused as having executed nothing" \
+  "${OUT}" "NOTHING RAN - the run executed no tests"
+
+# #3035's own case, kept, because the two are different lines and a rule covering one is not a rule
+# covering the other: this one is the phrase inside PROSE rather than inside a quoted echo.
+COMMENTED_RUNNER="$(make_runner commented 1 "${X} Test \"the guard fires\" failed after 0.01 seconds with 1 issue.
+    // A run that reported success while executing no tests fails with NOTHING RAN, naming the scope.
+${X} Test run with 12 tests in 2 suites failed after 0.1 seconds with 1 issue.")"
+write_subject
+OUT="$(OVERTURE_MUTATE_RUNNER="${COMMENTED_RUNNER}" "${MUTATE}" --at 'static let answer' "${SUBJECT}" 's/"yes"/"no"/' 2>&1)"
+assert_contains "a comment mentioning the phrase is not the runner saying it either" "${OUT}" "CAUGHT"
+assert_not_contains "and that run is not refused either" \
+  "${OUT}" "NOTHING RAN - the run executed no tests"
+
+# The other direction, so the anchoring cannot have turned the check into one that never fires (L1). The
+# real emission opens its line with the script's name.
+write_subject
+OUT="$(OVERTURE_MUTATE_RUNNER="${EMPTY_RUNNER}" "${MUTATE}" --at 'static let answer' "${SUBJECT}" 's/"yes"/"no"/' 2>&1)"
+assert_contains "the runner really saying it is still read as NOTHING RAN" "${OUT}" "NOTHING RAN"
+
+# And the bare form, with no script name at all, which the anchor also has to keep.
+BARE_RUNNER="$(make_runner bare 1 'NOTHING RAN. The scope matched no tests.')"
+write_subject
+OUT="$(OVERTURE_MUTATE_RUNNER="${BARE_RUNNER}" "${MUTATE}" --at 'static let answer' "${SUBJECT}" 's/"yes"/"no"/' 2>&1)"
+assert_contains "the phrase opening a line with no prefix is still read as NOTHING RAN" "${OUT}" "NOTHING RAN"
+
 # --- a mutation that matches nothing is a FAILURE, never a surviving guard --------------------------
 # The sharpest of the three, because it is the one that reads as a result. A substitution that matched
 # nothing leaves the file untouched, so the run that follows is green for the most ordinary reason there
