@@ -239,3 +239,35 @@ mutate_run_is_scoped() {
   done
   return 1
 }
+
+# mutation_build_share <seconds the runner took> <the run's log>: what that proof spent OUTSIDE its tests.
+#
+# #3240 asked whether the proofs a PR body carries could share one build. Measured 2026-08-31 on this Mac,
+# scoped to a five-test suite whose tests take 0.05s:
+#
+#   nothing changed since the last build   23.4s
+#   one TEST file changed                  93.6s
+#   one APP file changed                  145.2s
+#   the same proof on the pure scheme     199.2s   (slower, so that is not the lever either)
+#
+# So a proof is 75% to 84% build, and there is nothing to SHARE: each proof mutates a different file, and
+# each is already incremental on top of the build the author's own `scripts/test-all.sh` just made. What
+# is left is Swift re-typechecking a large module for one changed file. The number is printed on every
+# proof rather than written down anywhere, because a measurement in a sentence goes stale silently while
+# one the tool takes cannot (L316, L32).
+#
+# Says nothing at all when the run reported no duration of its own: a share computed against a missing
+# test time would be the whole wall clock, which reads as a measurement (L98, L11).
+mutation_build_share() {
+  elapsed="$1"
+  log="$2"
+  tests="$(grep -oE 'Suite shape: [^,]+, [0-9]+(\.[0-9]+)?s' "${log}" 2>/dev/null | tail -n 1 \
+    | grep -oE '[0-9]+(\.[0-9]+)?s$' | tr -d 's' || true)"
+  [ -n "${tests}" ] || return 0
+  case "${elapsed}" in ''|*[!0-9]*) return 0 ;; esac
+  awk -v total="${elapsed}" -v ran="${tests}" 'BEGIN {
+    if (total <= 0 || ran > total) exit 0
+    printf "  build and setup: %ds of the %ds this proof took; the tests themselves were %.1fs (#3240)\n",
+           total - ran, total, ran
+  }'
+}

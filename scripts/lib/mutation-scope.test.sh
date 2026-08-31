@@ -221,6 +221,33 @@ assert_equals "a runner FLAG is not a scope, which is the whole correction" "1" 
 mutate_run_is_scoped "-parallel-testing-enabled" "YES" "-only-testing:OvertureTests/SomeSuite"
 assert_equals "and a scope is still found beside a flag, wherever it sits" "0" "$?"
 
+# --- what a proof spends OUTSIDE its tests (#3240) ---------------------------------------------------
+#
+# The share is the answer to whether the proofs a PR carries could share one build, and it is printed on
+# every proof rather than written down, so it cannot go stale the way a dated sentence does.
+SHARE_LOG="$(fixture_scratch_file)"
+cat > "${SHARE_LOG}" <<'LOG'
+** TEST FAILED **
+run-tests-locked.sh: Suite shape: 5 tests in 1 suite, 0.4s. Test Swift to app Swift 1.92 to 1.
+LOG
+assert_contains "a proof says how much of it was build rather than tests" \
+  "$(mutation_build_share 94 "${SHARE_LOG}")" "build and setup: 93s of the 94s"
+
+# The two states that must not be folded into that, because a share computed against a duration nobody
+# read is the whole wall clock, and that reads exactly like a measurement (L98, L11).
+NO_SHAPE_LOG="$(fixture_scratch_file)"
+printf '%s\n' "** TEST FAILED **" > "${NO_SHAPE_LOG}"
+assert_empty "a run that reported no duration of its own claims no share" \
+  "$(mutation_build_share 94 "${NO_SHAPE_LOG}")"
+
+assert_empty "and neither does one whose elapsed time was not a number" \
+  "$(mutation_build_share "" "${SHARE_LOG}")"
+
+# A run whose tests are reported as LONGER than the whole thing is a reading of two different runs, so it
+# says nothing rather than printing a negative build time.
+assert_empty "a test time longer than the run is not reported as a negative build" \
+  "$(mutation_build_share 0 "${SHARE_LOG}")"
+
 if [ "${FAILURES}" -ne 0 ]; then
   echo "${FAILURES} failure(s)"
   exit 1

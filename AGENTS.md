@@ -564,6 +564,16 @@ already drifting from the Swift version it mirrored.
   (`/tmp/overture-mutate-run.log`, moved with `OVERTURE_MUTATE_LOG`): only the last 25 lines go to the
   screen, and the exact failure text this file demands in a PR body routinely sits just above that cut,
   which used to mean running the whole mutation again for evidence the run had already produced.
+  **Since #3240 every proof also says how much of itself was BUILD rather than tests.** That issue asked
+  whether the one to four proofs a PR body carries could share one build, and the measurement says there
+  is nothing to share: each proof mutates a different file, each is already incremental on top of the
+  build the author's own `scripts/test-all.sh` just made, and what is left is Swift re-typechecking a
+  large module for one changed file. Measured 2026-08-31 on this Mac, scoped to a five-test suite whose
+  tests take 0.05s: 23.4s with nothing changed at all, 93.6s with one TEST file changed, 145.2s with one
+  APP file changed, and 199.2s for the same proof on the pure `OvertureCore` scheme, which is SLOWER and
+  so is not the lever either. A proof is therefore 75% to 84% build. The line is printed rather than
+  written down here for this document's own standing reason: a measured number in a sentence goes stale
+  silently, and one the tool takes on every run cannot (L32, L316).
   The last two are #2820 and are the ones that lied in the CAUGHT direction, which is the worse one,
   since CAUGHT is the verdict quoted as proof for each of those ~1600 guards. Measured 2026-08-16: an
   expression using a pipe as its perl delimiter had its `\|` read as an escaped DELIMITER, reached the
