@@ -149,6 +149,82 @@ OUT="$(recompute_claim "${FIXTURE_TEXT}" "," 0)"
 assert_contains "recompute: a wrong claim is flagged as MISMATCH" "${OUT}" "MISMATCH"
 assert_contains "recompute: the actual recomputed count is reported" "${OUT}" "3"
 
+# --- #3237: the sweep reads only the files that can hold a claim ---------------------------------------
+# The scan cost 46 seconds of the cheap lane, because it forked a `cat` and ran two whole-text bash loops
+# for every one of the ~1,500 tracked Swift and Markdown files. Both parsers can only ever emit for a line
+# holding `LIVE-STORE-CLAIM`, or `live store`/`live rows` beside a digit, so a file with none of those
+# produces nothing however carefully it is read.
+#
+# `claim_candidates` is that pre-filter. What has to be true of it is that it is a SUPERSET of what the
+# parsers can act on: a file it drops must be one they would have said nothing about.
+CAND_DIR="$(fixture_scratch_dir)"
+# Removed here: the runner checks the temp directory the moment this fixture ends, and no other EXIT trap
+# is installed in this file, which is the thing to check before adding one.
+trap 'rm -rf "${CAND_DIR}" "${SWEEP_REPO:-}"' EXIT
+printf 'let x = 1\n' > "${CAND_DIR}/plain.swift"
+printf '// LIVE-STORE-CLAIM verified=2026-01-01 measure="rows"\n' > "${CAND_DIR}/tagged.swift"
+printf '// 0 of 26 live rows carry a city\n' > "${CAND_DIR}/untagged.swift"
+printf '// this runs against the live store\n' > "${CAND_DIR}/mention.swift"
+
+CANDIDATES="$(claim_candidates "${CAND_DIR}/plain.swift" "${CAND_DIR}/tagged.swift" \
+  "${CAND_DIR}/untagged.swift" "${CAND_DIR}/mention.swift")"
+assert_contains "a tagged file is a candidate" "${CANDIDATES}" "tagged.swift"
+assert_contains "an untagged live-rows claim is a candidate" "${CANDIDATES}" "untagged.swift"
+# A bare mention with no digit cannot produce a finding, but it IS kept: the filter is deliberately
+# looser than the parsers, because a filter that had to reproduce their exact conditions would be a
+# second definition of the rule, drifting silently against the first (L107).
+assert_contains "a bare mention of the live store is kept too" "${CANDIDATES}" "mention.swift"
+assert_not_contains "a file with none of the signals is dropped" "${CANDIDATES}" "plain.swift"
+
+# Zero candidates out of a NON-EMPTY file list is UNMEASURED, not clean. This is the whole risk of the
+# change: a broken filter empties the corpus and the summary then reports 0 claims, which is what a tree
+# with no claims in it reports (L98). The tree really holds 152.
+# A grep that ERRORED is not a grep that matched nothing, and the two are one character apart in the
+# status. Driven with a path grep cannot read, which is what an unreadable tree looks like from here.
+CAND_ERR="$(claim_candidates "${CAND_DIR}/tagged.swift" "${CAND_DIR}/no-such-file-at-all.swift" 2>&1)"
+CAND_ERR_STATUS=$?
+assert_eq "a grep that could not read its files refuses" "2" "${CAND_ERR_STATUS}"
+assert_contains "and says it will not report on a corpus it could not narrow" \
+  "${CAND_ERR}" "refusing to"
+
+# The other direction, so the refusal is not one that fires on every run: matching NOTHING is a real
+# answer and comes back clean.
+claim_candidates "${CAND_DIR}/plain.swift" >/dev/null 2>&1
+assert_eq "a file list that simply holds no claim is not an error" "0" "$?"
+
+# A SWEEP that narrows to nothing is unmeasured, never clean, and this is the whole risk of the change:
+# a broken filter empties the corpus and the summary then reports 0 claims, which is exactly what a tree
+# with no claims reports (L98). Driven end to end, in a throwaway repository, because the script takes
+# its root from its OWN location: copied into `<tmp>/scripts/`, its root is `<tmp>`.
+SWEEP_REPO="$(fixture_scratch_dir)"
+mkdir -p "${SWEEP_REPO}/scripts"
+cp "${REPO_ROOT}/scripts/check-live-store-claims.sh" "${SWEEP_REPO}/scripts/"
+printf 'let x = 1\n' > "${SWEEP_REPO}/nothing.swift"
+( cd "${SWEEP_REPO}" && git init -q . && git add -A && git -c user.email=t@t -c user.name=t commit -qm t ) >/dev/null 2>&1
+SWEEP_OUT="$( cd "${SWEEP_REPO}" && ./scripts/check-live-store-claims.sh 2>&1 )"
+SWEEP_STATUS=$?
+assert_eq "a sweep that narrows to nothing refuses" "2" "${SWEEP_STATUS}"
+assert_contains "and says nothing was examined rather than that all is well" \
+  "${SWEEP_OUT}" "Nothing was examined"
+assert_not_contains "and never prints a clean summary" "${SWEEP_OUT}" "0 tagged live-store claim(s), 0 malformed"
+
+# The other direction in the same repository, so the refusal is about an empty CORPUS and not about a
+# small one: one file carrying a claim is enough to make it report normally.
+printf '// LIVE-STORE-CLAIM verified=2026-01-01 measure="rows"\n' > "${SWEEP_REPO}/claim.swift"
+( cd "${SWEEP_REPO}" && git add -A && git -c user.email=t@t -c user.name=t commit -qm t2 ) >/dev/null 2>&1
+SWEEP_OK="$( cd "${SWEEP_REPO}" && ./scripts/check-live-store-claims.sh 2>&1 )"
+assert_contains "a sweep that finds one claim reports it rather than refusing" "${SWEEP_OK}" "1 tagged live-store claim(s)"
+
+ALL_FILES="$(cd "${REPO_ROOT}" && git ls-files '*.swift' '*.md')"
+COUNT=0
+while IFS= read -r f; do [[ -n "${f}" ]] && COUNT=$((COUNT + 1)); done <<< "${ALL_FILES}"
+assert_eq "the tree really has files to scan" "true" "$([[ "${COUNT}" -gt 1000 ]] && echo true || echo false)"
+
+NARROWED=0
+while IFS= read -r f; do [[ -n "${f}" ]] && NARROWED=$((NARROWED + 1)); done <<< "$(cd "${REPO_ROOT}" && claim_candidates ${ALL_FILES})"
+assert_eq "and the filter keeps a plausible fraction of them, rather than none" "true" \
+  "$([[ "${NARROWED}" -gt 20 && "${NARROWED}" -lt "${COUNT}" ]] && echo true || echo false)"
+
 echo
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "check-live-store-claims.test.sh: all assertions passed"

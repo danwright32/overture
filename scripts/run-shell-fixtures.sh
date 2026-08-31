@@ -515,6 +515,7 @@ fixture_left_processes() {
 run_shell_fixtures() {
   local failures=0
   local fixture rc
+  local sweep_started_at="${SECONDS}"
   local scratch
   scratch="$(overture_scratch_dir fixture-run)"
   local jobs="${OVERTURE_FIXTURE_JOBS:-8}"
@@ -542,6 +543,11 @@ echo "started ${fixture}" >> "${scratch}/progress"
 # control the background job's own pid IS its group id (measured on this Mac's bash 3.2), so the group
 # is known without a `ps` lookup that would race a fast fixture into looking unmeasured.
 set -m
+# #3237: the fixture's own wall time, in whole seconds from this wrapper's own `SECONDS`. A fresh
+# bash per fixture starts it at zero, so it costs no fork and needs no clock command; whole seconds is
+# the resolution bash 3.2 offers without one, and the question this answers is which fixtures dominate
+# a sweep, where the answer was 55.8s of 65.7s in a single file.
+started_at="${SECONDS}"
 ( set +e; TMPDIR="${scratch}/tmp-${idx}" OVERTURE_FIXTURE_TMPDIR_SCOPED=1 "${fixture}" >"${scratch}/log-${idx}" 2>&1; echo "$?" > "${scratch}/status-${idx}" ) &
 job=$!
 wait "${job}"
@@ -549,6 +555,7 @@ set +m
 # Recorded BEFORE the group is ended, or the report would be of a group this line had just emptied.
 fixture_surviving_processes "${job}" > "${scratch}/leaked-${idx}"
 fixture_end_process_group "${job}"
+echo "$(( SECONDS - started_at ))" > "${scratch}/seconds-${idx}"
 echo "finished ${fixture}" >> "${scratch}/progress"
 echo "finished ${fixture}"
 exit 0
@@ -602,8 +609,20 @@ WRAPPER
 
   # Every fixture has finished; now read each one's verdict, in list order.
   i=0
+  local seconds slowest_name="" slowest_seconds=-1 fixture_seconds_total=0
   for fixture in "$@"; do
-    echo "==> ${fixture}"
+    # #3237: each fixture's own wall time, beside its name. Whole seconds, so most read `(0s)`, which is
+    # the honest answer and is not the reading this exists for: what it makes visible is the one fixture
+    # that holds most of a sweep.
+    seconds="$(cat "${scratch}/seconds-${i}" 2>/dev/null || echo "?")"
+    if [[ "${seconds}" =~ ^[0-9]+$ ]]; then
+      fixture_seconds_total=$(( fixture_seconds_total + seconds ))
+      if [[ "${seconds}" -gt "${slowest_seconds}" ]]; then
+        slowest_seconds="${seconds}"
+        slowest_name="${fixture##*/}"
+      fi
+    fi
+    echo "==> ${fixture}  (${seconds}s)"
     cat "${scratch}/log-${i}" 2>/dev/null || true
     rc="$(cat "${scratch}/status-${i}" 2>/dev/null || echo 1)"
     if [[ "${rc}" -ne 0 ]]; then
@@ -639,6 +658,16 @@ WRAPPER
     echo
     i=$((i + 1))
   done
+
+  # #3237: what the sweep cost, and where. The WALL clock is the runner's own, not the sum of the
+  # fixtures': they run in ${jobs} lanes, so the sum is the work done and the wall clock is the time
+  # waited, and reporting the sum as the cost would overstate it by roughly the lane count. Both are
+  # printed because the gap between them is the reading that says whether more lanes would help.
+  #
+  # The slowest is NAMED, because a total nobody can attribute is a number with no action attached: the
+  # measurement that started this found ONE fixture holding 55.8s of a 65.7s sweep, and no output said so.
+  echo "Fixture time: $(( SECONDS - sweep_started_at ))s wall over ${jobs} lanes," \
+       "${fixture_seconds_total}s of fixture time, slowest: ${slowest_name:-none} (${slowest_seconds}s)"
   rm -rf "${scratch}"
   return "${failures}"
 }

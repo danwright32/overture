@@ -66,6 +66,10 @@ DerivedData/
 # line above, and the date lives inside the file rather than being its mtime, which a clone rewrites.
 .overture-live-corpus-seen
 
+# #3166: the local series of full suite runs (date, tests, suites, seconds, retry reason). Per machine,
+# written by mac/scripts/run-tests-locked.sh, read only by its own advisory.
+.overture-suite-run-series
+
 # #1995: when the app-hosted tests (the only ones that render a real SwiftUI view) last passed HERE.
 # Per machine for the same reason as the line above, and the date lives inside the file rather than
 # being its mtime, which a clone rewrites.

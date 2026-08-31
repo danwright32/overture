@@ -83,12 +83,18 @@ STUB
 
   chmod +x "${bin_dir}/flock" "${bin_dir}/ps" "${bin_dir}/xcodebuild" "${bin_dir}/log"
 
+  # #3166: EVERY record the wrapper writes is redirected into the throwaway bin dir, not just the ones
+  # this fixture reads. It drives the REAL wrapper, so anything it does not override it writes into the
+  # live tree (L2). Found by the sibling fixture's own guard: this one had no series override, and its
+  # stub runs appended their fake sizes (2400 tests in 348 suites) to the repository's real series.
   output="$(PATH="${bin_dir}:${PATH}" \
     OVERTURE_TEST_BASELINE_FILE="${bin_dir}/baseline" \
     OVERTURE_TEST_DIAGNOSTICS_DIR="${bin_dir}/diagnostics" \
     OVERTURE_TEST_STALL_LIMIT_SECONDS="${stall_limit}" \
     OVERTURE_TEST_STALL_CHECK_SECONDS="${check_every}" \
     OVERTURE_TEST_LOCK_NOTICE_SECONDS="${lock_notice}" \
+    OVERTURE_HOSTED_SUITE_RECORD="${bin_dir}/hosted-seen" \
+    OVERTURE_SUITE_RUN_SERIES="${bin_dir}/suite-run-series" \
     "${SCRIPT_DIR}/run-tests-locked.sh" 2>&1)"
   rm -rf "${bin_dir}"
   printf '%s\n' "${output}"

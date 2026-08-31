@@ -523,6 +523,30 @@ tracked_shell_files() {
   done < <(git -C "${REPO_ROOT}" ls-files "${pattern}")
 }
 
+# --- #3237: the sweep says what each fixture cost -----------------------------------------------------
+# The runner printed no per-fixture duration, so the fact that ONE fixture held 55.8s of a 65.7s sweep
+# was invisible until somebody timed them by hand. A number nobody can see is a number nobody acts on.
+TIMED_A="${TMP_DIR}/timed-a.test.sh"
+printf '#!/usr/bin/env bash\necho "ok - a asserted"\n' > "${TIMED_A}"
+TIMED_B="${TMP_DIR}/timed-b.test.sh"
+printf '#!/usr/bin/env bash\necho "ok - b asserted"\n' > "${TIMED_B}"
+chmod +x "${TIMED_A}" "${TIMED_B}"
+TIMED_OUT="$(run_shell_fixtures "${TIMED_A}" "${TIMED_B}" 2>&1)"
+# Asserted as a NUMBER, not as a parenthesis. Written the loose way first and proved SURVIVED: with the
+# recording removed the heading still reads `timed-a.test.sh  (?s)`, and a check for "(" is answered by
+# the unmeasured state exactly as well as by a real duration (L98, L11).
+assert_eq "each fixture's heading carries its own wall time as a number" "1" \
+  "$(grep -cE 'timed-a\.test\.sh  \([0-9]+s\)' <<< "${TIMED_OUT}")"
+assert_eq "and so does the second one" "1" \
+  "$(grep -cE 'timed-b\.test\.sh  \([0-9]+s\)' <<< "${TIMED_OUT}")"
+assert_not_contains "and a duration that could not be read is never printed as one" "${TIMED_OUT}" "(?s)"
+assert_contains "and the sweep says what it cost in total" "${TIMED_OUT}" "Fixture time:"
+assert_contains "naming how many lanes it used, since that is what the total is against" \
+  "${TIMED_OUT}" "lanes"
+# The slowest are named, because a total nobody can attribute is a number without an action attached.
+assert_eq "and it names the slowest fixture with a real number beside it" "1" \
+  "$(grep -cE 'slowest: timed-[ab]\.test\.sh \([0-9]+s\)' <<< "${TIMED_OUT}")"
+
 # --- #3401: a BUILTIN producer piped into a consumer that exits early --------------------------------
 # The rule above asks about the pipeline's STATUS and so covers only a condition. This one asks about the
 # producer's STDERR, which is what actually failed a push: `run-heartbeat.test.sh` reported
