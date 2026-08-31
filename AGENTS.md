@@ -339,9 +339,16 @@ already drifting from the Swift version it mirrored.
   main-actor suites here are main-actor for a real reason: of the 462 files carrying the attribute when
   this was written, 300 touch SwiftData, whose containers are main-actor bound, so a gate would fire on
   the ordinary case and be switched off within a day (L93). What #3386 removed was the other kind, the
-  suites that carried it and did not need it, which the COMPILER decides rather than a reading of the
-  code: strip the attribute, build, and put it back wherever the build says it was load bearing. Of 85
-  suites tried that way, 83 did not need it and 2 did.
+  suites that carried it and did not need it: strip the attribute, build, and put it back wherever the
+  build says it was load bearing.
+  **Two things about that method are worth knowing before repeating it.** A normal build reports
+  isolation errors one BATCH at a time, so the loop finds one or two files per round and takes an hour;
+  `SWIFT_COMPILATION_MODE=wholemodule` passed through the wrapper reported 37 of them in a single build,
+  which is not exhaustive on its own but turns a dozen rounds into two. And the compiler is NOT a
+  sufficient guard: `ScrollPassthroughWebViewTests` compiled perfectly without its attribute and then
+  crashed the test process part way through a full run, which the short-run gate caught and correctly
+  refused to call a pass. A suite touching AppKit or WebKit keeps its isolation whatever the compiler
+  says, because the breakage there is at run time.
   Read its answer correctly. Three exit codes, and the third is the one that matters: `2` is UNMEASURED,
   because a tree where no suite could be read and a tree with no main-actor suites leave the same empty
   result (L98). The unit is the SUITE rather than the file, since one file can declare several, and a

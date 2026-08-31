@@ -225,7 +225,7 @@ assert_equals "and a scope is still found beside a flag, wherever it sits" "0" "
 #
 # The share is the answer to whether the proofs a PR carries could share one build, and it is printed on
 # every proof rather than written down, so it cannot go stale the way a dated sentence does.
-SHARE_LOG="$(fixture_scratch_file)"
+SHARE_LOG="${WORK}/share-log"
 cat > "${SHARE_LOG}" <<'LOG'
 ** TEST FAILED **
 run-tests-locked.sh: Suite shape: 5 tests in 1 suite, 0.4s. Test Swift to app Swift 1.92 to 1.
@@ -235,7 +235,7 @@ assert_contains "a proof says how much of it was build rather than tests" \
 
 # The two states that must not be folded into that, because a share computed against a duration nobody
 # read is the whole wall clock, and that reads exactly like a measurement (L98, L11).
-NO_SHAPE_LOG="$(fixture_scratch_file)"
+NO_SHAPE_LOG="${WORK}/no-shape-log"
 printf '%s\n' "** TEST FAILED **" > "${NO_SHAPE_LOG}"
 assert_empty "a run that reported no duration of its own claims no share" \
   "$(mutation_build_share 94 "${NO_SHAPE_LOG}")"

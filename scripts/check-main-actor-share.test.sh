@@ -16,6 +16,8 @@ source "${SCRIPT_DIR}/check-main-actor-share.sh"
 # reader of one of them reports about half the real number, and half is the answer that reads as a
 # measurement (L11).
 WORK="$(fixture_scratch_dir)"
+# One scratch root for the whole file, removed at the end: the fixture runner fails a fixture that
+# leaves anything behind, and every path below hangs off this one.
 mkdir -p "${WORK}/mac/OvertureTests"
 
 cat > "${WORK}/mac/OvertureTests/AboveTests.swift" <<'SWIFT'
@@ -82,7 +84,7 @@ assert_not_contains "and never reports a percentage it did not measure" "${UNMEA
 
 # And the record is not stamped by such a run, or the last real measurement would be overwritten by one
 # that read nothing and the direction of travel would be nonsense from then on.
-RECORD_PROBE="$(fixture_scratch_file)"
+RECORD_PROBE="${WORK}/record-probe"
 printf '%s\n' "37" > "${RECORD_PROBE}"
 OVERTURE_MAIN_ACTOR_RECORD="${RECORD_PROBE}" REPO_ROOT_OVERRIDE="${WORK}/nowhere" \
   main_actor_share_main > /dev/null 2>&1
@@ -93,7 +95,7 @@ assert_equals "an unmeasured run leaves the last real reading alone" \
 # nothing about a direction of travel and, more to the point, print no error of its own: an input
 # redirection is processed before the `2>/dev/null` meant to quieten it, so the first version announced
 # a missing file on every first run.
-ABSENT_RECORD="$(fixture_scratch_dir)/never-written"
+ABSENT_RECORD="${WORK}/never-written"
 FIRST_RUN_ERRORS="$(OVERTURE_MAIN_ACTOR_RECORD="${ABSENT_RECORD}" REPO_ROOT_OVERRIDE="${WORK}" \
   main_actor_share_main 2>&1 >/dev/null)"
 assert_empty "the first run on a machine with no record says nothing on stderr" "${FIRST_RUN_ERRORS}"
@@ -107,6 +109,8 @@ OVERTURE_MAIN_ACTOR_RECORD="${RECORD_PROBE}" REPO_ROOT_OVERRIDE="${WORK}" main_a
 assert_not_equals_37="$(tr -d ' \n' < "${RECORD_PROBE}")"
 assert_equals "while a run that really measured records what it saw" \
   "66" "${assert_not_equals_37}"
+
+rm -rf "${WORK}"
 
 if [ "${FAILURES:-0}" -ne 0 ]; then
   echo "${FAILURES} check-main-actor-share failure(s)"
