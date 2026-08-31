@@ -558,7 +558,17 @@ already drifting from the Swift version it mirrored.
   LANDED ELSEWHERE naming a line nobody wrote, its parentheses having grouped rather than matched. That
   happened six times in one session, each costing a rerun of a scoped Swift suite. `--at-regex` is the
   opt in for an aim that genuinely wants a pattern; it is a separate flag rather than a mode on `--at`
-  so which reading is in force is visible at the call site. The perl expression is still genuinely perl
+  so which reading is in force is visible at the call site.
+  **Since #3344 `--at` may be given MORE THAN ONCE**, each naming one line, and a touched line has to be
+  named by one of them. That is for the ordinary two-line shape one aim cannot state: a `set -m` above
+  the line it protects, a `return` under the message explaining it. Measured 2026-08-30 while proving
+  #3292 and #3264, five correctly aimed mutations came back LANDED ELSEWHERE naming a line one above or
+  below the aim, and two were then worked around by hand-editing the file with perl, which is the exact
+  sequence this tool exists to stop anybody doing. The two flags MIX and each aim is read the way its own
+  flag says. One thing to know before using it: an aim that names NO line is refused on its own, rather
+  than being carried by a neighbour that does match. With a single aim a typo could only ever refuse,
+  since every touched line fell outside it, so the wrong aim announced itself; with two it would be
+  silently covered and a line you believe you named would be uncovered (L98). The perl expression is still genuinely perl
   and is unchanged, but a `NOT APPLIED` whose search text IS in the file literally now NAMES the
   metacharacters being read as a regex, the way `PERL VARIABLE` already names `$0`. It says that only
   with that evidence, never on the mere presence of a metacharacter, so the ordinary typo (text that is

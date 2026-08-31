@@ -449,6 +449,76 @@ printf 'struct Subject {\n    static let answer = "yes"\n}\n' > "${SUBJECT}"
 OUT="$(OVERTURE_MUTATE_RUNNER="${RED_RUNNER}" "${MUTATE}" --at 'answer|absent' "${SUBJECT}" 's/"yes"/"no"/' 2>&1)"
 assert_contains "a regex handed to the literal aim is refused" "${OUT}" "LANDED ELSEWHERE"
 
+# --- #3344: an aim can span more than one line ------------------------------------------------------
+# `--at` refuses a mutation touching any line the aim does not name, which is the right rule and caught
+# real misfires (#3080, #2820). What it could not express is an aim spanning TWO ADJACENT lines, which is
+# an ordinary shape: a `set -m` above the line it protects, a `return` under the message explaining it.
+#
+# Measured 2026-08-30 while proving #3292 and #3264: five correctly aimed mutations came back LANDED
+# ELSEWHERE naming a line one above or below the aim. Two were worked around by copying the file, editing
+# it with perl by hand and copying it back, which is exactly the sequence this script exists to stop
+# anybody doing, and one by finding a weaker single-line mutation, which proves less.
+TWO_LINE_SUBJECT='struct Subject {
+    static let answer = "yes"
+    static let other = "no"
+}'
+printf '%s\n' "${TWO_LINE_SUBJECT}" > "${SUBJECT}"
+OUT="$(OVERTURE_MUTATE_RUNNER="${RED_RUNNER}" "${MUTATE}" \
+  --at 'static let answer' --at 'static let other' "${SUBJECT}" \
+  's/"yes"\n    static let other = "no"/"a"\n    static let other = "b"/' 2>&1)"
+STATUS=$?
+assert_contains "two aims cover a mutation spanning both their lines" "${OUT}" "CAUGHT"
+assert_not_contains "and it is not refused" "${OUT}" "LANDED ELSEWHERE"
+assert_equals "and exits 0" "0" "${STATUS}"
+
+# The SAME mutation with only the first aim is still refused, so the pair is doing real work rather than
+# the check having been loosened into one that accepts everything (L1).
+printf '%s\n' "${TWO_LINE_SUBJECT}" > "${SUBJECT}"
+OUT="$(OVERTURE_MUTATE_RUNNER="${RED_RUNNER}" "${MUTATE}" \
+  --at 'static let answer' "${SUBJECT}" \
+  's/"yes"\n    static let other = "no"/"a"\n    static let other = "b"/' 2>&1)"
+assert_contains "one aim over a two-line mutation is still refused" "${OUT}" "LANDED ELSEWHERE"
+assert_contains "and names the line the single aim does not cover" "${OUT}" "line(s) 3"
+
+# A mutation outside EVERY aim is refused, and the refusal lists them all, because a message naming one
+# of several leaves the reader to guess which were in force.
+printf '%s\n' "${TWO_LINE_SUBJECT}" > "${SUBJECT}"
+OUT="$(OVERTURE_MUTATE_RUNNER="${RED_RUNNER}" "${MUTATE}" \
+  --at 'static let answer' --at 'static let other' "${SUBJECT}" 's/struct Subject/struct Other/' 2>&1)"
+assert_contains "a mutation outside every aim is refused" "${OUT}" "LANDED ELSEWHERE"
+assert_contains "and lists the first aim" "${OUT}" "--at static let answer"
+assert_contains "and the second one too" "${OUT}" "--at static let other"
+
+# An aim that names NO line is refused rather than carried by its neighbour. With a single aim a typo
+# could only ever refuse, because every touched line fell outside it, so the wrong aim announced itself.
+# With two, a typo is silently covered by the other and the author is left believing a line was named
+# that never was (L98).
+printf '%s\n' "${TWO_LINE_SUBJECT}" > "${SUBJECT}"
+OUT="$(OVERTURE_MUTATE_RUNNER="${RED_RUNNER}" "${MUTATE}" \
+  --at 'static let answer' --at 'static let nosuchthing' "${SUBJECT}" 's/"yes"/"no"/' 2>&1)"
+STATUS=$?
+assert_contains "an aim naming no line is refused" "${OUT}" "LANDED ELSEWHERE"
+assert_contains "and names the aim that covers nothing" "${OUT}" "static let nosuchthing"
+assert_not_contains "and never reports it as caught" "${OUT}" "CAUGHT"
+assert_equals "and does not exit 0" "1" "$([ "${STATUS}" -ne 0 ] && echo 1 || echo 0)"
+
+# The two flags MIX, each read the way its own flag says. One reading for the whole set would make it
+# depend on which flag was written last, which is the invisible-at-the-call-site problem #3080 split
+# them over.
+printf '%s\n' "${TWO_LINE_SUBJECT}" > "${SUBJECT}"
+OUT="$(OVERTURE_MUTATE_RUNNER="${RED_RUNNER}" "${MUTATE}" \
+  --at 'static let answer' --at-regex 'let other|absent' "${SUBJECT}" \
+  's/"yes"\n    static let other = "no"/"a"\n    static let other = "b"/' 2>&1)"
+assert_contains "a literal aim and a regex aim can be given together" "${OUT}" "CAUGHT"
+
+# And the mirror, so the mixing cannot have quietly made both readings the same: the same alternation
+# handed to the LITERAL flag names no line and is refused.
+printf '%s\n' "${TWO_LINE_SUBJECT}" > "${SUBJECT}"
+OUT="$(OVERTURE_MUTATE_RUNNER="${RED_RUNNER}" "${MUTATE}" \
+  --at 'static let answer' --at 'let other|absent' "${SUBJECT}" \
+  's/"yes"\n    static let other = "no"/"a"\n    static let other = "b"/' 2>&1)"
+assert_contains "the same alternation given literally is refused" "${OUT}" "LANDED ELSEWHERE"
+
 # `--at-regex` after the expression is the same misplaced flag `--at` already is (#2993), and has to be
 # refused the same way rather than falling into the trailing scopes.
 printf 'struct Subject {\n    static let answer = "yes"\n}\n' > "${SUBJECT}"

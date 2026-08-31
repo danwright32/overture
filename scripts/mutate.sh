@@ -81,7 +81,10 @@ instruction itself is malformed: every one of those looks like a result and mean
 guard.
 
   --at <text>         LITERAL text naming the lines the mutation is aimed at. Every line the mutation
-                      touches must contain it, or the run is refused as LANDED ELSEWHERE. Literal
+                      touches must contain it, or the run is refused as LANDED ELSEWHERE. May be given
+                      MORE THAN ONCE, each naming one line, for a mutation spanning adjacent lines: a
+                      touched line then has to be named by one of them, and an aim naming no line at
+                      all is refused rather than carried by its neighbours (#3344). Literal
                       because an aim is a LOCATOR, not a pattern: `Text(Copy.openReview)` names the
                       line it looks like it names, and its parentheses do not group (#3080).
   --at-regex <re>     the same check, reading its argument as an extended regex. Opt in, and a separate
@@ -109,16 +112,31 @@ guard.
 USAGE
 }
 
-# The declared aim, empty when none was given. Read before the positional arguments, so `--at` cannot be
+# The declared aims, empty when none was given. Read before the positional arguments, so `--at` cannot be
 # mistaken for the file (the fixture proved that first: without this the refusal read "no file at --at").
-AIM=""
-# #3080: whether that aim is read as a regex. FALSE by default, because an aim is a locator and the
+#
+# #3344: a LIST, because an aim spanning two adjacent lines is an ordinary shape and one aim cannot say
+# it: a `set -m` above the line it protects, a `return` under the message explaining it. Measured
+# 2026-08-30 while proving #3292 and #3264, five correctly aimed mutations came back LANDED ELSEWHERE
+# naming a line one above or below the aim, and two were then worked around by hand-editing the file with
+# perl, which is the sequence this script exists to stop anybody doing (#2820's incident is a hand-rolled
+# mutation that matched nothing and read as a surviving guard).
+#
+# Each `--at` names ONE line's text and they are read together: a touched line must be named by ONE of
+# them. That keeps the property worth having, that an aim is a locator and anything outside every aim is
+# refused, while letting a two-line aim be stated.
+AIMS=()
+# #3080: whether each aim is read as a regex. FALSE by default, because an aim is a locator and the
 # regex reading is what cost six reruns in one session: `Text(SendConfirmCopy.openReview)` reported
 # LANDED ELSEWHERE naming a line the author never wrote, because the parentheses grouped rather than
 # matched, and `try?` made the `y` optional. The tool was RIGHT every time, which is why this is a
 # usability fix and not a correctness one: what it cost was a rerun of a scoped Swift suite, and
 # AGENTS.md requires a mutation per guard in every PR body.
-AIM_IS_REGEX="false"
+#
+# Kept PER AIM rather than for the set, so `--at` and `--at-regex` can be mixed and each is read the way
+# its own flag says. One reading for the whole set would make it depend on which flag was written last,
+# which is exactly the invisible-at-the-call-site problem #3080 split the two flags over.
+AIM_KINDS=()
 # #2995: whether the compiler refusing this IS the finding. Declared, never inferred: the two cases look
 # identical from here and only the author knows which one this is.
 BREAKS_THE_BUILD="false"
@@ -129,23 +147,23 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --at)
-      AIM="${2:-}"
-      AIM_IS_REGEX="false"
+      AIMS+=("${2:-}")
+      AIM_KINDS+=("literal")
       shift 2
       ;;
     --at=*)
-      AIM="${1#--at=}"
-      AIM_IS_REGEX="false"
+      AIMS+=("${1#--at=}")
+      AIM_KINDS+=("literal")
       shift
       ;;
     --at-regex)
-      AIM="${2:-}"
-      AIM_IS_REGEX="true"
+      AIMS+=("${2:-}")
+      AIM_KINDS+=("regex")
       shift 2
       ;;
     --at-regex=*)
-      AIM="${1#--at-regex=}"
-      AIM_IS_REGEX="true"
+      AIMS+=("${1#--at-regex=}")
+      AIM_KINDS+=("regex")
       shift
       ;;
     *)
@@ -509,14 +527,34 @@ if [[ "${MATCHED_LENGTH}" == "0" ]]; then
   exit 2
 fi
 
-if [[ -n "${AIM}" ]]; then
+if [[ "${#AIMS[@]}" -gt 0 ]]; then
   # #3080: -F unless --at-regex asked for a pattern. Both spellings go through ONE grep so the two
   # readings cannot drift into different line-numbering or different quoting rules.
-  if [[ "${AIM_IS_REGEX}" == "true" ]]; then
-    AIMED_LINES="$(grep -nE -- "${AIM}" "${BACKUP}" 2>/dev/null | cut -d: -f1)"
-  else
-    AIMED_LINES="$(grep -nF -- "${AIM}" "${BACKUP}" 2>/dev/null | cut -d: -f1)"
-  fi
+  #
+  # #3344: the union over every aim, and each aim is checked for naming a line AT ALL first. With one aim
+  # a typo could only ever refuse, since every touched line fell outside it, so the wrong aim announced
+  # itself. With two, an aim naming nothing is silently carried by its neighbour and the author is left
+  # believing a line was covered that never was (L98).
+  AIMED_LINES=""
+  for (( aim_index = 0; aim_index < ${#AIMS[@]}; aim_index++ )); do
+    aim="${AIMS[aim_index]}"
+    if [[ "${AIM_KINDS[aim_index]}" == "regex" ]]; then
+      aim_lines="$(grep -nE -- "${aim}" "${BACKUP}" 2>/dev/null | cut -d: -f1)"
+    else
+      aim_lines="$(grep -nF -- "${aim}" "${BACKUP}" 2>/dev/null | cut -d: -f1)"
+    fi
+    if [[ -z "${aim_lines}" ]]; then
+      echo "LANDED ELSEWHERE - this aim names no line in ${TARGET}, so it covers nothing:"
+      echo "  --at ${aim}"
+      echo
+      echo "  Nothing was run. An aim matching nothing cannot say where the mutation was supposed to"
+      echo "  land, and beside another aim that does match it would be carried silently, leaving a line"
+      echo "  you believe you named uncovered. A literal --at matches the characters exactly; use"
+      echo "  --at-regex for an aim that is meant to be a pattern."
+      exit 2
+    fi
+    AIMED_LINES="${AIMED_LINES}${aim_lines}"$'\n'
+  done
   TOUCHED_LINES="$(mutation_touched_original_lines "${BACKUP}" "${TARGET}")"
   OUTSIDE_LINES=""
   while IFS= read -r touched_line; do
@@ -530,8 +568,10 @@ if [[ -n "${AIM}" ]]; then
   done <<< "${TOUCHED_LINES}"
 
   if [[ -n "${OUTSIDE_LINES}" ]]; then
-    echo "LANDED ELSEWHERE - the mutation touched line(s) ${OUTSIDE_LINES}, which --at does not name."
-    echo "  --at ${AIM}"
+    echo "LANDED ELSEWHERE - the mutation touched line(s) ${OUTSIDE_LINES}, which no --at names."
+    for aim in "${AIMS[@]}"; do
+      echo "  --at ${aim}"
+    done
     echo
     echo "  Nothing was run. The suite's verdict would be about whatever this broke, not about the guard"
     echo "  on the line you aimed at, and a red run there reads exactly like the guard firing."
@@ -539,7 +579,9 @@ if [[ -n "${AIM}" ]]; then
   fi
   if [[ -z "${TOUCHED_LINES}" ]]; then
     echo "LANDED ELSEWHERE - the mutation touched no line that --at names."
-    echo "  --at ${AIM}"
+    for aim in "${AIMS[@]}"; do
+      echo "  --at ${aim}"
+    done
     exit 2
   fi
 fi
