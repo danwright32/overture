@@ -873,8 +873,16 @@ main() {
   #
   # Printed only when this run NAMED failing tests. A crash prints the heading with nothing under it
   # (#1006's whole tell), and "FAILING TESTS (0)" would be a count of a run that did not fail at all.
+  #
+  # #3348: and each name carries its REASON, read from the run's own result bundle. Under
+  # `-parallel-testing-enabled YES` the reason reaches nothing else: a worker's stdout does not reach
+  # xcodebuild's, and Swift Testing writes an issue's text there, so three full parallel runs carrying
+  # three real failures held zero occurrences of `Expectation failed` or `recorded an issue` between
+  # them. The bundle path is the one the run printed itself, the same one the executed count is read
+  # from, and it is passed even when empty so a run that named no bundle says that rather than showing
+  # names with nothing under them.
   local failing_reprint
-  failing_reprint="$(failing_tests_report "${last_output}")"
+  failing_reprint="$(failing_tests_report "${last_output}" "$(test_run_result_bundle "${last_output}")")"
   if [[ -n "${failing_reprint}" ]]; then
     echo >&2
     awk 'NR==1 {print "run-tests-locked.sh: " $0; next} {print}' <<< "${failing_reprint}" >&2
