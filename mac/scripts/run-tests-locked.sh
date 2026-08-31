@@ -643,6 +643,11 @@ main() {
   # so the cheaper reading still wins where it works.
   if [[ -z "${restarted}" ]]; then
     TIME_LIMIT_KILL="$(result_bundle_time_limit_kill "$(test_run_result_bundle "${last_output}")")"
+    # #3385: and from the run's own output when the bundle could not be read. The bundle is ALSO where
+    # the executed count comes from, so reading the kill only from there meant one unreadable bundle took
+    # both at once: the detection fell silent and the count printed the remainder as a size. The two
+    # sources now fail independently.
+    [[ -z "${TIME_LIMIT_KILL}" ]] && TIME_LIMIT_KILL="$(output_time_limit_kill "${last_output}")"
     [[ -n "${TIME_LIMIT_KILL}" ]] && restarted="time-limit ${TIME_LIMIT_KILL}"
   fi
 

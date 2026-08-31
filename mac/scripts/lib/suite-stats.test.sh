@@ -813,6 +813,47 @@ assert_contains "and keeps the wording that lists the causes it cannot tell apar
 assert_contains "a run that was not killed still states its size" \
   "$(format_suite_report "8643 1179 144.834" "1.92 to 1" "2206" "8647" "")" "8643 tests in 1179 suites"
 
+# ---------------------------------------------------------------------------
+# #3385: the kill is readable from the run's OWN OUTPUT, so one unreadable bundle cannot take both
+# ---------------------------------------------------------------------------
+# #3384 read the kill from the result bundle only, and the bundle is also where the executed count comes
+# from. Measured on the first real truncated run after it shipped: the bundle could not be read, so the
+# detection said nothing AND the count fell back to the log text, and the readout printed
+# `5035 tests in 782 suites` for a run that had lost 3,608 tests. A guard must not draw on the same
+# source as the reading it would refuse.
+#
+# The signature needs no list of declared limits: Swift Testing expresses a time limit in whole MINUTES,
+# so a killed test reports a whole number of minutes in seconds to three decimals.
+
+KILLED_LINE="Test case 'RunStateIsPerSlotTests/aCheckStartedWhileAPrepIsLiveIsStillFollowed()' failed on 'My Mac - xctest (92479)' (60.000 seconds)"
+assert_eq "a failed test at exactly one minute is a time limit kill" \
+  "$(output_time_limit_kill "${KILLED_LINE}")" \
+  "RunStateIsPerSlotTests/aCheckStartedWhileAPrepIsLiveIsStillFollowed()"
+
+# A longer limit, so the reading is not the number 60 (L70: a check that only ever sees one value proves
+# nothing about the rule it claims to apply).
+assert_eq "a failed test at exactly three minutes is one too" \
+  "$(output_time_limit_kill "Test case 'Slow/thing()' failed on 'My Mac - xctest (1)' (180.000 seconds)")" \
+  "Slow/thing()"
+
+# A PASSING test is never a kill, whatever its duration reads. This is the case that stops the rule
+# firing on the ordinary parallel log, where the seconds are elapsed since the worker began rather than
+# what the test cost, so a whole minute lands there constantly (L93).
+assert_empty "a passing test at exactly one minute is not a kill" \
+  "$(output_time_limit_kill "Test case 'Fine/thing()' failed_not on 'My Mac - xctest (1)' (60.000 seconds)
+Test case 'Fine/other()' passed on 'My Mac - xctest (1)' (60.000 seconds)")"
+
+# An ordinary failure is not a kill either, or the reading would fire on every red run there is.
+assert_empty "an ordinary failure at a fractional duration is not a kill" \
+  "$(output_time_limit_kill "Test case 'Red/thing()' failed on 'My Mac - xctest (1)' (0.013 seconds)")"
+
+# And a duration that is a whole number of SECONDS but not of minutes is not a limit, since a limit
+# cannot be expressed that way.
+assert_empty "a failure at thirty seconds is not a time limit" \
+  "$(output_time_limit_kill "Test case 'Red/thing()' failed on 'My Mac - xctest (1)' (30.000 seconds)")"
+
+assert_empty "a run with no test lines at all yields nothing" "$(output_time_limit_kill "")"
+
 if [[ "${FAILURES}" -eq 0 ]]; then
   echo "All suite-stats.sh fixtures passed."
   exit 0
