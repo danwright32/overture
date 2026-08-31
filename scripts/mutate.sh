@@ -641,9 +641,17 @@ SHAPE="$(grep -oE "Test run with [0-9]+ tests? in [0-9]+ suites?" "${RUN_LOG}" |
 # guards. That is L156 exactly: a check looking for a substring of the thing being talked about also
 # matches the discussion of it, and here it turned a CAUGHT into a refusal.
 #
-# The runner emits it as `<script>: NOTHING RAN. <detail>`, so the phrase is required to open a line or to
-# follow a `: ` prefix. A mention inside prose or a comment is preceded by something else.
-if grep -qE "(^|: )NOTHING RAN\b" "${RUN_LOG}"; then
+# The runner emits it as `<script>: NOTHING RAN. <detail>` at the START of a line, and that is what is
+# required: either the phrase opens the line, or a script name and a colon do.
+#
+# #3395: the `: ` was allowed ANYWHERE on the line, and that let the phrase back in one level further out
+# than #3035's case. A fixture whose failing assertion PRINTS A SCRIPT'S SOURCE puts the runner's own
+#     echo "run-tests-locked.sh: NOTHING RAN. ${nothing_ran_detail}" >&2
+# into the log, and the ` : ` branch matched it. Measured 2026-08-31 while proving #3348's wiring guard:
+# a run that had really run and gone red on exactly the assertion under test was reported NOTHING RAN.
+# A dumped source line is preceded by `echo "` or by indentation, so anchoring to the line start covers
+# both this and #3035's comment case, and both have a fixture below.
+if grep -qE "^(NOTHING RAN\b|[A-Za-z0-9._-]+: NOTHING RAN\b)" "${RUN_LOG}"; then
   echo "NOTHING RAN - the run executed no tests, so this says nothing about any guard."
   echo "  Check the scope: $*"
   exit 2
