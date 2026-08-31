@@ -169,8 +169,9 @@ struct ScoutSourceInjectionTests {
                                      kind: .algolia)
         ctx.insert(carnegie)
         let stub = StubSourceExtractor(error: StubSourceExtractor.Failure.unreachable)
-        let scratch = UserDefaults(suiteName: "ScoutSourceFailureTests")!
-        scratch.removePersistentDomain(forName: "ScoutSourceFailureTests")
+        let suite = "ScoutSourceFailureTests-\(UUID().uuidString)"
+        let scratch = UserDefaults(suiteName: suite)!
+        scratch.removePersistentDomain(forName: suite)
 
         let outcome = try await ScoutService.runScout(into: ctx, extractor: stub, defaults: scratch)
 
@@ -204,8 +205,9 @@ struct ScoutSourceInjectionTests {
             ctx.insert(WatchedSource(sourceId: org, orgName: org,
                                      listingsURL: "https://\(org).example/events", kind: .html))
         }
-        let scratch = UserDefaults(suiteName: "ScoutLoopTests")!
-        scratch.removePersistentDomain(forName: "ScoutLoopTests")
+        let suite = "ScoutLoopTests-\(UUID().uuidString)"
+        let scratch = UserDefaults(suiteName: suite)!
+        scratch.removePersistentDomain(forName: suite)
 
         let stub = StubSourceExtractor(listing: ExtractedListing(events: [], verdict: .upcomingListings))
         let outcome = try await ScoutService.runScout(
@@ -241,8 +243,9 @@ struct ScoutSourceInjectionTests {
             configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
         ctx.insert(WatchedSource(sourceId: "org", orgName: "Org",
                                  listingsURL: "https://org.example/events", kind: .html))
-        let scratch = UserDefaults(suiteName: "ScoutWatchOnlyTests")!
-        scratch.removePersistentDomain(forName: "ScoutWatchOnlyTests")
+        let suite = "ScoutWatchOnlyTests-\(UUID().uuidString)"
+        let scratch = UserDefaults(suiteName: suite)!
+        scratch.removePersistentDomain(forName: suite)
 
         let stub = StubSourceExtractor(listing: ExtractedListing(events: [], verdict: .upcomingListings))
         let outcome = try await ScoutService.runScout(
@@ -276,8 +279,9 @@ struct ScoutSourceInjectionTests {
         let ctx = ModelContext(try ModelContainer(
             for: Schema([Prospect.self, WatchedSource.self]),
             configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
-        let scratch = UserDefaults(suiteName: "ScoutSourceInjectionTests")!
-        scratch.removePersistentDomain(forName: "ScoutSourceInjectionTests")
+        let suite = "ScoutSourceInjectionTests-\(UUID().uuidString)"
+        let scratch = UserDefaults(suiteName: suite)!
+        scratch.removePersistentDomain(forName: suite)
 
         // Carnegie's row, as the #800 backfill leaves it on a real store.
         let carnegie = WatchedSource(sourceId: WatchedSource.carnegieId, orgName: "Carnegie Hall",
@@ -321,8 +325,9 @@ struct ScoutSourceInjectionTests {
         let ctx = ModelContext(try ModelContainer(
             for: Schema([Prospect.self, WatchedSource.self]),
             configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
-        let scratch = UserDefaults(suiteName: "ScoutWarmupTests")!
-        scratch.removePersistentDomain(forName: "ScoutWarmupTests")
+        let suite = "ScoutWarmupTests-\(UUID().uuidString)"
+        let scratch = UserDefaults(suiteName: suite)!
+        scratch.removePersistentDomain(forName: suite)
 
         ctx.insert(WatchedSource(sourceId: WatchedSource.carnegieId, orgName: "Carnegie Hall",
                                  kind: .algolia))

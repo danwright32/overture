@@ -103,4 +103,21 @@ extension Trait where Self == SharesGlobalState {
     /// Measured 2026-08-30, it went red once in a parallel run and passed in the run before it, which is
     /// the shape that trains people to re-run until green (#3234).
     static var sharesTheRenderCounter: Self { Self(name: "QueueRenderCounter") }
+
+    /// The suites that reset and read `ResponseDecodeFailures.shared`, the process-wide register the APP
+    /// itself records every unreadable response into (#3272).
+    ///
+    /// This one is the reason #3272 exists. `scripts/check-test-shared-state.sh` finds shared state by
+    /// its SHAPE, a stored mutable `static var` in a test target, and this state has neither property:
+    /// it is a singleton, reached through a computed `.shared`, and it lives in the app rather than in
+    /// the tests. So the check that reads as an answer to "does this suite hold shared state" was
+    /// structurally unable to see it (L129).
+    ///
+    /// What it protects is a delta: a test resets the register, drives a real call site, and reads back
+    /// the count for one endpoint. A neighbour's `reset()` landing between the drive and the read wipes
+    /// the record and the assertion fails for a reason unrelated to the code. Swift Testing runs the
+    /// tests of one suite concurrently, so the two tests that do this can collide with EACH OTHER, which
+    /// is the case `.serialized` would close; the trait is used instead because it also closes the case
+    /// `.serialized` cannot, another suite arriving later that records into the same endpoints.
+    static var sharesTheDecodeFailureRegister: Self { Self(name: "ResponseDecodeFailures") }
 }

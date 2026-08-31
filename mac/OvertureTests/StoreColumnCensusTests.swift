@@ -24,9 +24,14 @@ import SwiftData
 final class StoreColumnCensusTests {
     private let sandboxes = TemporarySandboxes()
 
-    private func tempStoreURL() -> URL {
-        (try? sandboxes.makeFile(named: "Overture.store", inSandboxNamed: "census"))
-            ?? URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("Overture.store")
+    // #3272: THROWS rather than falling back. The fallback was
+    // `URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("Overture.store")`, one fixed
+    // path shared by every test in this suite and by anything else on the Mac using that name, reached
+    // exactly when the sandbox could not be made. It was the only fixed temp path in 132 test files that
+    // use the temp directory, and it turned a sandbox failure into a silent collision instead of a
+    // failure (L93, L98).
+    private func tempStoreURL() throws -> URL {
+        try sandboxes.makeFile(named: "Overture.store", inSandboxNamed: "census")
     }
 
     private func makeProspect(_ key: String) -> Prospect {
@@ -56,7 +61,7 @@ final class StoreColumnCensusTests {
 
     // Writes `count` shows, setting a send mode on the first `withMode` of them.
     private func makeStore(count: Int, withMode: Int) throws -> WrittenStore {
-        let url = tempStoreURL()
+        let url = try tempStoreURL()
         let container = try ModelContainer(for: AppSchema.schema,
                                            configurations: [ModelConfiguration(url: url)])
         let ctx = ModelContext(container)
@@ -151,8 +156,8 @@ final class StoreColumnCensusTests {
         #expect(census(store, table: "ZNOSUCHTABLE") == .unreadable(.tableNotInStore(table: "ZNOSUCHTABLE")))
     }
 
-    @Test func namesTheFileThatIsNotThere() {
-        let missing = tempStoreURL()
+    @Test func namesTheFileThatIsNotThere() throws {
+        let missing = try tempStoreURL()
 
         let reading = StoreColumnCensus.nonNullRows(table: "ZPROSPECT",
                                                     column: "ZSENDSTOGETHEROVERRIDE",
