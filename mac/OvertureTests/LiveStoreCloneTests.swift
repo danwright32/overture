@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 import SwiftData
+import SQLite3
 
 // #1672. Four suites rehearsed a migration against Dan's real store, each copying the `.store`, its
 // `-wal` and its `-shm` one file at a time, with no checkpoint and no lock, while Overture Release may be
@@ -191,45 +192,57 @@ struct ContendedLiveStoreCloneTests {
                 "the fixture's own sqlite3 call failed, so nothing below measures anything")
     }
 
-    /// A source in ROLLBACK JOURNAL mode, held by an exclusive transaction in another process.
+    /// Holds an EXCLUSIVE lock on a database, from THIS process, through SQLite directly.
+    ///
+    /// #3266: the first version started a `sqlite3` child, wrote `BEGIN EXCLUSIVE` to its stdin and
+    /// carried on. Starting a process and writing to a pipe both return long before the child has read
+    /// that input and taken the lock, so on a loaded machine the clones below ran against an unlocked
+    /// source and every one of them succeeded. Waiting for the lock to appear did not fix it either,
+    /// because the only way to ask was to spawn another `sqlite3`, and under the full suite process
+    /// spawns are themselves what is contended: a probe that could not run was indistinguishable from a
+    /// source that was not locked, so the fixture reported "never held" for thirty seconds (L98).
+    ///
+    /// Opening the database here removes every one of those moving parts. `BEGIN EXCLUSIVE` returning
+    /// SQLITE_OK IS the lock being held: there is nothing to wait for, nothing to poll, no second
+    /// process whose scheduling this depends on, and nothing left in the fixture that measures what else
+    /// the machine is running (L290).
     ///
     /// Rollback journal rather than WAL on purpose: in WAL a writer does not block a reader, so an
     /// exclusive transaction there contends with nothing and the fixture would prove the opposite of
-    /// what it claims. Measured, not assumed: the WAL version of this was tried first and every backup
-    /// succeeded while the lock was held.
+    /// what it claims. Measured, not assumed: the WAL version was tried first and every backup succeeded
+    /// while the lock was held.
     private final class ExclusiveHolder {
-        private let process = Process()
-        private let input = Pipe()
+        private var handle: OpaquePointer?
+
+        enum Failure: Error {
+            case couldNotOpen(String)
+            case couldNotLock(String)
+        }
+
+        /// THROWS when the lock could not be taken, rather than returning something to check. A fixture
+        /// that has not set up must not let the assertions below run at all, because every one of them
+        /// passes against an uncontended source (L1).
         init(holding database: URL) throws {
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
-            process.arguments = [database.path]
-            process.standardInput = input
-            process.standardOutput = Pipe()
-            process.standardError = Pipe()
-            try process.run()
-            // Left UNCOMMITTED and the pipe left open, which is what holds the lock.
-            try input.fileHandleForWriting.write(contentsOf: Data("BEGIN EXCLUSIVE;\nINSERT INTO t VALUES(99);\n".utf8))
+            var opened: OpaquePointer?
+            guard sqlite3_open(database.path, &opened) == SQLITE_OK, let opened else {
+                let message = opened.map { String(cString: sqlite3_errmsg($0)) } ?? "could not open"
+                sqlite3_close(opened)
+                throw Failure.couldNotOpen(message)
+            }
+            guard sqlite3_exec(opened, "BEGIN EXCLUSIVE;", nil, nil, nil) == SQLITE_OK else {
+                let message = String(cString: sqlite3_errmsg(opened))
+                sqlite3_close(opened)
+                throw Failure.couldNotLock(message)
+            }
+            handle = opened
         }
-        /// Commits and lets the process end. Idempotent, so `defer` can call it after the test already has.
-        ///
-        /// The wait is BOUNDED and ends in a `terminate()`. `Process.waitUntilExit()` has no deadline, so
-        /// a holder that did not exit on EOF would hang the suite while holding the machine-wide
-        /// xcodebuild lock, which is worse than any failure this fixture can report (L110).
+
+        /// Ends the transaction and the connection. Idempotent, so `defer` can call it after the test has.
         func release() {
-            try? input.fileHandleForWriting.close()
-            let deadline = ContinuousClock.now + .seconds(10)
-            while process.isRunning && ContinuousClock.now < deadline {
-                usleep(2_000)
-            }
-            if process.isRunning {
-                process.terminate()
-                process.waitUntilExit()
-            }
-        }
-        /// The last resort, so a fixture that fails early cannot leave a process holding a lock behind it.
-        func endWhateverHappened() {
-            if process.isRunning { process.terminate() }
-            release()
+            guard let handle else { return }
+            sqlite3_exec(handle, "ROLLBACK;", nil, nil, nil)
+            sqlite3_close(handle)
+            self.handle = nil
         }
     }
 
@@ -276,33 +289,33 @@ struct ContendedLiveStoreCloneTests {
         let source = sourceDir.appendingPathComponent("Overture.store")
         try sqlite([source.path, "PRAGMA journal_mode=DELETE; CREATE TABLE t(a INTEGER); INSERT INTO t VALUES(1);"])
 
+        // Throws when it could not take the lock, so a fixture that did not set up fails as a setup
+        // failure rather than letting every assertion below pass against an uncontended source.
         let holder = try ExclusiveHolder(holding: source)
-        defer { holder.endWhateverHappened() }
+        defer { holder.release() }
 
-        // Both attempts are made against the SAME held lock, so the only difference between them is the
-        // timeout. Comparing them against each other rather than against a fixed number is what keeps
-        // this a measurement of the wait and not of the machine (L224).
-        let withoutWaiting = attemptClone(of: source, into: root.appendingPathComponent("no-wait"),
-                                          timeoutMilliseconds: 0)
-        let waiting = attemptClone(of: source, into: root.appendingPathComponent("waits"),
-                                   timeoutMilliseconds: 400)
+        // Two attempts against the SAME held lock, differing only in the timeout, and the assertion is on
+        // the DIFFERENCE between them. Both pay the same process spawn, so the difference isolates the
+        // wait and cancels the machine out of it, which a comparison of one attempt against a fixed
+        // number cannot (L224). The first version compared a zero timeout against a short one and went
+        // red under load with 0.200s against 0.288s, which is spawn latency varying rather than a wait.
+        let short = attemptClone(of: source, into: root.appendingPathComponent("short-wait"),
+                                 timeoutMilliseconds: 100)
+        let long = attemptClone(of: source, into: root.appendingPathComponent("long-wait"),
+                                timeoutMilliseconds: 1200)
 
         // Both still FAIL, because the lock is never released here. That is the point: the timeout buys
         // a wait, not an exemption, and a clone that could not be taken must still say so rather than
         // hand back a torn copy (L11).
-        #expect(withoutWaiting.failure?.contains("locked") == true,
-                "a clone with no busy timeout should be refused by the held lock: \(withoutWaiting.failure ?? "it succeeded")")
-        #expect(waiting.failure?.contains("locked") == true,
-                "a clone whose wait ran out should still be refused: \(waiting.failure ?? "it succeeded")")
+        #expect(short.failure?.contains("locked") == true,
+                "a clone with a 100ms wait should still be refused by a lock nobody released: \(short.failure ?? "it succeeded")")
+        #expect(long.failure?.contains("locked") == true,
+                "a clone whose wait ran out should still be refused: \(long.failure ?? "it succeeded")")
 
-        #expect(waiting.elapsed > withoutWaiting.elapsed,
-                "the clone with a 1500ms timeout took \(waiting.elapsed) against \(withoutWaiting.elapsed) with none, so it did not wait at all")
-        // A floor far below the 400ms asked for, and it cannot be reached by a slow machine, because
-        // what is being waited on is a sleep rather than work. 400 rather than a comfortable few seconds
-        // because this is real time the suite pays on every run, and the measured separation is wide:
-        // with no timeout the same call returned in 0.07 seconds (L290).
-        #expect(waiting.elapsed > .milliseconds(150),
-                "the clone waited only \(waiting.elapsed) for a lock it was told to wait 400ms for")
+        // The floor is well under the 1100ms of extra wait asked for, so ordinary variation cannot reach
+        // it, and it is far above the spawn variation measured when this went wrong (about 90ms).
+        #expect(long.elapsed - short.elapsed > .milliseconds(500),
+                "a 1200ms wait took \(long.elapsed) against \(short.elapsed) for a 100ms one, so the timeout is not being honoured")
 
         // And with the lock gone the same clone succeeds, so the refusals above are the lock and not a
         // fixture that could never have worked (L1).
