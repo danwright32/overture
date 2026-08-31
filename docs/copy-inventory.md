@@ -96,6 +96,8 @@ What is not, and why:
 - `Integration/GmailThreadingRepair.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Integration/GmailThreadingRepair.swift`: a Google API URL and an HTTP header, not sentences Overture says (#915)
 - `Integration/InquiryConversationAttach.swift`: an HTTP header, not a sentence (#915)
+- `Integration/LoopbackListener.swift`: a POSIX error code, not a sentence Overture says (#915)
+- `Integration/LoopbackListener.swift`: developer diagnostic log, not the app's voice (#915)
 - `Integration/LoopbackListener.swift`: developer diagnostic log, not the app's voice (#915)
 - `Integration/OperaAmericaCalendar.swift`: synthesized source HTML the
 - `Integration/OperaAmericaCalendar.swift`: an outbound API request body, not the app's voice (#915)
