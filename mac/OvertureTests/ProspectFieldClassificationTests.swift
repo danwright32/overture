@@ -108,6 +108,18 @@ struct ProspectFieldClassificationTests {
         "reachabilityResultRaw": "what the paid check concluded, the same class as a found address",
         "reachabilityEmptyReasonRaw": "why the check came back empty, a fact about that check",
         "reachabilityUnansweredAt": "that a check never reached this show, a fact about the run",
+        // Milestone 61 Phase 0.3. Classified here, beside `reachabilityResultRaw`, and the reasoning is
+        // the same: it is a fact about what a paid CHECK concluded, not evidence that this row ever
+        // reached the outside world, which is what this rule protects. It is strictly weaker than
+        // `reachabilityProbedAt` directly above, which is already here: that says a check ran, this says
+        // only that the check's answer disagreed with what the row held.
+        //
+        // It IS irreplaceable (the repair that stamps it is what destroys the contradiction), so the
+        // cost of leaving it out is that a merged-away row's contradiction is not carried onto the
+        // survivor. That is the same cost `reachabilityResultRaw` already accepts, and #1845 measured
+        // the other direction: counting a found answer as a record wedged three shows into the queue
+        // twice, permanently, on rows nothing had ever been sent.
+        "contradictionMarkedAt": "that a paid check's answer disagreed with what the row held, a fact about that check",
         "fitScoreBeforeContactCheck": "the score before the check moved it, kept for retuning",
         "contactRouteAtScore": "which route was found at that score",
         "contactTierAtScore": "who was found at that score",

@@ -41,8 +41,6 @@ enum ReachabilityVerdictRefresh {
         var unchanged: Int
         var skippedNeverChecked: Int
         var skippedSentOrBooked: Int
-
-        var considered: Int { lifted + lowered + unchanged }
     }
 
     // Returns nil when the repair has already run on this Mac, so a caller can tell "did nothing because
