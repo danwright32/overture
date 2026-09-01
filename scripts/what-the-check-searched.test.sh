@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+# shellcheck source=lib/shell-assertions.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/shell-assertions.sh"
+
+# #2996: when a contact check comes home empty, the useful question is "what did it actually search
+# for", and answering it meant reading raw JSONL by hand out of Application Support. That is how #2983
+# was diagnosed: extracting one run's 22 web calls showed not one of them mentioned the company whose
+# contact page publishes an address, which turned a vague "the check missed it" into a precise defect.
+#
+# This is a READER over evidence that already exists. It became possible for runs older than the
+# current one only with #3446, which archives the streams per run; before that the next run overwrote
+# them.
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TOOL="${SCRIPT_DIR}/what-the-check-searched.sh"
+FAILURES=0
+# One trap naming every scratch this fixture makes, because bash keeps exactly ONE EXIT trap and a
+# second one silently replaces the first (#3249).
+TMP="$(fixture_scratch_dir)"
+EMPTY_DIR=""
+trap 'rm -rf "${TMP}" "${EMPTY_DIR:-}"' EXIT
+
+# A support directory shaped like the real one: an archived run holding its queue, and the streams for
+# that same run under the same stamp in their own directory (#3446).
+mkdir -p "${TMP}/check-run-archives/20260830-205244" \
+         "${TMP}/check-run-event-archives/20260830-205244"
+cat > "${TMP}/check-run-archives/20260830-205244/overture-check-queue.json" <<'JSON'
+{"version":6,"generatedAt":"2026-08-30T20:52:44Z","items":[
+  {"naturalKey":"kestrel-2027-04-18-rowan","groupName":"Kestrel Quartet","venue":"Rowan Hall",
+   "performanceDate":"2027-04-18","presenterOnRecord":"Rowan Presenting"},
+  {"naturalKey":"other-2027-05-01-elsewhere","groupName":"Marlow Ensemble","venue":"Elsewhere",
+   "performanceDate":"2027-05-01","presenterOnRecord":null}
+]}
+JSON
+cat > "${TMP}/check-run-event-archives/20260830-205244/check-run-events.chunk-1.jsonl" <<'JSON'
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"WebSearch","input":{"query":"Kestrel Quartet contact"}}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"WebFetch","input":{"url":"https://kestrelquartet.example/"}}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"/tmp/x"}}]}}
+{"type":"result","total_cost_usd":0.5}
+JSON
+
+out="$(bash "${TOOL}" --support "${TMP}" "Kestrel Quartet" 2>&1)"; status=$?
+
+assert_equals "a show that was checked is reported" "0" "${status}"
+assert_contains "names the run it found the show in" "${out}" "20260830-205244"
+assert_contains "shows the show as the run was GIVEN it, not as the store holds it now" \
+  "${out}" "Rowan Presenting"
+assert_contains "lists the searches, in order" "${out}" "Kestrel Quartet contact"
+assert_contains "and the fetches" "${out}" "https://kestrelquartet.example/"
+assert_not_contains "a local file read is not a search and must not pad the list" "${out}" "/tmp/x"
+
+# Matching by natural key too, since that is what every other tool here keys on.
+key_out="$(bash "${TOOL}" --support "${TMP}" "kestrel-2027-04-18-rowan" 2>&1)"
+assert_contains "matches on the natural key as well as the name" \
+  "${key_out}" "Kestrel Quartet contact"
+
+# THE STATE THAT MATTERS MOST, and the commonest one today: the run's queue is archived and its
+# streams are not, because streams were only archived from #3446 onwards. Reporting "no searches" there
+# would be a claim about the check when the truth is that nobody kept the evidence (L98, L11).
+mkdir -p "${TMP}/check-run-archives/20260817-172812"
+cat > "${TMP}/check-run-archives/20260817-172812/overture-check-queue.json" <<'JSON'
+{"version":6,"generatedAt":"2026-08-17T17:28:12Z","items":[
+  {"naturalKey":"older-2027-01-01-room","groupName":"Older Show","venue":"Room","performanceDate":"2027-01-01"}
+]}
+JSON
+old_out="$(bash "${TOOL}" --support "${TMP}" "Older Show" 2>&1)"
+assert_contains "a run whose streams were never archived says so" "${old_out}" "not archived"
+assert_not_contains "and never claims the check searched for nothing" "${old_out}" "no searches"
+
+# A show nobody has checked is its own answer, and it is not an error.
+miss="$(bash "${TOOL}" --support "${TMP}" "Nobody Checked This" 2>&1)"; miss_status=$?
+assert_equals "a show that appears in no archived run exits 1" "1" "${miss_status}"
+assert_contains "and says which it is" "${miss}" "no archived run"
+
+# UNMEASURED is its own exit code, because a support directory with no archives at all and a show that
+# was never checked leave the same empty result, and the emptiest possible failure must not read as the
+# cleanest possible answer (L98).
+EMPTY_DIR="$(fixture_scratch_dir)"
+bash "${TOOL}" --support "${EMPTY_DIR}" "Anything" >/dev/null 2>&1
+assert_equals "no archives at all is UNMEASURED, not 'not found'" "2" "$?"
+
+if [[ ${FAILURES} -gt 0 ]]; then
+  echo "${FAILURES} failure(s)"
+  exit 1
+fi
+echo "all what-the-check-searched checks passed"
