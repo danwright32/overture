@@ -54,9 +54,14 @@ struct WrittenOffBacklogOnScreenTests {
     // The plural sentence is a different string from the singular one, and only one of them can be
     // wrong at a time, so both are rendered rather than only the branch that happens to be commonest.
     @Test func severalShowsUseThePluralSentence() {
+        // Both instants are RELATIVE to one `now` taken here, never epoch literals. The claim under test
+        // is an ORDER between two marks, so pinning either end to a calendar date would make the fixture
+        // mean something different as real time walks past it, which is what
+        // `HostedProbeFixturesFollowTheLiveClockTests` exists to refuse (L130, #3169).
+        let now = Date()
         let drawn = lines(WrittenOffBacklog.Report(rows: [
-            row("Kestrel Quartet", venue: "Rowan Hall", at: Date(timeIntervalSince1970: 1_800_000_000)),
-            row("Marlow Ensemble", venue: "Rowan Hall", at: Date(timeIntervalSince1970: 1_700_000_000)),
+            row("Kestrel Quartet", venue: "Rowan Hall", at: now),
+            row("Marlow Ensemble", venue: "Rowan Hall", at: now.addingTimeInterval(-3600)),
         ]))
         #expect(drawn.contains(WrittenOffBacklogCopy.summary(count: 2)))
         #expect(!drawn.contains(WrittenOffBacklogCopy.summary(count: 1)))
