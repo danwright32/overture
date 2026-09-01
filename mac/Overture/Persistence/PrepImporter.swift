@@ -148,7 +148,26 @@ enum PrepImporter {
                     //
                     // An unrecognised value is dropped rather than stored, so a newer run's vocabulary can
                     // never put a sentence on the card this build cannot explain.
-                    p.reachabilityEmptyReason = r.emptyReason.flatMap(Reachability.EmptyReason.init(rawValue:))
+                    //
+                    // #3388: but only where the row genuinely holds no route. Every `EmptyReason` is a
+                    // claim that no way in was found (asserted over the whole vocabulary in
+                    // `AnEmptyAnswerDoesNotOverwriteRoutesTests`), so on a row that holds one, every one
+                    // of them is false. This branch used to write it unconditionally, so a barren
+                    // re-check stamped "nobody to write to" onto a row carrying stored addresses and
+                    // destroyed the evidence of the earlier run that found them (L5).
+                    //
+                    // A stale reason is CLEARED here rather than merely left unwritten, and that is the
+                    // half that repairs the rows already stored: measured on the live store 2026-08-31,
+                    // one row carried `named_but_no_route` beside four unguarded addresses. Refusing to
+                    // write would have left that sentence standing forever, since nothing else clears it.
+                    //
+                    // Asked through `hasAnyRoute`, which is derived from the whole five arm cascade, so a
+                    // form-only or social-only row counts as holding a route exactly as an address does.
+                    if p.hasAnyRoute {
+                        p.reachabilityEmptyReason = nil
+                    } else {
+                        p.reachabilityEmptyReason = r.emptyReason.flatMap(Reachability.EmptyReason.init(rawValue:))
+                    }
                 }
                 continue
             }
