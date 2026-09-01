@@ -737,8 +737,20 @@ enum PrepImporter {
         // #2879: the empty set is still the honest reading of a file that cannot be read (nothing can be
         // SHOWN to have been answered, so nothing is stamped), but the read is recorded now, so a results
         // file this build cannot decode no longer passes for a run that answered nobody.
+        // #3358 Phase 2: through the VERSION GATE, the same question `ingestFile` asks. This decoded with
+        // a bare `JSONDecoder` and so succeeded on a file one version ahead of this build, while
+        // `ingestFile` came through the gate and threw and `consumeIfNew` swallowed that with `try?`. So
+        // an unknown version made `markProbed` stamp EVERY show in the run with the no-email floor and a
+        // 90 day freshness stamp, nothing upgraded them, and the badge locked them out of a re-check for
+        // about three months with no error anywhere. `PrepResultsDecoder`'s own comment describes that
+        // sequence; it was written as a warning and stayed true.
+        //
+        // Asking the same question here makes the file UNREADABLE rather than empty, which is a
+        // different claim (L11, L98): empty says the run answered nobody, unreadable says nobody can
+        // tell. Nothing is stamped, the shows fall to the unanswered path and stay re-checkable, and
+        // #2879's recorder carries the file Overture could not read to a surface Dan sees.
         guard let decoded = HandoffFile.read(at: url,
-                                             decode: { try JSONDecoder().decode(PrepResults.self, from: $0) }).value
+                                             decode: { try PrepResultsDecoder.decode($0) }).value
         else { return [] }
         let groups = queueURL.map { PrepGroupCredit.groups(queueURL: $0, resultsURL: url) } ?? [:]
         return Set(PrepGroupCredit.credited(decoded.results, groups: groups).map(\.naturalKey))
