@@ -157,12 +157,37 @@ enum PrepImporter {
                     // discarded here, so a run could emit two people, land nobody, and leave the card
                     // saying "No email found" about a run that had found two people. Counting the
                     // recipients this check actually left behind is what closes that door.
-                    p.reachabilityEmptyReason = Reachability.emptyReason(
+                    let reason = Reachability.emptyReason(
                         afterIngesting: contacts,
                         // #3387: it counts usable RECIPIENTS, which has always meant addresses. Feeding
                         // it the send predicate had it counting a send hold as a missing address, so
                         // the reason and the verdict beside it were computed off different questions.
                         usableRecipients: p.recipients.filter(\.hasUnguardedAddress).count)
+                    // #3358 Phase 2, the third of the three siblings it names for "the run did not
+                    // finish". The other two are a results version this build cannot read (#3449) and a
+                    // run whose own records say it died (#3451, #3455). This one is different from both:
+                    // the run finished perfectly well and fell short on THIS show.
+                    //
+                    // `routeNamedButNotSupplied` is the run declaring a way in and supplying none, and
+                    // `Reachability`'s own comment for it draws the line this branch acts on:
+                    // `namedButNoRoute` is a fact about the WORLD, and this is a fact about the RUN. A
+                    // fact about the run is not an answer about the show, so it may not settle one.
+                    //
+                    // The card even said so already, and could not deliver it: its sentence recommends
+                    // another check while the candidacy rule refused the show one for 90 days (L111).
+                    //
+                    // The same unanswered path everything else in Phase 2 routes to, so no new state is
+                    // invented and the four writers cannot disagree about what an unfinished search
+                    // leaves behind. The REASON is dropped with the verdict deliberately: every
+                    // `EmptyReason` renders only under the `.noEmailFound` badge, so one stored on a row
+                    // with no verdict is counted for a claim no card makes, which is #3430 exactly. What
+                    // the run did wrong is reported per RUN by `RunInstructionCompliance`, which is the
+                    // honest unit for it and already existed.
+                    if reason?.meansTheSearchDidNotFinish == true {
+                        unsettle(p, now: now)
+                    } else {
+                        p.reachabilityEmptyReason = reason
+                    }
                 } else {
                     // #1722: the run answered this show and had nothing to give. THIS is the branch the
                     // whole issue is about: before, it wrote nothing at all, markProbed's `no_email_found`
@@ -186,10 +211,20 @@ enum PrepImporter {
                     //
                     // Asked through `hasAnyRoute`, which is derived from the whole five arm cascade, so a
                     // form-only or social-only row counts as holding a route exactly as an address does.
+                    let declared = r.emptyReason.flatMap(Reachability.EmptyReason.init(rawValue:))
                     if p.hasAnyRoute {
                         p.reachabilityEmptyReason = nil
+                    } else if declared?.meansTheSearchDidNotFinish == true {
+                        // #3358 Phase 2: the SECOND route the same reason reaches a row by. The branch
+                        // above computes it from contacts that did not survive; a run may also DECLARE it
+                        // on an entry carrying no contacts at all. Both are the run saying it did not
+                        // finish this show's search, so both unsettle rather than one, which is the
+                        // difference between fixing the class and fixing the instance (L30). Found by
+                        // mutating the other branch to fire on every reason and seeing that the
+                        // whole-vocabulary test, which drives THIS branch, stayed green.
+                        unsettle(p, now: now)
                     } else {
-                        p.reachabilityEmptyReason = r.emptyReason.flatMap(Reachability.EmptyReason.init(rawValue:))
+                        p.reachabilityEmptyReason = declared
                     }
                 }
                 continue
@@ -318,6 +353,19 @@ enum PrepImporter {
     // in place rather than duplicating it. A genuinely new provenance is appended as pending. An
     // already-sent recipient is never rewritten (its address is locked): a "corrected" contact for it
     // is dropped rather than appended as a duplicate (#408, audit SUP-017).
+    // #3358 Phase 2: a show this run did not actually settle, sent down the SAME unanswered path
+    // #1724 and #2621 built and #3451 already routes a dead run's shows to. One helper rather than the
+    // four lines written at each site, because the four fields have to move together: a verdict left
+    // behind is a claim nothing earned, and a probe stamp left behind is the 90 day lockout this exists
+    // to prevent (L16).
+    @MainActor
+    private static func unsettle(_ p: Prospect, now: Date) {
+        p.reachabilityProbedAt = nil
+        p.reachabilityResult = nil
+        p.reachabilityEmptyReason = nil
+        p.reachabilityUnansweredAt = now
+    }
+
     @MainActor
     private static func ingestContacts(_ contacts: [PrepContact], into p: Prospect, context: ModelContext) {
         // A batch that (unexpectedly) carries more than one contact of the same provenance cannot be

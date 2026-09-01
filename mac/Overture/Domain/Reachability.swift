@@ -298,6 +298,21 @@ enum Reachability {
         // It is the one empty reason under which the card SHOWS him something to act on, which is why it
         // is also the one that changes the pill's tone (see `emptyAnswerTone`).
         case unconfirmedSocialProfile = "unconfirmed_social_profile"
+
+        // #3358 Phase 2: which of these say the SEARCH did not finish, as opposed to what the search
+        // FOUND. Only one does, and its own comment above is the argument: `namedButNoRoute` is a fact
+        // about the world, and `routeNamedButNotSupplied` is a fact about the run, which stated a route
+        // type and did not finish the step that finds one.
+        //
+        // A fact about the run is not an answer about the show, so it may not settle one: it stores no
+        // verdict, no reason and no 90 day freshness stamp, and the show routes to the unanswered path
+        // instead. What the run did wrong is reported per RUN by `RunInstructionCompliance`.
+        //
+        // ON THE VOCABULARY rather than at either call site, because the reason reaches the row by two
+        // routes (computed here after the ingest, or declared by the run itself on an entry carrying no
+        // contacts) and a rule spelled twice is one that can come to mean two things (L263, L247). A
+        // case added later has to answer this question rather than inherit an answer (L113).
+        var meansTheSearchDidNotFinish: Bool { self == .routeNamedButNotSupplied }
     }
 
     // Whether a contact names a route it does not carry. Exhaustive over `ContactMethod`, so a method
