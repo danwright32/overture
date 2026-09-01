@@ -765,6 +765,27 @@ already drifting from the Swift version it mirrored.
     treated ordinary CoreData `Error:` noise as the suite finishing and reported a suite that was still
     running. Wait on the run's own end marker, never on a substring that routine noise can produce.
 
+- **Asking what a contact check actually searched for: `scripts/what-the-check-searched.sh <show>` (#2996).**
+  Takes a group name or a natural key and prints, per archived run, the show AS THE RUN WAS GIVEN IT
+  beside every web call that run made. Both halves matter and the defect is only ever visible in their
+  difference: #2983 was diagnosed exactly this way, by extracting one run's 22 web calls and seeing that
+  not one of them named the company whose contact page publishes an address, which turned a vague "the
+  check missed it" into a precise defect. It took an afternoon of hand-querying JSONL; it is now one
+  command.
+  A READER over evidence that already exists, never a new recording. It reads the archived queue
+  (#1878, #2760) and the archived event streams (#3446), which share a run stamp.
+  Three exit codes, and the third is the one that matters: `0` found, `1` the show appears in no
+  archived run, `2` UNMEASURED, meaning there are no archives to look in at all. An empty support
+  directory and a show nobody checked leave the same empty result, and the emptiest possible failure
+  must not read as the cleanest possible answer (L98, L11).
+  Read its answer correctly in one more place. A run whose streams were NOT archived says exactly that,
+  rather than reporting no searches: streams have only been kept per run since #3446, so every run
+  before that has none, and "no searches" there would be a claim about the check that nobody measured.
+  Only routes that reach the WEB are listed; a `Read` or a network-free `Bash` is not a search and
+  would pad the list this exists to make readable. And where a run covered more shows than it has
+  streams, one stream carries several shows, so the calls are the whole chunk's rather than that show's
+  and it says so: per item attribution is milestone 61 Phase 1.3 and does not exist yet.
+
 - **Judging whether a script succeeded: capture its status directly, never through a pipe.**
   `some-script.sh | tail -5` reports `tail`'s exit status, not the script's, so a script that died
   instantly on an unbound variable and printed nothing at all reads as a clean pass. That happened
