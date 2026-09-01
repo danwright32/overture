@@ -122,7 +122,11 @@ enum OrgAnswerRecording {
             // Sendable addresses only. An address held by the venue or press guard belongs to the room
             // this one show played, not to the organisation, so it must not ride to another venue.
             let emails = result == .emailFound
-                ? p.recipients.filter(\.isSendablePending).compactMap(\.email).filter { !$0.isEmpty }
+                // #3387: `hasUnguardedAddress`, matching the verdict above, which is now address led.
+                // The guards this still excludes are the venue and press ones the comment names; what
+                // it stops excluding is a send hold, which was never a reason to withhold an address
+                // from the organisation.
+                ? p.recipients.filter(\.hasUnguardedAddress).compactMap(\.email).filter { !$0.isEmpty }
                 : []
 
             if let row = byKey[orgKey] {
