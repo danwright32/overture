@@ -24,6 +24,11 @@ enum LaunchMigrations {
                     // reads is stamped on first launch and then never moves, so a test that could not
                     // supply its own would be asserting against whatever this Mac happened to record.
                     defaults: UserDefaults = .standard,
+                    // #3453: the archives are the evidence for which runs did not finish, so the pass
+                    // that reads them needs the folder they live in. A seam for the same reason the two
+                    // above are seams: a test must be able to hand it archives of its own rather than
+                    // whatever this Mac happens to have on disk.
+                    handoffDirectory: URL = StoreLocation.handoffDirectory,
                     now: Date = Date()) -> Bool {
         // #418 A1 / #416: copy the lead thread down to act recipients contacted via the old lead-level
         // send path, so per-recipient reply detection has a thread to watch. Idempotent; no-op once
@@ -69,6 +74,16 @@ enum LaunchMigrations {
         // the rule change Dan did not ask for: `contactRouteForScoring` still reads the stored verdict,
         // so the score still follows what the paid check concluded (his 2026-08-13 call).
         ReachabilityVerdictRefresh.run(in: context, defaults: defaults, now: now)
+        // #3453: a ONE TIME repair of the rows a run that DID NOT FINISH wrote off before #3451 existed
+        // to refuse them. Deliberately AFTER the refresh above, and the order is load-bearing in one
+        // direction: the refresh's contradiction MARK (`contradictionMarkedAt`) is evidence about rows
+        // holding a route, and this pass skips exactly those, so running it first could not change what
+        // the refresh sees but could leave a row looking repaired that the refresh had not yet judged.
+        //
+        // It is one time for the same reason the refresh is: it removes damage a since-fixed writer did,
+        // not a rule. `markProbed` and `PrepImporter.ingest` already refuse to create this state again.
+        DeadRunWriteOffRepair.run(in: context, handoffDirectory: handoffDirectory,
+                                  defaults: defaults, now: now)
         // LIVE-STORE-CLAIM verified=2026-07-26 measure="rows carrying the classifier catch-all fit reason when Phase 7 shipped the clearing migration"
         // #1600: clear the classifier's retired catch-all fit reason from the rows that already carry it
         // (499 on the live store). Idempotent: guarded by "still carries the retired string". Without it

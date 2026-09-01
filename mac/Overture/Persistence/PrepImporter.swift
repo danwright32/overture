@@ -769,9 +769,14 @@ enum PrepImporter {
     // claim that it died: every results file written before #1721 has none, and treating those as dead
     // runs would re-check the whole store (L11, L98).
     static func distrustedAnswerKeys(at url: URL, queueURL: URL? = nil) -> Set<String> {
+        // #3453: through `PrepResults.completion`, which reads `runCost.recorded` beside
+        // `webCalls.recorded`. This used to ask `webCalls` alone, and on any file written before #3443
+        // that field can claim a run finished when it did not, because the two recorders disagreed
+        // about what a finished stream was. Since #3443 they agree, so this changes nothing about a
+        // file written by the current runner and recovers the truth from every older one.
         guard let decoded = HandoffFile.read(at: url,
                                              decode: { try PrepResultsDecoder.decode($0) }).value,
-              decoded.webCalls?.recorded == false
+              decoded.completion == .didNotFinish
         else { return [] }
         let groups = queueURL.map { PrepGroupCredit.groups(queueURL: $0, resultsURL: url) } ?? [:]
         return Set(PrepGroupCredit.credited(decoded.results, groups: groups)
