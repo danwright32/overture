@@ -44,7 +44,10 @@ struct WrittenOffBacklogSection: View {
 
 enum WrittenOffBacklogCopy {
     static let title = "Shows written off that could be reached"
-    static let nothingContradicted = "No check has claimed a show was unreachable while the show held a way in. If one has, the shows appear here."
+    // Says what is TRUE of this list rather than what could fill it. The marker is written once, by the
+    // one-time repair, and by nothing else ever, so "if one has, they appear here" would promise a list
+    // that can never grow (L11).
+    static let nothingContradicted = "When Overture reviewed every stored answer, no show turned out to have been recorded as unreachable while it held a way in."
 
     static func summary(count: Int) -> String {
         count == 1
