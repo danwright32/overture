@@ -11,8 +11,19 @@ import Foundation
 //
 // So the PAIR is copied into a dated folder beside the live files, keeping the last `keep`, the same shape
 // the store backup has used since #601 and through that rotation's own code (DatedFolderRotation), not a
-// second implementation of it. The pair is about 14 KB; `prep-run-events.jsonl` and `prep-run.log` are
-// 300 KB+ each and are a separate retention decision, deliberately not archived here.
+// second implementation of it.
+//
+// LIVE-STORE-CLAIM verified=2026-09-01 measure="the size of every archived run folder in both slots, and the count and total size of the surviving chunk event streams"
+// #3357 Phase 1.2 corrects the sizes this comment used to state, which had gone stale by 2 to 3 times in
+// the very file that argues retention from them (L32, L210). Measured 2026-09-01: the archived PAIR runs
+// 20 to 84 KB across 17 prep folders (median about 28 KB) and 24 to 224 KB across 7 check folders
+// (median about 40 KB), NOT the "about 14 KB" this said. The chunk EVENT streams are 1.7 MB per run over
+// 7 files, mean 252 KB.
+//
+// The streams are no longer excluded: they are archived by `archiveEventStreams` into their OWN dated
+// directory with their OWN keep, because they are the only per item evidence a run leaves and the next
+// run overwrites them at a fixed path. Measured 2026-08-30, that is not hypothetical: one run's ten
+// streams were gone 45 minutes later while its archived `webCalls` still reported `streams: 10` (L202).
 //
 // Three properties are load-bearing:
 //
@@ -45,10 +56,14 @@ enum PrepRunArchive {
 
     static let logFilename = "archive.log"
 
-    // Thirty runs of about 14 KB is under half a megabyte, and at the one or two paid runs a night Dan
-    // actually does it is roughly a month of history: enough for #1616's learner to hold real samples,
-    // and enough that a question about last week's run is still answerable. Deliberately larger than the
-    // store backup's ten, because each of those is a copy of the entire SwiftData store.
+    // Thirty runs at the measured median of 28 to 40 KB is roughly 1 MB, and at the one or two paid runs
+    // a night Dan actually does it is about a month of history: enough for #1616's learner to hold real
+    // samples, and enough that a question about last week's run is still answerable. Deliberately larger
+    // than the store backup's ten, because each of those is a copy of the entire SwiftData store.
+    //
+    // #3357 Phase 1.2: this used to say "about 14 KB is under half a megabyte", which was wrong by 2 to
+    // 3 times and was the number any future retention decision would have been argued from. Re-measure
+    // rather than repeating this sentence.
     //
     // #2760: the number is the SLOT's, so one rotation can be retuned without silently changing how much of
     // the other's history survives.
@@ -126,6 +141,11 @@ enum PrepRunArchive {
         if fileManager.fileExists(atPath: destination.path) {
             sweepStaleWorkingFolders(in: archives, now: now, fileManager: fileManager)
             DatedFolderRotation.prune(in: archives, keep: keep, fileManager: fileManager)
+            // On the retry path too, so a run whose pair was archived by an earlier settle still gets its
+            // streams. They are written by the run itself and can land AFTER the pair, so the first call
+            // may legitimately have found none.
+            archiveEventStreams(slot: slot, handoffDirectory: handoffDirectory, stamp: stamp,
+                                now: now, fileManager: fileManager)
             return .alreadyArchived(folder: destination)
         }
 
@@ -162,7 +182,94 @@ enum PrepRunArchive {
                   archives: archives, fileManager: fileManager)
         sweepStaleWorkingFolders(in: archives, now: now, fileManager: fileManager)
         DatedFolderRotation.prune(in: archives, keep: keep, fileManager: fileManager)
+        archiveEventStreams(slot: slot, handoffDirectory: handoffDirectory, stamp: stamp,
+                            now: now, fileManager: fileManager)
         return .archived(folder: destination, copied: copied, missing: missing)
+    }
+
+    // #3357 Phase 1.2 / #3346: the RAW event streams, into their OWN dated directory under the SAME
+    // stamp, so one run's queue, results and streams are found under one folder name in two places.
+    //
+    // Its own directory and its own keep, because `DatedFolderRotation.prune` rotates whole FOLDERS by
+    // one keep: sharing one would give the pair or the streams a lifetime nobody chose (L285). See
+    // `RunSlot.eventArchiveKeep`.
+    //
+    // Best effort by design. The streams are evidence ABOUT a run, not the run's own output, so a
+    // failure to copy them must never turn a successfully archived run into a failed one. It is silent
+    // on finding none, because a run legitimately has none once its chunks have been cleaned up, and a
+    // problem reported on the ordinary case is one nobody reads (L36).
+    static func archiveEventStreams(slot: RunSlot, handoffDirectory: URL, stamp: String, now: Date,
+                                    fileManager: FileManager = .default,
+                                    reportProblem: (String) -> Void = { AgentLog.problem($0) }) {
+        let streams = presentEventStreams(slot: slot, handoffDirectory: handoffDirectory,
+                                          fileManager: fileManager)
+        // No empty folder for a run that produced nothing: an empty archive and a run whose streams were
+        // lost read identically to anybody looking later (L98, L11).
+        guard !streams.isEmpty else { return }
+
+        let archives = slot.eventArchivesDirectory(in: handoffDirectory)
+        let destination = archives.appendingPathComponent(stamp, isDirectory: true)
+        guard !fileManager.fileExists(atPath: destination.path) else { return }
+
+        let incoming = archives.appendingPathComponent(
+            stamp + incomingSuffix + UUID().uuidString, isDirectory: true)
+        do {
+            try fileManager.createDirectory(at: incoming, withIntermediateDirectories: true)
+            for source in streams {
+                try fileManager.copyItem(
+                    at: source, to: incoming.appendingPathComponent(source.lastPathComponent))
+            }
+            // The same atomic rename the pair uses: a kill part way through leaves a discardable working
+            // folder, never something that reads as a finished archive (L5).
+            try fileManager.moveItem(at: incoming, to: destination)
+        } catch {
+            try? fileManager.removeItem(at: incoming)
+            // A copy that FAILED is not the same state as a run with no streams, and both used to
+            // produce the same silence. The streams are the evidence this pass exists to preserve and
+            // nothing else records that they were meant to be here, so losing them without a word is the
+            // worse half of the two (L10, L11). Said the same two ways the pair's own failure is, and
+            // for the reason recorded there: the log lives inside the folder that may be the very thing
+            // that could not be written.
+            let reason = error.localizedDescription
+            appendLog(stamp: stamp, note: failedStreamsLogNote(count: streams.count, reason: reason),
+                      archives: archives, fileManager: fileManager)
+            reportProblem(failedStreamsProblemNote(count: streams.count, reason: reason))
+            return
+        }
+        sweepStaleWorkingFolders(in: archives, now: now, fileManager: fileManager)
+        DatedFolderRotation.prune(in: archives, keep: slot.eventArchiveKeep, fileManager: fileManager)
+    }
+
+    static func failedStreamsLogNote(count: Int, reason: String) -> String {
+        "event streams NOT archived (\(count) found): \(reason)"
+    }
+
+    // Singular and plural are separate sentences, never one with an "(s)" in it, which is the rule the
+    // rest of this app's counts already follow. And it says what Dan LOSES rather than naming the file:
+    // "event streams" is the thing on disk, "what the check searched for on each show" is the thing he
+    // would have wanted and cannot now get.
+    static func failedStreamsProblemNote(count: Int, reason: String) -> String {
+        // Each branch is a WHOLE sentence rather than a noun phrase spliced into a shared frame. Read
+        // assembled, the frame version split its own verb ("could not file the records ... away") and
+        // disagreed with itself on number ("records ... it will be lost").
+        return count == 1
+            ? "Overture could not save the record of what this run searched for, so it will be lost when "
+                + "the next run starts: \(reason)"
+            : "Overture could not save the records of what this run searched for on each show, so they "
+                + "will be lost when the next run starts: \(reason)"
+    }
+
+    // The chunk streams this run actually left on disk. Found by READING the directory rather than by
+    // counting up from chunk 1, because a run that died leaves whichever chunks it got to and a loop that
+    // stops at the first gap would silently archive a prefix of the evidence.
+    static func presentEventStreams(slot: RunSlot, handoffDirectory: URL,
+                                    fileManager: FileManager = .default) -> [URL] {
+        let names = (try? fileManager.contentsOfDirectory(atPath: handoffDirectory.path)) ?? []
+        // Through the slot's OWN name shape, never a second spelling of it here (L263).
+        return names
+            .filter { $0.hasPrefix(slot.chunkEventsPrefix) && $0.hasSuffix(RunSlot.chunkEventsSuffix) }
+            .sorted()
+            .map { handoffDirectory.appendingPathComponent($0) }
     }
 
     // Which run this is, in the rotation's own folder shape. Read from the run's own `generatedAt` (the
