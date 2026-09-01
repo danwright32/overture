@@ -698,14 +698,6 @@ fi
 assert_contains "the partial fixture says what it DID see, under its own name" \
   "${partial_fixture}" '"partialUsd": 3.600917'
 
-rm -rf "${FIXTMP}"
-
-if [[ ${FAILURES} -gt 0 ]]; then
-  echo "${FAILURES} failure(s)"
-  exit 1
-fi
-echo "all models.sh checks passed"
-
 # --- ONE definition of "this stream finished" (#3357 Phase 1.1, L263) -------------------------------
 #
 # `record_web_calls` and `record_run_cost` read the SAME event files and answered differently about
@@ -759,3 +751,11 @@ fi
 assert_contains "the partial per-route counts survive" "${killed_web}" '"byRoute"'
 assert_contains "and it says how many of how many streams reported" \
   "${killed_web}" '"streamsReported": 1'
+
+rm -rf "${FIXTMP}"
+
+if [[ ${FAILURES} -gt 0 ]]; then
+  echo "${FAILURES} failure(s)"
+  exit 1
+fi
+echo "all models.sh checks passed"
