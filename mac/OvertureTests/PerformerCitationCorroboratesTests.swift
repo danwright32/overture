@@ -57,16 +57,16 @@ struct PerformerCitationCorroboratesTests {
                                                   performanceCorroborated: nil) == "high")
     }
 
-    // Not a performer, so not this rule. A presenter or an act cited against its own page is a different
-    // claim: the organisation IS the target, where a named individual appears on many bills.
-    @Test func anonPerformerIsNotJudgedByThisRule() {
-        for provenance: String? in ["act", "presenter", nil] {
-            #expect(ContactConfidenceGuard.confidence(raw: "high", sourceURL: page,
-                                                      provenance: provenance,
-                                                      performanceCorroborated: false) == "high",
-                    "provenance \(provenance ?? "nil") is not what the runbook's rule is about")
-        }
-    }
+    // `anonPerformerIsNotJudgedByThisRule` was here and is DELETED, not adjusted, because its whole
+    // content was the decision #3376 reversed (L252). It asserted that an `act`, a `presenter` or an
+    // unstated provenance cited against a non-corroborating page stayed `high`, on the reasoning that
+    // "the organisation IS the target, where a named individual appears on many bills".
+    //
+    // That reasoning is what a guessed domain breaks. `docs/prep-runbook.md` tells the run to reach an
+    // organisation's site by "its name plus a canonical domain guess", so the page was never established
+    // as the organisation's in the first place: two organisations can share a name, and a guessed domain
+    // is no evidence of identity at all. The rule now covers every provenance, and
+    // `EveryCitedPageMustCorroborateTests` asserts that over `RecipientProvenance.allCases`.
 
     // It never UPGRADES. A run's own `low` is its judgement and this has no business improving it.
     @Test func itneverUpgrades() {
