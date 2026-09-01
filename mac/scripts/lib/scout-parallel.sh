@@ -45,6 +45,9 @@ split_queue_into_chunks() {
   # be launched as part of this run.
   rm -f "${out_dir}"/chunk-queue-*.json 2>/dev/null || true
 
+  # No apostrophes anywhere in the program below: it is a single-quoted shell string and one would end
+  # it, at which point the whole file stops parsing. Write "the whole queue" rather than the possessive.
+  # The same rule `mac/scripts/lib/models.sh` states, for the same reason.
   node -e '
     const fs = require("fs"), path = require("path");
     const [queuePath, maxRaw, outDir] = process.argv.slice(1);
@@ -62,16 +65,30 @@ split_queue_into_chunks() {
     // One chunk per source when there are fewer sources than the cap, never an empty chunk.
     const chunkCount = Math.min(max, items.length);
 
-    // Even split with the remainder spread across the FIRST chunks (sizes differ by at most one). The
-    // slowest single chunk is what sets wall-clock, so no chunk should be materially larger than another.
-    const base = Math.floor(items.length / chunkCount);
-    const extra = items.length % chunkCount;
-
-    let offset = 0;
+    // #3357 Phase 1.4: DEALT ROUND ROBIN, not sliced into contiguous ranges. Sizes still differ by at
+    // most one, because dealing one at a time is what an even split IS; the slowest single chunk still
+    // sets wall clock and no chunk is materially larger than another.
+    //
+    // Why the arrangement matters at all. The queue arrives grouped by source, so a contiguous slice was
+    // very nearly one venue per chunk. Two consequences, and the second is the one that bites: a killed
+    // chunk lost one ROOM rather than a spread, so loss correlated with difficulty; and any chunk to
+    // chunk comparison compared VENUES rather than chunk sizes, which is what Phase 5 would have been
+    // measuring without knowing it.
+    //
+    // Measured 2026-09-01 on the archived 97 item run: one host supplies 43 of 97 listings and the top
+    // two supply 57. Sliced contiguously into ten the mean single-host share of a chunk is 0.55; dealt
+    // round robin it is 0.44, which is the mixture of the whole queue and the best a fair deal can do.
+    //
+    // This supersedes one show per stream, which is unreachable at these sizes: the splitter makes
+    // min(items, MAX_PARALLEL) chunks and `prep-run.sh` records why ten is a ceiling, so a 97 item queue
+    // would need 97 concurrent web fetching processes.
+    //
+    // The partition is unchanged in every respect that anything downstream relies on: disjoint, every
+    // item exactly once, never an empty chunk, and a cap of 1 still yields one chunk holding the whole
+    // queue in its original order, byte for byte. What changes is only WHICH chunk an item lands in.
     for (let c = 0; c < chunkCount; c++) {
-      const size = base + (c < extra ? 1 : 0);
-      const slice = items.slice(offset, offset + size);
-      offset += size;
+      const slice = [];
+      for (let i = c; i < items.length; i += chunkCount) slice.push(items[i]);
       const chunkQueue = {
         version: queue.version,
         generatedAt: queue.generatedAt,

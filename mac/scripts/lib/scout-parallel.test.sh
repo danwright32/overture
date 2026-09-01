@@ -119,17 +119,45 @@ write_queue() {
 
 echo "--- split_queue_into_chunks"
 
-# Five sources, four-way parallelism: four chunks, sizes 2,1,1,1, contiguous, every id present once.
+# Five sources, four-way parallelism: four chunks, sizes 2,1,1,1, DEALT ROUND ROBIN, every id once.
+#
+# #3357 Phase 1.4. The deal used to slice CONTIGUOUS ranges, and the queue arrives grouped by source,
+# so a chunk was very nearly one venue's worth of shows. Two consequences, and the second is the one
+# that matters: a killed chunk loses one room rather than a spread, so loss correlates with difficulty;
+# and any chunk to chunk comparison compares VENUES rather than chunk sizes, which is what Phase 5 would
+# have been measuring without knowing it.
+#
+# LIVE-STORE-CLAIM verified=2026-09-01 measure="host concentration in the archived 97 item check queue, and the mean single-host share of a chunk under contiguous slicing against a round robin deal"
+# Measured 2026-09-01 on the archived 97 item run: one host supplies 43 of 97 listings and the top two
+# supply 57. Sliced contiguously into ten, the mean single-host share of a chunk is 0.55; dealt round
+# robin it is 0.44, which is the queue's own mixture (43/97) and the best a fair deal can do.
 rm -rf "${CHUNKDIR}"; mkdir -p "${CHUNKDIR}"
 write_queue 5
 K="$(split_queue_into_chunks "${QUEUE}" 4 "${CHUNKDIR}")"
 assert_equals "5 sources over max 4 makes 4 chunks" "4" "${K}"
-assert_equals "chunk 1 gets the first two (spreads the remainder to the front)" "s1,s2" "$(chunk_ids "${CHUNKDIR}/chunk-queue-1.json")"
-assert_equals "chunk 2 gets the third" "s3" "$(chunk_ids "${CHUNKDIR}/chunk-queue-2.json")"
-assert_equals "chunk 4 gets the last" "s5" "$(chunk_ids "${CHUNKDIR}/chunk-queue-4.json")"
-assert_equals "every source appears exactly once, in order, across the chunks" "s1,s2,s3,s4,s5" "$(all_chunk_ids "${CHUNKDIR}")"
+assert_equals "chunk 1 takes the 1st and the 5th, not the first two" "s1,s5" "$(chunk_ids "${CHUNKDIR}/chunk-queue-1.json")"
+assert_equals "chunk 2 takes the 2nd" "s2" "$(chunk_ids "${CHUNKDIR}/chunk-queue-2.json")"
+assert_equals "chunk 4 takes the 4th" "s4" "$(chunk_ids "${CHUNKDIR}/chunk-queue-4.json")"
+# The PARTITION is what this asserts, so it compares the sorted set: with a round robin deal the order
+# ACROSS chunk files is no longer the queue's, and asserting the old concatenation would be pinning an
+# arrangement rather than the invariant (L228). The merge's own order is asserted where it belongs, in
+# the merge_chunk_results section below, which still puts results back in the QUEUE's order.
+assert_equals "every source appears exactly once across the chunks" "s1,s2,s3,s4,s5" \
+  "$(all_chunk_ids "${CHUNKDIR}" | tr ',' '\n' | sort -V | paste -sd, -)"
 assert_equals "a chunk queue keeps the parent version" "2" "$(chunk_field "${CHUNKDIR}/chunk-queue-1.json" version)"
 assert_equals "a chunk queue keeps the parent generatedAt" "2026-07-17T10:00:00Z" "$(chunk_field "${CHUNKDIR}/chunk-queue-1.json" generatedAt)"
+
+# What the deal is FOR: a run of shows from one room is spread across the chunks rather than landing in
+# one. Written as the extreme case, because it is the one the archived queue approaches: with every item
+# from a single host, contiguous slicing puts a whole room in chunk 1 and a round robin deal cannot.
+rm -rf "${CHUNKDIR}"; mkdir -p "${CHUNKDIR}"
+write_queue 8
+K="$(split_queue_into_chunks "${QUEUE}" 4 "${CHUNKDIR}")"
+assert_equals "8 over max 4 makes 4 chunks" "4" "${K}"
+assert_equals "the first four of the queue land in four DIFFERENT chunks" "s1 s2 s3 s4" \
+  "$(for c in 1 2 3 4; do chunk_ids "${CHUNKDIR}/chunk-queue-${c}.json" | cut -d, -f1; done | paste -sd' ' -)"
+assert_equals "and each chunk carries two, so the sizes are still even" "2 2 2 2" \
+  "$(for c in 1 2 3 4; do chunk_ids "${CHUNKDIR}/chunk-queue-${c}.json" | tr ',' '\n' | grep -c .; done | paste -sd' ' -)"
 
 # Fewer sources than the parallelism cap: never make an empty chunk.
 rm -rf "${CHUNKDIR}"; mkdir -p "${CHUNKDIR}"
