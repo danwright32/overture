@@ -25,17 +25,17 @@ struct WrittenOffBacklogSection: View {
                 Text(WrittenOffBacklogCopy.summary(count: report.total))
                     .font(OVType.body).foregroundStyle(OVColor.inkSoft)
                     .fixedSize(horizontal: false, vertical: true)
-                ForEach(report.rows, id: \.naturalKey) { row in
+                ForEach(report.rows) { row in
                     HStack(alignment: .firstTextBaseline, spacing: OVSpacing.sm) {
                         Text(row.groupName).font(OVType.body).foregroundStyle(OVColor.ink)
                         Spacer(minLength: OVSpacing.sm)
                         Text(WrittenOffBacklogCopy.priorVerdict(row.priorResult))
-                            .font(OVType.caption).foregroundStyle(OVColor.inkSoft)
+                            .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
                     }
                 }
                 if report.unattributed > 0 {
                     Text(WrittenOffBacklogCopy.unattributed(report.unattributed))
-                        .font(OVType.caption).foregroundStyle(OVColor.inkSoft)
+                        .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }

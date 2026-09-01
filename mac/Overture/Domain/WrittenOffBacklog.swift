@@ -11,7 +11,9 @@ import Foundation
 // the population Phase 5.2's second stratum measures over.
 enum WrittenOffBacklog {
 
-    struct Row: Equatable, Sendable {
+    struct Row: Equatable, Sendable, Identifiable {
+        var id: String { naturalKey }
+
         var naturalKey: String
         var groupName: String
         var venue: String?
