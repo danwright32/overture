@@ -60,6 +60,15 @@ enum LaunchMigrations {
         // #1626: a show already checked before "contact form only" existed reads as a dead end while
         // holding a usable form link. Upgrades that one verdict and nothing else. Idempotent.
         ContactFormResultMigration.run(in: context)
+        // Milestone 61 Phase 0.3, Dan's decision 7 of 2026-08-31: a ONE TIME repair of every stored
+        // reachability verdict that has drifted from what its show holds. Deliberately AFTER
+        // ContactFormResultMigration above, so the narrow pass's own rows are already correct when the
+        // sweep reads them and the two can never disagree about a row in the same launch.
+        //
+        // It is one time, not per launch, and that is the whole of what keeps it a repair rather than
+        // the rule change Dan did not ask for: `contactRouteForScoring` still reads the stored verdict,
+        // so the score still follows what the paid check concluded (his 2026-08-13 call).
+        ReachabilityVerdictRefresh.run(in: context, defaults: defaults, now: now)
         // LIVE-STORE-CLAIM verified=2026-07-26 measure="rows carrying the classifier catch-all fit reason when Phase 7 shipped the clearing migration"
         // #1600: clear the classifier's retired catch-all fit reason from the rows that already carry it
         // (499 on the live store). Idempotent: guarded by "still carries the retired string". Without it

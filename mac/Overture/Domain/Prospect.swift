@@ -407,6 +407,27 @@ final class Prospect {
     // #1722. An unrecognised stored value reads as nil (no reason given), which the copy degrades to the
     // old sentence, so a newer producer's vocabulary can never put a claim on the card this build cannot
     // explain.
+    // Milestone 61 Phase 0.3. WHEN this row was observed to carry a negative verdict over a live route,
+    // stamped by `ReachabilityVerdictRefresh` before it rewrote a single value.
+    //
+    // It exists because the repair destroys its own evidence. The contradiction between a stored
+    // "no way in" and a route the row actually holds is a fact nothing recorded deliberately, it is the
+    // evidence base for #3345 and for Phase 5.2's second stratum, and refreshing the verdict is exactly
+    // what makes it unobservable (L277). Taking it at migration time is also the only moment the whole
+    // contradicting population is still readable, since a marker cannot see anything written before it
+    // shipped (L223).
+    //
+    // writer: `ReachabilityVerdictRefresh`, once, and nothing else ever.
+    var contradictionMarkedAt: Date? = nil
+
+    // WHICH negative verdict was contradicted. Not a spare copy of the marker above: `no_email_found`
+    // and `social_only` are different findings about the hunt, so a marker saying only THAT one was
+    // contradicted cannot answer what was actually wrong with the check.
+    //
+    // A raw String rather than the enum, the same boundary rule every other stored verdict here follows,
+    // so an unrecognised value from a later build reads as no prior verdict rather than failing a fetch.
+    var contradictionPriorResultRaw: String? = nil
+
     var reachabilityEmptyReason: Reachability.EmptyReason? {
         get { reachabilityEmptyReasonRaw.flatMap(Reachability.EmptyReason.init(rawValue:)) }
         set { reachabilityEmptyReasonRaw = newValue?.rawValue }
