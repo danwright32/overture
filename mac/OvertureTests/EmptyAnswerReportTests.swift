@@ -21,6 +21,7 @@ import Foundation
 struct EmptyAnswerReportTests {
 
     private func show(_ key: String, reason: Reachability.EmptyReason?, presenter: String? = nil,
+                      verdict: Reachability.ProbeResult? = .noEmailFound,
                       probedAt: Date? = Date(timeIntervalSince1970: 1_780_000_000)) -> Prospect {
         let p = Prospect(naturalKey: key, groupName: key, discipline: "music", venue: "The Example Room",
                          performanceDate: "2026-12-01", sourceListingURL: nil,
@@ -30,6 +31,15 @@ struct EmptyAnswerReportTests {
         p.presenter = presenter
         p.reachabilityProbedAt = probedAt
         p.reachabilityEmptyReason = reason
+        // #3356 Phase 0.5: the verdict too, because the report now counts a reason only where the card
+        // actually renders it, which is under `.noEmailFound` (`ProspectRowView`). These fixtures set a
+        // reason and no verdict, which the old rule did not care about; under the new one that is a row
+        // nothing ever judged rather than a claim, and every count here would read zero.
+        //
+        // Setting it makes the fixture the row it always meant: a show whose card says the sentence.
+        // The cases where a reason sits under a DIFFERENT verdict, and where it sits under none, are
+        // covered by `EmptyAnswerReportCountsOnlyClaimsTests` rather than by loosening this rule.
+        p.reachabilityResult = verdict
         return p
     }
 

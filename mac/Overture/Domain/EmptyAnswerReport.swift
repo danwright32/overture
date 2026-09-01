@@ -31,6 +31,13 @@ enum EmptyAnswerReport {
         var byReason: [Line]
         var nothingPublishedWithAPresenter: Int
         var nothingPublishedWithNoPresenter: Int
+        // #3356 Phase 0.5. Rows carrying a reason that their OWN stored verdict contradicts, and rows
+        // carrying a reason nothing ever judged. Reported rather than dropped: a number quietly getting
+        // smaller is indistinguishable from a defect being fixed, so the exclusion has to be visible
+        // (L11, L98). They are two numbers and not one because they are different faults: a verdict
+        // disagreeing with a reason, and no verdict existing at all.
+        var contradictedByVerdict: Int
+        var reasonWithNoVerdict: Int
 
         var total: Int { byReason.reduce(0) { $0 + $1.count } }
         func count(of reason: Reachability.EmptyReason) -> Int {
@@ -42,8 +49,29 @@ enum EmptyAnswerReport {
         var counts: [Reachability.EmptyReason: Int] = [:]
         var withPresenter = 0
         var withoutPresenter = 0
+        var contradicted = 0
+        var unjudged = 0
         for p in prospects {
             guard let reason = p.reachabilityEmptyReason else { continue }
+            // #3356 Phase 0.5. THE VERDICT DECIDES WHETHER AN EMPTY REASON IS A CLAIM; THE REASON ONLY
+            // SAYS WHICH CLAIM. `ProspectRowView` renders this sentence only under the `.noEmailFound`
+            // badge, so a reason sitting under any other verdict is counted here for something no card
+            // anywhere says. Measured on the live store 2026-08-31: of 103 rows carrying a reason, 43
+            // were renderable, 53 were contradicted by their own verdict and 7 had no verdict at all.
+            //
+            // The cause is a writer/reader split rather than bad data: `PrepImporter` writes the reason
+            // whenever no usable recipient survives the ingest, independent of where the cascade lands,
+            // so a show with no address and a form on its own site truthfully gets BOTH
+            // `contact_form_only` and a reason saying nobody could be reached. Both describe what they
+            // describe; only one of them is a claim about reachability.
+            guard let verdict = p.reachabilityResult else {
+                unjudged += 1
+                continue
+            }
+            guard verdict == .noEmailFound else {
+                contradicted += 1
+                continue
+            }
             counts[reason, default: 0] += 1
             guard reason == .nothingPublished else { continue }
             if namesAnOrganisation(p.presenter) { withPresenter += 1 } else { withoutPresenter += 1 }
@@ -55,7 +83,9 @@ enum EmptyAnswerReport {
             .sorted { ($0.count, $1.reason.rawValue) > ($1.count, $0.reason.rawValue) }
         return Report(byReason: lines,
                       nothingPublishedWithAPresenter: withPresenter,
-                      nothingPublishedWithNoPresenter: withoutPresenter)
+                      nothingPublishedWithNoPresenter: withoutPresenter,
+                      contradictedByVerdict: contradicted,
+                      reasonWithNoVerdict: unjudged)
     }
 
     // A stored empty string is not a named organisation. Counting one as a presenter would make the
