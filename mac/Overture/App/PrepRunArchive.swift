@@ -235,9 +235,9 @@ enum PrepRunArchive {
     static func presentEventStreams(slot: RunSlot, handoffDirectory: URL,
                                     fileManager: FileManager = .default) -> [URL] {
         let names = (try? fileManager.contentsOfDirectory(atPath: handoffDirectory.path)) ?? []
-        let prefix = "\(slot.rawValue)-run-events.chunk-"
+        // Through the slot's OWN name shape, never a second spelling of it here (L263).
         return names
-            .filter { $0.hasPrefix(prefix) && $0.hasSuffix(".jsonl") }
+            .filter { $0.hasPrefix(slot.chunkEventsPrefix) && $0.hasSuffix(RunSlot.chunkEventsSuffix) }
             .sorted()
             .map { handoffDirectory.appendingPathComponent($0) }
     }

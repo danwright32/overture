@@ -51,8 +51,14 @@ enum RunSlot: String, CaseIterable, Sendable {
         support.appendingPathComponent("\(rawValue)-run.chunk-\(chunk).log")
     }
     func chunkEventsURL(chunk: Int, in support: URL) -> URL {
-        support.appendingPathComponent("\(rawValue)-run-events.chunk-\(chunk).jsonl")
+        support.appendingPathComponent("\(chunkEventsPrefix)\(chunk).jsonl")
     }
+
+    // #3357 Phase 1.2: the shape of a chunk stream's NAME, in one place. `PrepRunArchive` has to find
+    // whichever chunks a run left on disk, and spelling the same prefix a second time there would be two
+    // definitions of one filename that can drift apart (L263).
+    var chunkEventsPrefix: String { "\(rawValue)-run-events.chunk-" }
+    static let chunkEventsSuffix = ".jsonl"
     func chunkEventsFIFOURL(chunk: Int, in support: URL) -> URL {
         support.appendingPathComponent("\(rawValue)-events-chunk-\(chunk).fifo")
     }
