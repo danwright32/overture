@@ -81,6 +81,17 @@ EMPTY_DIR="$(fixture_scratch_dir)"
 bash "${TOOL}" --support "${EMPTY_DIR}" "Anything" >/dev/null 2>&1
 assert_equals "no archives at all is UNMEASURED, not 'not found'" "2" "$?"
 
+# An archived queue this tool cannot READ is a different answer from a show that is not in it, and
+# until this they were the same silence: the run was skipped and the show reported as never checked.
+# That is the worse direction, because the run it cannot read is exactly the one somebody is asking
+# about (L10, L11).
+mkdir -p "${TMP}/check-run-archives/20260901-090000"
+printf '%s' 'not json at all' > "${TMP}/check-run-archives/20260901-090000/overture-check-queue.json"
+corrupt="$(bash "${TOOL}" --support "${TMP}" "Nobody Checked This" 2>&1)"
+assert_contains "an unreadable archived queue is named, not skipped in silence" \
+  "${corrupt}" "20260901-090000"
+assert_contains "and says it could not be read" "${corrupt}" "could not be read"
+
 if [[ ${FAILURES} -gt 0 ]]; then
   echo "${FAILURES} failure(s)"
   exit 1

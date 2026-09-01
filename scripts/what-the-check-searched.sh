@@ -47,6 +47,7 @@ const needle = query.toLowerCase();
 const slots = ["check", "prep"];
 let archivesSeen = 0;
 const hits = [];
+const unreadable = [];
 
 for (const slot of slots) {
   const runsDir = path.join(support, `${slot}-run-archives`);
@@ -56,7 +57,16 @@ for (const slot of slots) {
   for (const stamp of stamps.sort().reverse()) {
     const queueFile = path.join(runsDir, stamp, `overture-${slot}-queue.json`);
     let queue;
-    try { queue = JSON.parse(fs.readFileSync(queueFile, "utf8")); } catch (e) { continue; }
+    try {
+      queue = JSON.parse(fs.readFileSync(queueFile, "utf8"));
+    } catch (e) {
+      // An archived queue this tool cannot READ is a different answer from a show that is not in it,
+      // and skipping it silently made them the same: the run vanished and the show came back as never
+      // checked. That is the worse direction, because a run whose archive is damaged is exactly the one
+      // somebody is asking about (L10, L11).
+      unreadable.push(`${stamp} (${slot}): ${e.message}`);
+      continue;
+    }
     const items = Array.isArray(queue.items) ? queue.items : [];
     const item = items.find((i) =>
       String(i.naturalKey || "").toLowerCase().includes(needle) ||
@@ -72,8 +82,16 @@ if (archivesSeen === 0) {
   console.error("UNMEASURED: no archived runs at all under " + support + ", so nothing could be read.");
   process.exit(2);
 }
+// Said BEFORE any verdict, because an unreadable run changes what "appears in no archived run" is
+// worth: the show may well be in the one that could not be read.
+if (unreadable.length > 0) {
+  console.log(`${unreadable.length} archived run(s) could not be read, so this answer is incomplete:`);
+  for (const u of unreadable) console.log(`  ${u}`);
+  console.log("");
+}
 if (hits.length === 0) {
-  console.log(`"${query}" appears in no archived run. Nothing was checked, or the run predates archiving.`);
+  console.log(`"${query}" appears in no archived run that could be read.`);
+  console.log("Nothing was checked, or the run predates archiving.");
   process.exit(1);
 }
 
