@@ -760,15 +760,22 @@ enum ReachabilityCopy {
     // the only thing that changes that. It deliberately does not guess WHY the run came home short, which
     // is not recoverable from anything the row holds.
     //
-    // "never got an answer for it" is the shortfall sentence's own phrase (ReachabilityRunSummary), reused
-    // rather than reworded. Dan meets both about the same event, minutes apart: the run tells him 2 of 5
-    // shows never got an answer, and these are those two shows. Two spellings of one fact read as two
-    // different things.
     // #2621: it used to end "picking its date again is what gets it an answer", which sent Dan to a run
     // over the whole date while the card itself now carries a link that re-runs this one show. Two
     // spellings of one remedy, and the coarser of the two was the one written down (#843).
+    //
+    // #3358 Phase 2: it used to say the check "never got an answer for it", borrowed from the run
+    // shortfall sentence, and that was true of the one population that could reach this state when #1724
+    // wrote it. #3451 added a second: a run that DID NOT FINISH is no longer believed about a show it
+    // answered with nothing, and for that show an answer DID arrive, it just cannot be trusted. A message
+    // may claim only what its check measured (L11), so the sentence now says the check did not SETTLE the
+    // show, which is true of both and is the fact Dan acts on either way.
+    //
+    // The two causes are deliberately NOT given separate sentences. The remedy is identical, nothing he
+    // does differs between them, and a second badge state would split his attention by a distinction he
+    // cannot act on. It still refuses to guess WHY, which the row does not record.
     static let checkMissedItHelp =
-        "An earlier check included this show but never got an answer for it, so it's still unchecked. Nothing re-checks it on its own."
+        "An earlier check included this show and didn't settle it, so it's still unchecked. Nothing re-checks it on its own."
 }
 
 // #1308 Layer 2: the opt-in per-date probe (Layer 2). Kept out of the views (testable, #885), named so the
