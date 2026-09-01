@@ -39,6 +39,16 @@ struct EmptyAnswerSection: View {
                 // The cross-cut, which is the whole reason this section exists rather than the table
                 // above it. Shown only when the claim is actually being made, because a line about
                 // nothing is a line that teaches Dan to skip this section (L36).
+                if report.nothingPublishedWithAPresenter > 0 {
+                    Text(EmptyAnswerCopy.withAPresenter(report.nothingPublishedWithAPresenter))
+                        .font(OVType.body).foregroundStyle(OVColor.gold)
+                        .fixedSize(horizontal: false, vertical: true)
+                    // What the number CANNOT separate, said every time rather than left to be inferred,
+                    // the same rule the genre report's provenance line follows (L11).
+                    Text(EmptyAnswerReport.presenterCaveat)
+                        .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 // #3356 Phase 0.5: what this report deliberately does NOT count, so a corrected number
                 // cannot be mistaken for a shrinking one (L11, L98). Shown only when there is something
                 // to exclude, so a clean store never grows a permanent line saying nothing.
@@ -54,16 +64,6 @@ struct EmptyAnswerSection: View {
                         .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                if report.nothingPublishedWithAPresenter > 0 {
-                    Text(EmptyAnswerCopy.withAPresenter(report.nothingPublishedWithAPresenter))
-                        .font(OVType.body).foregroundStyle(OVColor.gold)
-                        .fixedSize(horizontal: false, vertical: true)
-                    // What the number CANNOT separate, said every time rather than left to be inferred,
-                    // the same rule the genre report's provenance line follows (L11).
-                    Text(EmptyAnswerReport.presenterCaveat)
-                        .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
             }
         }
     }
@@ -72,6 +72,23 @@ struct EmptyAnswerSection: View {
 // The section's own words, beside it rather than inside the view body, so they reach
 // `docs/copy-inventory.md` and get read cold.
 enum EmptyAnswerCopy {
+    // #3356 Phase 0.5: what this report deliberately does NOT count, and why. Said rather than left to
+    // be inferred, because the alternative is a total that silently stopped counting most of what it
+    // used to, which reads exactly like a defect being fixed (L11, L98).
+    static func contradictedByVerdict(_ count: Int) -> String {
+        count == 1
+            ? "1 more show stored a reason like these, but its own answer says it can be reached, so its card never says it."
+            : "\(count) more shows stored a reason like these, but their own answers say they can be reached, so their cards never say it."
+    }
+
+    // Its own sentence, because a reason contradicted by an answer and a reason with no answer beside
+    // it at all are different faults with different remedies (L11).
+    static func reasonWithNoVerdict(_ count: Int) -> String {
+        count == 1
+            ? "1 show stored a reason with no answer recorded beside it at all, which is a fault in the check rather than a finding about the show."
+            : "\(count) shows stored a reason with no answer recorded beside them at all, which is a fault in the check rather than a finding about those shows."
+    }
+
     static let title = "Checks that came home empty"
     static let nothingEmpty = "No check has come home without a contact. When one does, what it claimed appears here."
 
