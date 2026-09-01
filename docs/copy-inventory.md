@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1461 sentences**.
+Every sentence Overture can say to Dan: **1464 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 524 of the 1461 below hold a
+  sentence carrying a VALUE: 527 of the 1464 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -1470,6 +1470,10 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/StoreShrinkCheck.swift`
 "Overture could not open its data file to check it at \(path). Nothing has been opened or changed. The file may be in use by another program, or its permissions may have changed. Check that file before reopening Overture."
     `App/StoreSchemaGuard.swift`
+"Overture could not save the record of what this run searched for, so it will be lost when the next run starts: \(reason)"
+    `App/PrepRunArchive.swift`
+"Overture could not save the records of what this run searched for on each show, so they will be lost when the next run starts: \(reason)"
+    `App/PrepRunArchive.swift`
 "Overture could not update"
     `Domain/UpdateAttempt.swift`
 "Overture couldn't finish starting up"
@@ -3104,6 +3108,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ExperimentReport.swift`
 "elsewhere on \(dateLabel)"
     `UI/QueueView+Model.swift`
+"event streams NOT archived (\(count) found): \(reason)"
+    `App/PrepRunArchive.swift`
 "gave it up"
     `App/ActionFeedback.swift`
 "gave them up"

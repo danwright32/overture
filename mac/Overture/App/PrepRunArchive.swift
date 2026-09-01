@@ -244,9 +244,19 @@ enum PrepRunArchive {
         "event streams NOT archived (\(count) found): \(reason)"
     }
 
+    // Singular and plural are separate sentences, never one with an "(s)" in it, which is the rule the
+    // rest of this app's counts already follow. And it says what Dan LOSES rather than naming the file:
+    // "event streams" is the thing on disk, "what the check searched for on each show" is the thing he
+    // would have wanted and cannot now get.
     static func failedStreamsProblemNote(count: Int, reason: String) -> String {
-        "Overture could not archive \(count) event stream(s) for this run, so its per item evidence is "
-            + "only on disk until the next run overwrites it: \(reason)"
+        // Each branch is a WHOLE sentence rather than a noun phrase spliced into a shared frame. Read
+        // assembled, the frame version split its own verb ("could not file the records ... away") and
+        // disagreed with itself on number ("records ... it will be lost").
+        return count == 1
+            ? "Overture could not save the record of what this run searched for, so it will be lost when "
+                + "the next run starts: \(reason)"
+            : "Overture could not save the records of what this run searched for on each show, so they "
+                + "will be lost when the next run starts: \(reason)"
     }
 
     // The chunk streams this run actually left on disk. Found by READING the directory rather than by

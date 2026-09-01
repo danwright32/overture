@@ -185,8 +185,10 @@ struct EventStreamArchiveRetentionTests {
                                            reportProblem: { problems.append($0) })
 
         #expect(problems.count == 1, "a lost stream archive said nothing at all")
-        #expect(problems.first?.contains("stream") == true,
-                "the problem does not name what was lost: \(problems)")
+        #expect(problems.first?.contains("searched for") == true,
+                "the problem does not say what Dan lost: \(problems)")
+        #expect(problems.first?.contains("(s)") == false,
+                "singular and plural are separate sentences, never one with an (s) in it")
     }
 
     // And the ordinary case stays quiet, or the report above becomes noise on every run that has no
