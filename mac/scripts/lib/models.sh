@@ -456,3 +456,226 @@ tee_run_events() {
     fi
   done
 }
+
+# #3357 Phase 1.3: which web calls each ITEM cost, derived from the run's own streams.
+#
+# WHAT IT IS FOR. `scripts/what-the-check-searched.sh` (#2996) can already print every web call a run
+# made, and it refuses to say which SHOW a call belonged to whenever a chunk carried more than one:
+# "these calls are NOT attributed to this one. Read them as the whole chunk." That refusal is honest and
+# it is also the reason the tool cannot answer the question it exists for on a busy run. This is the
+# derivation that lets it.
+#
+# HOW. The runbook tells the run to rewrite the whole results file after EACH item (#1023), so each
+# `Write` names the item just finished, and the web calls since the previous `Write` are that item's.
+# The newly appearing `naturalKey` in a Write is what names it: the file is cumulative, so the keys
+# already seen are the items already done.
+#
+# THAT IS AN INSTRUCTION IN A PROMPT, NOT AN OBSERVED BEHAVIOUR (L27, L98). Measured across all seven
+# surviving chunk streams on 2026-08-30: one show per chunk, exactly one `Write` per chunk, and chunk 7
+# with no `Write` at all. There is no multi item chunk anywhere on disk to check the rule against,
+# because the only run that had them was overwritten 45 minutes later, which is #3346's argument stated
+# as a fact. So this SHIPS the derivation and its outcomes, and the per item rewrite RATE is measured on
+# the first archived multi item run. Nothing may depend on the attribution being right until then.
+#
+# THREE OUTCOMES, never two, because a stream nobody could read and a stream with nothing in it are
+# different facts and only one of them is a finding (L98, L11):
+#
+#   attributed     a Write boundary was found and the calls fall between boundaries
+#   unattributable a stream that reported calls and named no item, or calls after the last Write
+#   unmeasured     no event file, or nothing in it parsed
+#
+# UNATTRIBUTABLE IS REPORTED PER STREAM AND NEVER DIVIDED EVENLY ACROSS ITS ITEMS. Averaging is exactly
+# what would hide a starved show inside a busy chunk, which is the thing anybody reads this to find.
+#
+# IT ATTRIBUTES SEARCHES AS WELL AS FETCHES. Verified on the live streams: `WebSearch` tool_use records
+# carry `input.query` and sit in the same stream as `WebFetch` (one chunk held 9 searches, 6 fetches, 1
+# Write). A rule reading fetches alone would answer "what did this check look at" while leaving out what
+# it looked FOR, which is the half that showed #2983 had never searched the company at all.
+#
+# ONE DEPARTURE FROM THE PLAN TEXT, stated rather than smuggled. The plan lists "calls before the first
+# boundary" as unattributable. On the only data that exists that rule attributes NOTHING: every stream
+# holds one item and one Write, so every call precedes the first boundary and the tool would report 100%
+# unattributable while working perfectly. Those calls are therefore attributed to the item that first
+# Write names, and counted SEPARATELY as `beforeFirstWrite` so the weaker evidence stays visible and
+# anybody can subtract it.
+record_item_attribution() {
+  local out="$1" kills="$2"
+  shift 2
+  command -v node >/dev/null 2>&1 || return 0
+  node -e "${OVERTURE_STREAM_ENVELOPE_JS}"'
+    (function () {
+    const fs = require("fs");
+    const [outFile, killsFile, ...eventFiles] = process.argv.slice(1);
+
+    // Only routes that reach the WEB, matching what-the-check-searched.sh: a Read or a network-free
+    // Bash is not a search, and listing it would pad the very output this exists to make readable.
+    const callOf = (block) => {
+      if (!block || block.type !== "tool_use") return null;
+      const input = block.input || {};
+      if (block.name === "WebSearch") return { route: "search", detail: String(input.query || "") };
+      if (block.name === "WebFetch") return { route: "fetch", detail: String(input.url || "") };
+      return null;
+    };
+
+    // The keys THIS Write names. Read out of the written text rather than parsed as JSON, because a
+    // rewrite in flight is routinely truncated and a parse failure would throw the boundary away along
+    // with the item it names.
+    const keysIn = (text) => {
+      const out = [];
+      const re = /"naturalKey"\s*:\s*"((?:[^"\\]|\\.)*)"/g;
+      let m;
+      while ((m = re.exec(text)) !== null) out.push(m[1]);
+      return out;
+    };
+    const writeText = (block) => {
+      const input = block.input || {};
+      const parts = [input.content, input.new_string, input.file_text];
+      return parts.filter((p) => typeof p === "string").join("\n");
+    };
+
+    const streams = [];
+    let attributed = 0, unattributable = 0, unmeasured = 0, beforeFirstWrite = 0;
+
+    eventFiles.forEach((file, index) => {
+      const chunk = index + 1;
+      let text;
+      try { text = fs.readFileSync(file, "utf8"); } catch (e) {
+        streams.push({ chunk: chunk, outcome: "unmeasured", why: "no event file" });
+        unmeasured += 1;
+        return;
+      }
+      let parsedLines = 0;
+      const items = [];
+      const seen = new Set();
+      let pending = [];
+      let sawAWrite = false;
+      let strays = [];
+      for (const raw of text.split("\n")) {
+        const line = raw.trim();
+        if (!line.startsWith("{")) continue;
+        let event;
+        // A killed run leaves a half written line. Skip it rather than failing the whole stream, which
+        // is the rule record_web_calls already follows over these same files.
+        try { event = JSON.parse(line); } catch (e) { continue; }
+        parsedLines += 1;
+        const content = event && event.message && event.message.content;
+        if (!Array.isArray(content)) continue;
+        for (const block of content) {
+          const call = callOf(block);
+          if (call) { pending.push(call); continue; }
+          if (!block || block.type !== "tool_use" || block.name !== "Write") continue;
+          const fresh = keysIn(writeText(block)).filter((k) => !seen.has(k));
+          for (const k of fresh) seen.add(k);
+          // Exactly one new key names one item. Zero (a rewrite that added nobody) or several (a run
+          // that batched) cannot say which of them the calls belong to, and guessing is what would hide
+          // a starved show, so the calls stay unattributed and say so.
+          if (fresh.length === 1) {
+            if (!sawAWrite) beforeFirstWrite += pending.length;
+            items.push({ naturalKey: fresh[0], calls: pending });
+          } else if (pending.length > 0) {
+            strays = strays.concat(pending);
+          }
+          sawAWrite = true;
+          pending = [];
+        }
+      }
+      // Anything after the last Write was never named by one.
+      strays = strays.concat(pending);
+      if (parsedLines === 0) {
+        streams.push({ chunk: chunk, outcome: "unmeasured", why: "nothing in the stream parsed" });
+        unmeasured += 1;
+        return;
+      }
+      const outcome = items.length > 0 ? "attributed" : "unattributable";
+      if (outcome === "attributed") { attributed += 1; } else { unattributable += 1; }
+      streams.push({
+        chunk: chunk,
+        outcome: outcome,
+        complete: streamEnvelope(file) !== null,
+        items: items,
+        unattributedCalls: strays,
+      });
+    });
+
+    // #3357 Phase 1.5: the watchdog kills, folded in HERE because this is where the streams are already
+    // walked. `record_watchdog_kill` appends chunk and elapsed and parses nothing, so there is one
+    // implementation of "which items had this chunk written", not two that can drift (L263).
+    //
+    // Absent is the ordinary case and says nothing; UNREADABLE is its own state and says so, because a
+    // kills file that cannot be read and a run with no kills leave the same empty list, and a run
+    // offered as comparison evidence must be able to tell them apart (L98, L11).
+    let kills = [];
+    let killsReadable = true;
+    if (killsFile) {
+      try {
+        const raw = fs.readFileSync(killsFile, "utf8");
+        for (const line of raw.split("\n")) {
+          const t = line.trim();
+          if (!t.startsWith("{")) continue;
+          try { kills.push(JSON.parse(t)); } catch (e) { killsReadable = false; }
+        }
+      } catch (e) {
+        // No file at all is a run nothing killed, which is the ordinary case and not a fault.
+        kills = [];
+      }
+    }
+    // L50: the chunk number comes off DISK, so it never reaches a comparison directly. A value that is
+    // not a number matches no stream, and an empty `itemsAlreadyWritten` would then read as "this chunk
+    // had written nothing" when the truth is that nobody could tell which chunk it was. Those are
+    // different facts and the second one is the one that matters, so it says which (L11).
+    const itemsOf = (chunk) => {
+      if (typeof chunk !== "number" || !Number.isFinite(chunk)) return null;
+      const s = streams.find((x) => x.chunk === chunk);
+      return s && Array.isArray(s.items) ? s.items.map((i) => i.naturalKey) : null;
+    };
+    kills = kills.map((k) => {
+      // What that chunk had ALREADY written, which BOUNDS the item it died on rather than naming it.
+      // Naming one would be a claim the stream does not carry.
+      const written = itemsOf(k.chunk);
+      return {
+        chunk: k.chunk,
+        at: k.at,
+        requestInFlightSeconds: k.requestInFlightSeconds,
+        itemsAlreadyWritten: written === null ? [] : written,
+        // Separate from an empty list, for the reason `killsReadable` is separate from no kills: a
+        // chunk that wrote nothing and a chunk nobody could match are the same empty array.
+        itemsKnown: written !== null,
+      };
+    });
+
+    const report = {
+      version: 1,
+      generatedAt: new Date().toISOString(),
+      // A run with any kill in it is a confound, and this is the field to read before using a run as
+      // comparison evidence (#3007). Zero is a measurement; `killsReadable: false` is not.
+      watchdogKills: kills,
+      killsReadable: killsReadable,
+      attributed: attributed,
+      unattributable: unattributable,
+      unmeasured: unmeasured,
+      // Counted apart from the total, so the weaker evidence named in the header above stays
+      // visible rather than being folded into a number that reads as fully attributed.
+      beforeFirstWrite: beforeFirstWrite,
+      streams: streams,
+    };
+    try {
+      fs.writeFileSync(outFile, JSON.stringify(report, null, 2) + "\n");
+    } catch (e) {
+      // Evidence ABOUT a run rather than output the run itself made, so a failure to write it must
+      // never turn a
+      // successful run into a failed one. Reported below rather than thrown.
+      console.log("prep: could not write the per item attribution sidecar (" + e.message + ").");
+      return;
+    }
+    console.log("prep: per item attribution: " + attributed + " stream(s) attributed, " +
+                unattributable + " unattributable, " + unmeasured + " unmeasured" +
+                (beforeFirstWrite > 0
+                  ? " (" + beforeFirstWrite + " call(s) attributed to an item with no preceding Write)"
+                  : "") + ".");
+    if (kills.length > 0) {
+      console.log("prep: the stuck-request watchdog killed " + kills.length +
+                  " chunk(s) in this run, so it is not usable as comparison evidence (#3007).");
+    }
+    })();
+  ' "${out}" "${kills}" "$@"
+}

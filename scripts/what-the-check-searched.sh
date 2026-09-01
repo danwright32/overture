@@ -119,6 +119,47 @@ for (const hit of hits) {
   }
   console.log("");
 
+  // #3357 Phase 1.3: the per item SIDECAR, if this run has one. It is what lets the calls be
+  // attributed to THIS show rather than read as the whole chunk, which is the refusal printed at the
+  // bottom of this block and the reason it was printed.
+  //
+  // Archived on its own longer rotation, 60 against the 10 kept for streams, so a run can
+  // legitimately have a
+  // sidecar and no streams. That is the good case: the derivation outlives the evidence it was made
+  // from, on purpose, because nothing can re-derive it afterwards.
+  let attributed = null;
+  let killedChunks = [];
+  try {
+    const sidecar = JSON.parse(fs.readFileSync(
+      path.join(support, `${hit.slot}-run-attribution-archives`, hit.stamp,
+                `${hit.slot}-run-attribution.json`), "utf8"));
+    killedChunks = (sidecar.watchdogKills || []).map((k) => k.chunk);
+    for (const stream of sidecar.streams || []) {
+      for (const item of stream.items || []) {
+        if (item.naturalKey === i.naturalKey) {
+          attributed = (item.calls || []).map(
+            (c) => `${c.route === "search" ? "search " : "fetch  "} ${c.detail}`);
+        }
+      }
+    }
+  } catch (e) { attributed = null; }
+
+  if (attributed !== null) {
+    console.log(`Web calls this run made FOR THIS SHOW (${attributed.length}), from the run own`);
+    console.log("per item attribution:");
+    for (const c of attributed) console.log(`    ${c}`);
+    if (attributed.length === 0) {
+      console.log("    none. The run reached this show and searched for nothing.");
+    }
+    if (killedChunks.length > 0) {
+      console.log("");
+      console.log(`  Note: the stuck-request watchdog killed ${killedChunks.length} chunk(s) in this`);
+      console.log("  run, so it is not usable as comparison evidence (#3007).");
+    }
+    console.log("");
+    continue;
+  }
+
   const streamsDir = path.join(support, `${hit.slot}-run-event-archives`, hit.stamp);
   let streams = [];
   try {

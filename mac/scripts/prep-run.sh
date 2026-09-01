@@ -565,5 +565,14 @@ record_run_cost "$RESULTS" "$@"
 # code change once #1720's real depth is measured.
 record_web_calls "$RESULTS" "${OVERTURE_PREP_WEB_CALL_CAP:-15}" "$@"
 
+# #3357 Phase 1.3: which web calls each ITEM cost, derived from the SAME streams the two recorders above
+# read, for the same reason they share them: three numbers describing one run must not come from three
+# different sets of files. It also folds in Phase 1.5's watchdog kill record, because this is the pass
+# that already walks every stream.
+#
+# Runs LAST of the three and writes a file of its own rather than a field in the results, so it needs no
+# contract bump and a failure here cannot damage the run's own output.
+record_item_attribution "$SLOT_ATTRIBUTION" "$SLOT_WATCHDOG_KILLS" "$@"
+
 echo "prep run finished (claude exit ${CLAUDE_STATUS}) -> $RESULTS"
 exit "$CLAUDE_STATUS"

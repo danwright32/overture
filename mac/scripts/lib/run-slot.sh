@@ -74,6 +74,14 @@ resolve_run_slot() {
   # is the only writer; the runner only ever releases it. Named here with every other slot path so no
   # runner spells out a handoff path itself.
   SLOT_COVERS="${SUPPORT}/${RUN_SLOT}-covers.json"
+  # #3357 Phase 1.3: which web calls each ITEM cost, derived from the streams after the run and kept
+  # beside the run's other output. A fixed per slot path like everything else here, so the next run
+  # overwrites it; the ARCHIVE is what makes a given run's copy outlive that (`attributionArchiveKeep`).
+  SLOT_ATTRIBUTION="${SUPPORT}/${RUN_SLOT}-run-attribution.json"
+  # #3357 Phase 1.5: every chunk the stuck-tool watchdog killed, with the item it died on. Durable
+  # because the notice it used to have was one line on a terminal that closes (L148), and any run
+  # offered as comparison evidence has to be able to report zero kills or be discarded.
+  SLOT_WATCHDOG_KILLS="${SUPPORT}/${RUN_SLOT}-run-watchdog-kills.json"
   SLOT_EVENTS="${SUPPORT}/${RUN_SLOT}-run-events.jsonl"
   SLOT_EVENTS_FIFO="${SUPPORT}/${RUN_SLOT}-run-events.fifo"
   # open_run_log takes a NAME rather than a path, so this one is not absolute.

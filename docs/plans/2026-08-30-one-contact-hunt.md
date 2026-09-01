@@ -745,6 +745,15 @@ The stuck tool call watchdog kills a **whole chunk** when one WebFetch stalls. A
 
 ### 1.6 Constraint 8: what this does to the other run slot
 
+**SETTLED 2026-09-01, and the answer is nothing.** Phase 1 adds one recorder that runs AFTER the run
+has finished, over files it already wrote, and writes one small file at a fixed per slot path. It
+starts no process, takes no lock, and holds nothing open, so the blocking window `RunCoverage`
+arbitrates is unchanged in both directions. The paragraph below is the mechanism as verified, kept
+because the correction in it is the kind that gets re-discovered.
+
+Nothing in Phase 6 reduces contention any more either, since Phase 6 is closed (#3362): the Prep hunt
+stays, so the class of overlap `RunCoverage` arbitrates is the same as it was.
+
 The check and Prep are **not** subject to a blanket lockout, and the milestone that fixed this is closed (#2620, #2765, #3010). `RunCoverage` is per show and fail closed: `heldByOtherRun` reads the other slot's `<slot>-covers.json` and excludes the overlapping shows from this launch. **[R3] The mechanism, corrected:** it does **not** throw when the other slot is live and its holdings cannot be read; `RunCoverage.read` returns a **three case enum** whose third case, `.unreadable`, is a refusal the caller must honour (`RunCoverage.swift:18-40`), and the only `throws` in the file is `write` at `:82`, which fails loud when a run's coverage was not published. The substance is unchanged and the distinction matters, because a caller written to catch a throw would silently treat `.unreadable` as permission, which is the fail open direction on the one control that stops two paid runs colliding.
 
 Dan's call, 2026-08-15: exclude the overlapping shows and say so, never refuse the whole run; and 2026-08-20: whichever run starts second yields, in both directions.

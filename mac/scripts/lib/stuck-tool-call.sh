@@ -85,6 +85,28 @@ stuck_tool_call_seconds() {
 STUCK_TOOL_CALL_LIMIT="${OVERTURE_STUCK_TOOL_CALL_LIMIT_SECONDS:-180}"
 STUCK_TOOL_CALL_POLL="${OVERTURE_STUCK_TOOL_CALL_POLL_SECONDS:-15}"
 
+# #3357 Phase 1.5: RECORD a kill as well as saying it.
+#
+# The notice above is a durable control whose only trace was a terminal window that closes (L148), and a
+# killed chunk is a confound in every later comparison between runs: its items settle as unfinished
+# rather than as negatives, so a run offered as evidence has to be able to report zero kills or be
+# discarded. Nothing else on disk says a kill happened at all.
+#
+# ONE LINE OF JSON PER KILL, appended, with NO parsing of the stream here. The item a chunk died on is
+# derivable from what that chunk had already written, and `record_item_attribution` in `models.sh`
+# already walks every stream and computes exactly that. A second walk here would be one question with
+# two implementations, free to drift, which is the defect #3443 removed one file over (L263). This
+# records WHEN and WHICH CHUNK; the attribution pass folds in WHICH ITEMS after the run.
+#
+# Append-only text rather than a rewritten document, deliberately: this runs beside a paid run that is
+# already going wrong, several chunks can be killed, and a read-modify-write whose read fails would
+# erase the earlier kills at exactly the moment they matter (L105).
+record_watchdog_kill() {
+  [ -n "${SLOT_WATCHDOG_KILLS:-}" ] || return 0
+  printf '{"chunk":%s,"requestInFlightSeconds":%s,"at":"%s"}\n' \
+    "$1" "$2" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "${SLOT_WATCHDOG_KILLS}" 2>/dev/null || true
+}
+
 # stuck_watchdog_run <chunk-count> <chunk-pids>: watch each chunk's own event stream and kill the ONE
 # chunk whose current tool call has been in flight past the limit.
 #
@@ -124,6 +146,7 @@ stuck_watchdog_run() {
           fi
         elif [ "$_elapsed" -ge "$STUCK_TOOL_CALL_LIMIT" ]; then
           echo "prep: STOPPING CHUNK $_k. One request has been in flight for ${_elapsed}s (limit ${STUCK_TOOL_CALL_LIMIT}s), which is far past anything this Mac has recorded, so it is not coming back. The other chunks are untouched and will finish."
+          record_watchdog_kill "$_k" "$_elapsed"
           kill "$_pid" 2>/dev/null || true
         fi
       fi

@@ -413,6 +413,32 @@ are therefore the archive's too. A run that produced only half a pair is still a
 `prep-run-events.jsonl` and `prep-run.log` are 300 KB+ each and are deliberately NOT archived; their
 retention is a separate decision.
 
+#3357 Phase 1.2 and 1.3 add TWO more dated directories per slot, each with its own keep, and the reason
+is the rotation rather than tidiness: `DatedFolderRotation.prune` rotates whole FOLDERS by one keep, so
+any folder holding two consumers silently gives one of them a lifetime nobody chose.
+
+- `<slot>-run-event-archives/<stamp>/` holds the raw chunk streams, keep **10**. About 1.7 MB per run
+  (measured 2026-09-01 over seven files of 214 to 310 KB). Its reader is a same-week diagnosis of a run
+  that went wrong; nobody reads these months later.
+- `<slot>-run-attribution-archives/<stamp>/<slot>-run-attribution.json` holds the per item attribution
+  SIDECAR, keep **60**, a few KB per run. Written by `record_item_attribution` (`mac/scripts/lib/models.sh`)
+  from the same streams the two recorders above read; read by `scripts/what-the-check-searched.sh` to
+  say which calls belonged to WHICH show, and by anyone asking whether a run is usable as comparison
+  evidence. Version 1.
+
+  Note what the two keeps together mean, so nobody later cites a safety net that is not there: for the
+  50 runs between them the sidecar SURVIVES and the streams it was derived from do NOT, so re-deriving
+  it for those runs is impossible. The archived derivation is the only copy, which is why it is
+  archived rather than recomputed on demand.
+
+  The sidecar also carries `watchdogKills` (#3357 Phase 1.5), appended live by `record_watchdog_kill`
+  into `<slot>-run-watchdog-kills.json` and folded in after the run. A killed chunk settles its items as
+  unfinished rather than as negatives, so a run with any kill in it is a confound and this is the field
+  to read before using one as evidence. `killsReadable` is separate from an empty list, because a run
+  with no kills and a record nobody could read leave the same empty result.
+
+All three directories share the run's stamp, so one run is found under one folder name in three places.
+
 The runbook states BOTH versions and names every item field in prose, which drifted from the code
 unnoticed until #1908 (#1897 shipped queue v10 with `venueHistory` while the input spec still said
 version 9 and never listed the field). `src/lib/prepQueueSpec.test.ts` now holds that section to
