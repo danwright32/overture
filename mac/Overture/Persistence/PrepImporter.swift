@@ -102,6 +102,22 @@ enum PrepImporter {
             // instead of sticking on the free heuristic. Handled here and short-circuited so none of the
             // draft/status/reprep logic below can touch a probe row.
             if isProbe {
+                // #3358 Phase 2: a run that DID NOT FINISH is not believed about a show it answered with
+                // nothing. Asked HERE as well as in `markProbed`, and both are needed: markProbed writes
+                // the floor and this runs straight afterwards in the same settle, so fixing one alone
+                // would have the other put the 90 day lockout back. Proven by a test that drives this
+                // path directly, which went red before this guard existed.
+                //
+                // A contact the run DID land still stamps below, which is the boundary Dan chose: the
+                // contact is evidence the run reached this show.
+                let unfinished = results.webCalls?.recorded == false
+                if unfinished, (r.contacts ?? []).isEmpty {
+                    // The same route markProbed sends it down, so the two writers cannot disagree about
+                    // what this run established (L16). No verdict, no reason, no freshness stamp: this
+                    // run has not answered this show.
+                    p.reachabilityUnansweredAt = now
+                    continue
+                }
                 p.reachabilityProbedAt = now
                 if p.recipientsEditedByDan {
                     // #1596 Phase 3: Dan curated this row's recipients by hand, so the ingest below must
@@ -733,6 +749,36 @@ enum PrepImporter {
     // so "answered" has ONE definition here, at the ingest, and in the shortfall Dan reads, rather than
     // three that can drift. The queue is the app's own record of the grouping; a caller that has no queue
     // to offer (a test, a path with no work-list on disk) credits nothing and gets the old behaviour.
+    // #3358 Phase 2: the keys this run answered that it should NOT be believed about.
+    //
+    // A run killed by the stuck-tool watchdog, rate limited, or simply thin used to be written down as a
+    // firm negative with a 90 day lockout on a show with a live date. Whether the run finished is
+    // knowable: `webCalls.recorded` says so, and #3443 is what made that trustworthy, because
+    // `record_web_calls` and `record_run_cost` used to disagree about the same files and the web call
+    // reading called a run complete that had lost seven shows.
+    //
+    // Dan's call, 2026-09-01, asked directly because guessing either way costs something real: distrust
+    // them and re-check. So an EMPTY answer from a run that did not finish is treated as no answer at
+    // all, and the show routes to the unanswered path that already offers another look.
+    //
+    // An answer carrying CONTACTS is kept, which is the boundary of what he chose: the contacts are
+    // evidence the run reached this show, and re-checking those would spend money rediscovering an
+    // address already on the row.
+    //
+    // An ABSENT `webCalls` says nothing about whether the run finished, and silence must not read as a
+    // claim that it died: every results file written before #1721 has none, and treating those as dead
+    // runs would re-check the whole store (L11, L98).
+    static func distrustedAnswerKeys(at url: URL, queueURL: URL? = nil) -> Set<String> {
+        guard let decoded = HandoffFile.read(at: url,
+                                             decode: { try PrepResultsDecoder.decode($0) }).value,
+              decoded.webCalls?.recorded == false
+        else { return [] }
+        let groups = queueURL.map { PrepGroupCredit.groups(queueURL: $0, resultsURL: url) } ?? [:]
+        return Set(PrepGroupCredit.credited(decoded.results, groups: groups)
+            .filter { ($0.contacts ?? []).isEmpty }
+            .map(\.naturalKey))
+    }
+
     static func answeredKeys(at url: URL, queueURL: URL? = nil) -> Set<String> {
         // #2879: the empty set is still the honest reading of a file that cannot be read (nothing can be
         // SHOWN to have been answered, so nothing is stamped), but the read is recorded now, so a results
