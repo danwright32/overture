@@ -39,6 +39,21 @@ struct EmptyAnswerSection: View {
                 // The cross-cut, which is the whole reason this section exists rather than the table
                 // above it. Shown only when the claim is actually being made, because a line about
                 // nothing is a line that teaches Dan to skip this section (L36).
+                // #3356 Phase 0.5: what this report deliberately does NOT count, so a corrected number
+                // cannot be mistaken for a shrinking one (L11, L98). Shown only when there is something
+                // to exclude, so a clean store never grows a permanent line saying nothing.
+                if report.contradictedByVerdict > 0 {
+                    Text(EmptyAnswerCopy.contradictedByVerdict(report.contradictedByVerdict))
+                        .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                // Its own line and its own sentence, because a reason contradicted by a verdict and a
+                // reason nothing ever judged are different faults with different remedies.
+                if report.reasonWithNoVerdict > 0 {
+                    Text(EmptyAnswerCopy.reasonWithNoVerdict(report.reasonWithNoVerdict))
+                        .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 if report.nothingPublishedWithAPresenter > 0 {
                     Text(EmptyAnswerCopy.withAPresenter(report.nothingPublishedWithAPresenter))
                         .font(OVType.body).foregroundStyle(OVColor.gold)
