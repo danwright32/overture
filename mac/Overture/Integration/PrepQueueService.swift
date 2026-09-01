@@ -402,7 +402,14 @@ enum PrepQueueService {
         let answered = Set(PrepImporter.answeredKeys(at: resultsURL, queueURL: queueURL)
                             .map(remap.current))
         let asked = Set(keys.map(remap.current))
-        let toStamp = asked.intersection(answered)
+        // #3358 Phase 2: a show a run that DID NOT FINISH answered with nothing is not believed, so it
+        // never reaches the stamping loop below and falls into `missed` with the shows the run never
+        // reached at all. That is deliberate rather than incidental: those two are the same situation
+        // (this run has not established anything about this show) and the unanswered path already offers
+        // another look, so no new state is invented for it.
+        let distrusted = PrepImporter.distrustedAnswerKeys(at: resultsURL, queueURL: queueURL)
+            .map(remap.current)
+        let toStamp = asked.intersection(answered).subtracting(distrusted)
         let all = (try? context.fetch(FetchDescriptor<Prospect>())) ?? []
         for p in all where toStamp.contains(p.naturalKey) {
             // #1596 Phase 3: the pre-guard default. This runs BEFORE the probe-safe ingest, so the venue
