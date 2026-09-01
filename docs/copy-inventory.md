@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1453 sentences**.
+Every sentence Overture can say to Dan: **1465 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 521 of the 1453 below hold a
+  sentence carrying a VALUE: 523 of the 1465 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -358,12 +358,16 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ProbeSelection.swift`
 "1 of those is a show that names its producing organisation."
     `UI/EmptyAnswerSection.swift`
+"1 of those was recorded by a later version of Overture, so this build cannot say which claim it made."
+    `UI/WrittenOffBacklogSection.swift`
 "1 run was left alone: Overture could not check whether its next night is free"
     `App/ActionFeedback.swift`
 "1 show has been checked and left with nobody to write to. What the check claimed:"
     `UI/EmptyAnswerSection.swift`
 "1 show on \(dateLabel) has no genre read. Set it before dismissing the night."
     `Domain/GenreGate.swift`
+"1 show was recorded as having no way in while it held one. The check's own claim, beside it:"
+    `UI/WrittenOffBacklogSection.swift`
 "1 source needs"
     `Domain/SourceAttention.swift`
 "1 venue is still waiting to be checked."
@@ -1171,6 +1175,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReplyPanel.swift`
 "No address yet, so its shows are not placed in your area."
     `UI/SourcesView.swift`
+"No check has claimed a show was unreachable while the show held a way in. If one has, the shows appear here."
+    `UI/WrittenOffBacklogSection.swift`
 "No check has come home without a contact. When one does, what it claimed appears here."
     `UI/EmptyAnswerSection.swift`
 "No contact found"
@@ -1937,6 +1943,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "Shows land here once Overture has tracked at least one."
     `Domain/EmptyState.swift`
+"Shows written off that could be reached"
+    `UI/WrittenOffBacklogSection.swift`
 "Shows you kept that a date clash is holding back."
     `Domain/AgentRoster.swift`
 "Shows you've pitched and are waiting to hear back on."
@@ -2656,6 +2664,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/HandoffShortfall.swift`
 "\(count) of those are shows that name their producing organisation."
     `UI/EmptyAnswerSection.swift`
+"\(count) of those were recorded by a later version of Overture, so this build cannot say which claims they made."
+    `UI/WrittenOffBacklogSection.swift`
 "\(count) shows have been checked and left with nobody to write to. What the checks claimed:"
     `UI/EmptyAnswerSection.swift`
 "\(count) shows on \(dateLabel) have no genre read. Set them before dismissing the night."
@@ -2664,6 +2674,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ScoutWarningCopy.swift`
 "\(count) shows were left out this run because the local store stopped answering. Run the scout again."
     `Domain/ScoutWarnings.swift`
+"\(count) shows were recorded as having no way in while they held one. Each check's own claim, beside it:"
+    `UI/WrittenOffBacklogSection.swift`
 "\(count) sources couldn't be checked."
     `UI/ScoutSummaryView.swift`
 "\(count) sources need"
@@ -3072,6 +3084,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/TicketLink.swift`
 "both of these people"
     `UI/SendConfirmSheet.swift`
+"claim not readable"
+    `UI/WrittenOffBacklogSection.swift`
 "couldn't read \(read.label). (\(underlying))"
     `Integration/ScoutService.swift`
 "couldn't save the producer answers, so other shows by them won't reuse this one"
@@ -3144,6 +3158,16 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "restored your guidance notes"
     `Domain/PrepRunSummary.swift`
+"said contact form only"
+    `UI/WrittenOffBacklogSection.swift`
+"said email found"
+    `UI/WrittenOffBacklogSection.swift`
+"said no email found"
+    `UI/WrittenOffBacklogSection.swift`
+"said social only"
+    `UI/WrittenOffBacklogSection.swift`
+"said weak contact only"
+    `UI/WrittenOffBacklogSection.swift`
 "send failed"
     `Integration/GmailSender.swift`
 "show is"

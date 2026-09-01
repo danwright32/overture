@@ -52,7 +52,7 @@ macOS may relocate this into the overflow menu or drop it entirely at a narrow w
 
 A sentence written as a constant is read here at the file that RENDERS it, not only at the file that declares it. That is the case the rest of this document and `copy-inventory.md` cannot show: moving an existing sentence onto a new screen changes no literal anywhere, so it produces no diff and gets no cold read, which is exactly when placement most needs reading.
 
-51 files render a sentence declared as a constant.
+52 files render a sentence declared as a constant.
 
 `App/OvertureApp.swift`
     StoreLaunchOutcome.defaultUnavailableReason  "Overture's data is unavailable."
@@ -302,6 +302,9 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
 `UI/WatchlistMutations.swift`
     WatchlistEditing.invalidURLMessage  "That doesn't look like a web address."
     WatchlistEditing.needsNameMessage  "Give the organization a name so you can recognize it here."
+`UI/WrittenOffBacklogSection.swift`
+    WrittenOffBacklogCopy.nothingContradicted  "No check has claimed a show was unreachable while the show held a way in. If one has, the shows appear here."
+    WrittenOffBacklogCopy.title  "Shows written off that could be reached"
 
 ## Every file, by surface
 

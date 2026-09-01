@@ -126,10 +126,6 @@ struct ReachabilityVerdictRefreshTests {
         let report = try #require(ReachabilityVerdictRefresh.run(in: ctx, defaults: defaults()))
 
         #expect(p.contradictionMarkedAt != nil)
-        // WHICH verdict was contradicted, not merely THAT one was: `no_email_found` and `social_only`
-        // are different findings about the hunt, and the trend line cannot tell them apart from a bare
-        // marker.
-        #expect(p.contradictionPriorResultRaw == Reachability.ProbeResult.noEmailFound.rawValue)
         #expect(report.marked == 1)
     }
 
@@ -142,7 +138,6 @@ struct ReachabilityVerdictRefreshTests {
         _ = ReachabilityVerdictRefresh.run(in: ctx, defaults: defaults())
 
         #expect(p.contradictionMarkedAt == nil)
-        #expect(p.contradictionPriorResultRaw == nil)
     }
 
     // One time, as Dan chose. A second launch must not rewrite anything, or the repair becomes the rule

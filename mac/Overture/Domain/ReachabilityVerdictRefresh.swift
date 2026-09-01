@@ -63,7 +63,6 @@ enum ReachabilityVerdictRefresh {
         for p in prospects {
             guard p.reachabilityResult == .noEmailFound, p.hasAnyRoute else { continue }
             p.contradictionMarkedAt = now
-            p.contradictionPriorResultRaw = p.reachabilityResult?.rawValue
             report.marked += 1
         }
 

@@ -418,15 +418,16 @@ final class Prospect {
     // shipped (L223).
     //
     // writer: `ReachabilityVerdictRefresh`, once, and nothing else ever.
-    var contradictionMarkedAt: Date? = nil
-
-    // WHICH negative verdict was contradicted. Not a spare copy of the marker above: `no_email_found`
-    // and `social_only` are different findings about the hunt, so a marker saying only THAT one was
-    // contradicted cannot answer what was actually wrong with the check.
+    // reader: `WrittenOffBacklog`, surfaced beside the other store reports.
     //
-    // A raw String rather than the enum, the same boundary rule every other stored verdict here follows,
-    // so an unrecognised value from a later build reads as no prior verdict rather than failing a fetch.
-    var contradictionPriorResultRaw: String? = nil
+    // There is deliberately NO companion field recording WHICH verdict was contradicted. The plan asked
+    // for one, reasoning that `no_email_found` and `social_only` are different findings about the hunt.
+    // They are, but a row is only marked where the stored verdict says there is no way in AND the row
+    // holds one, and `no_email_found` is the only verdict that says there is no way in: `social_only`
+    // and `contact_form_only` ARE ways in. So the field could only ever hold one value, which tells a
+    // reader nothing, and it is the same defect the plan itself removed `contradictionPriorEmptyReasonRaw`
+    // for (L46). If the marking rule ever widens, the field comes back with it.
+    var contradictionMarkedAt: Date? = nil
 
     var reachabilityEmptyReason: Reachability.EmptyReason? {
         get { reachabilityEmptyReasonRaw.flatMap(Reachability.EmptyReason.init(rawValue:)) }

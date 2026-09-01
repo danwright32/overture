@@ -26,17 +26,16 @@ struct WrittenOffBacklogSection: View {
                     .font(OVType.body).foregroundStyle(OVColor.inkSoft)
                     .fixedSize(horizontal: false, vertical: true)
                 ForEach(report.rows) { row in
+                    // The show and the room, and nothing else. Every row here carries the SAME prior
+                    // claim ("No email found"), which the summary line above states once, so repeating
+                    // it per row would say what the line next to it already said (#843).
                     HStack(alignment: .firstTextBaseline, spacing: OVSpacing.sm) {
                         Text(row.groupName).font(OVType.body).foregroundStyle(OVColor.ink)
-                        Spacer(minLength: OVSpacing.sm)
-                        Text(WrittenOffBacklogCopy.priorVerdict(row.priorResult))
-                            .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                        if let venue = row.venue {
+                            Spacer(minLength: OVSpacing.sm)
+                            Text(venue).font(OVType.meta).foregroundStyle(OVColor.inkSoft)
+                        }
                     }
-                }
-                if report.unattributed > 0 {
-                    Text(WrittenOffBacklogCopy.unattributed(report.unattributed))
-                        .font(OVType.meta).foregroundStyle(OVColor.inkSoft)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
@@ -49,26 +48,7 @@ enum WrittenOffBacklogCopy {
 
     static func summary(count: Int) -> String {
         count == 1
-            ? "1 show was recorded as having no way in while it held one. The check's own claim, beside it:"
-            : "\(count) shows were recorded as having no way in while they held one. Each check's own claim, beside it:"
-    }
-
-    // The row already names the show, so repeating that would tell Dan nothing the line beside it did
-    // not (#843). What this adds is WHICH claim the check made, since those are different findings.
-    static func priorVerdict(_ result: Reachability.ProbeResult?) -> String {
-        guard let result else { return "claim not readable" }
-        switch result {
-        case .noEmailFound: return "said no email found"
-        case .socialOnly: return "said social only"
-        case .contactFormOnly: return "said contact form only"
-        case .weakContactOnly: return "said weak contact only"
-        case .emailFound: return "said email found"
-        }
-    }
-
-    static func unattributed(_ count: Int) -> String {
-        count == 1
-            ? "1 of those was recorded by a later version of Overture, so this build cannot say which claim it made."
-            : "\(count) of those were recorded by a later version of Overture, so this build cannot say which claims they made."
+            ? "1 show was recorded as having no email to write to while it held a way in. Overture has since corrected it:"
+            : "\(count) shows were recorded as having no email to write to while they held a way in. Overture has since corrected them:"
     }
 }

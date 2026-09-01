@@ -21,8 +21,7 @@ struct WrittenOffBacklogTests {
     }
 
     @discardableResult
-    private func show(_ ctx: ModelContext, _ name: String, markedAt: Date? = nil,
-                      priorRaw: String? = nil) -> Prospect {
+    private func show(_ ctx: ModelContext, _ name: String, markedAt: Date? = nil) -> Prospect {
         let key = Prospect.makeNaturalKey(groupName: name, performanceDate: "2027-04-18",
                                           venue: "Rowan Hall")
         let p = Prospect(naturalKey: key, groupName: name, discipline: "music", venue: "Rowan Hall",
@@ -32,14 +31,13 @@ struct WrittenOffBacklogTests {
                          possibleMatchSource: nil, possibleMatchName: nil, status: .new)
         ctx.insert(p)
         p.contradictionMarkedAt = markedAt
-        p.contradictionPriorResultRaw = priorRaw
         try? ctx.save()
         return p
     }
 
     @Test func aMarkedRowIsReported() throws {
         let ctx = ModelContext(try container())
-        show(ctx, "Written Off", markedAt: Date(), priorRaw: "no_email_found")
+        show(ctx, "Written Off", markedAt: Date())
         show(ctx, "Never Contradicted")
 
         let report = WrittenOffBacklog.make(from: try ctx.fetch(FetchDescriptor<Prospect>()))
@@ -48,39 +46,41 @@ struct WrittenOffBacklogTests {
         #expect(report.rows.first?.groupName == "Written Off")
     }
 
-    // WHICH verdict was contradicted, because `no_email_found` and `social_only` are different findings
-    // about the hunt and a bare count cannot tell them apart. This is the whole reason
-    // `contradictionPriorResultRaw` is stored rather than only the date.
-    @Test func itSaysWhichVerdictWasContradicted() throws {
+    // The absence of a prior-verdict field is DELIBERATE and is asserted, so a later reader does not
+    // add one back on the plan's original reasoning without re-checking the premise. A row is marked
+    // only where the stored verdict says there is no way in AND the row holds one, and `noEmailFound`
+    // is the only verdict that says there is no way in, so such a field could hold exactly one value
+    // and would tell a reader nothing (L46). If the marking rule widens, this test is what says the
+    // field has to come back with it.
+    @Test func everyMarkedRowWasContradictingTheSameVerdict() throws {
         let ctx = ModelContext(try container())
-        show(ctx, "Said No Email", markedAt: Date(), priorRaw: "no_email_found")
-        show(ctx, "Said Social Only", markedAt: Date(), priorRaw: "social_only")
+        let d = UserDefaults(suiteName: "backlog-\(UUID().uuidString)")!
+        let key = Prospect.makeNaturalKey(groupName: "Marked By The Real Pass",
+                                          performanceDate: "2027-04-18", venue: "Rowan Hall")
+        let p = Prospect(naturalKey: key, groupName: "Marked By The Real Pass", discipline: "music",
+                         venue: "Rowan Hall", performanceDate: "2027-04-18", sourceListingURL: nil,
+                         priorRelationship: "none", production: "unknown", profile: "strong",
+                         coverage: "likely_uncovered", fitScore: 6, tier: "mid", fitReason: "r",
+                         matchedClientName: nil, possibleMatchSource: nil, possibleMatchName: nil,
+                         status: .new)
+        ctx.insert(p)
+        p.reachabilityResult = .socialOnly
+        p.addRecipient(Recipient(id: "r", email: nil, name: "n", role: nil, provenance: .performer,
+                                 contactMethodRaw: "form_or_dm", contactConfidenceRaw: "medium",
+                                 contactFormURL: "https://instagram.com/someact", contactSourceURL: nil))
+        try? ctx.save()
 
-        let report = WrittenOffBacklog.make(from: try ctx.fetch(FetchDescriptor<Prospect>()))
+        _ = ReachabilityVerdictRefresh.run(in: ctx, defaults: d)
 
-        #expect(report.count(of: .noEmailFound) == 1)
-        #expect(report.count(of: .socialOnly) == 1)
+        // socialOnly IS a way in, so this row is not a contradiction and is not marked. That is the
+        // premise the missing field rests on.
+        #expect(p.contradictionMarkedAt == nil)
     }
 
-    // A marker whose prior verdict this build cannot read is COUNTED and reported as unattributed rather
-    // than dropped, because a row silently vanishing from the total makes the report claim fewer
-    // contradictions than were observed (L98, L11).
-    @Test func aPriorVerdictThisBuildCannotReadIsStillCounted() throws {
+    // No date means no marker, which is the whole of what makes a row a member of this list.
+    @Test func aRowWithNoDateIsNotAContradiction() throws {
         let ctx = ModelContext(try container())
-        show(ctx, "From A Later Build", markedAt: Date(), priorRaw: "some_future_verdict")
-
-        let report = WrittenOffBacklog.make(from: try ctx.fetch(FetchDescriptor<Prospect>()))
-
-        #expect(report.total == 1)
-        #expect(report.unattributed == 1)
-    }
-
-    // A marker with no date is not a marker. Asserted because the two fields are written together by one
-    // pass, so a row carrying only the prior verdict means something went wrong rather than that a
-    // contradiction was observed.
-    @Test func aPriorVerdictWithNoDateIsNotAContradiction() throws {
-        let ctx = ModelContext(try container())
-        show(ctx, "Half Written", markedAt: nil, priorRaw: "no_email_found")
+        show(ctx, "Half Written", markedAt: nil)
 
         #expect(WrittenOffBacklog.make(from: try ctx.fetch(FetchDescriptor<Prospect>())).total == 0)
     }
@@ -91,8 +91,8 @@ struct WrittenOffBacklogTests {
         let ctx = ModelContext(try container())
         let older = Date(timeIntervalSince1970: 1_700_000_000)
         let newer = Date(timeIntervalSince1970: 1_800_000_000)
-        show(ctx, "Older", markedAt: older, priorRaw: "no_email_found")
-        show(ctx, "Newer", markedAt: newer, priorRaw: "no_email_found")
+        show(ctx, "Older", markedAt: older)
+        show(ctx, "Newer", markedAt: newer)
 
         let rows = WrittenOffBacklog.make(from: try ctx.fetch(FetchDescriptor<Prospect>())).rows
         #expect(rows.map(\.groupName) == ["Newer", "Older"])
