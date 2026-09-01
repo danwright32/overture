@@ -134,4 +134,31 @@ struct EventStreamArchiveRetentionTests {
             .filter(PrepRunArchive.isArchivedRunFolder)
         #expect(folders.isEmpty)
     }
+
+    // The keep the PRODUCTION PATH actually applies, which the rotation test above does not prove: it
+    // calls `DatedFolderRotation.prune` itself, so it asserts the arithmetic and never that
+    // `archiveEventStreams` passes the streams' own number. Caught by mutation: swapping
+    // `slot.eventArchiveKeep` for `slot.archiveKeep` in the production call left that test green, which
+    // is a guard measuring a proxy for the quantity it exists to protect (L63).
+    @Test func theArchivingPathPrunesByTheStreamsOwnKeep() throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let slot = RunSlot.check
+        let past = slot.eventArchiveKeep + 5
+
+        for i in 0..<past {
+            // A fresh stream each round, since the previous one was copied, not moved.
+            try "{\"type\":\"result\",\"total_cost_usd\":0.1}\n"
+                .write(to: slot.chunkEventsURL(chunk: 1, in: root), atomically: true, encoding: .utf8)
+            PrepRunArchive.archiveEventStreams(slot: slot, handoffDirectory: root,
+                                               stamp: String(format: "202601%02d-120000", i + 1),
+                                               now: Date())
+        }
+
+        let left = ((try? FileManager.default.contentsOfDirectory(
+            atPath: slot.eventArchivesDirectory(in: root).path)) ?? [])
+            .filter(PrepRunArchive.isArchivedRunFolder)
+        #expect(left.count == slot.eventArchiveKeep,
+                "archived \(past) runs of streams and kept \(left.count), not the streams' own keep")
+    }
 }
