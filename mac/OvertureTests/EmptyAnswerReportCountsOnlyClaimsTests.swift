@@ -116,4 +116,51 @@ struct EmptyAnswerReportCountsOnlyClaimsTests {
         #expect(report.reasonWithNoVerdict == 0)
         #expect(report.total == 1)
     }
+
+    // The two numbers reach the SCREEN, and each behind its own test, so a store with nothing to
+    // exclude never grows a permanent line saying nothing (L36). Source-text guards in the same shape
+    // as the section's existing ones, because `EmptyAnswerSection` reads its rows through `@Query` and
+    // cannot be rendered without a live container.
+    @Test func bothExcludedCountsAreDrawnAndEachIsGatedOnHavingSomethingToSay() {
+        let source = SourceGuardHelper.source("Overture/UI/EmptyAnswerSection.swift")
+        #expect(!source.isEmpty)
+        #expect(SourceGuardHelper.containsCode("if report.contradictedByVerdict > 0 {", in: source),
+                "the contradicted count is computed and no screen shows it")
+        #expect(SourceGuardHelper.containsCode("if report.reasonWithNoVerdict > 0 {", in: source),
+                "the unjudged count is computed and no screen shows it")
+        #expect(SourceGuardHelper.containsCode(
+            "Text(EmptyAnswerCopy.contradictedByVerdict(report.contradictedByVerdict))", in: source))
+        #expect(SourceGuardHelper.containsCode(
+            "Text(EmptyAnswerCopy.reasonWithNoVerdict(report.reasonWithNoVerdict))", in: source))
+    }
+
+    // They sit AFTER the cross-cut, which is what the section exists for rather than the table above
+    // it. Order is a real claim about what Dan reads first, and it was wrong on the first attempt.
+    @Test func theExclusionLinesFollowTheCrossCutRatherThanBuryingIt() {
+        let source = SourceGuardHelper.source("Overture/UI/EmptyAnswerSection.swift")
+        #expect(!source.isEmpty)
+        let crossCut = source.range(of: "if report.nothingPublishedWithAPresenter > 0 {")
+        let excluded = source.range(of: "if report.contradictedByVerdict > 0 {")
+        #expect(crossCut != nil && excluded != nil)
+        #expect(crossCut!.lowerBound < excluded!.lowerBound,
+                "the caveats about what is not counted sit above the accusation the section exists to make")
+    }
+
+    // Singular and plural are different sentences, not one with an "(s)" in it, matching the rule the
+    // section's existing counts follow.
+    @Test func theExcludedCountsReadAsEnglishAtOne() {
+        #expect(EmptyAnswerCopy.contradictedByVerdict(1).contains("1 more show stored"))
+        #expect(EmptyAnswerCopy.contradictedByVerdict(4).contains("4 more shows stored"))
+        #expect(EmptyAnswerCopy.reasonWithNoVerdict(1).contains("1 show stored"))
+        #expect(EmptyAnswerCopy.reasonWithNoVerdict(4).contains("4 shows stored"))
+    }
+
+    // The two say DIFFERENT things, because they are different faults. If they ever collapse into one
+    // sentence, one of the two causes has silently stopped being reported (L11).
+    @Test func theTwoExclusionsDoNotSayTheSameThing() {
+        #expect(EmptyAnswerCopy.contradictedByVerdict(3) != EmptyAnswerCopy.reasonWithNoVerdict(3))
+        // The second names the fault as the CHECK's, which is what tells Dan it is not a finding about
+        // those shows at all.
+        #expect(EmptyAnswerCopy.reasonWithNoVerdict(3).contains("fault in the check"))
+    }
 }
