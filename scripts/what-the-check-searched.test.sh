@@ -92,6 +92,68 @@ assert_contains "an unreadable archived queue is named, not skipped in silence" 
   "${corrupt}" "20260901-090000"
 assert_contains "and says it could not be read" "${corrupt}" "could not be read"
 
+# --- #3357 Phase 1.3: the per item SIDECAR, which is the whole reason the refusal above exists --------
+#
+# The block above proves the tool refuses to attribute when a chunk carried several shows. This proves
+# it STOPS refusing when the run left a sidecar saying which calls were whose, which is the only thing
+# that turns "read these as the whole chunk" into an answer about one show.
+
+ATTR_DIR="$(fixture_scratch_dir)"
+mkdir -p "${ATTR_DIR}/check-run-archives/20260902-101500" \
+         "${ATTR_DIR}/check-run-attribution-archives/20260902-101500"
+cat > "${ATTR_DIR}/check-run-archives/20260902-101500/overture-check-queue.json" <<'JSON'
+{"version":6,"generatedAt":"2026-09-02T10:15:00Z","items":[
+  {"naturalKey":"kestrel-2027-04-18-rowan","groupName":"Kestrel Quartet","venue":"Rowan Hall",
+   "performanceDate":"2027-04-18"},
+  {"naturalKey":"other-2027-05-01-elsewhere","groupName":"Marlow Ensemble","venue":"Elsewhere",
+   "performanceDate":"2027-05-01"}
+]}
+JSON
+cat > "${ATTR_DIR}/check-run-attribution-archives/20260902-101500/check-run-attribution.json" <<'JSON'
+{"version":1,"attributed":1,"unattributable":0,"unmeasured":0,"beforeFirstWrite":0,
+ "watchdogKills":[{"chunk":2,"at":"2026-09-02T10:20:00Z","requestInFlightSeconds":190,
+                   "itemsAlreadyWritten":[],"itemsKnown":true}],
+ "killsReadable":true,
+ "streams":[{"chunk":1,"outcome":"attributed","complete":true,"unattributedCalls":[],
+   "items":[
+     {"naturalKey":"kestrel-2027-04-18-rowan",
+      "calls":[{"route":"search","detail":"Kestrel Quartet producer"},
+               {"route":"fetch","detail":"https://kestrelquartet.example/contact"}]},
+     {"naturalKey":"other-2027-05-01-elsewhere",
+      "calls":[{"route":"search","detail":"Marlow Ensemble booking"}]}]}]}
+JSON
+
+attr_out="$(bash "${TOOL}" --support "${ATTR_DIR}" "Kestrel Quartet" 2>&1)"
+assert_contains "the sidecar's calls for THIS show are listed" \
+  "${attr_out}" "Kestrel Quartet producer"
+assert_contains "and its fetch too" "${attr_out}" "https://kestrelquartet.example/contact"
+
+# THE POINT. Without the sidecar this run would print every call in the chunk and refuse to say whose
+# they were; with it, the other show's search must not appear under this one.
+assert_not_contains "and the OTHER show's search does not appear under this one" \
+  "${attr_out}" "Marlow Ensemble booking"
+assert_not_contains "so the whole-chunk refusal is not printed either" \
+  "${attr_out}" "NOT attributed to this one"
+
+# #3357 Phase 1.5: a run with a killed chunk in it is a confound, and the tool says so where somebody
+# reading the calls will see it (#3007).
+assert_contains "a run with a watchdog kill says it is not comparison evidence" \
+  "${attr_out}" "not usable as comparison evidence"
+
+# A show the sidecar attributes NO calls to is a real finding, and the commonest one worth having: the
+# run reached it and searched for nothing. It must not read as a missing sidecar.
+cat > "${ATTR_DIR}/check-run-attribution-archives/20260902-101500/check-run-attribution.json" <<'JSON'
+{"version":1,"attributed":1,"unattributable":0,"unmeasured":0,"beforeFirstWrite":0,
+ "watchdogKills":[],"killsReadable":true,
+ "streams":[{"chunk":1,"outcome":"attributed","complete":true,"unattributedCalls":[],
+   "items":[{"naturalKey":"kestrel-2027-04-18-rowan","calls":[]}]}]}
+JSON
+none_out="$(bash "${TOOL}" --support "${ATTR_DIR}" "Kestrel Quartet" 2>&1)"
+assert_contains "a show the run searched for nothing on says exactly that" \
+  "${none_out}" "searched for nothing"
+
+rm -rf "${ATTR_DIR}"
+
 if [[ ${FAILURES} -gt 0 ]]; then
   echo "${FAILURES} failure(s)"
   exit 1

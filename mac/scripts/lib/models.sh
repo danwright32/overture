@@ -619,18 +619,29 @@ record_item_attribution() {
         kills = [];
       }
     }
+    // L50: the chunk number comes off DISK, so it never reaches a comparison directly. A value that is
+    // not a number matches no stream, and an empty `itemsAlreadyWritten` would then read as "this chunk
+    // had written nothing" when the truth is that nobody could tell which chunk it was. Those are
+    // different facts and the second one is the one that matters, so it says which (L11).
     const itemsOf = (chunk) => {
+      if (typeof chunk !== "number" || !Number.isFinite(chunk)) return null;
       const s = streams.find((x) => x.chunk === chunk);
-      return s && Array.isArray(s.items) ? s.items.map((i) => i.naturalKey) : [];
+      return s && Array.isArray(s.items) ? s.items.map((i) => i.naturalKey) : null;
     };
-    kills = kills.map((k) => ({
-      chunk: k.chunk,
-      at: k.at,
-      requestInFlightSeconds: k.requestInFlightSeconds,
+    kills = kills.map((k) => {
       // What that chunk had ALREADY written, which BOUNDS the item it died on rather than naming it.
       // Naming one would be a claim the stream does not carry.
-      itemsAlreadyWritten: itemsOf(k.chunk),
-    }));
+      const written = itemsOf(k.chunk);
+      return {
+        chunk: k.chunk,
+        at: k.at,
+        requestInFlightSeconds: k.requestInFlightSeconds,
+        itemsAlreadyWritten: written === null ? [] : written,
+        // Separate from an empty list, for the reason `killsReadable` is separate from no kills: a
+        // chunk that wrote nothing and a chunk nobody could match are the same empty array.
+        itemsKnown: written !== null,
+      };
+    });
 
     const report = {
       version: 1,

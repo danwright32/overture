@@ -865,6 +865,18 @@ assert_contains "the kills reach the sidecar" "${attr4}" '"watchdogKills"'
 assert_contains "and a killed chunk names what it had already written" \
   "${attr4}" '"itemsAlreadyWritten"'
 assert_contains "which is the item that stream finished" "${attr4}" 'kestrel|2027-04-18|rowan'
+assert_contains "and says whether that chunk could be matched at all" "${attr4}" '"itemsKnown": true'
+
+# L50: a chunk number that is not a number matches no stream, and the empty list that follows must not
+# read as "this chunk had written nothing". A kill record can be corrupted, and a truncated append is
+# exactly how (the writer appends a line per kill while a run is being killed).
+printf '{"chunk":"1","requestInFlightSeconds":187,"at":"2026-09-01T00:00:00Z"}\n' \
+  > "${ATTRTMP}/kills-bad.json"
+record_item_attribution "${ATTRTMP}/attr5.json" "${ATTRTMP}/kills-bad.json" \
+  "${ATTRTMP}/events-chunk-1.jsonl" >/dev/null 2>&1
+assert_contains "a chunk number that is not a number is reported as unknown, not as empty" \
+  "$(cat "${ATTRTMP}/attr5.json")" '"itemsKnown": false'
+
 assert_contains "a run with a kill in it says it is not comparison evidence" \
   "$(cat "${ATTRTMP}/attr4.out")" "not usable as comparison evidence"
 
