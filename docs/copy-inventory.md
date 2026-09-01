@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1453 sentences**.
+Every sentence Overture can say to Dan: **1457 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 521 of the 1453 below hold a
+  sentence carrying a VALUE: 522 of the 1457 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -364,6 +364,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/EmptyAnswerSection.swift`
 "1 show on \(dateLabel) has no genre read. Set it before dismissing the night."
     `Domain/GenreGate.swift`
+"1 show was recorded as having no email to write to while it held a way in. Overture has since corrected it:"
+    `UI/WrittenOffBacklogSection.swift`
 "1 source needs"
     `Domain/SourceAttention.swift`
 "1 venue is still waiting to be checked."
@@ -1937,6 +1939,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "Shows land here once Overture has tracked at least one."
     `Domain/EmptyState.swift`
+"Shows written off that could be reached"
+    `UI/WrittenOffBacklogSection.swift`
 "Shows you kept that a date clash is holding back."
     `Domain/AgentRoster.swift`
 "Shows you've pitched and are waiting to hear back on."
@@ -2422,6 +2426,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/OutcomePatternsView.swift`
 "What your genre corrections are teaching"
     `Domain/GenreCorrection.swift`
+"When Overture reviewed every stored answer, no show turned out to have been recorded as unreachable while it held a way in."
+    `UI/WrittenOffBacklogSection.swift`
 "Which kept shows to prep?"
     `Domain/PrepSelectionCopy.swift`
 "Which message is their reply?"
@@ -2664,6 +2670,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ScoutWarningCopy.swift`
 "\(count) shows were left out this run because the local store stopped answering. Run the scout again."
     `Domain/ScoutWarnings.swift`
+"\(count) shows were recorded as having no email to write to while they held a way in. Overture has since corrected them:"
+    `UI/WrittenOffBacklogSection.swift`
 "\(count) sources couldn't be checked."
     `UI/ScoutSummaryView.swift`
 "\(count) sources need"

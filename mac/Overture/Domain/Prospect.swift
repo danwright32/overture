@@ -407,6 +407,28 @@ final class Prospect {
     // #1722. An unrecognised stored value reads as nil (no reason given), which the copy degrades to the
     // old sentence, so a newer producer's vocabulary can never put a claim on the card this build cannot
     // explain.
+    // Milestone 61 Phase 0.3. WHEN this row was observed to carry a negative verdict over a live route,
+    // stamped by `ReachabilityVerdictRefresh` before it rewrote a single value.
+    //
+    // It exists because the repair destroys its own evidence. The contradiction between a stored
+    // "no way in" and a route the row actually holds is a fact nothing recorded deliberately, it is the
+    // evidence base for #3345 and for Phase 5.2's second stratum, and refreshing the verdict is exactly
+    // what makes it unobservable (L277). Taking it at migration time is also the only moment the whole
+    // contradicting population is still readable, since a marker cannot see anything written before it
+    // shipped (L223).
+    //
+    // writer: `ReachabilityVerdictRefresh`, once, and nothing else ever.
+    // reader: `WrittenOffBacklog`, surfaced beside the other store reports.
+    //
+    // There is deliberately NO companion field recording WHICH verdict was contradicted. The plan asked
+    // for one, reasoning that `no_email_found` and `social_only` are different findings about the hunt.
+    // They are, but a row is only marked where the stored verdict says there is no way in AND the row
+    // holds one, and `no_email_found` is the only verdict that says there is no way in: `social_only`
+    // and `contact_form_only` ARE ways in. So the field could only ever hold one value, which tells a
+    // reader nothing, and it is the same defect the plan itself removed `contradictionPriorEmptyReasonRaw`
+    // for (L46). If the marking rule ever widens, the field comes back with it.
+    var contradictionMarkedAt: Date? = nil
+
     var reachabilityEmptyReason: Reachability.EmptyReason? {
         get { reachabilityEmptyReasonRaw.flatMap(Reachability.EmptyReason.init(rawValue:)) }
         set { reachabilityEmptyReasonRaw = newValue?.rawValue }

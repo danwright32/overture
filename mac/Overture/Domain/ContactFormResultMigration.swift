@@ -15,6 +15,18 @@ import SwiftData
 // dismissed, and he decided on 2026-07-27 that dismissing a warning makes the address sendable but does
 // NOT move the badge until a re-check. This pass must not quietly overturn that.
 //
+// Milestone 61 Phase 0.3, 2026-08-31: `ReachabilityVerdictRefresh` now runs directly AFTER this pass,
+// once per Mac, and refreshes every unsent show's stored verdict to what the show holds. So the
+// 2026-07-27 decision quoted above was overturned ONCE, deliberately, by Dan's call of 2026-08-31 ("why
+// wouldn't we refresh all 690 of them? Shouldn't it be accurate?"), on being shown that some shows
+// would move down and why.
+//
+// The ONGOING rule is unchanged and this pass is NOT dead. Dan confirmed in the same session that he
+// meant a one time repair rather than a rule change, so after that single sweep a dismissed warning
+// still does not move the badge until a re-check, and this narrow pass is still what upgrades a row
+// that acquires a form URL afterwards. The plan's revision 3 assumed a blanket re-derive and said this
+// file would become dead code; that assumption did not survive asking him which he meant.
+//
 // Idempotent, guarded by the stored value itself, so a second pass is a no-op. Returns how many it
 // changed.
 enum ContactFormResultMigration {

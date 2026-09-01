@@ -69,6 +69,10 @@ struct OutcomePatternsView: View {
                     // #2989: what the empty contact answers are claiming, and the one contradiction
                     // visible without opening a card.
                     EmptyAnswerSection()
+                    // Milestone 61 Phase 0.3: the shows a check wrote off that turned out to hold a
+                    // route. The reader for the contradiction marker, which is the only record that
+                    // survives the repair which removed the contradiction itself.
+                    WrittenOffBacklogSection()
                 }
                 .padding(OVSpacing.lg)
             }
