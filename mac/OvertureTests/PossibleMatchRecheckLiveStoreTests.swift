@@ -81,8 +81,16 @@ struct PossibleMatchRecheckLiveStoreTests {
                                                  uniquingKeysWith: { a, _ in a })
             // Snapshot every flag as a VALUE before the pass mutates the rows in place, so the
             // honest-reporting check below compares strings rather than re-reading the same objects.
-            let flagsBefore = Dictionary(before.map { ($0.naturalKey, $0.possibleMatchName ?? "") },
-                                         uniquingKeysWith: { a, _ in a })
+            //
+            // BOTH halves of the flag, not just the name. `PossibleMatchRecheck.run` counts a row when
+            // EITHER `possibleMatchSource` or `possibleMatchName` moves, so a snapshot of the name alone
+            // is a different predicate from the one the count comes from, and the guard then measures a
+            // proxy for the thing it exists to protect (L63, L16). It fired for real on 2026-08-31:
+            // reported 4 changed against 3 names moved, on a row whose SOURCE changed while its name
+            // stayed the same. The pass was right and this snapshot was incomplete.
+            let flagsBefore = Dictionary(before.map {
+                ($0.naturalKey, "\($0.possibleMatchSource ?? "")|\($0.possibleMatchName ?? "")")
+            }, uniquingKeysWith: { a, _ in a })
             // The pass reads two real files, and if either is missing it correctly declines to judge and
             // changes nothing. That is indistinguishable from a converged store unless it is asserted, so
             // this is what proves the run below actually happened against real inputs rather than
@@ -105,7 +113,9 @@ struct PossibleMatchRecheckLiveStoreTests {
             // the pass REPORTS must equal the number of flags that actually moved. That holds on a
             // converged store (nothing moved, nothing reported) and catches both directions of the lie,
             // a pass reporting work it did not do and one doing work it does not report.
-            let actuallyMoved = after.filter { ($0.possibleMatchName ?? "") != flagsBefore[$0.naturalKey] }
+            let actuallyMoved = after.filter {
+                "\($0.possibleMatchSource ?? "")|\($0.possibleMatchName ?? "")" != flagsBefore[$0.naturalKey]
+            }
             #expect(changed == actuallyMoved.count,
                     "reported \(changed) changed, \(actuallyMoved.count) flags actually moved")
 
