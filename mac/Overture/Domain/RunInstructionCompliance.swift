@@ -28,6 +28,11 @@ enum RunInstructionCompliance {
         var withATier: Int
         var declaredNoRouteFound: Int
         var routeNamedButNotSupplied: Int
+        // #3376: contacts emitted at `high` with a cited page. The denominator for the next field, and
+        // its own field rather than a derived one, because "no high citations at all" is a legitimate
+        // run and must not read as an ignored instruction (L98).
+        var citedAtHigh: Int
+        var citedAtHighSayingWhetherItCorroborates: Int
 
         // Not "fewer than all", deliberately. A partial run is a different thing from an ignored
         // instruction, and accusing on a partial would fire on the ordinary case.
@@ -40,6 +45,18 @@ enum RunInstructionCompliance {
             routeNamedButNotSupplied > 0 && declaredNoRouteFound == 0
         }
 
+        // #3376: the corroboration refusal now covers every provenance, and it reads a field only the
+        // runbook writes. If runs never adopt it, `holdDown` refuses nobody while reading as an active
+        // safeguard, and the canonical domain guess goes on recording a stranger's address as an answer
+        // (L27, L128, L506).
+        //
+        // Not "fewer than all", for the same reason as `tierInstructionIgnored` directly above: a run
+        // that answered the question on some of its citations has adopted the instruction, and accusing
+        // on a partial would fire on the ordinary case.
+        var corroborationInstructionIgnored: Bool {
+            citedAtHigh > 0 && citedAtHighSayingWhetherItCorroborates == 0
+        }
+
         // One sentence per instruction, never one covering both: they are different rules with different
         // remedies, and a sentence about both would name neither (L11).
         var notes: [String] {
@@ -47,6 +64,9 @@ enum RunInstructionCompliance {
             if tierInstructionIgnored { out.append(RunComplianceCopy.noTierAtAll(contacts)) }
             if refusalFiringWithoutAdoption {
                 out.append(RunComplianceCopy.routesNamedNeverFound(routeNamedButNotSupplied))
+            }
+            if corroborationInstructionIgnored {
+                out.append(RunComplianceCopy.noCorroborationAtAll(citedAtHigh))
             }
             return out
         }
@@ -56,7 +76,19 @@ enum RunInstructionCompliance {
         var withATier = 0
         var noRouteFound = 0
         var routeMissing = 0
+        var cited = 0
+        var citedAndAnswered = 0
         for c in contacts {
+            // #3376: the population the corroboration rule is ABOUT, which is a high confidence claim
+            // resting on a named page. A contact with no `sourceUrl` is already refused by
+            // `holdDown`'s `namedNoPage` arm and has no page to corroborate against, so counting it
+            // here would put the ordinary case into the denominator and make adoption look worse than
+            // it is (L139).
+            if c.confidence == "high",
+               !(c.sourceUrl ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                cited += 1
+                if c.performanceCorroborated != nil { citedAndAnswered += 1 }
+            }
             if !(c.tier ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { withATier += 1 }
             if c.method == ContactMethod.noRouteFound.rawValue { noRouteFound += 1 }
             // Through the ONE definition of "names a route it does not carry", never a second predicate
@@ -65,7 +97,9 @@ enum RunInstructionCompliance {
             if Reachability.declaredRouteIsMissing(c) { routeMissing += 1 }
         }
         return Measurement(contacts: contacts.count, withATier: withATier,
-                           declaredNoRouteFound: noRouteFound, routeNamedButNotSupplied: routeMissing)
+                           declaredNoRouteFound: noRouteFound, routeNamedButNotSupplied: routeMissing,
+                           citedAtHigh: cited,
+                           citedAtHighSayingWhetherItCorroborates: citedAndAnswered)
     }
 }
 
@@ -83,5 +117,13 @@ enum RunComplianceCopy {
         count == 1
             ? "1 contact named a way in and gave none, and the run never once said it found no route"
             : "\(count) contacts named a way in and gave none, and the run never once said it found no route"
+    }
+
+    // #3376: what the silence COSTS, in the terms the other two sentences use. The cost is not that a
+    // field is missing, it is that a site found by guessing an address is being taken on trust.
+    static func noCorroborationAtAll(_ cited: Int) -> String {
+        cited == 1
+            ? "its 1 confident contact never says the page it cites is anyone on this show, so a same named stranger would be kept as an answer"
+            : "not one of its \(cited) confident contacts says the page it cites is anyone on this show, so a same named stranger would be kept as an answer"
     }
 }

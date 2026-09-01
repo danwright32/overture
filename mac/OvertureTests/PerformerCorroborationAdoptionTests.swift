@@ -54,10 +54,18 @@ struct PerformerCorroborationAdoptionTests {
             for result in results.results {
                 for contact in result.contacts ?? [] {
                     c.contacts += 1
-                    // The population the rule can speak about at all. A contact that is not a performer,
-                    // or is not claiming high, is outside the runbook's rule and outside this count, or
-                    // the denominator would be every contact and the ratio would mean nothing.
-                    guard contact.provenance == "performer", contact.confidence == "high" else { continue }
+                    // The population the rule can speak about at all: a high confidence claim resting on
+                    // a named page. A contact not claiming high, or claiming it with no page, is outside
+                    // the runbook's rule and outside this count, or the denominator would be every
+                    // contact and the ratio would mean nothing.
+                    //
+                    // #3376 removed the `provenance == "performer"` half of this guard, in step with the
+                    // rule itself: the refusal now covers every provenance, and a census still scoped to
+                    // performers would go on reporting adoption of a narrower rule than the one that
+                    // ships, which is a measurement quietly answering a different question (L220, L63).
+                    guard contact.confidence == "high",
+                          !(contact.sourceUrl ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    else { continue }
                     c.performerHigh += 1
                     if since { c.performerHighSince += 1 }
                     if contact.performanceCorroborated != nil {

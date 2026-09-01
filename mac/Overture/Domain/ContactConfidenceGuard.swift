@@ -75,7 +75,22 @@ enum ContactConfidenceGuard {
         guard raw == "high", !nameMatchOnly else { return nil }
         let cited = (sourceURL ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         if cited.isEmpty { return .namedNoPage }
-        if provenance == "performer", performanceCorroborated == false { return .pageDoesNotCorroborate }
+        // #3376: EVERY provenance, not only `performer`.
+        //
+        // #2895 wrote this rule against the case it was reported on, a named performer cited against
+        // their own portfolio page. The risk is not the performer's: it is that a page carrying the
+        // right NAME is not thereby the right PARTY, and the runbook's own instruction for an
+        // organisation is to reach its site by "its name plus a canonical domain guess", which is one
+        // lookup, no judgement, and emitted as `provenance: "presenter"`. So the one route that finds a
+        // page by GUESSING its address was the one route exempt from the rule about whether the page is
+        // the right one (L30, L247). The exemption was invisible because it reads as the rule working.
+        //
+        // `nil` still means nobody said, and is deliberately NOT a denial. A run that has not adopted
+        // the field sends nothing, and reading absence as denial would hold down every high contact from
+        // every older run at once (L98, L11). Adoption is measured per run by `RunInstructionCompliance`
+        // rather than assumed, because a field whose only writer is a prompt cannot tell a model that
+        // ignored the instruction from one that judged it inapplicable (L27, L128).
+        if performanceCorroborated == false { return .pageDoesNotCorroborate }
         return nil
     }
 

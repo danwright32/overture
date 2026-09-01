@@ -622,11 +622,21 @@ names this group); a bare name match with no such corroboration is a misidentifi
 risk, so mark it `low` instead, same as any other unverified guess.
 
 **Say whether the page you cited corroborates the performance (`performanceCorroborated`, v11,
-#2895).** For a `performer` contact you are emitting at `high`, add
-`performanceCorroborated: true` when the page in `sourceUrl` ties THAT PERSON to THIS performance
-(it lists this date or venue, names this group, or credits them on this bill), and
-`performanceCorroborated: false` when it does not. It is the rule directly above, said out loud, so
-the app can hold the claim down instead of taking it on trust.
+#2895; every provenance since #3376).** On ANY contact you are emitting at `high` with a `sourceUrl`,
+add `performanceCorroborated: true` when that page ties THAT PARTY to THIS performance (it lists this
+date or venue, names this group, credits them on this bill, or, for an organisation, presents this
+show), and `performanceCorroborated: false` when it does not. It is the rule directly above, said out
+loud, so the app can hold the claim down instead of taking it on trust.
+
+**#3376: this is what makes the canonical domain guess safe, and it is why the field is no longer a
+performer's alone.** The instruction above tells you to reach an organisation's own site by its name
+plus a guessed domain. Names are not unique and a site carries no field saying which bearer of a name
+it belongs to, so that step can land on a stranger who shares the name, and the address on such a page
+is perfectly real. A blank reads as missing; a wrong address reads as an answer, and the next thing
+that happens to it is a pitch under Dan's name to somebody who has nothing to do with the show. So a
+guessed domain is a candidate until the page itself ties the party to this show. If it does not, that
+is not a failure and not a reason to emit nothing: emit at `low` with
+`performanceCorroborated: false`, exactly as the paragraph below already says.
 
 The live case, 2026-08-17: a run emitted a named performer at `high` as `Playwright`, citing their own
 portfolio site. That page describes them as "an actor and writer", contains the word "playwright"

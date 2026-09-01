@@ -49,7 +49,8 @@ enum PrepImporter {
         // to discard: a contact refused for naming a route it never found is exactly the evidence being
         // counted, so counting only survivors would count zero of the thing in question.
         var instructionCompliance = RunInstructionCompliance.Measurement(
-            contacts: 0, withATier: 0, declaredNoRouteFound: 0, routeNamedButNotSupplied: 0)
+            contacts: 0, withATier: 0, declaredNoRouteFound: 0, routeNamedButNotSupplied: 0,
+            citedAtHigh: 0, citedAtHighSayingWhetherItCorroborates: 0)
     }
 
     // Fail loud, not silent (#754). The performer matcher is only as good as the two files it reads,
