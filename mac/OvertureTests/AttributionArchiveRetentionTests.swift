@@ -97,4 +97,27 @@ final class AttributionArchiveRetentionTests {
         #expect(!FileManager.default.fileExists(
             atPath: slot.attributionArchivesDirectory(in: dir).path))
     }
+
+    // A copy that FAILED is not a run with no sidecar, and both used to be the same silence. That is
+    // the lesson `archiveEventStreams` beside it already recorded, and it bites harder here: the
+    // sidecar is kept for 60 runs so it can be read after the streams it came from are gone, so
+    // nothing else would ever say it was meant to be here (L10, L11).
+    @Test func aCopyThatFailedSaysSoRatherThanLookingLikeARunWithNoSidecar() throws {
+        let slot = RunSlot.check
+        let dir = try sandboxes.make(named: "attribution-retention")
+        try write(#"{"version":1,"streams":[]}"#, to: slot.attributionURL(in: dir))
+
+        // A FILE where the archives directory has to go, so creating the working folder cannot succeed.
+        try write("not a directory", to: slot.attributionArchivesDirectory(in: dir))
+
+        var problems: [String] = []
+        PrepRunArchive.archiveAttribution(slot: slot, handoffDirectory: dir, stamp: "20260101-000000",
+                                          now: Date(), reportProblem: { problems.append($0) })
+
+        #expect(problems.count == 1, "a failed copy said nothing at all")
+        #expect(problems.first?.contains("per item attribution") == true,
+                "the problem did not name what was lost")
+        #expect(problems.first?.contains("next run") == true,
+                "it did not say the evidence goes when the next run starts")
+    }
 }
