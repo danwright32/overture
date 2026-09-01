@@ -536,7 +536,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/ExcludedTownsView.swift`
 "An AI draft came back while you were writing."
     `Domain/ReplyPanel.swift`
-"An earlier check included this show but never got an answer for it, so it's still unchecked. Nothing re-checks it on its own."
+"An earlier check included this show and didn't settle it, so it's still unchecked. Nothing re-checks it on its own."
     `Domain/Reachability.swift`
 "An email to \(p.replyWatchDisplayName) bounced, and it went to more than one person (\(addresses)), so Overture cannot tell which address failed. Check the bounce in Gmail and fix or remove the dead address"
     `Integration/BounceService.swift`
