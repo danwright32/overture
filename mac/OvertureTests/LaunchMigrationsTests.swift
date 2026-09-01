@@ -246,4 +246,55 @@ struct LaunchMigrationsTests {
             throw error
         }
     }
+
+    // #3453: WIRED, not merely built. `DeadRunWriteOffRepair` is a pass nothing else calls, so if the
+    // line in `LaunchMigrations` were dropped the repair's own suite would stay entirely green while
+    // the repair never ran on Dan's Mac (L3). Proven by deleting that line and watching this go red.
+    @Test func launchRepairsAShowADeadRunWroteOff() async throws {
+        await RealStoreTestLock.shared.acquire()
+        do {
+            let fm = FileManager.default
+            let scratch = fm.temporaryDirectory
+                .appendingPathComponent("overture-3453-launch-\(UUID().uuidString)", isDirectory: true)
+            defer { try? fm.removeItem(at: scratch) }
+            try fm.createDirectory(at: scratch, withIntermediateDirectories: true)
+            let storeURL = scratch.appendingPathComponent("default.store")
+            let handoff = scratch.appendingPathComponent("handoff", isDirectory: true)
+
+            let schema = Schema([Prospect.self, Recipient.self, OrgReachabilityAnswer.self])
+            let context = ModelContext(try ModelContainer(
+                for: schema,
+                configurations: [ModelConfiguration(schema: schema, url: storeURL,
+                                                    cloudKitDatabase: .none)]))
+            let p = makeProspect("dead-run|2027-04-18|rowan hall")
+            context.insert(p)
+            p.reachabilityResult = .noEmailFound
+            p.reachabilityProbedAt = Date(timeIntervalSince1970: 1_756_580_000)
+            try context.save()
+
+            let folder = RunSlot.check.archivesDirectory(in: handoff)
+                .appendingPathComponent("20260830-205244", isDirectory: true)
+            try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+            try Data(#"{"version":13,"generatedAt":"2026-08-30T20:52:44Z","items":[]}"#.utf8)
+                .write(to: folder.appendingPathComponent(RunSlot.check.queueFileName))
+            try Data(#"""
+            {"version":11,"generatedAt":"2026-08-30T20:52:44Z",
+             "results":[{"naturalKey":"dead-run|2027-04-18|rowan hall","contacts":[]}],
+             "runCost":{"recorded":false,"streams":10,"streamsRecorded":9}}
+            """#.utf8).write(to: folder.appendingPathComponent(RunSlot.check.resultsFileName))
+
+            #expect(LaunchMigrations.run(
+                in: context,
+                defaults: UserDefaults(suiteName: "launch-3453-\(UUID().uuidString)")!,
+                handoffDirectory: handoff))
+
+            #expect(p.reachabilityResult == nil)
+            #expect(p.reachabilityProbedAt == nil)
+            #expect(p.reachabilityUnansweredAt == Date(timeIntervalSince1970: 1_756_580_000))
+            await RealStoreTestLock.shared.release()
+        } catch {
+            await RealStoreTestLock.shared.release()
+            throw error
+        }
+    }
 }

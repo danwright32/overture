@@ -21,6 +21,38 @@ struct PrepResults: Codable, Equatable, Sendable {
     // Optional for the same reason `model` is: a results file from before this existed still decodes and
     // still lands Dan's drafts. A gap in the record is never a reason to drop his work on the floor.
     var webCalls: WebCalls? = nil
+    // #3453: the run's own cost record, decoded for ONE field. `ProbeDurationHistory` decodes this same
+    // object for a usable DURATION reading, which is a different question and rightly stays there; what
+    // is needed here is only whether the run finished.
+    //
+    // It is read BESIDE `webCalls.recorded` rather than instead of it, and the reason is historical
+    // rather than defensive. Before #3443 (2026-09-01) the two recorders answered "did this stream
+    // finish" differently: `record_web_calls` counted a stream that merely PARSED, `record_run_cost`
+    // required the terminal result envelope. So on every archive written before that date `webCalls`
+    // can claim a run finished when it did not, and `runCost` is the half that was already correct.
+    // The real archive `check-run-archives/20260830-205244` is that exact shape: `webCalls.recorded`
+    // true, `runCost.recorded` false, `streamsRecorded` 9 of 10, seven shows lost.
+    //
+    // Since #3443 both recorders share `stream_completed`, so on any file written afterwards the two
+    // agree and reading both changes nothing. This is how the truth is recovered from the files written
+    // before the fix, which is the only place it can still be hiding.
+    var runCost: RunCost? = nil
+
+    struct RunCost: Codable, Equatable, Sendable {
+        // Optional, because a file predating the field carries none and absent is not false.
+        var recorded: Bool? = nil
+    }
+
+    // Whether this run finished, in THREE states rather than two. "Nothing was recorded" is not
+    // "it finished": every results file written before #1721 carries no `webCalls` at all, so folding
+    // the two together would read the entire history of this store as a series of dead runs (L98, L11).
+    enum Completion: Equatable, Sendable { case finished, didNotFinish, notRecorded }
+
+    var completion: Completion {
+        if webCalls?.recorded == false || runCost?.recorded == false { return .didNotFinish }
+        if webCalls != nil || runCost != nil { return .finished }
+        return .notRecorded
+    }
 
     struct WebCalls: Codable, Equatable, Sendable {
         // False when a stream did not report. On that path the writer publishes NO `total` at all, so
