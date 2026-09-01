@@ -200,4 +200,95 @@ struct ADeadRunWritesOffNothingTests {
         #expect(p.reachabilityProbedAt != nil)
         #expect(p.reachabilityEmptyReason == .nothingPublished)
     }
+
+    // #3453: the SAME show, with the shape every archive written before #3443 carries: web calls that
+    // claim the run finished, beside a cost record that says it did not. Both writers have to read this
+    // the same way, so this drives the INGEST for the same reason `theIngestDoesNotPutTheLockoutBack`
+    // above does: it runs immediately after markProbed in the same settle, and a writer left behind puts
+    // the lockout straight back.
+    @Test func theIngestBelievesTheCostRecordWhenTheWebCallRecordDisagrees() throws {
+        let ctx = ModelContext(try container())
+        let key = "kestrel-2027-04-18-rowan"
+        let p = show(ctx, key)
+
+        let lying = PrepResults.WebCalls(recorded: true, total: 692, items: 90, capPerItem: 15,
+                                         allowance: 1620)
+        _ = PrepImporter.ingest(PrepResults(version: 2, generatedAt: "now",
+                                            results: [PrepResult(naturalKey: key, contacts: nil,
+                                                                 emptyReason: "nothing_published")],
+                                            webCalls: lying,
+                                            runCost: PrepResults.RunCost(recorded: false)),
+                                into: ctx, isProbe: true)
+
+        #expect(p.reachabilityProbedAt == nil,
+                "the ingest read webCalls alone and re-stamped a lockout for a run that did not finish")
+        #expect(p.reachabilityEmptyReason == nil)
+    }
+
+    // And the pair the other way round, so the rule above cannot become "any run carrying a cost record
+    // is dead": both recorders agreeing that the run finished still ingests exactly as before (L159).
+    @Test func aRunWhoseCostAndWebCallsBothRecordedIngestsNormally() throws {
+        let ctx = ModelContext(try container())
+        let key = "kestrel-2027-04-18-rowan"
+        let p = show(ctx, key)
+
+        let whole = PrepResults.WebCalls(recorded: true, total: 4, items: 1, capPerItem: 18, allowance: 18)
+        _ = PrepImporter.ingest(PrepResults(version: 2, generatedAt: "now",
+                                            results: [PrepResult(naturalKey: key, contacts: nil,
+                                                                 emptyReason: "nothing_published")],
+                                            webCalls: whole,
+                                            runCost: PrepResults.RunCost(recorded: true)),
+                                into: ctx, isProbe: true)
+
+        #expect(p.reachabilityProbedAt != nil)
+        #expect(p.reachabilityEmptyReason == .nothingPublished)
+    }
+}
+
+// #3453: the two writers #3451 paired must keep asking ONE question.
+//
+// `markProbed` asks it through `PrepImporter.distrustedAnswerKeys` and the ingest asks it inline. Both
+// read `webCalls?.recorded == false` when #3451 shipped, which was one definition spelled twice. #3453
+// gave the question a home on `PrepResults.completion` and moved `distrustedAnswerKeys` to it, and
+// missed the ingest: for one commit the two disagreed about the exact archive shape #3453 exists to
+// read, which is #3451's opening defect restored (fix one writer, the other puts the lockout back).
+//
+// Found by grepping every reader of `webCalls?.recorded`, so this guard is that grep kept (L30, L96).
+@Suite("One definition of a run that did not finish (#3453)")
+struct RunCompletionHasOneDefinitionTests {
+
+    @Test func onlyPrepResultsItselfReadsTheRawRecordedFlags() {
+        let offenders = AppSourceWalk.files(under: RepoRoot.mac.appendingPathComponent("Overture"))
+            .filter { $0.name != "PrepResults.swift" }
+            // Through `scannableLines`, so this reads CODE and not prose. A comment explaining why a
+            // file must NOT read the raw flags names them in order to say so, and a guard counting
+            // those reports the very change that fixed the defect as an instance of it. That is not
+            // hypothetical: it fired on `PrepImporter.swift`'s own new comment the first time it ran.
+            .filter { file in
+                SwiftSource.scannableLines(in: file.text).contains { _, code in
+                    code.contains("webCalls?.recorded") || code.contains("runCost?.recorded")
+                }
+            }
+            .map(\.name)
+
+        #expect(offenders.isEmpty, """
+        \(offenders.joined(separator: ", ")) asks whether a run finished by reading a recorder's raw \
+        flag. Ask PrepResults.completion instead: it is the only place that knows both recorders have \
+        to be consulted, because before #3443 they disagreed and only runCost was right.
+        """)
+    }
+
+    // The positive control, so the guard above cannot pass by finding no files at all (L159, L98).
+    // `AppSourceWalk` refuses an empty walk on its own; this asserts the needle is genuinely findable,
+    // so a rename of `completion` that left the flags behind would still be caught.
+    @Test func theDefinitionItselfIsWhereTheGuardSaysItIs() {
+        let prepResults = AppSourceWalk.files(under: RepoRoot.mac.appendingPathComponent("Overture"))
+            .first { $0.name == "PrepResults.swift" }
+
+        let text = try! #require(prepResults?.text)
+        let code = SwiftSource.scannableLines(in: text).map(\.code).joined(separator: "\n")
+        #expect(code.contains("webCalls?.recorded"))
+        #expect(code.contains("runCost?.recorded"))
+        #expect(code.contains("var completion: Completion"))
+    }
 }

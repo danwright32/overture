@@ -110,7 +110,14 @@ enum PrepImporter {
                 //
                 // A contact the run DID land still stamps below, which is the boundary Dan chose: the
                 // contact is evidence the run reached this show.
-                let unfinished = results.webCalls?.recorded == false
+                // #3453: through `PrepResults.completion`, the SAME question `distrustedAnswerKeys` asks
+                // one line away in `markProbed`. It read `webCalls` alone, which stopped being the whole
+                // answer the moment `completion` also consulted `runCost`, and these two writers
+                // disagreeing is precisely the defect #3451 opened with: fixing one alone puts the
+                // lockout straight back, because this runs immediately after markProbed in the same
+                // settle. Found by grepping every reader of `webCalls?.recorded` rather than by
+                // remembering this one existed (L30, L263).
+                let unfinished = results.completion == .didNotFinish
                 if unfinished, (r.contacts ?? []).isEmpty {
                     // The same route markProbed sends it down, so the two writers cannot disagree about
                     // what this run established (L16). No verdict, no reason, no freshness stamp: this
