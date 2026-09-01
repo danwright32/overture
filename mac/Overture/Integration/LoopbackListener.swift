@@ -11,10 +11,20 @@ import Network
 enum LoopbackListener {
     enum LoopbackError: LocalizedError {
         case noPort, failed(String), timedOut
+        // #3409: a bind refused at THIS instant, which is worth another attempt. A separate case rather
+        // than a flag on `failed`, so the retry loop asks the error what it is instead of re-reading the
+        // words somebody chose for it (L35).
+        case bindRefusedForNow(String)
         var errorDescription: String? {
             switch self {
             case .noPort: return "Local login listener never reported a port."
             case .failed(let m): return "Local login listener failed: \(m)"
+            // Its own sentence, not `failed`'s. It says the thing that is true of this case and not of
+            // that one: every attempt was spent, and the condition is one that clears, so pressing the
+            // control again is an action that changes the state the person is stuck in (L111).
+            case .bindRefusedForNow(let m):
+                return "Local login listener couldn't get a port after \(LoopbackListener.bindAttempts) "
+                    + "tries: \(m). Connecting again usually works."
             case .timedOut: return "Couldn't open the local login listener (timed out)."
             }
         }
@@ -55,15 +65,14 @@ enum LoopbackListener {
     /// Only these two. A permanent failure (no permission, no route) has to be reported at once: retrying
     /// it spends the person's whole timeout to arrive at the same answer more slowly (L110).
     ///
-    /// Matched as a whole number rather than as a substring, or `rawValue: 490` would read as 49.
-    static func isTransientBindFailure(_ message: String) -> Bool {
-        [48, 49].contains { code in
-            // copy-inventory:ignore-start  a POSIX error code, not a sentence Overture says (#915)
-            guard let range = message.range(of: "rawValue: \(code)") else { return false }
-            // copy-inventory:ignore-end
-            let next = message[range.upperBound...].first
-            return next == nil || !next!.isNumber
-        }
+    /// It reads the POSIX code out of the TYPED error rather than looking for digits in the text
+    /// `NWError` renders, which is the whole reason this is decided here, at the one place the type still
+    /// exists, and carried onward as its own error case (L35). The first version matched on the message,
+    /// and a message is a rendering: it can be reworded by the framework, localised, or made to say
+    /// `rawValue: 490` where a substring reader sees 49.
+    static func isTransientBindFailure(_ error: NWError) -> Bool {
+        guard case .posix(let code) = error else { return false }
+        return code == .EADDRNOTAVAIL || code == .EADDRINUSE
     }
 
     /// What is left of the caller's wait, never negative: a negative budget handed to a sleep or a
@@ -89,9 +98,7 @@ enum LoopbackListener {
             do {
                 return try await startOnce(queue: queue, timeout: budget, log: log, onConnection: onConnection)
             } catch let error as LoopbackError {
-                guard case .failed(let message) = error,
-                      isTransientBindFailure(message),
-                      attempt < bindAttempts
+                guard case .bindRefusedForNow(let message) = error, attempt < bindAttempts
                 else { throw error }
                 lastError = error
                 // copy-inventory:ignore-start  developer diagnostic log, not the app's voice (#915)
@@ -157,7 +164,9 @@ enum LoopbackListener {
                     // #3409: released here, because a failed attempt may be followed by another one and a
                     // listener left behind per attempt is a leak the retry would introduce.
                     listener.cancel()
-                    box.resume(throwing: LoopbackError.failed("\(error)"))
+                    box.resume(throwing: isTransientBindFailure(error)
+                        ? LoopbackError.bindRefusedForNow("\(error)")
+                        : LoopbackError.failed("\(error)"))
                 default:
                     break
                 }

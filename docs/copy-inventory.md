@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1452 sentences**.
+Every sentence Overture can say to Dan: **1453 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 520 of the 1452 below hold a
+  sentence carrying a VALUE: 521 of the 1453 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -96,7 +96,6 @@ What is not, and why:
 - `Integration/GmailThreadingRepair.swift`: developer diagnostic log, not the app's own voice (#915)
 - `Integration/GmailThreadingRepair.swift`: a Google API URL and an HTTP header, not sentences Overture says (#915)
 - `Integration/InquiryConversationAttach.swift`: an HTTP header, not a sentence (#915)
-- `Integration/LoopbackListener.swift`: a POSIX error code, not a sentence Overture says (#915)
 - `Integration/LoopbackListener.swift`: developer diagnostic log, not the app's voice (#915)
 - `Integration/LoopbackListener.swift`: developer diagnostic log, not the app's voice (#915)
 - `Integration/OperaAmericaCalendar.swift`: synthesized source HTML the
@@ -1083,6 +1082,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/DraftCheck.swift`
 "Links one gallery instead of the portfolio itself"
     `Domain/DraftCheck.swift`
+"Local login listener couldn't get a port after \(LoopbackListener.bindAttempts) tries: \(m). Connecting again usually works."
+    `Integration/LoopbackListener.swift`
 "Local login listener failed: \(m)"
     `Integration/LoopbackListener.swift`
 "Local login listener never reported a port."

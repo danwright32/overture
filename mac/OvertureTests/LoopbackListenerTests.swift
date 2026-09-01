@@ -92,21 +92,29 @@ struct LoopbackListenerTests {
     // the failures that can plausibly clear. A permanent one (no permission, no route) must still fail at
     // once: retrying that spends a person's whole timeout to reach the same answer more slowly.
     @Test func aBindRefusedAtThisInstantIsWorthAnotherAttempt() {
-        #expect(LoopbackListener.isTransientBindFailure(
-            "POSIXErrorCode(rawValue: 49): Can't assign requested address"))
-        #expect(LoopbackListener.isTransientBindFailure(
-            "POSIXErrorCode(rawValue: 48): Address already in use"))
+        #expect(LoopbackListener.isTransientBindFailure(.posix(.EADDRNOTAVAIL)))
+        #expect(LoopbackListener.isTransientBindFailure(.posix(.EADDRINUSE)))
     }
 
     @Test func aPermanentBindFailureIsNotRetried() {
-        #expect(!LoopbackListener.isTransientBindFailure(
-            "POSIXErrorCode(rawValue: 1): Operation not permitted"))
-        #expect(!LoopbackListener.isTransientBindFailure(
-            "POSIXErrorCode(rawValue: 65): No route to host"))
-        #expect(!LoopbackListener.isTransientBindFailure(""))
-        // The numbers are read as whole numbers, not as digits inside a longer one: 490 is not 49.
-        #expect(!LoopbackListener.isTransientBindFailure(
-            "POSIXErrorCode(rawValue: 490): Something else entirely"))
+        #expect(!LoopbackListener.isTransientBindFailure(.posix(.EPERM)))
+        #expect(!LoopbackListener.isTransientBindFailure(.posix(.EHOSTUNREACH)))
+        // Not every bind failure is a POSIX one, and a failure this cannot read must never be treated as
+        // the kind worth waiting out: the retry would spend the person's whole timeout on it (L110).
+        #expect(!LoopbackListener.isTransientBindFailure(.dns(DNSServiceErrorType(kDNSServiceErr_Refused))))
+    }
+
+    // The classification is carried as its own error CASE rather than re-read from the message the
+    // framework rendered, which is the point: a message is a rendering, and a reader of it is a second
+    // classifier that drifts from the first (L35).
+    @Test func theRefusalCarriesItsOwnKindAndStillNamesTheCause() {
+        let transient = LoopbackListener.LoopbackError.bindRefusedForNow("POSIXErrorCode(rawValue: 49)")
+        let permanent = LoopbackListener.LoopbackError.failed("POSIXErrorCode(rawValue: 1)")
+        #expect(transient.errorDescription?.contains("rawValue: 49") == true)
+        #expect(permanent.errorDescription?.contains("rawValue: 1") == true)
+        if case .bindRefusedForNow = permanent {
+            Issue.record("a permanent failure must not be readable as the retryable kind")
+        }
     }
 
     // The retry may not buy itself more time than the caller allowed. A person pressing Connect Gmail
