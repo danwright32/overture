@@ -61,6 +61,45 @@ OVERTURE_MODEL_EXTRACTION="sonnet"
 # in two would have paid a second full context load to keep the cheap half cheap, and saved almost nothing.
 OVERTURE_MODEL_REPLY_CLASSIFY="${OVERTURE_MODEL_DRAFTING}"
 
+# ONE definition of "this stream finished", shared by record_web_calls and record_run_cost (#3357
+# Phase 1.1, L263).
+#
+# They read the SAME event files and used to answer differently. record_web_calls counted a stream as
+# reported if its file merely PARSED; record_run_cost required the terminal result envelope. Measured on
+# a real archive (check-run-archives/20260830-205244): runCost said streams 10, streamsRecorded 9,
+# recorded false, while webCalls said recorded true, overCap false, streams 10, about the same run.
+# Seven shows were silently lost and the web call reading called that run complete.
+#
+# The ENVELOPE is the right test and parsing is not, because a stream killed part way flushes plenty of
+# valid JSONL and no envelope, which is the commonest way a run dies here.
+#
+# It is a shell VARIABLE holding JS rather than a function, because each recorder is one node program in
+# a single-quoted string, and adjacent-string concatenation ("$VAR"'...') is what lets both embed the
+# same source without either learning to expand variables. No apostrophes anywhere below: the callers
+# splice this beside single-quoted text.
+OVERTURE_STREAM_ENVELOPE_JS='
+    // The terminal result envelope of one stream, or null if it never reached one.
+    const streamEnvelope = (events) => {
+      try {
+        const lines = require("fs").readFileSync(events, "utf8").split("\n");
+        // Walk backwards: the envelope is last, and a killed run leaves a half-written line after
+        // whatever it had already flushed.
+        for (let i = lines.length - 1; i >= 0; i--) {
+          const line = lines[i].trim();
+          if (!line) continue;
+          let parsed;
+          try { parsed = JSON.parse(line); } catch (e) { continue; }
+          if (parsed && parsed.type === "result" && typeof parsed.total_cost_usd === "number") {
+            return parsed;
+          }
+        }
+      } catch (e) {
+        // No event file at all. A stream that did not report, which is the honest answer.
+      }
+      return null;
+    };
+'
+
 # Records the model a run actually used, into that run's own results file.
 #
 # The SCRIPT records it, not the model, and that is the point: asking a model to write down which model
@@ -154,7 +193,7 @@ record_web_calls() {
   shift 2
   [[ -f "${results}" ]] || return 0
   command -v node >/dev/null 2>&1 || return 0
-  node -e '
+  node -e "${OVERTURE_STREAM_ENVELOPE_JS}"'
     (function () {
     const fs = require("fs");
     const [file, capRaw, ...eventFiles] = process.argv.slice(1);
@@ -243,9 +282,15 @@ record_web_calls() {
       try {
         counts = countIn(f);
       } catch (e) {
-        continue;   // a stream that did not report; counted as missing below
+        continue;   // unreadable: no calls to add, and it did not report
       }
-      reported += 1;
+      // #3357 Phase 1.1: reported means it reached its terminal envelope, NOT merely that the file
+      // parsed. This line used to be an unconditional `reported += 1`, which is why a run whose stream
+      // was killed part way through counted as complete here while the cost reading beside it, over the
+      // same files, correctly said it was not. The calls this stream DID make are still added below,
+      // because a partial count is still published under the incomplete path; what changes is only
+      // whether the run may call itself finished.
+      if (streamEnvelope(f)) { reported += 1; }
       for (const k of Object.keys(byRoute)) {
         byRoute[k] += counts.made[k];
         deniedByRoute[k] += counts.refused[k];
@@ -314,7 +359,7 @@ record_run_cost() {
   shift
   [[ -f "${results}" ]] || return 0
   command -v node >/dev/null 2>&1 || return 0
-  node -e '
+  node -e "${OVERTURE_STREAM_ENVELOPE_JS}"'
     (function () {
     const fs = require("fs");
     const [file, ...eventFiles] = process.argv.slice(1);
@@ -326,27 +371,10 @@ record_run_cost() {
       // own path. Overwriting it would destroy the evidence of what went wrong.
       return;
     }
-    const envelopeIn = (events) => {
-      try {
-        const lines = fs.readFileSync(events, "utf8").split("\n");
-        // Walk backwards: the result envelope is last, and a killed run leaves a half-written line after
-        // whatever it had already flushed.
-        for (let i = lines.length - 1; i >= 0; i--) {
-          const line = lines[i].trim();
-          if (!line) continue;
-          let parsed;
-          try { parsed = JSON.parse(line); } catch (e) { continue; }
-          if (parsed && parsed.type === "result" && typeof parsed.total_cost_usd === "number") {
-            return parsed;
-          }
-        }
-      } catch (e) {
-        // No event file at all. Counts as a stream that did not report, which is the honest answer.
-      }
-      return null;
-    };
 
-    const envelopes = eventFiles.map(envelopeIn).filter(Boolean);
+    // #3357 Phase 1.1: `streamEnvelope` is the SHARED definition, spliced in by the caller, so the
+    // web call reading beside this one cannot answer differently about the same streams (L263).
+    const envelopes = eventFiles.map(streamEnvelope).filter(Boolean);
     // Float addition on money: round to cents so a sum of ten streams cannot present itself as
     // 3.7500000000000004 in a figure Dan reads.
     const usd = Math.round(envelopes.reduce((a, e) => a + e.total_cost_usd, 0) * 1e6) / 1e6;
