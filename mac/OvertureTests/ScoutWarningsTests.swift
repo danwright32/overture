@@ -8,7 +8,6 @@ import Foundation
 // shows EVERY applicable warning as its own ranked section rather than the single highest-priority one a
 // one-line alert could hold. The reader-finished-empty signal is kept as its own section, because it is
 // the one shape of failure indistinguishable from every calendar being quiet.
-@MainActor
 @Suite("Structured end-of-scout warnings (#1027)")
 struct ScoutWarningsTests {
     private func outcome() -> ScoutService.Outcome {
@@ -247,7 +246,6 @@ struct ScoutWarningsTests {
 // surprise with a 90-day window, which was Carnegie's Algolia index horizon from when Carnegie was the
 // only established feed. Shown for any of 62 sources it was simply a number about none of them, and it
 // was not the app's own horizon either (a month plus three).
-@MainActor
 @Suite("Empty-feed warning copy (#1531)")
 struct SilentlyEmptyFeedCopyTests {
     @Test func itNamesTheOneCalendarThatWentQuiet() {
@@ -318,7 +316,6 @@ struct SilentlyEmptyFeedCopyTests {
 }
 
 // #1027: the popup's own count-dependent copy, pinned so a plural bug shows in the diff (#863/#885).
-@MainActor
 @Suite("Scout summary popup copy (#1027)")
 struct ScoutSummaryCopyTests {
     @Test func theFailuresHeadingPluralizes() {
@@ -336,7 +333,6 @@ struct ScoutSummaryCopyTests {
 // its per-scout budget and deferred sources. The show/hide rule and the singular/plural wording live in
 // a helper rather than the view body, so a plural bug or a leak into scheduled runs shows in the diff
 // (#863: view-computed logic drifted twice under a green suite).
-@MainActor
 @Suite("Re-run prompt after a budget-capped scout (#1190)")
 struct ScoutRerunPromptTests {
     // (a) a manual run that deferred sources offers the prompt, with a line and a one-click button.

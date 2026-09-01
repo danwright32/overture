@@ -835,14 +835,24 @@ test_declarations_under() {
 # Worth watching as a share because these prove something about how the code is WRITTEN, not about
 # what it does. A suite drifting towards them is drifting away from testing behaviour, and that is
 # visible in a number and invisible in any one diff.
+# #3408: counted in ONE pass rather than one process per file. It ran `grep -o | wc -l | tr -d` for each
+# of about 470 matching files, so the readout every run prints cost roughly 1,400 processes: measured
+# 2026-08-31 on a stubbed wrapper run with no build and no tests in it, this loop was 940 of the 2,436
+# traced lines and the run took 5.07 seconds. `mac/scripts/run-tests-locked.test.sh` pays that 28 times,
+# which is most of why it is the floor of the cheap lane.
+#
+# NUL separated on the way into xargs, because this repository's own path has spaces in it and a list
+# split on whitespace would count nothing here while reporting a confident zero (L98). The empty case is
+# answered before xargs is reached: with no arguments xargs runs its command over STDIN, which would hang
+# rather than report nothing.
 source_guard_declarations_under() {
   local dir="$1"
   [[ -d "${dir}" ]] || { echo 0; return 0; }
-  local file total=0
-  while IFS= read -r file; do
-    total=$(( total + $(grep -o '@Test' "${file}" 2>/dev/null | wc -l | tr -d ' ') ))
-  done < <(grep -rl -E 'SwiftSource|SourceGuardHelper|CopyInventory' "${dir}" --include='*.swift' 2>/dev/null)
-  echo "${total}"
+  local files
+  files="$(grep -rl -E 'SwiftSource|SourceGuardHelper|CopyInventory' "${dir}" --include='*.swift' 2>/dev/null)"
+  [[ -n "${files}" ]] || { echo 0; return 0; }
+  printf '%s\n' "${files}" | tr '\n' '\0' \
+    | xargs -0 grep -ho '@Test' 2>/dev/null | wc -l | tr -d ' '
 }
 
 # The whole readout for a finished run, given that run's output and the repo's mac directory.

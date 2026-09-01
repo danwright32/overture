@@ -11,7 +11,6 @@ import SwiftData
 // what "we'll leave you alone" means.
 //
 // The hard part is WHICH source comes off, and getting it backwards would be its own bad failure.
-@MainActor
 @Suite("A refusal takes the org off the watchlist too (#769, #802)")
 struct RefusalStopsWatchingTests {
     private func prospect(_ groupName: String, sourceIds: [String] = []) -> Prospect {

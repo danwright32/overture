@@ -13,7 +13,6 @@ import Testing
 //
 // So the warning is now health-aware: an empty result is only unusual for a source that HAS a feed
 // history and came back with nothing anyway.
-@MainActor
 @Suite("Scout outcome warning, per source (#27, #802)")
 struct ScoutOutcomeWarningTests {
     private func outcome(found: Int, clientListWarning: String? = nil,

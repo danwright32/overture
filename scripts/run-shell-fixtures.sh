@@ -45,6 +45,40 @@ FIXTURE_UNRESOLVED_COMMAND=": command not found"
 # is still caught.
 FIXTURE_EXPECTS_MISSING="shell-fixture-expects-missing-command:"
 
+# #3408: the shapes bash prints when it could not PARSE something, which is the same defect as the one
+# below wearing different words. A line bash cannot parse never runs, so the fixture carries on, prints
+# every other check as passing and exits 0, and `command not found` cannot see it because nothing was
+# ever looked up. It had been live in `mac/scripts/lib/suite-stats.test.sh` since the assertion was
+# written: a needle holding `$(` inside single quotes inside a command substitution is mis-parsed by
+# bash 3.2, so the check that a scoped run never writes the duration series printed nothing at all,
+# every run, while the sweep passed.
+#
+# Both carry the leading colon for the same reason as the phrase below: a fixture that merely QUOTES
+# the words in a message must still pass.
+FIXTURE_PARSE_FAILURES=(": bad substitution" ": syntax error near unexpected token")
+
+# Reads one finished fixture's output and returns nonzero when bash reported that it could not parse
+# part of it. Kept separate from the unresolved-command check rather than folded into it, because the
+# two want different remedies: one says a name does not exist, this one says a line was never a command.
+fixture_parsed_completely() {
+  local log="$1" phrase hits=()
+  for phrase in "${FIXTURE_PARSE_FAILURES[@]}"; do
+    while IFS= read -r line; do
+      [[ -n "${line}" ]] && hits+=("${line}")
+    done < <(grep -F "${phrase}" "${log}" || true)
+  done
+
+  [[ "${#hits[@]}" -eq 0 ]] && return 0
+
+  echo "FAIL - ${FIXTURE_PATH_FOR_REPORT:-a fixture} reported success holding a line bash could not PARSE"
+  printf '  %s\n' "${hits[@]}"
+  echo "  A line that does not parse never runs, so whatever assertion was on it checked nothing and"
+  echo "  this run proved less than it claimed. The commonest cause here is a needle containing \$( "
+  echo "  inside single quotes inside a command substitution, which bash 3.2 mis-parses: assign the"
+  echo "  needle to a variable first, then pass the variable."
+  return 1
+}
+
 # Reads one finished fixture's output and returns nonzero when it called a command bash could not
 # resolve and did not declare. Prints the offending lines, and separately says so when a declaration
 # never fired: a rehearsed absence that stopped happening means the degradation path is no longer being
@@ -639,6 +673,8 @@ WRAPPER
       # naming the helper it could not find is the message that tells somebody what to do. Asked the other
       # way round, the specific diagnosis is hidden behind the generic one.
       if ! FIXTURE_PATH_FOR_REPORT="${fixture}" unresolved_commands_are_all_declared "${scratch}/log-${i}"; then
+        failures=$((failures + 1))
+      elif ! FIXTURE_PATH_FOR_REPORT="${fixture}" fixture_parsed_completely "${scratch}/log-${i}"; then
         failures=$((failures + 1))
       elif ! fixture_asserted_something "${scratch}/log-${i}"; then
         echo "FAIL - ${fixture} exited 0 but asserted nothing"

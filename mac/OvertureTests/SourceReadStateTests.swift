@@ -13,7 +13,6 @@ import SwiftData
 // It is also what makes a page that changes on EVERY load visible. Such a page is re-read on every scout
 // Dan runs, forever, and costs him tokens with nothing to show, and the only symptom is a source that is
 // somehow never "unchanged".
-@MainActor
 @Suite("Checked is not the same as read (#803)")
 struct SourceReadStateTests {
     private let now = Date(timeIntervalSince1970: 1_800_000_000)
@@ -88,7 +87,6 @@ struct SourceReadStateTests {
 //
 // It matters beyond those two rows: if "Checked" can mean "attempted and got nothing", the timestamp is
 // untrustworthy everywhere on the sheet, and a stale source sits looking fresh.
-@MainActor
 @Suite("The checked line may not claim a read that did not happen (#1758)")
 struct CheckedLineIsHonestTests {
     private let now = Date(timeIntervalSince1970: 1_800_000_000)

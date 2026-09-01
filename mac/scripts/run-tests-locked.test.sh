@@ -367,6 +367,14 @@ assert_not_contains() {
 # every call above this one is unchanged. They exist because the advisory reads a REAL daemon on a
 # real Mac, and a fixture that reached the live process table would assert about whatever this Mac
 # happened to be doing (L2), including the healthy two-day-old daemon measured here on 2026-08-16.
+# #3410: the day every stubbed run below believes it is, which is a day no real run can ever believe it
+# is again. It is what makes "did this fixture write the repository's screens record?" answerable at all:
+# the record holds nothing but `screens=<today>`, so a stub run's stamp and a real run's stamp are byte
+# for byte the same text, and the before-against-after comparison this replaced was therefore racing the
+# real suite running in the other lane of `scripts/test-all.sh` (#3166 went red on exactly that, reporting
+# the real run's own reading as the fixture's pollution).
+STUB_TODAY="2001-02-03"
+
 run_wrapper_with_stub_xcodebuild() {
   local xcodebuild_output="$1" xcodebuild_exit="$2" log_output="${3:-}" diagnostics_dir="${4:-}"
   local daemon_pid="${5:-}" daemon_etime="${6:-}" starting_baseline="${7:-}"
@@ -434,7 +442,19 @@ ${log_output}
 LOG_OUTPUT
 STUB
 
-  chmod +x "${bin_dir}/flock" "${bin_dir}/ps" "${bin_dir}/pgrep" "${bin_dir}/xcodebuild" "${bin_dir}/log"
+  # #3410: only the ONE question whose answer becomes a durable record (`date +%Y-%m-%d`). Every other
+  # format the run asks for, an epoch for its own elapsed arithmetic among them, is handed to the real
+  # `date`, because a stub that answered all of them with one string would feed the run's timing a date.
+  cat > "${bin_dir}/date" <<STUB
+#!/usr/bin/env bash
+case "\$*" in
+  "+%Y-%m-%d") echo "${STUB_TODAY}"; exit 0 ;;
+esac
+exec /bin/date "\$@"
+STUB
+
+  chmod +x "${bin_dir}/flock" "${bin_dir}/ps" "${bin_dir}/pgrep" "${bin_dir}/xcodebuild" "${bin_dir}/log" \
+           "${bin_dir}/date"
 
   # #2195: a throwaway baseline. The stub reports a handful of tests, so against the real one every
   # wrapper run here would read as a catastrophically short run, and a fixture must never write to the
@@ -492,14 +512,22 @@ STUB
 # that the override is really in force, in the same before-against-after shape the live store record
 # uses, so it holds on a pristine checkout and on a machine that has been running the suite for months.
 REPO_HOSTED_RECORD="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}/.overture-hosted-suite-seen"
-repo_hosted_record_state() {
-  if [[ -e "${REPO_HOSTED_RECORD}" ]]; then
-    shasum -a 256 "${REPO_HOSTED_RECORD}" | cut -d' ' -f1
-  else
-    echo absent
-  fi
+
+# Judged by CONTENT SIGNATURE rather than by a hash taken before and after, for the reason #3166 learned
+# on the series beside it: `scripts/test-all.sh` runs the REAL suite in one lane while this fixture runs
+# in the other, and a real run legitimately stamps this record when it verifies the screens, so a
+# before-against-after comparison is racing the run next door and goes red on a healthy push. It had not
+# fired yet only because the Swift lane writes near the end, after the cheap lane has usually finished.
+#
+# What is actually forbidden is a stamp carrying the day the STUB runs believe it is, which no real run
+# can produce. Pure, taking the contents rather than reading the file, so both directions can be shown
+# rather than watched not to happen (L1).
+screens_record_holds_a_stub_reading() {
+  case "$1" in
+    *"screens=${STUB_TODAY}"*) echo yes ;;
+    *) echo no ;;
+  esac
 }
-REPO_HOSTED_RECORD_BEFORE="$(repo_hosted_record_state)"
 
 # #3166: the same, for the run-duration series. Same shape and the same reason, and it is not
 # hypothetical here either: the series shipped without this fixture overriding it, and the nine stubbed
@@ -1416,13 +1444,21 @@ assert_contains "a parallel run that rendered a hosted suite says the screens we
 # Without that record the reader above is a claim nothing acts on (L3), and without the throwaway path
 # these very runs would stamp the live tree with a day on which no view was rendered at all (L2).
 assert_equals "and records that against the run's own throwaway file, never the repository's" \
-  "screensrecord=screens=$(date +%Y-%m-%d)" "$(grep '^screensrecord=' <<< "${PARALLEL_RUN}")"
+  "screensrecord=screens=${STUB_TODAY}" "$(grep '^screensrecord=' <<< "${PARALLEL_RUN}")"
 
-# Nothing above reached the repository's own copy. Judged by CONTENT against what was there before,
-# so a real record this machine already carries is not mistaken for something these runs wrote
-# (#3172's reason, and its shape).
-assert_equals "and no run in this fixture changed the repository's screens record" \
-  "${REPO_HOSTED_RECORD_BEFORE}" "$(repo_hosted_record_state)"
+# Nothing above reached the repository's own copy. #3410: judged by the SIGNATURE only a stub run can
+# leave, so a real suite stamping this file from the other lane of scripts/test-all.sh is not read as
+# this fixture's pollution.
+assert_equals "and no run in this fixture stamped the repository's screens record" \
+  "no" "$(screens_record_holds_a_stub_reading "$(cat "${REPO_HOSTED_RECORD}" 2>/dev/null || true)")"
+
+# Both directions of that check, because a signature nothing has been seen to match reports "clean" for
+# a tree it never read and for a tree with nothing in it alike (L98, L1).
+assert_equals "the signature really does recognise a stub run's stamp" \
+  "yes" "$(screens_record_holds_a_stub_reading "screens=${STUB_TODAY}")"
+
+assert_equals "and a real run's own stamp, the thing racing this, is never called pollution" \
+  "no" "$(screens_record_holds_a_stub_reading "screens=$(/bin/date +%Y-%m-%d)")"
 
 # #3166: nor its run-duration series. None of this fixture's fake sizes may appear there.
 assert_equals "and no run in this fixture wrote its fake sizes into the repository's series" \

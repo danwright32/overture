@@ -109,17 +109,29 @@ hosted_suites_ran() {
   types="${3:-}"
   [ -n "${output}" ] || return 0
 
+  # #3408: ONE pass over the output for all of them, rather than one grep per name. The loop below it ran
+  # about 200 processes and re-read the whole log 98 times per wrapper run, and in a real run that log is
+  # megabytes. Every name that reported is extracted first, then the answer is chosen by walking the
+  # NAMES list, so which name comes back is still the first in the caller's list rather than the first in
+  # the output.
+  #
+  # The comparison is on whole lines and is LITERAL, which the old `grep -aF` was and the type branch's
+  # `grep -aE` was not: a display name is a sentence Dan wrote and already carries brackets, a `#` and an
+  # apostrophe in this tree. Both lists are tagged rather than separated by a sentinel line, because any
+  # sentinel is a suite somebody could name.
   if [ -n "${names}" ]; then
-    serial_hit="$(printf '%s\n' "${names}" | while IFS= read -r name; do
-      [ -n "${name}" ] || continue
-      if printf '%s\n' "${output}" | grep -aF "Suite \"${name}\" passed" >/dev/null; then
-        printf '%s\n' "${name}"
-        break
+    serial_seen="$(printf '%s\n' "${output}" \
+      | grep -aoE 'Suite "[^"]+" passed' \
+      | sed -e 's/^Suite "//' -e 's/" passed$//' || true)"
+    if [ -n "${serial_seen}" ]; then
+      serial_hit="$({ printf '%s\n' "${serial_seen}" | sed 's/^/H /'
+                      printf '%s\n' "${names}" | sed 's/^/N /'; } \
+        | awk '/^H / { seen[substr($0, 3)] = 1; next }
+               /^N / { name = substr($0, 3); if (name != "" && (name in seen)) { print name; exit } }')"
+      if [ -n "${serial_hit}" ]; then
+        printf '%s\n' "${serial_hit}"
+        return 0
       fi
-    done)"
-    if [ -n "${serial_hit}" ]; then
-      printf '%s\n' "${serial_hit}"
-      return 0
     fi
   fi
 
@@ -131,13 +143,14 @@ hosted_suites_ran() {
   # screen. And `passed` specifically, as above: a hosted test that FAILED rendered something, but
   # this record is what a later reader trusts as "the screens were checked and were fine".
   [ -n "${types}" ] || return 0
-  printf '%s\n' "${types}" | while IFS= read -r type; do
-    [ -n "${type}" ] || continue
-    if printf '%s\n' "${output}" | grep -aE "^Test case '${type}/[^']*' passed on " >/dev/null; then
-      printf '%s\n' "${type}"
-      break
-    fi
-  done
+  parallel_seen="$(printf '%s\n' "${output}" \
+    | grep -aoE "^Test case '[^'/]+/[^']*' passed on " \
+    | sed -e "s/^Test case '//" -e 's%/.*%%' || true)"
+  [ -n "${parallel_seen}" ] || return 0
+  { printf '%s\n' "${parallel_seen}" | sed 's/^/H /'
+    printf '%s\n' "${types}" | sed 's/^/N /'; } \
+    | awk '/^H / { seen[substr($0, 3)] = 1; next }
+           /^N / { name = substr($0, 3); if (name != "" && (name in seen)) { print name; exit } }'
 }
 
 # hosted_stamp_update <verified> <today> <existing>: the file's new contents, or the existing ones.

@@ -10,7 +10,6 @@ import SwiftData
 // Each of these measures the cost with a counting closure rather than asserting that a closure exists,
 // because the defect is invisible from the outside: the answer is identical either way, and only what was
 // paid for it changes.
-@MainActor
 @Suite("A guard that refuses must refuse the cost too (#1960)")
 struct GuardedArgumentCostTests {
 

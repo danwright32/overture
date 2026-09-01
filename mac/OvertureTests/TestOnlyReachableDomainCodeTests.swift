@@ -62,12 +62,12 @@ struct TestOnlyReachableDomainCodeTests {
 
     // Whole-word, for the reason #2811 records: without the boundaries `list` is found inside `listing`,
     // nothing is ever reported, and the guard fails silently rather than loudly.
+    //
+    // #3405 moved the counting into `IdentifierIndex`, which answers a whole vocabulary in one pass
+    // instead of compiling a regex per name. This one-name spelling is kept because the detector's own
+    // unit test reads it, and it forwards rather than reimplementing so the two cannot drift (L263).
     static func mentions(_ name: String, in lines: [(line: Int, code: String)]) -> Int {
-        guard let re = try? NSRegularExpression(
-            pattern: #"\b"# + NSRegularExpression.escapedPattern(for: name) + #"\b"#) else { return 1 }
-        return lines.reduce(0) { total, entry in
-            total + re.numberOfMatches(in: entry.code, range: NSRange(entry.code.startIndex..., in: entry.code))
-        }
+        IdentifierIndex.counts(in: lines, wanted: [name])[name] ?? 0
     }
 
     static func declaredNames(in lines: [(line: Int, code: String)]) -> [String] {
@@ -85,22 +85,90 @@ struct TestOnlyReachableDomainCodeTests {
         }
     }
 
-    static func findings() -> [Finding] {
+    // Computed ONCE per process, because both live tests below ask the same question of the same tree
+    // and it was answered twice: 36.1s and 32.4s of a 69.3s suite before #3405, 5.9s and 5.8s after it.
+    //
+    // A `let` holding a lock rather than a `static var`, so this is not the shared mutable state
+    // `scripts/check-test-shared-state.sh` exists to find, and so it is still correct when the suite runs
+    // its tests in parallel. An EMPTY result is never remembered, on `AppSourceWalk`'s precedent: a memo
+    // that kept one would hand "checked everything, found nothing" to every later caller from a scan that
+    // had really read nothing (L286, L98).
+    private final class Memo: @unchecked Sendable {
+        private let lock = NSLock()
+        private var kept: [Finding]?
+        private var computed = 0
+
+        var computations: Int {
+            lock.lock(); defer { lock.unlock() }
+            return computed
+        }
+
+        func value(_ build: () -> [Finding]) -> [Finding] {
+            lock.lock()
+            if let hit = kept { lock.unlock(); return hit }
+            computed += 1
+            lock.unlock()
+            let found = build()
+            guard !found.isEmpty else { return found }
+            lock.lock(); kept = found; lock.unlock()
+            return found
+        }
+    }
+
+    private static let memo = Memo()
+
+    // How many times the scan has really run. Exists so the memo can be PROVED rather than assumed: the
+    // fallback is correct and merely slower, so one that silently stopped working would be invisible
+    // (L289).
+    static var findingsComputations: Int { memo.computations }
+
+    static func findings() -> [Finding] { memo.value(uncachedFindings) }
+
+    static func uncachedFindings() -> [Finding] {
         let appFiles = scanned(app, floor: 200)
         var testFiles = scanned(RepoRoot.mac.appendingPathComponent("OvertureTests"), floor: 400)
         testFiles += scanned(RepoRoot.mac.appendingPathComponent("OvertureHostedTests"), floor: 20)
         testFiles += scanned(RepoRoot.mac.appendingPathComponent("TestSupport"), floor: 5)
 
+        // Every name the question is about, gathered before anything is counted, so each file is read
+        // once for the whole vocabulary rather than once per name (#3405).
+        let domainFiles = appFiles.filter { $0.path.contains("/Overture/Domain/") }
+        var declaredIn: [String: Set<String>] = [:]
+        var candidates: Set<String> = []
+        for file in domainFiles {
+            let names = Set(declaredNames(in: file.lines))
+            declaredIn[file.path] = names
+            candidates.formUnion(names)
+        }
+        guard !candidates.isEmpty else { return [] }
+
+        // How many APP files mention each name, and how often each Domain file mentions the names it
+        // declares. The declaring file always contributes one, because the declaration itself is a
+        // mention, so "named anywhere else in the app" is exactly a file count above one.
+        var appFilesMentioning: [String: Int] = [:]
+        var ownCounts: [String: [String: Int]] = [:]
+        for file in appFiles {
+            let counts = IdentifierIndex.counts(in: file.lines, wanted: candidates)
+            for (name, count) in counts where count > 0 { appFilesMentioning[name, default: 0] += 1 }
+            if declaredIn[file.path] != nil { ownCounts[file.path] = counts }
+        }
+
+        var namedByTests: Set<String> = []
+        for file in testFiles {
+            for (name, count) in IdentifierIndex.counts(in: file.lines, wanted: candidates) where count > 0 {
+                namedByTests.insert(name)
+            }
+        }
+
         var out: Set<Finding> = []
-        for file in appFiles where file.path.contains("/Overture/Domain/") {
-            for name in Set(declaredNames(in: file.lines)) {
+        for file in domainFiles {
+            for name in declaredIn[file.path] ?? [] {
                 // Used somewhere else in its own file: not dead, whatever its access level.
-                guard mentions(name, in: file.lines) <= 1 else { continue }
+                guard (ownCounts[file.path]?[name] ?? 0) <= 1 else { continue }
                 // Named anywhere else in the app: reached, and this guard says nothing about it.
-                guard !appFiles.contains(where: { $0.path != file.path && mentions(name, in: $0.lines) > 0 })
-                else { continue }
+                guard (appFilesMentioning[name] ?? 0) <= 1 else { continue }
                 // Named by no test either: a different question, and #2811's, not this one.
-                guard testFiles.contains(where: { mentions(name, in: $0.lines) > 0 }) else { continue }
+                guard namedByTests.contains(name) else { continue }
                 out.insert(Finding(file: file.name, name: name))
             }
         }
@@ -144,6 +212,26 @@ struct TestOnlyReachableDomainCodeTests {
         SearchScope.swift:isHolding  # reached through a key path the scan cannot see
         """)
         #expect(keys == ["PrepQueueButton.swift:canStart", "SearchScope.swift:isHolding"])
+    }
+
+    // The memo really memoises, and BOTH halves of that are asserted. The second reading alone is
+    // satisfied by a `findings()` that never consults the memo at all: the counter then sits at zero
+    // forever and never changes, which is exactly what an unchanged count looks like (L98). Proved by
+    // mutation: replacing `memo.value(uncachedFindings)` with `uncachedFindings()` left this green.
+    //
+    // Race-free under parallel testing without any coordination. The count is asserted as "at least
+    // one" rather than "exactly one", because two callers can miss the memo at the same instant and
+    // both build; and once a non-empty result is in it, the memo is filled for the life of the process
+    // and no caller anywhere can raise the count again, so the second reading cannot be moved by a
+    // neighbour.
+    @Test func theScanIsPaidForOnceHoweverManyTestsAsk() {
+        let first = Self.findings()
+        #expect(!first.isEmpty, "an empty scan is never remembered, so this would prove nothing")
+        let after = Self.findingsComputations
+        #expect(after >= 1, "the scan never went through the memo, so nothing below measures it")
+        let second = Self.findings()
+        #expect(Self.findingsComputations == after, "the scan ran again; the memo is not in force")
+        #expect(second == first)
     }
 
     // MARK: - The live claim

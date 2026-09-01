@@ -12,7 +12,6 @@ import Foundation
 // path the app really uses: an inquiry's stage is StageNavigation.stage(for:), and the rows come from
 // QueueModel.inquiryRows. Both are asserted for each date, because a rule that holds in the stage and not
 // in the rows would still lose the inquiry.
-@MainActor
 @Suite("Inquiry queue fold-in and the date-window audit")
 struct InquiryQueueTests {
     private let today = "2026-07-01"

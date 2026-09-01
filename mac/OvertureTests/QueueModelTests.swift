@@ -439,7 +439,6 @@ struct RowDraftTraceBadgeTests {
 // flight would read as deletion (#1014/#901).
 // Those rows still need a label, so `.underway` survives, but Dan's second ruling the same day was that
 // nothing in the app may call an opened run BOOKABLE.
-@MainActor
 @Suite("The triage queue's near edge is the run's opening night (#1540)")
 struct MultiDateRunQueueTests {
     private func run(_ open: String?, _ close: String?, key: String = "run") -> QueueItem {

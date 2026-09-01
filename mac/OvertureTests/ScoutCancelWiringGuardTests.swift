@@ -6,7 +6,6 @@ import Testing
 // see is whether those pieces are actually CONNECTED: that RootView's Cancel both flags the native sweep
 // and writes the sentinel, and that the runner reads the sentinel on its heartbeat and clears it. This
 // pins that wiring, so a silent disconnect (a Cancel button that does nothing) cannot slip through.
-@MainActor
 @Suite("The cancel wiring is connected end to end (#1037)")
 struct ScoutCancelWiringGuardTests {
     private var rootView: String { SourceGuardHelper.source("Overture/App/RootView.swift") }

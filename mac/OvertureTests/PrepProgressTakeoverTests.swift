@@ -4,7 +4,6 @@ import Foundation
 // #1130: the Prep run gets the scout's takeover progress screen instead of only a subtle toolbar label,
 // so a detached run that takes minutes shows a visible working / still-alive / stalled state. It reuses
 // the shared RunProgressView in a new `.prepping` phase, fed by the run's own progress file.
-@MainActor
 @Suite("Prep progress takeover (#1130)")
 struct PrepProgressTakeoverTests {
     private func tempDir() throws -> URL {

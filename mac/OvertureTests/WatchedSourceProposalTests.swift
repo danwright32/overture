@@ -9,7 +9,6 @@ import SwiftData
 // it would happen: Dan pastes a show he found interesting, having forgotten it is the org that wrote to
 // him last spring asking to be left alone, and a helpful watchlist quietly puts them back on the list
 // and starts surfacing their shows to pitch again.
-@MainActor
 @Suite("What Overture proposes to keep watching (#768, #802)")
 struct WatchedSourceProposalTests {
     private func source(_ id: String, url: String, active: Bool = true,

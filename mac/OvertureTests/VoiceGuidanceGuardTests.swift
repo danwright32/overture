@@ -9,7 +9,6 @@ import SwiftData
 // feed a future draft) and reports the leak so Dan is warned. Dan's own notes section is never
 // inspected or touched — what he writes there is his call.
 
-@MainActor
 @Suite("Voice guidance guard (#249)")
 struct VoiceGuidanceGuardTests {
     private func prospect(group: String = "Aurora Strings", venue: String? = "Carnegie Hall",

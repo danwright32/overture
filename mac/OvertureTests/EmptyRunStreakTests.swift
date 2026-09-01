@@ -9,7 +9,6 @@ import Foundation
 //
 // Observed 2026-08-06 on The Players Theatre, whose last saved page (26 July) showed a full OvationTix
 // listing running well past today, so the empty result was unlikely to be a quiet season.
-@MainActor
 @Suite("A source that comes back empty run after run (#2211)")
 struct EmptyRunStreakTests {
 

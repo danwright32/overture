@@ -171,6 +171,22 @@ elif [ "${SHARED_STATE_STATUS}" != "0" ]; then
   echo "  scripts/check-test-shared-state.sh --record."
 fi
 
+# #3386: how much of the Swift suite runs on the main actor, which is one serial executor and therefore
+# the length of the queue every main-actor test waits in under parallel testing. Before this nobody could
+# say how big it was, and the reduction it asks for has no number to be measured against.
+#
+# ADVISORY and never a gate, on the same footing as the two above: 300 of the 462 files carrying the
+# attribute touch SwiftData, whose containers are main-actor bound, so a rule refusing a new one would
+# fire on the ordinary case and be switched off within a day (L93). Exit 2 is UNMEASURED and is not
+# folded into it, for the reason the shared-state check states.
+echo "==> scripts/check-main-actor-share.sh"
+MAIN_ACTOR_STATUS=0
+"${REPO_ROOT}/scripts/check-main-actor-share.sh" || MAIN_ACTOR_STATUS=$?
+if [ "${MAIN_ACTOR_STATUS}" = "2" ]; then
+  TEST_ALL_CHEAP_FAILURES+=("scripts/check-main-actor-share.sh")
+  echo "FAILED - scripts/check-main-actor-share.sh could not measure anything (exit 2)"
+fi
+
 # Warns if docs/prep-runbook.md and the external dan-wright-brand-voice skill have drifted apart
 # (#731). Skips cleanly (exit 0) on any machine without the skill installed, since it lives outside
 # this clone, so it never breaks CI or a fresh checkout; it only fails locally on genuine drift.

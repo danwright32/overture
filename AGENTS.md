@@ -330,6 +330,34 @@ already drifting from the Swift version it mirrored.
   `scripts/check-test-identity-provenance.test.sh`, which drives it against a throwaway git repository
   with real commits rather than a stub of `git log` (L52).
 
+- **Asking how much of the Swift suite runs on the main actor: `scripts/check-main-actor-share.sh`
+  (#3386).** The main actor is one serial executor, so under `-parallel-testing-enabled YES` two
+  `@MainActor` suites in one process cannot overlap however they are written: they queue, and a test
+  that awaits anything waits for everything ahead of it. Past its `.timeLimit` it is KILLED, which
+  truncates the whole run (#3266). Before this nobody could say how big that queue was.
+  It REPORTS and does not refuse, and rides along in `scripts/test-all.sh` as an advisory. Most
+  main-actor suites here are main-actor for a real reason: of the 462 files carrying the attribute when
+  this was written, 300 touch SwiftData, whose containers are main-actor bound, so a gate would fire on
+  the ordinary case and be switched off within a day (L93). What #3386 removed was the other kind, the
+  suites that carried it and did not need it: strip the attribute, build, and put it back wherever the
+  build says it was load bearing.
+  **Two things about that method are worth knowing before repeating it.** A normal build reports
+  isolation errors one BATCH at a time, so the loop finds one or two files per round and takes an hour;
+  `SWIFT_COMPILATION_MODE=wholemodule` passed through the wrapper reported 37 of them in a single build,
+  which is not exhaustive on its own but turns a dozen rounds into two. And the compiler is NOT a
+  sufficient guard: `ScrollPassthroughWebViewTests` compiled perfectly without its attribute and then
+  crashed the test process part way through a full run, which the short-run gate caught and correctly
+  refused to call a pass. A suite touching AppKit or WebKit keeps its isolation whatever the compiler
+  says, because the breakage there is at run time.
+  Read its answer correctly. Three exit codes, and the third is the one that matters: `2` is UNMEASURED,
+  because a tree where no suite could be read and a tree with no main-actor suites leave the same empty
+  result (L98). The unit is the SUITE rather than the file, since one file can declare several, and a
+  `@MainActor` on a nested helper inside a suite is not counted, because it isolates the helper rather
+  than the tests.
+  The record is `.overture-main-actor-share` beside the repo, gitignored and per machine, on
+  `.overture-hosted-suite-seen`'s precedent: a tracked file rewritten by every run is git noise on every
+  branch and a conflict on every merge.
+
 - **Asking which test harnesses hold state for the whole process: `scripts/check-test-shared-state.sh`
   (#3270).** A stored `static var` in a test target is one variable per process, so two tests running at
   once share it. That is the defect standing between this repo and parallel testing: every remaining
@@ -543,6 +571,16 @@ already drifting from the Swift version it mirrored.
   (`/tmp/overture-mutate-run.log`, moved with `OVERTURE_MUTATE_LOG`): only the last 25 lines go to the
   screen, and the exact failure text this file demands in a PR body routinely sits just above that cut,
   which used to mean running the whole mutation again for evidence the run had already produced.
+  **Since #3240 every proof also says how much of itself was BUILD rather than tests.** That issue asked
+  whether the one to four proofs a PR body carries could share one build, and the measurement says there
+  is nothing to share: each proof mutates a different file, each is already incremental on top of the
+  build the author's own `scripts/test-all.sh` just made, and what is left is Swift re-typechecking a
+  large module for one changed file. Measured 2026-08-31 on this Mac, scoped to a five-test suite whose
+  tests take 0.05s: 23.4s with nothing changed at all, 93.6s with one TEST file changed, 145.2s with one
+  APP file changed, and 199.2s for the same proof on the pure `OvertureCore` scheme, which is SLOWER and
+  so is not the lever either. A proof is therefore 75% to 84% build. The line is printed rather than
+  written down here for this document's own standing reason: a measured number in a sentence goes stale
+  silently, and one the tool takes on every run cannot (L32, L316).
   The last two are #2820 and are the ones that lied in the CAUGHT direction, which is the worse one,
   since CAUGHT is the verdict quoted as proof for each of those ~1600 guards. Measured 2026-08-16: an
   expression using a pipe as its perl delimiter had its `\|` read as an escaped DELIMITER, reached the
@@ -765,6 +803,19 @@ already drifting from the Swift version it mirrored.
   exempts the one command named and nothing else. A fixture keeping its own definition of a helper is
   fine and deliberately still supported: two fixtures read `assert_contains` as
   (desc, needle, haystack), and a definition after the source line wins.
+  **Since #3408 the runner also fails a fixture holding a line bash could not PARSE.** It is the same
+  defect as the unresolved-command rule wearing different words, and that rule structurally cannot see
+  it, because nothing was ever looked up: a line that does not parse was never a command. Found by
+  accident on 2026-08-31, and it had been live in two places. `suite-stats.test.sh` held a needle with
+  `$(` inside single quotes inside a command substitution on a continued line, which bash 3.2
+  mis-parses, so its assertion that a scoped run never writes the duration series had printed nothing at
+  all on every sweep since it was written. `pr-completeness-guard.test.sh` held a COMMENT between two
+  stages of a pipeline inside a command substitution, which bash 3.2 also refuses: it dropped the `awk`
+  stage, left the variable holding the whole lowercased script, and both assertions under it then passed
+  on any file containing the word "author" anywhere in it (L135). Both are fixed, and the rule is what
+  finds the next one. Two shapes are matched, `: bad substitution` and
+  `: syntax error near unexpected token`, each carrying its leading colon so a fixture that merely
+  QUOTES the words still passes.
 - **Quoting a character the style gate forbids: write it as an escape, never override the gate.**
   The pre-push style gate blocks any new line holding an em dash, en dash or emoji, and it cannot
   tell a line that USES one from a line that must QUOTE one, which is the gate working correctly.

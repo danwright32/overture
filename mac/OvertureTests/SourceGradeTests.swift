@@ -98,7 +98,6 @@ struct SourceGradeTests {
 
 // The Sources sheet renders exactly what this returns, in exactly this order, so the sheet has no
 // judgement of its own to get wrong and the whole of its behaviour is testable without a UI.
-@MainActor
 @Suite("The Sources sheet's sections (#800)")
 struct SourceSectionsTests {
     private func source(_ id: String, health: SourceHealth = .ok, active: Bool = true,

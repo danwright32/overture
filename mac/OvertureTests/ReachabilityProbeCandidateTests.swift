@@ -5,7 +5,6 @@ import Foundation
 // pre-commitment candidates count: a booked, sent, or drafted show is past the keep/dismiss moment, and an
 // already-probed show already has its answer. The date-header "Check reachability" control appears only
 // when two or more such candidates share a date (the whole value is comparing several).
-@MainActor
 @Suite("Reachability probe candidates (#1308)")
 struct ReachabilityProbeCandidateTests {
     private func item(_ key: String, status: ReviewStatus = .new, booked: Bool = false,

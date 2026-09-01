@@ -2,7 +2,6 @@ import Testing
 import Foundation
 import SwiftData
 
-@MainActor
 @Suite("Booking match rule")
 struct BookingMatchTests {
     private func booking(id: String = "B", client: String = "C1", start: String, end: String,

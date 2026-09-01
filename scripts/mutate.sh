@@ -615,14 +615,19 @@ fi
 # repo already keeps cross-run artifacts (the shared xcodebuild lock).
 RUN_LOG="${OVERTURE_MUTATE_LOG:-/tmp/overture-mutate-run.log}"
 : > "${RUN_LOG}"
+RUN_STARTED_AT=${SECONDS}
 "${RUNNER}" "$@" > "${RUN_LOG}" 2>&1
 RUN_STATUS=$?
+RUN_ELAPSED=$(( SECONDS - RUN_STARTED_AT ))
 
 sed 's/^/  | /' "${RUN_LOG}" | tail -n 25
 echo
 # Named on EVERY outcome, not only a red one. A SURVIVED verdict is the one that most needs reading: it
 # is a finding about a guard rather than about the code.
 echo "  full log: ${RUN_LOG}"
+# #3240: what this proof spent outside its tests, printed rather than written down, so the share stays a
+# measurement instead of a sentence that ages.
+mutation_build_share "${RUN_ELAPSED}" "${RUN_LOG}"
 echo
 
 # How much actually ran, quoted back on a SURVIVED. A scope naming a suite that exists but does not hold

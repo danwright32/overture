@@ -5,7 +5,6 @@ import Foundation
 //
 // The whole reason the marker is its own field is that reporting has to tell an email he WROTE from an
 // AI draft he TWEAKED. Review is where he reads that distinction first, so it has to be visible there.
-@MainActor
 @Suite("Reviewing a hand-written draft (#2007)")
 struct ManualDraftReviewTests {
     private func prospect() -> Prospect {
