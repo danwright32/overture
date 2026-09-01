@@ -161,4 +161,43 @@ struct EventStreamArchiveRetentionTests {
         #expect(left.count == slot.eventArchiveKeep,
                 "archived \(past) runs of streams and kept \(left.count), not the streams' own keep")
     }
+
+    // A copy that FAILED is not the same state as a run with no streams, and until this it produced the
+    // same silence. The pair's own path reports a failure to both the archive log and the problem ledger
+    // for exactly this reason: a broken archive that says nothing looks identical to a working one
+    // (L10, L11). Losing the streams silently is the worse half, because they are the evidence this pass
+    // exists to preserve and nothing else records that they were meant to be there.
+    @Test func aFailedStreamCopyIsReportedRatherThanSwallowed() throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let slot = RunSlot.check
+        try "{}\n".write(to: slot.chunkEventsURL(chunk: 1, in: root), atomically: true, encoding: .utf8)
+
+        // A FILE where the archive directory needs to be, so creating the working folder fails. A real
+        // failure of the real call rather than a stubbed FileManager, so what is asserted is the
+        // behaviour and not a double's (L52).
+        try "not a directory".write(to: slot.eventArchivesDirectory(in: root),
+                                    atomically: true, encoding: .utf8)
+
+        var problems: [String] = []
+        PrepRunArchive.archiveEventStreams(slot: slot, handoffDirectory: root,
+                                           stamp: "20260901-120000", now: Date(),
+                                           reportProblem: { problems.append($0) })
+
+        #expect(problems.count == 1, "a lost stream archive said nothing at all")
+        #expect(problems.first?.contains("stream") == true,
+                "the problem does not name what was lost: \(problems)")
+    }
+
+    // And the ordinary case stays quiet, or the report above becomes noise on every run that has no
+    // streams to archive and nobody reads it (L36).
+    @Test func aRunWithNoStreamsReportsNoProblem() throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        var problems: [String] = []
+        PrepRunArchive.archiveEventStreams(slot: .check, handoffDirectory: root,
+                                           stamp: "20260901-120000", now: Date(),
+                                           reportProblem: { problems.append($0) })
+        #expect(problems.isEmpty)
+    }
 }

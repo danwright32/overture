@@ -199,7 +199,8 @@ enum PrepRunArchive {
     // on finding none, because a run legitimately has none once its chunks have been cleaned up, and a
     // problem reported on the ordinary case is one nobody reads (L36).
     static func archiveEventStreams(slot: RunSlot, handoffDirectory: URL, stamp: String, now: Date,
-                                    fileManager: FileManager = .default) {
+                                    fileManager: FileManager = .default,
+                                    reportProblem: (String) -> Void = { AgentLog.problem($0) }) {
         let streams = presentEventStreams(slot: slot, handoffDirectory: handoffDirectory,
                                           fileManager: fileManager)
         // No empty folder for a run that produced nothing: an empty archive and a run whose streams were
@@ -223,10 +224,29 @@ enum PrepRunArchive {
             try fileManager.moveItem(at: incoming, to: destination)
         } catch {
             try? fileManager.removeItem(at: incoming)
+            // A copy that FAILED is not the same state as a run with no streams, and both used to
+            // produce the same silence. The streams are the evidence this pass exists to preserve and
+            // nothing else records that they were meant to be here, so losing them without a word is the
+            // worse half of the two (L10, L11). Said the same two ways the pair's own failure is, and
+            // for the reason recorded there: the log lives inside the folder that may be the very thing
+            // that could not be written.
+            let reason = error.localizedDescription
+            appendLog(stamp: stamp, note: failedStreamsLogNote(count: streams.count, reason: reason),
+                      archives: archives, fileManager: fileManager)
+            reportProblem(failedStreamsProblemNote(count: streams.count, reason: reason))
             return
         }
         sweepStaleWorkingFolders(in: archives, now: now, fileManager: fileManager)
         DatedFolderRotation.prune(in: archives, keep: slot.eventArchiveKeep, fileManager: fileManager)
+    }
+
+    static func failedStreamsLogNote(count: Int, reason: String) -> String {
+        "event streams NOT archived (\(count) found): \(reason)"
+    }
+
+    static func failedStreamsProblemNote(count: Int, reason: String) -> String {
+        "Overture could not archive \(count) event stream(s) for this run, so its per item evidence is "
+            + "only on disk until the next run overwrites it: \(reason)"
     }
 
     // The chunk streams this run actually left on disk. Found by READING the directory rather than by
