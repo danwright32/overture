@@ -698,6 +698,60 @@ fi
 assert_contains "the partial fixture says what it DID see, under its own name" \
   "${partial_fixture}" '"partialUsd": 3.600917'
 
+# --- ONE definition of "this stream finished" (#3357 Phase 1.1, L263) -------------------------------
+#
+# `record_web_calls` and `record_run_cost` read the SAME event files and answered differently about
+# whether the run finished. web_calls counted a stream as reported if its file merely PARSED;
+# run_cost required a terminal result envelope.
+#
+# The cost of the disagreement, measured on a real archive (`check-run-archives/20260830-205244/`): a
+# 97 item queue, a 90 result file, `runCost` reporting `streams: 10, streamsRecorded: 9,
+# recorded: false`, and `webCalls` reporting `recorded: true, overCap: false, streams: 10` about the
+# SAME run. Seven shows were silently lost, and the web call reading called that run complete.
+#
+# The existing incomplete-path case above uses a MISSING file, which both definitions already agree
+# about. This is the case that separated them: a stream killed part way flushes plenty of valid JSONL
+# and no envelope, so every line parses and nothing finished. That is the commonest way a run dies here.
+
+cat > "${WEBTMP}/events-killed.jsonl" <<'KILLED'
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"WebFetch","input":{"url":"https://b.example"}}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"WebSearch","input":{"query":"someone"}}]}}
+KILLED
+
+echo '{"version":6,"results":[{"naturalKey":"a"}]}' > "${WEBTMP}/killed-web.json"
+echo '{"version":6,"results":[{"naturalKey":"a"}]}' > "${WEBTMP}/killed-cost.json"
+record_web_calls "${WEBTMP}/killed-web.json" 18 "${WEBTMP}/events.jsonl" "${WEBTMP}/events-killed.jsonl"
+record_run_cost "${WEBTMP}/killed-cost.json" "${WEBTMP}/events.jsonl" "${WEBTMP}/events-killed.jsonl"
+killed_web="$(cat "${WEBTMP}/killed-web.json")"
+killed_cost="$(cat "${WEBTMP}/killed-cost.json")"
+
+# The one claim, in both halves: they agree the run did not finish, over the same streams.
+assert_contains "a stream killed before its envelope is incomplete to the cost reading" \
+  "${killed_cost}" '"recorded": false'
+assert_contains "and incomplete to the web call reading, over the SAME streams" \
+  "${killed_web}" '"recorded": false'
+
+# Neither publishes the number a reader would take as the real one. A partial total is worse than none,
+# because it reads as a measurement and nothing beside it says it is short (L98, L11).
+if [[ "${killed_cost}" == *'"usd":'* ]]; then
+  echo "FAIL - a run killed before its envelope still published a 'usd' downstream would read as real"
+  FAILURES=$((FAILURES + 1))
+else
+  echo "ok - a killed run publishes no 'usd' at all"
+fi
+if [[ "${killed_web}" == *'"total":'* ]]; then
+  echo "FAIL - a run killed before its envelope still published a 'total' downstream would read as real"
+  FAILURES=$((FAILURES + 1))
+else
+  echo "ok - and no 'total' at all"
+fi
+
+# What the run DID see survives, so an incomplete reading is not an empty one, and it says how many of
+# how many streams actually reported.
+assert_contains "the partial per-route counts survive" "${killed_web}" '"byRoute"'
+assert_contains "and it says how many of how many streams reported" \
+  "${killed_web}" '"streamsReported": 1'
+
 rm -rf "${FIXTMP}"
 
 if [[ ${FAILURES} -gt 0 ]]; then
