@@ -95,7 +95,13 @@ Treat every numbered claim below as unverified until checked. The items in this 
 
 8. Phase 6's TypeScript sweep is specified as an `rg` over named files, and `prepRunbookRules.ts` holds its rules as REGEXES rather than as the symbol names the sweep searches for. A sweep for a symbol may therefore miss a rule whose pattern spells the behaviour differently, which is the same class of blindness the Swift tool had, one level down. The plan says a nothing-found result is a finding to investigate; it does not give a mechanical way to enumerate the rules.
 
-## Decisions escalated to Dan, still unanswered
+## Decisions escalated to Dan: ALL SEVEN ANSWERED 2026-08-31
+
+The answers, with Dan's own words where he gave a rule rather than picking an option, are the
+section of the same name near the end of this document. The options as they were put to him are
+kept below so the answers can be read against what was asked.
+
+### The options as put (answered: see the section near the end)
 
 1. What does a card say when its last check came back incomplete, and what does the app say on a run where more than half the shows settle incomplete? The named people and the 'Only names, no way to reach them' badge stay per your decision; what changes is the sentence above them, from a claim about the show to a claim about the search.
    * I write both sentences myself; show me the rendered card and the run notice, not the code
@@ -1142,7 +1148,70 @@ Phases 0 and 1 are thirteen changes; eleven need no model spend, and the two tha
 
 ---
 
-## Decisions escalated to Dan
+## Decisions escalated to Dan: ANSWERED 2026-08-31
+
+All seven were put to Dan in the working session of 2026-08-31 and all seven are answered. His
+words are quoted where he stated a rule instead of picking one of the options offered, because in
+three cases the rule he gave is not any of them and is the thing to build to.
+
+**1. What a card says when the last check did not finish.** Ship my draft, correct it live. The
+card reads "The last check did not finish for this show" with a re-check offer, and the run carries
+a line naming how many settled that way. No rendered review before it ships.
+
+**2. What may depress a show's fit score.** Dan did not take any of the three options and gave the
+rule instead (his words, 2026-08-31, in session): *"The score should be solely on if I can contact
+them. Some of what you said has no impact. I can contact them if the night is blocked (even if I
+shouldn't). I can contact them if there's no subject line (I'll just write one). If it failed a
+lint check I'll just fix what's wrong, that doesn't have anything to do with the person I'm trying
+to contact. It should only be impacted by whether or not I'm physically capable of contacting
+them."* So the tier moves onto the clean address predicate, no preview, and the three send-stage
+facts (`hasUnclearedConflict`, `draftIsMissingSubject`, the lint and greeting holds) stop reaching
+the score at all. Measured on the live store 2026-08-31: 9 prospects hold an unguarded address
+while their stored verdict denies it, 7 of them masked by an open calendar conflict.
+
+**3. A stale route on the send sheet.** 90 days, warn only, naming the age. Chosen over the plan's
+60 so the send sheet and the card cannot disagree about whether an answer is current: 90 is already
+the verdict's own freshness window, and two clocks meaning nearly the same thing is one word naming
+two units (L118).
+
+**4. The bar the listing-billing name reader must clear.** Not a percentage. Dan's rule
+(2026-08-31, in session): *"It just has to be better than what I have now and not worse."* So the
+gate is a COMPARISON against today's behaviour rather than an absolute threshold: over the archived
+97 item queue, the reader ships enabled if it names at least the people the current run already
+finds and adds no more wasted lookups than today. That is measurable for free off what is already
+on disk, and it replaces the 90 / 80 / disabled options entirely.
+
+**5. The gate on removing the Prep hunt.** Yes to both: population at least 25 negatives with both
+readings, the deep arm reaching at most 10 percent of what the single hunt called negative, and the
+two runs are approved.
+
+**6. Stopping a repeatedly unfinished show being offered.** No automatic exclusion, consistent with
+#2513. **And the set-aside control is DROPPED ENTIRELY**, which Dan asked for on his own reasoning:
+*"Couldn't I just dismiss it if I don't want it to check again?"* Verified 2026-08-31 in the source
+rather than answered from memory: `probeIsWorthOffering` (QueueView+Model.swift:2224) requires
+`OpenForDecision.isOpen`, which requires `status == .new` (OpenForDecision.swift:20), so a dismissed
+show is already never a check candidate. Dismiss does the whole job. This deletes
+`reachabilitySetAsideUntil`, `Reachability.isSetAside`, its four call sites, the durable list's
+"Set aside" section, the per-run set-aside notice and 5.2's set-aside exclusion line, all of which
+revision 3 added under items 13 and 14. What survives is the repeat-offender list, because nothing
+else would show which shows are burning lookups.
+
+**7. The frozen verdict, and the 2026-08-13 reversal.** Refresh all of them, no preview, counts
+reported afterwards. Dan's reasoning when shown the narrow option (2026-08-31, in session): *"why
+wouldn't we refresh all 690 of them? Shouldn't it be accurate?"*, and on being shown that some
+shows would move DOWN, and why, he chose the full refresh anyway. **This deliberately reverses his
+recorded call of 2026-08-13** ("ranking stays tied to what the paid check CONCLUDED",
+Prospect.swift:271-289) **and his call of 2026-07-27** ("dismissing a warning makes the address
+sendable but does NOT move the badge until a re-check", ContactFormResultMigration.swift:13-16). Both
+comments are rewritten in the same change rather than left standing over code that no longer obeys
+them, `ContactFormResultMigration` is dead and is DELETED (L29), and every test asserting either
+old rule is DELETED rather than adjusted, because a test defending a reversed decision is the guard
+protecting the rejected behaviour (L252). `scripts/find-tests-naming.sh` is the tool for finding
+them and a run naming nothing is a finding to investigate, not a clearance (L98).
+
+---
+
+## The options as they were put
 
 The first six are unchanged in substance. The seventh is new in this revision and is the largest.
 
