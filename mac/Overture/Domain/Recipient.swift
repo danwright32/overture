@@ -651,6 +651,29 @@ final class Recipient {
                 || isLooksLikeAnotherPersons)
     }
 
+    // #3387 / milestone 61 Phase 0.1. Does an ADDRESS exist that no research guard is holding.
+    //
+    // Deliberately NOT `isSendablePending`. That answers whether this may go out RIGHT NOW and folds in
+    // an uncleared calendar conflict (#901), a blank subject line (#2052), the lint and greeting holds
+    // (#2545), `pausedByReply` and this row's send state, none of which is a fact about whether a way to
+    // contact anybody exists. Measured on the live store 2026-08-31: 9 prospects held an unguarded
+    // address while their stored verdict denied it, 7 of them masked by an open calendar conflict.
+    //
+    // Dan's rule, 2026-08-31: "It should only be impacted by whether or not I'm physically capable of
+    // contacting them."
+    //
+    // ADDRESS ONLY, on purpose. It is substituted into the FIRST arm of the verdict cascade, and a
+    // route bearing predicate there would report every form-only and social-only show as `emailFound`.
+    // `Prospect.hasAnyRoute` is the "a way in of any kind" question and is derived from the whole
+    // cascade rather than written beside it.
+    //
+    // The FIFTH hold state is decided here rather than left to be discovered. `isHeldDownToUnverified`
+    // is in neither `isHeldByAGuard` nor `isSendablePending`; it drives warnings only. So a held down
+    // address IS a route here, which matches today's behaviour and is the right answer: the hold down
+    // describes confidence in WHO is on the end, which the card already warns about, and withholding
+    // the route as well would silently remove a show Dan can judge in seconds.
+    var hasUnguardedAddress: Bool { email?.isEmpty == false && !isHeldByAGuard }
+
     // #1798: WHICH kind of hold, so the card's sentence can be true of the row that produced it. Measured
     // on the live store 2026-07-31: the one row in this state was held by the duplicate guard alone, with
     // the venue and press guards both clear, so the wording written for those two would have been a false

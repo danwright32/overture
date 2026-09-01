@@ -136,7 +136,10 @@ enum PrepImporter {
                     // recipients this check actually left behind is what closes that door.
                     p.reachabilityEmptyReason = Reachability.emptyReason(
                         afterIngesting: contacts,
-                        usableRecipients: p.recipients.filter(\.isSendablePending).count)
+                        // #3387: it counts usable RECIPIENTS, which has always meant addresses. Feeding
+                        // it the send predicate had it counting a send hold as a missing address, so
+                        // the reason and the verdict beside it were computed off different questions.
+                        usableRecipients: p.recipients.filter(\.hasUnguardedAddress).count)
                 } else {
                     // #1722: the run answered this show and had nothing to give. THIS is the branch the
                     // whole issue is about: before, it wrote nothing at all, markProbed's `no_email_found`

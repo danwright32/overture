@@ -258,7 +258,10 @@ final class Prospect {
     // not score as if he could. And an address held by a guard (venue, press, duplicate, held down to
     // unverified) does not set the tier either, for the same reason it does not make the show emailFound.
     var contactTierFromRecipients: ContactTier? {
-        ContactTier.best(of: recipients.filter(\.isSendablePending).map(\.contactTier))
+        // #3387: the same clean predicate the verdict arm above takes, so the badge and the score keep
+        // answering from ONE list. Dan's rule, 2026-08-31: the score is affected only by whether he is
+        // physically capable of contacting them, so a blocked night no longer strips the tier.
+        ContactTier.best(of: recipients.filter(\.hasUnguardedAddress).map(\.contactTier))
     }
 
     // The tier as the SCORE should see it: nil once the answer it came from has aged out, so a stale
@@ -289,7 +292,10 @@ final class Prospect {
     // counts as sendable. Mirrors the venue and press guard outcome exactly: an address held by either
     // guard is real but not sendable, which is `weakContactOnly` rather than `noEmailFound` (#1324).
     var reachabilityResultFromRecipients: Reachability.ProbeResult {
-        if recipients.contains(where: \.isSendablePending) { return .emailFound }
+        // #3387: `hasUnguardedAddress`, not `isSendablePending`. This arm asks whether an address
+        // exists that no research guard is holding; the send predicate folds in a calendar conflict, a
+        // blank subject and two lint judgements, none of which is a fact about reachability.
+        if recipients.contains(where: \.hasUnguardedAddress) { return .emailFound }
         // #1798: through the ONE shared definition, which lists every guard that can hold an address
         // (`Recipient.isHeldByAGuard`). This rule listed two of the three, so an address held only as a
         // possible duplicate was neither sendable nor weak and fell through to "no address at all".
@@ -306,6 +312,15 @@ final class Prospect {
         // one Dan reaches for first. Above `noEmailFound` because it is a route, not the absence of one.
         return socialRouteURLs.isEmpty ? .noEmailFound : .socialOnly
     }
+
+    // #3387 / milestone 61 Phase 0.1. Does a way in of ANY kind exist: an address, a form on the act's
+    // own site, or a social profile that takes messages.
+    //
+    // DERIVED from the corrected cascade rather than reimplemented beside it, so there is one definition
+    // of "reachable" and not two that can drift apart (L263). It is deliberately NOT substituted into
+    // any arm of that cascade: a route bearing predicate in the `emailFound` arm would report every
+    // form-only and social-only show as holding an address.
+    var hasAnyRoute: Bool { reachabilityResultFromRecipients != .noEmailFound }
 
     // #2612: the social profiles Dan will actually DM. Judged through the SAME venue and press guards as
     // the form list below, so a room's own Instagram or a press account is no more a route here than it
