@@ -82,6 +82,26 @@ enum RunSlot: String, CaseIterable, Sendable {
     // today, which is what `prep-run-archives` has held since #1878.
     var archiveKeep: Int { 30 }
 
+    // #3357 Phase 1.2 / #3346: the RAW event streams, in their own dated directory with their own keep.
+    //
+    // Why a SECOND directory rather than more files in the one above. `DatedFolderRotation.prune` rotates
+    // whole FOLDERS by one keep, so a single folder holding both gives one of the two consumers a
+    // lifetime nobody chose, silently on both sides: at 10 the queue and results history collapses from
+    // 30 to 10, which is exactly the defect #2760 was filed to fix, and at 30 the streams stay for three
+    // times their budget. Two directories make both impossible rather than unlikely, which is the answer
+    // #2760 already established here for this same question (L285, L191).
+    func eventArchivesDirectory(in support: URL) -> URL {
+        support.appendingPathComponent("\(rawValue)-run-event-archives", isDirectory: true)
+    }
+
+    // Deliberately FEWER runs than the pair above, and the sizes are why. Measured 2026-09-01: the seven
+    // surviving stream files total 1.7 MB, mean 252 KB, against archived run folders of 20 to 224 KB.
+    // Ten runs of streams is roughly 17 MB.
+    //
+    // Reader: a same-week diagnosis of a run that went wrong. Nobody reads these months later, which is
+    // what makes a shorter keep the right trade rather than a compromise.
+    var eventArchiveKeep: Int { 10 }
+
     // MARK: - The stored state
 
     // #2760: the keys are per slot for the same reason the files are. `prep.consumedResultsFingerprint`
