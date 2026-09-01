@@ -1173,8 +1173,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ReplyPanel.swift`
 "No address yet, so its shows are not placed in your area."
     `UI/SourcesView.swift`
-"No check has claimed a show was unreachable while the show held a way in. If one has, the shows appear here."
-    `UI/WrittenOffBacklogSection.swift`
 "No check has come home without a contact. When one does, what it claimed appears here."
     `UI/EmptyAnswerSection.swift`
 "No contact found"
@@ -2428,6 +2426,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/OutcomePatternsView.swift`
 "What your genre corrections are teaching"
     `Domain/GenreCorrection.swift`
+"When Overture reviewed every stored answer, no show turned out to have been recorded as unreachable while it held a way in."
+    `UI/WrittenOffBacklogSection.swift`
 "Which kept shows to prep?"
     `Domain/PrepSelectionCopy.swift`
 "Which message is their reply?"

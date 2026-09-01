@@ -303,7 +303,7 @@ A sentence written as a constant is read here at the file that RENDERS it, not o
     WatchlistEditing.invalidURLMessage  "That doesn't look like a web address."
     WatchlistEditing.needsNameMessage  "Give the organization a name so you can recognize it here."
 `UI/WrittenOffBacklogSection.swift`
-    WrittenOffBacklogCopy.nothingContradicted  "No check has claimed a show was unreachable while the show held a way in. If one has, the shows appear here."
+    WrittenOffBacklogCopy.nothingContradicted  "When Overture reviewed every stored answer, no show turned out to have been recorded as unreachable while it held a way in."
     WrittenOffBacklogCopy.title  "Shows written off that could be reached"
 
 ## Every file, by surface
