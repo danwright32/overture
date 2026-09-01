@@ -11,8 +11,19 @@ import SwiftData
 struct WrittenOffBacklogSection: View {
     @Query private var prospects: [Prospect]
 
+    // The @Query wrapper and nothing else. Everything that DECIDES what is drawn lives in
+    // `WrittenOffBacklogBody` below, which takes its report as a value, so the section can be rendered
+    // in a test at all: a view that fetches its own data needs a live container and is otherwise only
+    // ever checked by looking at it.
     var body: some View {
-        let report = WrittenOffBacklog.make(from: prospects)
+        WrittenOffBacklogBody(report: WrittenOffBacklog.make(from: prospects))
+    }
+}
+
+struct WrittenOffBacklogBody: View {
+    let report: WrittenOffBacklog.Report
+
+    var body: some View {
         VStack(alignment: .leading, spacing: OVSpacing.md) {
             Text(WrittenOffBacklogCopy.title).font(OVType.groupName).foregroundStyle(OVColor.ink)
             if report.total == 0 {
