@@ -108,6 +108,30 @@ enum RunSlot: String, CaseIterable, Sendable {
     // what makes a shorter keep the right trade rather than a compromise.
     var eventArchiveKeep: Int { 10 }
 
+    // #3357 Phase 1.3 and 1.5: the per item attribution SIDECAR, and the watchdog kill record folded
+    // into it. Written by `record_item_attribution` at a fixed per slot path that the next run
+    // overwrites, exactly like every other handoff file here.
+    func attributionURL(in support: URL) -> URL {
+        support.appendingPathComponent("\(rawValue)-run-attribution.json")
+    }
+
+    var attributionFileName: String { attributionURL(in: Self.nameBase).lastPathComponent }
+
+    func attributionArchivesDirectory(in support: URL) -> URL {
+        support.appendingPathComponent("\(rawValue)-run-attribution-archives", isDirectory: true)
+    }
+
+    // Deliberately DOUBLE the queue and results keep of 30, and a few KB per run rather than the
+    // streams' 1.7 MB, so the cost of the longer life is trivial. Its readers arrive weeks to months
+    // after a run: whether a check ever searched for a given show, and whether a run used as comparison
+    // evidence had a chunk killed in it.
+    //
+    // Note what the two keeps TOGETHER mean, so nobody later cites a safety net that is not there
+    // (L174): for the 50 runs between `eventArchiveKeep` and this, the sidecar SURVIVES and the raw
+    // streams it was derived from do NOT, so re-deriving it for those runs is impossible. The archived
+    // derivation is the only copy, which is the whole reason it is archived rather than recomputed.
+    var attributionArchiveKeep: Int { 60 }
+
     // MARK: - The stored state
 
     // #2760: the keys are per slot for the same reason the files are. `prep.consumedResultsFingerprint`

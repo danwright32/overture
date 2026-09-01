@@ -754,6 +754,132 @@ assert_contains "and it says how many of how many streams reported" \
 
 rm -rf "${FIXTMP}"
 
+# --- #3357 Phase 1.3 and 1.5: per item attribution, and the watchdog kill record ---------------------
+#
+# These cases sit ABOVE the verdict deliberately. `FAILURES` is summed and this file exits a few lines
+# down, so a case appended BELOW that prints its FAIL text and is never counted: the fixture exits 0
+# with failures on screen. That happened while proving #3443 and is why the file now ends with its
+# verdict.
+
+ATTRTMP="$(fixture_scratch_dir)"
+
+# One stream, two items, in the shape the runbook asks for: research, write, research, write. The Write
+# content is the cumulative results file, so the SECOND write names both keys and only the new one is
+# the item it just finished.
+{
+  printf '{"message":{"content":[{"type":"tool_use","name":"WebSearch","input":{"query":"kestrel quartet contact"}}]}}\n'
+  printf '{"message":{"content":[{"type":"tool_use","name":"WebFetch","input":{"url":"https://kestrelquartet.example/about"}}]}}\n'
+  printf '{"message":{"content":[{"type":"tool_use","name":"Write","input":{"content":"{\\"results\\":[{\\"naturalKey\\":\\"kestrel|2027-04-18|rowan\\"}]}"}}]}}\n'
+  printf '{"message":{"content":[{"type":"tool_use","name":"WebSearch","input":{"query":"thornfield ensemble producer"}}]}}\n'
+  printf '{"message":{"content":[{"type":"tool_use","name":"Write","input":{"content":"{\\"results\\":[{\\"naturalKey\\":\\"kestrel|2027-04-18|rowan\\"},{\\"naturalKey\\":\\"thornfield|2027-05-02|rowan\\"}]}"}}]}}\n'
+  printf '{"type":"result","total_cost_usd":1.5}\n'
+} > "${ATTRTMP}/events-chunk-1.jsonl"
+
+record_item_attribution "${ATTRTMP}/attr.json" "${ATTRTMP}/no-kills.json" \
+  "${ATTRTMP}/events-chunk-1.jsonl" > "${ATTRTMP}/attr.out" 2>&1
+attr="$(cat "${ATTRTMP}/attr.json" 2>/dev/null)"
+
+assert_contains "the first show is named" "${attr}" 'kestrel|2027-04-18|rowan'
+assert_contains "the second show is named" "${attr}" 'thornfield|2027-05-02|rowan'
+assert_contains "a SEARCH is attributed, not only a fetch" "${attr}" 'kestrel quartet contact'
+assert_contains "and so is a fetch" "${attr}" 'https://kestrelquartet.example/about'
+assert_contains "the stream reports as attributed" "${attr}" '"outcome": "attributed"'
+
+# THE POINT OF THE WHOLE DERIVATION: the calls land on the item they were made for, not on the chunk.
+# Without this the two items share one undifferentiated list and a starved show is invisible inside a
+# busy chunk, which is the reading `what-the-check-searched.sh` exists to make possible.
+second_item_block="${attr#*thornfield|2027-05-02|rowan}"
+assert_contains "the second show carries its OWN search" "${second_item_block}" 'thornfield ensemble producer'
+if [[ "${second_item_block}" == *"kestrel quartet contact"* ]]; then
+  echo "FAIL - the first show's search was attributed to the second one as well"
+  FAILURES=$((FAILURES + 1))
+else
+  echo "ok - and not the first show's"
+fi
+
+# A Write naming SEVERAL new keys at once cannot say which of them the preceding calls were for, so
+# they stay unattributed. Guessing is what would hide a starved show inside a busy chunk, which is the
+# one reading this whole derivation exists to make possible.
+#
+# Added because a mutation found it missing: relaxing `fresh.length === 1` to `>= 1` SURVIVED, so
+# nothing was holding the batched case at all.
+{
+  printf '{"message":{"content":[{"type":"tool_use","name":"WebSearch","input":{"query":"one search, two shows"}}]}}\n'
+  printf '{"message":{"content":[{"type":"tool_use","name":"Write","input":{"content":"{\\"results\\":[{\\"naturalKey\\":\\"alpha|2027-06-01|rowan\\"},{\\"naturalKey\\":\\"beta|2027-06-02|rowan\\"}]}"}}]}}\n'
+  printf '{"type":"result","total_cost_usd":1.5}\n'
+} > "${ATTRTMP}/events-chunk-batched.jsonl"
+
+record_item_attribution "${ATTRTMP}/attr-batched.json" "" \
+  "${ATTRTMP}/events-chunk-batched.jsonl" >/dev/null 2>&1
+batched="$(cat "${ATTRTMP}/attr-batched.json")"
+assert_contains "a Write naming two new shows attributes the calls to neither" \
+  "${batched}" '"unattributedCalls"'
+batched_items="${batched#*\"items\": [}"
+batched_items="${batched_items%%]*}"
+if [[ "${batched_items}" == *"alpha|2027-06-01|rowan"* ]]; then
+  echo "FAIL - a batched Write claimed one of its two shows as the item"
+  FAILURES=$((FAILURES + 1))
+else
+  echo "ok - and names neither of them as the item it just finished"
+fi
+assert_contains "and the call itself is kept rather than dropped" \
+  "${batched}" 'one search, two shows'
+
+# A stream that reported calls and never named an item is UNATTRIBUTABLE, and a stream that could not be
+# read at all is UNMEASURED. Two states, never one: an unreadable stream and a stream with nothing in it
+# are different facts and only one of them is a finding (L98, L11).
+printf '{"message":{"content":[{"type":"tool_use","name":"WebSearch","input":{"query":"nobody"}}]}}\n' \
+  > "${ATTRTMP}/events-chunk-2.jsonl"
+record_item_attribution "${ATTRTMP}/attr2.json" "" "${ATTRTMP}/events-chunk-2.jsonl" >/dev/null 2>&1
+assert_contains "a stream that named no item is unattributable" \
+  "$(cat "${ATTRTMP}/attr2.json")" '"outcome": "unattributable"'
+assert_contains "and its calls are kept rather than dropped" \
+  "$(cat "${ATTRTMP}/attr2.json")" '"unattributedCalls"'
+
+record_item_attribution "${ATTRTMP}/attr3.json" "" "${ATTRTMP}/no-such-stream.jsonl" >/dev/null 2>&1
+assert_contains "a stream that is not there is unmeasured, never clean" \
+  "$(cat "${ATTRTMP}/attr3.json")" '"outcome": "unmeasured"'
+assert_contains "and the run says so in its totals" "$(cat "${ATTRTMP}/attr3.json")" '"unmeasured": 1'
+
+# #3357 Phase 1.5. A killed chunk is a confound in any comparison between runs, and its only trace used
+# to be a line on a terminal that closes (L148).
+# `record_watchdog_kill` lives in stuck-tool-call.sh, beside the watchdog that calls it, and this
+# fixture covers the pair because the ITEM half of the record is computed in models.sh. Sourced here
+# rather than moving the function, so the writer stays next to the only thing that fires it.
+# shellcheck source=stuck-tool-call.sh
+source "${SCRIPT_DIR}/stuck-tool-call.sh"
+
+KILLS="${ATTRTMP}/kills.json"
+SLOT_WATCHDOG_KILLS="${KILLS}" record_watchdog_kill 1 187
+SLOT_WATCHDOG_KILLS="${KILLS}" record_watchdog_kill 3 191
+assert_contains "a kill is recorded with its chunk" "$(cat "${KILLS}")" '"chunk":1'
+assert_contains "and a second kill does not erase the first" "$(cat "${KILLS}")" '"chunk":3'
+assert_contains "and how long the request had been in flight" "$(cat "${KILLS}")" '"requestInFlightSeconds":187'
+
+record_item_attribution "${ATTRTMP}/attr4.json" "${KILLS}" "${ATTRTMP}/events-chunk-1.jsonl" \
+  > "${ATTRTMP}/attr4.out" 2>&1
+attr4="$(cat "${ATTRTMP}/attr4.json")"
+assert_contains "the kills reach the sidecar" "${attr4}" '"watchdogKills"'
+# The ITEM half of Phase 1.5, and the reason the kill record parses nothing itself: chunk 1 is the
+# stream this pass already walked, so what it had written is known here without a second parser (L263).
+assert_contains "and a killed chunk names what it had already written" \
+  "${attr4}" '"itemsAlreadyWritten"'
+assert_contains "which is the item that stream finished" "${attr4}" 'kestrel|2027-04-18|rowan'
+assert_contains "a run with a kill in it says it is not comparison evidence" \
+  "$(cat "${ATTRTMP}/attr4.out")" "not usable as comparison evidence"
+
+# A run nothing killed says zero, and that is a measurement. Absent and unreadable must not read the
+# same as it, which is why `killsReadable` is its own field.
+assert_contains "a run with no kills reports the fact" "${attr}" '"killsReadable": true'
+if [[ "${attr}" == *'"watchdogKills": []'* ]]; then
+  echo "ok - and an empty kill list, not a missing one"
+else
+  echo "FAIL - a run with no kills did not report an empty list"
+  FAILURES=$((FAILURES + 1))
+fi
+
+rm -rf "${ATTRTMP}"
+
 if [[ ${FAILURES} -gt 0 ]]; then
   echo "${FAILURES} failure(s)"
   exit 1

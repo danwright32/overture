@@ -146,6 +146,8 @@ enum PrepRunArchive {
             // may legitimately have found none.
             archiveEventStreams(slot: slot, handoffDirectory: handoffDirectory, stamp: stamp,
                                 now: now, fileManager: fileManager)
+            archiveAttribution(slot: slot, handoffDirectory: handoffDirectory, stamp: stamp,
+                               now: now, fileManager: fileManager)
             return .alreadyArchived(folder: destination)
         }
 
@@ -184,6 +186,8 @@ enum PrepRunArchive {
         DatedFolderRotation.prune(in: archives, keep: keep, fileManager: fileManager)
         archiveEventStreams(slot: slot, handoffDirectory: handoffDirectory, stamp: stamp,
                             now: now, fileManager: fileManager)
+        archiveAttribution(slot: slot, handoffDirectory: handoffDirectory, stamp: stamp,
+                           now: now, fileManager: fileManager)
         return .archived(folder: destination, copied: copied, missing: missing)
     }
 
@@ -238,6 +242,43 @@ enum PrepRunArchive {
         }
         sweepStaleWorkingFolders(in: archives, now: now, fileManager: fileManager)
         DatedFolderRotation.prune(in: archives, keep: slot.eventArchiveKeep, fileManager: fileManager)
+    }
+
+    // #3357 Phase 1.3: the attribution sidecar, into its OWN dated directory under the SAME stamp, so a
+    // run is found under one folder name in three places.
+    //
+    // A THIRD directory rather than a file added to either of the other two, for the reason #2760
+    // established here and #3346 repeated: `DatedFolderRotation.prune` rotates whole FOLDERS by one
+    // keep, so any folder holding two consumers gives one of them a lifetime nobody chose. This wants
+    // to outlive the streams by a long way (60 against 10) precisely because its readers arrive long
+    // after the run, and putting it beside them would cut it to 10 silently.
+    //
+    // Best effort, like the streams: this is evidence ABOUT a run, so a failure to copy it must never
+    // turn a successfully archived run into a failed one. Silent when there is none, because a run
+    // legitimately has none until `record_item_attribution` has run once (L36).
+    static func archiveAttribution(slot: RunSlot, handoffDirectory: URL, stamp: String, now: Date,
+                                   fileManager: FileManager = .default) {
+        let source = slot.attributionURL(in: handoffDirectory)
+        guard fileManager.fileExists(atPath: source.path) else { return }
+
+        let archives = slot.attributionArchivesDirectory(in: handoffDirectory)
+        let destination = archives.appendingPathComponent(stamp, isDirectory: true)
+        guard !fileManager.fileExists(atPath: destination.path) else { return }
+
+        let incoming = archives.appendingPathComponent(
+            stamp + incomingSuffix + UUID().uuidString, isDirectory: true)
+        do {
+            try fileManager.createDirectory(at: incoming, withIntermediateDirectories: true)
+            try fileManager.copyItem(at: source,
+                                     to: incoming.appendingPathComponent(slot.attributionFileName))
+            try fileManager.moveItem(at: incoming, to: destination)
+        } catch {
+            try? fileManager.removeItem(at: incoming)
+            return
+        }
+        sweepStaleWorkingFolders(in: archives, now: now, fileManager: fileManager)
+        DatedFolderRotation.prune(in: archives, keep: slot.attributionArchiveKeep,
+                                  fileManager: fileManager)
     }
 
     static func failedStreamsLogNote(count: Int, reason: String) -> String {
