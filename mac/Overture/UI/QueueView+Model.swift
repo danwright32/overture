@@ -515,10 +515,26 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     // at all, so a kept form contact beside an emailable one read as a missing address: "7 found, 1
     // reachable" on a card where six of the seven were people, not gaps. Now that a real form is a route
     // Dan keeps deliberately, the number and the list under it say the same thing.
+    // #2958: and never a social profile the run itself called a NAME MATCH ONLY. This number is a
+    // promise about what the rows hold (L16), which is Overture ASSERTING that a way in exists, and
+    // #2912 already settled that such an account cannot support that claim: it excluded exactly this
+    // from `Prospect.socialRouteURLs` for the same reason. The handle stays ON the card, marked,
+    // because looking at it costs Dan seconds; what changes is only whether it is counted.
+    //
+    // Measured 2026-09-01: 22 recipients carry the flag, all 22 with a URL and no address, 19 of them
+    // on a social host, so 19 rows were counted as a way in by a number whose own app refuses them.
+    //
+    // SOCIAL only, matching `socialRouteURLs` exactly rather than testing the flag alone.
+    // `Prospect.usableContactFormURLs` does not test `nameMatchOnly`, so a flagged NON-social form
+    // still reads as `contactFormOnly` and its card still offers the form; dropping it from this count
+    // alone would make the number contradict the badge, which is this defect pointing the other way.
+    // Whether that list should test the flag too is a question about the VERDICT, not about this count.
     var reachableContactCount: Int {
         contacts.filter { c in
             let address = (c.email ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            return !address.isEmpty || usableContactFormURL(c) != nil
+            if !address.isEmpty { return true }
+            guard let form = usableContactFormURL(c) else { return false }
+            return !(c.nameMatchOnly && Reachability.isSocialOnly(form.absoluteString))
         }.count
     }
 
