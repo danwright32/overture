@@ -786,6 +786,28 @@ already drifting from the Swift version it mirrored.
   streams, one stream carries several shows, so the calls are the whole chunk's rather than that show's
   and it says so: per item attribution is milestone 61 Phase 1.3 and does not exist yet.
 
+- **Asking where the freeze tool's busy threshold actually lands: `scripts/analyse-freeze-load.sh`
+  (#3464).** `scripts/freeze-measure.sh` calls a process unusually busy at 25% CPU. That number was
+  CHOSEN when it was written and said so, because there was no distribution of this Mac's idle CPU to set
+  it from. This is the command that reads the one Phase 0 produced, so the premise is re-runnable rather
+  than a dated sentence somebody has to believe (L316, L32).
+  It reads the `.processes.txt` files beside each measurement rather than the `.json` records, and that
+  is the point: the tables hold every process, the records hold only what already crossed the threshold,
+  and a reading taken THROUGH the threshold cannot say whether the threshold is well placed (L70).
+  Three exit codes, and the third is the one that matters: `2` is UNMEASURED, because no recordings and
+  recordings with nothing unusual in them leave the same empty result, and a pile of unreadable files is
+  a failed read rather than a quiet machine (L98, L11). `1` is INSIDE THE BULK, meaning more than one row
+  in twenty crosses the line so it is naming the ordinary case (L172). `0` is discriminating.
+  **Read the per-measurement list, not just the verdict.** The percentile cannot say whether the line is
+  in the right place; WHICH processes cross it can. That is how #3464's real finding surfaced: WindowServer
+  crossed 25% in six of the first eleven recordings, and those six were exactly the six taken while
+  Overture had a window on screen, so every genuine measurement read as contaminated by the compositor
+  drawing the frames the measurement exists to time. It is on `fixtures/resting-baseline.txt` now, with
+  what that exemption gives up written beside it (L324).
+  It is OPT IN and not in `scripts/test-all.sh`: it reads a directory that exists only on Dan's Mac. Its
+  judging half rides along on every push through `scripts/analyse-freeze-load.test.sh`, which builds its
+  own recordings with a known distribution rather than reading the real ones.
+
 - **Judging whether a script succeeded: capture its status directly, never through a pipe.**
   `some-script.sh | tail -5` reports `tail`'s exit status, not the script's, so a script that died
   instantly on an unbound variable and printed nothing at all reads as a clean pass. That happened
