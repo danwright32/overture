@@ -50,11 +50,6 @@ struct BlockedCalendar: Equatable, Sendable {
         }
     }
 
-    // Deliberately NOT defaulted at the property, so `build` has to be told. `empty` is the one value that
-    // sets it without being told, and it is `.measured`: "nothing blocked at all" is a real statement about
-    // a store with no export configured, which is the state Overture has been in its whole life.
-    var blockedDaysAreUnknown: Bool = false
-
     enum Kind: String, Equatable, Sendable, Codable {
         case bookedShoot        // Downbeat says he is working
         case dayOff             // Dan says he is away
@@ -209,7 +204,15 @@ struct BlockedCalendar: Equatable, Sendable {
                       daysOff: [DayOffRange],
                       cancelledBookingIds: Set<String> = []) -> BlockedCalendar {
         var cal = BlockedCalendar()
-        cal.blockedDaysAreUnknown = availability == .unknown
+        // #3298 stored `availability` on the calendar as a `blockedDaysAreUnknown` flag. Dan's call,
+        // 2026-09-02: removed. Nothing read it. The masthead notice reads the export's health directly and
+        // is the surface that actually tells him the nights are unknown, so the flag was a second value
+        // for the same fact with no reader, which is the shape this repo's own PR rule exists to catch.
+        //
+        // The PARAMETER stays, and is still required. It is what makes a caller say which it is holding,
+        // and `Availability(health:)` is still the one place that decides. If a reader is ever needed, put
+        // the flag back here rather than re-deriving the verdict at the call site.
+        _ = availability
         // Which dates a cancellation has actually touched, and which of those still hold a shoot. The flat
         // `blockedDates` rule below needs both: a date whose every booking is cancelled must lose its flat
         // entry too, and a date that never had a booking must keep one.

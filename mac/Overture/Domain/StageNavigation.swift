@@ -15,11 +15,10 @@ import Foundation
 // list somebody remembered, which is the list that silently omits the stage added next (L96, L113).
 enum StageFocus: String, Equatable, Sendable, CaseIterable {
     case scout, prep, review
-    // #1583/#1691: kept, undrafted, and held back by a date clash that landed AFTER the keep. Its own focus
-    // rather than a fold into `.prep`, on the same reasoning as the five send focuses: the Prep RUN still
-    // refuses these shows, so counting them under Prep would state a number the run then does not work
-    // through, which is the exact mismatch #863 exists to prevent. Before it existed these shows matched no
-    // focus at all, and the queue is stage-scoped only, so they were rendered nowhere (#1691).
+    // #3369 retired `.prepBlocked`, which stood here between `.review` and the send focuses. It held a kept,
+    // undrafted show that a date clash landed on after the keep, because the Prep run then refused those
+    // shows and a show in no stage is rendered nowhere at all (#1583/#1691). Nothing is refused on a clash
+    // any more (Dan, 2026-09-01), so every kept show is under `.prep` with its clash on the card.
     case sendApproved, sendBlocked, sendErrors, sendStuck, sendDegraded
     // #2647: sent, but the real Message-ID Gmail assigned could not be read back, so Overture's NEXT
     // message on that conversation cannot reference it and a standards based client will file it as a
