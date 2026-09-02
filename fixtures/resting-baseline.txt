@@ -1,0 +1,29 @@
+# What is ALWAYS running on this Mac, so a measurement taken beside it is the representative one.
+#
+# measured: 2026-09-01, on Daniels-MacBook-Pro-2
+#
+# Read by scripts/freeze-measure.sh. Anything at or above its CPU threshold that is NOT named here is
+# reported as ELEVATED, with its name, and the measurement is flagged as not comparable against one
+# taken without it. Anything named here is expected and says nothing.
+#
+# WHY THIS IS A FILE AND NOT A LIST INSIDE THE SCRIPT. Dan's own words, 2026-09-01: "the synology and
+# backblaze are always running". A rule hardcoding that is a claim about ONE Mac at ONE moment, and it
+# is wrong on any other machine and on this one the day he changes what he runs. Kept here so it can be
+# re-derived rather than believed, and carrying its measurement date INSIDE the file, because a clone
+# rewrites every mtime.
+#
+# HOW TO RE-DERIVE IT. With Overture running and nothing unusual going on, read the top CPU consumers
+# (`ps -Ao pcpu,pid,comm -r | head -20`) and list anything that is genuinely always on. Do not add
+# something merely because it happened to be busy: a process listed here is one this tool will never
+# again warn about, so an over-broad list silently disarms the check (L324).
+#
+# Deliberately NOT listed, and each for its own reason:
+#
+#   Adobe Lightroom Classic  Dan uses it, so it comes and goes. Measured at 349.5% on 2026-09-01, which
+#                            he confirmed was far more than usual. It is not banned and never should be:
+#                            it is named when busy so a reading taken during an import carries that fact
+#                            rather than being silently blended with one taken without it.
+#   xcodebuild / xctest      the load Phase 0 anticipated. Not always on, and correctly reported.
+
+cloud-drive-daemon
+bztransmit
