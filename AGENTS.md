@@ -786,6 +786,30 @@ already drifting from the Swift version it mirrored.
   streams, one stream carries several shows, so the calls are the whole chunk's rather than that show's
   and it says so: per item attribution is milestone 61 Phase 1.3 and does not exist yet.
 
+- **Asking whether a fixture sized against the live store has fallen behind it:
+  `scripts/check-fixture-corpus-drift.sh` (#3426).** Two cost guards sized their corpus with a number
+  measured against the live store once and never moved, and by 2026-08-31 both were exercising a store
+  between a fifth and a third smaller than the one that ships. Nothing reported it and nothing could: a
+  cost guard sized BELOW the live store stays green the whole time, because it is exercising a smaller
+  world rather than failing (L354). It fails in the direction that hides a problem.
+  What it checks is DERIVED from the source rather than listed in the script (L96): any declaration
+  carrying a `// LIVE-SHAPE: <dimension>` comment on the line above it joins the check automatically.
+  What the script does hold is the definition of each dimension against the store, which is the one
+  thing a source scan cannot supply, and a tag naming a dimension it cannot measure is REFUSED rather
+  than skipped, because a silently ignored tag is a declaration nobody is checking while it reads as
+  covered (L100).
+  It reads the store through a WAL-inclusive copy, never the bare `.store` file, since recent writes
+  live in the `-wal` beside it. Measured 2026-09-02 at 0.06 to 0.09s for the copy and the counts
+  together, which is what makes it affordable on the mandatory pre-push gate rather than opt in.
+  Read its answer correctly, because it has FOUR outcomes and only one of them fails the run. `1` is
+  DRIFTED and is ADVISORY: the store grows every night, so a gate firing on ordinary growth has its
+  threshold raised until it catches nothing (L36, L93). `2` is UNMEASURED and DOES fail: a store that is
+  present and unreadable, a tag it cannot measure, or a scan that found no declarations at all, each of
+  which is a failed measurement rather than a clean one (L98). `3` is a machine with no live store,
+  which is the ordinary state on a clone, in CI and in an agent worktree, so it says so and passes; it
+  is kept apart from `0` because a run that measured nothing must not read as one that measured and was
+  happy. Widen the tolerance for one run with `OVERTURE_CORPUS_DRIFT_TOLERANCE=<percent>`.
+
 - **Asking where the freeze tool's busy threshold actually lands: `scripts/analyse-freeze-load.sh`
   (#3464).** `scripts/freeze-measure.sh` calls a process unusually busy at 25% CPU. That number was
   CHOSEN when it was written and said so, because there was no distribution of this Mac's idle CPU to set

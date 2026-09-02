@@ -228,6 +228,36 @@ run_foreground_check "scripts/check-runner-posix.sh" "${REPO_ROOT}/scripts/check
 # a genuinely malformed tag or a checked-in fixture that disagrees with its own claim.
 run_foreground_check "scripts/check-live-store-claims.sh" "${REPO_ROOT}/scripts/check-live-store-claims.sh"
 
+# #3426: a test fixture sized against the live store that has quietly fallen behind it. Two cost guards
+# sized their corpus with a number measured once and never moved, and by 2026-08-31 both were exercising
+# a store between a fifth and a third smaller than the one that ships. Nothing reported it, and nothing
+# could: a cost guard sized below the live store stays GREEN the whole time, because it is exercising a
+# smaller world rather than failing (L354).
+#
+# The subjects are DERIVED from the source rather than listed here: any declaration carrying a
+# `// LIVE-SHAPE: <dimension>` tag joins the check (L96). It reads the store through a WAL-inclusive
+# copy, measured at 0.06 to 0.09s including the counts, which is what makes it affordable here.
+#
+# ADVISORY on drift, never blocking, on the same footing as the two checks above. The store grows every
+# night, so a gate that fires on ordinary growth has its threshold raised until it catches nothing (L36,
+# L93), and Dan's standing rule is that he wants the override with the reason named in the message.
+#
+# Exit 2 is UNMEASURED and IS folded into the failures: a store that is PRESENT and unreadable, or a tag
+# naming something that cannot be measured, is a failed measurement rather than a clean one (L98).
+# Exit 3 is a machine with no live store at all, which is the ordinary state on a clone, in CI and in an
+# agent worktree, so it says so and passes.
+echo "==> scripts/check-fixture-corpus-drift.sh"
+CORPUS_DRIFT_STATUS=0
+"${REPO_ROOT}/scripts/check-fixture-corpus-drift.sh" || CORPUS_DRIFT_STATUS=$?
+if [ "${CORPUS_DRIFT_STATUS}" = "2" ]; then
+  TEST_ALL_CHEAP_FAILURES+=("scripts/check-fixture-corpus-drift.sh")
+  echo "FAILED - scripts/check-fixture-corpus-drift.sh could not measure anything (exit 2)"
+elif [ "${CORPUS_DRIFT_STATUS}" = "1" ]; then
+  echo "  Advisory, so this does NOT fail the run. Re-measure the store and update the tagged"
+  echo "  declaration and its recorded date together, or widen it for one run with"
+  echo "  OVERTURE_CORPUS_DRIFT_TOLERANCE=<percent>."
+fi
+
 # #1970: clears LaunchServices registrations pointing at Overture bundles that no longer exist, and
 # says how many it took out. Dan's call, 2026-08-04: "it should clear them without me."
 #

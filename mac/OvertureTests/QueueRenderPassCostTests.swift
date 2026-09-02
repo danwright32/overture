@@ -20,10 +20,19 @@ import SwiftData
 @MainActor
 @Suite("One render pass of the queue costs a pinned number of sweeps (#1913)")
 struct QueueRenderPassCostTests {
-    // The live store measured 724 prospects on 2026-08-01, 511 of them untriaged. A corpus that size is
-    // what makes the count meaningful: at ten rows every shape is fast and nothing is learned.
-    private static let corpusSize = 724
-    private static let untriaged = 511
+    // The live store, re-measured 2026-09-02 on a WAL-inclusive copy: 1,139 prospects, 587 of them
+    // untriaged. A corpus that size is what makes the count meaningful: at ten rows every shape is fast
+    // and nothing is learned.
+    //
+    // Both figures carry a LIVE-SHAPE tag, so scripts/check-fixture-corpus-drift.sh compares them
+    // against the real store on every push and says which one has fallen behind. Before #3426 this read
+    // 724 and 511, measured 2026-08-01, and had been exercising a store a third smaller than the one
+    // that ships for a month with nothing reporting it: the guard stays GREEN the whole time, because it
+    // is protecting a smaller world rather than failing (L354).
+    // LIVE-SHAPE: prospects
+    private static let corpusSize = 1139
+    // LIVE-SHAPE: untriaged
+    private static let untriaged = 587
 
     // Eight sweeps of the store, once each, and every one of them named. If this number moves, one of
     // these lines has changed or a new one has appeared, and either is a decision rather than an accident:
