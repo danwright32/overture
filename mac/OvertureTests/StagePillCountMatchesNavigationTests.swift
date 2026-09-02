@@ -108,16 +108,18 @@ struct StagePillCountMatchesNavigationTests {
         }
     }
 
-    // #901: a show Dan cannot work that night is NOT ordinary prep work. The Prep run refuses to draft it
-    // (no money is spent on a show that cannot happen), so the Prep pill must not offer it as work waiting
-    // on a run: a pill that offers work the run will then decline to do is #863 all over again.
+    // #3369 DELETED `thePrepPillReportsABlockedShowApartFromTheWorkTheRunWillDo`. It asserted that a
+    // clashed show was reported under its own `.prepBlocked` focus and that the run would not take it,
+    // which is exactly the behaviour Dan reversed on 2026-09-01, so it is deleted rather than adjusted
+    // (L252). The claim it protected that is STILL true, that the Prep pill's number equals the rows it
+    // lands on, is covered by `eachPillsNumberEqualsTheRowsItLandsOn` in this file and is unaffected: a
+    // clashed show is now counted as ordinary prep work and the pill lands on it as such.
     //
-    // #1583/#1691 fixed the OTHER half of that, which was a bug of its own. The pill used to report zero and
-    // take Dan nowhere, and because the queue is stage-scoped only, a show in no stage is rendered nowhere
-    // in the app at all: the row vanished, taking the control for clearing the clash with it. So the pill
-    // reports these shows under their OWN focus, whose count and destination are the same list, exactly as
-    // the Send pill reports five different problems. Counted apart, reachable, still never drafted.
-    @Test func thePrepPillReportsABlockedShowApartFromTheWorkTheRunWillDo() throws {
+    // The replacement for the half about the run's behaviour is `ConflictWarnsRatherThanBlocksTests`.
+
+    // Kept from the deleted test, because it is the half the reversal did NOT change: overruling a clash
+    // leaves the show as ordinary work, counted and reachable.
+    @Test func aClashedShowIsOrdinaryPrepWorkAndThePillLandsOnIt() throws {
         let ctx = try context()
         let kept = show(ctx, "kept-but-booked", status: .queued, hasDraft: false)
         kept.setScoutConflict(BlockedCalendar.Day(date: "2026-09-19", kind: .bookedShoot,
@@ -125,12 +127,13 @@ struct StagePillCountMatchesNavigationTests {
         try ctx.save()
 
         let prep = try pill(ctx, "Prep")
-        #expect(prep.focus == .prepBlocked)                         // reported as a clash, not as work
+        #expect(prep.focus == .prep)
         #expect(prep.count == 1)
-        #expect(try targets(ctx, prep) == ["kept-but-booked"])      // #1691: and the tap actually lands on it
-        #expect(PrepQueueBuilder.needsPrepEligible(kept) == false)  // the run still won't take it
+        #expect(try targets(ctx, prep) == ["kept-but-booked"])
+        #expect(PrepQueueBuilder.needsPrepEligible(kept))
 
-        // And once he overrules the clash, it is ordinary work again, counted and reachable as such.
+        // And overruling the clash changes nothing about where it is counted, which is the point: the
+        // clash was never a lifecycle position.
         kept.clearConflict()
         try ctx.save()
         let cleared = try pill(ctx, "Prep")

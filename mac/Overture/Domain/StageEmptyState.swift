@@ -14,11 +14,12 @@ enum StageEmptyState {
     }
 
     // The stages Dan works, in order, so the pointer sends him to the EARLIEST one holding work.
-    // #1583/#1691: `.prepBlocked` sits right after `.prep`, so an otherwise-empty queue still points Dan at
-    // a show stuck behind a date clash. It is the one focus that cannot resolve itself: everything else in
-    // this list moves on when a run finishes or an email goes out, while a blocked show waits on an answer
-    // only he can give, and it was reachable from nowhere at all before it had a stage.
-    static let pointerOrder: [StageFocus] = [.scout, .prep, .prepBlocked, .review, .reachedOut]
+    //
+    // #3369 retired `.prepBlocked`, which used to sit between `.prep` and `.review`. It existed because a
+    // date clash held a kept show out of Prep and it was then reachable from nowhere; a clash no longer
+    // holds anything back, so every kept show is under `.prep` and there is nothing for a fourth stage to
+    // point at.
+    static let pointerOrder: [StageFocus] = [.scout, .prep, .review, .reachedOut]
 
     static func message(for stage: StageFocus, counts: [StageFocus: Int], reachedOut: Int) -> Message {
         let detail = pointer(excluding: stage, counts: counts, reachedOut: reachedOut)
@@ -40,7 +41,6 @@ enum StageEmptyState {
         switch target {
         case .scout: return "\(Plural.count(count, "show")) to triage"
         case .prep: return "\(Plural.count(count, "show")) to prep"
-        case .prepBlocked: return "\(Plural.count(count, "show")) held by a date clash"
         // #2050: shows, not drafts. An approved show waiting to send is counted here too now.
         case .review: return "\(Plural.count(count, "show")) to review"
         case .reachedOut: return "\(Plural.count(count, "show")) you've pitched"
@@ -61,7 +61,6 @@ enum StageEmptyState {
         switch stage {
         case .scout: return "Nothing new to triage"
         case .prep: return "Nothing to prep yet"
-        case .prepBlocked: return "Nothing held by a date clash"
         case .review: return "Nothing to review yet"
         // #2654: named rather than defaulted, for the reason above. `reachedOut` is here because the
         // reached-out stage renders its own empty copy and never calls this, so it takes the generic
@@ -89,7 +88,6 @@ enum StageEmptyState {
         // typed in himself, and calling that a booking would describe his vacation as a shoot. "turns up
         // later" is the other half, and the load-bearing half: what puts a show here is the TIMING, a clash
         // arriving after he kept it, not the clash itself.
-        case .prepBlocked: return "A show you kept lands here if a clash with your calendar turns up later."
         case .review: return "Prepped drafts land here to read and send."
         // #2654: named rather than defaulted. The empty string is the DECISION described above, not an
         // absence, and spelling the cases out is what makes a stage added later have to make that

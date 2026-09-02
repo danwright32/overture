@@ -115,9 +115,8 @@ struct TriageWindowTests {
         show(ctx, "far-kept", status: .queued, date: far)
         keys[.prep] = "far-kept"
 
-        let blocked = show(ctx, "far-kept-clashing", status: .queued, date: far)
-        blocked.conflictOpen = true
-        keys[.prepBlocked] = "far-kept-clashing"
+        // #3369 removed the `.prepBlocked` row that stood here. A clashed kept show is ordinary Prep work
+        // now, so it is the same case as "far-kept" above rather than a focus of its own.
 
         show(ctx, "far-drafted", status: .drafted, date: far, hasDraft: true)
         keys[.review] = "far-drafted"

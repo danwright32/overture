@@ -29,10 +29,6 @@ struct AgentStatus: Equatable, Identifiable, Sendable {
 struct AgentInputs: Sendable {
     var toTriage: Int        // #370: freshly scouted, undecided (status .new), awaiting keep/dismiss
     var keptToPrep: Int      // kept, no draft yet, waiting on a Prep run
-    // #1583/#1691: kept, no draft, and held back by a date clash that landed AFTER Dan kept it. Its own
-    // number rather than a fold into keptToPrep: the Prep run still refuses these, so counting them as
-    // "ready to prep" would state a backlog the run then does not work through (#863).
-    var prepBlocked: Int = 0
     // #2614: WHICH detached run holds the single slot, or nil for none. Deliberately one value rather
     // than a boolean beside a second boolean: a check is by definition also "running", so two independent
     // flags is a state space with an impossible corner in it, and the pill read the flag that could not
@@ -114,7 +110,6 @@ extension AgentInputs {
         return AgentInputs(
             toTriage: count(.scout),
             keptToPrep: count(.prep),
-            prepBlocked: count(.prepBlocked),
             runInFlight: runInFlight,
             toReview: count(.review) + inquiryCount(.review),   // #1436: un-replied inquiries live here
             readyToSend: count(.sendApproved),
@@ -256,15 +251,6 @@ enum AgentRoster {
         // rather than a chase, so the sentence named one of the four things behind it.
         case .followUps:
             return "Shows you've pitched that need something from you: a nudge, a possible reply to check, or how it ended."
-        // A show held by a date clash DOES reach a pill: `statuses` returns a "Prep" status carrying this
-        // focus whenever `prepBlocked > 0`, and it outranks the ordinary ready-to-prep state, so it is
-        // what Dan hovers on exactly the day something is stuck.
-        //
-        // Said plainly because the first version of this switch returned "" here, on the belief that this
-        // focus had no pill of its own. It has: the pill is named "Prep" and only its FOCUS differs. That
-        // wrong belief blanked this tooltip whenever a show was held, which is the very defect #2654 was
-        // written to close, reintroduced by closing it.
-        case .prepBlocked: return "Shows you kept that a date clash is holding back."
         }
     }
 
@@ -304,19 +290,10 @@ enum AgentRoster {
         // is now false in the ordinary case, and the state it named no longer exists. The plain backlog
         // status below is the true one (L152: the change is reported by the surface that showed what was
         // outstanding, and resolving it correctly makes that surface go quiet).
-        // #1583/#1691: a show Dan kept and a booking then landed on. It outranks the ordinary backlog for
-        // the same reason a send problem outranks an approved email waiting on a click: the routine case
-        // resolves itself (the next Prep run picks those shows up), while this one is stuck until he
-        // answers it, and before this focus existed it was stuck INVISIBLY, in no stage at all.
         //
-        // A separate focus, never folded into the count above, because the Prep run still refuses these
-        // shows: a number promising work the run will not do is the mismatch #863 exists to prevent.
-        if i.prepBlocked > 0 {
-            let n = i.prepBlocked
-            return AgentStatus(name: "Prep", state: .needsAttention,
-                               detail: "\(n) \(shows(n)) held by a date clash",
-                               focus: .prepBlocked, count: n)
-        }
+        // #3369: a "held by a date clash" status used to stand here, outranking the ordinary backlog. A
+        // clash no longer holds anything back, so those shows are part of the ready-to-prep count below
+        // and the clash is said on the card and again at the launch confirm.
         if i.keptToPrep > 0 {
             return AgentStatus(name: "Prep", state: .needsAttention, detail: "\(i.keptToPrep) ready to prep",
                                focus: .prep, count: i.keptToPrep)

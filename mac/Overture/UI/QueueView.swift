@@ -1488,8 +1488,7 @@ struct QueueView: View {
     // if the show sits on a date that already holds a committed pitch, confirm past it deliberately;
     // otherwise act straight away. One guard, differing only in verb and the action it runs on confirm.
     private func requestReprep(_ item: QueueItem, _ mode: ReprepMode) {
-        guardSelfBooking(item, title: SelfBookingCopy.prepConfirmTitle,
-                         proceedLabel: SelfBookingCopy.prepConfirmProceed) {
+        guardPrepClashes(item) {
             Task { @MainActor in
                 if let onLaunchPrep {
                     await ProspectMutations.reprep(item, mode: mode, prospects: prospects, context: context,
@@ -1506,15 +1505,26 @@ struct QueueView: View {
     // the send confirmation sheet carries it (`sendSelfBookingWarning` below), computed from the same
     // `selfBookingConflictNames` this guard reads, so the clash is still named, once, at the moment Dan
     // actually commits rather than in an alert before a second screen.
-    private func guardSelfBooking(_ item: QueueItem, title: String, proceedLabel: String,
-                                  proceed: @escaping () -> Void) {
-        if let clash = QueueModel.selfBookingClash(for: item, in: QueueModel.selfBookingIndex(items)),
-           let message = SelfBookingCopy.prepConfirmMessage([clash]) {
-            pendingSelfBookingGuard = SelfBookingGuard(key: item.id, title: title,
-                                                       proceedLabel: proceedLabel, message: message, proceed: proceed)
-        } else {
+    // #3366: and the CALENDAR clash with it. This is the second prep entry point, so gating only the "Prep
+    // these N" sheet would leave the per-row Re-prep able to spend on a night Dan is booked for with no
+    // warning at all, which is the hole #1219's own red team found on this exact pair of paths.
+    //
+    // The title and the proceed label come from the clashes actually found rather than being passed in,
+    // because a sentence naming the wrong kind of clash is worse than a generic one.
+    private func guardPrepClashes(_ item: QueueItem, proceed: @escaping () -> Void) {
+        let clash = QueueModel.selfBookingClash(for: item, in: QueueModel.selfBookingIndex(items))
+        let selfBooking = clash.flatMap { SelfBookingCopy.prepConfirmMessage([$0]) }
+        let calendar = PrepLaunchCopy.calendarClashMessage(
+            QueueModel.calendarClashesForPrep(forKeys: [item.id], among: items))
+        guard let message = PrepLaunchCopy.combinedMessage(selfBooking: selfBooking, calendar: calendar),
+              let title = PrepLaunchCopy.confirmTitle(selfBooking: selfBooking != nil,
+                                                      calendar: calendar != nil) else {
             proceed()
+            return
         }
+        pendingSelfBookingGuard = SelfBookingGuard(key: item.id, title: title,
+                                                   proceedLabel: PrepLaunchCopy.proceedLabel,
+                                                   message: message, proceed: proceed)
     }
 
     // Step 1 of an explicit send: show Dan exactly what will go out and wait for his confirm (#49).

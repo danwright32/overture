@@ -91,9 +91,17 @@ struct ManualPrepMutationTests {
         #expect(feedback.message == "Add an address to send to. Nothing was saved")
     }
 
-    // #901's gate holds here too. A hand-written pitch for a night Dan cannot work is the same wrong
-    // email as an AI one, and the same sentence says so.
-    @Test func aShowOnANightHeCannotWorkIsRefusedWithTheSameSentence() throws {
+    // #3369 DELETED `aShowOnANightHeCannotWorkIsRefusedWithTheSameSentence`. It asserted that Dan's own
+    // hand-written pitch was REFUSED on a night carrying a clash, which is the behaviour he reversed on
+    // 2026-09-01 ("Maybe warn me, but let me do it"), so it goes rather than being adjusted (L252).
+    //
+    // It is the clearest case for the reversal: he is typing the email himself, with the clash on the card
+    // in front of him, and the app was refusing to save it. The send gate still stands between that draft
+    // and a stranger's inbox.
+
+    // What replaces it: the pitch is written, and the clash is still on the record rather than cleared by
+    // writing past it.
+    @Test func aHandWrittenPitchOnAClashedNightIsSavedAndTheClashStands() throws {
         let ctx = try context()
         let p = kept(ctx)
         p.setScoutConflict(BlockedCalendar.Day(date: "2026-11-14", kind: .dayOff, name: "Vacation").key)
@@ -104,8 +112,8 @@ struct ManualPrepMutationTests {
                                        subject: "s", body: "b",
                                        prospects: [p], context: ctx, feedback: feedback)
 
-        #expect(p.hasDraft == false)
-        #expect(feedback.message == ActionAck.manualPrepBlockedByClash(org: "Bargemusic"))
+        #expect(p.hasDraft)
+        #expect(p.hasUnclearedConflict, "writing the email is not an answer to the clash")
     }
 
     // MARK: - What the editor will accept
@@ -153,13 +161,8 @@ struct ManualPrepMutationTests {
         #expect(QueueModel.manualPrepOffer(for: QueueItem(kept(ctx, status: .new))) == .hidden)
     }
 
-    // Offered but inert, saying why, rather than vanishing: the sentence teaches, and "I can shoot this
-    // anyway" sits on the same card to clear it.
-    @Test func blockedWithItsReasonOnANightHeCannotWork() throws {
-        let ctx = try context()
-        let p = kept(ctx)
-        p.setScoutConflict(BlockedCalendar.Day(date: "2026-11-14", kind: .dayOff, name: "Vacation").key)
-        #expect(QueueModel.manualPrepOffer(for: QueueItem(p))
-                == .blocked(ActionAck.manualPrepBlockedByClash(org: "Bargemusic")))
-    }
+    // #3369 DELETED `blockedWithItsReasonOnANightHeCannotWork`, which asserted the control was offered
+    // INERT with a refusal sentence on a clashed night. Nothing refuses at Prep any more, so the control
+    // is simply offered; `PerRowPrepControlsTests` asserts that, and the clash reaches Dan through the
+    // card's own note and the launch confirm.
 }

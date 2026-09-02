@@ -275,13 +275,10 @@ enum ProspectMutations {
                              prospects: [Prospect], context: ModelContext, feedback: ActionFeedback) {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
 
-        // #901's gate, and for the same reason it holds the AI path: a pitch for a night he cannot work
-        // is the same wrong email whoever wrote it. Checked BEFORE anything is written, so a refusal
-        // never leaves half a draft behind. The card offers "I can shoot this anyway" to clear it.
-        guard !model.hasUnclearedConflict else {
-            feedback.acknowledge(ActionAck.manualPrepBlockedByClash(org: model.groupName), tone: .warning)
-            return
-        }
+        // #3369: #901's gate stood here too, refusing Dan's OWN hand-written pitch for a night carrying a
+        // clash. It is the clearest case for the decision of 2026-09-01: he is typing the email himself,
+        // the card is showing him the clash while he types, and refusing him is the thing he was objecting
+        // to. The send gate still stands between the draft and a stranger's inbox.
 
         // The same rule the editor's Save button is gated on, so the two cannot disagree. #2023: this also
         // READS the address field, so a string that is not addresses is refused here, before a single
@@ -1012,16 +1009,9 @@ enum ProspectMutations {
                        }) async {
         guard let model = prospects.first(where: { $0.naturalKey == item.id }) else { return }
 
-        // #1828: a show on a night Dan is booked or away for cannot be re-prepped at all.
-        // PrepQueueBuilder.needsPrep refuses it BEFORE it reads the re-prep flags, so setting a flag and
-        // launching would acknowledge work that the run then silently declines to do. Checked here, ahead
-        // of the flags, so no request is left behind to ride a later run just as silently. The card
-        // already offers the control in a blocked state saying this (QueueModel.reprepOffer); this is the
-        // enforcement under it, since a rule and its wiring are two claims (#1679).
-        guard !model.hasUnclearedConflict else {
-            feedback.acknowledge(ActionAck.reprepBlockedByClash(org: item.groupName), tone: .warning)
-            return
-        }
+        // #3369: the clash guard that stood here is gone with the gate it enforced. It existed because
+        // `needsPrep` refused a clashed show before reading the re-prep flags, so a request set here would
+        // have ridden a later run just as silently. The run takes those shows now.
 
         let draftGranted = ReprepRequest.apply(mode, to: model)
         guard context.saveOrWarn(org: item.groupName, feedback: feedback) else { return }

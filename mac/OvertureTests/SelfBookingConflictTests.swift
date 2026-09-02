@@ -115,10 +115,9 @@ struct SelfBookingCopyTests {
                 == "Choir P is on a date you already have a pitch in progress for Orchestra A and 1 other.")
     }
 
-    @Test func prepConfirmProceedLabelIsStable() {
-        #expect(SelfBookingCopy.prepConfirmTitle == "Prep a show on a date you're already pitching?")
-        #expect(SelfBookingCopy.prepConfirmProceed == "Prep anyway")
-    }
+    // #3369 moved the title and the proceed label to `PrepLaunchCopy`, which owns the launch confirm now
+    // that a calendar clash reaches the same sheet. Their assertions moved with them, into
+    // `PrepCalendarClashCopyTests`, where the title is a function of which kinds of clash were found.
 
     @Test func approveConfirmCopyIsStable() {
     }

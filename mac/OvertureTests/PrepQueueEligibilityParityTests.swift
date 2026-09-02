@@ -48,9 +48,11 @@ struct PrepQueueEligibilityParityTests {
         insert(ctx, key: "dismissed-with-flags", status: .dismissed, hasDraft: true,
                reprepDraftRequested: true, reprepContactsRequested: true)
 
-        // #901: the conflict gate, in all three of its states. Otherwise the predicate and the function
-        // could agree perfectly on every case that predates it and still disagree on every case that
-        // matters now.
+        // #3369: the conflict gate is gone from BOTH halves, and these two rows are what proves it left
+        // them in step. The predicate is a #Predicate mirror of the function and cannot share code with
+        // it, so removing the gate from one and not the other would have the "Prep kept" button's @Query
+        // disagree with every other caller, silently. Kept rather than deleted for exactly that reason:
+        // the rows still matter, only the expected answer changed.
         let conflicted = Prospect(naturalKey: "kept-but-booked", groupName: "g", discipline: "choral",
                                   venue: "V", performanceDate: "2026-07-01", sourceListingURL: nil, priorRelationship: "none", production: "self",
                                   profile: "strong", coverage: "likely_uncovered", fitScore: 5,
@@ -80,7 +82,10 @@ struct PrepQueueEligibilityParityTests {
 
         #expect(viaPredicate == viaFunction)
         #expect(viaPredicate == Set(["kept-no-draft", "drafted-draft-flag", "drafted-contacts-flag",
-                                     "approved-both-flags", "kept-but-cleared"]))
-        #expect(!viaPredicate.contains("kept-but-booked"))   // and the conflicted show is in neither
+                                     "approved-both-flags", "kept-but-cleared", "kept-but-booked"]))
+        // #3369: the conflicted show is in BOTH now. It is the row that would catch the gate being
+        // removed from one half and left in the other.
+        #expect(viaPredicate.contains("kept-but-booked"))
+        #expect(viaFunction.contains("kept-but-booked"))
     }
 }

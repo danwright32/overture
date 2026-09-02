@@ -160,17 +160,10 @@ struct ConflictSurfacedTests {
 
     // MARK: - Not draftable until he clears it
 
-    @Test func aConflictedShowIsNotPreppedUntilHeClearsIt() throws {
-        let ctx = try context()
-        run([event("Vienna Philharmonic")], blocked: vacation("2099-09-19", "2099-09-19"), in: ctx)
-        let p = try #require(stored(ctx).first)
-        p.status = .queued                                          // Dan keeps it anyway
-
-        #expect(PrepQueueBuilder.needsPrepEligible(p) == false)     // but no money is spent drafting it
-
-        p.clearConflict(); try? ctx.save()
-        #expect(PrepQueueBuilder.needsPrepEligible(p) == true)      // now it is ordinary work
-    }
+    // #3369 DELETED `aConflictedShowIsNotPreppedUntilHeClearsIt`, which asserted no money was spent
+    // drafting a clashed show until Dan cleared it. That is the rule he reversed on 2026-09-01, so it goes
+    // rather than being adjusted (L252). The send half of the same story, immediately below, is UNCHANGED
+    // and is the one that still refuses.
 
     // The failure path that a prep-only gate would miss: the draft already exists, and the conflict
     // turns up afterwards (he books a shoot, or blocks the week, AFTER approving the email).

@@ -36,7 +36,7 @@ enum StageOverlap {
     // show is in the send half by SendHalf.entered, so it may carry a send problem.
     static func family(of focus: StageFocus) -> Family {
         switch focus {
-        case .scout, .prep, .prepBlocked, .review: return .lifecycle
+        case .scout, .prep, .review: return .lifecycle
         case .sendApproved, .sendBlocked, .sendErrors, .sendStuck, .sendDegraded,
              .sendThreadingDegraded: return .sendProblem
         case .followUps, .reachedOut: return .resolvesNoKeys

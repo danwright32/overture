@@ -29,26 +29,16 @@ struct PrepQueueTests {
         return p
     }
 
-    // #901: a kept show on a day Dan cannot work is not prep work, whatever else is true of it. It stays
-    // in the queue, flagged (he decides, not the app), but no contacts are researched and no email is
-    // drafted for a night he is already booked or away for.
-    @Test func anUnclearedDateConflictIsNeverPrepWork() {
-        #expect(PrepQueueBuilder.needsPrep(status: .queued, hasDraft: false,
-                                           hasUnclearedConflict: true) == false)
-        // Even an explicit re-prep request loses to it: Dan asking for a redraft is not the same as Dan
-        // saying he can shoot that night, and only the second one unblocks the show.
-        #expect(PrepQueueBuilder.needsPrep(status: .approved, hasDraft: true, reprepDraftRequested: true,
-                                           hasUnclearedConflict: true) == false)
-        #expect(PrepQueueBuilder.needsPrep(status: .approved, hasDraft: true, reprepDraftRequested: true,
-                                           hasUnclearedConflict: false) == true)
-    }
+    // #3369 DELETED `anUnclearedDateConflictIsNeverPrepWork`. It asserted the exact rule Dan reversed on
+    // 2026-09-01 ("Maybe warn me, but let me do it"), so it is deleted rather than adjusted (L252). The
+    // opposite is now the rule, and `ConflictWarnsRatherThanBlocksTests` asserts it.
 
     @Test func needsPrepOnlyForKeptUndrafted() {
-        #expect(PrepQueueBuilder.needsPrep(status: .queued, hasDraft: false, hasUnclearedConflict: false) == true)
-        #expect(PrepQueueBuilder.needsPrep(status: .queued, hasDraft: true, hasUnclearedConflict: false) == false)  // already drafted
-        #expect(PrepQueueBuilder.needsPrep(status: .new, hasDraft: false, hasUnclearedConflict: false) == false)    // not kept
-        #expect(PrepQueueBuilder.needsPrep(status: .dismissed, hasDraft: false, hasUnclearedConflict: false) == false)
-        #expect(PrepQueueBuilder.needsPrep(status: .approved, hasDraft: true, hasUnclearedConflict: false) == false)
+        #expect(PrepQueueBuilder.needsPrep(status: .queued, hasDraft: false) == true)
+        #expect(PrepQueueBuilder.needsPrep(status: .queued, hasDraft: true) == false)  // already drafted
+        #expect(PrepQueueBuilder.needsPrep(status: .new, hasDraft: false) == false)    // not kept
+        #expect(PrepQueueBuilder.needsPrep(status: .dismissed, hasDraft: false) == false)
+        #expect(PrepQueueBuilder.needsPrep(status: .approved, hasDraft: true) == false)
     }
 
     // #367: a drafted/approved prospect flagged for re-prep re-enters the queue even though it
@@ -56,25 +46,25 @@ struct PrepQueueTests {
     // no matter what the flags say.
     @Test func needsPrepAlsoTrueForReprepFlaggedEligibleStatuses() {
         #expect(PrepQueueBuilder.needsPrep(status: .drafted, hasDraft: true,
-                                           reprepDraftRequested: true, reprepContactsRequested: false, hasUnclearedConflict: false) == true)
+                                           reprepDraftRequested: true, reprepContactsRequested: false) == true)
         #expect(PrepQueueBuilder.needsPrep(status: .drafted, hasDraft: true,
-                                           reprepDraftRequested: false, reprepContactsRequested: true, hasUnclearedConflict: false) == true)
+                                           reprepDraftRequested: false, reprepContactsRequested: true) == true)
         #expect(PrepQueueBuilder.needsPrep(status: .approved, hasDraft: true,
-                                           reprepDraftRequested: true, reprepContactsRequested: true, hasUnclearedConflict: false) == true)
+                                           reprepDraftRequested: true, reprepContactsRequested: true) == true)
         #expect(PrepQueueBuilder.needsPrep(status: .queued, hasDraft: true,
-                                           reprepDraftRequested: true, reprepContactsRequested: false, hasUnclearedConflict: false) == true)
+                                           reprepDraftRequested: true, reprepContactsRequested: false) == true)
     }
 
     @Test func needsPrepFalseWhenReprepFlagsSetButNoFlagsActuallyTrue() {
         #expect(PrepQueueBuilder.needsPrep(status: .drafted, hasDraft: true,
-                                           reprepDraftRequested: false, reprepContactsRequested: false, hasUnclearedConflict: false) == false)
+                                           reprepDraftRequested: false, reprepContactsRequested: false) == false)
     }
 
     @Test func needsPrepNeverTrueForContactedOrDismissedEvenWithReprepFlags() {
         #expect(PrepQueueBuilder.needsPrep(status: .contacted, hasDraft: true,
-                                           reprepDraftRequested: true, reprepContactsRequested: true, hasUnclearedConflict: false) == false)
+                                           reprepDraftRequested: true, reprepContactsRequested: true) == false)
         #expect(PrepQueueBuilder.needsPrep(status: .dismissed, hasDraft: true,
-                                           reprepDraftRequested: true, reprepContactsRequested: true, hasUnclearedConflict: false) == false)
+                                           reprepDraftRequested: true, reprepContactsRequested: true) == false)
     }
 
     @Test func gathersOnlyKeptUndraftedProspectsWithExactKey() throws {

@@ -17,13 +17,16 @@ import ViewInspector
 struct SelfBookingConfirmSheetTests {
     @Test func showsTheTitleMessageAndBothButtons() throws {
         let sheet = SelfBookingConfirmSheet(
-            title: SelfBookingCopy.prepConfirmTitle,
+            // #3369: the title comes from PrepLaunchCopy now, which owns the launch confirm since a
+            // calendar clash reaches the same sheet. This one is the self-booking-only case.
+            title: try #require(PrepLaunchCopy.confirmTitle(selfBooking: true, calendar: false)),
             message: "This date already holds a pitch to Aurora Strings.",
-            proceedLabel: SelfBookingCopy.prepConfirmProceed, onProceed: {}, onCancel: {})
+            proceedLabel: PrepLaunchCopy.proceedLabel, onProceed: {}, onCancel: {})
         let texts = try sheet.inspect().findAll(ViewType.Text.self).map { try $0.string() }
-        #expect(texts.contains(SelfBookingCopy.prepConfirmTitle))                 // the title
+        #expect(texts.contains(try #require(PrepLaunchCopy.confirmTitle(selfBooking: true,
+                                                                        calendar: false))))  // the title
         #expect(texts.contains("This date already holds a pitch to Aurora Strings.")) // the clash message
-        _ = try sheet.inspect().find(button: SelfBookingCopy.prepConfirmProceed)  // the proceed action, wired to onProceed
+        _ = try sheet.inspect().find(button: PrepLaunchCopy.proceedLabel)  // the proceed action, wired to onProceed
         _ = try sheet.inspect().find(button: SendConfirmCopy.cancel)                 // and Cancel, wired to onCancel
     }
 

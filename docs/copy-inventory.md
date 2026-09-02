@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1479 sentences**.
+Every sentence Overture can say to Dan: **1476 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 535 of the 1479 below hold a
+  sentence carrying a VALUE: 533 of the 1476 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -117,7 +117,7 @@ What is not, and why:
 - `UI/DraftSignaturePreview.swift`: renders the outbound email's own HTML (body + Gmail signature), not Overture's voice (#1203)
 - `UI/DraftSignaturePreview.swift`: browser-side measuring script, not a sentence Overture says to Dan (#915)
 
-## The same sentence, said in more than one place (52)
+## The same sentence, said in more than one place (53)
 
 Two copies of a sentence will drift. #843 owns fixing these.
 
@@ -231,6 +231,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
 - "Their events or season page"
   - `UI/SourceFixConfirmActions.swift`
   - `UI/SourcesView.swift`
+- "This show"
+  - `Domain/PrepLaunchCopy.swift`
+  - `Domain/SelfBookingConflict.swift`
 - "Try again"
   - `App/RootView.swift`
   - `Domain/ProposedConversation.swift`
@@ -445,8 +448,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SendConfirmSheet.swift`
 "A show was left out this run because the local store stopped answering. Run the scout again."
     `Domain/ScoutWarnings.swift`
-"A show you kept lands here if a clash with your calendar turns up later."
-    `Domain/StageEmptyState.swift`
 "A source \"\(sourceName)\" may be them: check its name, or tag it a returning client."
     `Domain/ClientCoverage.swift`
 "A source couldn't be checked. Open Sources to fix or confirm it."
@@ -1321,8 +1322,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/Reachability.swift`
 "Nothing has recorded a merge on this Mac, so there is nothing to compare this copy against."
     `Domain/BuildFreshnessPanel.swift`
-"Nothing held by a date clash"
-    `Domain/StageEmptyState.swift`
 "Nothing here right now"
     `Domain/StageEmptyState.swift`
 "Nothing in the queue matches \"\(query)\""
@@ -1612,9 +1611,13 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "Prep \(groupName) by hand"
     `Domain/ManualPrepPrefill.swift`
 "Prep a show on a date you're already pitching?"
-    `Domain/SelfBookingConflict.swift`
+    `Domain/PrepLaunchCopy.swift`
+"Prep a show on a night that's already spoken for?"
+    `Domain/PrepLaunchCopy.swift`
+"Prep a show on a night you're not free?"
+    `Domain/PrepLaunchCopy.swift`
 "Prep anyway"
-    `Domain/SelfBookingConflict.swift`
+    `Domain/PrepLaunchCopy.swift`
 "Prep kept"
     `App/RootView.swift`
 "Prep manually"
@@ -1962,8 +1965,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/EmptyState.swift`
 "Shows written off that could be reached"
     `UI/WrittenOffBacklogSection.swift`
-"Shows you kept that a date clash is holding back."
-    `Domain/AgentRoster.swift`
 "Shows you've pitched and are waiting to hear back on."
     `Domain/AgentRoster.swift`
 "Shows you've pitched that need something from you: a nudge, a possible reply to check, or how it ended."
@@ -2312,6 +2313,7 @@ Two copies of a sentence will drift. #843 owns fixing these.
 "This should be their events or season page, not one show. A single show's page never changes again, so watching it would watch nothing."
     `UI/AddLeadSheet.swift`
 "This show"
+    `Domain/PrepLaunchCopy.swift`
     `Domain/SelfBookingConflict.swift`
 "This show has been and gone."
     `Domain/ReachedOutClose.swift`
@@ -2623,8 +2625,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "\(Plural.count(count, "show")) \(Plural.word(count, "is", "are")) back in \(undoStageWord(for: priorStatuses))"
     `App/ActionFeedback.swift`
-"\(Plural.count(count, "show")) held by a date clash"
-    `Domain/StageEmptyState.swift`
 "\(Plural.count(count, "show")) on \(dateLabel)"
     `Domain/BulkDismiss.swift`
 "\(Plural.count(count, "show")) on \(dateLabel) are dismissed as \(reason.label)"
@@ -2802,8 +2802,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/ScoutExtractProgress.swift`
 "\(months[month - 1]) \(year)"
     `UI/LeadIntakeModel.swift`
-"\(n) \(shows(n)) held by a date clash"
-    `Domain/AgentRoster.swift`
 "\(n) \(shows(n)) sent, but a later nudge will arrive as a new email, not a reply"
     `Domain/AgentRoster.swift`
 "\(n) \(shows(n)) sent, but replies can't be tracked: check Gmail"
@@ -2890,10 +2888,6 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "\(org) is in a town you asked not to see."
     `Domain/ShowOutcome.swift`
-"\(org) is on a night you're already booked, so it can't be pitched until you clear the clash"
-    `App/ActionFeedback.swift`
-"\(org) is on a night you're already booked, so nothing will re-prep until you clear the clash"
-    `App/ActionFeedback.swift`
 "\(org) is open again. \"\(outcome.label)\" is no longer recorded against it."
     `Domain/ShowOutcome.swift`
 "\(org) recorded as booked."
@@ -2956,6 +2950,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `App/ActionFeedback.swift`
 "\(runs[0]) runs past \(dateLabel), so dismissing it takes its later nights too."
     `Domain/BulkDismiss.swift`
+"\(s)\n\n\(c)"
+    `Domain/PrepLaunchCopy.swift`
 "\(s.alreadyAnsweredCount) more "
     `Domain/ProbeSelection.swift`
 "\(s.dateCount) dates"
@@ -2988,6 +2984,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SelfBookingConflict.swift`
 "\(show) plays a later night of its run when you already have a pitch in progress for \(others)."
     `Domain/SelfBookingConflict.swift`
+"\(show): \(clash.note)"
+    `Domain/PrepLaunchCopy.swift`
 "\(showCount) shows"
     `UI/SourcesView.swift`
 "\(showName), closed out"

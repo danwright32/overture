@@ -209,15 +209,16 @@ protocol PrepEligibilityFacts {
     var hasDraft: Bool { get }
     var reprepDraftRequested: Bool { get }
     var reprepContactsRequested: Bool { get }
-    var hasUnclearedConflict: Bool { get }
 }
 
 extension Prospect: PrepEligibilityFacts {}
 
-// #1666: what the next Prep run will do with ONE show, as one answer. Two rules decide it and a surface
-// stating it has to obey both: `needsPrep` refuses a show with an open date conflict outright, and
-// `prepMode` downgrades a show whose contact a reachability probe already found to writing the draft
-// alone. Anything telling Dan what happens to a show next asks this rather than deriving it again.
+// #1666: what the next Prep run will do with ONE show, as one answer. `needsPrep` says whether it is prep
+// work at all, and `prepMode` downgrades a show whose contact a reachability probe already found to writing
+// the draft alone. Anything telling Dan what happens to a show next asks this rather than deriving it again.
+//
+// #3369: it used to be THREE rules, the third being an open date conflict refusing the show outright. That
+// gate is gone: a clash warns at launch and never decides.
 enum PrepRunIntent: Equatable, Sendable {
     // The next run will not take this show up at all: it is untriaged, dismissed, already drafted with
     // no re-prep asked for, or kept on a night Dan cannot work.
@@ -258,21 +259,28 @@ enum PrepQueueBuilder {
     // (RootView's "Prep kept" button gate) can't call an arbitrary function from inside a
     // #Predicate macro, so needsPrepPredicate below expresses the SAME logic as a standalone
     // Predicate value and PrepQueueEligibilityParityTests pins the two never drifting apart.
-    // `hasUnclearedConflict` is deliberately NOT defaulted, and it is the only argument here that isn't.
+    // #1666's history, kept because the lesson outlives the argument it was about: `hasUnclearedConflict`
+    // used to be a DEFAULTED parameter here and was silently wrong the moment it shipped, because
+    // StageNavigation called this without it, so the Prep pill counted a show the run would then refuse.
+    // That is #863 (a pill's number is a promise about rows) arriving through a default value that made
+    // forgetting invisible. Making it required fixed it; #3369 removed the gate itself.
     //
-    // Defaulted, it was silently wrong the moment it shipped: StageNavigation called this without it, so
-    // the Prep pill counted a show Dan is booked against and took him to it, while the Prep run refused to
-    // draft it. That is exactly #863 (a pill's number is a promise about rows), reappearing in a new place
-    // through a default value that made forgetting invisible. Required, forgetting it is a compile error.
+    // #3369/#3366: the calendar-clash gate that stood here is GONE. Dan's call, 2026-09-01, asked whether
+    // it should disappear entirely or only stand down when a run still has a free night: "Maybe warn me,
+    // but let me do it."
+    //
+    // #901 put it here to save his money: no contacts researched and no email written for a night he is
+    // already booked for. What that missed is that the decision was never offered to him. A run playing two
+    // nights lost Prep because ONE was blocked while the other was free ("I just blocked the 12th and it
+    // disappeared from my prep queue"), and a one-night show on a blocked night was equally unresearchable
+    // with no way past it. The saving is kept where it belongs: the prep-launch confirm names the clash
+    // and he presses through it, so the spend is still his decision and now it is actually his.
+    //
+    // The SEND gate (`Recipient.isSendablePending`) is untouched and still refuses. That is the committing
+    // moment, and a pitch that has gone cannot be taken back.
     static func needsPrep(status: ReviewStatus, hasDraft: Bool,
                           reprepDraftRequested: Bool = false,
-                          reprepContactsRequested: Bool = false,
-                          hasUnclearedConflict: Bool) -> Bool {
-        // #901: a show on a day Dan cannot work is not drafted until he says he can work it. Not a drop
-        // (he still sees it, flagged, and decides), but no contacts are researched and no email is
-        // written for a night he is already booked or away for: that is his money and the model's time
-        // spent on a show that cannot happen.
-        if hasUnclearedConflict { return false }
+                          reprepContactsRequested: Bool = false) -> Bool {
         if status == .queued && !hasDraft { return true }
         let reprepEligible = status == .queued || status == .drafted || status == .approved
         return reprepEligible && (reprepDraftRequested || reprepContactsRequested)
@@ -287,8 +295,7 @@ enum PrepQueueBuilder {
     static func needsPrepEligible<Facts: PrepEligibilityFacts>(_ p: Facts) -> Bool {
         needsPrep(status: p.status, hasDraft: p.hasDraft,
                  reprepDraftRequested: p.reprepDraftRequested,
-                 reprepContactsRequested: p.reprepContactsRequested,
-                 hasUnclearedConflict: p.hasUnclearedConflict)
+                 reprepContactsRequested: p.reprepContactsRequested)
     }
 
     // #1666: whether a reachability probe has already found this show a contact, which is the fact
@@ -317,20 +324,6 @@ enum PrepQueueBuilder {
         }
     }
 
-    // #1583/#1691: the same question with the date-clash gate lifted, which is what the `.prepBlocked`
-    // stage needs to ask ("would this show be prep work if Dan were free that night?").
-    //
-    // It goes through `needsPrep` rather than restating the status-and-draft rule, so `.prep` and
-    // `.prepBlocked` cannot drift into disagreeing about which shows are prep work at all. Passing the gate
-    // `false` is not the same as defaulting it: the argument is still spelled out at the one call site that
-    // deliberately ignores it, and every other caller is still forced to supply the real value.
-    static func needsPrepIgnoringConflict(_ p: Prospect) -> Bool {
-        needsPrep(status: p.status, hasDraft: p.hasDraft,
-                 reprepDraftRequested: p.reprepDraftRequested,
-                 reprepContactsRequested: p.reprepContactsRequested,
-                 hasUnclearedConflict: false)
-    }
-
     // #2365: which kept prospects a Prep run defaults to covering, which is now ALL of them.
     //
     // Dan's rule, 2026-08-11: "I don't think prep needs to worry about filtering out. Scout should be
@@ -355,12 +348,11 @@ enum PrepQueueBuilder {
     // reinvented inline in RootView.swift.
     static var needsPrepPredicate: Predicate<Prospect> {
         #Predicate<Prospect> { p in
-            // #901: the conflict gate. It reads the SAME stored column Prospect.hasUnclearedConflict
-            // does, rather than re-deriving the rule from the two keys, which is both why it is trivial
-            // here and why it cannot drift from the plain-Swift function above. (Expressed inline from
-            // the keys, it overran the #Predicate type-checker outright; see Prospect.conflictOpen.)
-            !p.conflictOpen
-            && ((p.statusRaw == "queued" && p.draftBody == nil)
+            // #3369/#3366: the conflict gate that stood here is gone from BOTH halves at once. The
+            // parity test between this predicate and `needsPrep` is what makes that mandatory: leaving
+            // it here would have the @Query behind the "Prep kept" button disagree with the function
+            // every other caller obeys, which is the drift that test exists to catch.
+            ((p.statusRaw == "queued" && p.draftBody == nil)
                 || ((p.reprepDraftRequested || p.reprepContactsRequested)
                     && (p.statusRaw == "queued" || p.statusRaw == "drafted" || p.statusRaw == "approved")))
         }

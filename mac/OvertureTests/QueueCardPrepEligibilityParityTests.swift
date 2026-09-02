@@ -144,19 +144,21 @@ struct QueueCardPrepEligibilityParityTests {
 
     // #1534's defect exactly: kept is not queued. The card still calls this show kept, and must not
     // claim a Prep run for a night Dan is already committed to.
-    @Test func aKeptShowOnABlockedNightIsKeptAndIsNotAwaitingAPrepRun() throws {
+    @Test func aKeptShowOnABlockedNightIsKeptAndIsAwaitingAPrepRun() throws {
         let ctx = try context()
         let p = show(ctx, "kept-undrafted-on-a-blocked-night", status: .queued, conflicted: true)
         try ctx.save()
 
+        // #3369: the card and the run AGREE that a clashed show is prep work, which is the parity this
+        // test is for. Only the answer they agree on changed.
         let card = QueueItem(p)
         #expect(card.isKept, "the fixture must be a kept show, or this proves nothing about isKept")
-        #expect(!card.isAwaitingPrepRun)
-        #expect(card.nextPrepRun == .notQueued)
+        #expect(card.isAwaitingPrepRun)
+        #expect(card.nextPrepRun != .notQueued)
 
         let queue = PrepQueueService.buildQueue(from: ctx, generatedAt: "now", today: today,
                                                 venueHistory: emptyHistory)
-        #expect(queue.items.isEmpty, "the Prep run refuses it too, which is the point of the parity")
+        #expect(queue.items.count == 1, "the Prep run takes it too, which is the point of the parity")
     }
 
     // Overruling the clash hands the show back: the same fixture, one decision later, is ordinary work
@@ -223,16 +225,18 @@ struct QueueCardPrepEligibilityParityTests {
 
     // A clash outranks a re-prep request on the card exactly as it does in the run, which is the state
     // QueueModel.reprepOffer already says out loud rather than confirming work that cannot happen.
-    @Test func aClashOutranksAReprepRequest() throws {
+    @Test func aClashDoesNotOutrankAReprepRequest() throws {
         let ctx = try context()
         let p = show(ctx, "drafted-redraft-asked-for-on-a-blocked-night", status: .drafted, hasDraft: true,
                      draftRequested: true, conflicted: true)
         try ctx.save()
 
-        #expect(QueueItem(p).nextPrepRun == .notQueued)
+        // #3369: a clash no longer outranks anything. The re-prep request is honoured and the run takes
+        // the show; the clash reaches Dan at the launch confirm instead.
+        #expect(QueueItem(p).nextPrepRun != .notQueued)
         let queue = PrepQueueService.buildQueue(from: ctx, generatedAt: "now", today: today,
                                                 venueHistory: emptyHistory)
-        #expect(queue.items.isEmpty)
+        #expect(queue.items.count == 1)
     }
 
     // MARK: - And the card asks it rather than the raw field
@@ -249,9 +253,9 @@ struct QueueCardPrepEligibilityParityTests {
 
         #expect(QueueModel.manualPrepOffer(for: QueueItem(free)) == .shown)
         #expect(QueueModel.manualPrepOffer(for: QueueItem(drafted)) == .hidden)
-        guard case .blocked = QueueModel.manualPrepOffer(for: QueueItem(blocked)) else {
-            Issue.record("a clashed show must offer manual prep in the blocked state, with its reason")
-            return
-        }
+        // #3369: the control is OFFERED on a clashed show, because the run would take it. The parity this
+        // test enforces is unchanged: the control blocks exactly when the run would refuse, and the run
+        // no longer refuses on a clash.
+        #expect(QueueModel.manualPrepOffer(for: QueueItem(blocked)) == .shown)
     }
 }
