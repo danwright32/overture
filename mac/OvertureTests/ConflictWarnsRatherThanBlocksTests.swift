@@ -87,6 +87,29 @@ struct PrepBlockedStageRetiredTests {
         }
     }
 
+    // And the guard above is not enough on its own, which was found the hard way: the first version of
+    // this change deleted the `case prepBlocked` line and LEFT the paragraph explaining it, so a
+    // description of a stage the app no longer has ended up sitting directly over a different group of
+    // cases, reading as current. Every check here passed, because they all look for the CASE.
+    //
+    // So a mention that survives has to mark itself as history. A comment recording WHY something was
+    // retired is worth keeping (deleting it is how the next person re-adds the thing); a comment that
+    // describes it as though it still exists is worse than no comment at all (L103, L346).
+    @Test func everySurvivingMentionSaysItIsRetired() {
+        for file in ["Overture/Domain/StageNavigation.swift",
+                     "Overture/Domain/StageEmptyState.swift",
+                     "Overture/Domain/AgentRoster.swift",
+                     "Overture/Domain/StageOverlap.swift",
+                     "Overture/Domain/PrepQueue.swift",
+                     "Overture/UI/QueueView+Model.swift"] {
+            for line in SourceGuardHelper.source(file).components(separatedBy: "\n")
+            where line.contains("prepBlocked") {
+                #expect(line.contains("#3369") || line.lowercased().contains("retired"),
+                        "\(file) names the retired focus without saying it is gone: \(line)")
+            }
+        }
+    }
+
     // The lifecycle stages still cover the whole state space between them (L45): a kept, undrafted show
     // is in Prep whatever its calendar says, so retiring the focus leaves nothing stranded.
     @Test func aKeptShowWithAClashIsInPrepRatherThanNowhere() {

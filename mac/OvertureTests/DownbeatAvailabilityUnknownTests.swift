@@ -14,31 +14,19 @@ import Foundation
 // understand, or no file at all.
 @Suite("A Downbeat export nobody could read (#3298)")
 struct DownbeatAvailabilityUnknownTests {
-    // The calendar KNOWS it could not measure, so nothing downstream can read its emptiness as a clear
-    // diary. This is the whole point: an empty calendar and an unmeasured one are different states.
-    @Test func aCalendarBuiltFromAnUnreadableExportSaysSoRatherThanLookingClear() {
-        let unknown = BlockedCalendar.build(availability: .unknown, bookings: [],
-                                            exportedBlockedDates: [], daysOff: [])
-        #expect(unknown.blockedDaysAreUnknown)
-        #expect(unknown.days.isEmpty)
-    }
-
-    // ...and a genuinely empty diary is NOT unknown. Without this the flag would be true whenever there is
-    // nothing to report, which is the ordinary state, and it would mean nothing.
-    @Test func aReadableExportWithNothingBlockedIsMeasuredAndEmpty() {
-        let clear = BlockedCalendar.build(availability: .measured, bookings: [],
-                                          exportedBlockedDates: [], daysOff: [])
-        #expect(!clear.blockedDaysAreUnknown)
-        #expect(clear.days.isEmpty)
-    }
-
-    // A measured calendar that DOES hold blocked days still judges normally; the flag changes nothing
-    // about what a readable export decides.
-    @Test func aMeasuredCalendarStillJudgesItsOwnBlockedDays() {
+    // #3298 stored the verdict on the calendar as a `blockedDaysAreUnknown` flag and three tests here
+    // pinned it. Dan's call, 2026-09-02: removed, because nothing ever read it. The masthead notice reads
+    // the export's health directly and is the surface that tells him the nights are unknown, so the flag
+    // was a second value for the same fact with no reader.
+    //
+    // What is left is the part that still decides something: `Availability(health:)`, tested below, and
+    // the fact that a readable export judges its blocked days exactly as before.
+    @Test func aReadableExportStillJudgesItsOwnBlockedDays() {
         let cal = BlockedCalendar.build(availability: .measured, bookings: [],
                                         exportedBlockedDates: ["2026-10-29"], daysOff: [])
-        #expect(!cal.blockedDaysAreUnknown)
         #expect(cal.conflict(performanceDate: "2026-10-29", runEndDate: String?.none) != nil)
+        #expect(BlockedCalendar.build(availability: .unknown, bookings: [],
+                                      exportedBlockedDates: [], daysOff: []).days.isEmpty)
     }
 
     // The health verdict decides it, so a caller cannot get the two out of step by hand.
@@ -53,9 +41,9 @@ struct DownbeatAvailabilityUnknownTests {
     // unreadable case would take a real answer away and replace it with "we do not know", which is
     // false and which #3299 is separately about saying properly.
     @Test func aStaleExportIsStillMeasured() {
+        #expect(BlockedCalendar.Availability(health: .stale(ageDays: 90)) == .measured)
         let stale = BlockedCalendar.build(availability: BlockedCalendar.Availability(health: .stale(ageDays: 90)),
                                           bookings: [], exportedBlockedDates: ["2026-10-29"], daysOff: [])
-        #expect(!stale.blockedDaysAreUnknown)
         #expect(stale.conflict(performanceDate: "2026-10-29", runEndDate: String?.none) != nil)
     }
 }
