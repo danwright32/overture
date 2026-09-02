@@ -401,7 +401,8 @@ final class LeadIntakeModel {
                                          // pasted was judged against a different, smaller set of blocked
                                          // days than a scouted show was.
                                          blocked: ScoutService.blockedCalendar(
-                                            export: (loaded.bookings, loaded.blockedDates), context: context),
+                                            export: (loaded.bookings, loaded.blockedDates, loaded.health),
+                                            context: context),
                                          today: today, sourceIds: [WatchedSource.manualId],
                                          into: context)
         let added = outcome.inserted + outcome.updated

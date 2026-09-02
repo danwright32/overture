@@ -103,7 +103,11 @@ enum DayOffEditing {
     // `export` is a parameter, not a hidden read, so the sweep below is testable without a file on disk.
     // It defaults to the real one, so no call site can accidentally sweep against an empty calendar and
     // quietly drop every booked shoot from the verdict.
-    typealias Export = (bookings: [OvertureBooking], blockedDates: [String])
+    // #3298: the health rides along, because `blockedDates` comes back EMPTY from an export nobody could
+    // read and an empty list is indistinguishable from a clear diary (L98). Every consumer that builds a
+    // calendar from this needs to be able to say which of the two it is holding.
+    typealias Export = (bookings: [OvertureBooking], blockedDates: [String],
+                        health: DownbeatBridge.Health)
 
     @discardableResult
     static func add(start: String, end: String, note: String?,

@@ -240,7 +240,7 @@ struct AcknowledgeOnlyWhenSavedTests {
             schema: Self.schema,
             seed: { _ in },
             body: { ctx in
-                DayOffMutations.add(start: "2026-08-03", end: "2026-08-05", note: nil, export: ([], []),
+                DayOffMutations.add(start: "2026-08-03", end: "2026-08-05", note: nil, export: ([], [], .ok),
                                     context: ctx, feedback: feedback)
             })
 
@@ -255,7 +255,7 @@ struct AcknowledgeOnlyWhenSavedTests {
                                                   configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
         let feedback = ActionFeedback()
 
-        let outcome = DayOffMutations.add(start: "2026-08-03", end: "2026-08-05", note: nil, export: ([], []),
+        let outcome = DayOffMutations.add(start: "2026-08-03", end: "2026-08-05", note: nil, export: ([], [], .ok),
                                           context: ctx, feedback: feedback)
 
         #expect(outcome == .added)
@@ -361,7 +361,7 @@ struct AcknowledgeOnlyWhenSavedTests {
             seed: { $0.insert(DayOff(startDate: "2026-08-03", endDate: "2026-08-05", note: nil)) },
             body: { ctx in
                 let row = try #require((try? ctx.fetch(FetchDescriptor<DayOff>()))?.first)
-                DayOffMutations.remove(row, export: ([], []), context: ctx, feedback: feedback)
+                DayOffMutations.remove(row, export: ([], [], .ok), context: ctx, feedback: feedback)
             })
 
         #expect(feedback.tone == .warning)
@@ -376,7 +376,7 @@ struct AcknowledgeOnlyWhenSavedTests {
         ctx.insert(DayOff(startDate: "2026-08-03", endDate: "2026-08-05", note: nil))
         let row = try #require((try? ctx.fetch(FetchDescriptor<DayOff>()))?.first)
 
-        DayOffMutations.remove(row, export: ([], []), context: ctx, feedback: feedback)
+        DayOffMutations.remove(row, export: ([], [], .ok), context: ctx, feedback: feedback)
 
         #expect(feedback.message == ActionAck.dayOffRemoved(range: QueueModel.runDateLabel(start: "2026-08-03",
                                                                                            end: "2026-08-05")))
@@ -390,7 +390,7 @@ struct AcknowledgeOnlyWhenSavedTests {
             schema: Self.schema,
             seed: { _ in },
             body: { ctx in
-                ProspectMutations.blockDaysOff(start: "2026-08-03", end: "2026-08-05", export: ([], []),
+                ProspectMutations.blockDaysOff(start: "2026-08-03", end: "2026-08-05", export: ([], [], .ok),
                                                context: ctx, feedback: feedback)
             })
 
@@ -406,7 +406,7 @@ struct AcknowledgeOnlyWhenSavedTests {
                                                   configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]))
         let feedback = ActionFeedback()
 
-        let blocked = ProspectMutations.blockDaysOff(start: "2026-08-03", end: "2026-08-05", export: ([], []),
+        let blocked = ProspectMutations.blockDaysOff(start: "2026-08-03", end: "2026-08-05", export: ([], [], .ok),
                                                      context: ctx, feedback: feedback)
 
         #expect(blocked)

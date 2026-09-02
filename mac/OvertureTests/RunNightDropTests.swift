@@ -187,7 +187,7 @@ struct RunNightDropTests {
         let ctx = ModelContext(try container())
         let p = fiore(ctx)
         // The live block: Dan's own day off on Aug 19, named Empire Harmony Rehearsal.
-        let calendar = BlockedCalendar.build(
+        let calendar = BlockedCalendar.build(availability: .measured, 
             bookings: [], exportedBlockedDates: [],
             daysOff: [DayOffRange(startDate: "2026-08-19", endDate: "2026-08-19",
                                   note: "Empire Harmony Rehearsal")])

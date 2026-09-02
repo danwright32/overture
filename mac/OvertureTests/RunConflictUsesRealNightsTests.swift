@@ -24,7 +24,7 @@ struct RunConflictUsesRealNightsTests {
 
     // Dan's real shoot, on the date all three false flags point at. 2026-07-31 is a Friday.
     private func calendarBlocking(_ dates: [String]) -> BlockedCalendar {
-        BlockedCalendar.build(bookings: [], exportedBlockedDates: dates, daysOff: [])
+        BlockedCalendar.build(availability: .measured, bookings: [], exportedBlockedDates: dates, daysOff: [])
     }
 
     // Tuesdays. The run opens 2026-07-28 and closes 2026-08-11, so the span contains the blocked Friday

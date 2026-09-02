@@ -406,7 +406,8 @@ enum ScoutService {
         // as one, so a show Dan has already shot reads as cold and gets pitched as a stranger.
         let existing = try required(.repeatClientHistory) { try context.fetch(FetchDescriptor<Prospect>()) }
         let history = LocalHistory.forMatching(existing: existing)
-        let blocked = blockedCalendar(export: (loaded.bookings, loaded.blockedDates), context: context)
+        let blocked = blockedCalendar(export: (loaded.bookings, loaded.blockedDates, loaded.health),
+                                      context: context)
 
         // #3071: the one that matters most. An empty watchlist plans zero sources, so the scout scans
         // nothing and reports an ordinary quiet run (L98).
@@ -1761,9 +1762,14 @@ enum ScoutService {
     //
     // The days off now live in the store (DayOff), where the sheet that edits them and the scout that
     // reads them are looking at the same rows, instead of at a file only one of them knew about.
-    static func blockedCalendar(export: (bookings: [OvertureBooking], blockedDates: [String]),
+    // #3298: `availability` comes from the export's own health, so a file Overture could not read produces
+    // a calendar that SAYS it could not measure rather than one that looks like a clear diary. The tuple
+    // carries the health for that reason and nothing else.
+    static func blockedCalendar(export: (bookings: [OvertureBooking], blockedDates: [String],
+                                        health: DownbeatBridge.Health),
                                 context: ModelContext) -> BlockedCalendar {
-        BlockedCalendar.build(bookings: export.bookings,
+        BlockedCalendar.build(availability: BlockedCalendar.Availability(health: export.health),
+                              bookings: export.bookings,
                               exportedBlockedDates: export.blockedDates,
                               daysOff: DayOffEditing.ranges(in: context),
                               // #2692: the shoots Dan has said are not happening. Read HERE, in the one

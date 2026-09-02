@@ -490,7 +490,7 @@ struct ScoutServiceTests {
             export: (bookings: [OvertureBooking(id: "b1", clientId: "c1", clientDisplayName: "A Client",
                                                 shootName: "Nguyen Recital", startDate: "2026-03-10",
                                                 endDate: "2026-03-10", venueId: nil, venueName: "V")],
-                     blockedDates: ["2026-03-10"]),
+                     blockedDates: ["2026-03-10"], health: .ok),
             context: ctx)
 
         #expect(cal.conflict(performanceDate: "2026-03-10", runEndDate: nil)?.name == "Nguyen Recital")

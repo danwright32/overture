@@ -25,7 +25,7 @@ import SwiftData
 @Suite("A deliberately written presenter survives an ordinary scout re-read (#2453)")
 struct PresenterProvenanceTests {
 
-    private let clearCalendar = BlockedCalendar.build(bookings: [], exportedBlockedDates: [], daysOff: [])
+    private let clearCalendar = BlockedCalendar.build(availability: .measured, bookings: [], exportedBlockedDates: [], daysOff: [])
 
     private func context() throws -> ModelContext {
         let container = try ModelContainer(for: Schema([Prospect.self, Recipient.self, DayOff.self]),

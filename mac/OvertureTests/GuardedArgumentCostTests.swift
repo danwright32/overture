@@ -28,7 +28,7 @@ struct GuardedArgumentCostTests {
         var built = 0
         let calendar = { () -> BlockedCalendar in
             built += 1
-            return BlockedCalendar.build(bookings: [], exportedBlockedDates: [], daysOff: [])
+            return BlockedCalendar.build(availability: .measured, bookings: [], exportedBlockedDates: [], daysOff: [])
         }
 
         let reason = DaysOffAttention.reason(calendar(), defaults: defaults)
@@ -43,7 +43,7 @@ struct GuardedArgumentCostTests {
         var built = 0
         let calendar = { () -> BlockedCalendar in
             built += 1
-            return BlockedCalendar.build(bookings: [], exportedBlockedDates: [], daysOff: [])
+            return BlockedCalendar.build(availability: .measured, bookings: [], exportedBlockedDates: [], daysOff: [])
         }
 
         let reason = DaysOffAttention.reason(calendar(), defaults: defaults)

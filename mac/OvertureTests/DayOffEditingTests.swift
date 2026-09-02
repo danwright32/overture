@@ -82,7 +82,7 @@ struct DayOffEditingTests {
         let ctx = try context()
         DayOffEditing.add(start: "2026-11-14", end: "2026-11-22", note: "Vacation", into: ctx)
 
-        let cal = BlockedCalendar.build(bookings: [], exportedBlockedDates: [],
+        let cal = BlockedCalendar.build(availability: .measured, bookings: [], exportedBlockedDates: [],
                                         daysOff: DayOffEditing.ranges(in: ctx))
 
         #expect(cal.conflict(performanceDate: "2026-11-18", runEndDate: nil)?.name == "Vacation")

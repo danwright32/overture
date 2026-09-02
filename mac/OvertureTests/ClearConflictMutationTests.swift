@@ -90,7 +90,7 @@ struct ClearConflictMutationTests {
                                     shootName: "God Lives in Glass", startDate: "2026-11-14",
                                     endDate: "2026-11-14", venueId: nil, venueName: "Somewhere")
         func key(_ bookings: [OvertureBooking]) -> String? {
-            BlockedCalendar.build(bookings: bookings, exportedBlockedDates: [], daysOff: [])
+            BlockedCalendar.build(availability: .measured, bookings: bookings, exportedBlockedDates: [], daysOff: [])
                 .conflict(performanceDate: "2026-11-14", runEndDate: nil)?.key
         }
 

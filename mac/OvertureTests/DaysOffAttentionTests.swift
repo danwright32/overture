@@ -26,25 +26,25 @@ struct DaysOffAttentionTests {
         UserDefaults(suiteName: "days-off-attention-\(UUID().uuidString)")!
     }
     private func calendarWithUpcomingShoot() -> BlockedCalendar {
-        BlockedCalendar.build(bookings: [booking("2026-11-14")], exportedBlockedDates: [], daysOff: [])
+        BlockedCalendar.build(availability: .measured, bookings: [booking("2026-11-14")], exportedBlockedDates: [], daysOff: [])
     }
 
     // MARK: - When Overture is protecting nothing, it says so
 
     @Test func noBookedShootDataNeedsALook() {
-        let cal = BlockedCalendar.build(bookings: [], exportedBlockedDates: [], daysOff: [])
+        let cal = BlockedCalendar.build(availability: .measured, bookings: [], exportedBlockedDates: [], daysOff: [])
         #expect(DaysOffAttention.needsALook(cal) == true)
     }
 
     @Test func aSingleBookedShootIsEnoughToStopSayingIt() {
-        let cal = BlockedCalendar.build(bookings: [booking("2026-11-14")], exportedBlockedDates: [], daysOff: [])
+        let cal = BlockedCalendar.build(availability: .measured, bookings: [booking("2026-11-14")], exportedBlockedDates: [], daysOff: [])
         #expect(DaysOffAttention.needsALook(cal) == false)
     }
 
     // The days Dan blocks himself are NOT booked-shoot data, and must not silence the warning: they are
     // vacations, and they say nothing about the shoots he has taken.
     @Test func dansOwnDaysOffDoNotSilenceIt() {
-        let cal = BlockedCalendar.build(bookings: [], exportedBlockedDates: [],
+        let cal = BlockedCalendar.build(availability: .measured, bookings: [], exportedBlockedDates: [],
                                         daysOff: [DayOffRange(startDate: "2026-11-14", endDate: "2026-11-22", note: nil)])
         #expect(DaysOffAttention.needsALook(cal) == true)
     }

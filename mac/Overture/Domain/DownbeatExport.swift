@@ -143,9 +143,16 @@ enum DownbeatBridge {
     // #901: just the two halves the blocked calendar is built from. A convenience over loadWithHealth, so
     // the three places that need the export in order to judge a date (the scout, the Days off sheet, and
     // the sweep that runs when Dan edits his days off) do not each re-destructure the same tuple.
-    static func loadedExport() -> (bookings: [OvertureBooking], blockedDates: [String]) {
+    //
+    // #3298: it carries the HEALTH too, and that is not a convenience. Both lists come back empty when the
+    // export could not be read, and an empty `blockedDates` is indistinguishable from a diary with nothing
+    // in it (L98), so a caller handed only the two lists cannot tell "no nights are blocked" from "nobody
+    // could read which nights are blocked". `BlockedCalendar.Availability` is what turns the verdict into
+    // the calendar's own statement about itself.
+    static func loadedExport() -> (bookings: [OvertureBooking], blockedDates: [String],
+                                   health: Health) {
         let loaded = loadWithHealth(now: Date())
-        return (loaded.bookings, loaded.blockedDates)
+        return (loaded.bookings, loaded.blockedDates, loaded.health)
     }
 
     // Reads whatever clients it can, plus a health verdict. Never throws: a missing or
@@ -153,9 +160,17 @@ enum DownbeatBridge {
     static func loadWithHealth(from url: URL = defaultURL, now: Date,
                                staleAfter: TimeInterval = defaultStaleAfter)
         -> (clients: [DownbeatClient], bookings: [OvertureBooking], blockedDates: [String], health: Health) {
-        // #2879: through the shared reader, exempt from the register because a broken export already
-        // has the loudest line on the masthead (AppNotices.downbeatShootsVanished and the health verdict
-        // below), and a second generic wording of it would be the same fault said twice (#843).
+        // #2879: through the shared reader, exempt from the register because a broken export has its own
+        // line on the masthead (AppNotices.downbeatAvailabilityUnknown), and a second generic wording of
+        // it would be the same fault said twice (#843).
+        //
+        // #3298 corrected that sentence. It used to name `AppNotices.downbeatShootsVanished` and "the
+        // health verdict below" as the loud surfaces, and NEITHER was: `downbeatShootsVanished` returns
+        // nil whenever `clientCount == 0`, which is exactly what a rejected export produces, and the health
+        // verdict was read only by ScoutService's own run summary and by the coverage box inside the
+        // Sources sheet. So the state that stops Overture knowing which nights are taken had nothing on the
+        // surface Dan looks at, while this comment asserted it had the loudest line there. The notice named
+        // above is that line, and it exists now.
         // A file present and unopenable now reads as a DECODE FAILURE rather than as missing: it used to
         // take this branch and report `.missing`, which says the export was never made.
         let read = HandoffFile.data(at: url, recorder: .reportedByItsOwnSurface)

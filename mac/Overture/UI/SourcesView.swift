@@ -251,9 +251,11 @@ struct SourcesView: View {
     // showing an empty list that reads as "all covered".
     @ViewBuilder
     private var coverageSection: some View {
-        if clientsHealth != .ok {
+        // #3299: switched on the health CASE, not on `!= .ok`. A stale export is readable, so its coverage
+        // is still shown; only the two states that genuinely stop it being judged replace the list.
+        if let unavailable = CoverageCopy.unavailable(clientsHealth) {
             coverageBox {
-                Text(CoverageCopy.coverageUnavailable)
+                Text(unavailable)
                     .font(.system(size: 11)).foregroundStyle(OVColor.rust)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -268,6 +270,13 @@ struct SourcesView: View {
                     Text(CoverageCopy.sectionExplanation(hasGaps: !gaps.isEmpty))
                         .font(.system(size: 11)).foregroundStyle(OVColor.inkSoft)
                         .fixedSize(horizontal: false, vertical: true)
+                    // #3299: what the list cannot tell him, said beside the list rather than instead of
+                    // it. A client booked since the export was written is simply absent from it.
+                    if let caveat = CoverageCopy.staleCaveat(clientsHealth) {
+                        Text(caveat)
+                            .font(.system(size: 11)).foregroundStyle(OVColor.rust)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                     if !gaps.isEmpty {
                         VStack(spacing: 0) {
                             ForEach(gaps, id: \.client.id) { gap in

@@ -98,7 +98,7 @@ struct KeepAcceptsConflictTests {
         #expect(p.hasUnclearedConflict == false)
 
         let entry = try #require(stack.takeTop())
-        #expect(QueueUndo.apply(entry, to: p, in: ctx, export: (bookings: [], blockedDates: [])))
+        #expect(QueueUndo.apply(entry, to: p, in: ctx, export: (bookings: [], blockedDates: [], health: .ok)))
 
         #expect(p.status == .new)
         #expect(p.hasUnclearedConflict, "the undo left a silent pre-clearance behind")
@@ -115,7 +115,7 @@ struct KeepAcceptsConflictTests {
         keep(p, in: ctx, undo: stack)
 
         let entry = try #require(stack.takeTop())
-        #expect(QueueUndo.apply(entry, to: p, in: ctx, export: (bookings: [], blockedDates: [])))
+        #expect(QueueUndo.apply(entry, to: p, in: ctx, export: (bookings: [], blockedDates: [], health: .ok)))
 
         #expect(p.status == .dismissed)
         #expect(p.conflictClearedKey == vacation)
@@ -132,7 +132,7 @@ struct KeepAcceptsConflictTests {
         #expect(p.hasUnclearedConflict == false)
 
         let entry = try #require(stack.takeTop())
-        #expect(QueueUndo.apply(entry, to: p, in: ctx, export: (bookings: [], blockedDates: [])))
+        #expect(QueueUndo.apply(entry, to: p, in: ctx, export: (bookings: [], blockedDates: [], health: .ok)))
         #expect(p.hasUnclearedConflict == false)
     }
 

@@ -139,7 +139,7 @@ struct RunNightDropWiringTests {
         let ctx = ModelContext(try container())
         let p = run(ctx)
         // The live block: Aug 19 is a day off, Empire Harmony Rehearsal.
-        let export: DayOffEditing.Export = (bookings: [], blockedDates: ["2026-08-19"])
+        let export: DayOffEditing.Export = (bookings: [], blockedDates: ["2026-08-19"], health: .ok)
         ConflictSweep.reapply(p, export: export, in: ctx)
         #expect(p.conflictOpen, "the live card really does carry the badge")
 
@@ -157,7 +157,7 @@ struct RunNightDropWiringTests {
     func theNightDismissAlsoClearsTheBadge() throws {
         let ctx = ModelContext(try container())
         let p = run(ctx)
-        let export: DayOffEditing.Export = (bookings: [], blockedDates: ["2026-08-19"])
+        let export: DayOffEditing.Export = (bookings: [], blockedDates: ["2026-08-19"], health: .ok)
         ConflictSweep.reapply(p, export: export, in: ctx)
         #expect(p.conflictOpen)
 

@@ -55,7 +55,7 @@ struct DayOffRangeStaysForwardsTests {
         let feedback = ActionFeedback()
 
         let outcome = DayOffMutations.add(start: "2026-08-10", end: "2026-08-07", note: nil,
-                                          export: ([], []), context: ctx, feedback: feedback)
+                                          export: ([], [], .ok), context: ctx, feedback: feedback)
 
         #expect(outcome == .refused("The last day is before the first day."))
         #expect(DayOffEditing.rows(in: ctx).isEmpty, "and nothing was written")

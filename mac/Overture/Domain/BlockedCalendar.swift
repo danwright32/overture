@@ -25,6 +25,36 @@ struct DayOffRange: Equatable, Sendable {
 
 struct BlockedCalendar: Equatable, Sendable {
 
+    // #3298: whether the export this calendar was built from could be READ at all.
+    //
+    // `DownbeatBridge.loadWithHealth` answers a refusal with empty clients, empty bookings AND an empty
+    // `blockedDates`, and an empty blocked-date list is indistinguishable from a diary with nothing in it
+    // (L98). Without this, a corrupt or missing export makes every night look free and the scout stops
+    // suppressing nights Dan is already shooting. It happened on 2026-08-30: 16 blocked dates and 31
+    // clients went invisible, and the only thing that reported it was a line inside a sheet.
+    //
+    // A STALE export is `.measured`, deliberately. Its nights are known and merely old, so folding it in
+    // here would replace a real answer with "we do not know", which is false. What a stale export owes Dan
+    // is its own sentence (#3299), not this one.
+    enum Availability: Equatable, Sendable {
+        case measured
+        case unknown
+
+        // Derived from the health verdict rather than set by hand, so a caller cannot get the two out of
+        // step. Exhaustive over `Health`, so a fifth case has to decide which side it is on.
+        init(health: DownbeatBridge.Health) {
+            switch health {
+            case .ok, .stale: self = .measured
+            case .missing, .unreadable: self = .unknown
+            }
+        }
+    }
+
+    // Deliberately NOT defaulted at the property, so `build` has to be told. `empty` is the one value that
+    // sets it without being told, and it is `.measured`: "nothing blocked at all" is a real statement about
+    // a store with no export configured, which is the state Overture has been in its whole life.
+    var blockedDaysAreUnknown: Bool = false
+
     enum Kind: String, Equatable, Sendable, Codable {
         case bookedShoot        // Downbeat says he is working
         case dayOff             // Dan says he is away
@@ -170,11 +200,16 @@ struct BlockedCalendar: Equatable, Sendable {
     // a night Dan is free on costs him one show he could have pitched; failing to block one he is working
     // costs him a pitch for a night that is taken, which is the failure this whole calendar exists to
     // prevent (L42's direction).
-    static func build(bookings: [OvertureBooking],
+    //
+    // #3298: `availability` has NO default. A caller that could omit it would silently claim the export was
+    // read, which is exactly the claim this parameter exists to stop anybody making by accident (L168).
+    static func build(availability: Availability,
+                      bookings: [OvertureBooking],
                       exportedBlockedDates: [String],
                       daysOff: [DayOffRange],
                       cancelledBookingIds: Set<String> = []) -> BlockedCalendar {
         var cal = BlockedCalendar()
+        cal.blockedDaysAreUnknown = availability == .unknown
         // Which dates a cancellation has actually touched, and which of those still hold a shoot. The flat
         // `blockedDates` rule below needs both: a date whose every booking is cancelled must lose its flat
         // entry too, and a date that never had a booking must keep one.
