@@ -34,7 +34,7 @@ struct UndoDismissWithDayOffTests {
     }
 
     // A calendar with nothing in it, so these tests never read Dan's real export off disk.
-    private let noExport: DayOffEditing.Export = (bookings: [], blockedDates: [])
+    private let noExport: DayOffEditing.Export = (bookings: [], blockedDates: [], health: .ok)
 
     private func dismissEntry(_ ctx: ModelContext, _ p: Prospect, into stack: QueueUndoStack) {
         ProspectMutations.dismissForReason(QueueItem(p), .dateConflict, prospects: [p], context: ctx,

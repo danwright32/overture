@@ -11,7 +11,7 @@ import SwiftData
 @Suite("A published start time reaches the store (#1699)")
 struct StartTimeReachesTheStoreTests {
     // Nothing in Dan's calendar: these tests are about the start time, not about conflicts.
-    private let clearCalendar = BlockedCalendar.build(bookings: [], exportedBlockedDates: [], daysOff: [])
+    private let clearCalendar = BlockedCalendar.build(availability: .measured, bookings: [], exportedBlockedDates: [], daysOff: [])
 
     private func context() throws -> ModelContext {
         let container = try ModelContainer(for: Schema([Prospect.self]),

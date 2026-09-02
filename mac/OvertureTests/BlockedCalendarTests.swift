@@ -21,12 +21,12 @@ struct BlockedCalendarTests {
     // MARK: - What blocks a day
 
     @Test func anEmptyCalendarBlocksNothing() {
-        let cal = BlockedCalendar.build(bookings: [], exportedBlockedDates: [], daysOff: [])
+        let cal = BlockedCalendar.build(availability: .measured, bookings: [], exportedBlockedDates: [], daysOff: [])
         #expect(cal.conflict(performanceDate: "2026-11-14", runEndDate: nil) == nil)
     }
 
     @Test func aBookedShootBlocksItsDayAndNamesTheShoot() {
-        let cal = BlockedCalendar.build(bookings: [booking("Smith Recital", "2026-11-14")],
+        let cal = BlockedCalendar.build(availability: .measured, bookings: [booking("Smith Recital", "2026-11-14")],
                                         exportedBlockedDates: [], daysOff: [])
         let clash = cal.conflict(performanceDate: "2026-11-14", runEndDate: nil)
 
@@ -37,7 +37,7 @@ struct BlockedCalendarTests {
 
     // A multi-day booking blocks EVERY day it spans, not just the day it starts.
     @Test func aMultiDayBookingBlocksEveryDayItSpans() {
-        let cal = BlockedCalendar.build(bookings: [booking("Festival", "2026-11-14", "2026-11-16")],
+        let cal = BlockedCalendar.build(availability: .measured, bookings: [booking("Festival", "2026-11-14", "2026-11-16")],
                                         exportedBlockedDates: [], daysOff: [])
 
         #expect(cal.conflict(performanceDate: "2026-11-15", runEndDate: nil)?.name == "Festival")
@@ -46,7 +46,7 @@ struct BlockedCalendarTests {
     }
 
     @Test func aDayOffBlocksItsRangeAndCarriesDansNote() {
-        let cal = BlockedCalendar.build(bookings: [], exportedBlockedDates: [],
+        let cal = BlockedCalendar.build(availability: .measured, bookings: [], exportedBlockedDates: [],
                                         daysOff: [dayOff("2026-11-14", "2026-11-22", note: "Vacation")])
         let clash = cal.conflict(performanceDate: "2026-11-20", runEndDate: nil)
 
@@ -58,7 +58,7 @@ struct BlockedCalendarTests {
     // Downbeat's export carries a flat blockedDates list alongside its bookings. A day in that list with
     // no booking to name it still blocks: it is a real commitment we simply cannot label.
     @Test func anExportedBlockedDateWithNoBookingStillBlocks() {
-        let cal = BlockedCalendar.build(bookings: [], exportedBlockedDates: ["2026-11-14"], daysOff: [])
+        let cal = BlockedCalendar.build(availability: .measured, bookings: [], exportedBlockedDates: ["2026-11-14"], daysOff: [])
         let clash = cal.conflict(performanceDate: "2026-11-14", runEndDate: nil)
 
         #expect(clash?.kind == .bookedShoot)
@@ -68,7 +68,7 @@ struct BlockedCalendarTests {
     // A booked shoot outranks Dan's own day off on the same date: naming the real shoot tells him more
     // than "you're away" does, and he can act on it.
     @Test func aBookedShootOutranksADayOffOnTheSameDate() {
-        let cal = BlockedCalendar.build(bookings: [booking("Smith Recital", "2026-11-14")],
+        let cal = BlockedCalendar.build(availability: .measured, bookings: [booking("Smith Recital", "2026-11-14")],
                                         exportedBlockedDates: [],
                                         daysOff: [dayOff("2026-11-14", "2026-11-14", note: "Vacation")])
 
@@ -80,7 +80,7 @@ struct BlockedCalendarTests {
     // THE trap this issue names. The old check tested performanceDate alone, so a run whose LATER nights
     // land on a booked day sailed through: Dan would have been pitched a show he cannot finish.
     @Test func aRunThatOnlyCollidesOnALaterNightIsCaught() {
-        let cal = BlockedCalendar.build(bookings: [booking("Smith Recital", "2026-11-16")],
+        let cal = BlockedCalendar.build(availability: .measured, bookings: [booking("Smith Recital", "2026-11-16")],
                                         exportedBlockedDates: [], daysOff: [])
         let clash = cal.conflict(performanceDate: "2026-11-14", runEndDate: "2026-11-17")
 
@@ -89,7 +89,7 @@ struct BlockedCalendarTests {
     }
 
     @Test func aRunThatClearsEveryBlockedDayDoesNotConflict() {
-        let cal = BlockedCalendar.build(bookings: [booking("Smith Recital", "2026-11-20")],
+        let cal = BlockedCalendar.build(availability: .measured, bookings: [booking("Smith Recital", "2026-11-20")],
                                         exportedBlockedDates: [], daysOff: [])
 
         #expect(cal.conflict(performanceDate: "2026-11-14", runEndDate: "2026-11-17") == nil)
@@ -98,7 +98,7 @@ struct BlockedCalendarTests {
     // The EARLIEST clash is the one reported, so the note names the first night he'd miss rather than
     // whichever day happened to hash first.
     @Test func theEarliestClashInARunIsTheOneReported() {
-        let cal = BlockedCalendar.build(
+        let cal = BlockedCalendar.build(availability: .measured, 
             bookings: [booking("Later Shoot", "2026-11-17"), booking("Earlier Shoot", "2026-11-15")],
             exportedBlockedDates: [], daysOff: [])
 
@@ -108,7 +108,7 @@ struct BlockedCalendarTests {
     // An undated listing ("date to be confirmed") cannot collide with anything, and must not be treated
     // as if it did.
     @Test func anUndatedShowNeverConflicts() {
-        let cal = BlockedCalendar.build(bookings: [booking("Smith Recital", "2026-11-14")],
+        let cal = BlockedCalendar.build(availability: .measured, bookings: [booking("Smith Recital", "2026-11-14")],
                                         exportedBlockedDates: [], daysOff: [])
 
         #expect(cal.conflict(performanceDate: nil, runEndDate: nil) == nil)
@@ -117,7 +117,7 @@ struct BlockedCalendarTests {
     // A scraped runEndDate is whatever the org's page said, so it can be nonsense. Expanding it blindly
     // would walk a million days. The scan is capped, and still answers.
     @Test func aNonsensicalRunEndDateDoesNotHangTheScan() {
-        let cal = BlockedCalendar.build(bookings: [booking("Smith Recital", "2026-11-16")],
+        let cal = BlockedCalendar.build(availability: .measured, bookings: [booking("Smith Recital", "2026-11-16")],
                                         exportedBlockedDates: [], daysOff: [])
 
         #expect(cal.conflict(performanceDate: "2026-11-14", runEndDate: "2999-01-01")?.date == "2026-11-16")
@@ -125,7 +125,7 @@ struct BlockedCalendarTests {
 
     // A backwards range (end before start) is bad data, not a block on every day in between.
     @Test func aBackwardsRunIsJudgedOnItsOpeningNightAlone() {
-        let cal = BlockedCalendar.build(bookings: [booking("Smith Recital", "2026-11-10")],
+        let cal = BlockedCalendar.build(availability: .measured, bookings: [booking("Smith Recital", "2026-11-10")],
                                         exportedBlockedDates: [], daysOff: [])
 
         #expect(cal.conflict(performanceDate: "2026-11-14", runEndDate: "2026-11-01") == nil)
@@ -179,14 +179,14 @@ struct BlockedCalendarTests {
     // works. #925 sharpened the question from "has a booking ever existed" to "is there one from today
     // on", so this asks against a fixed `today`.
     @Test func aCalendarWithNoBookingsHasNoUpcomingShoot() {
-        let cal = BlockedCalendar.build(bookings: [], exportedBlockedDates: [],
+        let cal = BlockedCalendar.build(availability: .measured, bookings: [], exportedBlockedDates: [],
                                         daysOff: [dayOff("2099-11-14", "2099-11-22")])
 
         #expect(cal.hasUpcomingBookedShoot(today: ScoutTestClock.farFuture) == false)  // Dan's own days off are not shoots
     }
 
     @Test func aCalendarWithAnUpcomingBookingHasOne() {
-        let cal = BlockedCalendar.build(bookings: [booking("Smith Recital", "2099-11-14")],
+        let cal = BlockedCalendar.build(availability: .measured, bookings: [booking("Smith Recital", "2099-11-14")],
                                         exportedBlockedDates: [], daysOff: [])
 
         #expect(cal.hasUpcomingBookedShoot(today: ScoutTestClock.farFuture) == true)
@@ -198,7 +198,7 @@ struct BlockedCalendarTests {
     // and was invisible everywhere. The days off sheet, whose whole job is telling Dan what he already has
     // on, under-reported it with nothing saying anything was missing.
     @Test func bothShootsOnOneNightAreListed() {
-        let cal = BlockedCalendar.build(
+        let cal = BlockedCalendar.build(availability: .measured, 
             bookings: [booking("Firebird Pops Orchestra", "2027-02-14"),
                        booking("Feb14 Show - Potentially not happening - confirm", "2027-02-14")],
             exportedBlockedDates: [], daysOff: [])
@@ -233,7 +233,7 @@ struct BlockedCalendarTests {
                                            "2027-04-20", "2027-05-01", "2027-05-30", "2027-06-13"]
 
     @Test func theLiveExportsFifteenBookingsAllReachTheSheet() {
-        let cal = BlockedCalendar.build(
+        let cal = BlockedCalendar.build(availability: .measured, 
             bookings: Self.liveBookings.map { booking($0.name, $0.date) },
             exportedBlockedDates: Self.liveBlockedDates, daysOff: [])
 
@@ -248,7 +248,7 @@ struct BlockedCalendarTests {
     // The other half of that: an exported date is a booking's date on the live export, so it must not sit
     // beside the booking as a second, unnamed row.
     @Test func anExportedBlockedDateAddsNoRowToANightABookingAlreadyNames() {
-        let cal = BlockedCalendar.build(bookings: [booking("Smith Recital", "2026-11-14")],
+        let cal = BlockedCalendar.build(availability: .measured, bookings: [booking("Smith Recital", "2026-11-14")],
                                         exportedBlockedDates: ["2026-11-14"], daysOff: [])
 
         #expect(cal.days.map(\.name) == ["Smith Recital"])
@@ -257,7 +257,7 @@ struct BlockedCalendarTests {
     // Two bookings identical in name and date are ONE fact to everything downstream: the same key, the
     // same sentence, the same row. Keeping both would hand the sheet two rows sharing an id.
     @Test func twoBookingsAlikeInNameAndDateAreOneRow() {
-        let cal = BlockedCalendar.build(
+        let cal = BlockedCalendar.build(availability: .measured, 
             bookings: [booking("Total Vocal", "2026-11-24", id: "one"),
                        booking("Total Vocal", "2026-11-24", id: "two")],
             exportedBlockedDates: [], daysOff: [])
@@ -271,9 +271,9 @@ struct BlockedCalendarTests {
     @Test func theConflictKeyDoesNotMoveWhenTheExportListsTheSameTwoBookingsTheOtherWayRound() {
         let one = booking("Sorenson and DiOrio", "2027-05-30")
         let other = booking("God Lives in Glass", "2027-05-30")
-        let asExported = BlockedCalendar.build(bookings: [one, other],
+        let asExported = BlockedCalendar.build(availability: .measured, bookings: [one, other],
                                                exportedBlockedDates: [], daysOff: [])
-        let reordered = BlockedCalendar.build(bookings: [other, one],
+        let reordered = BlockedCalendar.build(availability: .measured, bookings: [other, one],
                                               exportedBlockedDates: [], daysOff: [])
 
         #expect(asExported.conflict(performanceDate: "2027-05-30", runEndDate: nil)?.key
@@ -283,7 +283,7 @@ struct BlockedCalendarTests {
     // A night holding two shoots still answers the one question a conflict asks with ONE day, because the
     // prospect stores one key. Which one is settled here (by name) rather than by the export.
     @Test func aNightWithTwoShootsStillReportsASingleNamedConflict() {
-        let cal = BlockedCalendar.build(
+        let cal = BlockedCalendar.build(availability: .measured, 
             bookings: [booking("Sorenson and DiOrio", "2027-05-30"),
                        booking("God Lives in Glass", "2027-05-30")],
             exportedBlockedDates: [], daysOff: [])
@@ -301,8 +301,8 @@ struct BlockedCalendarTests {
     @Test func theDayOffKeyDoesNotMoveWhenTwoOverlappingRangesArriveInADifferentOrder() {
         let early = dayOff("2026-11-10", "2026-11-16", note: "Vacation")
         let late = dayOff("2026-11-14", "2026-11-22", note: "Away for a wedding")
-        let one = BlockedCalendar.build(bookings: [], exportedBlockedDates: [], daysOff: [early, late])
-        let other = BlockedCalendar.build(bookings: [], exportedBlockedDates: [], daysOff: [late, early])
+        let one = BlockedCalendar.build(availability: .measured, bookings: [], exportedBlockedDates: [], daysOff: [early, late])
+        let other = BlockedCalendar.build(availability: .measured, bookings: [], exportedBlockedDates: [], daysOff: [late, early])
 
         #expect(one.conflict(performanceDate: "2026-11-14", runEndDate: nil)?.key
                 == other.conflict(performanceDate: "2026-11-14", runEndDate: nil)?.key)
@@ -311,7 +311,7 @@ struct BlockedCalendarTests {
     // Precedence is unchanged where a booked shoot lands on a day off, and the day off does not turn up in
     // the sheet's booked list beside the shoots that outranked it.
     @Test func aDayOffUnderTwoBookedShootsIsNotListedAtAll() {
-        let cal = BlockedCalendar.build(
+        let cal = BlockedCalendar.build(availability: .measured, 
             bookings: [booking("Sorenson and DiOrio", "2027-05-30"),
                        booking("God Lives in Glass", "2027-05-30")],
             exportedBlockedDates: [],

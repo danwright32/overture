@@ -211,6 +211,44 @@ enum AppNotices {
     // A warning rather than a receipt in all three states, including `missing`, which the domain type
     // rightly calls a normal state rather than a fault. Normal is not the same as harmless: while it is
     // true, a whole drafting input is empty and nothing else on this screen would ever say so.
+    // #3298: Overture could not read the Downbeat export at all, so it does not know which nights Dan is
+    // already shooting.
+    //
+    // This is the state that has to be LOUD, and until now it was the quietest thing in the app.
+    // `loadWithHealth` answers a refusal with an empty `blockedDates`, an empty list is indistinguishable
+    // from a diary with nothing in it (L98), and the only two places that said otherwise were
+    // `DownbeatBridge.warningText`, read by ScoutService's run summary alone, and the coverage box inside
+    // the Sources sheet, which Dan has to open. Measured 2026-08-30: 16 blocked dates and 31 clients went
+    // invisible for a version bump, and nothing on the surface he looks at said a word.
+    //
+    // Two cases, two sentences (L11). A file that was never exported and a file that cannot be parsed need
+    // different things done about them, and each remedy names a step that changes the state he is actually
+    // in (L111). A STALE export raises nothing here: its nights ARE known and merely old, so saying they
+    // are unknown would take a real answer away and replace it with a worse one; what a stale export owes
+    // him is #3299's sentence.
+    static func downbeatAvailabilityUnknown(_ health: DownbeatBridge.Health) -> AppNotice? {
+        switch health {
+        case .ok, .stale:
+            return nil
+        case .missing:
+            return AppNotice(
+                text: "Overture has no Downbeat export, so it doesn't know which nights you're already shooting.",
+                tone: .warning,
+                help: "Until it can read one, nothing in the queue is known to be a free night, and the "
+                    + "scout cannot keep clear of your bookings. Export your client list from Downbeat, "
+                    + "then re-read it here.",
+                action: .recheckDownbeatExport)
+        case .unreadable:
+            return AppNotice(
+                text: "Overture can't read your Downbeat export, so it doesn't know which nights you're already shooting.",
+                tone: .warning,
+                help: "The file is there but Overture could not make sense of it, so nothing in the queue "
+                    + "is known to be a free night and the scout cannot keep clear of your bookings. "
+                    + "Re-export it from Downbeat, then re-read it here.",
+                action: .recheckDownbeatExport)
+        }
+    }
+
     static func shootHistoryWarning(_ health: ShootHistory.Health) -> AppNotice? {
         guard let text = ShootHistory.warningText(for: health) else { return nil }
         return AppNotice(text: text, tone: .warning, action: .recheckShootHistory)
@@ -334,8 +372,16 @@ enum AppNotices {
                         // caller decides which rows qualify, because that needs the store; what a bounce
                         // MEANS on this surface is decided here.
                         bouncedPitches: [BouncedPitch] = [],
+                        // #3298: the export's own health, so a file nobody could read says so here rather
+                        // than only inside a sheet Dan has to open.
+                        downbeatAvailability: DownbeatBridge.Health? = nil,
                         status: StatusLine) -> [AppNotice] {
         var notices: [AppNotice] = []
+        // First, and deliberately: while this is unresolved, every other line about the queue is being
+        // said about a diary Overture cannot see.
+        if let downbeatAvailability, let notice = downbeatAvailabilityUnknown(downbeatAvailability) {
+            notices.append(notice)
+        }
         if let bookingsVanished { notices.append(downbeatShootsVanished(bookingsVanished)) }
         if let omniFocusFailure {
             notices.append(omniFocusFailing(omniFocusFailure.kind, reason: omniFocusFailure.reason))

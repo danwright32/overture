@@ -211,7 +211,7 @@ struct RunNightDropKeyCollisionTests {
                                    priorShowOutcomeRaw: nil, priorDismissedAt: nil,
                                    priorConflictClearedKey: nil, droppedNights: ["2026-10-02"])
         let outcome = QueueUndo.apply(entry, resolving: { _ in run }, in: ctx,
-                                      export: (bookings: [], blockedDates: []))
+                                      export: (bookings: [], blockedDates: [], health: .ok))
 
         #expect(outcome.restored == 0)
         #expect(outcome.didAnything == false)

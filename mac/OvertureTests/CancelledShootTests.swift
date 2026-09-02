@@ -27,11 +27,11 @@ struct CancelledShootTests {
         let bookings = [booking("b1", "April20 Show", "2027-04-20")]
         let flat = ["2027-04-20"]
 
-        let before = BlockedCalendar.build(bookings: bookings, exportedBlockedDates: flat, daysOff: [])
+        let before = BlockedCalendar.build(availability: .measured, bookings: bookings, exportedBlockedDates: flat, daysOff: [])
         #expect(before.conflict(performanceDate: "2027-04-20", runEndDate: nil) != nil,
                 "it blocks before the cancellation, or this test proves nothing about after")
 
-        let after = BlockedCalendar.build(bookings: bookings, exportedBlockedDates: flat, daysOff: [],
+        let after = BlockedCalendar.build(availability: .measured, bookings: bookings, exportedBlockedDates: flat, daysOff: [],
                                           cancelledBookingIds: ["b1"])
         #expect(after.conflict(performanceDate: "2027-04-20", runEndDate: nil) == nil)
     }
@@ -42,7 +42,7 @@ struct CancelledShootTests {
         let bookings = [booking("b1", "Feb14 Show", "2027-02-14"),
                         booking("b2", "Firebird Pops Orchestra", "2027-02-14")]
 
-        let after = BlockedCalendar.build(bookings: bookings, exportedBlockedDates: ["2027-02-14"],
+        let after = BlockedCalendar.build(availability: .measured, bookings: bookings, exportedBlockedDates: ["2027-02-14"],
                                           daysOff: [], cancelledBookingIds: ["b1"])
         #expect(after.conflict(performanceDate: "2027-02-14", runEndDate: nil) != nil,
                 "the night is still taken, and freeing it here is the defect keying on the date would be")
@@ -57,7 +57,7 @@ struct CancelledShootTests {
     @Test func cancellingBothFreesTheNight() {
         let bookings = [booking("b1", "Feb14 Show", "2027-02-14"),
                         booking("b2", "Firebird Pops Orchestra", "2027-02-14")]
-        let after = BlockedCalendar.build(bookings: bookings, exportedBlockedDates: ["2027-02-14"],
+        let after = BlockedCalendar.build(availability: .measured, bookings: bookings, exportedBlockedDates: ["2027-02-14"],
                                           daysOff: [], cancelledBookingIds: ["b1", "b2"])
         #expect(after.conflict(performanceDate: "2027-02-14", runEndDate: nil) == nil)
     }
@@ -67,7 +67,7 @@ struct CancelledShootTests {
     // satisfies the bare form vacuously, and freeing it would unblock a night Downbeat blocked with
     // nothing to name it by.
     @Test func aFlatEntryWithNoBookingBehindItStillBlocks() {
-        let after = BlockedCalendar.build(bookings: [], exportedBlockedDates: ["2027-06-01"], daysOff: [],
+        let after = BlockedCalendar.build(availability: .measured, bookings: [], exportedBlockedDates: ["2027-06-01"], daysOff: [],
                                           cancelledBookingIds: ["b1"])
         #expect(after.conflict(performanceDate: "2027-06-01", runEndDate: nil) != nil)
     }
@@ -75,7 +75,7 @@ struct CancelledShootTests {
     // A cancellation covers the booking's whole span, not only its first night.
     @Test func aMultiNightShootFreesEveryNightItHeld() {
         let bookings = [booking("b1", "Three Nighter", "2027-03-10", "2027-03-12")]
-        let after = BlockedCalendar.build(bookings: bookings, exportedBlockedDates: [], daysOff: [],
+        let after = BlockedCalendar.build(availability: .measured, bookings: bookings, exportedBlockedDates: [], daysOff: [],
                                           cancelledBookingIds: ["b1"])
         for night in ["2027-03-10", "2027-03-11", "2027-03-12"] {
             #expect(after.conflict(performanceDate: night, runEndDate: nil) == nil, "\(night) still blocked")
@@ -87,7 +87,7 @@ struct CancelledShootTests {
     @Test func cancellingAShootDoesNotUnblockDansOwnDayOff() {
         let bookings = [booking("b1", "A Shoot", "2027-07-04")]
         let daysOff = [DayOffRange(startDate: "2027-07-04", endDate: "2027-07-04", note: "Holiday")]
-        let after = BlockedCalendar.build(bookings: bookings, exportedBlockedDates: [], daysOff: daysOff,
+        let after = BlockedCalendar.build(availability: .measured, bookings: bookings, exportedBlockedDates: [], daysOff: daysOff,
                                           cancelledBookingIds: ["b1"])
         let day = after.conflict(performanceDate: "2027-07-04", runEndDate: nil)
         #expect(day?.kind == .dayOff)
@@ -100,7 +100,7 @@ struct CancelledShootTests {
         let bookings = [booking("b1", "April20 Show", "2027-04-20")]
         // Two separate builds standing for two separate exports, both carrying the booking.
         for _ in 0..<2 {
-            let cal = BlockedCalendar.build(bookings: bookings, exportedBlockedDates: ["2027-04-20"],
+            let cal = BlockedCalendar.build(availability: .measured, bookings: bookings, exportedBlockedDates: ["2027-04-20"],
                                             daysOff: [], cancelledBookingIds: ["b1"])
             #expect(cal.conflict(performanceDate: "2027-04-20", runEndDate: nil) == nil)
         }
@@ -160,7 +160,7 @@ struct CancelledShootStoreTests {
 
     @Test func cancellingThenRestoringPutsTheNightBack() throws {
         let ctx = try context()
-        let empty: DayOffEditing.Export = ([], [])
+        let empty: DayOffEditing.Export = ([], [], .ok)
 
         #expect(CancelledShootEditing.cancel(bookingIds: ["b1"], named: "April20 Show",
                                              on: "2027-04-20", export: empty, in: ctx) == 1)
@@ -173,7 +173,7 @@ struct CancelledShootStoreTests {
     // Pressing it twice is one cancellation, not two rows that could disagree.
     @Test func cancellingTheSameShootTwiceAddsNothingTheSecondTime() throws {
         let ctx = try context()
-        let empty: DayOffEditing.Export = ([], [])
+        let empty: DayOffEditing.Export = ([], [], .ok)
         #expect(CancelledShootEditing.cancel(bookingIds: ["b1"], named: "X", on: "2027-04-20",
                                              export: empty, in: ctx) == 1)
         #expect(CancelledShootEditing.cancel(bookingIds: ["b1"], named: "X", on: "2027-04-20",
@@ -184,7 +184,7 @@ struct CancelledShootStoreTests {
     // The sweep is hygiene: it clears a row whose booking the export no longer carries.
     @Test func theSweepClearsARowDownbeatHasDropped() throws {
         let ctx = try context()
-        let empty: DayOffEditing.Export = ([], [])
+        let empty: DayOffEditing.Export = ([], [], .ok)
         CancelledShootEditing.cancel(bookingIds: ["gone", "still-there"], named: "X", on: "2027-04-20",
                                      export: empty, in: ctx)
 
@@ -199,7 +199,7 @@ struct CancelledShootStoreTests {
     // situations (L214).
     @Test func theSweepRefusesAnEmptyExportRatherThanClearingEverything() throws {
         let ctx = try context()
-        let empty: DayOffEditing.Export = ([], [])
+        let empty: DayOffEditing.Export = ([], [], .ok)
         CancelledShootEditing.cancel(bookingIds: ["b1", "b2"], named: "X", on: "2027-04-20",
                                      export: empty, in: ctx)
         #expect(CancelledShootEditing.sweep(against: [], in: ctx) == 0)

@@ -263,7 +263,7 @@ struct RunNightDropCoveredNightTests {
 
         let entry = try #require(undo.takeTop())
         let outcome = QueueUndo.apply(entry, resolving: { _ in run }, in: ctx,
-                                      export: (bookings: [], blockedDates: []))
+                                      export: (bookings: [], blockedDates: [], health: .ok))
 
         #expect(outcome.restored == 1)
         #expect(run.status != .dismissed)
@@ -286,7 +286,7 @@ struct RunNightDropCoveredNightTests {
 
         let entry = try #require(undo.takeTop())
         _ = QueueUndo.apply(entry, resolving: { _ in run }, in: ctx,
-                            export: (bookings: [], blockedDates: []))
+                            export: (bookings: [], blockedDates: [], health: .ok))
 
         #expect(run.runNights == ["2026-09-10", "2026-09-11", "2026-09-12", "2026-09-13"])
         #expect(run.performanceDate == "2026-09-10")

@@ -21,7 +21,7 @@ struct DaysOffSnoozeTests {
     }
 
     private func calendar(_ bookings: [OvertureBooking]) -> BlockedCalendar {
-        BlockedCalendar.build(bookings: bookings, exportedBlockedDates: [], daysOff: [])
+        BlockedCalendar.build(availability: .measured, bookings: bookings, exportedBlockedDates: [], daysOff: [])
     }
 
     private func defaults() -> UserDefaults {
@@ -53,7 +53,7 @@ struct DaysOffSnoozeTests {
     // Dan's own days off are not shoots, and never silence this: a vacation says nothing about the work
     // he has taken on.
     @Test func hisOwnDaysOffAreNotBookedShoots() {
-        let cal = BlockedCalendar.build(bookings: [], exportedBlockedDates: [],
+        let cal = BlockedCalendar.build(availability: .measured, bookings: [], exportedBlockedDates: [],
                                         daysOff: [DayOffRange(startDate: "2026-08-01", endDate: "2026-08-09", note: nil)])
 
         #expect(cal.hasUpcomingBookedShoot(today: today) == false)

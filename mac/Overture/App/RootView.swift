@@ -214,6 +214,12 @@ struct RootView: View {
     // looked, so the masthead says nothing rather than vouching for a file nobody has opened.
     @State private var shootHistoryHealth: ShootHistory.Health?
 
+    // #3298: whether the Downbeat export can be read at all, for the masthead line that says Overture does
+    // not know which nights Dan is already shooting. Held rather than derived per render for exactly the
+    // reason above: answering it decodes a JSON file and this view is on the render path. nil until
+    // something has looked, so the masthead says nothing rather than vouching for a file nobody opened.
+    @State private var downbeatHealth: DownbeatBridge.Health?
+
     // #2879: the handoff files Overture currently cannot read. Held as state and refreshed on a tick,
     // following this view's existing convention (StatusLine is a plain value in @State too) rather than
     // reading the register inside `body`, which would register no dependency on it and leave the line
@@ -242,6 +248,15 @@ struct RootView: View {
     private func readShootHistoryHealth() -> ShootHistory.Health {
         let health = ShootHistory.loadWithHealth(now: Date()).health
         shootHistoryHealth = health
+        return health
+    }
+
+    // #3298: the ONE place the export's health is read for the masthead, so the launch load and the
+    // notice's own re-read cannot reach different verdicts about the same file.
+    @discardableResult
+    private func readDownbeatHealth() -> DownbeatBridge.Health {
+        let health = DownbeatBridge.loadWithHealth(now: Date()).health
+        downbeatHealth = health
         return health
     }
 
@@ -539,6 +554,10 @@ struct RootView: View {
                                               // why nothing else on this screen would ever mention it
                                               // again.
                                               bouncedPitches: BounceDetection.unresolvedBounces(in: allProspects),
+                                              // #3298: and an export Overture cannot read at all, which
+                                              // is upstream of every other line here: while it stands,
+                                              // nothing in the queue is known to be a free night.
+                                              downbeatAvailability: downbeatHealth,
                                               status: status),
                   // #2250: the remedy a notice names, run from here where the sync lives.
                   onNoticeAction: { action in
@@ -555,7 +574,12 @@ struct RootView: View {
                       // uses, so pressing this and waiting for a tick can never reach different verdicts.
                       // A fixed export clears the line on the spot; a still-broken one leaves it standing,
                       // which is the honest answer to "has Overture noticed yet".
-                      case .recheckDownbeatExport: DownbeatBookingFeedStore.observe(now: Date())
+                      case .recheckDownbeatExport:
+                          DownbeatBookingFeedStore.observe(now: Date())
+                          // #3298: and the availability verdict with it, or pressing the control on the
+                          // unreadable-export line would leave that exact line standing after a good
+                          // export had landed (L12).
+                          readDownbeatHealth()
                       // #1900: Dan has run the shoot-history import, so read the file again through the
                       // same call the launch load uses (pressing this and relaunching can never reach
                       // different verdicts) and SAY what it found. A finished import clears the line on
@@ -971,6 +995,7 @@ struct RootView: View {
             // launch is enough for a file only a manual import rewrites, and the notice's own re-read
             // control covers the case where Dan runs that import mid-session.
             .task { readShootHistoryHealth() }
+            .task { readDownbeatHealth() }
             // #2879: keep the "couldn't read" line current. Once at launch, because the launch ingests
             // have already run by then, and then on a tick, because most of these files are read by
             // background work (a run watcher, the reconcile scheduler) that has no way to reach this
@@ -1841,7 +1866,8 @@ struct RootView: View {
         let outcome = ScoutExtractIngest.ingest(
             results, clients: loaded.clients,
             history: LocalHistory.forMatching(existing: existing),
-            blocked: ScoutService.blockedCalendar(export: (loaded.bookings, loaded.blockedDates),
+            blocked: ScoutService.blockedCalendar(export: (loaded.bookings, loaded.blockedDates,
+                                                           loaded.health),
                                                   context: context),
             into: context)
 

@@ -1,6 +1,6 @@
 # Copy inventory
 
-Every sentence Overture can say to Dan: **1473 sentences**.
+Every sentence Overture can say to Dan: **1479 sentences**.
 
 Generated, do not edit by hand. The test suite regenerates it (`mac/scripts/run-tests-locked.sh`)
 and fails if it is stale, so a PR that changes what the app says shows the change here, in the
@@ -14,7 +14,7 @@ What is not, and why:
   sentences under tokens nobody reads.
 - **Nothing, if it is written as two literals joined with `+`.** Those ARE joined here, into the
   one sentence the running app says (#3155). What is still only part of what Dan reads is a
-  sentence carrying a VALUE: 534 of the 1473 below hold a
+  sentence carrying a VALUE: 535 of the 1479 below hold a
   `\(...)` where a number or a name goes, so what is printed is the template. They are counted
   here rather than listed again, because the hole is visible in the line itself; what was missing
   was any statement of how much of this document is templates.
@@ -735,7 +735,9 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/LeadIntakeModel.swift`
 "Couldn't work out who to write to"
     `Domain/EmptyAnswerReport.swift`
-"Coverage cannot be checked right now: the Downbeat client export is missing or could not be read. Refresh it from Downbeat."
+"Coverage can't be checked: the Downbeat client export couldn't be read. Re-export it from Downbeat."
+    `Domain/ClientCoverage.swift`
+"Coverage can't be checked: there's no Downbeat client export. Export your client list from Downbeat."
     `Domain/ClientCoverage.swift`
 "Dan Wright"
     `Integration/GmailSender.swift`
@@ -1461,6 +1463,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/SuppressionReport.swift`
 "Outside New York, New Jersey and Connecticut."
     `UI/QueueView+Model.swift`
+"Overture can't read your Downbeat export, so it doesn't know which nights you're already shooting."
+    `Domain/AppNotice.swift`
 "Overture cannot reach its data, so there is nowhere to add a lead"
     `UI/AddLeadPresenter.swift`
 "Overture cannot tell how old this copy is"
@@ -1521,6 +1525,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/InquiryCopy.swift`
 "Overture gave up waiting for Gmail while looking for replies to the pitches you sent through a form or a DM."
     `Integration/GmailReplySearch.swift`
+"Overture has no Downbeat export, so it doesn't know which nights you're already shooting."
+    `Domain/AppNotice.swift`
 "Overture has not checked for replies or bookings in \(PrepStatus.duration(seconds: seconds))"
     `Domain/WatchGap.swift`
 "Overture has stopped looking for a reply to this one. If they did write, link it by hand."
@@ -2126,6 +2132,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/SendConfirmSheet.swift`
 "The email that will send, edit it here"
     `UI/SendConfirmSheet.swift`
+"The file is there but Overture could not make sense of it, so nothing in the queue is known to be a free night and the scout cannot keep clear of your bookings. Re-export it from Downbeat, then re-read it here."
+    `Domain/AppNotice.swift`
 "The installer could not reach GitHub to check whether this build's code had been merged."
     `Domain/BuildFreshnessPanel.swift`
 "The last day is before the first day."
@@ -2381,6 +2389,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `UI/QueueView+Model.swift`
 "Unlink this conversation"
     `Domain/DetachConversation.swift`
+"Until it can read one, nothing in the queue is known to be a free night, and the scout cannot keep clear of your bookings. Export your client list from Downbeat, then re-read it here."
+    `Domain/AppNotice.swift`
 "Unverified email found"
     `Domain/Reachability.swift`
 "Update Overture"
@@ -2565,6 +2575,8 @@ Two copies of a sentence will drift. #843 owns fixing these.
     `Domain/InquiryCopy.swift`
 "You've said none of the messages Overture found are them. It'll keep looking while this pitch is open."
     `Domain/ProposedConversation.swift`
+"Your Downbeat client export is \(days) days old, so a client booked since then may be missing from this list."
+    `Domain/ClientCoverage.swift`
 "Your Downbeat client export is \(days) days old. Recently booked clients may be missing, so some warm leads could look cold. Open Downbeat to refresh it."
     `Domain/DownbeatExport.swift`
 "Your Gmail access has expired or was revoked, so nothing was sent. Click Connect Gmail to reconnect, then try Send again."

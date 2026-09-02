@@ -281,7 +281,8 @@ final class ReconcileScheduler {
         // export that failed to load cannot be read as "Downbeat dropped everything" and take every one of
         // Dan's cancellations with it (L214).
         CancelledShootEditing.sweep(against: loaded.bookings, in: context)
-        ConflictSweep.reapplyAll(export: (loaded.bookings, loaded.blockedDates), in: context)
+        ConflictSweep.reapplyAll(export: (loaded.bookings, loaded.blockedDates, loaded.health),
+                                 in: context)
     }
 
     // Mark prospects Booked from the Downbeat export. No-op when the export is absent or unchanged.

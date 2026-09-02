@@ -24,12 +24,12 @@ struct ConflictSurfacedTests {
     }
 
     private func vacation(_ start: String, _ end: String, note: String? = "Vacation") -> BlockedCalendar {
-        BlockedCalendar.build(bookings: [], exportedBlockedDates: [],
+        BlockedCalendar.build(availability: .measured, bookings: [], exportedBlockedDates: [],
                               daysOff: [DayOffRange(startDate: start, endDate: end, note: note)])
     }
 
     private func booked(_ shoot: String, _ date: String) -> BlockedCalendar {
-        BlockedCalendar.build(
+        BlockedCalendar.build(availability: .measured, 
             bookings: [OvertureBooking(id: "b1", clientId: "c1", clientDisplayName: "A Client",
                                        shootName: shoot, startDate: date, endDate: date,
                                        venueId: nil, venueName: "Somewhere")],

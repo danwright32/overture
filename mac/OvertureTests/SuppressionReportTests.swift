@@ -95,7 +95,7 @@ struct SuppressionReportTests {
         let outcome = ScoutService.apply(
             events: [event("Vienna Philharmonic")], clients: [],
             history: LocalHistory.forMatching(existing: existing),
-            blocked: BlockedCalendar.build(
+            blocked: BlockedCalendar.build(availability: .measured, 
                 bookings: [], exportedBlockedDates: ["2099-09-19"], daysOff: []),
             today: ScoutTestClock.beforeAllFixtures,
             sourceIds: [WatchedSource.carnegieId], into: ctx)

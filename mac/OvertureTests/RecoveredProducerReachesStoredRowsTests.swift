@@ -24,7 +24,7 @@ import SwiftData
 @Suite("A recovered producer reaches the rows already stored (#2259)")
 struct RecoveredProducerReachesStoredRowsTests {
 
-    private let clearCalendar = BlockedCalendar.build(bookings: [], exportedBlockedDates: [], daysOff: [])
+    private let clearCalendar = BlockedCalendar.build(availability: .measured, bookings: [], exportedBlockedDates: [], daysOff: [])
 
     private func context() throws -> ModelContext {
         let container = try ModelContainer(for: Schema([Prospect.self]),

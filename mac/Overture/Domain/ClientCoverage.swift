@@ -237,8 +237,36 @@ enum CoverageCopy {
         "Set aside \(name). It will not show as a coverage gap."
     }
 
-    // Fail loud: when the Downbeat export is missing, stale or unreadable, an empty gap list would look
-    // exactly like "every client is covered". Say instead that coverage cannot be checked.
-    static let coverageUnavailable =
-        "Coverage cannot be checked right now: the Downbeat client export is missing or could not be read. Refresh it from Downbeat."
+    // Fail loud: when the Downbeat export cannot be read, an empty gap list would look exactly like
+    // "every client is covered". Say instead that coverage cannot be checked, and say WHY.
+    //
+    // #3299: this used to be one sentence for three states, chosen by `clientsHealth != .ok`. A STALE
+    // export fails that test too, so a perfectly readable export that was merely old was described as
+    // "missing or could not be read" and its coverage was hidden along with it. Those states need
+    // different things done about them and carry different urgency (L11), and only two of the three
+    // actually stop coverage being judged.
+    //
+    // Nil for every state where the list can still be drawn, so the caller renders the real answer rather
+    // than a sentence standing in for it.
+    static func unavailable(_ health: DownbeatBridge.Health) -> String? {
+        switch health {
+        case .ok, .stale:
+            return nil
+        case .missing:
+            return "Coverage can't be checked: there's no Downbeat client export. Export your client list from Downbeat."
+        case .unreadable:
+            return "Coverage can't be checked: the Downbeat client export couldn't be read. Re-export it from Downbeat."
+        }
+    }
+
+    // #3299: a stale export CAN be judged. What it owes Dan is the limit of the answer, not a refusal to
+    // give one: a client booked since the export was written is absent from it, so a real gap can be
+    // missing from the list rather than the list being wrong.
+    //
+    // The age comes from the verdict rather than being recomputed here, so this sentence and
+    // `DownbeatBridge.warningText`'s cannot disagree about how old the file is.
+    static func staleCaveat(_ health: DownbeatBridge.Health) -> String? {
+        guard case .stale(let days) = health else { return nil }
+        return "Your Downbeat client export is \(days) days old, so a client booked since then may be missing from this list."
+    }
 }

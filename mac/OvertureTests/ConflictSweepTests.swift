@@ -42,7 +42,7 @@ struct ConflictSweepTests {
         #expect(p.hasUnclearedConflict == false)
 
         DayOffEditing.add(start: "2026-11-14", end: "2026-11-22", note: "Vacation",
-                          export: (bookings: [], blockedDates: []), into: ctx)
+                          export: (bookings: [], blockedDates: [], health: .ok), into: ctx)
 
         #expect(p.hasUnclearedConflict)                               // no scout needed
         #expect(p.conflictNote == "You blocked Nov 18 (Vacation).")
@@ -55,11 +55,11 @@ struct ConflictSweepTests {
         let ctx = try context()
         let p = show(ctx, on: "2026-11-18")
         DayOffEditing.add(start: "2026-11-14", end: "2026-11-22", note: "Vacation",
-                          export: (bookings: [], blockedDates: []), into: ctx)
+                          export: (bookings: [], blockedDates: [], health: .ok), into: ctx)
         #expect(p.hasUnclearedConflict)
 
         let row = try #require(DayOffEditing.rows(in: ctx).first)
-        DayOffEditing.remove(row, export: (bookings: [], blockedDates: []), in: ctx)
+        DayOffEditing.remove(row, export: (bookings: [], blockedDates: [], health: .ok), in: ctx)
 
         #expect(p.hasUnclearedConflict == false)
         #expect(p.conflictNote == nil)
@@ -81,7 +81,7 @@ struct ConflictSweepTests {
         let feedback = ActionFeedback()
 
         ProspectMutations.blockDaysOff(start: "2026-11-14", end: "2026-11-22", note: "Vacation",
-                                       export: (bookings: [], blockedDates: []),
+                                       export: (bookings: [], blockedDates: [], health: .ok),
                                        context: ctx, feedback: feedback)
 
         #expect(p.hasUnclearedConflict)                              // blocked, so held back
@@ -102,7 +102,7 @@ struct ConflictSweepTests {
         let p = show(ctx, on: "2026-11-12", runEnd: "2026-11-15")     // opens before the trip, closes inside it
 
         DayOffEditing.add(start: "2026-11-14", end: "2026-11-22", note: "Vacation",
-                          export: (bookings: [], blockedDates: []), into: ctx)
+                          export: (bookings: [], blockedDates: [], health: .ok), into: ctx)
 
         #expect(p.hasUnclearedConflict)
         // #1501: Nov 14 is the first night he would miss, and it is INSIDE the run rather than its opening
@@ -116,12 +116,12 @@ struct ConflictSweepTests {
         let ctx = try context()
         let p = show(ctx, on: "2026-11-18")
         DayOffEditing.add(start: "2026-11-14", end: "2026-11-22", note: "Vacation",
-                          export: (bookings: [], blockedDates: []), into: ctx)
+                          export: (bookings: [], blockedDates: [], health: .ok), into: ctx)
         p.clearConflict()                                              // "I can shoot this anyway"
         try ctx.save()
 
         DayOffEditing.add(start: "2026-12-01", end: "2026-12-03", note: "Family",
-                          export: (bookings: [], blockedDates: []), into: ctx)
+                          export: (bookings: [], blockedDates: [], health: .ok), into: ctx)
 
         #expect(p.hasUnclearedConflict == false)                      // still his call
     }
@@ -136,7 +136,7 @@ struct ConflictSweepTests {
                                       endDate: "2026-11-18", venueId: nil, venueName: "V")
 
         DayOffEditing.add(start: "2026-11-14", end: "2026-11-22", note: "Vacation",
-                          export: (bookings: [booking], blockedDates: []), into: ctx)
+                          export: (bookings: [booking], blockedDates: [], health: .ok), into: ctx)
 
         #expect(p.conflictNote == "You're already shooting Nguyen Recital on Nov 18.")
     }
