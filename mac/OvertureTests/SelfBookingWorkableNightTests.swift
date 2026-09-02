@@ -13,15 +13,18 @@ import Foundation
 struct SelfBookingWorkableNightTests {
     private func show(_ key: String, at times: [String], commitment: Bool = true,
                       name: String = "Show", date: String? = "2026-08-06") -> SelfBookingConflict.Show {
-        SelfBookingConflict.Show(key: key, date: date, isCommitment: commitment,
-                                 engagementKey: nil, name: name, startTimes: times)
+        // #3323: one night, spelled as the night-plural type. `date` is nil-able because a show with no
+        // night at all is one of the cases below, and it becomes an empty night list.
+        SelfBookingConflict.Show(key: key, nights: date.map { [$0] } ?? [], isCommitment: commitment,
+                                 engagementKey: nil, name: name,
+                                 timesByNight: date.map { [$0: times] } ?? [:])
     }
 
     @Test func curtainsFurtherApartThanTheGapAreNotAClash() {
         let target = show("b", at: ["20:00"], commitment: false)
         let other = show("a", at: ["14:00"], name: "Orchestra A")
         #expect(SelfBookingConflict.conflicts(for: target, among: [other, target]).isEmpty)
-        #expect(SelfBookingConflict.workable(for: target, among: [other, target]).map(\.name)
+        #expect(SelfBookingConflict.workable(for: target, among: [other, target]).map(\.other.name)
                 == ["Orchestra A"])
     }
 
@@ -35,7 +38,7 @@ struct SelfBookingWorkableNightTests {
     @Test func oneMinuteInsideTheGapStaysAClash() {
         let target = show("b", at: ["18:59"], commitment: false)
         let other = show("a", at: ["14:00"], name: "Orchestra A")
-        #expect(SelfBookingConflict.conflicts(for: target, among: [other, target]).map(\.name)
+        #expect(SelfBookingConflict.conflicts(for: target, among: [other, target]).map(\.other.name)
                 == ["Orchestra A"])
         #expect(SelfBookingConflict.workable(for: target, among: [other, target]).isEmpty)
     }
@@ -44,13 +47,13 @@ struct SelfBookingWorkableNightTests {
     @Test func aShowNobodyPublishedATimeForStaysAClash() {
         let target = show("b", at: [], commitment: false)
         let other = show("a", at: ["14:00"], name: "Orchestra A")
-        #expect(SelfBookingConflict.conflicts(for: target, among: [other, target]).map(\.name)
+        #expect(SelfBookingConflict.conflicts(for: target, among: [other, target]).map(\.other.name)
                 == ["Orchestra A"])
 
         // ...and the other way round: the target's own time alone proves nothing about the other show.
         let timed = show("b", at: ["20:00"], commitment: false)
         let untimed = show("a", at: [], name: "Orchestra A")
-        #expect(SelfBookingConflict.conflicts(for: timed, among: [untimed, timed]).map(\.name)
+        #expect(SelfBookingConflict.conflicts(for: timed, among: [untimed, timed]).map(\.other.name)
                 == ["Orchestra A"])
     }
 
@@ -59,7 +62,7 @@ struct SelfBookingWorkableNightTests {
     @Test func anUnreadableTimeStaysAClash() {
         let target = show("b", at: ["20:00"], commitment: false)
         let other = show("a", at: ["2pm"], name: "Orchestra A")
-        #expect(SelfBookingConflict.conflicts(for: target, among: [other, target]).map(\.name)
+        #expect(SelfBookingConflict.conflicts(for: target, among: [other, target]).map(\.other.name)
                 == ["Orchestra A"])
     }
 
@@ -68,7 +71,7 @@ struct SelfBookingWorkableNightTests {
     @Test func aDoubleBillCollidingOnEitherPerformanceStaysAClash() {
         let target = show("b", at: ["20:00"], commitment: false)
         let other = show("a", at: ["11:00", "19:00"], name: "Orchestra A")
-        #expect(SelfBookingConflict.conflicts(for: target, among: [other, target]).map(\.name)
+        #expect(SelfBookingConflict.conflicts(for: target, among: [other, target]).map(\.other.name)
                 == ["Orchestra A"])
     }
 
@@ -76,7 +79,7 @@ struct SelfBookingWorkableNightTests {
         let target = show("b", at: ["20:00"], commitment: false)
         let other = show("a", at: ["09:00", "11:00"], name: "Orchestra A")
         #expect(SelfBookingConflict.conflicts(for: target, among: [other, target]).isEmpty)
-        #expect(SelfBookingConflict.workable(for: target, among: [other, target]).map(\.name)
+        #expect(SelfBookingConflict.workable(for: target, among: [other, target]).map(\.other.name)
                 == ["Orchestra A"])
     }
 
@@ -87,8 +90,8 @@ struct SelfBookingWorkableNightTests {
         let tight = show("a", at: ["18:00"], name: "Choir B")
         let far = show("b", at: ["13:00"], name: "Orchestra A")
         let all = [tight, far, target]
-        #expect(SelfBookingConflict.conflicts(for: target, among: all).map(\.name) == ["Choir B"])
-        #expect(SelfBookingConflict.workable(for: target, among: all).map(\.name) == ["Orchestra A"])
+        #expect(SelfBookingConflict.conflicts(for: target, among: all).map(\.other.name) == ["Choir B"])
+        #expect(SelfBookingConflict.workable(for: target, among: all).map(\.other.name) == ["Orchestra A"])
     }
 
     // The time never widens the net: a non-commitment, a different date and the same linked production
@@ -112,8 +115,15 @@ struct SelfBookingWorkableNightTests {
 struct SelfBookingWorkableCopyTests {
     private func show(_ key: String, at times: [String], name: String = "Show")
         -> SelfBookingConflict.Show {
-        SelfBookingConflict.Show(key: key, date: "2026-08-06", isCommitment: true,
-                                 engagementKey: nil, name: name, startTimes: times)
+        SelfBookingConflict.Show(key: key, nights: ["2026-08-06"], isCommitment: true,
+                                 engagementKey: nil, name: name,
+                                 timesByNight: ["2026-08-06": times])
+    }
+
+    // The copy takes an Overlap now (#3323): the night travels with the show, because the gap it renders
+    // is a fact about ONE night and a run's nights genuinely differ.
+    private func overlap(_ show: SelfBookingConflict.Show) -> SelfBookingConflict.Overlap {
+        SelfBookingConflict.Overlap(night: "2026-08-06", other: show)
     }
 
     // Dan's pick from the rendered options (2026-08-03): the note names the other show's curtain and how
@@ -121,14 +131,14 @@ struct SelfBookingWorkableCopyTests {
     @Test func theNoteNamesTheCurtainAndTheGap() {
         let target = show("b", at: ["20:00"])
         let other = show("a", at: ["14:00"], name: "Orchestra A")
-        #expect(SelfBookingCopy.workableRowMarker(target: target, others: [other])
+        #expect(SelfBookingCopy.workableRowMarker(target: target, others: [overlap(other)])
                 == "Also pitching Orchestra A at 2:00 PM, 6 hours before this one")
     }
 
     @Test func aLaterShowReadsAsAfterThisOne() {
         let target = show("b", at: ["14:00"])
         let other = show("a", at: ["20:00"], name: "Orchestra A")
-        #expect(SelfBookingCopy.workableRowMarker(target: target, others: [other])
+        #expect(SelfBookingCopy.workableRowMarker(target: target, others: [overlap(other)])
                 == "Also pitching Orchestra A at 8:00 PM, 6 hours after this one")
     }
 
@@ -136,7 +146,7 @@ struct SelfBookingWorkableCopyTests {
     @Test func thePartHourIsDroppedRatherThanRoundedUp() {
         let target = show("b", at: ["20:45"])
         let other = show("a", at: ["14:00"], name: "Orchestra A")
-        #expect(SelfBookingCopy.workableRowMarker(target: target, others: [other])
+        #expect(SelfBookingCopy.workableRowMarker(target: target, others: [overlap(other)])
                 == "Also pitching Orchestra A at 2:00 PM, 6 hours before this one")
     }
 
@@ -145,7 +155,7 @@ struct SelfBookingWorkableCopyTests {
     @Test func aDoubleBillNamesBothCurtains() {
         let target = show("b", at: ["20:00"])
         let other = show("a", at: ["09:00", "11:00"], name: "Orchestra A")
-        #expect(SelfBookingCopy.workableRowMarker(target: target, others: [other])
+        #expect(SelfBookingCopy.workableRowMarker(target: target, others: [overlap(other)])
                 == "Also pitching Orchestra A at 9:00 AM and 11:00 AM, 9 hours before this one")
     }
 
@@ -155,7 +165,7 @@ struct SelfBookingWorkableCopyTests {
         let target = show("c", at: ["20:00"])
         let a = show("a", at: ["09:00"], name: "Orchestra A")
         let b = show("b", at: ["11:00"], name: "Choir B")
-        #expect(SelfBookingCopy.workableRowMarker(target: target, others: [a, b])
+        #expect(SelfBookingCopy.workableRowMarker(target: target, others: [overlap(a), overlap(b)])
                 == "Also pitching Orchestra A at 9:00 AM and 1 other")
     }
 
@@ -167,7 +177,7 @@ struct SelfBookingWorkableCopyTests {
     @Test func aBlankNameReadsAsAnotherShow() {
         let target = show("b", at: ["20:00"])
         let other = show("a", at: ["14:00"], name: "  ")
-        #expect(SelfBookingCopy.workableRowMarker(target: target, others: [other])
+        #expect(SelfBookingCopy.workableRowMarker(target: target, others: [overlap(other)])
                 == "Also pitching another show at 2:00 PM, 6 hours before this one")
     }
 }
@@ -197,8 +207,8 @@ struct SelfBookingWorkableWiringTests {
         let target = row("b", name: "Brooklyn Chamber Players", times: ["20:00"])
         let other = row("a", name: "Orchestra A", times: ["14:00"], sent: true)
         let all = [other, target]
-        #expect(QueueModel.selfBookingConflicts(for: target, among: all).isEmpty)
-        #expect(QueueModel.selfBookingWorkableNote(for: target, among: all)
+        #expect(QueueModel.selfBookingConflicts(for: target, in: QueueModel.selfBookingIndex(all)).isEmpty)
+        #expect(QueueModel.selfBookingWorkableNote(for: target, in: QueueModel.selfBookingIndex(all))
                 == "Also pitching Orchestra A at 2:00 PM, 6 hours before this one")
     }
 
@@ -206,8 +216,8 @@ struct SelfBookingWorkableWiringTests {
         let target = row("b", name: "Brooklyn Chamber Players", times: ["20:00"])
         let other = row("a", name: "Orchestra A", times: ["18:00"], sent: true)
         let all = [other, target]
-        #expect(QueueModel.selfBookingConflictNames(for: target, among: all) == ["Orchestra A"])
-        #expect(QueueModel.selfBookingWorkableNote(for: target, among: all) == nil)
+        #expect(QueueModel.selfBookingConflictNames(for: target, in: QueueModel.selfBookingIndex(all)) == ["Orchestra A"])
+        #expect(QueueModel.selfBookingWorkableNote(for: target, in: QueueModel.selfBookingIndex(all)) == nil)
     }
 
     // A run whose nights differ states no single time on its card, but the night being compared has its
@@ -216,14 +226,14 @@ struct SelfBookingWorkableWiringTests {
         let target = row("b", name: "Brooklyn Chamber Players",
                          nightTimes: ["2026-08-06 14:00", "2026-08-07 19:00"], vary: true)
         let other = row("a", name: "Orchestra A", times: ["20:00"], sent: true)
-        #expect(QueueModel.selfBookingConflicts(for: target, among: [other, target]).isEmpty)
+        #expect(QueueModel.selfBookingConflicts(for: target, in: QueueModel.selfBookingIndex([other, target])).isEmpty)
     }
 
     @Test func aVaryingRunSilentAboutThisNightStaysAClash() {
         let target = row("b", name: "Brooklyn Chamber Players",
                          nightTimes: ["2026-08-07 19:00"], vary: true)
         let other = row("a", name: "Orchestra A", times: ["20:00"], sent: true)
-        #expect(QueueModel.selfBookingConflictNames(for: target, among: [other, target])
+        #expect(QueueModel.selfBookingConflictNames(for: target, in: QueueModel.selfBookingIndex([other, target]))
                 == ["Orchestra A"])
     }
 
@@ -234,7 +244,7 @@ struct SelfBookingWorkableWiringTests {
         let tight = row("a", name: "Choir B", times: ["18:00"], sent: true)
         let far = row("b", name: "Orchestra A", times: ["13:00"], sent: true)
         let all = [tight, far, target]
-        #expect(QueueModel.selfBookingConflictNames(for: target, among: all) == ["Choir B"])
-        #expect(QueueModel.selfBookingWorkableNote(for: target, among: all) == nil)
+        #expect(QueueModel.selfBookingConflictNames(for: target, in: QueueModel.selfBookingIndex(all)) == ["Choir B"])
+        #expect(QueueModel.selfBookingWorkableNote(for: target, in: QueueModel.selfBookingIndex(all)) == nil)
     }
 }

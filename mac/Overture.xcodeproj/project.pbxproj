@@ -1225,6 +1225,7 @@
 		A30042B78AA7BC7216C3C396 /* OmniFocusSyncRunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 976998798673F1D7648B4B8A /* OmniFocusSyncRunnerTests.swift */; };
 		A30A6912834A1F7664C1DB5D /* DetachConversation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45091D2A3EFC72AEDF5079F0 /* DetachConversation.swift */; };
 		A32D4E320C7D7F903F14C23A /* HandoffFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED36DDBEBF6DFCBFDE93289E /* HandoffFile.swift */; };
+		A3821F1BA9072DE2C50AD80C /* SelfBookingRunNightsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00265246BC8B07D3CA9C5099 /* SelfBookingRunNightsTests.swift */; };
 		A38DE692E70399777624F785 /* QueueCopyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA4855E0A391F15D086981B8 /* QueueCopyTests.swift */; };
 		A39DEEE32974C052BA3A2EB2 /* CancelledShootTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF4429259D6A83759BE64D30 /* CancelledShootTests.swift */; };
 		A3A367503BF96C9C1B1896FE /* SendFailureLine.swift in Sources */ = {isa = PBXBuildFile; fileRef = E04454C008A40315381B7306 /* SendFailureLine.swift */; };
@@ -1980,6 +1981,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		00265246BC8B07D3CA9C5099 /* SelfBookingRunNightsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfBookingRunNightsTests.swift; sourceTree = "<group>"; };
 		005C352CDC65F795DE62C9FD /* ReprepRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReprepRequest.swift; sourceTree = "<group>"; };
 		006146947C2361334D9BAE13 /* StreetClause.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetClause.swift; sourceTree = "<group>"; };
 		00808F64D5725ECB3A4619DE /* RecipientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipientTests.swift; sourceTree = "<group>"; };
@@ -4338,6 +4340,7 @@
 				2F3180AAE3A0F32C65075DFF /* SecureFileWriteTests.swift */,
 				A6A24C0EDD3F72C6E15DC128 /* SeedTableCensusLiveStoreTests.swift */,
 				4AAC96C322499E916539DF69 /* SelfBookingConflictTests.swift */,
+				00265246BC8B07D3CA9C5099 /* SelfBookingRunNightsTests.swift */,
 				A737FE2816AF825D551B3A21 /* SelfBookingWorkableNightTests.swift */,
 				6BF54AC30F42B8FE4D1BA8B6 /* SendConfirmAndReconnectAlertsSharedTests.swift */,
 				E7401013CA3A714300090BE7 /* SendConfirmationTests.swift */,
@@ -6840,6 +6843,7 @@
 				A71BD417F07AA6D986878502 /* SelfBookingConfirmSheet.swift in Sources */,
 				C8C5F65371435D353BBF36D3 /* SelfBookingConflict.swift in Sources */,
 				C1912F6E6CE736C16D483A1E /* SelfBookingConflictTests.swift in Sources */,
+				A3821F1BA9072DE2C50AD80C /* SelfBookingRunNightsTests.swift in Sources */,
 				3EF0321204BB0FA28A5A0049 /* SelfBookingWorkableNightTests.swift in Sources */,
 				53E5FA88C22DA4BD40C90B49 /* SendConfirmAndReconnectAlerts.swift in Sources */,
 				1841EB867F8ECD6653B72BC2 /* SendConfirmAndReconnectAlertsSharedTests.swift in Sources */,

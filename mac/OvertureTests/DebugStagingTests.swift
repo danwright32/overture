@@ -447,10 +447,15 @@ final class DebugStagingTests {
         // #1699 part 3: the seeds' own published times ride along, so this stays a faithful copy of what
         // the queue builds. If a future seed ever gives these two shows curtains 5 hours apart, they stop
         // being a clash and this goes red, which is the right signal rather than a quietly wrong scenario.
-        let shows = all.map {
-            SelfBookingConflict.Show(key: $0.naturalKey, date: $0.performanceDate, isCommitment: true,
-                                     engagementKey: $0.groupName, name: $0.groupName,
-                                     startTimes: $0.performanceStartTimes)
+        let shows = all.map { (p: Prospect) -> SelfBookingConflict.Show in
+            let nights = p.performanceDate.map { [$0] } ?? []
+            var times: [String: [String]] = [:]
+            if let date = p.performanceDate, !p.performanceStartTimes.isEmpty {
+                times[date] = p.performanceStartTimes
+            }
+            return SelfBookingConflict.Show(key: p.naturalKey, nights: nights, isCommitment: true,
+                                            engagementKey: p.groupName, name: p.groupName,
+                                            timesByNight: times)
         }
         let target = try #require(shows.first { $0.key == drafted.naturalKey })
         #expect(SelfBookingConflict.conflicts(for: target, among: shows).count == 1)

@@ -92,9 +92,15 @@ struct QueueRenderDataGuardTests {
                 Issue.record("expected to find the body of \(name)")
                 continue
             }
-            #expect(body.contains("among: data.items"))
+            // #3323: the lookups now take the index built once in the render pass, which is a STRONGER
+            // form of the same rule: #1772's `among: data.items` still mapped every item into a `Show`
+            // once per card, and a run-aware check multiplies that by the run's length.
+            #expect(body.contains("in: data.selfBooking"))
             // `among: items` there is `self.items`, the computed property that rebuilds the whole queue.
             #expect(!body.contains("among: items"))
+            // Building the index inside a per-row function is #1772 wearing the new spelling: the work is
+            // the same, it has just moved. The one place it may be built is QueueRenderPass.
+            #expect(!body.contains("selfBookingIndex("))
         }
     }
 
