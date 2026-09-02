@@ -62,9 +62,25 @@ SECONDS_TO_SAMPLE="${OVERTURE_MEASURE_SECONDS:-10}"
 OUT_DIR="${OVERTURE_MEASURE_OUT:-${HOME}/.overture-mac-test-diagnostics}"
 BASELINE_FILE="${OVERTURE_MEASURE_BASELINE_FILE:-${MEASURE_DIR}/../fixtures/resting-baseline.txt}"
 
-# A quarter of one core. CHOSEN, not measured: there is no distribution of this Mac's idle CPU to set it
-# from yet, and Phase 0 is the thing that produces one. Named as chosen rather than dressed up as a
-# measurement, so the next person re-derives it instead of trusting it (L172, L316).
+# A quarter of one core. It was CHOSEN when it was written, because there was no distribution of this
+# Mac's idle CPU to set it from. Phase 0 has since produced one, and #3464 read it: the number is
+# unchanged and its premise is now measured rather than assumed.
+#
+# The premise is recorded as a COMMAND rather than as a dated sentence, because a figure with a date on
+# it reads as more trustworthy the older it gets (L316, L32):
+#
+#     scripts/analyse-freeze-load.sh
+#
+# What it said over the first eleven recordings: 25% is crossed by 38 of 24,420 recorded process rows,
+# 0.16%, which is about the 99.84th percentile of what this Mac runs. The dense part of the distribution
+# ends far below it (p99 is 1.9%, p99.5 is 6.4%), so this is nowhere near the dense middle L172 warns
+# about, where a small uniform shift carries many rows across at once. That tool re-derives all of it and
+# says INSIDE THE BULK if the number ever slides into the data.
+#
+# It remains a JUDGEMENT at the margin and is labelled as one, which is what #3464 asked to keep: at 25%
+# a one-off `launchd` spike of 29% is named, and raising it to 40% would stop naming a competing `claude`
+# at 30%, which is real contention. Neither is obviously wrong, so the number stays where the evidence
+# puts it rather than being tuned to taste.
 BUSY_CPU="${OVERTURE_MEASURE_BUSY_CPU:-25.0}"
 
 # How often the process table is read WHILE the sample runs (#3463). The cost of seeing a burst that

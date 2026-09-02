@@ -24,6 +24,29 @@
 #                            it is named when busy so a reading taken during an import carries that fact
 #                            rather than being silently blended with one taken without it.
 #   xcodebuild / xctest      the load Phase 0 anticipated. Not always on, and correctly reported.
+#   claude / Terminal        the harness taking the measurement. It competes for CPU like anything
+#                            else and its share genuinely varies, so it is named when busy rather
+#                            than exempted (measured at 30% during one reading, and absent from the
+#                            rest).
 
 cloud-drive-daemon
 bztransmit
+
+# WindowServer, added 2026-09-02 (#3464), and the reason is different from the two above: it is not
+# merely always running, its CPU is a FUNCTION OF THE MEASUREMENT ITSELF. It is the macOS compositor, so
+# it draws the frames a freeze measurement exists to time, and asking it to be quiet is asking the app
+# not to draw.
+#
+# Measured with scripts/analyse-freeze-load.sh over the first eleven recordings: WindowServer crossed
+# 25% in SIX of them, and those six are exactly the six taken while Overture had a window on screen
+# (archive-hittest 49%, archive-typing-2 45%, archive-scroll 44%, B-archive-typing 42%, archive-typing
+# 38%, control-typing 35%). In the two taken with nothing being drawn it did not cross at all. So before
+# this line every genuine measurement read as contaminated, which is the check firing on the ordinary
+# case, and a check that fires on the ordinary case is switched off within a day (L93).
+#
+# What this GIVES UP, stated rather than glossed (L324): the list is all or nothing per name, so a
+# genuinely wedged compositor will no longer be reported here. That is accepted on two grounds. A wedged
+# WindowServer freezes the whole Mac, which is noticed long before this tool is run. And whatever else is
+# drawing heavily is still named in its own right, as Lightroom was at 438% and 593%, so the reading
+# still carries its caveat by another route.
+WindowServer
