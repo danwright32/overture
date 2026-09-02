@@ -337,7 +337,23 @@ BUNDLE_DATE="$(stat -f '%Sm' -t '%Y-%m-%d %H:%M' "${APP_EXEC}" 2>/dev/null || ec
   printf '  "elevated_processes": ['
   if [ -n "${ELEVATED}" ]; then
     printf '\n'
-    printf '%s\n' "${ELEVATED}" | sed 's/"/\\"/g; s/^[[:space:]]*/    "/; s/[[:space:]]*$/",/'
+    # The separator goes BETWEEN elements, never after each one (#3483). Appending it to every element
+    # leaves a trailing comma, which no JSON parser accepts, and the EMPTY array never reaches this line
+    # at all: so a BASELINE record parsed and every ELEVATED one did not, and a reader that skips what it
+    # cannot parse kept the clean readings and silently dropped the contaminated ones, which is exactly
+    # the population #3442 forbids dropping. Measured 2026-09-02 over the 10 records taken so far: 8
+    # unparseable, 2 parseable, and the 2 were the 2 with nothing elevated.
+    printf '%s\n' "${ELEVATED}" | awk '
+      {
+        gsub(/\\/, "\\\\")
+        gsub(/"/, "\\\"")
+        sub(/^[[:space:]]+/, "")
+        sub(/[[:space:]]+$/, "")
+        line[n++] = $0
+      }
+      END {
+        for (i = 0; i < n; i++) printf "    \"%s\"%s\n", line[i], (i < n - 1 ? "," : "")
+      }'
     printf '  '
   fi
   printf '],\n'

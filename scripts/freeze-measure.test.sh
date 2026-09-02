@@ -452,6 +452,70 @@ assert_equals "a window open at baseline load exits 0" 0 "${STATUS}"
 RECORD12="$(find "${OUT12}" -name 'freeze-measure-*.json' 2>/dev/null | head -1)"
 assert_contains "the record says a window was open" "$(cat "${RECORD12}" 2>/dev/null)" '"windows": "open"'
 
+# --- 13. the record a CONTAMINATED reading writes can actually be read back (#3483) ----------------
+#
+# The half that had never been asserted, and it failed in the direction that reads as fine. Measured
+# 2026-09-02 over the 10 records in ~/.overture-mac-test-diagnostics: 8 could not be parsed and 2 could,
+# and the 2 that could were exactly the 2 whose elevated list was EMPTY. So a reader that skips what it
+# cannot parse keeps every clean reading and silently drops every contaminated one, which is precisely
+# the population #3442 forbids dropping.
+#
+# Asserted by PARSING it with a real parser rather than by matching text in it, because the assertion
+# above ("the record carries the load verdict") is satisfied by a file no parser can read: a guard must
+# use the reader's own predicate, not a looser one (L150).
+parses_as_json() {
+  python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$1" 2>/dev/null
+}
+
+OUT13="${WORK}/out13"
+RESULT="$(OVERTURE_MEASURE_PS="${ELEVATED_PS}" OVERTURE_MEASURE_PGREP="${ONE_APP}" \
+  run_measure "${OUT13}" --label A)"
+RECORD13="$(find "${OUT13}" -name 'freeze-measure-*.json' 2>/dev/null | head -1)"
+if parses_as_json "${RECORD13}"; then
+  pass "an ELEVATED record parses as JSON"
+else
+  fail "an ELEVATED record parses as JSON" "$(python3 -c 'import json,sys
+try:
+    json.load(open(sys.argv[1]))
+except Exception as e:
+    print(e)' "${RECORD13}" 2>&1)"
+fi
+
+# The elevated names really are IN it, so a writer that fixed the parse by emitting an empty array would
+# not satisfy this (L98). Two entries, so the separator between them is exercised at all: with one entry
+# a trailing separator and a correct one are the same file.
+# One of them carries a double quote and a backslash in its name, which is what the escaping in the
+# writer exists for. Without it those characters end the JSON string early and the record is unreadable
+# for a second, independent reason, so the parse assertion below covers the escaping as well as the
+# separator.
+TWO_BUSY_PS="$(make_ps twobusy \
+  '349.5   676 /Applications/Adobe Lightroom Classic/Adobe Lightroom Classic.app/Contents/MacOS/Adobe Lightroom Classic' \
+  '142.0   767 corespotlightd' \
+  '111.0   768 odd"name\\with-marks' \
+  ' 99.4  1393 cloud-drive-daemon' \
+  '  0.4   901 /Applications/Overture.app/Contents/MacOS/Overture')"
+OUT13B="${WORK}/out13b"
+RESULT="$(OVERTURE_MEASURE_PS="${TWO_BUSY_PS}" OVERTURE_MEASURE_PGREP="${ONE_APP}" \
+  run_measure "${OUT13B}" --label A)"
+RECORD13B="$(find "${OUT13B}" -name 'freeze-measure-*.json' 2>/dev/null | head -1)"
+COUNT13B="$(python3 -c 'import json,sys
+try:
+    print(len(json.load(open(sys.argv[1])).get("elevated_processes", [])))
+except Exception:
+    print("unreadable")' "${RECORD13B}" 2>&1)"
+assert_equals "a record naming three busy processes parses and holds all three" "3" "${COUNT13B}"
+
+# And the BASELINE case keeps its own assertion, or a writer emitting nothing at all satisfies the above.
+OUT13C="${WORK}/out13c"
+RESULT="$(OVERTURE_MEASURE_PS="${BASELINE_PS}" OVERTURE_MEASURE_PGREP="${ONE_APP}" \
+  run_measure "${OUT13C}" --label A)"
+RECORD13C="$(find "${OUT13C}" -name 'freeze-measure-*.json' 2>/dev/null | head -1)"
+if parses_as_json "${RECORD13C}"; then
+  pass "a BASELINE record parses as JSON too"
+else
+  fail "a BASELINE record parses as JSON too" "it did not parse"
+fi
+
 if [ "${FAILURES}" -eq 0 ]; then
   echo "All freeze-measure.sh fixtures passed."
 else
