@@ -403,7 +403,13 @@ struct QueueView: View {
         let runs: [String]
         // The narrower set: the shows that play only on this night. Empty when there is no choice to make.
         let keysOnlyThisNight: [String]
-        var offersChoice: Bool { !runs.isEmpty && !keysOnlyThisNight.isEmpty }
+        // #3365: through BulkDismiss, never restated here. It was a second copy of the same rule, and the
+        // rule has just gained a condition (a one-night reason offers no choice); a copy would have kept
+        // the buttons and the sentence above them disagreeing about whether there was one (#863).
+        var offersChoice: Bool {
+            BulkDismiss.offersChoice(reason: reason, runsPastTheNight: runs,
+                                     keysOnlyThisNight: keysOnlyThisNight)
+        }
         var id: String { "\(dateLabel)|\(reason.rawValue)" }
     }
 

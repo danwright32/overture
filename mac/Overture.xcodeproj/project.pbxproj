@@ -806,6 +806,7 @@
 		6428C66C3F82FDB838F9C04E /* RunStartTimes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8315171A718EFB93A371A5E4 /* RunStartTimes.swift */; };
 		64743006E39095A0C45AE6DA /* PerformanceStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEC6CEBFA28D94E2267F6F15 /* PerformanceStatus.swift */; };
 		64BAF44FA87FC2675F340271 /* RecentOpenersServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBEA40E648090718CC10B1B7 /* RecentOpenersServiceTests.swift */; };
+		64F1286F87C7BF8346A14F8F /* BulkDismissOneNightCopyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6197B40324F3ED527993D4B4 /* BulkDismissOneNightCopyTests.swift */; };
 		64F1941D84A0C3F180D91BEE /* ProspectFieldClassificationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEABD0BE19440728011ADB9B /* ProspectFieldClassificationTests.swift */; };
 		64F70CE9BFE961E26F2EAC99 /* AutoScoutSpendGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A965AFBE232A38533A44B713 /* AutoScoutSpendGuardTests.swift */; };
 		6511973B97BF8AB2F72AF59A /* PresenterProvenanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F129E428D70A720307D2F9 /* PresenterProvenanceTests.swift */; };
@@ -2520,6 +2521,7 @@
 		613970864511262475B3BAB5 /* ReplyPanelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReplyPanelTests.swift; sourceTree = "<group>"; };
 		61410B8B5EF4F16C9D837125 /* QueueUndoStackTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueUndoStackTests.swift; sourceTree = "<group>"; };
 		617E40670AED4DE127AEFF46 /* WaitUntilTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaitUntilTests.swift; sourceTree = "<group>"; };
+		6197B40324F3ED527993D4B4 /* BulkDismissOneNightCopyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BulkDismissOneNightCopyTests.swift; sourceTree = "<group>"; };
 		619962CF9A81A1D9080846E4 /* NobodyToPursueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NobodyToPursueTests.swift; sourceTree = "<group>"; };
 		61BFE4E6528A1F2DB7FA5E67 /* GroupNameDriftTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupNameDriftTests.swift; sourceTree = "<group>"; };
 		61C82A4C0E16B10B90554D33 /* RepeatedReadFailureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepeatedReadFailureTests.swift; sourceTree = "<group>"; };
@@ -3680,6 +3682,7 @@
 				2F71D1818DF0A4CE05CCAEF8 /* BounceServiceHardBounceTests.swift */,
 				DF7885E07239867B750DFE6C /* BuildFreshnessTests.swift */,
 				F64E89E297E958F6ECE450FA /* BulkDismissMutationTests.swift */,
+				6197B40324F3ED527993D4B4 /* BulkDismissOneNightCopyTests.swift */,
 				AAD2375D22755F159891B047 /* BulkDismissTests.swift */,
 				756DA6A8171DBB92C152E6F5 /* BulkDismissWiringGuardTests.swift */,
 				7E63CC896B1976E04C51E1AC /* BusinessDayTests.swift */,
@@ -5836,6 +5839,7 @@
 				D4FF08660F16AE076B802BB4 /* BuildMemo.swift in Sources */,
 				ED45B4463308638C31A1E156 /* BulkDismiss.swift in Sources */,
 				FB7381B0CEF8E1BE0F628338 /* BulkDismissMutationTests.swift in Sources */,
+				64F1286F87C7BF8346A14F8F /* BulkDismissOneNightCopyTests.swift in Sources */,
 				24AC90130274179156CE3B06 /* BulkDismissTests.swift in Sources */,
 				50F8D3198BBA148CB632C4BF /* BulkDismissWiringGuardTests.swift in Sources */,
 				4D4E0130BD425F44537730C6 /* BusinessDay.swift in Sources */,

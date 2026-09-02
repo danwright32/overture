@@ -75,7 +75,7 @@ struct BulkDismissTests {
     @Test func anightWithNoRunsOffersNoChoice() {
         let plan = BulkDismiss.plan(for: [show("a", "The Music Shop", on: "2026-07-24")], on: "2026-07-24")
 
-        #expect(plan.offersChoice == false)
+        #expect(plan.offersChoice(for: .notAFit) == false)
     }
 
     // The other empty side: when EVERY show on the night runs past it, "dismiss only the ones that play
@@ -86,7 +86,7 @@ struct BulkDismissTests {
                                     on: "2026-07-24")
 
         #expect(plan.keysOnlyThisNight.isEmpty)
-        #expect(plan.offersChoice == false)
+        #expect(plan.offersChoice(for: .notAFit) == false)
     }
 
     @Test func amixedNightOffersTheChoice() {
@@ -94,7 +94,9 @@ struct BulkDismissTests {
                                           show("b", "Hadestown", on: "2026-07-24", runEnd: "2026-07-31")],
                                     on: "2026-07-24")
 
-        #expect(plan.offersChoice)
+        // #3365: asked of a WHOLE-SHOW reason. A one-night reason offers no choice whatever the night
+        // holds, which `BulkDismissOneNightChoiceTests` covers.
+        #expect(plan.offersChoice(for: .notAFit))
     }
 
     // MARK: - What Dan reads before it happens
@@ -127,8 +129,11 @@ struct BulkDismissTests {
     }
 
     // The run warning, in the words of the show Dan is about to lose later dates for.
+    //
+    // #3365: asked of a WHOLE-SHOW reason. Under `.dateConflict`, which is what this used to pass, the
+    // sentence was simply false: that reason drops the night and the run comes back under its next one.
     @Test func theConfirmSaysWhichRunLosesItsLaterNights() {
-        let message = BulkDismiss.confirmMessage(count: 2, reason: .dateConflict,
+        let message = BulkDismiss.confirmMessage(count: 2, reason: .notAFit,
                                                  runs: ["Hadestown"], dateLabel: "Jul 24")
 
         #expect(message.contains("Hadestown runs past Jul 24, so dismissing it takes its later nights too."))
@@ -136,7 +141,7 @@ struct BulkDismissTests {
 
     // Two runs read as a list, with the verb agreeing, rather than the same sentence stamped twice.
     @Test func twoRunsAreNamedInOneSentence() {
-        let message = BulkDismiss.confirmMessage(count: 3, reason: .dateConflict,
+        let message = BulkDismiss.confirmMessage(count: 3, reason: .notAFit,
                                                  runs: ["Hadestown", "The Music Shop"], dateLabel: "Jul 24")
 
         #expect(message.contains(
@@ -163,21 +168,25 @@ struct BulkDismissTests {
 
     // With two ways forward, the message must not pre-commit to one of them. "They all leave your queue"
     // above a button that deliberately leaves the runs behind describes an outcome Dan is still choosing.
+    //
+    // #3365: asked of a WHOLE-SHOW reason. A one-night reason no longer offers a choice at all (Dan,
+    // 2026-09-02), so `offeringChoice: true` beside `.tooSoon` is a state the app cannot reach.
     @Test func withAChoiceOnOfferTheMessageDoesNotPreCommit() {
-        let message = BulkDismiss.confirmMessage(count: 12, reason: .tooSoon, runs: ["Shifters"],
+        let message = BulkDismiss.confirmMessage(count: 12, reason: .notAFit, runs: ["Shifters"],
                                                  dateLabel: "Jul 26", offeringChoice: true)
 
-        #expect(message.hasPrefix("Filed as Too soon either way."))
+        #expect(message.hasPrefix("Filed as Not a fit either way."))
         #expect(!message.contains("They all leave"))
         #expect(message.contains("Shifters runs past Jul 26"))
     }
 
     // A night of nothing BUT runs has no choice to offer, so it still says plainly what will happen.
+    // #3365: under a whole-show reason, which is the one that still takes the run.
     @Test func withNoChoiceTheMessageStillStatesTheOutcome() {
-        let message = BulkDismiss.confirmMessage(count: 3, reason: .tooSoon, runs: ["Shifters"],
+        let message = BulkDismiss.confirmMessage(count: 3, reason: .notAFit, runs: ["Shifters"],
                                                  dateLabel: "Jul 26", offeringChoice: false)
 
-        #expect(message.hasPrefix("They all leave your queue, filed as Too soon."))
+        #expect(message.hasPrefix("They all leave your queue, filed as Not a fit."))
     }
 
     // MARK: - What one Cmd+Z will offer to reverse
